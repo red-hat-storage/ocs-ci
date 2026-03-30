@@ -75,7 +75,7 @@ def ui_deployment_conditions():
         return True
 
 
-def format_locator(locator, *args):
+def format_locator(locator, *args, **kwargs):
     """
     Use this function format_locator when working with dynamic locators.
 
@@ -83,12 +83,14 @@ def format_locator(locator, *args):
         locator (tuple): (GUI element needs to operate on (str), type (By))
         *args (str): Name of the variable (string) which contains the dynamic web element
             when generated on certain action
+        **kwargs (str): Keyword arguments(string) where the key matches the placeholder name in the locator
+            to which value is assigned to dynamically format the web element.
 
     return:
         formats the locator using .format() function which takes string to be inserted as an argument
 
     """
-    return locator[0].format(*args), locator[1]
+    return locator[0].format(*args, **kwargs), locator[1]
 
 
 def ui_add_capacity_conditions():

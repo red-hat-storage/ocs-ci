@@ -50,7 +50,7 @@ need_to_delete = []
     ],
 )
 @skipif_hci_provider_or_client
-@jira("DFBUGS-2139")
+@jira("DFBUGS-4385")
 class TestPoolUserInterface(ManageTest):
     """
     Test Pool User Interface

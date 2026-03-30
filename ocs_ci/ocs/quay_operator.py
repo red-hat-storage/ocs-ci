@@ -206,6 +206,7 @@ def get_super_user_token(endpoint):
         headers={"content-type": "application/json"},
         data=data,
         verify=False,
+        timeout=120,
     )
     if r.status_code != 200:
         raise Exception(
@@ -232,6 +233,7 @@ def check_super_user(endpoint, token):
             "Authorization": f"Bearer {token}",
         },
         verify=False,
+        timeout=120,
     )
     return True if r.json()["users"][0]["super_user"] else False
 
@@ -257,6 +259,7 @@ def create_quay_org(endpoint, token, org_name):
         },
         data=data,
         verify=False,
+        timeout=120,
     )
     return True if "Created" in r.json() else False
 
@@ -289,6 +292,7 @@ def create_quay_repository(
         },
         data=data,
         verify=False,
+        timeout=120,
     )
     return True if "Created" in r.json() else False
 
@@ -313,6 +317,7 @@ def delete_quay_repository(endpoint, token, org_name, repo_name):
             "Authorization": f"Bearer {token}",
         },
         verify=False,
+        timeout=120,
     )
     return True if "204" in str(r.status_code) else False
 

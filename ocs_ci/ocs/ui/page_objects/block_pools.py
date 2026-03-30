@@ -103,10 +103,10 @@ class StoragePools(CreateResourceForm, EditLabelForm, ResourceList):
         Returns:
             bool: True if the block pool delete via UI performed, False otherwise
         """
-        logger.info(f"Deleting the block pool: {block_pool_name}")
+        logger.info(f"Deleting the pool: {block_pool_name}")
         self.select_search_by("name")
+        self.clear_search()
         self.search(block_pool_name)
-
         from ocs_ci.ocs.ui.helpers_ui import format_locator
 
         resource_actions = format_locator(
@@ -171,6 +171,6 @@ class StoragePools(CreateResourceForm, EditLabelForm, ResourceList):
         logger.info(
             f"Navigate to the specific block pool details page {block_pool_name}"
         )
-        self.nav_to_resource_via_name(constants.DEFAULT_BLOCKPOOL)
+        self.nav_to_resource_via_name(block_pool_name)
 
         return CephBlockPool()

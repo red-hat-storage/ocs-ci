@@ -3,7 +3,6 @@ This module provides base class for different deployment
 platforms like AWS, VMWare, Baremetal etc.
 """
 
-from copy import deepcopy
 import json
 import logging
 import os
@@ -19,15 +18,17 @@ import yaml
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 
 from ocs_ci.deployment.helpers import storage_class
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
+    get_and_apply_rgw_cert_ca,
 )
 from ocs_ci.deployment.helpers.mcg_helpers import (
-    mcg_only_deployment,
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
@@ -41,16 +42,18 @@ from ocs_ci.deployment.helpers.lso_helpers import (
     cleanup_nodes_for_lso_install,
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
-from ocs_ci.deployment.encryption import add_in_transit_encryption_to_cluster_data
 from ocs_ci.deployment.metallb import MetalLBInstaller
-from ocs_ci.framework import config, merge_dict
+from ocs_ci.framework import config
+from ocs_ci.utility.iscsi_config import iscsi_setup
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
     get_cluster_set_name,
     create_service_exporter,
+    is_cg_enabled,
     validate_storage_cluster_peer_state,
     verify_volsync,
+    validate_drpolicy_grouping,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -70,7 +73,6 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     TimeoutExpiredError,
     UnavailableResourceException,
-    UnsupportedFeatureError,
     UnexpectedDeploymentConfiguration,
     ResourceNotFoundError,
     ACMClusterConfigurationException,
@@ -87,6 +89,7 @@ from ocs_ci.ocs.monitoring import (
 )
 from ocs_ci.ocs.node import (
     get_worker_nodes,
+    mark_masters_schedulable,
     verify_all_nodes_created,
     label_nodes,
     get_all_nodes,
@@ -100,7 +103,7 @@ from ocs_ci.ocs.resources.catalog_source import (
     CatalogSource,
     disable_specific_source,
 )
-from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
@@ -120,7 +123,6 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
-    setup_ceph_debug,
     get_osd_count,
     StorageCluster,
     validate_serviceexport,
@@ -147,15 +149,18 @@ from ocs_ci.utility.deployment import (
     workaround_mark_disks_as_ssd,
 )
 from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.utility.networking import (
+    annotate_worker_nodes_with_mon_ip,
+)
 from ocs_ci.utility import (
     templating,
     ibmcloud,
-    kms as KMS,
     pgsql,
     version,
 )
 from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
 from ocs_ci.utility.multicluster import create_mce_catsrc
+from ocs_ci.utility.operators import NMStateOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -163,6 +168,7 @@ from ocs_ci.utility.ssl_certs import (
     configure_custom_api_cert,
     get_root_ca_cert,
 )
+from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
@@ -185,16 +191,16 @@ from ocs_ci.utility.utils import (
     ceph_health_check_multi_storagecluster_external,
     get_acm_version,
     get_acm_mce_build_tag,
+    apply_oadp_workaround,
+    mute_mon_netsplit,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
-    set_configmap_log_level_rook_ceph_operator,
     get_default_storage_class,
     update_volsync_channel,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
-from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 from ocs_ci.deployment.cnv import CNVInstaller
 
@@ -207,13 +213,66 @@ class Deployment(object):
     """
 
     def __init__(self):
-        self.platform = config.ENV_DATA["platform"]
-        self.ocp_deployment_type = config.ENV_DATA["deployment_type"]
-        self.cluster_path = config.ENV_DATA["cluster_path"]
-        self.namespace = config.ENV_DATA["cluster_namespace"]
         self.sts_role_arn = None
-        self.storage_class = storage_class.get_storageclass()
-        self.custom_storage_class_path = None
+        storage_class.set_custom_storage_class_path()
+        logger.info(
+            f"Deployment platform {self.platform} initiated with storage class: {self.storage_class}"
+        )
+
+    # Because of for different platform multicluster run, as by wrong design we define only one deployer
+    # We need use config to hold the storage class for each cluster.
+    # See issue: https://issues.redhat.com/browse/OCSQE-4214 for more details
+    @property
+    def storage_class(self):
+        if not config.ENV_DATA.get("storage_class"):
+            sc = storage_class.get_storageclass()
+            self.storage_class = sc
+            return sc
+        return config.ENV_DATA["storage_class"]
+
+    @storage_class.setter
+    def storage_class(self, value):
+        config.ENV_DATA["storage_class"] = value
+
+    @property
+    def platform(self):
+        return config.ENV_DATA["platform"]
+
+    @platform.setter
+    def platform(self, value):
+        config.ENV_DATA["platform"] = value
+
+    @property
+    def ocp_deployment_type(self):
+        return config.ENV_DATA["deployment_type"]
+
+    @ocp_deployment_type.setter
+    def ocp_deployment_type(self, value):
+        config.ENV_DATA["ocp_deployment_type"] = value
+
+    @property
+    def cluster_path(self):
+        return config.ENV_DATA["cluster_path"]
+
+    @cluster_path.setter
+    def cluster_path(self, value):
+        config.ENV_DATA["cluster_path"] = value
+
+    @property
+    def namespace(self):
+        return config.ENV_DATA["cluster_namespace"]
+
+    @namespace.setter
+    def namespace(self, value):
+        config.ENV_DATA["namespace"] = value
+
+    @property
+    def custom_storage_class_path(self):
+        return config.ENV_DATA["custom_storage_class_path"]
+
+    @custom_storage_class_path.setter
+    def custom_storage_class_path(self, value):
+        config.ENV_DATA["custom_storage_class_path"] = value
 
     class OCPDeployment(BaseOCPDeployment):
         """
@@ -235,6 +294,16 @@ class Deployment(object):
                 logger.warning("OCP cluster is already running, skipping installation")
             else:
                 try:
+                    if (
+                        version.get_semantic_ocp_version_from_config()
+                        > version.VERSION_4_21
+                    ):
+                        logger.info(
+                            "setting environment variable OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY to true"
+                        )
+                        os.environ[
+                            "OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY"
+                        ] = "true"
                     self.deploy_ocp(log_cli_level)
                     self.post_ocp_deploy()
                 except Exception as e:
@@ -270,12 +339,20 @@ class Deployment(object):
             switch_ctx (int): The cluster index by the cluster name
 
         """
+        if config.ENV_DATA.get("skip_gitops_deployment", False):
+            return
         (
             config.switch_ctx(switch_ctx)
             if switch_ctx is not None
             else config.switch_acm_ctx()
         )
 
+        if get_csvs_start_with_prefix(
+            csv_prefix=constants.GITOPS_OPERATOR_NAME,
+            namespace=constants.GITOPS_NAMESPACE,
+        ):
+            logger.info(f"Found {constants.GITOPS_OPERATOR_NAME} skipping creation")
+            return
         logger.info("Creating Namespace for GitOps Operator ")
         gitops_namespace = OCP(
             kind=constants.NAMESPACE, resource_name=constants.GITOPS_NAMESPACE
@@ -408,7 +485,7 @@ class Deployment(object):
                 # Run ocs_install_verification here only in case of multicluster.
                 # For single cluster, test_deployment will take care.
                 if config.multicluster:
-                    for i in range(config.multicluster):
+                    for i in range(config.nclusters):
                         if i in get_all_acm_indexes():
                             continue
                         else:
@@ -442,32 +519,43 @@ class Deployment(object):
                             )
                             storage_cluster.reload_data()
                             storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
-                            ptch = (
-                                f'\'{{"spec": {{"network": {{"multiClusterService": '
-                                f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", \"enabled\": true}}}}}}}}'"
-                            )
-                            ptch_cmd = (
-                                f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
-                                f"-n openshift-storage  --type merge --patch {ptch}"
-                            )
-                            run_cmd(ptch_cmd)
+                            if (
+                                get_provider_service_type() != "NodePort"
+                                and cluster.ENV_DATA.get("cluster_type", "").lower()
+                                != constants.HCI_CLIENT
+                            ):
+                                ptch = (
+                                    f'\'{{"spec": {{"network": {{"multiClusterService": '
+                                    f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
+                                    f'"enabled": true}}}}}}}}\''
+                                )
+                                ptch_cmd = (
+                                    f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+                                    f"-n openshift-storage  --type merge --patch {ptch}"
+                                )
+                                run_cmd(ptch_cmd)
+                                storage_cluster.reload_data()
+                                assert (
+                                    storage_cluster.data.get("spec")
+                                    .get("network")
+                                    .get("multiClusterService")
+                                    .get("enabled")
+                                ), "Failed to update StorageCluster globalnet"
+                                validate_serviceexport()
                             ocs_registry_image = config.DEPLOYMENT.get(
                                 "ocs_registry_image", None
                             )
-                            storage_cluster.reload_data()
-                            assert (
-                                storage_cluster.data.get("spec")
-                                .get("network")
-                                .get("multiClusterService")
-                                .get("enabled")
-                            ), "Failed to update StorageCluster globalnet"
-                            validate_serviceexport()
                             ocs_install_verification(
                                 timeout=2000, ocs_registry_image=ocs_registry_image
                             )
                     config.reset_ctx()
                 if config.REPORTING["collect_logs_on_success_run"]:
-                    collect_ocs_logs("deployment", ocp=False, status_failure=False)
+                    try:
+                        collect_ocs_logs("deployment", ocp=False, status_failure=False)
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to collect OCS logs: {e}, but ignoring it as deployment is successful"
+                        )
             else:
                 logger.warning("OCS deployment will be skipped")
         except Exception as e:
@@ -475,16 +563,22 @@ class Deployment(object):
             if config.REPORTING["gather_on_deploy_failure"]:
                 # Let's do the collections separately to guard against one
                 # of them failing
-                collect_ocs_logs(
-                    "deployment",
-                    ocs=False,
-                    timeout=defaults.MUST_GATHER_TIMEOUT,
-                )
-                collect_ocs_logs(
-                    "deployment",
-                    ocp=False,
-                    timeout=defaults.MUST_GATHER_TIMEOUT,
-                )
+                try:
+                    collect_ocs_logs(
+                        "deployment",
+                        ocs=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCP logs: {e}")
+                try:
+                    collect_ocs_logs(
+                        "deployment",
+                        ocp=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCS logs: {e}")
             raise
 
     def do_deploy_mce(self):
@@ -503,6 +597,8 @@ class Deployment(object):
         Deploy OADP Operator
 
         """
+        if config.ENV_DATA.get("skip_oadp_deployment", False):
+            return
         if config.ENV_DATA.get("skip_dr_deployment", False):
             return
 
@@ -534,6 +630,14 @@ class Deployment(object):
                 index = cluster.MULTICLUSTER["multicluster_index"]
                 with config.RunWithConfigContext(index):
                     config.switch_ctx(index)
+                    if get_csvs_start_with_prefix(
+                        csv_prefix=constants.OADP_OPERATOR_NAME,
+                        namespace=constants.OADP_NAMESPACE,
+                    ):
+                        logger.info(
+                            f"Found {constants.OADP_OPERATOR_NAME} skipping creation"
+                        )
+                        continue
                     logger.info("Creating Namespace")
                     # creating Namespace and operator group for cert-manager
                     logger.info(
@@ -608,6 +712,8 @@ class Deployment(object):
                     )
                     csv.wait_for_phase("Succeeded", timeout=720)
                     logger.info("OADP Operator Deployment Succeeded")
+                    if cluster.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+                        apply_oadp_workaround(namespace=constants.OADP_NAMESPACE)
 
     def do_deploy_rdr(self):
         """
@@ -696,7 +802,7 @@ class Deployment(object):
         if config.DEPLOYMENT.get("metallb_operator"):
             MetalLBInstaller().deploy_lb()
 
-    def do_deploy_hosted_clusters(self):
+    def do_deploy_hosted_spoke_clusters(self):
         """
         Deploy Hosted cluster(s)
         """
@@ -704,10 +810,37 @@ class Deployment(object):
             not config.ENV_DATA["skip_ocs_deployment"]
             or config.DEPLOYMENT.get("deploy_hosted_clusters")
         ):
+            hosted_client_clusters = {
+                name: data
+                for name, data in config.ENV_DATA.get("clusters", {}).items()
+                if data.get("cluster_type") == "hci_client"
+            }
+            if not hosted_client_clusters:
+                return
             # imported locally due to a circular dependency
-            from ocs_ci.deployment.hosted_cluster import HostedClients
+            from ocs_ci.deployment.hub_spoke import HostedClients
 
             HostedClients().do_deploy()
+
+    def do_deploy_external_spoke_clusters(self):
+        """
+        Deploy External spoke cluster(s)
+        """
+        if config.ENV_DATA.get("clusters", False) and (
+            not config.ENV_DATA["skip_ocs_deployment"]
+            or config.DEPLOYMENT.get("deploy_hosted_clusters")
+        ):
+            ext_client_clusters = {
+                name: data
+                for name, data in config.ENV_DATA.get("clusters", {}).items()
+                if data.get("cluster_type") == "ext_client"
+            }
+            if not ext_client_clusters:
+                return
+            # imported locally due to a circular dependency
+            from ocs_ci.deployment.hub_spoke import ExternalClients
+
+            ExternalClients().do_deploy()
 
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
@@ -745,7 +878,7 @@ class Deployment(object):
             else:
                 x_addr_list = None
             if config.DEPLOYMENT.get("arbiter_deployment"):
-                arbiter_zone = self.get_arbiter_location()
+                arbiter_zone = get_arbiter_location()
                 logger.debug("detected arbiter zone: %s", arbiter_zone)
             else:
                 arbiter_zone = None
@@ -782,9 +915,14 @@ class Deployment(object):
             setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
 
         if config.DEPLOYMENT.get("enable_nested_virtualization"):
-            from ocs_ci.deployment.hosted_cluster import enable_nested_virtualization
+            from ocs_ci.deployment.hub_spoke import enable_nested_virtualization
 
             enable_nested_virtualization()
+        if (
+            config.DEPLOYMENT.get("enable_data_replication_separation")
+            and config.ENV_DATA.get("cluster_type") == "provider"
+        ):
+            annotate_worker_nodes_with_mon_ip()
 
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
@@ -796,7 +934,8 @@ class Deployment(object):
         self.do_deploy_cnv()
         self.do_deploy_hyperconverged()
         self.do_deploy_metallb()
-        self.do_deploy_hosted_clusters()
+        self.do_deploy_hosted_spoke_clusters()
+        self.do_deploy_external_spoke_clusters()
 
     def get_rdr_conf(self):
         """
@@ -820,6 +959,10 @@ class Deployment(object):
             log_cli_level (str): log level for installer (default: DEBUG)
         """
         self.ocp_deployment = self.OCPDeployment()
+        # self.ocp_deployment.outer is a dependency injection,
+        # necessary to refer an outer instance methods from the inner OCPDeployment
+        # works for all classes inherited from Deployment
+        self.ocp_deployment.outer = self
         self.ocp_deployment.deploy_prereq()
         self.ocp_deployment.deploy(log_cli_level)
         # logging the cluster UUID so that we can ask for it's telemetry data
@@ -849,6 +992,7 @@ class Deployment(object):
         if config.ENV_DATA["deployment_type"] not in (
             constants.MANAGED_DEPL_TYPE,
             constants.MANAGED_CP_DEPL_TYPE,
+            constants.AI_AGENT_DEPL_TYPE,
         ):
             add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
@@ -868,6 +1012,15 @@ class Deployment(object):
             except Exception as err:
                 logger.warning(
                     f"Ingress Node Firewall deployment and SSH access to nodes restriction failed: {err}"
+                )
+        # Setup iSCSI if configured
+        if config.ENV_DATA.get("iscsi_setup", False):
+            try:
+                logger.info("Setting up iSCSI configuration after OCP deployment...")
+                iscsi_setup()
+            except Exception as err:
+                logger.warning(
+                    f"iSCSI setup failed: {err}. Continuing with deployment..."
                 )
 
     def label_and_taint_nodes(self):
@@ -1072,7 +1225,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             subscription_yaml_data, subscription_manifest.name
         )
-        run_cmd(f"oc create -f {subscription_manifest.name}")
+        run_cmd(f"oc apply -f {subscription_manifest.name}")
         self.wait_for_subscription(ocs_operator_name)
         if subscription_plan_approval == "Manual":
             wait_for_install_plan_and_approve(self.namespace)
@@ -1089,7 +1242,7 @@ class Deployment(object):
 
         Args:
             subscription_name (str): Subscription name pattern
-            namespace (str): Namespace name for checking subscription if None then default from ENV_data
+            namespace (str): Namespace name for checking subscription if None then default from ENV_DATA
 
         """
         if not namespace:
@@ -1129,40 +1282,6 @@ class Deployment(object):
                     return
                 logger.debug(f"Still waiting for the CSV: {csv_name}")
 
-    def get_arbiter_location(self):
-        """
-        Get arbiter mon location for storage cluster
-        """
-        if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
-            "arbiter_autodetect"
-        ):
-            return config.DEPLOYMENT.get("arbiter_zone")
-
-        # below logic will autodetect arbiter_zone
-        nodes = ocp.OCP(kind="node").get().get("items", [])
-
-        worker_nodes_zones = {
-            node["metadata"]["labels"].get(constants.ZONE_LABEL)
-            for node in nodes
-            if constants.WORKER_LABEL in node["metadata"]["labels"]
-            and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
-        }
-
-        master_nodes_zones = {
-            node["metadata"]["labels"].get(constants.ZONE_LABEL)
-            for node in nodes
-            if constants.MASTER_LABEL in node["metadata"]["labels"]
-        }
-
-        arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
-
-        if len(arbiter_locations) < 1:
-            raise UnavailableResourceException(
-                "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
-            )
-
-        return arbiter_locations[0]
-
     def deploy_ocs_via_operator(self, image=None):
         """
         Method for deploy OCS via OCS operator
@@ -1173,7 +1292,6 @@ class Deployment(object):
         """
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
         live_deployment = config.DEPLOYMENT.get("live_deployment")
-        arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
         local_storage = config.DEPLOYMENT.get("local_storage")
         perform_lso_standalone_deployment = config.DEPLOYMENT.get(
             "lso_standalone_deployment", False
@@ -1191,7 +1309,8 @@ class Deployment(object):
             return
         else:
             log_step("Deployment of OCS via OCS operator")
-            self.label_and_taint_nodes()
+            if not config.ENV_DATA["mcg_only_deployment"]:
+                self.label_and_taint_nodes()
 
         if aws_sts_deployment:
             log_step("Create STS role and attach AmazonS3FullAccess Policy")
@@ -1264,11 +1383,10 @@ class Deployment(object):
                 config.ENV_DATA.get("multus_create_public_net")
                 and ocs_version >= version.VERSION_4_16
             ):
-                from ocs_ci.deployment.nmstate import NMStateInstaller
-
-                logger.info("Install NMState operator and create an instance")
-                nmstate_obj = NMStateInstaller()
-                nmstate_obj.running_nmstate()
+                nmstate_operator = NMStateOperator(
+                    create_catalog=True,
+                )
+                nmstate_operator.deploy()
                 from ocs_ci.helpers.helpers import (
                     configure_node_network_configuration_policy_on_all_worker_nodes,
                 )
@@ -1294,10 +1412,18 @@ class Deployment(object):
                         )
 
             if create_public_net:
-                nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
+                use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
                 logger.info("Creating Multus public network")
-                if config.DEPLOYMENT.get("ipv6"):
+
+                # Determine which template to use
+                if use_vlan:
+                    nad_to_load = constants.MULTUS_PUBLIC_NET_VLAN_YAML
+                    logger.info("Using VLAN-based public network template")
+                elif config.DEPLOYMENT.get("ipv6"):
                     nad_to_load = constants.MULTUS_PUBLIC_NET_IPV6_YAML
+                else:
+                    nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
+
                 public_net_data = templating.load_yaml(nad_to_load)
                 public_net_data["metadata"]["name"] = config.ENV_DATA.get(
                     "multus_public_net_name"
@@ -1307,17 +1433,57 @@ class Deployment(object):
                 )
                 public_net_config_str = public_net_data["spec"]["config"]
                 public_net_config_dict = json.loads(public_net_config_str)
-                public_net_config_dict["master"] = config.ENV_DATA.get(
-                    "multus_public_net_interface"
-                )
-                if not config.DEPLOYMENT.get("ipv6"):
-                    public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_public_net_range"
+
+                # Configure master interface
+                if use_vlan:
+                    # For VLAN mode, master is the VLAN interface
+                    vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
+                    base_interface = config.ENV_DATA.get("multus_public_net_interface")
+                    vlan_interface = f"{base_interface}.{vlan_id}"
+                    public_net_config_dict["master"] = vlan_interface
+                    logger.info(
+                        f"Public network using VLAN interface: {vlan_interface}"
                     )
+                else:
+                    # For non-VLAN mode, master is the base interface
+                    public_net_config_dict["master"] = config.ENV_DATA.get(
+                        "multus_public_net_interface"
+                    )
+
+                # Configure IP range
+                if not config.DEPLOYMENT.get("ipv6"):
+                    if use_vlan and config.ENV_DATA.get("multus_public_net_ip_range"):
+                        public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_public_net_ip_range"
+                        )
+                    else:
+                        public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_public_net_range"
+                        )
                 else:
                     public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
                         "multus_public_ipv6_net_range"
                     )
+
+                # Configure IP range limits for VLAN mode
+                if use_vlan:
+                    # Add routes to shim network (critical for host-to-pod communication)
+                    # Default shim network is 192.168.252.0/24 (shim IPs assigned starting at .5)
+                    shim_network = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    if "routes" not in public_net_config_dict["ipam"]:
+                        public_net_config_dict["ipam"]["routes"] = []
+                    # Ensure route to shim network exists
+                    if not any(
+                        r.get("dst") == shim_network
+                        for r in public_net_config_dict["ipam"]["routes"]
+                    ):
+                        public_net_config_dict["ipam"]["routes"].append(
+                            {"dst": shim_network}
+                        )
+                    logger.info(f"Added route to shim network: {shim_network}")
+
                 public_net_config_dict["type"] = config.ENV_DATA.get(
                     "multus_public_net_type"
                 )
@@ -1332,14 +1498,19 @@ class Deployment(object):
                 run_cmd(f"oc create -f {public_net_yaml.name}")
 
             if create_cluster_net:
+                use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
                 logger.info("Creating Multus cluster network")
-                if config.DEPLOYMENT.get("ipv6"):
-                    constants.MULTUS_CLUSTER_NET_YAML = (
-                        constants.MULTUS_CLUSTER_NET_IPV6_YAML
-                    )
-                cluster_net_data = templating.load_yaml(
-                    constants.MULTUS_CLUSTER_NET_YAML
-                )
+
+                # Determine which template to use
+                if use_vlan:
+                    nad_to_load = constants.MULTUS_CLUSTER_NET_VLAN_YAML
+                    logger.info("Using VLAN-based cluster network template")
+                elif config.DEPLOYMENT.get("ipv6"):
+                    nad_to_load = constants.MULTUS_CLUSTER_NET_IPV6_YAML
+                else:
+                    nad_to_load = constants.MULTUS_CLUSTER_NET_YAML
+
+                cluster_net_data = templating.load_yaml(nad_to_load)
                 cluster_net_data["metadata"]["name"] = config.ENV_DATA.get(
                     "multus_cluster_net_name"
                 )
@@ -1348,23 +1519,57 @@ class Deployment(object):
                 )
                 cluster_net_config_str = cluster_net_data["spec"]["config"]
                 cluster_net_config_dict = json.loads(cluster_net_config_str)
-                cluster_net_config_dict["master"] = config.ENV_DATA.get(
-                    "multus_cluster_net_interface"
-                )
-                if not config.DEPLOYMENT.get("ipv6"):
-                    cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_cluster_net_range"
+
+                # Configure master interface
+                if use_vlan:
+                    # For VLAN mode, master is the VLAN interface
+                    vlan_id = config.ENV_DATA.get("multus_cluster_net_vlan_id", 202)
+                    base_interface = config.ENV_DATA.get("multus_cluster_net_interface")
+                    vlan_interface = f"{base_interface}.{vlan_id}"
+                    cluster_net_config_dict["master"] = vlan_interface
+                    logger.info(
+                        f"Cluster network using VLAN interface: {vlan_interface}"
                     )
+                else:
+                    # For non-VLAN mode, master is the base interface
+                    cluster_net_config_dict["master"] = config.ENV_DATA.get(
+                        "multus_cluster_net_interface"
+                    )
+
+                # Configure IP range
+                if not config.DEPLOYMENT.get("ipv6"):
+                    if use_vlan and config.ENV_DATA.get("multus_cluster_net_ip_range"):
+                        cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_cluster_net_ip_range"
+                        )
+                    else:
+                        cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_cluster_net_range"
+                        )
                 else:
                     cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
                         "multus_cluster_ipv6_net_range"
                     )
+
+                # Configure IP range limits for VLAN mode
+                if use_vlan:
+                    if config.ENV_DATA.get("multus_cluster_net_ip_range_start"):
+                        cluster_net_config_dict["ipam"]["range_start"] = (
+                            config.ENV_DATA.get("multus_cluster_net_ip_range_start")
+                        )
+                    if config.ENV_DATA.get("multus_cluster_net_ip_range_end"):
+                        cluster_net_config_dict["ipam"]["range_end"] = (
+                            config.ENV_DATA.get("multus_cluster_net_ip_range_end")
+                        )
+                    # Remove routes for VLAN mode (not needed)
+                    cluster_net_config_dict["ipam"].pop("routes", None)
+
                 cluster_net_config_dict["mode"] = config.ENV_DATA.get(
                     "multus_cluster_net_mode"
                 )
                 cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
                 cluster_net_yaml = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="multus_public", delete=False
+                    mode="w+", prefix="multus_cluster", delete=False
                 )
                 templating.dump_data_to_temp_yaml(
                     cluster_net_data, cluster_net_yaml.name
@@ -1417,7 +1622,7 @@ class Deployment(object):
                 selector=operator_selector,
                 subscription_plan_approval=subscription_plan_approval,
             )
-            package_manifest.wait_for_resource(timeout=300)
+            package_manifest.wait_for_resource(timeout=600)
             csv_name = package_manifest.get_current_csv(channel=channel)
             csv = CSV(resource_name=csv_name, namespace=self.namespace)
             if managed_ibmcloud and not live_deployment:
@@ -1457,6 +1662,14 @@ class Deployment(object):
                             replace_to=csv_change_to,
                         )
 
+        # Create custom storage class early for Azure Performance Plus feature
+        # This needs to be done before StorageSystem/StorageCluster creation
+        if self.custom_storage_class_path is not None:
+            log_step("Creating custom storage class for deployment")
+            self.storage_class = storage_class.create_custom_storageclass(
+                self.custom_storage_class_path
+            )
+
         if is_storage_system_needed():
             logger.info("Creating StorageSystem")
             # change namespace of storage system if needed
@@ -1473,7 +1686,6 @@ class Deployment(object):
             log_step("Apply StorageSystem CR")
             exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
 
-        ocp_version = version.get_semantic_ocp_version_from_config()
         if managed_ibmcloud:
             log_step("Patching config map to change KUBLET DIR PATH")
             config_map = ocp.OCP(
@@ -1490,517 +1702,8 @@ class Deployment(object):
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
             )
 
-        # create custom storage class for StorageCluster CR if necessary
-        if self.custom_storage_class_path is not None:
-            self.storage_class = storage_class.create_custom_storageclass(
-                self.custom_storage_class_path
-            )
-
-        # Set rook log level
-        self.set_rook_log_level()
-
-        # creating StorageCluster
-        if config.DEPLOYMENT.get("kms_deployment"):
-            kms = KMS.get_kms_deployment()
-            kms.deploy()
-
-        if config.ENV_DATA["mcg_only_deployment"]:
-            mcg_only_deployment()
-            return
-
-        log_step("Setup StorageCluster preferences before applying CR")
-        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
-        # Figure out all the OCS modules enabled/disabled
-        # CLI parameter --disable-components takes the precedence over
-        # anything which comes from config file
-        if config.ENV_DATA.get("disable_components"):
-            for component in config.ENV_DATA["disable_components"]:
-                config.COMPONENTS[f"disable_{component}"] = True
-                logger.warning(f"disabling: {component}")
-
-        if config.DEPLOYMENT.get("host_network"):
-            logger.info("Using host network for ODF operator")
-            cluster_data["spec"]["network"] = {"hostNetwork": True}
-
-        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
-            cluster_data["spec"]["providerAPIServerServiceType"] = "NodePort"
-
-        # Update cluster_data with respective component enable/disable
-        for key in config.COMPONENTS.keys():
-            comp_name = constants.OCS_COMPONENTS_MAP[key.split("_")[1]]
-            if config.COMPONENTS[key]:
-                if "noobaa" in key:
-                    merge_dict(
-                        cluster_data,
-                        {
-                            "spec": {
-                                "multiCloudGateway": {"reconcileStrategy": "ignore"}
-                            }
-                        },
-                    )
-                else:
-                    merge_dict(
-                        cluster_data,
-                        {
-                            "spec": {
-                                "managedResources": {
-                                    f"{comp_name}": {"reconcileStrategy": "ignore"}
-                                }
-                            }
-                        },
-                    )
-
-        device_class = config.ENV_DATA.get("device_class")
-        if arbiter_deployment:
-            cluster_data["spec"]["arbiter"] = {}
-            cluster_data["spec"]["nodeTopologies"] = {}
-            cluster_data["spec"]["arbiter"]["enable"] = True
-            cluster_data["spec"]["nodeTopologies"][
-                "arbiterLocation"
-            ] = self.get_arbiter_location()
-            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 4
-
-        cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
-        cluster_data["metadata"]["namespace"] = self.namespace
-
-        deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
-        device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
-        if device_class:
-            deviceset_data["deviceClass"] = device_class
-
-        logger.debug(
-            "Flexible scaling is available from version 4.7 on LSO cluster with less than 3 zones"
-        )
-        zone_num = get_az_count()
-        if (
-            local_storage
-            and ocs_version >= version.VERSION_4_7
-            and zone_num < 3
-            and not config.DEPLOYMENT.get("arbiter_deployment")
-            and not (self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS)
-        ):
-            cluster_data["spec"]["flexibleScaling"] = True
-            # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
-            cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
-            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
-        elif self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
-            from ocs_ci.deployment.baremetal import disks_available_to_cleanup
-
-            nodes_obj = OCP(
-                kind=constants.NODE,
-                selector=f"{constants.OPERATOR_NODE_LABEL}",
-            )
-            nodes_data = nodes_obj.get()["items"]
-            node_names = [nodes["metadata"]["name"] for nodes in nodes_data]
-
-            no_of_worker_nodes = len(node_names)
-            number_of_disks_available_total = 0
-            # count number of disks available on all labeled nodes and divide to number of nodes
-            for node in node_names:
-                node_obj_list = get_node_objs([node])
-                number_of_disks_available_total += len(
-                    disks_available_to_cleanup(node_obj_list.pop())
-                )
-
-            number_of_disks_available = int(
-                number_of_disks_available_total / no_of_worker_nodes
-            )
-
-            # with this approach of datermining the number of nodes we assume worker nodes number of disks is equal
-            # to master nodes number of disks, in case when config.ENV_DATA.get("mark_masters_schedulable") == True,
-            # and we labeled master nodes to serve as a storage nodes
-            cluster_data["spec"]["storageDeviceSets"][0][
-                "count"
-            ] = number_of_disks_available
-            cluster_data["spec"]["storageDeviceSets"][0]["replica"] = no_of_worker_nodes
-            cluster_data["spec"]["flexibleScaling"] = True
-
-        # set size of request for storage
-        if self.platform.lower() in [
-            constants.BAREMETAL_PLATFORM,
-            constants.HCI_BAREMETAL,
-        ]:
-            pv_size_list = helpers.get_pv_size(
-                storageclass=constants.DEFAULT_STORAGECLASS_LSO
-            )
-            pv_size_list.sort()
-            deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
-                "storage"
-            ] = f"{pv_size_list[0]}"
-        else:
-            deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
-                "storage"
-            ] = f"{device_size}Gi"
-
-        # set storage class to OCS default on current platform
-        if self.storage_class:
-            deviceset_data["dataPVCTemplate"]["spec"][
-                "storageClassName"
-            ] = self.storage_class
-
-        # StorageCluster tweaks for LSO
-        if local_storage:
-            cluster_data["spec"]["manageNodes"] = False
-            cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
-            deviceset_data["name"] = constants.DEFAULT_DEVICESET_LSO_PVC_NAME
-            deviceset_data["portable"] = False
-            deviceset_data["dataPVCTemplate"]["spec"][
-                "storageClassName"
-            ] = constants.DEFAULT_STORAGECLASS_LSO
-            lso_type = config.DEPLOYMENT.get("type")
-            if (
-                self.platform.lower() == constants.AWS_PLATFORM
-                and not lso_type == constants.AWS_EBS
-            ):
-                deviceset_data["count"] = 2
-            # setting resource limits for AWS i3
-            # https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.6/html-single/deploying_openshift_container_storage_using_amazon_web_services/index#creating-openshift-container-storage-cluster-on-amazon-ec2_local-storage
-            if (
-                ocs_version >= version.VERSION_4_5
-                and config.ENV_DATA.get("worker_instance_type")
-                == constants.AWS_LSO_WORKER_INSTANCE
-            ):
-                deviceset_data["resources"] = {
-                    "limits": {"cpu": 2, "memory": "5Gi"},
-                    "requests": {"cpu": 1, "memory": "5Gi"},
-                }
-            if (ocp_version >= version.VERSION_4_6) and (
-                ocs_version >= version.VERSION_4_6
-            ):
-                cluster_data["metadata"]["annotations"] = {
-                    "cluster.ocs.openshift.io/local-devices": "true"
-                }
-            count = config.DEPLOYMENT.get("local_storage_storagedeviceset_count")
-            if count is not None:
-                deviceset_data["count"] = count
-
-        # Allow lower instance requests and limits for OCS deployment
-        # The resources we need to change can be found here:
-        # https://github.com/openshift/ocs-operator/blob/release-4.5/pkg/deploy-manager/storagecluster.go#L88-L116
-        if config.DEPLOYMENT.get("allow_lower_instance_requirements"):
-            none_resources = {"Requests": None, "Limits": None}
-            deviceset_data["resources"] = deepcopy(none_resources)
-            resources = [
-                "mon",
-                "mds",
-                "rgw",
-                "mgr",
-                "noobaa-core",
-                "noobaa-db",
-            ]
-            if ocs_version >= version.VERSION_4_5:
-                resources.append("noobaa-endpoint")
-            cluster_data["spec"]["resources"] = {
-                resource: deepcopy(none_resources) for resource in resources
-            }
-            if ocs_version >= version.VERSION_4_5:
-                cluster_data["spec"]["resources"]["noobaa-endpoint"] = {
-                    "limits": {"cpu": 1, "memory": "500Mi"},
-                    "requests": {"cpu": 1, "memory": "500Mi"},
-                }
-        else:
-            platform = config.ENV_DATA.get("platform", "").lower()
-            if local_storage and platform == "aws":
-                resources = {
-                    "mds": {
-                        "limits": {"cpu": 3, "memory": "8Gi"},
-                        "requests": {"cpu": 1, "memory": "8Gi"},
-                    }
-                }
-                if ocs_version < version.VERSION_4_5:
-                    resources["noobaa-core"] = {
-                        "limits": {"cpu": 2, "memory": "8Gi"},
-                        "requests": {"cpu": 1, "memory": "8Gi"},
-                    }
-                    resources["noobaa-db"] = {
-                        "limits": {"cpu": 2, "memory": "8Gi"},
-                        "requests": {"cpu": 1, "memory": "8Gi"},
-                    }
-                cluster_data["spec"]["resources"] = resources
-
-        # Enable host network if enabled in config (this require all the
-        # rules to be enabled on underlaying platform).
-        if config.DEPLOYMENT.get("host_network"):
-            cluster_data["spec"]["hostNetwork"] = True
-            logger.info("Host network is enabled")
-            # follow the rule in bug DFBUGS-2324. UI adds this value by default if the ["spec"]["hostNetwork"] = True
-            # this prevents crashes on rgw installation
-            cluster_data["spec"].setdefault("managedResources", {}).setdefault(
-                "cephObjectStores", {}
-            )["hostNetwork"] = False
-
-        cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
-
-        if managed_ibmcloud:
-            mon_pvc_template = {
-                "spec": {
-                    "accessModes": ["ReadWriteOnce"],
-                    "resources": {"requests": {"storage": "20Gi"}},
-                    "storageClassName": self.storage_class,
-                    "volumeMode": "Filesystem",
-                }
-            }
-            cluster_data["spec"]["monPVCTemplate"] = mon_pvc_template
-            # Need to check if it's needed for ibm cloud to set manageNodes
-            cluster_data["spec"]["manageNodes"] = False
-
-        if config.ENV_DATA.get("encryption_at_rest"):
-            if ocs_version < version.VERSION_4_6:
-                error_message = "Encryption at REST can be enabled only on OCS >= 4.6!"
-                logger.error(error_message)
-                raise UnsupportedFeatureError(error_message)
-            logger.info("Enabling encryption at REST!")
-            cluster_data["spec"]["encryption"] = {
-                "enable": True,
-            }
-            if ocs_version >= version.VERSION_4_10:
-                cluster_data["spec"]["encryption"] = {
-                    "clusterWide": True,
-                }
-            if config.DEPLOYMENT.get("kms_deployment"):
-                cluster_data["spec"]["encryption"]["kms"] = {
-                    "enable": True,
-                }
-            if config.DEPLOYMENT.get("sc_encryption"):
-                if not config.DEPLOYMENT.get("kms_deployment"):
-                    raise UnsupportedFeatureError(
-                        "StorageClass encryption can be enabled only when KMS is enabled!"
-                    )
-                cluster_data["spec"]["encryption"]["storageClass"] = True
-
-        managed_resources = cluster_data["spec"].setdefault("managedResources", {})
-        if config.DEPLOYMENT.get("ceph_debug"):
-            setup_ceph_debug()
-            managed_resources.setdefault("cephConfig", {}).update(
-                {"reconcileStrategy": "ignore"}
-            )
-        if config.ENV_DATA.get("is_multus_enabled"):
-            public_net_name = config.ENV_DATA["multus_public_net_name"]
-            public_net_namespace = config.ENV_DATA["multus_public_net_namespace"]
-            cluster_net_name = config.ENV_DATA["multus_cluster_net_name"]
-            cluster_net_namespace = config.ENV_DATA["multus_cluster_net_namespace"]
-            selector_data = {}
-            if create_public_net:
-                public_selector_data = {
-                    "public": f"{public_net_namespace}/{public_net_name}"
-                }
-                selector_data.update(public_selector_data)
-            if create_cluster_net:
-                cluster_selector_data = {
-                    "cluster": f"{cluster_net_namespace}/{cluster_net_name}"
-                }
-                selector_data.update(cluster_selector_data)
-            cluster_data["spec"]["network"] = {
-                "provider": "multus",
-                "selectors": selector_data,
-            }
-
-        # Enable in-transit encryption.
-        cluster_data = add_in_transit_encryption_to_cluster_data(cluster_data)
-
-        # Use Custom Storageclass Names
-        if config.ENV_DATA.get("custom_default_storageclass_names"):
-            storageclassnames = config.ENV_DATA.get("storageclassnames")
-
-            keys_to_update = [
-                constants.OCS_COMPONENTS_MAP["cephfs"],
-                constants.OCS_COMPONENTS_MAP["rgw"],
-                constants.OCS_COMPONENTS_MAP["blockpools"],
-                constants.OCS_COMPONENTS_MAP["cephnonresilentpools"],
-            ]
-
-            cluster_data.setdefault("spec", {}).setdefault("managedResources", {})
-
-            for key in keys_to_update:
-                if storageclassnames.get(key):
-                    cluster_data["spec"]["managedResources"][key] = {
-                        "storageClassName": storageclassnames[key]
-                    }
-
-            if cluster_data["spec"].get("nfs"):
-                cluster_data["spec"]["nfs"] = {
-                    "storageClassName": storageclassnames["nfs"]
-                }
-
-            if cluster_data["spec"].get("encryption"):
-                cluster_data["spec"]["encryption"] = {
-                    "storageClassName": storageclassnames["encryption"]
-                }
-        performance_profile = config.ENV_DATA.get("performance_profile")
-        if performance_profile:
-            cluster_data["spec"]["resourceProfile"] = performance_profile
-        # Bluestore-rdr for RDR greenfield deployments: 4.14 onwards until 4.17
-        if (
-            (
-                version.VERSION_4_14
-                <= version.get_semantic_ocs_version_from_config()
-                <= version.VERSION_4_17
-            )
-            and config.multicluster
-            and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
-            and config.ENV_DATA.get("rdr_osd_deployment_mode")
-            == constants.RDR_OSD_MODE_GREENFIELD
-        ):
-            rdr_bluestore_annotation = {
-                "ocs.openshift.io/clusterIsDisasterRecoveryTarget": "true"
-            }
-            merge_dict(
-                cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
-            )
-        if (
-            version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
-            and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
-        ):
-            api_server_exported_address_annotation = {
-                "ocs.openshift.io/api-server-exported-address": (
-                    f'{config.ENV_DATA["cluster_name"]}.'
-                    f"ocs-provider-server.openshift-storage.svc.clusterset.local:50051"
-                )
-            }
-            merge_dict(
-                cluster_data,
-                {"metadata": {"annotations": api_server_exported_address_annotation}},
-            )
-        if config.ENV_DATA.get("noobaa_external_pgsql"):
-            log_step(
-                "Creating external pgsql DB for NooBaa and correct StorageCluster data"
-            )
-            pgsql_data = config.AUTH["pgsql"]
-            user = pgsql_data["username"]
-            password = pgsql_data["password"]
-            host = pgsql_data["host"]
-            port = pgsql_data["port"]
-            pgsql_manager = pgsql.PgsqlManager(
-                username=user,
-                password=password,
-                host=host,
-                port=port,
-            )
-            cluster_name = config.ENV_DATA["cluster_name"]
-            db_name = f"nbcore_{cluster_name.replace('-', '_')}"
-            pgsql_manager.create_database(
-                db_name=db_name, extra_params="WITH LC_COLLATE = 'C' TEMPLATE template0"
-            )
-            create_external_pgsql_secret()
-            cluster_data["spec"]["multiCloudGateway"] = {
-                "externalPgConfig": {"pgSecretName": constants.NOOBAA_POSTGRES_SECRET}
-            }
-        # To be able to verify: https://bugzilla.redhat.com/show_bug.cgi?id=2276694
-        wait_timeout_for_healthy_osd_in_minutes = config.ENV_DATA.get(
-            "wait_timeout_for_healthy_osd_in_minutes"
-        )
-        # For testing: https://issues.redhat.com/browse/RHSTOR-5929
-        ceph_threshold_backfill_full_ratio = config.ENV_DATA.get(
-            "ceph_threshold_backfill_full_ratio"
-        )
-        ceph_threshold_full_ratio = config.ENV_DATA.get("ceph_threshold_full_ratio")
-        ceph_threshold_near_full_ratio = config.ENV_DATA.get(
-            "ceph_threshold_near_full_ratio"
-        )
-
-        osd_maintenance_timeout = config.ENV_DATA.get("osd_maintenance_timeout")
-
-        # For testing: https://issues.redhat.com/browse/RHSTOR-5758
-        skip_upgrade_checks = config.ENV_DATA.get("skip_upgrade_checks")
-        continue_upgrade_after_checks_even_if_not_healthy = config.ENV_DATA.get(
-            "continue_upgrade_after_checks_even_if_not_healthy"
-        )
-        upgrade_osd_requires_healthy_pgs = config.ENV_DATA.get(
-            "upgrade_osd_requires_healthy_pgs"
-        )
-        wipe_devices_from_other_clusters = config.ENV_DATA.get(
-            "wipe_devices_from_other_clusters", False
-        )
-
-        set_managed_resources_ceph_cluster = (
-            wait_timeout_for_healthy_osd_in_minutes
-            or ceph_threshold_backfill_full_ratio
-            or ceph_threshold_full_ratio
-            or ceph_threshold_near_full_ratio
-            or osd_maintenance_timeout
-            or skip_upgrade_checks is not None
-            or continue_upgrade_after_checks_even_if_not_healthy is not None
-            or upgrade_osd_requires_healthy_pgs is not None
-            or wipe_devices_from_other_clusters
-        )
-        if set_managed_resources_ceph_cluster:
-            cluster_data.setdefault("spec", {}).setdefault(
-                "managedResources", {}
-            ).setdefault("cephCluster", {})
-            managed_resources_ceph_cluster = cluster_data["spec"]["managedResources"][
-                "cephCluster"
-            ]
-            if wait_timeout_for_healthy_osd_in_minutes:
-                managed_resources_ceph_cluster["waitTimeoutForHealthyOSDInMinutes"] = (
-                    wait_timeout_for_healthy_osd_in_minutes
-                )
-            if ceph_threshold_backfill_full_ratio:
-                managed_resources_ceph_cluster["backfillFullRatio"] = (
-                    ceph_threshold_backfill_full_ratio
-                )
-            if ceph_threshold_full_ratio:
-                managed_resources_ceph_cluster["fullRatio"] = ceph_threshold_full_ratio
-            if ceph_threshold_near_full_ratio:
-                managed_resources_ceph_cluster["nearFullRatio"] = (
-                    ceph_threshold_near_full_ratio
-                )
-
-            if osd_maintenance_timeout:
-                managed_resources_ceph_cluster["osdMaintenanceTimeout"] = (
-                    osd_maintenance_timeout
-                )
-
-            if skip_upgrade_checks is not None:
-                managed_resources_ceph_cluster["skipUpgradeChecks"] = (
-                    skip_upgrade_checks
-                )
-
-            if continue_upgrade_after_checks_even_if_not_healthy is not None:
-                managed_resources_ceph_cluster[
-                    "continueUpgradeAfterChecksEvenIfNotHealthy"
-                ] = continue_upgrade_after_checks_even_if_not_healthy
-
-            if upgrade_osd_requires_healthy_pgs is not None:
-                managed_resources_ceph_cluster["upgradeOSDRequiresHealthyPGs"] = (
-                    upgrade_osd_requires_healthy_pgs
-                )
-            # Flag to enable wiping devices that were used by other Ceph clusters
-            if wipe_devices_from_other_clusters:
-                logger.info(
-                    "Enabling cleanupPolicy.wipeDevicesFromOtherClusters on CephCluster"
-                )
-                cp = managed_resources_ceph_cluster.setdefault("cleanupPolicy", {})
-                cp["wipeDevicesFromOtherClusters"] = True
-
-        storage_cluster_override = config.DEPLOYMENT.get("storage_cluster_override", {})
-        if storage_cluster_override:
-            logger.info(
-                f"Override storage cluster data with: {storage_cluster_override}"
-            )
-            merge_dict(cluster_data, storage_cluster_override)
-        cluster_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="cluster_storage", delete=False
-        )
-        templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
-
-        log_step("Create StorageCluster CR")
-        storage_cluster_obj = ocp.OCP(
-            kind=constants.STORAGECLUSTER,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        is_storagecluster = storage_cluster_obj.is_exist(
-            resource_name=constants.DEFAULT_STORAGE_CLUSTER
-        )
-
-        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
-            if not is_storagecluster:
-                run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
-            else:
-                logger.info(
-                    f"StorageCluster {constants.DEFAULT_STORAGE_CLUSTER} already exists, skipping creation."
-                )
-        else:
-            run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
+        storage_cluster_setup = StorageClusterSetup()
+        storage_cluster_setup.setup_storage_cluster()
 
         if config.DEPLOYMENT["infra_nodes"]:
             log_step("Labeling infra nodes")
@@ -2074,12 +1777,57 @@ class Deployment(object):
         deployment_obj.install_ocs_ui()
         close_browser()
 
+    def set_noobaa_core_for_rgw_ssl(self):
+        """
+        Set env variables for noobaa-core StatefulSet to inject SSL environment variables
+        required for RGW SSL connections in external mode to W/A issue:
+        https://issues.redhat.com/browse/DFBUGS-3777#
+
+        This adds NODE_OPTIONS and SSL_CERT_FILE environment variables
+        to the noobaa-core container to enable SSL certificate validation.
+        """
+        logger.info(
+            "Setting env variables for noobaa-core StatefulSet for RGW SSL support"
+        )
+
+        # Wait for noobaa-core StatefulSet to exist
+        sts_obj = ocp.OCP(
+            kind="StatefulSet", namespace=self.namespace, resource_name="noobaa-core"
+        )
+
+        # Wait for StatefulSet for noobaa-core exists before patching
+        jsonpath: str = "'{.status.readyReplicas}'=1"
+        if not sts_obj.wait(
+            timeout=600,
+            condition=None,
+            jsonpath=jsonpath,
+        ):
+            raise ResourceNotFoundError("noobaa-core StatefulSet not found")
+
+        set_env_cmd = (
+            f"oc set env statefulset noobaa-core -n {self.namespace} "
+            f"NODE_OPTIONS='--use-openssl-ca' SSL_CERT_FILE='/etc/ocp-injected-ca-bundle/ca-bundle.crt'"
+        )
+
+        try:
+            run_cmd(set_env_cmd)
+            logger.info(
+                "Successfully set env variables for noobaa-core StatefulSet with SSL environment variables"
+            )
+        except CommandFailed as e:
+            logger.error(
+                f"Failed to set env variables for noobaa-core StatefulSet: {e}"
+            )
+            raise
+
     def deploy_with_external_mode(self):
         """
         This function handles the deployment of OCS on
         external/indpendent RHCS cluster
 
         """
+        if config.EXTERNAL_MODE.get("rgw_secure"):
+            get_and_apply_rgw_cert_ca()
 
         if not config.DEPLOYMENT.get("multi_storagecluster"):
             live_deployment = config.DEPLOYMENT.get("live_deployment")
@@ -2108,7 +1856,7 @@ class Deployment(object):
                 csv = CSV(resource_name=csv_name, namespace=self.namespace)
                 csv.wait_for_phase("Succeeded", timeout=720)
         # Set rook log level
-        self.set_rook_log_level()
+        helpers.set_rook_log_level()
 
         # get external cluster details
         host, user, password, ssh_key = get_external_cluster_client()
@@ -2139,7 +1887,7 @@ class Deployment(object):
             cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
         # Create secret for external cluster
-        create_external_secret()
+        create_external_secret(apply=True)
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
             storageclassnames = config.ENV_DATA.get("storageclassnames")
@@ -2187,6 +1935,16 @@ class Deployment(object):
                     storageclassnames["encryption"]
                 )
 
+        # Disable NFS when cluster resources are insufficient
+        from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
+
+        if not check_cluster_resources_for_nfs():
+            logger.info(
+                "Disabling NFS for external mode because cluster resources are insufficient "
+                "(based on actual node CPU/memory measurement)"
+            )
+            cluster_data["spec"]["nfs"] = {"enable": False}
+
         # Enable in-transit encryption.
         if config.ENV_DATA.get("in_transit_encryption"):
             cluster_data["spec"]["network"] = {
@@ -2196,7 +1954,8 @@ class Deployment(object):
             mode="w+", prefix="external_cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
-        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        run_cmd(f"oc apply -f {cluster_data_yaml.name}", timeout=2400)
+        external_cluster.disable_certificate_check()
         self.external_post_deploy_validation()
 
         # enable secure connection mode for in-transit encryption
@@ -2228,11 +1987,6 @@ class Deployment(object):
                     "External multi-storagecluster external ceph cluster not healthy"
                 )
             verify_storage_cluster_extended()
-
-    def set_rook_log_level(self):
-        rook_log_level = config.DEPLOYMENT.get("rook_log_level")
-        if rook_log_level:
-            set_configmap_log_level_rook_ceph_operator(rook_log_level)
 
     def external_post_deploy_validation(self):
         """
@@ -2315,16 +2069,8 @@ class Deployment(object):
             OCP().exec_oc_cmd(command=patch_cmd)
 
             # Mark master nodes schedulable if mark_masters_schedulable: True
-            if config.ENV_DATA.get("mark_masters_schedulable", False):
-                path = "/spec/mastersSchedulable"
-                params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-                scheduler_obj = ocp.OCP(
-                    kind=constants.SCHEDULERS_CONFIG,
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                )
-                assert scheduler_obj.patch(
-                    params=params, format_type="json"
-                ), "Failed to run patch command to update control nodes as scheduleable"
+            if config.ENV_DATA.get("mark_masters_schedulable", True):
+                mark_masters_schedulable()
                 # Allow ODF to be deployed on all nodes
                 logger.info("labeling all nodes as storage nodes")
                 nodes = get_all_nodes()
@@ -2475,6 +2221,10 @@ class Deployment(object):
                     f"Failed to set values for bluestore_slow_ops. Exception is: {ex}"
                 )
 
+        # Mute MON_NETSPLIT for arbiter deployments to avoid:
+        # https://issues.redhat.com/browse/DFBUGS-4521
+        if config.DEPLOYMENT.get("arbiter_deployment"):
+            mute_mon_netsplit(namespace=self.namespace)
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
         try:
@@ -2483,9 +2233,7 @@ class Deployment(object):
             err = str(ex)
             logger.warning(f"Ceph health check failed with {err}")
             if "clock skew detected" in err:
-                logger.info(
-                    f"Changing NTP on compute nodes to" f" {constants.RH_NTP_CLOCK}"
-                )
+                logger.info("Changing NTP on cluster nodes")
                 if self.platform == constants.VSPHERE_PLATFORM:
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
@@ -2722,6 +2470,9 @@ class Deployment(object):
             self.deploy_multicluster_hub()
         if config.ENV_DATA.get("configure_acm_to_import_mce"):
             self.configure_acm_to_import_mce_clusters()
+        from ocs_ci.ocs.acm.acm import verify_running_acm
+
+        verify_running_acm()
 
     def configure_acm_to_import_mce_clusters(self):
         """
@@ -2730,93 +2481,137 @@ class Deployment(object):
 
         # Before starting the configuration, verify the presence of the pods cluster-proxy-proxy-agent,
         # klusterlet-addon-workmgr and managed-serviceaccount-addon-agent in the default addons namespace
-        for pod_label in [
-            "open-cluster-management.io/addon=cluster-proxy",
-            "component=work-manager",
-            "addon-agent=managed-serviceaccount",
-        ]:
-            if not wait_for_pods_by_label_count(
-                label=pod_label,
-                expected_count=1,
+        acm_version = get_acm_version()
+        if version.compare_versions(f"{acm_version} <= 2.14"):
+            logger.info(
+                "Setting Up Configure ACM to import MCE operator cluster via Manual Way"
+            )
+            for pod_label in [
+                "open-cluster-management.io/addon=cluster-proxy",
+                "component=work-manager",
+                "addon-agent=managed-serviceaccount",
+            ]:
+                if not wait_for_pods_by_label_count(
+                    label=pod_label,
+                    expected_count=1,
+                    namespace=constants.ACM_ADDONS_NAMESPACE,
+                    timeout=300,
+                    sleep=10,
+                ):
+                    raise ResourceNotFoundError(
+                        f"Pod with label {pod_label} not found in the namespace {constants.ACM_ADDONS_NAMESPACE}"
+                    )
+
+            # Verify the status of existing pods in the default addons namespace
+            all_pods = get_all_pods(namespace=constants.ACM_ADDONS_NAMESPACE)
+            if not wait_for_pods_to_be_in_statuses(
+                expected_statuses=[
+                    constants.STATUS_RUNNING,
+                    constants.STATUS_COMPLETED,
+                ],
+                pod_names=[pod_obj.name for pod_obj in all_pods],
                 namespace=constants.ACM_ADDONS_NAMESPACE,
                 timeout=300,
                 sleep=10,
             ):
-                raise ResourceNotFoundError(
-                    f"Pod with label {pod_label} not found in the namespace {constants.ACM_ADDONS_NAMESPACE}"
+                raise ResourceWrongStatusException(
+                    f"Some pods in the namespace {constants.ACM_ADDONS_NAMESPACE} are not in expected status."
                 )
 
-        # Verify the status of existing pods in the default addons namespace
-        all_pods = get_all_pods(namespace=constants.ACM_ADDONS_NAMESPACE)
-        if not wait_for_pods_to_be_in_statuses(
-            expected_statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
-            pod_names=[pod_obj.name for pod_obj in all_pods],
-            namespace=constants.ACM_ADDONS_NAMESPACE,
-            timeout=300,
-            sleep=10,
-        ):
-            raise ResourceWrongStatusException(
-                f"Some pods in the namespace {constants.ACM_ADDONS_NAMESPACE} are not in expected status."
+            # Create AddOnDeploymentConfig to install add-ons in a different multicluster
+            # engine operator namespace so that
+            # the multicluster engine operator can self-manage with the local-cluster add-ons while
+            # ACM manages multicluster engine operator at the same time
+            logger.info(
+                "Configuring Red Hat Advanced Cluster Management to import multicluster engine operator clusters"
+            )
+            addon_deployment_config = helpers.create_resource(
+                **templating.load_yaml(constants.ACM_ADDON_DEPLOYMENT_CONFIG_YAML)
             )
 
-        # Create AddOnDeploymentConfig to install add-ons in a different multicluster engine operator namespace so that
-        # the multicluster engine operator can self-manage with the local-cluster add-ons while
-        # ACM manages multicluster engine operator at the same time
-        logger.info(
-            "Configuring Red Hat Advanced Cluster Management to import multicluster engine operator clusters"
-        )
-        addon_deployment_config = helpers.create_resource(
-            **templating.load_yaml(constants.ACM_ADDON_DEPLOYMENT_CONFIG_YAML)
-        )
-
-        # Update the existing ClusterManagementAddOn resources for the add-ons so that the add-ons are installed
-        # in the namespace that is specified in the AddOnDeploymentConfig
-        patch_cmd = (
-            f'{{"spec": {{"installStrategy": {{"placements": [{{"name": "global","namespace": '
-            f'"open-cluster-management-global-set","rolloutStrategy": {{"type": "All"}},"configs": [{{"group": '
-            f'"addon.open-cluster-management.io","name": "{addon_deployment_config.name}","namespace": '
-            f'"{addon_deployment_config.namespace}","resource":"addondeploymentconfigs"}}]}}]}}}}}}'
-        )
-
-        addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
-        for management_addon in [
-            "work-manager",
-            "managed-serviceaccount",
-            "cluster-proxy",
-        ]:
-            addon_obj.patch(
-                resource_name=management_addon, params=patch_cmd, format_type="merge"
+            # Update the existing ClusterManagementAddOn resources for the add-ons so that the add-ons are installed
+            # in the namespace that is specified in the AddOnDeploymentConfig
+            patch_cmd = (
+                f'{{"spec": {{"installStrategy": {{"placements": [{{"name": "global","namespace": '
+                f'"open-cluster-management-global-set","rolloutStrategy": {{"type": "All"}},"configs": [{{"group": '
+                f'"addon.open-cluster-management.io","name": "{addon_deployment_config.name}","namespace": '
+                f'"{addon_deployment_config.namespace}","resource":"addondeploymentconfigs"}}]}}]}}}}}}'
             )
 
-        # Verify the presence and Running status of the pods cluster-proxy-proxy-agent, klusterlet-addon-workmgr and
-        # managed-serviceaccount-addon-agent
-        for pod_label in [
-            "open-cluster-management.io/addon=cluster-proxy",
-            "component=work-manager",
-            "addon-agent=managed-serviceaccount",
-        ]:
-            wait_for_pods_by_label_count(
-                label=pod_label,
-                expected_count=1,
+            addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
+            for management_addon in [
+                "work-manager",
+                "managed-serviceaccount",
+                "cluster-proxy",
+            ]:
+                addon_obj.patch(
+                    resource_name=management_addon,
+                    params=patch_cmd,
+                    format_type="merge",
+                )
+
+            # Verify the presence and Running status of the pods cluster-proxy-proxy-agent,
+            # klusterlet-addon-workmgr and managed-serviceaccount-addon-agent
+            for pod_label in [
+                "open-cluster-management.io/addon=cluster-proxy",
+                "component=work-manager",
+                "addon-agent=managed-serviceaccount",
+            ]:
+                wait_for_pods_by_label_count(
+                    label=pod_label,
+                    expected_count=1,
+                    namespace=addon_deployment_config.data["spec"][
+                        "agentInstallNamespace"
+                    ],
+                    timeout=900,
+                    sleep=20,
+                )
+            wait_for_pods_to_be_running(
                 namespace=addon_deployment_config.data["spec"]["agentInstallNamespace"],
                 timeout=900,
                 sleep=20,
             )
-        wait_for_pods_to_be_running(
-            namespace=addon_deployment_config.data["spec"]["agentInstallNamespace"],
-            timeout=900,
-            sleep=20,
-        )
 
-        # Create a KlusterletConfig resource that is used by ManagedCluster resources to import multicluster engine
-        # operator clusters so that the klusterlet is installed with a different name to avoid the conflict
-        klusterlet_config = helpers.create_resource(
-            **templating.load_yaml(constants.KLUSTERLET_CONFIG_MCE_IMPORT_YAML)
-        )
+            # Create a KlusterletConfig resource that is used by ManagedCluster resources to import multicluster engine
+            # operator clusters so that the klusterlet is installed with a different name to avoid the conflict
+            helpers.create_resource(
+                **templating.load_yaml(constants.KLUSTERLET_CONFIG_MCE_IMPORT_YAML)
+            )
 
-        logger.info(
-            "Configured Red Hat ACM to import multicluster engine operator clusters"
-        )
+            logger.info(
+                "Configured Red Hat ACM to import multicluster engine operator clusters"
+            )
+
+        else:
+            logger.info(
+                "Setting Up Configure ACM to import MCE operator cluster via Automated Way"
+            )
+
+            cmd = (
+                "oc patch addondeploymentconfig hypershift-addon-deploy-config "
+                "-n multicluster-engine "
+                "--type=merge "
+                '-p \'{"spec":{"customizedVariables":[{"name":"configureMceImport","value":"true"}]}}\''
+            )
+            run_cmd(cmd=cmd)
+            logger.info("Sleeping for 60 Sec for Background Activity")
+            time.sleep(60)
+            for pod_label in [
+                "open-cluster-management.io/addon=cluster-proxy",
+                "component=work-manager",
+                "addon-agent=managed-serviceaccount",
+                "component=application-manager",
+            ]:
+                if not wait_for_pods_by_label_count(
+                    label=pod_label,
+                    expected_count=1,
+                    namespace=constants.ACM_ADDONS_NAMESPACE_DISCOVERY,
+                    timeout=400,
+                    sleep=10,
+                ):
+                    raise ResourceNotFoundError(
+                        f"Pod with label {pod_label} not found in the ns {constants.ACM_ADDONS_NAMESPACE_DISCOVERY}"
+                    )
 
         # Configuration for backup and restore. Add backup label to the default and new addondeploymentconfig,
         # clustermanagementaddon and KlusterletConfig
@@ -2824,17 +2619,36 @@ class Deployment(object):
             "Add label for backup in addondeploymentconfigs, clustermanagementaddons and klusterletconfig"
         )
         backup_label = "cluster.open-cluster-management.io/backup=true"
-        addon_deployment_config.add_label(label=backup_label)
-        addon_deployment_config.ocp.add_label(
-            resource_name="hypershift-addon-deploy-config", label=backup_label
+        addon_deployment_config = OCP(
+            kind=constants.ADDONDEPLOYMENTCONFIG,
+            namespace=constants.MCE_NAMESPACE,
         )
+        klusterlet_config = OCP(
+            kind=constants.KLUSTERLET_CONFIG,
+            resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
+        )
+        addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
+
+        addon_deployment_config.add_label(
+            label=backup_label,
+            resource_name=constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME,
+        )
+        addon_deployment_config.add_label(
+            resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
+            label=backup_label,
+        )
+
         for management_addon in [
             "work-manager",
             "managed-serviceaccount",
             "cluster-proxy",
+            "application-manager",
         ]:
             addon_obj.add_label(resource_name=management_addon, label=backup_label)
-        klusterlet_config.add_label(label=backup_label)
+        klusterlet_config.add_label(
+            label=backup_label,
+            resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
+        )
 
     def deploy_acm_hub_unreleased(self):
         """
@@ -2959,7 +2773,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             acm_hub_subscription_yaml_data, acm_hub_subscription_manifest.name
         )
-        run_cmd(f"oc create -f {acm_hub_subscription_manifest.name}")
+        run_cmd(f"oc apply -f {acm_hub_subscription_manifest.name}")
         logger.info("Sleeping for 90 seconds after subscribing to ACM")
         time.sleep(90)
         csv_name = package_manifest.get_current_csv(channel=channel)
@@ -3045,7 +2859,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             acm_hub_subscription_yaml_data, acm_hub_subscription_manifest.name
         )
-        run_cmd(f"oc create -f {acm_hub_subscription_manifest.name}")
+        run_cmd(f"oc apply -f {acm_hub_subscription_manifest.name}")
         logger.info("Sleeping for 90 seconds after subscribing to ACM")
         time.sleep(90)
         csv_name = package_manifest.get_current_csv(channel=channel)
@@ -3102,30 +2916,6 @@ class Deployment(object):
         except CommandFailed:
             mch_running = False
         return mch_running
-
-
-def create_external_pgsql_secret():
-    """
-    Creates secret for external PgSQL to be used by Noobaa
-    """
-    secret_data = templating.load_yaml(constants.EXTERNAL_PGSQL_NOOBAA_SECRET_YAML)
-    secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-    pgsql_data = config.AUTH["pgsql"]
-    user = pgsql_data["username"]
-    password = pgsql_data["password"]
-    host = pgsql_data["host"]
-    port = pgsql_data["port"]
-    cluster_name = config.ENV_DATA["cluster_name"].replace("-", "_")
-    secret_data["stringData"][
-        "db_url"
-    ] = f"postgres://{user}:{password}@{host}:{port}/nbcore_{cluster_name}"
-
-    secret_data_yaml = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="external_pgsql_noobaa_secret", delete=False
-    )
-    templating.dump_data_to_temp_yaml(secret_data, secret_data_yaml.name)
-    logger.info("Creating external PgSQL Noobaa secret")
-    run_cmd(f"oc create -f {secret_data_yaml.name}")
 
 
 def validate_acm_hub_install():
@@ -3562,21 +3352,34 @@ class MultiClusterDROperatorsDeploy(object):
             mode="w+", prefix="mirror_peer", delete=False
         )
         # Update all the participating clusters in mirror_peer_yaml
-        non_acm_clusters = get_non_acm_cluster_config()
-        primary = get_primary_cluster_config()
-        non_acm_clusters.remove(primary)
-        for cluster in non_acm_clusters:
-            logger.info(f"{cluster.ENV_DATA['cluster_name']}")
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            current_dr_clusters_list = [
+                (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+                    if is_hosted_cluster(cluster_name=item)
+                    else item
+                )
+                for item in dr_cluster_relations[0]
+            ]
+        else:
+            non_acm_clusters = get_non_acm_cluster_config()
+            primary = get_primary_cluster_config()
+            non_acm_clusters.remove(primary)
+            for cluster in non_acm_clusters:
+                logger.info(f"{cluster.ENV_DATA['cluster_name']}")
+            current_dr_clusters_list = [
+                primary.ENV_DATA["cluster_name"],
+                non_acm_clusters[0].ENV_DATA["cluster_name"],
+            ]
         index = -1
         # First entry should be the primary cluster
         # in the mirror peer
         for cluster_entry in mirror_peer_data["spec"]["items"]:
             if index == -1:
-                cluster_entry["clusterName"] = primary.ENV_DATA["cluster_name"]
+                cluster_entry["clusterName"] = current_dr_clusters_list[0]
             else:
-                cluster_entry["clusterName"] = non_acm_clusters[index].ENV_DATA[
-                    "cluster_name"
-                ]
+                cluster_entry["clusterName"] = current_dr_clusters_list[1]
             index += 1
 
         # Use unique cluster name to easily identify the managed clusters
@@ -3717,13 +3520,20 @@ class MultiClusterDROperatorsDeploy(object):
         # Create DR policy on ACM hub cluster
         dr_policy_hub_data = templating.load_yaml(constants.DR_POLICY_ACM_HUB)
         # Update DR cluster name and s3profile name
-        dr_policy_hub_data["spec"]["drClusters"][
-            0
-        ] = get_primary_cluster_config().ENV_DATA["cluster_name"]
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
+        if dr_cluster_relations:
+            primary_managed_cluster = (
+                f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{primary_cluster_name}"
+                if is_hosted_cluster(cluster_name=primary_cluster_name)
+                else primary_cluster_name
+            )
+        else:
+            primary_managed_cluster = primary_cluster_name
+        dr_policy_hub_data["spec"]["drClusters"][0] = primary_managed_cluster
         # Fill in for the rest of the non-acm clusters
         # index 0 is filled by primary
         index = 1
-        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
         # The dr_cluster_relations is expected to have only 1 pair for deployment, else,
         # the first pair will be considered. This is mainly applicable for client cluster RDR pairs
         # in multiclient configuration and provider cluster contexts will also be present.
@@ -3745,9 +3555,25 @@ class MultiClusterDROperatorsDeploy(object):
                 == get_primary_cluster_config().ENV_DATA["cluster_name"]
             ) or is_recovery_cluster(cluster):
                 continue
-            dr_policy_hub_data["spec"]["drClusters"][index] = cluster.ENV_DATA[
-                "cluster_name"
-            ]
+            secondary_cluster_name = cluster.ENV_DATA["cluster_name"]
+            if dr_cluster_relations:
+                secondary_managed_cluster = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{secondary_cluster_name}"
+                    if is_hosted_cluster(cluster_name=secondary_cluster_name)
+                    else secondary_cluster_name
+                )
+            else:
+                secondary_managed_cluster = secondary_cluster_name
+            dr_policy_hub_data["spec"]["drClusters"][index] = secondary_managed_cluster
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if ibm_cloud_managed:
+            dr_policy_hub_data["metadata"][
+                "name"
+            ] = constants.RDR_DR_POLICY_IBM_CLOUD_MANAGED
+            dr_policy_hub_data["spec"]["schedulingInterval"] = "10m"
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
             dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
@@ -3774,6 +3600,11 @@ class MultiClusterDROperatorsDeploy(object):
         )
         if not sample.wait_for_func_status(True):
             raise TimeoutExpiredError("DR Policy failed to reach Succeeded state")
+
+        # Validate DRPolicy grouping for ODF version >= 4.21
+        if is_cg_enabled():
+            logger.info("Validating DRPolicy grouping configuration")
+            validate_drpolicy_grouping(drpolicy_name=self.dr_policy_name)
 
     def enable_cluster_backup(self):
         """
@@ -3953,6 +3784,7 @@ class MultiClusterDROperatorsDeploy(object):
         2. 1 velero pod
         3. backupstoragelocation resource in "Available" phase
         """
+
         # Restic pods have been renamed to node-agent after oadp 1.2
         logger.info("Getting OADP version")
         oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
@@ -4243,7 +4075,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             rbddops.deploy()
 
         multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
-        if not multicluster_observability.get(dont_raise=True):
+        if not multicluster_observability.get()["items"]:
             # TODO: Check whether this need to be enabled for each pair of RDR clusters
             self.enable_acm_observability()
 
@@ -4256,7 +4088,25 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # TODO: Skip backup configuration if the managed clusters under test is client clusters
         #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
         #  This should be updated for the client clusters
+        # Create DPA when the RDR clusters are client clusters.
         if config.hci_client_exist():
+            # The dr_cluster_relations is expected to have only 1 pair for deployment, else,
+            # the first pair will be considered. This is mainly applicable for client cluster RDR pairs
+            # in multiclient configuration where provider cluster contexts will also be present.
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            if dr_cluster_relations:
+                dr_cluster_names = dr_cluster_relations[0]
+                cluster_configs = [
+                    cluster
+                    for cluster in config.clusters
+                    if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+                ]
+                for cluster in cluster_configs:
+                    with config.RunWithConfigContext(
+                        cluster.MULTICLUSTER["multicluster_index"]
+                    ):
+                        logger.info("Creating Resource DataProtectionApplication")
+                        run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
             return
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
@@ -4282,6 +4132,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.create_dpa(self.meta_obj.bucket_name)
 
         config.switch_acm_ctx()
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            apply_oadp_workaround(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
         # Adding Ca Cert
         self.add_cacert_ramen_configmap()
         # Only on the active hub enable managedserviceaccount-preview
@@ -4510,3 +4362,38 @@ MULTICLUSTER_DR_MAP = {
     "regional-dr": RDRMultiClusterDROperatorsDeploy,
     "metro-dr": MDRMultiClusterDROperatorsDeploy,
 }
+
+
+def get_arbiter_location():
+    """
+    Get arbiter mon location for storage cluster
+    """
+    if config.DEPLOYMENT.get("arbiter_deployment") and not config.DEPLOYMENT.get(
+        "arbiter_autodetect"
+    ):
+        return config.DEPLOYMENT.get("arbiter_zone")
+
+    # below logic will autodetect arbiter_zone
+    nodes = ocp.OCP(kind="node").get().get("items", [])
+
+    worker_nodes_zones = {
+        node["metadata"]["labels"].get(constants.ZONE_LABEL)
+        for node in nodes
+        if constants.WORKER_LABEL in node["metadata"]["labels"]
+        and str(constants.OPERATOR_NODE_LABEL)[:-3] in node["metadata"]["labels"]
+    }
+
+    master_nodes_zones = {
+        node["metadata"]["labels"].get(constants.ZONE_LABEL)
+        for node in nodes
+        if constants.MASTER_LABEL in node["metadata"]["labels"]
+    }
+
+    arbiter_locations = list(master_nodes_zones - worker_nodes_zones)
+
+    if len(arbiter_locations) < 1:
+        raise UnavailableResourceException(
+            "Atleast 1 different zone required than storage nodes in master nodes to host arbiter mon"
+        )
+
+    return arbiter_locations[0]

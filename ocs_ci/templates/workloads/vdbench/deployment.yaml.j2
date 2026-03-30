@@ -23,29 +23,54 @@ spec:
         command: ["/bin/bash", "-c"]
         args:
         - |
-          echo "Starting Vdbench workload..."
+          # Loop to run Vdbench multiple times
+          RUN_COUNT=0
+          MAX_RUNS={{ workload_runs | default(1) }}
 
-          echo "Configuration file:"
-          cat /config/vdbench.conf || { echo "Missing config"; exit 1; }
-          cp /config/vdbench.conf /tmp/vdbench.conf
+          while [ $RUN_COUNT -lt $MAX_RUNS ]; do
+            RUN_COUNT=$((RUN_COUNT + 1))
+            echo "========================================"
+            echo "Vdbench workload run #${RUN_COUNT}"
+            echo "========================================"
 
-          mkdir -p /tmp/vdbench-work
-          cd /tmp/vdbench-work
+            echo "Configuration file:"
+            cat /config/vdbench.conf || { echo "Missing config"; exit 1; }
+            cp /config/vdbench.conf /tmp/vdbench.conf
+
+            mkdir -p /tmp/vdbench-work
+            cd /tmp/vdbench-work
 
 {% if volume_mode == "Block" %}
-          echo "Block device information:"
-          ls -la {{ device_path }}
-          lsblk {{ device_path }} || true
+            echo "Block device information:"
+            ls -la {{ device_path }}
+            lsblk {{ device_path }} || true
 {% else %}
-          echo "Filesystem path:"
-          ls -la {{ mount_path }}
+            echo "Filesystem path:"
+            ls -la {{ mount_path }}
 {% endif %}
 
-          echo "Running Vdbench..."
-          /vdbench/vdbench -f /tmp/vdbench.conf || { echo "Vdbench failed"; exit 1; }
-          echo "Vdbench completed"
+            echo "Running Vdbench..."
+{% if enable_verification | default(false) %}
+            /vdbench/vdbench -f /tmp/vdbench.conf -v
+{% else %}
+            /vdbench/vdbench -f /tmp/vdbench.conf
+{% endif %}
+            EXIT_CODE=$?
 
-          # Prevent container from exiting
+            if [ $EXIT_CODE -eq 0 ]; then
+              echo "✅ Vdbench run #${RUN_COUNT} completed successfully"
+            else
+              echo "❌ Vdbench run #${RUN_COUNT} failed with exit code $EXIT_CODE"
+            fi
+
+            # Wait before restarting (avoid rapid restart loops)
+            if [ $RUN_COUNT -lt $MAX_RUNS ]; then
+              echo "Waiting 10 seconds before next run..."
+              sleep 10
+            fi
+          done
+
+          echo "Maximum runs ($MAX_RUNS) reached. Sleeping indefinitely..."
           sleep infinity
 
 {% if volume_mode == "Block" %}

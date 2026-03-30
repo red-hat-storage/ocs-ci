@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import skipif_ocs_version
 
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 @mcg
@@ -64,4 +64,5 @@ def send_rpc_request_to_mgmt_endpoint(mcg_obj, api, method, params={}):
         url=mcg_obj.mgmt_endpoint,
         data=json.dumps(payload),
         verify=retrieve_verification_mode(),
+        timeout=120,
     )

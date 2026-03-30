@@ -3,6 +3,7 @@ import logging
 
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 @magenta_squad
 class TestDisableMCGExternalService:
     @pytest.fixture()
-    def patch_noobaa_object(self, request):
+    def patch_storagecluster_object(self, request):
 
         # get noobaa object
         noobaa_ocp_obj = OCP(
@@ -26,10 +27,17 @@ class TestDisableMCGExternalService:
             resource_name="noobaa",
         )
 
-        # patch noobaa object
-        noobaa_ocp_obj.patch(
-            resource_name="noobaa",
-            params='{"spec": {"disableLoadBalancerService": true }}',
+        # get storagecluster object
+        storagecluster_obj = OCP(
+            kind="storagecluster",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+        )
+
+        # patch storagecluster object
+        storagecluster_obj.patch(
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+            params='{"spec":{ "multiCloudGateway": {"disableLoadBalancerService": true }}}',
             format_type="merge",
         )
 
@@ -41,11 +49,13 @@ class TestDisableMCGExternalService:
         )
 
         def finalizer():
-            noobaa_ocp_obj.patch(
-                resource_name="noobaa",
-                params='{"spec": {"disableLoadBalancerService": false }}',
+
+            storagecluster_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params='{"spec":{ "multiCloudGateway": {"disableLoadBalancerService": false }}}',
                 format_type="merge",
             )
+
             noobaa_ocp_obj.patch(
                 resource_name="noobaa",
                 params='{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 1,"maxCount": 2}}}}',
@@ -58,14 +68,14 @@ class TestDisableMCGExternalService:
     @tier2
     @polarion_id("OCS-4932")
     @skipif_external_mode
-    def test_disable_mcg_external_service(self, patch_noobaa_object):
+    def test_disable_mcg_external_service(self, patch_storagecluster_object):
         """
         Test KCS https://access.redhat.com/articles/6970745
         Make sure disableLoadBalancerService is not reconciled and verify it works as expected
         """
         # verify disableLoadBalancerService is reconciled
         assert (
-            str(patch_noobaa_object.get()["spec"]["disableLoadBalancerService"])
+            str(patch_storagecluster_object.get()["spec"]["disableLoadBalancerService"])
             == "True"
         ), "disableLoadBalancerService is reconciled back to false"
 

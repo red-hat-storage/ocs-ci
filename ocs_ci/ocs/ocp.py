@@ -231,11 +231,11 @@ class OCP(object):
         except ValueError:
             pass
 
-        if out_yaml_format:
-            return yaml.safe_load(out)
-
-        if original_context:
+        if original_context is not None:
             config.switch_ctx(original_context)
+
+        if out_yaml_format:
+            return yaml.load(out, Loader=yaml.CSafeLoader)
         return out
 
     @retry(CommandFailed, tries=3, delay=30, backoff=1)
@@ -322,9 +322,13 @@ class OCP(object):
         resource_name = resource_name if resource_name else self.resource_name
         selector = selector if selector else self.selector
         field_selector = field_selector if field_selector else self.field_selector
+        kind = self.kind
+        if kind == constants.NETWORK_ATTACHMENT_DEFINITION:
+            # https://github.com/k8snetworkplumbingwg/multus-cni/issues/295
+            kind = "network-attachment-definition"
         if selector or field_selector:
             resource_name = ""
-        command = f"get {self.kind} {resource_name}"
+        command = f"get {kind} {resource_name}"
         if all_namespaces and not self.namespace:
             command += " -A"
         elif self.namespace:
@@ -348,7 +352,7 @@ class OCP(object):
                 if not silent:
                     log.warning(
                         f"Failed to get resource: {resource_name} of kind: "
-                        f"{self.kind}, selector: {selector}, Error: {ex}"
+                        f"{kind}, selector: {selector}, Error: {ex}"
                     )
                 retry -= 1
                 if not retry:
@@ -409,7 +413,7 @@ class OCP(object):
         command = "create "
         if yaml_file:
             command += f"-f {yaml_file}"
-            if config.RUN["resource_checker"]:
+            if config.RUN.get("resource_checker"):
                 yaml_dct = load_yaml(yaml_file)
                 kind = yaml_dct["kind"]
                 if kind == "PersistentVolume":
@@ -448,7 +452,7 @@ class OCP(object):
         elif resource_name:
             # e.g "oc namespace my-project"
             command += f"{self.kind} {resource_name}"
-            if config.RUN["resource_checker"]:
+            if config.RUN.get("resource_checker"):
                 config.RUN["RESOURCE_DICT_TEST"][self.kind] = resource_name
         if out_yaml_format:
             command += " -o yaml"
@@ -540,6 +544,9 @@ class OCP(object):
         condition="Available",
         timeout=300,
         selector=None,
+        namespace=None,
+        jsonpath=None,
+        delete=False,
     ):
         """
         Wait for a resource to meet a specific condition using 'oc wait' command.
@@ -547,21 +554,102 @@ class OCP(object):
         Args:
             resource_name (str): The name of the specific resource to wait for.
             condition (str): The condition to wait for (e.g.,'Available', 'Ready').
+                Mutually exclusive with jsonpath and delete parameters. If you want to use
+                other mutual exclusive parameters, set condition to None
             timeout (int): Timeout in seconds for the wait operation.
             selector (str): The label selector to look for
+            namespace (str): The namespace of the resource. If not provided, the namespace
+                of the current OCP instance will be used.
+            jsonpath (str): JSONPath expression to wait for a specific value.
+                Format: "jsonpath_expression=expected_value" or just "jsonpath_expression"
+                Examples:
+                    - "'{.status.phase}'=Running"
+                    - "'{.status.readyReplicas}'=1"
+                    - "'{.status.loadBalancer.ingress}'"
+                Mutually exclusive with condition and delete parameters.
+            delete (bool): If True, wait for the resource to be deleted.
+                Mutually exclusive with condition and jsonpath parameters.
 
         Raises:
+            ValueError: If multiple mutually exclusive parameters are provided.
             TimeoutExpiredError: If the resource does not meet the specified condition within the timeout.
 
+        Examples:
+            # Wait for condition (default behavior)
+            ocp_obj.wait(resource_name="pod/busybox1", condition="Ready")
+
+            # Wait for jsonpath
+            ocp_obj.wait(resource_name="sts/noobaa-core", jsonpath="'{.status.readyReplicas}'=1")
+
+            # Wait for deletion
+            ocp_obj.wait(resource_name="pod/busybox1", delete=True)
+
         """
+        # Validate mutual exclusivity
+        wait_modes = sum([condition is not None, jsonpath is not None, delete is True])
+
+        # If only default condition is set and no other modes, it's valid
+        if wait_modes > 1:
+            raise ValueError(
+                "Parameters 'condition', 'jsonpath', and 'delete' are mutually exclusive. "
+                "Please specify only one wait mode."
+            )
+
         resource_name = resource_name if resource_name else self.resource_name
-        command = f"wait {self.kind} {resource_name} --for=condition={condition}"
+        # If not waiting for deletion, first wait for the resource to exist
+        if not delete:
+            start_time = time.time()
+            sleep_time = 10
+            resource_exists = False
+            log.info(
+                f"Checking if resource {self.kind}/{resource_name} exists before waiting for condition"
+            )
+            try:
+                for sample in TimeoutSampler(
+                    timeout=timeout,
+                    sleep=sleep_time,
+                    func=self.get,
+                    resource_name=resource_name,
+                    out_yaml_format=False,
+                    selector=selector,
+                    silent=True,
+                ):
+                    if sample:
+                        resource_exists = True
+                        log.info(
+                            f"Resource {self.kind}/{resource_name} found, proceeding with wait command"
+                        )
+                        break
+            except TimeoutExpiredError:
+                log.error(
+                    f"Timeout expired while waiting for resource {self.kind}/{resource_name} to be created"
+                )
+                return False
+            if not resource_exists:
+                log.error(
+                    f"Resource {self.kind}/{resource_name} was not created within timeout of {timeout}s"
+                )
+                return False
+            # Adjust timeout for the actual wait command based on time already spent
+            elapsed_time = time.time() - start_time
+            remaining_timeout = max(1, int(timeout - elapsed_time))
+            timeout = remaining_timeout
+
+        namespace: str | None = namespace if namespace else self.namespace
+        base_cmd: str = f"wait {self.kind} {resource_name} --namespace {namespace}"
+        # Build the wait command based on the mode
+        if delete:
+            command = f"{base_cmd} --for=delete"
+        elif jsonpath is not None:
+            command = f"{base_cmd} --for=jsonpath={jsonpath}"
+        else:
+            command = f"{base_cmd} --for=condition={condition}"
         if timeout:
             command += f" --timeout={timeout}s"
         if selector:
             command += f" --selector={selector}"
         try:
-            self.exec_oc_cmd(command, out_yaml_format=False)
+            self.exec_oc_cmd(command, out_yaml_format=False, timeout=timeout)
             return True
         except CommandFailed:
             return False
@@ -602,7 +690,7 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         ocp = OCP(kind="namespace")
-        if config.RUN["custom_kubeconfig_location"]:
+        if config.RUN.get("custom_kubeconfig_location"):
             cmd = f'oc --kubeconfig {config.RUN["custom_kubeconfig_location"]} new-project {project_name}'
         else:
             cmd = f"oc new-project {project_name}"
@@ -791,6 +879,7 @@ class OCP(object):
             )
 
         selector = selector or self.selector
+        resource_name = resource_name or self.resource_name
         command = f"wait {self.kind} {resource_name} --for=jsonpath='{{.status.phase}}'={condition}"
 
         # if selector is used, all resources of kind self.kind with that selector must match the condition, e.g.
@@ -1195,6 +1284,7 @@ class OCP(object):
                 raise TimeoutError(msg)
             time.sleep(sleep)
 
+    @retry(IndexError, tries=4, delay=20, backoff=1)
     def get_resource(self, resource_name, column, retry=0, wait=3, selector=None):
         """
         Get a column value for a resource based on:
@@ -1403,7 +1493,7 @@ class OCP(object):
         log.info(f"Check if resource: {resource_name} exists.")
         self.check_name_is_specified(resource_name)
         try:
-            self.get(resource_name, selector=selector)
+            self.get(resource_name, selector=selector, silent=True)
             log.info(f"Resource: '{resource_name}', selector: '{selector}' was found.")
             return True
         except CommandFailed:
@@ -1536,18 +1626,18 @@ def get_all_resource_names_of_a_kind(kind):
 
 def get_all_resource_of_kind_containing_string(search_string, kind):
     """
-    Return all the resource of kind which name contain search_string
+    Return all the resource names of kind which name contain search_string
     Args:
          search_string (str): The string to search in name of the resource
          kind (str): Kind of the resource to search for
     Returns:
-        (list): List of resource
+        (list): List of resource names
     """
 
     resource_list = []
     for resource in OCP(kind=kind).get().get("items"):
         if search_string in resource["metadata"]["name"]:
-            resource_list.append(resource)
+            resource_list.append(resource.get("metadata").get("name"))
     return resource_list
 
 
@@ -1832,6 +1922,9 @@ def check_cluster_operator_versions(target_image, operator_upgrade_timeout):
         operator_upgrade_timeout (int): timeout for operator upgrade
     """
     cluster_operators = get_all_cluster_operators()
+    if "aro" in cluster_operators:
+        log.debug("aro cluster operator check will be ignored!")
+        cluster_operators.remove("aro")
     for ocp_operator in cluster_operators:
         for sampler in TimeoutSampler(
             timeout=operator_upgrade_timeout,

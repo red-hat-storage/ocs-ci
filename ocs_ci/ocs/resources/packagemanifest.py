@@ -199,6 +199,12 @@ class PackageManifest(OCP):
 
         for _channel in channels:
             if _channel["name"] == channel:
+                if (
+                    config.DEPLOYMENT.get("fdf_cluster")
+                    and "rhodf" in _channel["currentCSV"]
+                ):
+                    return _channel["currentCSV"].rsplit("-", 1)[0]
+
                 return _channel["currentCSV"]
         channel_names = [_channel["name"] for _channel in channels]
         raise ChannelNotFound(
@@ -227,7 +233,7 @@ class PackageManifest(OCP):
             ]
             if not not_approved_install_plans:
                 raise NoInstallPlanForApproveFoundException(
-                    "No insall plan for approve found!"
+                    "No install plan for approve found!"
                 )
         sorted_install_plans = sorted(
             install_plans,
@@ -263,11 +269,11 @@ class PackageManifest(OCP):
             TimeoutExpiredError: in case the resource not found in timeout
 
         """
+        resource_name = resource_name if resource_name else self.resource_name
         log.info(
             f"Waiting for a resource(s) of kind {self._kind}"
             f" identified by name '{resource_name}'"
         )
-        resource_name = resource_name if resource_name else self.resource_name
         self.check_name_is_specified(resource_name)
 
         for sample in TimeoutSampler(timeout=timeout, sleep=sleep, func=self.get):

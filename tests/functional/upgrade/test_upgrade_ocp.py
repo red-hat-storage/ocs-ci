@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 import pytest
 
@@ -8,6 +9,7 @@ from semantic_version import Version
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CephHealthException
+from ocs_ci.ocs.node import get_nodes_in_statuses
 from ocs_ci.ocs.ocp import check_cluster_operator_versions
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.deployment.disconnected import mirror_ocp_release_images
@@ -21,6 +23,8 @@ from ocs_ci.utility.utils import (
     expose_ocp_version,
     ceph_health_check,
     load_config_file,
+    wait_for_machineconfigpool_status,
+    get_latest_ocp_multi_image,
 )
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
@@ -29,6 +33,7 @@ from ocs_ci.ocs.cluster import (
     CephClusterMultiCluster,
     CephHealthMonitor,
     MulticlusterCephHealthMonitor,
+    DummyCephHealthMonitor,
 )
 from ocs_ci.ocs.utils import (
     get_primary_cluster_config,
@@ -117,6 +122,7 @@ class TestUpgradeOCP(ManageTest):
         logger.debug(f"Cluster versions before upgrade:\n{cluster_ver}")
         if (
             config.multicluster
+            and config.MULTICLUSTER.get("multicluster_mode")
             and config.MULTICLUSTER["multicluster_mode"] in ["metro-dr", "regional-dr"]
             and is_acm_cluster(config)
         ):
@@ -133,6 +139,9 @@ class TestUpgradeOCP(ManageTest):
                 local_zone_odf = get_primary_cluster_config()
             ceph_cluster = CephClusterMultiCluster(local_zone_odf)
             health_monitor = MulticlusterCephHealthMonitor
+        elif config.DEPLOYMENT.get("ocp_only_upgrade"):
+            ceph_cluster = None
+            health_monitor = DummyCephHealthMonitor
         else:
             ceph_cluster = CephCluster()
             health_monitor = CephHealthMonitor
@@ -153,6 +162,9 @@ class TestUpgradeOCP(ManageTest):
             rosa_platform = (
                 config.ENV_DATA["platform"].lower() in constants.ROSA_PLATFORMS
             )
+
+            # Initialize image_path (will be set properly in non-ROSA branches)
+            image_path = config.UPGRADE.get("ocp_upgrade_path", "")
 
             if rosa_platform:
                 # Handle ROSA-specific upgrade logic
@@ -175,19 +187,60 @@ class TestUpgradeOCP(ManageTest):
                     target_image = latest_ocp_ver
             else:
                 # Handle non-ROSA upgrade logic
-                if ocp_upgrade_version:
+                multi_arch = config.ENV_DATA.get("multi_arch")
+                if multi_arch:
+                    # Handle multi-arch upgrade
+                    # Check if image is already a multi-arch image (contains -multi in version)
+                    user_provided_path = config.UPGRADE.get("ocp_upgrade_path")
+                    is_multi_arch_image = (
+                        ocp_upgrade_version and "-multi" in ocp_upgrade_version
+                    )
+
+                    if is_multi_arch_image and user_provided_path:
+                        # User provided explicit multi-arch image - use it directly
+                        image_path = user_provided_path
+                        target_image = ocp_upgrade_version
+                        logger.info(
+                            f"Using user-provided multi-arch image for upgrade: {image_path}:{target_image}"
+                        )
+                    elif ocp_upgrade_version:
+                        # Version provided but not multi-arch, fetch proper multi-arch image
+                        # Extract major.minor version (X.Y) using regex to get latest and greatest
+                        # e.g., "4.21.0-0.nightly" -> "4.21"
+                        version_match = re.match(r"^(\d+\.\d+)", ocp_upgrade_version)
+                        if version_match:
+                            base_version = version_match.group(1)
+                        else:
+                            # Fallback if regex doesn't match
+                            base_version = ocp_upgrade_version.split(".")[0:2]
+                            base_version = ".".join(base_version)
+                        full_image = get_latest_ocp_multi_image(version=base_version)
+                        logger.info(
+                            "Multi-arch enabled: fetching latest multi-arch image for version "
+                            f"{base_version}: {full_image}"
+                        )
+                        image_path, target_image = full_image.rsplit(":", 1)
+                    else:
+                        # Get latest multi-arch image for current OCP version
+                        full_image = get_latest_ocp_multi_image()
+                        logger.info(
+                            f"Multi-arch enabled: using latest multi-arch image: {full_image}"
+                        )
+                        image_path, target_image = full_image.rsplit(":", 1)
+                elif ocp_upgrade_version:
                     target_image = (
                         expose_ocp_version(ocp_upgrade_version)
                         if ocp_upgrade_version.endswith(".nightly")
                         else ocp_upgrade_version
                     )
+                    image_path = config.UPGRADE["ocp_upgrade_path"]
                 else:
                     ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
                     ocp_arch = config.UPGRADE["ocp_arch"]
                     target_image = f"{ocp_upgrade_version}-{ocp_arch}"
+                    image_path = config.UPGRADE["ocp_upgrade_path"]
             logger.info(f"Target image: {target_image}")
 
-            image_path = config.UPGRADE["ocp_upgrade_path"]
             cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
             # disconnected environment prerequisites
@@ -217,6 +270,21 @@ class TestUpgradeOCP(ManageTest):
 
                 logger.info(f"full upgrade path: {image_path}:{target_image}")
                 ocp.upgrade_ocp(image=target_image, image_path=image_path)
+
+                # On provider clusters, using HCP, automatic MCO drain & reboot fails due to fail evict
+                # kube-apiserver and virt-launcher pods
+                if provider_cluster and config.ENV_DATA["platform"] == "hci_baremetal":
+                    cordoned = get_nodes_in_statuses(
+                        [
+                            constants.NODE_READY_SCHEDULING_DISABLED,
+                            constants.NODE_NOT_READY_SCHEDULING_DISABLED,
+                        ]
+                    )
+                    logger.info(f"Cordoned nodes: {[node.name for node in cordoned]}")
+                    wait_for_machineconfigpool_status(
+                        node_type="worker", force_delete_pods=True, timeout=1800
+                    )
+
             else:
                 logger.info(f"upgrade rosa cluster to target version: '{target_image}'")
                 upgrade_rosa_cluster(config.ENV_DATA["cluster_name"], target_image)
@@ -295,7 +363,11 @@ class TestUpgradeOCP(ManageTest):
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)
 
-        if not config.ENV_DATA["mcg_only_deployment"] and not config.multicluster:
+        if (
+            not config.ENV_DATA["mcg_only_deployment"]
+            and not config.multicluster
+            and not config.DEPLOYMENT.get("ocp_only_upgrade")
+        ):
             new_ceph_cluster = CephCluster()
             # Increased timeout because of this bug:
             # https://bugzilla.redhat.com/show_bug.cgi?id=2038690

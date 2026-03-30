@@ -15,6 +15,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
     add_disk_for_vsphere_platform,
     create_optional_operators_catalogsource_non_ga,
 )
+from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
 
@@ -356,6 +357,9 @@ class DeploymentUI(PageNavigator):
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
 
+        if ocs_version >= version.VERSION_4_21:
+            self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+
         self.configure_osd_size()
 
         self.configure_performance()
@@ -465,11 +469,23 @@ class DeploymentUI(PageNavigator):
         ocs_version = version.get_semantic_ocs_version_from_config()
         device_size = str(config.ENV_DATA.get("device_size"))
 
-        osd_size = (
-            device_size
-            if device_size in osd_sizes
-            else "512" if ocs_version <= version.VERSION_4_18 else "0.5 TiB"
-        )
+        # Mapping from GiB numeric values to TiB strings for versions 4.19+
+        size_mapping = {
+            "512": "0.5 TiB",
+            "1024": "1 TiB",
+            "2048": "2 TiB",
+            "4096": "4 TiB",
+            "8192": "8 TiB",
+        }
+
+        # For versions > 4.18, convert numeric values to TiB format
+        if ocs_version > version.VERSION_4_18 and device_size in size_mapping:
+            osd_size = size_mapping[device_size]
+        elif device_size in osd_sizes:
+            osd_size = device_size
+        else:
+            # Default fallback
+            osd_size = "512" if ocs_version <= version.VERSION_4_18 else "0.5 TiB"
         logger.info(f"Configure OSD Capacity {osd_size}")
         if self.ocp_version_semantic >= version.VERSION_4_11:
             self.do_click(self.dep_loc["osd_size_dropdown"], enable_screenshot=True)
@@ -564,8 +580,8 @@ class DeploymentUI(PageNavigator):
             self.choose_expanded_mode(
                 mode=True, locator=self.dep_loc["drop_down_projects"]
             )
-            default_projects_is_checked = self.driver.find_element_by_id(
-                "no-label-switch-on"
+            default_projects_is_checked = self.driver.find_element(
+                By.ID, "no-label-switch-on"
             ).is_selected()
             if not default_projects_is_checked:
                 logger.info("Show default projects")

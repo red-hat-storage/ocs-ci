@@ -70,6 +70,7 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
 
         # Start IO
         log.info("Starting IO on all pods")
+
         for pod_obj in self.pods:
             storage_type = (
                 "block"
@@ -82,6 +83,7 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
                 runtime=20,
                 fio_filename=file_name,
                 end_fsync=1,
+                direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
             log.info(f"IO started on pod {pod_obj.name}")
         log.info("Started IO on all pods")
@@ -155,7 +157,7 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
         log.info("Verifying restored PVCs are Bound")
         for pvc_obj in restore_pvcs:
             helpers.wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=200
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=480
             )
             pvc_obj.reload()
         log.info("Verified: Restored PVCs are Bound")

@@ -1,8 +1,8 @@
+import json
 import logging
 import time
 import os
 import tempfile
-import requests
 
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
     NoSuchElementException,
 )
 
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.helpers.dr_helpers import get_cluster_set_name
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
@@ -20,6 +21,7 @@ from ocs_ci.ocs.acm.acm_constants import (
     ACM_PAGE_TITLE,
     ACM_2_7_MULTICLUSTER_URL,
     ACM_PAGE_TITLE_2_7_ABOVE,
+    ACM_PAGE_TITLE_2_7_ABOVE_IBM_CLOUD_MANAGED,
 )
 from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
@@ -36,10 +38,10 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility.utils import (
     TimeoutSampler,
-    get_ocp_version,
     get_running_acm_version,
     string_chunkify,
     run_cmd,
+    get_client_type_by_name,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import (
@@ -194,11 +196,21 @@ class AcmAddClusters(AcmPageNavigator):
                 if s.MULTICLUSTER["multicluster_index"] != primary_index
             ][0]
         # submariner catalogsource creation
-        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            self.create_submariner_downstream_unreleased_catalogsource()
+        submariner_image = config.ENV_DATA.get("submariner_image")
+        if submariner_image:
+            self.create_submariner_downstream_catalogsource(image=submariner_image)
 
         cluster_name_a = cluster_env.get(f"cluster_name_{primary_index}")
         cluster_name_b = cluster_env.get(f"cluster_name_{secondary_index}")
+        if dr_cluster_relations:
+            if is_hosted_cluster(cluster_name_a):
+                cluster_name_a = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name_a}"
+                )
+            if is_hosted_cluster(cluster_name_b):
+                cluster_name_b = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name_b}"
+                )
         self.navigate_clusters_page()
         self.page_has_loaded(retries=15, sleep_time=5)
         self.do_click(locator=self.acm_page_nav["Clusters_page"])
@@ -264,28 +276,61 @@ class AcmAddClusters(AcmPageNavigator):
             log.info("Globalnet is disabled")
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
-        log.info("Click on 'Enable NAT-T' to uncheck it")
-        self.do_click(self.page_nav["nat-t-checkbox"])
-        log.info(
-            "Increase the gateway count to 3 by clicking twice on the gateway count add button"
+        acm_version = ".".join(get_running_acm_version().split(".")[:2])
+        increase_gateway = False
+        if compare_versions(f"{acm_version}>=2.12"):
+            increase_gateway = True
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
         )
-        self.do_click(self.page_nav["gateway-count-btn"])
-        self.do_click(self.page_nav["gateway-count-btn"])
-        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            self.submariner_unreleased_downstream_info()
-        log.info("Click on Next button")
-        self.do_click(self.page_nav["next-btn"])
-        log.info("Click on 'Enable NAT-T' to uncheck it [2]")
-        self.do_click(self.page_nav["nat-t-checkbox"])
-        log.info(
-            "Increase the gateway count to 3 by clicking twice on the gateway count add button [2]"
-        )
-        self.do_click(self.page_nav["gateway-count-btn"])
-        self.do_click(self.page_nav["gateway-count-btn"])
-        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            self.submariner_unreleased_downstream_info()
-        log.info("Click on Next button [2]")
-        self.do_click(self.page_nav["next-btn"])
+        azure_ipi_clusters_indices = [
+            cluster_index
+            for cluster_index in [primary_index, secondary_index]
+            if config.clusters[cluster_index].ENV_DATA["platform"]
+            == constants.AZURE_PLATFORM
+            and config.clusters[cluster_index].ENV_DATA.get("deployment_type") == "ipi"
+        ]
+
+        increase_gateway_number = 2
+        if ibm_cloud_managed or azure_ipi_clusters_indices:
+            increase_gateway_number = 1
+
+        found_azure_page = False
+        for cluster_nr in range(1, 3):
+            if azure_ipi_clusters_indices:
+                try:
+                    azure_page = self.get_element_text(
+                        self.page_nav["submariner_addon_azure_page"]
+                    )
+                    found_azure_page = True
+                    azure_index = [
+                        cluster_index
+                        for cluster_index in azure_ipi_clusters_indices
+                        if config.clusters[cluster_index].ENV_DATA["cluster_name"]
+                        in azure_page
+                    ][0]
+                    self.enter_azure_details(azure_cluster_index=azure_index)
+                except NoSuchElementException:
+                    if (not found_azure_page) and cluster_nr == 2:
+                        raise
+            if not ibm_cloud_managed:
+                log.info(
+                    f"Click on 'Enable NAT-T' to uncheck it for cluster [{cluster_nr}]"
+                )
+                self.do_click(self.page_nav["nat-t-checkbox"])
+            if increase_gateway:
+                log.info(
+                    f"Increase the gateway count by {increase_gateway_number} clicking"
+                    f" gateway count add button for cluster [{cluster_nr}]"
+                )
+                for _ in range(increase_gateway_number):
+                    self.do_click(self.page_nav["gateway-count-btn"])
+            if submariner_image:
+                self.submariner_downstream_info()
+            self.take_screenshot()
+            log.info("Click on Next button for cluster [{cluster_nr}]")
+            self.do_click(self.page_nav["next-btn"])
         if ocs_version >= version.VERSION_4_13 and globalnet:
             check_globalnet = self.get_element_text(self.page_nav["check-globalnet"])
             assert (
@@ -295,14 +340,42 @@ class AcmAddClusters(AcmPageNavigator):
         self.take_screenshot()
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
+
+        # Add loadBalancerEnable: true and hostedCluster: true in the submarinerconfig for kubevirt hcp clusters
+        if dr_cluster_relations:
+            for dr_cluster in [primary_index, secondary_index]:
+                cluster_name = config.get_cluster_name_by_index(dr_cluster)
+                if get_client_type_by_name(cluster_name) == "kubevirt":
+                    cluster_name = (
+                        f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name}"
+                    )
+                    submariner_config = OCP(
+                        kind=constants.SUBMARINERCONFIG,
+                        namespace=cluster_name,
+                        resource_name="submariner",
+                    )
+                    patch_param = (
+                        '[{"op": "replace", "path": "/spec/hostedCluster", "value": true }, '
+                        '{"op": "replace", "path": "/spec/loadBalancerEnable", "value": true }]'
+                    )
+                    submariner_config.patch(params=patch_param, format_type="json")
         return cluster_set_name
 
-    def submariner_unreleased_downstream_info(self):
+    def submariner_downstream_info(self):
         log.info("Use custom Submariner subscription ")
         self.do_click(self.page_nav["submariner-custom-subscription"])
         log.info("Clear existing Source")
         self.do_clear(self.page_nav["submariner-custom-source"])
-        log.info("Send submariner-catalogsource as Source")
+        source = self.driver.find_element(
+            By.XPATH, "//input[@placeholder='Enter the catalog source']"
+        )
+        value_of_source = source.get_attribute("value")
+        if value_of_source == "":
+            log.info("Textbox for 'Source' is empty.")
+        else:
+            self.do_clear(self.page_nav["submariner-custom-source"])
+            log.info("Textbox for 'Source' wasn't empty, cleared it in 2nd attempt")
+        log.info("Send submariner-catalogsource as 'Source'")
         self.do_send_keys(
             self.page_nav["submariner-custom-source"], "submariner-catalogsource"
         )
@@ -326,7 +399,21 @@ class AcmAddClusters(AcmPageNavigator):
         This is a mandatory pre-check for Regional DR.
 
         """
+        timeout = 600
+        cluster_set_name = (
+            config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+        )
+        azure_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get(
+            selector=f"cluster.open-cluster-management.io/clusterset={cluster_set_name},cloud=Azure",
+            dont_raise=True,
+        )
 
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if ibm_cloud_managed or azure_clusters:
+            timeout = 2100
         self.navigate_clusters_page()
         cluster_sets_page = self.wait_until_expected_text_is_found(
             locator=self.page_nav["cluster-sets"],
@@ -339,9 +426,6 @@ class AcmAddClusters(AcmPageNavigator):
         else:
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
-        cluster_set_name = (
-            config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
-        )
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
@@ -352,34 +436,34 @@ class AcmAddClusters(AcmPageNavigator):
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-1"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Connection status 1 is unhealthy for Submariner"
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-2"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Connection status 2 is unhealthy for Submariner"
         log.info("Checking agent status of both the imported clusters")
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-1"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Agent status 1 is unhealthy for Submariner"
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-2"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Agent status 2 is unhealthy for Submariner"
         log.info("Checking if nodes of both the imported clusters are labeled or not")
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-1"],
             expected_text="Nodes labeled",
-            timeout=600,
+            timeout=timeout,
         ), "First gateway node label check did not pass for Submariner"
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-2"],
             expected_text="Nodes labeled",
-            timeout=600,
+            timeout=timeout,
         ), "Second gateway node label check did not pass for Submariner"
         self.take_screenshot()
         log.info("Submariner is healthy, check passed")
@@ -393,8 +477,9 @@ class AcmAddClusters(AcmPageNavigator):
             globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
 
         """
-        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            self.create_submariner_downstream_unreleased_catalogsource()
+        submariner_image = config.ENV_DATA.get("submariner_image")
+        if submariner_image:
+            self.create_submariner_downstream_catalogsource(image=submariner_image)
         submariner_broker_yaml = templating.load_yaml(constants.SUBMARINER_BROKER_YAML)
         all_documents = []
         log.info("Creating ManagedClusterSet")
@@ -438,13 +523,14 @@ class AcmAddClusters(AcmPageNavigator):
             submariner_config_yaml["metadata"]["namespace"] = cluster.ENV_DATA[
                 "cluster_name"
             ]
-            if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-                submariner_unreleased_channel = (
-                    config.ENV_DATA.get("submariner_unreleased_channel")
-                    if config.ENV_DATA.get("submariner_unreleased_channel")
+            if submariner_image:
+                submariner_channel = (
+                    config.ENV_DATA.get("submariner_channel")
+                    if config.ENV_DATA.get("submariner_channel")
                     else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
                 )
-                channel_name = "stable-" + submariner_unreleased_channel
+
+                channel_name = "stable-" + submariner_channel
                 subscription_config = {
                     "source": "submariner-catalogsource",
                     "sourceNamespace": "openshift-marketplace",
@@ -477,31 +563,20 @@ class AcmAddClusters(AcmPageNavigator):
         config.switch_acm_ctx()
         run_cmd(cmd=f"oc create -f {submariner_data_file.name}")
 
-    def create_submariner_downstream_unreleased_catalogsource(self):
+    def create_submariner_downstream_catalogsource(self, image=None):
         """
-        Create Catalogsource for installing Downstream Unreleased Submariner
+        Create Catalogsource for installing Downstream Submariner
+
+        Args:
+            image (str): Image path.
 
         """
         submariner_downstream_unreleased = templating.load_yaml(
             constants.SUBMARINER_DOWNSTREAM_UNRELEASED
         )
         # Update catalog source
-        submariner_full_url = "".join(
-            [
-                constants.SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL,
-                config.ENV_DATA["submariner_version"],
-            ]
-        )
-
-        version_tag = config.ENV_DATA.get("submariner_unreleased_image", None)
-        if version_tag is None:
-            resp = requests.get(submariner_full_url, verify=False)
-            raw_msg = resp.json()["raw_messages"]
-            version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
-                f"v{get_ocp_version()}"
-            ].split(":")[1]
-        submariner_downstream_unreleased["spec"]["image"] = ":".join(
-            [constants.BREW_REPO, version_tag]
+        submariner_downstream_unreleased["spec"]["image"] = (
+            image if image else config.ENV_DATA.get("submariner_image")
         )
         submariner_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="submariner_downstream_unreleased", delete=False
@@ -524,6 +599,38 @@ class AcmAddClusters(AcmPageNavigator):
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             run_cmd(f"oc apply -f {submariner_data_yaml.name}", timeout=300)
         config.switch_ctx(old_ctx)
+
+    def enter_azure_details(self, azure_cluster_index):
+        """
+        Enter Azure details in Submariner install page
+
+        Args:
+            azure_cluster_index (str): The index of the Azure cluster
+
+        """
+        log.info("Enter Azure cluster details")
+        self.do_send_keys(
+            self.page_nav["azure_base_domain_resource_group"],
+            config.clusters[azure_cluster_index].ENV_DATA.get(
+                "azure_base_domain_resource_group_name"
+            ),
+        )
+        self.do_send_keys(
+            self.page_nav["azure_client_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["client_id"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_client_secret"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["client_secret"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_subscription_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["subscription_id"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_tenent_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["tenant_id"],
+        )
 
 
 def copy_kubeconfig(file=None, return_str=False):
@@ -619,12 +726,21 @@ def login_to_acm():
     else:
         log.warning(
             "Neither 'local-cluster' nor 'Administrator' dropdown found, view is expected to be on the ACM console"
+            "Check if login to OCP console is successful or not"
         )
 
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
     if compare_versions(cmp_str):
-        page_title = ACM_PAGE_TITLE_2_7_ABOVE
+        if ibm_cloud_managed:
+            page_title = ACM_PAGE_TITLE_2_7_ABOVE_IBM_CLOUD_MANAGED
+        else:
+            page_title = ACM_PAGE_TITLE_2_7_ABOVE
     else:
         page_title = ACM_PAGE_TITLE
+    log.info(f"Validating page title to be: {page_title}")
     validate_page_title(title=page_title)
     log.info("Successfully logged into RHACM console")
     side_navigation_toggle_btn = wait_for_element_to_be_clickable(
@@ -770,13 +886,22 @@ def import_clusters_via_cli(clusters):
         auto_import_secret["metadata"]["namespace"] = cluster[0]
         auto_import_secret["stringData"]["kubeconfig"] = cluster[1]
         auto_import_secret_obj = OCS(**auto_import_secret)
-        auto_import_secret_obj.apply(**auto_import_secret)
+        try:
+            auto_import_secret_obj.apply(**auto_import_secret)
+        except CommandFailed as ex:
+            if (
+                'Error is Error from server (NotFound): secrets "auto-import-secret" not found'
+                in str(ex)
+            ):
+                pass
+            else:
+                raise
 
         log.info("Wait managedcluster move to Available state")
         time.sleep(60)
         ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
         ocp_obj.wait_for_resource(
-            timeout=1200,
+            timeout=2000,
             condition="True",
             column="AVAILABLE",
             resource_name=cluster[0],
@@ -797,8 +922,12 @@ def import_clusters_via_cli(clusters):
 
         log.info("Waiting for addon pods to be in running state")
         config.switch_to_cluster_by_name(cluster[0])
+
         wait_for_pods_to_be_running(
-            namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
+            namespace=constants.ACM_ADDONS_NAMESPACE,
+            timeout=300,
+            sleep=15,
+            skip_for_status=[constants.STATUS_COMPLETED],
         )
 
         config.switch_acm_ctx()
@@ -869,12 +998,16 @@ def discover_hosted_clusters():
         format_type="merge",
     )
     # Disable metrics and HyperShift operator management
+    log.info("Getting existing values")
+    spec_data = addondeploymentconfig.get(
+        resource_name="hypershift-addon-deploy-config"
+    )["spec"]["customizedVariables"]
+
+    discovery_prefix_data_to_add = {"name": "discoveryPrefix", "value": "dr"}
+    spec_data.append(discovery_prefix_data_to_add)
     addondeploymentconfig.patch(
         resource_name="hypershift-addon-deploy-config",
-        params=(
-            '{"spec":{"customizedVariables":[{"name":"disableMetrics","value": "true"},'
-            '{"name":"disableHOManagement","value": "true"},{"name":"discoveryPrefix","value": "dr"}]}}'
-        ),
+        params=json.dumps({"spec": {"customizedVariables": spec_data}}),
         format_type="merge",
     )
 
@@ -923,10 +1056,11 @@ def install_clusteradm():
     """
     try:
         run_cmd("clusteradm")
-    except CommandFailed:
-        # Install/re0install clusteradm
+    except (CommandFailed, FileNotFoundError):
+        # Install/reinstall clusteradm
         run_cmd(
-            "curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh | bash"
+            "bash -c 'curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh "
+            "| bash'"
         )
 
 

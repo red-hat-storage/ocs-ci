@@ -44,7 +44,9 @@ class TestNoobaaStorageAccount:
             "https://management.azure.com/.default"
         )
         secret_ocp_obj = OCP(
-            kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
+            kind=constants.SECRET,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            timeout=60,
         )
         creds_secret_obj = secret_ocp_obj.get(constants.AZURE_NOOBAA_SECRET)
         resource_group_name = base64.b64decode(

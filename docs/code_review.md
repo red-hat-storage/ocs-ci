@@ -61,3 +61,30 @@
   followed. The person merging a workaround is responsible for checking that all
   information related to the workaround is correct.
 * MCG test cases should work on any cloud platform (AWS, Azure, GCP, ...).
+
+## Pre-commit hooks
+
+Please set up pre-commit hooks locally to avoid PR check failures. We have
+several hooks to ensure our code conventions and rules are followed and enforced.
+
+To install pre-commit hooks, run the following:
+
+   * `pip install -r requirements-dev.txt`
+   * `pre-commit install --hook-type pre-commit --hook-type commit-msg --install-hooks`
+
+You can also run all pre-commit hooks manually using:
+ ```bash
+   pre-commit run --all-files
+```
+
+### Detect-secrets
+
+We are using IBM fork of [detect-secret](https://github.com/ibm/detect-secrets)
+to make sure we do not leak any secrets to public GitHub. This is handled both
+as a pre-commit hook and as a PR check triggered via a GitHub Action defined
+in `tox.ini` file.
+
+As part of the pre-commit hook, we remove the `generated_at` line from the
+baseline file `.secrets.baseline`. This avoids unnecessary conflicts in PRs,
+so please make sure you either run the pre-commit hook or manually remove the
+`generated_at` line from the baseline.

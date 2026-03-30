@@ -140,7 +140,8 @@ class TestCnvNodeReplace(E2ETest):
 
         logger.info("Starting vms")
         self.vm_for_stop.start()
-        vm_rwo.start()
+        if not vm_rwo.ready():
+            vm_rwo.start()
         if self.vm_for_snap.printableStatus() == constants.VM_PAUSED:
             self.vm_for_snap.unpause()
 

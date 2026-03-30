@@ -63,7 +63,7 @@ class BackingStore:
         self.vol_num = vol_num
         self.vol_size = vol_size
 
-    def delete(self, retry=True, timeout=120):
+    def delete(self, retry=True, timeout=240):
         """
         Deletes the current backingstore by using OC/CLI commands
 

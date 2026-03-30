@@ -2,7 +2,8 @@ import logging
 from getpass import getuser
 
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import get_ocp_version, get_testrun_name
+from ocs_ci.ocs.version import get_ocp_version
+from ocs_ci.utility.utils import get_testrun_name
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +77,10 @@ def get_rp_launch_attributes():
         > config.RUN["skipped_on_ceph_health_threshold"]
     ):
         rp_attrs["ceph_health_skips_over_threshold"] = True
+    if config.REPORTING.get("primary_assignee"):
+        rp_attrs["primary_assignee"] = config.REPORTING.get("primary_assignee")
+    if config.REPORTING.get("backup_assignee"):
+        rp_attrs["backup_assignee"] = config.REPORTING.get("backup_assignee")
 
     return rp_attrs
 
@@ -113,6 +118,7 @@ def get_rp_launch_description():
     return description
 
 
+@config.run_for_all_clusters
 def update_live_must_gather_image():
     """
     Update live must gather image in the config.

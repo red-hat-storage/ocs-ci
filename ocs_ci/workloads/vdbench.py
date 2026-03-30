@@ -12,6 +12,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility.templating import Templating
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, TemplateError
+from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
@@ -64,6 +65,9 @@ class VdbenchWorkload:
         self.access_modes = self.pvc.data["spec"]["accessModes"]
         self.storage_class = self.pvc.data["spec"].get("storageClassName", "")
 
+        # Inject verification patterns if enabled in KrKn config
+        self._inject_verification_patterns()
+
         # Deployment files
         self.output_file = f"/tmp/{self.deployment_name}.yaml"
         self.configmap_file = f"/tmp/{self.deployment_name}-config.yaml"
@@ -95,6 +99,35 @@ class VdbenchWorkload:
             lstrip_blocks=True,
         )
 
+        # Add indent filter to the custom Jinja2 environment
+        def indent_text(text, spaces, first=False):
+            """
+            Indent text by the specified number of spaces.
+
+            Args:
+                text: The text to indent
+                spaces: Number of spaces to indent
+                first: If True, indent the first line as well (default: False)
+            """
+            indent_str = " " * spaces
+            lines = text.split("\n")
+
+            if not lines:
+                return text
+
+            if first:
+                # Indent all lines including the first one
+                return "\n".join(indent_str + line for line in lines)
+            else:
+                # Skip indenting the first line
+                if len(lines) == 1:
+                    return lines[0]
+                return (
+                    lines[0] + "\n" + "\n".join(indent_str + line for line in lines[1:])
+                )
+
+        self.jinja_env.filters["indent"] = indent_text
+
     def _load_vdbench_config(self):
         """
         Load Vdbench configuration from YAML file.
@@ -118,6 +151,259 @@ class VdbenchWorkload:
         except yaml.YAMLError as e:
             raise UnexpectedBehaviour(f"Invalid YAML in configuration file: {e}")
 
+    def _is_verification_enabled_in_krkn_config(self):
+        """
+        Check if verification is enabled in the KrKn chaos configuration.
+
+        Returns:
+            bool: True if verification is enabled in KrKn config, False otherwise
+        """
+        try:
+            krkn_config = config.ENV_DATA.get("krkn_config", {})
+            return krkn_config.get("enable_verification", False)
+        except Exception as e:
+            log.debug(f"Could not check KrKn verification config: {e}")
+            return False
+
+    def _inject_verification_patterns(self):
+        """
+        Automatically inject verification patterns into the Vdbench configuration
+        when verification is enabled in KrKn config.
+        """
+        if not self._is_verification_enabled_in_krkn_config():
+            return
+
+        log.info(
+            "KrKn verification enabled - injecting verification patterns into Vdbench config"
+        )
+
+        # Get KrKn Vdbench configuration for verification settings
+        krkn_vdbench_config = config.ENV_DATA.get("krkn_config", {}).get(
+            "vdbench_config", {}
+        )
+        verification_threads = krkn_vdbench_config.get("max_verification_threads", 16)
+        verification_elapsed = krkn_vdbench_config.get("verification_elapsed", 300)
+
+        # Check if this is KrKn format configuration
+        if self._is_krkn_chaos_config_format(self.vdbench_config):
+            # For KrKn format, add patterns to the vdbench_config section
+            vdbench_config = self.vdbench_config["vdbench_config"]
+
+            # Add verification patterns for filesystem workloads
+            if self.volume_mode == "Filesystem":
+                if "filesystem" not in vdbench_config:
+                    vdbench_config["filesystem"] = {}
+                if "patterns" not in vdbench_config["filesystem"]:
+                    vdbench_config["filesystem"]["patterns"] = []
+
+                # Add verification pattern for filesystem (use seekpct for KrKn format compatibility)
+                verification_pattern = {
+                    "name": "verify_data_integrity",
+                    "seekpct": 100,  # Random I/O for KrKn format compatibility
+                    "rdpct": 100,  # Read-only verification
+                    "xfersize": "1m",
+                    "threads": verification_threads,
+                    "skew": 0,
+                }
+                vdbench_config["filesystem"]["patterns"].append(verification_pattern)
+                log.info(
+                    f"Added filesystem verification pattern to KrKn config: {verification_pattern}"
+                )
+                log.info(
+                    f"Total patterns after adding verification: {len(vdbench_config['filesystem']['patterns'])}"
+                )
+
+            # Add verification patterns for block workloads
+            else:  # Block mode
+                if "block" not in vdbench_config:
+                    vdbench_config["block"] = {}
+                if "patterns" not in vdbench_config["block"]:
+                    vdbench_config["block"]["patterns"] = []
+
+                # Add verification pattern for block
+                verification_pattern = {
+                    "name": "verify_data_integrity",
+                    "rdpct": 100,  # Read-only verification
+                    "seekpct": 100,  # Random I/O
+                    "xfersize": "1m",
+                    "skew": 0,
+                }
+                vdbench_config["block"]["patterns"].append(verification_pattern)
+                log.info("Added block verification pattern to KrKn config")
+        else:
+            # For legacy format, add patterns to the main config
+            config_to_check = self.vdbench_config
+            if "vdbench_config" in self.vdbench_config:
+                config_to_check = self.vdbench_config["vdbench_config"]
+
+            # Add verification patterns for filesystem workloads
+            if self.volume_mode == "Filesystem":
+                if "filesystem" not in config_to_check:
+                    config_to_check["filesystem"] = {}
+                if "patterns" not in config_to_check["filesystem"]:
+                    config_to_check["filesystem"]["patterns"] = []
+
+                # Add verification pattern for filesystem
+                verification_pattern = {
+                    "name": "verify_data_integrity",
+                    "fileio": "random",
+                    "rdpct": 100,  # Read-only verification
+                    "xfersize": "1m",
+                    "threads": verification_threads,
+                    "skew": 0,
+                }
+                config_to_check["filesystem"]["patterns"].append(verification_pattern)
+                log.info("Added filesystem verification pattern to legacy config")
+
+            # Add verification patterns for block workloads
+            else:  # Block mode
+                if "block" not in config_to_check:
+                    config_to_check["block"] = {}
+                if "patterns" not in config_to_check["block"]:
+                    config_to_check["block"]["patterns"] = []
+
+                # Add verification pattern for block
+                verification_pattern = {
+                    "name": "verify_data_integrity",
+                    "rdpct": 100,  # Read-only verification
+                    "seekpct": 100,  # Random I/O
+                    "xfersize": "1m",
+                    "skew": 0,
+                }
+                config_to_check["block"]["patterns"].append(verification_pattern)
+                log.info("Added block verification pattern to legacy config")
+
+        # Add verification run definition
+        if self._is_krkn_chaos_config_format(self.vdbench_config):
+            # For KrKn format, add run definition to the vdbench_config section
+            vdbench_config = self.vdbench_config["vdbench_config"]
+            if "run_definitions" not in vdbench_config:
+                vdbench_config["run_definitions"] = []
+
+            # Calculate the verification pattern ID based on existing patterns
+            # Note: The verification pattern has already been added, so we use the count directly
+            if self.volume_mode == "Filesystem":
+                existing_patterns = vdbench_config.get("filesystem", {}).get(
+                    "patterns", []
+                )
+            else:
+                existing_patterns = vdbench_config.get("block", {}).get("patterns", [])
+
+            log.info(
+                f"Calculating verification pattern ID: found {len(existing_patterns)} patterns in config"
+            )
+
+            # The verification pattern is the last one in the list
+            # Vdbench uses 1-based indexing, so the ID equals the total count
+            if self.volume_mode == "Filesystem":
+                verification_pattern_id = f"fwd{len(existing_patterns)}"
+            else:
+                verification_pattern_id = f"wd{len(existing_patterns)}"
+
+            log.info(f"Calculated verification pattern ID: {verification_pattern_id}")
+
+            # Find the last run definition to add verification after it
+            verification_run = {
+                "id": "rd_verify",
+                "format": "no",  # No formatting needed for verification
+                "elapsed": verification_elapsed,
+                "interval": 60,
+            }
+
+            # Add the appropriate workload reference and rate parameter
+            if self.volume_mode == "Filesystem":
+                verification_run["fwd_id"] = verification_pattern_id
+                verification_run["fwdrate"] = "max"
+            else:
+                verification_run["wd_id"] = verification_pattern_id
+                verification_run["iorate"] = "max"
+            vdbench_config["run_definitions"].append(verification_run)
+            log.info(
+                f"Added verification run definition to KrKn config with "
+                f"{verification_elapsed}s duration, referencing {verification_pattern_id}"
+            )
+        else:
+            # For legacy format, add run definition to the main config
+            config_to_check = self.vdbench_config
+            if "vdbench_config" in self.vdbench_config:
+                config_to_check = self.vdbench_config["vdbench_config"]
+
+            if "run_definitions" not in config_to_check:
+                config_to_check["run_definitions"] = []
+
+            # Calculate the verification pattern ID based on existing patterns
+            # Note: The verification pattern has already been added, so we use the count directly
+            if self.volume_mode == "Filesystem":
+                existing_patterns = config_to_check.get("filesystem", {}).get(
+                    "patterns", []
+                )
+            else:
+                existing_patterns = config_to_check.get("block", {}).get("patterns", [])
+
+            # The verification pattern is the last one, so its ID is the current count
+            if self.volume_mode == "Filesystem":
+                verification_pattern_id = f"fwd{len(existing_patterns)}"
+            else:
+                verification_pattern_id = f"wd{len(existing_patterns)}"
+
+            # Find the last run definition to add verification after it
+            verification_run = {
+                "id": "rd_verify",
+                "format": "no",  # No formatting needed for verification
+                "elapsed": verification_elapsed,
+                "interval": 60,
+            }
+
+            # Add the appropriate workload reference and rate parameter
+            if self.volume_mode == "Filesystem":
+                verification_run["fwd_id"] = verification_pattern_id
+                verification_run["fwdrate"] = "max"
+            else:
+                verification_run["wd_id"] = verification_pattern_id
+                verification_run["iorate"] = "max"
+            config_to_check["run_definitions"].append(verification_run)
+            log.info(
+                f"Added verification run definition to legacy config with "
+                f"{verification_elapsed}s duration, referencing {verification_pattern_id}"
+            )
+
+    def _has_verification_patterns(self):
+        """
+        Check if verification patterns are present in the VDBENCH configuration.
+
+        Returns:
+            bool: True if verification patterns are detected, False otherwise
+        """
+        if not self.vdbench_config:
+            return False
+
+        # Check for verification patterns in the configuration
+        patterns = []
+
+        # Handle both old format (direct access) and new format (vdbench_config wrapper)
+        config_to_check = self.vdbench_config
+        if "vdbench_config" in self.vdbench_config:
+            config_to_check = self.vdbench_config["vdbench_config"]
+
+        # Check block patterns
+        if "block" in config_to_check and "patterns" in config_to_check["block"]:
+            patterns.extend(config_to_check["block"]["patterns"])
+
+        # Check filesystem patterns
+        if (
+            "filesystem" in config_to_check
+            and "patterns" in config_to_check["filesystem"]
+        ):
+            patterns.extend(config_to_check["filesystem"]["patterns"])
+
+        # Check if any pattern has "verify" in the name
+        for pattern in patterns:
+            if "verify" in pattern.get("name", "").lower():
+                log.info(f"Found verification pattern: {pattern.get('name')}")
+                return True
+
+        return False
+
     def _render_templates(self):
         """
         Render Kubernetes YAML templates for Vdbench deployment and ConfigMap using Jinja2 templates.
@@ -137,6 +423,26 @@ class VdbenchWorkload:
             vdbench_config_content = self._convert_yaml_to_vdbench_format(
                 self.vdbench_config
             )
+            log.info(
+                f"Generated Vdbench configuration content:\n{vdbench_config_content}"
+            )
+
+            # Check if verification patterns are present in the configuration
+            enable_verification = self._has_verification_patterns()
+
+            # Get workload_loop from config (resiliency_config or krkn_config)
+            # Default to 1 (single run) to avoid affecting existing tests
+            workload_runs = 1
+
+            # Check resiliency_config first, then krkn_config
+            for config_key in ["resiliency_config", "krkn_config"]:
+                vdbench_config = config.ENV_DATA.get(config_key, {}).get(
+                    "vdbench_config", {}
+                )
+                if "workload_loop" in vdbench_config:
+                    workload_runs = vdbench_config["workload_loop"]
+                    log.info(f"Using workload_loop from {config_key}: {workload_runs}")
+                    break
 
             # Prepare template data for Jinja2 templates
             template_data = {
@@ -149,6 +455,8 @@ class VdbenchWorkload:
                 "image": self.image,
                 "vdbench_config_content": vdbench_config_content,
                 "replicas": self.current_replicas,
+                "enable_verification": enable_verification,
+                "workload_runs": workload_runs,
             }
 
             log.info(f"Rendering templates with data: {template_data}")
@@ -175,12 +483,16 @@ class VdbenchWorkload:
 
             # Render ConfigMap template
             try:
+                log.info(
+                    "Attempting to render ConfigMap template with main templating system"
+                )
                 configmap_yaml = self.templating.render_template(
                     "workloads/vdbench/configmap.yaml.j2", template_data
                 )
                 with open(self.configmap_file, "w") as f:
                     f.write(configmap_yaml)
                 log.info(f"Rendered ConfigMap template to {self.configmap_file}")
+                log.info(f"ConfigMap content:\n{configmap_yaml}")
             except (TemplateNotFound, TemplateError) as te:
                 log.error(f"Jinja2 configmap rendering failed: {te}")
                 log.info("Falling back to inline template generation")
@@ -188,6 +500,7 @@ class VdbenchWorkload:
                     configmap_yaml = self._create_configmap_template(template_data)
                     with open(self.configmap_file, "w") as f:
                         f.write(configmap_yaml)
+                    log.info(f"ConfigMap content (fallback):\n{configmap_yaml}")
                 except (OSError, TypeError, KeyError) as fe:
                     raise UnexpectedBehaviour(
                         f"Failed to fallback write ConfigMap YAML: {fe}"
@@ -228,8 +541,11 @@ class VdbenchWorkload:
 
     def _create_configmap_template(self, data):
         """
-        Fallback method to create Kubernetes ConfigMap YAML content inline.
-        This is used when Jinja2 templates are not available.
+        Fallback method to create Kubernetes ConfigMap YAML content using Jinja2 template.
+        This is used when the main templating system is not available.
+
+        The fallback template (configmap_fallback.yaml.j2) is always available in the code
+        repository, so there's no need for inline YAML generation.
 
         Args:
             data (dict): Template data containing Vdbench configuration
@@ -237,16 +553,21 @@ class VdbenchWorkload:
         Returns:
             str: YAML content for Kubernetes ConfigMap
         """
-        log.warning("Using fallback inline ConfigMap template generation")
+        log.warning("Using fallback ConfigMap template generation")
 
         try:
-            configmap_template = self.jinja_env.get_template("configmap.yaml.j2")
-            log.info("Rendering ConfigMap template with Jinja2")
+            # Use the fallback Jinja2 template (always available in code repo)
+            configmap_template = self.jinja_env.get_template(
+                "configmap_fallback.yaml.j2"
+            )
+            log.info(
+                "Rendering ConfigMap fallback template with custom Jinja2 environment"
+            )
             configmap_yaml = configmap_template.render(data)
             return configmap_yaml
 
         except TemplateNotFound as tnfe:
-            raise UnexpectedBehaviour(f"ConfigMap template not found: {tnfe}")
+            raise UnexpectedBehaviour(f"ConfigMap fallback template not found: {tnfe}")
 
         except TemplateError as te:
             raise UnexpectedBehaviour(f"Jinja2 template rendering error: {te}")
@@ -255,20 +576,6 @@ class VdbenchWorkload:
             raise UnexpectedBehaviour(
                 f"Invalid data passed for ConfigMap rendering: {e}"
             )
-
-    def _indent_text(self, text, spaces):
-        """
-        Indent text by specified number of spaces.
-
-        Args:
-            text (str): Text to indent
-            spaces (int): Number of spaces to indent
-
-        Returns:
-            str: Indented text
-        """
-        indent = " " * spaces
-        return "\n".join(indent + line for line in text.split("\n"))
 
     def _convert_yaml_to_vdbench_format(self, config):
         """
@@ -280,7 +587,17 @@ class VdbenchWorkload:
         Returns:
             str: Vdbench configuration file content
         """
-        vdbench_lines = [""]
+        vdbench_lines = []
+
+        # Add global validate parameter for verification if enabled
+        if self._is_verification_enabled_in_krkn_config():
+            vdbench_lines.append("validate=yes")
+
+        vdbench_lines.append("")
+
+        # Check if this is the new krkn_chaos_config format
+        if self._is_krkn_chaos_config_format(config):
+            return self._convert_krkn_chaos_config_to_vdbench(config)
 
         # Process storage_definitions: sd or fsd
         if "storage_definitions" in config:
@@ -294,6 +611,8 @@ class VdbenchWorkload:
                     )
                     if "size" in sd:
                         line += f",size={sd['size']}"
+                    if "open_flags" in sd:
+                        line += f",openflags={sd['open_flags']}"
                 else:
                     # Block device definition
                     line = f"sd=sd{id_},lun={sd['lun']}"
@@ -303,6 +622,12 @@ class VdbenchWorkload:
                         line += f",threads={sd['threads']}"
                     if "openflags" in sd:
                         line += f",openflags={sd['openflags']}"
+                    if "open_flags" in sd:
+                        line += f",openflags={sd['open_flags']}"
+                    if "align" in sd and sd["align"]:  # Only include if not empty
+                        line += f",align={sd['align']}"
+                    if "offset" in sd and sd["offset"]:  # Only include if not empty
+                        line += f",offset={sd['offset']}"
                 vdbench_lines.append(line)
             vdbench_lines.append("")
 
@@ -310,30 +635,69 @@ class VdbenchWorkload:
         if "workload_definitions" in config:
             for wd in config["workload_definitions"]:
                 id_ = wd["id"]
+
+                # Handle both sd_id (block) and fsd_id (filesystem) references
+                storage_ref_id = None
+                if "sd_id" in wd:
+                    storage_ref_id = wd["sd_id"]
+                elif "fsd_id" in wd:
+                    storage_ref_id = wd["fsd_id"]
+                else:
+                    raise KeyError(
+                        "Workload definition must contain either 'sd_id' or 'fsd_id'"
+                    )
+
+                # Determine if this references a filesystem storage definition
                 is_fsd = any(
-                    s.get("fsd", False) and s["id"] == wd["sd_id"]
+                    s.get("fsd", False) and s["id"] == storage_ref_id
                     for s in config["storage_definitions"]
                 )
                 prefix = "fwd" if is_fsd else "wd"
                 storage = "fsd" if is_fsd else "sd"
 
-                line = f"{prefix}={prefix}{id_},{storage}={storage}{wd['sd_id']}"
+                line = f"{prefix}={id_},{storage}={storage}{storage_ref_id}"
 
                 # For file workloads
                 if is_fsd:
-                    # If rdpct is provided, fileio must be random
-                    if "rdpct" in wd:
+                    # Handle fileio parameter - if rdpct is provided and fileio is not specified, default to random
+                    fileio_value = None
+                    if "fileio" in wd:
+                        fileio_value = wd["fileio"]
+                        line += f",fileio={fileio_value}"
+                    elif "rdpct" in wd:
+                        fileio_value = "random"
                         line += ",fileio=random"
-                        line += f",rdpct={wd['rdpct']}"
-                    # Append allowed keys for fwd
-                    for key in ["xfersize", "openflags", "threads"]:
+
+                    # Handle filesystem workload parameters - exclude rdpct for sequential fileio
+                    for key in ["rdpct", "xfersize", "threads"]:
                         if key in wd:
+                            # Skip rdpct if fileio is sequential (they are mutually exclusive)
+                            if key == "rdpct" and fileio_value == "sequential":
+                                continue
                             line += f",{key}={wd[key]}"
+
+                    # Only add skew if it's non-zero
+                    if "skew" in wd and wd["skew"] != 0:
+                        line += f",skew={wd['skew']}"
+
+                    # Handle openflags if present
+                    if "openflags" in wd:
+                        line += f",openflags={wd['openflags']}"
                 else:
                     # For block workloads, allow all fields
-                    for key in ["rdpct", "seekpct", "xfersize", "openflags", "threads"]:
+                    for key in [
+                        "rdpct",
+                        "seekpct",
+                        "xfersize",
+                        "openflags",
+                        "threads",
+                    ]:
                         if key in wd:
                             line += f",{key}={wd[key]}"
+
+                    # Only add skew if it's non-zero
+                    if "skew" in wd and wd["skew"] != 0:
+                        line += f",skew={wd['skew']}"
 
                 vdbench_lines.append(line)
             vdbench_lines.append("")
@@ -342,18 +706,262 @@ class VdbenchWorkload:
         if "run_definitions" in config:
             for rd in config["run_definitions"]:
                 id_ = rd["id"]
-                wd_id = rd["wd_id"]
-                is_fwd = any(f"fwd=fwd{wd_id}" in line for line in vdbench_lines)
+
+                # Handle both wd_id (block) and fwd_id (filesystem) references
+                workload_ref_id = None
+                if "wd_id" in rd:
+                    workload_ref_id = rd["wd_id"]
+                    is_fwd = False
+                elif "fwd_id" in rd:
+                    workload_ref_id = rd["fwd_id"]
+                    is_fwd = True
+                else:
+                    raise KeyError(
+                        "Run definition must contain either 'wd_id' or 'fwd_id'"
+                    )
+
                 prefix = "fwd" if is_fwd else "wd"
                 rate_key = "fwdrate" if is_fwd else "iorate"
 
-                line = f"rd=rd{id_},{prefix}={prefix}{wd_id}"
+                line = f"rd=rd{id_},{prefix}={workload_ref_id}"
 
                 for key in ["elapsed", "interval"]:
                     if key in rd:
                         line += f",{key}={rd[key]}"
                 if "iorate" in rd:
                     line += f",{rate_key}={rd['iorate']}"
+
+                # Handle additional filesystem-specific parameters
+                if "format" in rd:
+                    line += f",format={rd['format']}"
+
+                vdbench_lines.append(line)
+
+        return "\n".join(vdbench_lines)
+
+    def _is_krkn_chaos_config_format(self, config):
+        """
+        Check if the configuration is in the new krkn_chaos_config format.
+
+        Args:
+            config (dict): Configuration to check
+
+        Returns:
+            bool: True if it's the new format
+        """
+        return (
+            "vdbench_config" in config
+            and isinstance(config["vdbench_config"], dict)
+            and (
+                "block" in config["vdbench_config"]
+                or "filesystem" in config["vdbench_config"]
+            )
+        )
+
+    def _convert_krkn_chaos_config_to_vdbench(self, config):
+        """
+        Convert krkn_chaos_config format to Vdbench configuration.
+
+        Args:
+            config (dict): krkn_chaos_config format configuration
+
+        Returns:
+            str: Vdbench configuration file content
+        """
+        vdbench_config = config["vdbench_config"]
+        vdbench_lines = []
+
+        # Add global validate parameter for verification if enabled
+        if self._is_verification_enabled_in_krkn_config():
+            vdbench_lines.append("validate=yes")
+
+        vdbench_lines.append("")
+
+        # Determine volume mode and get appropriate config
+        if self.volume_mode == "Block" and "block" in vdbench_config:
+            workload_config = vdbench_config["block"]
+            is_filesystem = False
+        elif self.volume_mode == "Filesystem" and "filesystem" in vdbench_config:
+            workload_config = vdbench_config["filesystem"]
+            is_filesystem = True
+        else:
+            raise ValueError(
+                f"No configuration found for volume mode: {self.volume_mode}"
+            )
+
+        # Get common parameters from parent config with fallback to workload config
+        def get_param(key, default):
+            return vdbench_config.get(key, workload_config.get(key, default))
+
+        # Create storage definition
+        if is_filesystem:
+            # Filesystem storage definition
+            fsd_config = workload_config
+            anchor = "/vdbench-data"
+            depth = fsd_config.get("depth", 4)
+            width = fsd_config.get("width", 5)
+            files = fsd_config.get("files", 10)
+            file_size = fsd_config.get("file_size", "1m")
+
+            line = f"fsd=fsd1,anchor={anchor},depth={depth},width={width},files={files},size={file_size}"
+            vdbench_lines.append(line)
+        else:
+            # Block storage definition
+            block_config = workload_config
+            device_path = "/dev/vdbench-device"
+            size = block_config.get("size", "15g")
+            threads = get_param("threads", 16)
+
+            line = f"sd=sd1,lun={device_path},size={size},threads={threads},openflags=o_direct"
+            vdbench_lines.append(line)
+
+        vdbench_lines.append("")
+
+        # Create workload definitions for each pattern
+        patterns = workload_config.get("patterns", [])
+        log.info(f"Processing {len(patterns)} patterns for workload definitions")
+        log.info(f"Pattern details: {[p.get('name', 'unnamed') for p in patterns]}")
+        for i, pattern in enumerate(patterns, 1):
+            log.info(f"Processing pattern {i}: {pattern}")
+            if is_filesystem:
+                # Filesystem workload definition
+                line = f"fwd=fwd{i},fsd=fsd1"
+
+                # Handle fileio parameter for filesystem
+                is_sequential = False
+                if "fileio" in pattern:
+                    line += f",fileio={pattern['fileio']}"
+                    is_sequential = pattern["fileio"] == "sequential"
+                elif "seekpct" in pattern:
+                    # Legacy support: convert seekpct to fileio
+                    if pattern["seekpct"] == 0:
+                        line += ",fileio=sequential"
+                        is_sequential = True
+                    else:
+                        line += ",fileio=random"
+                elif "rdpct" in pattern:
+                    # If rdpct is provided but no fileio, default to random
+                    line += ",fileio=random"
+
+                # Add pattern parameters (rdpct only for random I/O)
+                # Skip skew if it's 0 to avoid Vdbench skew calculation issues with wildcards
+                for key in ["xfersize"]:
+                    if key in pattern:
+                        line += f",{key}={pattern[key]}"
+
+                # Only add skew if it's non-zero
+                if "skew" in pattern and pattern["skew"] != 0:
+                    line += f",skew={pattern['skew']}"
+
+                # Add rdpct only for random I/O (sequential I/O doesn't support rdpct)
+                if not is_sequential and "rdpct" in pattern:
+                    line += f",rdpct={pattern['rdpct']}"
+
+                # Add threads parameter (use pattern value or common default)
+                threads_value = pattern.get("threads", get_param("threads", 16))
+                line += f",threads={threads_value}"
+            else:
+                # Block workload definition
+                line = f"wd=wd{i},sd=sd1"
+
+                # Add pattern parameters
+                # Skip skew if it's 0 to avoid Vdbench skew calculation issues with wildcards
+                for key in ["rdpct", "seekpct", "xfersize"]:
+                    if key in pattern:
+                        line += f",{key}={pattern[key]}"
+
+                # Only add skew if it's non-zero
+                if "skew" in pattern and pattern["skew"] != 0:
+                    line += f",skew={pattern['skew']}"
+
+                # Note: For block workloads, threads parameter is handled in SD, not WD
+
+            vdbench_lines.append(line)
+
+        vdbench_lines.append("")
+
+        # Create run definitions
+        elapsed = get_param("elapsed", 600)
+        interval = get_param("interval", 60)
+
+        # Note: Verification is handled via command-line flags (-v or -vq), not run definition parameters
+
+        if is_filesystem:
+            # Add file creation phase for filesystem workloads to prevent early exit
+            vdbench_lines.append(
+                "# File creation phase - create all files before workload starts"
+            )
+            vdbench_lines.append(
+                "rd=rd0,fwd=fwd*,elapsed=30,interval=10,fwdrate=max,format=yes"
+            )
+            vdbench_lines.append("")
+
+            # Filesystem run definition (use fwdrate instead of iorate)
+            line = f"rd=rd1,fwd=fwd1,elapsed={elapsed},interval={interval},fwdrate=max"
+            if workload_config.get("group_all_fwds_in_one_rd", True):
+                # Add all patterns to single run using wildcard syntax
+                # But exclude the last pattern if verification is enabled (it will run separately)
+                if self._is_verification_enabled_in_krkn_config() and len(patterns) > 1:
+                    # List all except the last pattern (verification pattern)
+                    fwd_list = ",".join([f"fwd{i}" for i in range(1, len(patterns))])
+                    line = f"rd=rd1,fwd=({fwd_list}),elapsed={elapsed},interval={interval},fwdrate=max"
+                else:
+                    line = f"rd=rd1,fwd=fwd*,elapsed={elapsed},interval={interval},fwdrate=max"
+
+            # Note: Verification is handled via command-line flags (-v or -vq), not run definition parameters
+        else:
+            # Block run definition (use iorate)
+            # Exclude the last pattern if verification is enabled (it will run separately)
+            if self._is_verification_enabled_in_krkn_config() and len(patterns) > 1:
+                # List all except the last pattern (verification pattern)
+                wd_list = ",".join([f"wd{i}" for i in range(1, len(patterns))])
+                line = f"rd=rd1,wd=({wd_list}),elapsed={elapsed},interval={interval},iorate=max"
+            else:
+                line = f"rd=rd1,wd=wd*,elapsed={elapsed},interval={interval},iorate=max"
+
+            # Note: Verification is handled via command-line flags (-v or -vq), not run definition parameters
+
+        vdbench_lines.append(line)
+
+        # Process any additional run definitions from the configuration
+        run_definitions = vdbench_config.get("run_definitions", [])
+        if run_definitions:
+            vdbench_lines.append("")
+            for rd in run_definitions:
+                id_ = rd["id"]
+
+                # Handle both wd_id (block) and fwd_id (filesystem) references
+                workload_ref_id = None
+                if "wd_id" in rd:
+                    workload_ref_id = rd["wd_id"]
+                    is_fwd = False
+                elif "fwd_id" in rd:
+                    workload_ref_id = rd["fwd_id"]
+                    is_fwd = True
+                else:
+                    raise KeyError(
+                        "Run definition must contain either 'wd_id' or 'fwd_id'"
+                    )
+
+                prefix = "fwd" if is_fwd else "wd"
+                rate_key = "fwdrate" if is_fwd else "iorate"
+
+                line = f"rd={id_},{prefix}={workload_ref_id}"
+
+                for key in ["elapsed", "interval"]:
+                    if key in rd:
+                        line += f",{key}={rd[key]}"
+
+                # Handle rate parameters
+                if "fwdrate" in rd:
+                    line += f",fwdrate={rd['fwdrate']}"
+                elif "iorate" in rd:
+                    line += f",{rate_key}={rd['iorate']}"
+
+                # Handle additional parameters
+                for key in ["format"]:
+                    if key in rd:
+                        line += f",{key}={rd[key]}"
 
                 vdbench_lines.append(line)
 
@@ -499,6 +1107,104 @@ class VdbenchWorkload:
         )
         log.info("Combined logs output:\n" + "\n".join(logs_output))
         return "\n".join(logs_output)
+
+    def validate_data_integrity(self):
+        """
+        Validate data integrity by parsing Vdbench logs for validation errors.
+
+        Checks for the data validation summary line:
+        "Total amount of key blocks read and validated: X; key blocks marked in error: Y"
+
+        Raises:
+            AssertionError: If any key blocks are marked in error (data corruption detected)
+        """
+        import re
+
+        log.info("Validating data integrity from Vdbench logs...")
+        logs = self.get_all_deployment_pod_logs()
+
+        # Pattern to match Vdbench validation summary
+        # Example: "14:13:30.227 localhost-0: 14:13:30.226 Total amount of
+        #           key blocks read and validated: 9,809,664; key blocks marked in error: 0"
+        pattern = r"key blocks read and validated:\s*([\d,]+);\s*key blocks marked in error:\s*(\d+)"
+
+        validation_results = []
+        for match in re.finditer(pattern, logs, re.IGNORECASE):
+            blocks_validated = match.group(1).replace(",", "")
+            blocks_in_error = int(match.group(2))
+            validation_results.append(
+                {
+                    "blocks_validated": int(blocks_validated),
+                    "blocks_in_error": blocks_in_error,
+                }
+            )
+
+        if not validation_results:
+            log.warning(
+                "⚠️  No data validation summary found in Vdbench logs. "
+                "This may indicate: (1) Verification was not enabled (-v flag), "
+                "(2) Workload did not complete verification phase, or "
+                "(3) Logs were truncated or not captured"
+            )
+            return
+
+        # Check each validation result individually
+        log.info(
+            f"📊 Data Validation Results: Found {len(validation_results)} validation result(s) in logs. "
+            f"Checking each result individually..."
+        )
+
+        failed_runs = []
+        for i, result in enumerate(validation_results, 1):
+            blocks_validated = result["blocks_validated"]
+            blocks_in_error = result["blocks_in_error"]
+
+            # Check this specific validation result
+            if blocks_in_error > 0:
+                status = "❌ FAILED"
+                failed_runs.append(i)
+                log.error(
+                    f"   Run #{i}: {blocks_validated:,} blocks validated, "
+                    f"{blocks_in_error} errors {status}"
+                )
+            else:
+                status = "✅ PASSED"
+                log.info(
+                    f"   Run #{i}: {blocks_validated:,} blocks validated, "
+                    f"{blocks_in_error} errors {status}"
+                )
+
+        # Calculate totals
+        total_blocks_validated = sum(r["blocks_validated"] for r in validation_results)
+        total_blocks_in_error = sum(r["blocks_in_error"] for r in validation_results)
+
+        # Summary
+        log.info(
+            f"📈 Summary: Total validation runs: {len(validation_results)}, "
+            f"Passed: {len(validation_results) - len(failed_runs)}, "
+            f"Failed: {len(failed_runs)}, "
+            f"Total blocks validated: {total_blocks_validated:,}, "
+            f"Total blocks in error: {total_blocks_in_error}"
+        )
+
+        # Raise exception if ANY validation run detected errors
+        if total_blocks_in_error > 0:
+            error_msg = (
+                f"❌ DATA CORRUPTION DETECTED! "
+                f"{len(failed_runs)} out of {len(validation_results)} validation run(s) failed. "
+                f"{total_blocks_in_error} key blocks marked in error out of "
+                f"{total_blocks_validated:,} total validated blocks. "
+                f"Failed run(s): {failed_runs}. "
+                f"Data integrity verification FAILED."
+            )
+            log.error(error_msg)
+            raise AssertionError(error_msg)
+
+        log.info(
+            f"✅ Data integrity validation PASSED - All {len(validation_results)} "
+            f"run(s) completed without errors ({total_blocks_validated:,} blocks validated)"
+        )
+        return True
 
     def scale_up_pods(self, desired_count):
         """

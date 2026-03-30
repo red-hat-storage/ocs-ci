@@ -1,4 +1,5 @@
 import logging
+import sys
 import time
 
 from ocs_ci.framework.logger_helper import log_step
@@ -104,7 +105,7 @@ class TestStoreUserInterface(object):
         log_step(
             "Navigate to Data Foundation / Object Storage / (Backing Store | Namespace Store)"
         )
-        object_storage = PageNavigator().nav_object_storage()
+        object_storage = PageNavigator().nav_object_storage_page()
 
         if kind == "BackingStore":
             store_tab = object_storage.nav_backing_store_tab()
@@ -290,8 +291,13 @@ def generate_test_params():
     """
     Generate test parameters for the test_obc_creation_and_deletion - helper function to reuse fixture in parametrize
     """
-
-    noobaa_sc = fetch_noobaa_storage_class_name().decode("utf-8")
+    # During collect-only mode, use a placeholder to avoid cluster connections
+    # Check sys.argv since config.RUN['cli_params'] is not populated at module import time
+    is_collect_only = "--collect-only" in sys.argv or "--co" in sys.argv
+    if is_collect_only:
+        noobaa_sc = "noobaa"
+    else:
+        noobaa_sc = fetch_noobaa_storage_class_name().decode("utf-8")
     return [
         pytest.param(
             *[
@@ -335,7 +341,11 @@ class TestObcUserInterface(object):
 
     def teardown(self):
         obc_lst = get_all_resource_names_of_a_kind("obc")
-        test_obcs = [obc_name for obc_name in obc_lst if "obc-testing" in obc_name]
+        test_obcs = [
+            obc_name
+            for obc_name in obc_lst
+            if ("obc-testing" or "test-bucket-") in obc_name
+        ]
         for obc_name in test_obcs:
             OCP(kind="obc", namespace=config.ENV_DATA["cluster_namespace"]).delete(
                 resource_name=obc_name
@@ -514,6 +524,13 @@ class TestBucketCreate:
         setup_ui_class_factory()
         bucket_ui = BucketsTab()
         bucket_ui.nav_object_storage_page()
+
+        # Create test buckets via UI to ensure comparison is meaningful
+        bucket_ui.create_bucket_ui("s3")
+        bucket_ui.nav_object_storage_page()
+        bucket_ui.create_bucket_ui("obc")
+        bucket_ui.nav_object_storage_page()
+
         bucket_ui.nav_buckets_page()
 
         # Get CLI bucket list for comparison

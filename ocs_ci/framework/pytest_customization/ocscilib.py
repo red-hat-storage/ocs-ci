@@ -7,6 +7,7 @@ all the config before pytest run. This run_ocsci.py is just a wrapper for
 pytest which proccess config and passes all params to pytest.
 """
 
+import datetime
 import logging
 import os
 import shutil
@@ -27,10 +28,10 @@ from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
     OCP_VERSION_CONF_DIR,
+    TOP_DIR,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
-    ConfigurationError,
     ResourceNotFoundError,
 )
 from ocs_ci.ocs.cluster import check_clusters
@@ -38,7 +39,6 @@ from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs import utils
 from ocs_ci.utility.utils import (
     dump_config_to_file,
-    exec_cmd,
     get_ceph_version,
     get_cluster_name,
     get_cluster_version,
@@ -47,6 +47,7 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
     load_config_file,
     create_stats_dir,
+    create_kubeconfig,
 )
 
 from ocs_ci.utility.memory import (
@@ -64,6 +65,9 @@ __all__ = [
 
 current_factory = logging.getLogRecordFactory()
 log = logging.getLogger(__name__)
+
+# Global variable to store test start time
+test_start_time = None
 
 
 def _pytest_addoption_cluster_specific(parser):
@@ -277,6 +281,14 @@ def pytest_addoption(parser):
         "--upgrade-acm-version",
         dest="upgrade_acm_version",
         help="acm version to upgrade(e.g. 2.8), use only with DR upgrade scenario",
+    )
+    parser.addoption(
+        "--product-type",
+        action="store",
+        choices=["odf", "fdf"],
+        default="odf",
+        dest="product_type",
+        help="Product type (ODF or FDF)",
     )
     parser.addoption(
         "--flexy-env-file", dest="flexy_env_file", help="Path to flexy environment file"
@@ -625,39 +637,7 @@ def process_cluster_cli_params(config):
         or get_cli_param(config, "teardown", default=False)
         or get_cli_param(config, "kubeconfig")
     ):
-        if ocsci_config.RUN.get("kubeadmin_password") and ocsci_config.RUN.get(
-            "ocp_url"
-        ):
-            log.info(
-                "Generating kubeconfig file from provided kubeadmin password and OCP URL"
-            )
-            # check and correct OCP URL (change it to API url if console url provided and add port if needed
-            ocp_api_url = ocsci_config.RUN.get("ocp_url").replace(
-                "console-openshift-console.apps", "api"
-            )
-            if ":6443" not in ocp_api_url:
-                ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
-
-            cmd = (
-                f"oc login --username {ocsci_config.RUN['username']} "
-                f"--password {ocsci_config.RUN['kubeadmin_password']} "
-                f"{ocp_api_url} "
-                f"--kubeconfig {kubeconfig_path} "
-                "--insecure-skip-tls-verify=true"
-            )
-            result = exec_cmd(cmd, secrets=(ocsci_config.RUN["kubeadmin_password"],))
-            if result.returncode:
-                log.warning(f"executed command: {cmd}")
-                log.warning(f"returncode: {result.returncode}")
-                log.warning(f"stdout: {result.stdout}")
-                log.warning(f"stderr: {result.stderr}")
-            else:
-                log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
-        else:
-            raise ConfigurationError(
-                "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
-                "environment variables were not provided."
-            )
+        create_kubeconfig(kubeconfig_path)
 
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
@@ -831,12 +811,16 @@ def process_cluster_cli_params(config):
         config, "skip_rpm_go_version_collection"
     )
     ocsci_config.RUN["skip_rpm_go_version_collection"] = skip_rpm_go_version_collection
+    ocsci_config.ENV_DATA["product_type"] = get_cli_param(config, "product_type")
 
 
 def pytest_collection_modifyitems(session, config, items):
     """
     Add Polarion ID property to test cases that are marked with one.
+    Also validate test name length to prevent issues with data upload.
     """
+    # Maximum allowed length for test names (including parametrization)
+    MAX_TEST_NAME_LENGTH = 128
 
     re_trigger_failed_tests = ocsci_config.RUN.get("re_trigger_failed_tests")
     if re_trigger_failed_tests:
@@ -844,6 +828,42 @@ def pytest_collection_modifyitems(session, config, items):
         cases_to_re_trigger = []
         for suite in junit_report:
             cases_to_re_trigger += [_case.name for _case in suite if _case.result]
+
+    # Check for test names that are too long
+    long_test_names = []
+    for item in items:
+        test_name = item.name
+        if len(test_name) > MAX_TEST_NAME_LENGTH:
+            long_test_names.append((test_name, len(test_name), item.nodeid))
+
+    # If any test names are too long, build error message and fail collection
+    if long_test_names:
+        # Build a single comprehensive error message
+        error_details = []
+        for test_name, length, nodeid in long_test_names:
+            error_details.append(
+                f"\nTest name length: {length} characters (exceeds limit of {MAX_TEST_NAME_LENGTH})\n"
+                f"Test name: {test_name}\n"
+                f"Full path: {nodeid}\n"
+                f"{'-'*80}"
+            )
+
+        # Combine all details into one message
+        full_error_message = (
+            f"\n{'='*80}\n"
+            f"ERROR: Found {len(long_test_names)} test(s) with names exceeding "
+            f"{MAX_TEST_NAME_LENGTH} characters.\n"
+            f"Long test names cause issues with data upload and reporting.\n"
+            f"{'='*80}" + "".join(error_details) + f"\n{'='*80}\n"
+            f"Test collection failed: {len(long_test_names)} test(s) have names "
+            f"exceeding {MAX_TEST_NAME_LENGTH} characters.\n"
+            f"Please shorten the parametrization names or test function names.\n"
+            f"{'='*80}"
+        )
+
+        # Exit with the complete error message
+        pytest.exit(full_error_message, returncode=1)
+
     for item in items[:]:
         if re_trigger_failed_tests and item.name not in cases_to_re_trigger:
             log.info(
@@ -870,6 +890,44 @@ def pytest_collection_modifyitems(session, config, items):
 def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
+
+    # Write test results to files first (always do this)
+    if rep.failed:
+        test_name = item.nodeid
+        # Write the failure information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/failed_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    if rep.passed and rep.when == "call":
+        test_name = item.nodeid
+        # Write the passed information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/passed_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    if rep.skipped:
+        test_name = item.nodeid
+        # Write the skipped information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/skipped_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    # Check if stop was requested and if it's not graceful, skip log collection
+    stop_requested = ocsci_config.RUN.get("stop_requested", False)
+    graceful_stop = ocsci_config.RUN.get("graceful_stop", True)
+
+    # Skip log collection if .stop file was used (not graceful)
+    if stop_requested and not graceful_stop:
+        log.info(
+            "Skipping log collection due to .stop file - "
+            "use .stop_gracefully if you want logs collected"
+        )
+        return
+
     # we only look at actual failing test calls, not setup/teardown
     # Don't collect must-gather for deployment here since its already
     # handled in deployment
@@ -917,6 +975,19 @@ def pytest_runtest_makereport(item, call):
         mcg_logs_collection = bool(mcg_markers_to_collect & item_markers)
         try:
             if not ocsci_config.RUN.get("is_ocp_deployment_failed"):
+                # Format test start time in RFC3339 format for must-gather
+                # Subtract 5 minutes buffer to capture events before test started
+                global test_start_time
+                since_time_str = None
+                if test_start_time:
+                    # Add 5 minute buffer before test start time
+                    time_with_buffer = test_start_time - datetime.timedelta(minutes=5)
+                    # RFC3339 format: YYYY-MM-DDTHH:MM:SSZ
+                    since_time_str = time_with_buffer.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    log.info(
+                        f"Collecting logs since: {since_time_str} (5 min buffer before test start)"
+                    )
+
                 utils.collect_ocs_logs(
                     dir_name=test_case_name,
                     ocp=ocp_logs_collection,
@@ -926,6 +997,7 @@ def pytest_runtest_makereport(item, call):
                     output_file=True,
                     skip_after_max_fail=True,
                     timeout=timeout,
+                    since_time=since_time_str,
                 )
         except Exception:
             log.exception("Failed to collect OCS logs")
@@ -963,30 +1035,6 @@ def pytest_runtest_makereport(item, call):
         except Exception:
             log.exception("Failed to collect performance stats")
 
-    if rep.failed:
-        test_name = item.nodeid
-        # Write the failure information to a file
-        with open(
-            f'{ocsci_config.ENV_DATA.get("cluster_path")}/failed_testcases.txt', "a"
-        ) as file:
-            file.write(f"{test_name}\n")
-
-    if rep.passed and rep.when == "call":
-        test_name = item.nodeid
-        # Write the passed information to a file
-        with open(
-            f'{ocsci_config.ENV_DATA.get("cluster_path")}/passed_testcases.txt', "a"
-        ) as file:
-            file.write(f"{test_name}\n")
-
-    if rep.skipped:
-        test_name = item.nodeid
-        # Write the skipped information to a file
-        with open(
-            f'{ocsci_config.ENV_DATA.get("cluster_path")}/skipped_testcases.txt', "a"
-        ) as file:
-            file.write(f"{test_name}\n")
-
 
 def set_log_level(config):
     """
@@ -1000,20 +1048,83 @@ def set_log_level(config):
     log.setLevel(logging.getLevelName(level))
 
 
+def check_stop_file():
+    """
+    Check if stop files exist in the repository root directory.
+
+    Returns:
+        tuple: (stop_requested, graceful_stop, message)
+            - stop_requested (bool): True if any stop file exists
+            - graceful_stop (bool): True if .stop_gracefully file exists
+            - message (str): Skip message to display
+    """
+    stop_file = os.path.join(TOP_DIR, ".stop")
+    stop_gracefully_file = os.path.join(TOP_DIR, ".stop_gracefully")
+
+    if os.path.exists(stop_gracefully_file):
+        log.warning(
+            f"Graceful stop file detected at {stop_gracefully_file}. "
+            "Current test will complete with log collection, remaining tests will be skipped."
+        )
+        return True, True, "Graceful stop requested via .stop_gracefully file"
+    elif os.path.exists(stop_file):
+        log.warning(
+            f"Stop file detected at {stop_file}. "
+            "Current test will complete without log collection, remaining tests will be skipped."
+        )
+        return True, False, "Stop requested via .stop file - skipping log collection"
+
+    return False, False, ""
+
+
+def set_stop_flags_for_all_clusters(stop_requested, graceful_stop):
+    """
+    Set stop flags in RUN config for all clusters in multicluster scenarios.
+
+    Args:
+        stop_requested (bool): Whether stop was requested
+        graceful_stop (bool): Whether graceful stop was requested
+    """
+    if ocsci_config.multicluster:
+        # Set flags for all clusters
+        for cluster in ocsci_config.clusters:
+            cluster.RUN["stop_requested"] = stop_requested
+            cluster.RUN["graceful_stop"] = graceful_stop
+    else:
+        # Single cluster scenario
+        ocsci_config.RUN["stop_requested"] = stop_requested
+        ocsci_config.RUN["graceful_stop"] = graceful_stop
+
+
 global consumed_ram_start_test
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     try:
+        # Check for stop files before starting the test
+        stop_requested, graceful_stop, skip_message = check_stop_file()
+
+        if stop_requested:
+            # Set flag in config to control log collection behavior
+            # Handle both single and multicluster scenarios
+            set_stop_flags_for_all_clusters(stop_requested, graceful_stop)
+
+            log.warning(f"Skipping test: {item.nodeid} - {skip_message}")
+            pytest.skip(skip_message)
+
         start_monitor_memory()
 
-        global consumed_ram_start_test
+        global consumed_ram_start_test, test_start_time
         consumed_ram_start_test = get_consumed_ram()
+
+        # Capture test start time in UTC for must-gather --since-time option
+        test_start_time = datetime.datetime.utcnow()
 
         log.debug(
             f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_ram_start_test)}"
         )
+        log.debug(f"Test start time (UTC): {test_start_time.isoformat()}Z")
     except Exception:
         log.exception("Got exception while start to monitor memory")
 

@@ -658,7 +658,7 @@ class PASTest(BaseTest):
         search_string = f"_find?type=index-pattern&search_fields=title&search='{name}'"
         log.info(f"Connecting to Kibana {server} on port {port}")
         try:
-            res = requests.get(f"{http_link}/{search_string}")
+            res = requests.get(f"{http_link}/{search_string}", timeout=120)
             res = json.loads(res.content.decode())
             for ind in res.get("saved_objects"):
                 if ind.get("attributes").get("title") in [name, f"{name}*"]:

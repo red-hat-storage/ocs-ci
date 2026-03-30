@@ -3,11 +3,12 @@ import yaml
 import json
 
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import version, templating
+from ocs_ci.utility import templating
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
-from ocs_ci.ocs.resources.pod import get_pod_obj
+from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_logs
 from ocs_ci.helpers import helpers
 import ocs_ci.utility.prometheus
 from ocs_ci.ocs.exceptions import (
@@ -61,33 +62,22 @@ def create_configmap_cluster_monitoring_pod(sc_name=None, telemeter_server_url=N
     config_data = yaml.dump(config_data)
     config_map["data"]["config.yaml"] = config_data
     ocp = OCP("v1", "ConfigMap", defaults.OCS_MONITORING_NAMESPACE)
-    azure_platform = config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM
-    ibm_cloud_platform = (
-        config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM
-    )
-    version_4_16_onwards = (
-        version.get_semantic_ocs_version_from_config() >= version.VERSION_4_16
-    )
     config_map_exists = False
-    if (
-        ((ibm_cloud_platform and version_4_16_onwards) or azure_platform)
-        and config.ENV_DATA["deployment_type"] == "managed"
-    ) or config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
-        try:
-            assert ocp.get(resource_name="cluster-monitoring-config")
-            logger.info(
-                "For Azure ARO or IBM Cloud ROKS cluster the cluster-monitoring-config"
-                " exists and we need only apply the data!"
-            )
-            config_map_exists = True
-            config_map_obj = OCS(**config_map)
-            config_map_obj.apply(**config_map)
-        except CommandFailed:
-            pass
+    try:
+        ocp.get(resource_name="cluster-monitoring-config")
+        logger.info(
+            "In case the cluster-monitoring-config already exists, we need only apply the data!"
+        )
+        config_map_exists = True
+        config_map_obj = OCS(**config_map)
+        config_map_obj.apply(**config_map)
+        logger.info("Successfully updated configmap cluster-monitoring-config")
+    except CommandFailed:
+        pass
     if not config_map_exists:
         assert helpers.create_resource(**config_map)
+        logger.info("Successfully created configmap cluster-monitoring-config")
     assert ocp.get(resource_name="cluster-monitoring-config")
-    logger.info("Successfully created configmap cluster-monitoring-config")
 
 
 @retry((AssertionError, CommandFailed), tries=30, delay=10, backoff=1)
@@ -428,3 +418,52 @@ def get_ceph_capacity_metrics(threading_lock):
     # convert dict to json and print it with pretty format
     logger.info(json.dumps(ceph_capacity, indent=4))
     return ceph_capacity
+
+
+def validate_no_prometheus_rule_failures(threading_lock=None):
+    """
+    Check that there is no PrometheusRuleFailures alert in OCP Prometheus or
+    many-to-many matching errors in Prometheus logs (more in DFBUGS-2571).
+
+    Args:
+        threading_lock (threading.RLock): A lock to prevent multiple threads calling 'oc' command at the same time
+
+    Returns:
+        bool: True if no error is found
+
+    """
+    # any check with state False will fail the test
+    test_results = {}
+
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI(threading_lock=threading_lock)
+    alerts_response = prometheus.get(
+        "alerts", payload={"silenced": False, "inhibited": False}
+    )
+    test_results["alert-msg-ok-check"] = alerts_response.ok is True
+    alerts = alerts_response.json()["data"]["alerts"]
+    logger.info(f"Prometheus Alerts: {alerts}")
+    test_results[f"{constants.ALERT_PROMETHEUSRULEFAILURES}-present-check"] = (
+        constants.ALERT_PROMETHEUSRULEFAILURES
+        not in [alert["labels"]["alertname"] for alert in alerts]
+    )
+    prometheus_pods = get_pod_name_by_pattern(
+        defaults.PROMETHEUS_ROUTE, constants.MONITORING_NAMESPACE
+    )
+    for pod_name in prometheus_pods:
+        logger.info(f"Checking logs of pod {pod_name}")
+        matching_logs = get_pod_logs(
+            pod_name=pod_name,
+            namespace=constants.MONITORING_NAMESPACE,
+            grep="many-to-many matching not allowed",
+            case_senitive=False,
+            first_match_only=True,
+            return_empty_string=True,
+        )
+        # If grep returns non-empty string, the error is present
+        if matching_logs.strip():
+            test_results[f"many-to-many-error-present-{pod_name}-check"] = False
+        else:
+            test_results[f"many-to-many-error-present-{pod_name}-check"] = True
+
+    logger.info(f"prometheus rule failures check: {test_results}")
+    return all(test_results.values())

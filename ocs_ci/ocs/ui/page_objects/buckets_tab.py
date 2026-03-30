@@ -12,6 +12,7 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
 )
 
+
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
@@ -30,33 +31,42 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
 
-    def create_bucket_ui(self, method: str) -> ObjectStorage:
+    def create_bucket_ui(self, method: str, return_name: bool = False):
         """
         Creates a bucket via UI using specified method.
 
+        Note: For new code, consider using create_bucket_ui_with_details() which always
+        returns a consistent type (tuple[ObjectStorage, str]).
+
         Args:
             method (str): Creation method, either 'obc' or 's3'.
+            return_name (bool): If True, returns tuple of (ObjectStorage, bucket_name).
+                               If False, returns ObjectStorage (for backward compatibility).
 
         Returns:
-            ObjectStorage: Instance of ObjectStorage class.
+            ObjectStorage or tuple: Instance of ObjectStorage class or tuple of (ObjectStorage, bucket_name).
 
         Raises:
             ValueError: If method is not 'obc' or 's3'.
         """
         self.do_click(self.bucket_tab["create_bucket_button"])
         if method == "obc":
-            return self.create_bucket_via_obc()
+            return self.create_bucket_via_obc(return_name)
         elif method == "s3":
-            return self.create_bucket_via_s3()
+            return self.create_bucket_via_s3(return_name)
         else:
             raise ValueError(f"Invalid method: {method}")
 
-    def create_bucket_via_obc(self) -> ObjectStorage:
+    def create_bucket_via_obc(self, return_name: bool = False):
         """
         Creates bucket via OBC with improved dropdown handling.
 
+        Args:
+            return_name (bool): If True, returns tuple of (ObjectStorage, bucket_name).
+                               If False, returns ObjectStorage (for backward compatibility).
+
         Returns:
-            ObjectStorage: Instance of ObjectStorage class.
+            ObjectStorage or tuple: Instance of ObjectStorage class or tuple of (ObjectStorage, bucket_name).
 
         Raises:
             NoSuchElementException: If UI elements are not found.
@@ -80,8 +90,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             logger.info("Selecting noobaa storage class option")
             self.do_click(self.bucket_tab["storage_class_noobaa_option"])
 
-        except NoSuchElementException as e:
-            logger.error(f"Failed to select storage class: {str(e)}")
+        except NoSuchElementException:
+            logger.exception("Failed to select storage class")
             raise
 
         logger.info("Clicking submit button to create OBC")
@@ -89,14 +99,21 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["submit_button_obc"])
 
         logger.info("Waiting for OBC to be created")
+
+        if return_name:
+            return ObjectStorage(), name_generator
         return ObjectStorage()
 
-    def create_bucket_via_s3(self) -> ObjectStorage:
+    def create_bucket_via_s3(self, return_name: bool = False):
         """
         Creates bucket via S3 method.
 
+        Args:
+            return_name (bool): If True, returns tuple of (ObjectStorage, bucket_name).
+                               If False, returns ObjectStorage (for backward compatibility).
+
         Returns:
-            ObjectStorage: Instance of ObjectStorage class.
+            ObjectStorage or tuple: Instance of ObjectStorage class or tuple of (ObjectStorage, bucket_name).
 
         Raises:
             NoSuchElementException: If UI elements are not found.
@@ -106,7 +123,60 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["create_bucket_button_s3"])
         self.do_send_keys(self.bucket_tab["s3_bucket_name_input"], name_generator)
         self.do_click(self.bucket_tab["submit_button_obc"])
+
+        if return_name:
+            return ObjectStorage(), name_generator
         return ObjectStorage()
+
+    def create_bucket_ui_with_details(self, method: str) -> tuple[ObjectStorage, str]:
+        """
+        Creates a bucket via UI using specified method and returns both ObjectStorage and bucket name.
+        This method always returns both values for predictable behavior.
+
+        Args:
+            method (str): Method to use for bucket creation ('obc' or 's3').
+
+        Returns:
+            tuple[ObjectStorage, str]: Always returns tuple of (ObjectStorage instance, bucket name).
+
+        Raises:
+            ValueError: If method is not 'obc' or 's3'.
+        """
+        self.do_click(self.bucket_tab["create_bucket_button"])
+        if method == "obc":
+            return self.create_bucket_via_obc_with_details()
+        elif method == "s3":
+            return self.create_bucket_via_s3_with_details()
+        else:
+            raise ValueError(f"Invalid method: {method}")
+
+    def create_bucket_via_obc_with_details(self) -> tuple[ObjectStorage, str]:
+        """
+        Creates bucket via OBC and returns both ObjectStorage and bucket name.
+        This method always returns both values for predictable behavior.
+
+        Returns:
+            tuple[ObjectStorage, str]: Always returns tuple of (ObjectStorage instance, bucket name).
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        # Call the existing method with return_name=True to get both values
+        return self.create_bucket_via_obc(return_name=True)
+
+    def create_bucket_via_s3_with_details(self) -> tuple[ObjectStorage, str]:
+        """
+        Creates bucket via S3 and returns both ObjectStorage and bucket name.
+        This method always returns both values for predictable behavior.
+
+        Returns:
+            tuple[ObjectStorage, str]: Always returns tuple of (ObjectStorage instance, bucket name).
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        # Call the existing method with return_name=True to get both values
+        return self.create_bucket_via_s3(return_name=True)
 
     def create_folder_in_bucket(
         self, bucket_name: str = None, folder_name: str = None
@@ -188,8 +258,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
             return folder_name
 
-        except NoSuchElementException as e:
-            logger.error(f"Error during file upload: {str(e)}")
+        except NoSuchElementException:
+            logger.exception("Error during file upload")
             raise
 
     def get_buckets_list(self) -> list:
@@ -202,7 +272,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         buckets = self.get_elements(self.bucket_tab["bucket_list_items"])
         # Extract text from elements immediately to avoid stale element references later
         bucket_names = [bucket.text for bucket in buckets]
-        logger.info(f"Found {len(bucket_names)} buckets")
+        logger.debug(f"Found {len(bucket_names)} buckets")
         return bucket_names
 
     def create_multiple_buckets_ui(
@@ -227,12 +297,12 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         created_buckets = []
 
         self.navigate_buckets_page()
-        self.driver.refresh()
+        self.refresh_page()
         self.page_has_loaded(sleep_time=2)
 
         # Create S3 buckets
         for i in range(s3_buckets):
-            logger.info(f"Creating S3 bucket #{i + 1}")
+            logger.debug(f"Creating S3 bucket #{i + 1}")
             bucket = self.create_bucket_ui(method="s3")
             created_buckets.append(bucket)
 
@@ -243,7 +313,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         # Create OBC buckets
         for i in range(obc_buckets):
-            logger.info(f"Creating OBC bucket #{i + 1}")
+            logger.debug(f"Creating OBC bucket #{i + 1}")
             bucket = self.create_bucket_ui(method="obc")
             created_buckets.append(bucket)
 
@@ -254,6 +324,22 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         logger.info(f"Successfully created {len(created_buckets)} buckets")
         return created_buckets
+
+    def navigate_to_bucket_by_name(self, bucket_name: str):
+        """
+        Navigate to a specific bucket by clicking on its name in the buckets list.
+
+        Args:
+            bucket_name (str): Name of the bucket to navigate to.
+
+        Raises:
+            NoSuchElementException: If bucket with given name is not found.
+        """
+        logger.info(f"Navigating to bucket: {bucket_name}")
+        # Use XPath to find the bucket link by name
+        bucket_link_locator = f"//tr//a[contains(text(), '{bucket_name}')]"
+        self.do_click(bucket_link_locator, By.XPATH)
+        logger.info(f"Successfully navigated to bucket: {bucket_name}")
 
     def has_pagination_controls(self) -> bool:
         """
@@ -270,8 +356,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 f"Pagination controls {'found' if element_found else 'not found'}"
             )
             return element_found
-        except Exception as e:
-            logger.error(f"Error checking pagination controls: {str(e)}")
+        except (NoSuchElementException, TimeoutException):
+            logger.exception("Error checking pagination controls")
             return False
 
     def navigate_to_next_page(self) -> bool:
@@ -313,8 +399,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             NoSuchElementException,
             TimeoutException,
             StaleElementReferenceException,
-        ) as e:
-            logger.error(f"Error navigating to next page: {str(e)}")
+        ):
+            logger.exception("Error navigating to next page")
             return False
 
     def navigate_to_previous_page(self) -> bool:
@@ -357,8 +443,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             NoSuchElementException,
             TimeoutException,
             StaleElementReferenceException,
-        ) as e:
-            logger.error(f"Error navigating to previous page: {str(e)}")
+        ):
+            logger.exception("Error navigating to previous page")
             return False
 
     def delete_bucket_ui(self, delete_via, expect_fail, resource_name):
@@ -410,8 +496,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     logger.info(
                         "Successfully entered bucket name in confirmation dialog"
                     )
-                except Exception as e:
-                    logger.warning(f"Failed to enter bucket name: {str(e)}")
+                except (NoSuchElementException, StaleElementReferenceException):
+                    logger.exception("Failed to enter bucket name")
                     self.take_screenshot()
                     self.copy_dom()
 
@@ -424,8 +510,12 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 )
                 time.sleep(5)
 
-            except Exception as e:
-                logger.error(f"Error during bucket deletion: {str(e)}")
+            except (
+                NoSuchElementException,
+                TimeoutException,
+                StaleElementReferenceException,
+            ):
+                logger.exception("Error during bucket deletion")
                 self.take_screenshot()
                 self.copy_dom()
 
@@ -433,10 +523,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     logger.info("Falling back to standard deletion method")
                     try:
                         self.delete_resource(delete_via, resource_name)
-                    except Exception as fallback_e:
-                        logger.error(
-                            f"Fallback deletion also failed: {str(fallback_e)}"
-                        )
+                    except Exception:
+                        logger.exception("Fallback deletion also failed")
                         if not expect_fail:
                             raise
         else:
@@ -496,6 +584,114 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     ), f"No expected Popup. See full response: \n {json.dumps(json_resp)}"
 
             _check_three_dots_disabled("check three dots inactive automatically")
-            self.driver.refresh()
+            self.refresh_page()
             self.page_has_loaded(sleep_time=2)
             _check_three_dots_disabled("check three dots inactive after refresh")
+
+    def upload_folder_to_bucket(self, folder_path: str, wait_time: int = 2) -> None:
+        """
+        Upload a folder to the bucket.
+
+        Args:
+            folder_path (str): Path to the folder to upload.
+            wait_time (int): Time to wait after upload (default: 2 seconds).
+        """
+        file_input = self.driver.find_element(
+            self.bucket_tab["file_input_directory"][1],
+            self.bucket_tab["file_input_directory"][0],
+        )
+        self.driver.execute_script(
+            "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
+            file_input,
+        )
+        file_input.clear()
+        file_input.send_keys(folder_path)
+        time.sleep(wait_time)
+
+    def navigate_to_bucket(self, bucket_name: str) -> None:
+        """
+        Navigate to object storage and select the specific test bucket by name.
+
+        Args:
+            bucket_name (str): Name of the bucket to navigate to.
+        """
+        self.nav_object_storage_page()
+        logger.info(f"Navigating to bucket: {bucket_name}")
+        logger.info(f"Looking for bucket link with text: {bucket_name}")
+        bucket_link_locator = f"//tr//a[contains(text(), '{bucket_name}')]"
+        self.do_click((bucket_link_locator, By.XPATH))
+        logger.info(f"Successfully navigated into bucket: {bucket_name}")
+
+    def navigate_to_folder_and_enable_versions(
+        self,
+        folder_name: str,
+        bucket_name: str,
+        navigation_wait_time: int = 2,
+        versions_load_wait_time: int = 3,
+    ) -> None:
+        """
+        Navigate to the test folder and enable version listing.
+
+        Args:
+            folder_name (str): Name of the folder to navigate to.
+            bucket_name (str): Name of the bucket to work with.
+            navigation_wait_time (int): Time to wait after navigation (default: 2 seconds).
+            versions_load_wait_time (int): Time to wait for versions to load (default: 3 seconds).
+        """
+        logger.info("Navigating to folder and showing versions")
+        self.navigate_to_bucket(bucket_name)
+
+        logger.info(f"Clicking on folder link to navigate into folder: {folder_name}")
+        self.do_click(self.bucket_tab["first_folder_link"])
+
+        time.sleep(navigation_wait_time)
+        logger.info("Clicking 'List all versions' toggle")
+        self.do_click(self.bucket_tab["list_all_versions_toggle"])
+
+        time.sleep(versions_load_wait_time)
+        logger.info(
+            f"Successfully navigated to folder '{folder_name}' and enabled version listing"
+        )
+
+    def navigate_to_bucket_permissions(self, bucket_name: str = None):
+        """
+        Navigate to bucket permissions tab.
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+
+        Returns:
+            BucketsTabPermissions: Instance of BucketsTabPermissions page object.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
+            BucketsTabPermissions,
+        )
+
+        if not bucket_name:
+            self.do_click(self.bucket_tab["bucket_list_items"])
+            self.do_click(self.bucket_tab["permissions_tab"])
+            self.do_click(self.bucket_tab["bucket_policy_tab"])
+            return BucketsTabPermissions()
+
+        bucket_elements = self.get_elements(self.bucket_tab["bucket_list_items"])
+
+        for bucket_element in bucket_elements:
+            if bucket_element.text != bucket_name:
+                continue
+
+            bucket_element.click()
+            break
+        else:
+            available_buckets = [elem.text for elem in bucket_elements]
+            raise NoSuchElementException(
+                f"Bucket '{bucket_name}' not found in bucket list. "
+                f"Available buckets: {available_buckets}. "
+                "Verify bucket name exists and is visible on current page."
+            )
+
+        self.do_click(self.bucket_tab["permissions_tab"])
+        self.do_click(self.bucket_tab["bucket_policy_tab"])
+        return BucketsTabPermissions()

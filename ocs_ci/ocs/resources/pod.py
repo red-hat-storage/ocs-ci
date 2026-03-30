@@ -49,6 +49,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.constants import CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -588,13 +589,38 @@ class Pod(OCS):
         Install packages in a Pod
 
         Args:
-            packages (list): List of packages to install
-
+            packages (list or str): List of packages to install
         """
         if isinstance(packages, list):
             packages = " ".join(packages)
 
-        cmd = f"yum install {packages} -y"
+        # Detect OS inside pod
+        os_release = self.exec_cmd_on_pod(
+            "cat /etc/os-release || true", out_yaml_format=False
+        )
+
+        os_release_lower = os_release.lower() if os_release else ""
+
+        if "alpine" in os_release_lower:
+            # Alpine uses apk
+            cmd = f"apk add --no-cache {packages}"
+        elif any(
+            x in os_release_lower
+            for x in ["rhel", "centos", "fedora", "ubi", "red hat"]
+        ):
+            # RHEL-based uses yum
+            cmd = f"yum install -y {packages}"
+        elif any(x in os_release_lower for x in ["debian", "ubuntu"]):
+            # Debian-based uses apt
+            cmd = (
+                "apt-get update && "
+                f"DEBIAN_FRONTEND=noninteractive apt-get install -y {packages}"
+            )
+        else:
+            raise RuntimeError(
+                f"Unsupported OS for package install. /etc/os-release:\n{os_release}"
+            )
+
         self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
     def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
@@ -1403,7 +1429,8 @@ def cal_md5sum(pod_obj, file_name, block=False, raw_path=False):
         file_path = file_name
 
     md5sum_cmd_out = pod_obj.ocp.exec_oc_cmd(
-        command=f"exec {pod_obj.name} -- md5sum {file_path}"
+        command=f"exec {pod_obj.name} -- md5sum {file_path}",
+        out_yaml_format=False,
     )
     md5sum = md5sum_cmd_out.split()[0]
 
@@ -1781,6 +1808,60 @@ def get_osd_prepare_pods(
     return osd_pods
 
 
+def get_csi_addons_pod():
+    """
+    Find a CSI addon pod that contains the 'csi-addons' container.
+
+    In ODF 4.20, CSI addon functionality is in dedicated pods with the label
+    'app=openshift-storage.rbd.csi.ceph.com-nodeplugin-csi-addons'.
+
+    Returns:
+        Pod: A Pod object that contains the 'csi-addons' container
+
+    Raises:
+        AssertionError: If no CSI addon pod with 'csi-addons' container is found
+
+    """
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    try:
+        addon_pods = get_pods_having_label(
+            CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
+        )
+        if not addon_pods:
+            raise AssertionError(
+                f"No CSI addon pods found with label '{CSI_RBD_ADDON_NODEPLUGIN_LABEL_420}' "
+                f"in namespace {namespace}"
+            )
+
+        pod_obj = Pod(**addon_pods[0])
+
+        # Verify the pod actually has the 'csi-addons' container
+        csi_addon_container = pod_obj.get_container_data("csi-addons")
+        if not csi_addon_container:
+            raise AssertionError(
+                f"CSI addon pod '{pod_obj.name}' exists but does not contain 'csi-addons' container"
+            )
+
+        logger.info(f"Found CSI addon pod: {pod_obj.name}")
+        return pod_obj
+
+    except Exception as e:
+        # Provide helpful diagnostic information
+        try:
+            all_pods = get_all_pods(namespace=namespace)
+            csi_pod_names = [pod.name for pod in all_pods if "csi" in pod.name.lower()]
+            error_msg = (
+                f"Failed to find CSI addon pod in namespace {namespace}. "
+                f"Error: {str(e)}. Available CSI-related pods: {csi_pod_names}"
+            )
+        except Exception:
+            error_msg = f"Failed to find CSI addon pod in namespace {namespace}. Error: {str(e)}"
+
+        raise AssertionError(error_msg)
+
+
 def get_osd_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
     """
     Fetches info about osd deployments in the cluster
@@ -1882,17 +1963,36 @@ def get_pod_logs(
     all_containers=False,
     since=None,
     tail=None,
+    grep=None,
+    regex=False,
+    case_senitive=False,
+    context=0,
+    return_empty_string=True,
+    first_match_only=True,
 ):
     """
     Get logs from a given pod
 
-    pod_name (str): Name of the pod
-    container (str): Name of the container
-    namespace (str): Namespace of the pod
-    previous (bool): True, if pod previous log required. False otherwise.
-    all_containers (bool): fetch logs from all containers of the resource
-    since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
-    tail (str): number of lines to tail
+    Args:
+        pod_name (str): Name of the pod
+        container (str): Name of the container
+        namespace (str): Namespace of the pod
+        previous (bool): True, if pod previous log required. False otherwise.
+        all_containers (bool): fetch logs from all containers of the resource
+        since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
+        tail (str): number of lines to tail
+        grep (str): filter the logs by the given string
+        regex (bool): True, if the grep is a regex. False otherwise.
+            Applicable only if grep is provided.
+        case_senitive (bool): True, if the grep is case sensitive. False otherwise.
+            Applicable only if grep is provided.
+        context (int): number of lines to show before and after the matching line
+            Applicable only if grep is provided.
+        return_empty_string (bool): True, if the function should return an empty string if no logs are found.
+            Applicable only if grep is provided. Default value is True.
+        first_match_only (bool): True, if the function should return the first match only. False otherwise.
+            Applicable only if grep is provided. Default value is True.
+
     Returns:
         str: Output from 'oc get logs <pod_name> command
 
@@ -1910,8 +2010,18 @@ def get_pod_logs(
         cmd += f" --since={since}"
     if tail:
         cmd += f" --tail={tail}"
-
-    return pod.exec_oc_cmd(cmd, out_yaml_format=False)
+    if grep:
+        regex_flag = "-E" if regex else ""
+        cmd += f" | grep {regex_flag} '{grep}'"
+        if not case_senitive:
+            cmd += " -i"
+        if context:
+            cmd += f" -C {context}"
+        if first_match_only:
+            cmd += " -m 1"
+        if return_empty_string:
+            cmd += " || echo ''"
+    return pod.exec_oc_cmd(cmd, out_yaml_format=False, shell=bool(grep))
 
 
 def get_pod_node(pod_obj):
@@ -2509,6 +2619,7 @@ def get_pod_restarts_count(namespace=None, label=None, list_of_pods=None):
             "rook-ceph-osd-prepare",
             "rook-ceph-drain-canary",
             "ceph-file-controller-detect-version",
+            "status-reporter",
         )
         if all(exclude_name not in p.name for exclude_name in exclude_names):
             pod_count = ocp_pod_obj.get_resource(p.name, "RESTARTS")
@@ -2559,12 +2670,16 @@ def check_pods_in_running_state(
     )
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
+        # Also skip CatalogSource pods (managed by OLM) — they may be Pending
+        # when nodes are tainted with custom taints that lack matching tolerations
+        # on the CatalogSource resource.
         if (
             ("rook-ceph-osd-prepare" not in p.name)
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
             and (constants.REPORT_STATUS_TO_PROVIDER_POD not in p.name)
             and ("status-reporter" not in p.name)
+            and not p.get_labels().get("olm.catalogSource")
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if skip_for_status:
@@ -2660,6 +2775,7 @@ def wait_for_pods_to_be_running(
     timeout=200,
     sleep=10,
     cluster_kubeconfig="",
+    skip_for_status=None,
 ):
     """
     Wait for all the pods in a specific namespace to be running.
@@ -2675,6 +2791,9 @@ def wait_for_pods_to_be_running(
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
         cluster_kubeconfig (str): The kubeconfig file to use for the oc command
+        skip_for_status (list): List of pod status that should be skipped. If the status of a pod is in the given list,
+            the check for 'Running' status of that particular pod will be skipped.
+            eg: ["Pending", "Completed"]
 
     Returns:
          bool: True, if all pods in Running state. False, otherwise
@@ -2690,6 +2809,7 @@ def wait_for_pods_to_be_running(
             pod_names=pod_names,
             raise_pod_not_found_error=raise_pod_not_found_error,
             cluster_kubeconfig=cluster_kubeconfig,
+            skip_for_status=skip_for_status,
         ):
             # Check if all the pods in running state
             if pods_running:
@@ -2882,12 +3002,16 @@ def run_osd_removal_job(osd_ids=None):
     Run the ocs-osd-removal job
 
     Args:
-        osd_ids (list): The osd IDs.
+        osd_ids (list | None): The osd IDs.
 
     Returns:
-        ocs_ci.ocs.resources.ocs.OCS: The ocs-osd-removal job object
+        ocs_ci.ocs.resources.ocs.OCS | None: The ocs-osd-removal job object, or None if no OSDs provided
 
     """
+    if not osd_ids:
+        logger.warning("run_osd_removal_job called with empty osd_ids – nothing to do")
+        return None
+
     osd_ids_str = ",".join(map(str, osd_ids))
 
     cmd_params = "-p FORCE_OSD_REMOVAL=true"
@@ -3714,21 +3838,25 @@ def exit_osd_maintenance_mode(osd_deployment):
     helpers.modify_deployment_replica_count(
         deployment_name=constants.OCS_CSV_PREFIX, replica_count=1
     )
+    try:
+        # UnSet ceph osd noout and pause flags BEFORE waiting for pods.
+        # Pods cannot fully start while I/O is paused, so unsetting first
+        # avoids a deadlock where we wait for pods that can never be ready.
+        ct_pod = get_ceph_tools_pod()
+        logger.info("UnSet osd noout flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset noout")
+        logger.info("UnSet osd pause flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset pause")
+    finally:
+        # Remove the backup files regardless of flag-unset outcome
+        for deployment in osd_deployment:
+            if os.path.isfile(f"backup_{deployment.name}.yaml"):
+                os.remove(f"backup_{deployment.name}.yaml")
     # Sleep for 60 sec for the OSD pods to respin
     logger.info("Sleeping for 60s for the osd pods to stabilize")
     time.sleep(60)
     for pod in get_osd_pods():
         helpers.wait_for_resource_state(resource=pod, state=constants.STATUS_RUNNING)
-    ct_pod = get_ceph_tools_pod()
-    # UnSet ceph osd noout and pause flags
-    logger.info("UnSet osd noout flag")
-    ct_pod.exec_ceph_cmd("ceph osd unset noout")
-    logger.info("UnSet osd pause flag")
-    ct_pod.exec_ceph_cmd("ceph osd unset pause")
-    # Remove the backup files
-    for deployment in osd_deployment:
-        if os.path.isfile(f"backup_{deployment.name}.yaml"):
-            os.remove(f"backup_{deployment.name}.yaml")
 
 
 def restart_pods_having_label(label, namespace=None):
@@ -3829,6 +3957,7 @@ def search_pattern_in_pod_logs(
     namespace=None,
     container=None,
     all_containers=False,
+    since=None,
 ):
     """
     Searches for the given regular expression pattern in the logs of a pod and returns all matching lines.
@@ -3839,6 +3968,8 @@ def search_pattern_in_pod_logs(
         namespace (str, optional): The namespace of the pod. Defaults to None.
         container (str, optional): The name of the container to search logs for. Defaults to None.
         all_containers (bool, optional): Whether to search logs for all containers in the pod. Defaults to False.
+        since (str, optional): Only return logs newer than a relative duration like 5s, 2m, or 3h.
+            Defaults to None.
 
     Returns:
         A list of matched lines with the pattern.
@@ -3849,6 +3980,7 @@ def search_pattern_in_pod_logs(
         namespace=namespace,
         container=container,
         all_containers=all_containers,
+        since=since,
     )
 
     matched_lines = [line for line in pod_logs.split("\n") if re.search(pattern, line)]
@@ -4073,6 +4205,113 @@ def get_pod_used_memory_in_mebibytes(podname):
             if memory_value_with_unit.endswith("Mi"):
                 memory_value = int(memory_value_with_unit.replace("Mi", ""))
                 return memory_value
+
+
+def get_pod_metrics(pod_name, namespace=None):
+    """
+    Get memory and CPU metrics for a specific pod using oc adm top.
+
+    Args:
+        pod_name (str): Name of the pod
+        namespace (str): Namespace where the pod is located
+
+    Returns:
+        dict: Dictionary with 'memory_mib' and 'cpu_millicores' keys
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ocp_obj = OCP(namespace=namespace)
+
+    try:
+        # Get pod metrics using oc adm top
+        cmd = f"adm top pod {pod_name} -n {namespace}"
+        output = ocp_obj.exec_oc_cmd(cmd, out_yaml_format=False)
+
+        # Parse output: NAME CPU(cores) MEMORY(bytes)
+        # Example: pod-name 50m 125Mi
+        lines = output.strip().split("\n")
+        for line in lines:
+            parts = line.split()
+            # Check exact match on first column (pod name) to avoid substring matching issues
+            if len(parts) >= 3 and parts[0] == pod_name:
+                cpu_str = parts[1]
+                memory_str = parts[2]
+
+                # Parse CPU (e.g., "50m" -> 50 millicores)
+                cpu_millicores = 0
+                if cpu_str.endswith("m"):
+                    cpu_millicores = int(cpu_str.replace("m", ""))
+                elif "." in cpu_str:
+                    cpu_millicores = int(float(cpu_str) * 1000)
+                else:
+                    cpu_millicores = int(cpu_str) * 1000
+
+                # Parse memory (e.g., "125Mi" -> 125 MiB)
+                memory_mib = 0
+                if memory_str.endswith("Mi"):
+                    memory_mib = int(memory_str.replace("Mi", ""))
+                elif memory_str.endswith("Gi"):
+                    memory_mib = int(float(memory_str.replace("Gi", "")) * 1024)
+                elif memory_str.endswith("Ki"):
+                    memory_mib = int(int(memory_str.replace("Ki", "")) / 1024)
+                else:
+                    # Assume bytes
+                    memory_mib = int(int(memory_str) / (1024 * 1024))
+
+                # Validate parsed values are not zero
+                if memory_mib == 0 or cpu_millicores == 0:
+                    logger.warning(
+                        f"Parsed metrics for pod {pod_name} resulted in zero values: "
+                        f"memory_mib={memory_mib}, cpu_millicores={cpu_millicores}. "
+                        f"Raw values: cpu={cpu_str}, memory={memory_str}"
+                    )
+
+                return {
+                    "memory_mib": memory_mib,
+                    "cpu_millicores": cpu_millicores,
+                }
+
+        logger.warning(f"Could not parse metrics for pod {pod_name}")
+        return {"memory_mib": 0, "cpu_millicores": 0}
+
+    except Exception as e:
+        logger.error(f"Error getting metrics for pod {pod_name}: {e}")
+        return {"memory_mib": 0, "cpu_millicores": 0}
+
+
+def get_pods_aggregated_metrics(pod_objs):
+    """
+    Get aggregated metrics for multiple pods.
+
+    Args:
+        pod_objs (list): List of Pod objects
+
+    Returns:
+        dict: Dictionary with aggregated metrics including:
+            - total_memory_mib: Sum of memory across all pods
+            - total_cpu_millicores: Sum of CPU across all pods
+            - max_memory_mib: Maximum memory among all pods
+            - max_cpu_millicores: Maximum CPU among all pods
+            - pod_count: Number of pods
+    """
+    total_memory_mib = 0
+    total_cpu_millicores = 0
+    max_memory_mib = 0
+    max_cpu_millicores = 0
+
+    for pod in pod_objs:
+        metrics = get_pod_metrics(pod.name, pod.namespace)
+        total_memory_mib += metrics["memory_mib"]
+        total_cpu_millicores += metrics["cpu_millicores"]
+        max_memory_mib = max(max_memory_mib, metrics["memory_mib"])
+        max_cpu_millicores = max(max_cpu_millicores, metrics["cpu_millicores"])
+
+    return {
+        "total_memory_mib": total_memory_mib,
+        "total_cpu_millicores": total_cpu_millicores,
+        "max_memory_mib": max_memory_mib,
+        "max_cpu_millicores": max_cpu_millicores,
+        "pod_count": len(pod_objs),
+    }
 
 
 def get_ceph_csi_ctrl_pods(namespace=None):
@@ -4364,3 +4603,100 @@ def get_csi_addons_controller_manager_pod():
         return []
 
     return [Pod(**pod) for pod in pods]
+
+
+def wait_for_matching_pattern_in_pod_logs(
+    pod_name,
+    pattern,
+    namespace=None,
+    container=None,
+    all_containers=False,
+    since=None,
+    timeout=300,
+    sleep=20,
+):
+    """
+    Waits for a matching pattern in the logs of a pod until timeout is reached.
+
+    Args:
+        pod_name (str): The name of the pod.
+        pattern (str): The regular expression pattern to search for.
+        namespace (str, optional): The namespace of the pod. Defaults to None.
+        container (str, optional): The name of the container to search logs for. Defaults to None.
+        all_containers (bool, optional): Whether to search logs for all containers in the pod. Defaults to False.
+        since (str, optional): Only return logs newer than a relative duration like 5s, 2m, or 3h.
+            Defaults to None.
+        timeout (int): Maximum time to wait for the pattern to appear in seconds.
+        sleep (int): Time in seconds to sleep between attempts.
+
+    Returns:
+        list: The list of matched lines with the pattern if found within timeout, else False.
+
+    Raises:
+        TimeoutExpiredError: If the pattern is not found within the specified timeout.
+
+    """
+    logger.info(f"Waiting for pattern '{pattern}' in logs of pod '{pod_name}'")
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=search_pattern_in_pod_logs,
+        pod_name=pod_name,
+        pattern=pattern,
+        namespace=namespace,
+        container=container,
+        all_containers=all_containers,
+        since=since,
+    )
+    try:
+        for matched_lines in sampler:
+            if matched_lines:
+                logger.info(f"Pattern '{pattern}' found in logs of pod '{pod_name}'.")
+                return matched_lines
+    except TimeoutExpiredError as e:
+        raise TimeoutExpiredError(
+            f"Pattern '{pattern}' not found in logs of pod '{pod_name}' within {timeout} seconds."
+        ) from e
+
+
+def get_mon_pod_by_id(mon_id, namespace=None):
+    """
+    Function to get monitor pod by mon_id label
+
+    Args:
+        mon_id (str): mon id of the monitor pod
+        namespace (str): Namespace in which monitor pod is running
+
+    Returns:
+        Pod: Pod object of the monitor pod
+
+    """
+    mons = get_pods_having_label(label=f"mon={mon_id}", namespace=namespace)
+    if not mons:
+        raise ValueError(f"Monitor pod with id {mon_id} not found")
+
+    return Pod(**mons[0])
+
+
+def get_deviceclass_osd_pods(deviceclass_name, namespace=None):
+    """
+    Get the deviceclass osd pods
+
+    Args:
+        deviceclass_name (str): The deviceclass name
+        namespace (str): Namespace in which ceph cluster lives
+            (default: config.ENV_DATA["cluster_namespace"])
+
+    Returns:
+        list : The deviceclass osd pod objects
+
+    """
+    from ocs_ci.ocs.resources.pvc import get_deviceclass_pvcs
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pvcs = get_deviceclass_pvcs(deviceclass_name, namespace)
+    pvc_names = [pvc.name for pvc in pvcs]
+    osd_pods = get_osd_pods()
+    deviceclass_osd_pods = [p for p in osd_pods if get_pvc_name(p) in pvc_names]
+
+    return deviceclass_osd_pods

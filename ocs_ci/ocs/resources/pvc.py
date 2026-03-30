@@ -8,7 +8,11 @@ from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import UnavailableResourceException, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    UnavailableResourceException,
+    TimeoutExpiredError,
+    CommandFailed,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
@@ -79,7 +83,7 @@ class PVC(OCS):
         data = dict()
         data["api_version"] = self.api_version
         data["kind"] = "PersistentVolume"
-        data["metadata"] = {"name": self.backed_pv, "namespace": self.namespace}
+        data["metadata"] = {"name": self.backed_pv}
         pv_obj = OCS(**data)
         pv_obj.ocp.cluster_kubeconfig = self.ocp.cluster_kubeconfig
         pv_obj.reload()
@@ -236,13 +240,14 @@ class PVC(OCS):
                 attached_pods.append(pod_obj)
         return attached_pods
 
-    def create_snapshot(self, snapshot_name=None, wait=False):
+    def create_snapshot(self, snapshot_name=None, wait=False, timeout=60):
         """
         Take snapshot of the PVC
 
         Args:
             snapshot_name (str): Name to be provided for snapshot
             wait (bool): True to wait for snapshot to be ready, False otherwise
+            timeout (int): Timeout in seconds to wait for snapshot to be ready (default: 60)
 
         Returns:
             OCS: Kind Snapshot
@@ -281,6 +286,7 @@ class PVC(OCS):
             namespace=self.namespace,
             sc_name=snapshotclass,
             wait=wait,
+            timeout=timeout,
         )
         snapshot_obj.parent_access_mode = self.get_pvc_access_mode
         snapshot_obj.parent_sc = self.backed_sc
@@ -446,7 +452,7 @@ def get_deviceset_pvs():
 
 
 def create_pvc_snapshot(
-    pvc_name, snap_yaml, snap_name, namespace, sc_name=None, wait=False
+    pvc_name, snap_yaml, snap_name, namespace, sc_name=None, wait=False, timeout=60
 ):
     """
     Create snapshot of a PVC
@@ -458,6 +464,7 @@ def create_pvc_snapshot(
         namespace (str): The namespace for the snapshot creation
         sc_name (str): The name of the snapshot class
         wait (bool): True to wait for snapshot to be ready, False otherwise
+        timeout (int): Timeout in seconds to wait for snapshot to be ready (default: 60)
 
     Returns:
         OCS object
@@ -479,7 +486,7 @@ def create_pvc_snapshot(
             condition="true",
             resource_name=ocs_obj.name,
             column=constants.STATUS_READYTOUSE,
-            timeout=60,
+            timeout=timeout,
         )
     return ocs_obj
 
@@ -766,3 +773,175 @@ def wait_for_pvcs_in_lvs_to_reach_status(
             f"expected status {expected_status} after {timeout} seconds"
         )
         return False
+
+
+def get_pvcs_using_storageclass(
+    storageclass_name: str, namespace: str = None
+) -> list[dict]:
+    """
+    Find all PVCs using a specific StorageClass
+
+    Args:
+        storageclass_name (str): Name of the StorageClass to search for
+        namespace (str): Namespace to search in. If None, searches all namespaces
+
+    Returns:
+        list[dict]: List of PVC information dictionaries containing name, namespace,
+                   storageclass, status, and size
+
+    Raises:
+        ValueError: If storageclass_name is empty or None
+        CommandFailed: If OCP API call fails
+    """
+    if not storageclass_name or not storageclass_name.strip():
+        raise ValueError("storageclass_name cannot be empty or None")
+
+    log.info(
+        f"Searching for PVCs using StorageClass '{storageclass_name}' in namespace: {namespace or 'all'}"
+    )
+
+    try:
+        ocp_obj = OCP(kind=constants.PVC, namespace=namespace)
+        all_pvcs = ocp_obj.get()
+
+        if not all_pvcs or "items" not in all_pvcs:
+            log.info("No PVCs found in the cluster")
+            return []
+
+        matching_pvcs = []
+        for pvc in all_pvcs["items"]:
+            pvc_spec = pvc.get("spec", {})
+            pvc_metadata = pvc.get("metadata", {})
+            pvc_status = pvc.get("status", {})
+
+            if pvc_spec.get("storageClassName") == storageclass_name:
+                pvc_info = {
+                    "name": pvc_metadata.get("name", "unknown"),
+                    "namespace": pvc_metadata.get("namespace", "unknown"),
+                    "storageclass": pvc_spec.get("storageClassName"),
+                    "status": pvc_status.get("phase", "unknown"),
+                    "size": pvc_spec.get("resources", {})
+                    .get("requests", {})
+                    .get("storage", "unknown"),
+                }
+                matching_pvcs.append(pvc_info)
+                log.info(
+                    f"Found PVC: {pvc_info['name']} in namespace {pvc_info['namespace']}"
+                )
+
+        log.info(
+            f"Found {len(matching_pvcs)} PVCs using StorageClass '{storageclass_name}'"
+        )
+        return matching_pvcs
+
+    except CommandFailed as e:
+        log.error(f"Failed to get PVCs: {e}")
+        raise
+
+
+def get_pvcs_in_deviceset(deviceset_name, namespace=None):
+    """
+    Get the Persistent Volume Claims (PVCs) associated with a specific Deviceset.
+
+    Args:
+        deviceset_name (str): The Deviceset name whose PVCs are being retrieved.
+        namespace (str): The namespace where the Deviceset PVCs are located.
+
+    Returns:
+        list: List of PVC objects associated with the specified Deviceset.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pvcs = get_all_pvcs(namespace)
+    pvc_items = pvcs.get("items", [])
+    deviceset_pvcs = []
+
+    for pvc in pvc_items:
+        labels = pvc.get("metadata", {}).get("labels", {})
+        device_set_label = labels.get("ceph.rook.io/DeviceSet", "")
+        if device_set_label.startswith(deviceset_name):
+            deviceset_pvcs.append(PVC(**pvc))
+
+    return deviceset_pvcs
+
+
+def wait_for_pvcs_in_deviceset_to_reach_status(
+    deviceset_name, pvc_count, expected_status, namespace=None, timeout=180, sleep=10
+):
+    """
+    Wait for the Persistent Volume Claims (PVCs) associated with a specific Deviceset
+    to reach the expected status within a given timeout.
+
+    Args:
+        deviceset_name (str): The Deviceset name whose PVCs are being monitored.
+        pvc_count (int): The number of PVCs expected to reach the desired status.
+        expected_status (str): The expected status of the PVCs (e.g., "Bound", "Available").
+        namespace (str): The namespace where the Deviceset PVCs are located.
+        timeout (int): Maximum time to wait for the PVCs to reach the expected status, in seconds.
+        sleep (int): Interval between successive checks, in seconds.
+
+    Returns:
+        bool: True, if the PVCs reach the expected status within the specified timeout. False, otherwise.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    log.info(
+        f"Waiting for the PVCs in the Deviceset {deviceset_name} to reach the "
+        f"expected status {expected_status}"
+    )
+    try:
+        for deviceset_pvcs in TimeoutSampler(
+            func=get_pvcs_in_deviceset,
+            deviceset_name=deviceset_name,
+            namespace=namespace,
+            timeout=timeout,
+            sleep=sleep,
+        ):
+            current_pvc_count = len(deviceset_pvcs)
+            if current_pvc_count != pvc_count:
+                log.warning(
+                    f"The current PVC count {current_pvc_count} is not equal to the "
+                    f"expected PVC count {pvc_count}"
+                )
+                continue
+            pvc_statuses = [pvc.status for pvc in deviceset_pvcs]
+            log.info(f"PVCs statuses = {pvc_statuses}")
+            if all([status == expected_status for status in pvc_statuses]):
+                log.info(
+                    f"All the PVCs in the Deviceset {deviceset_name} reached the "
+                    f"expected status {expected_status}"
+                )
+                return True
+    except TimeoutExpiredError:
+        log.warning(
+            f"The PVCs in the Deviceset {deviceset_name} failed to reach the "
+            f"expected status {expected_status} after {timeout} seconds"
+        )
+        return False
+
+
+def get_deviceclass_pvcs(deviceclass_name, namespace=None):
+    """
+    Get the Persistent Volume Claims (PVCs) associated with a specific DeviceClass.
+
+    Args:
+        deviceclass_name (str): The DeviceClass name whose PVCs are being retrieved.
+        namespace (str): The namespace where the DeviceClass PVCs are located.
+
+    Returns:
+        list: List of PVC objects associated with the specified DeviceClass.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pvcs = get_all_pvcs(namespace)
+    pvc_items = pvcs.get("items", [])
+    deviceclass_pvcs = []
+
+    for pvc in pvc_items:
+        crush_device_class = (
+            pvc.get("metadata", {}).get("annotations", {}).get("crushDeviceClass", "")
+        )
+        if crush_device_class == deviceclass_name:
+            deviceclass_pvcs.append(PVC(**pvc))
+
+    return deviceclass_pvcs

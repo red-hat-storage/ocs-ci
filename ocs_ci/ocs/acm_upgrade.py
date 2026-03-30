@@ -5,7 +5,7 @@ ACM operator upgrade classes and utilities
 
 import logging
 import tempfile
-from pkg_resources import parse_version
+from packaging.version import parse as parse_version
 
 import requests
 
@@ -32,7 +32,7 @@ class ACMUpgrade(object):
         # Hence we can't rely on ENV_DATA['acm_version'] for the pre-upgrade version
         # we need to dynamically find it
         self.version_before_upgrade = self.get_acm_version_before_upgrade()
-        self.upgrade_version = config.UPGRADE.get(["upgrade_acm_version"], "")
+        self.upgrade_version = config.UPGRADE.get("upgrade_acm_version", "")
         # In case if we are using registry image
         self.acm_registry_image = config.UPGRADE.get("upgrade_acm_registry_image", "")
         self.zstream_upgrade = False
@@ -127,7 +127,7 @@ class ACMUpgrade(object):
             acm_catsrc["spec"]["image"] = self.acm_registry_image
         else:
             # Update catalog source
-            resp = requests.get(constants.ACM_BREW_BUILD_URL, verify=False)
+            resp = requests.get(constants.ACM_BREW_BUILD_URL, verify=False, timeout=120)
             raw_msg = resp.json()["raw_messages"]
             # TODO: Find way to get ocp version before upgrade
             # Adding try and KeyError exception as the key 'index_image' does not exist,

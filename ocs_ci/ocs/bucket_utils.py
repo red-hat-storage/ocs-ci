@@ -494,11 +494,15 @@ def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=Fa
     endpoint = s3_obj.s3_internal_endpoint
 
     # compile the src code
-    javas3_pod.exec_cmd_on_pod(command="mvn clean compile", out_yaml_format=False)
+    javas3_pod.exec_cmd_on_pod(
+        command="mvn clean compile -Dmaven.repo.local=/app/s3test/.m2/repository",
+        out_yaml_format=False,
+    )
 
     # execute the upload application
     command = (
-        'mvn exec:java -Dexec.mainClass=amazons3.s3test.ChunkedUploadApplication -Dexec.args="'
+        "mvn -Dmaven.repo.local=/app/s3test/.m2/repository "
+        + 'exec:java -Dexec.mainClass=amazons3.s3test.ChunkedUploadApplication -Dexec.args="'
         + f"{endpoint} {access_key} {secret_key} {bucket_name} {is_multipart}"
         + '" -Dmaven.test.skip=true package'
     )
@@ -1131,7 +1135,7 @@ def check_pv_backingstore_type(
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
         "-o=jsonpath='{.status.phase}'"
     )
-    res = exec_cmd(cmd=cmd, use_shell=True)
+    res = exec_cmd(cmd=cmd, shell=True)
     if res.returncode != 0:
         logger.error(f"Failed to fetch backingstore details\n{res.stderr}")
 
@@ -1142,7 +1146,7 @@ def check_pv_backingstore_type(
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
         "-o=jsonpath='{.spec.type}'"
     )
-    res = exec_cmd(cmd=cmd, use_shell=True)
+    res = exec_cmd(cmd=cmd, shell=True)
     if res.returncode != 0:
         logger.error(f"Failed to fetch backingstore type\n{res.stderr}")
     return res.stdout.decode()
@@ -1815,7 +1819,7 @@ def compare_directory(
     return all(comparisons)
 
 
-def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=None):
+def s3_copy_object(s3_obj, bucketname, source, object_key, **kwargs):
     """
     Boto3 client based copy object
 
@@ -1824,17 +1828,15 @@ def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=None):
         bucketname (str): Name of the bucket
         source (str): Source object key. eg: '<bucket>/<key>
         object_key (str): Unique object Identifier for copied object
-        metadata (dict): Metadata to be updated with the object
+        **kwargs: Additional arguments to pass to boto3's copy_object method
+                  (e.g., Metadata, MetadataDirective, ACL, ServerSideEncryption, etc.)
 
     Returns:
         dict : Copy object response
 
     """
-    # default to None; metadata={} in the signature would be shared across calls
-    metadata = {} if metadata is None else metadata
-
     return s3_obj.s3_client.copy_object(
-        Bucket=bucketname, CopySource=source, Key=object_key, Metadata=metadata
+        Bucket=bucketname, CopySource=source, Key=object_key, **kwargs
     )
 
 
@@ -2142,6 +2144,7 @@ def write_random_test_objects_to_bucket(
     return obj_lst
 
 
+@config.run_with_provider_context_if_available
 def patch_replication_policy_to_bucket(
     bucket_name, rule_id, destination_bucket_name, prefix=""
 ):
@@ -2184,6 +2187,7 @@ def patch_replication_policy_to_bucket(
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+@config.run_with_provider_context_if_available
 def update_replication_policy(bucket_name, replication_policy_dict):
     """
     Updates the replication policy of a bucket
@@ -2211,6 +2215,7 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+@config.run_with_provider_context_if_available
 def get_replication_policy(bucket_name):
     """
     Get the replication policy on a bucket
@@ -2229,6 +2234,7 @@ def get_replication_policy(bucket_name):
     ).get()["spec"]["additionalConfig"]["replicationPolicy"]
 
 
+@config.run_with_provider_context_if_available
 def patch_replication_policy_to_bucketclass(
     bucketclass_name, rule_id, destination_bucket_name
 ):
@@ -2630,7 +2636,7 @@ def delete_all_noobaa_buckets(mcg_obj, request):
         logger.info(f"Deleting {bucket} and its objects")
         s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
         delete_all_objects_in_batches(
-            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket
+            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket.name
         )
         s3_bucket.delete()
 
@@ -3552,10 +3558,11 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
     """
     query = f"{metric_name} {{bucket_name='{bucket_name}'}}"
     api = PrometheusAPI(threading_lock=threading_lock)
-    resp = api.get("query", payload={"query": query})
+    logger.info(f"Prometheus query: {query}")
+    resp = api.get("query", payload={"query": query}, timeout=1200)
 
     if resp.ok:
-        logger.debug(query)
+        logger.info(f"Prometheus response: {resp.text}")
         metrics_output = json.loads(resp.text)
         got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
         logger.info(f"Metrics {metric_name} : {got_metrics_value}")
@@ -3564,3 +3571,24 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
         raise Exception(
             f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
         )
+
+
+def get_bucket_status_value(mcg_obj, bucket_name, key):
+    """
+    Helper function returning specific bucket status value by key
+    Args:
+        mcg_obj (obj): An object representing the current state of the MCG in the cluster
+        bucket_name (str): Name of the bucket on which ls should be run
+        key (str): Key to bucket status value to be returned
+    Returns:
+        str: value of the status property
+    """
+    bucket_status = mcg_obj.exec_mcg_cmd(
+        cmd=f"bucket status {bucket_name}",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        use_yes=True,
+    ).stdout
+    logger.info(f"Status = {bucket_status}")
+    op = bucket_status.split("\n")
+    value = next(item.split(":")[1].strip() for item in op if key in item)
+    return value

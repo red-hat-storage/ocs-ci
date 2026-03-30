@@ -2,11 +2,14 @@ import logging
 
 import pytest
 
+from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
     multicluster_roles,
     runs_on_provider,
     yellow_squad,
+    kubevirt_cluster_upgrade,
+    mce_upgrade,
 )
 from ocs_ci.framework.testlib import (
     ocs_upgrade,
@@ -26,7 +29,10 @@ from ocs_ci.ocs.dr_upgrade import (
     MultiClusterOrchestratorUpgrade,
     DRHubUpgrade,
 )
-from ocs_ci.ocs.provider_client_upgrade import ProviderClusterOperatorUpgrade
+from ocs_ci.ocs.provider_client_upgrade import (
+    ProviderClusterOperatorUpgrade,
+    KubevirtClusterUpgrade,
+)
 from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_z_stream_upgrade
 
@@ -184,3 +190,27 @@ def test_acm_upgrade(zone_rank, role_rank, config_index):
     """
     acm_hub_upgrade_obj = ACMUpgrade()
     acm_hub_upgrade_obj.run_upgrade()
+
+
+@purple_squad
+@mce_upgrade
+@multicluster_roles(["mdr-all-acm", "rdr-all-acm"])
+def test_mce_upgrade(zone_rank, role_rank, config_index):
+    """
+    Test upgrade procedure for MCE operator
+
+    """
+    mce_installer = MCEInstaller()
+    mce_installer.upgrade_mce()
+
+
+@yellow_squad
+@kubevirt_cluster_upgrade
+@runs_on_provider
+def test_upgrade_kubevirt_clusters(zone_rank, role_rank, config_index):
+    """
+    Test upgrade of hosted kubevirt clusters in the managed clusters (named Provider/Client in past)
+
+    """
+    hosted_clients = KubevirtClusterUpgrade()
+    hosted_clients.run_upgrade_ocp_on_kubevirt_clusters()

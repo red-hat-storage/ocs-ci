@@ -1,0 +1,39 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: custom-odf-latency-rule
+  namespace: openshift-storage
+  labels:
+    role: alert-rules
+    app: custom-odf
+spec:
+  groups:
+  - name: odf_healthchecks.rules.override
+    rules:
+    - alert: ODFNodeLatencyHighOnOSDNodes   # SAME NAME
+      annotations:
+        description: Node {{ $labels.instance }} has max ICMP RTT latency > 1ms over the last 1min. This may impact Ceph performance.
+        runbook_url: https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator/ODFNodeLatencyHighOnOSDNodes.md
+        summary: High ICMP latency (>1ms) detected on ODF OSD node(s)
+      expr: |
+        max_over_time(
+          (
+            probe_icmp_duration_seconds{phase="rtt", job="odf-blackbox-exporter"}
+            and on(instance)
+            (
+              count by (hostname) (ceph_osd_metadata)
+              * on(hostname) group_left(instance)
+              label_replace(
+                label_replace(
+                  max by (node, internal_ip) (kube_node_info),
+                  "hostname", "$1", "node", "(.+)"
+                ),
+                "instance", "$1", "internal_ip", "(.+)"
+              )
+            )
+          )[2m:]
+        ) > .005
+      for: 1m
+      labels:
+        component: odf
+        severity: warning

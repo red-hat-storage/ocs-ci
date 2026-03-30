@@ -12,7 +12,7 @@ for each pull request created for this repository.
 
 ## How to run the unit tests myself?
 
-Make sure you have python 3.9 and tox installed from binary packages of your
+Make sure you have python 3.11 and tox installed from binary packages of your
 distribution.
 
 Then in root directory of the repository just run:
@@ -29,7 +29,7 @@ checks.
 
 You can list available tests by doing:
 ```
-$ tox -e py39 -- --collect-only
+$ tox -e py311 -- --collect-only
 ```
 
 ## How to run particular test only?
@@ -37,18 +37,18 @@ $ tox -e py39 -- --collect-only
 It's possible to pass additional pytest arguments to tox like this:
 
 ```
-$ tox -e py39 -- ocsci/pytest_customization/tests/test_pytest.py::test_config_parametrize
+$ tox -e py311 -- ocsci/pytest_customization/tests/test_pytest.py::test_config_parametrize
 ```
 
 Or like this:
 ```
-$ tox -e py39 -- -k test_config_parametrize
+$ tox -e py311 -- -k test_config_parametrize
 ```
 
 This can be also helpful during debugging:
 
 ```
-$ tox -e py39 -- -v --pdb
+$ tox -e py311 -- -v --pdb
 ```
 
 ## Pytest integration tests

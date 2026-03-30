@@ -142,26 +142,51 @@ class Submariner(object):
             config.switch_ctx(old_ctx)
 
         global_net = get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
+        # W/A for ROKS deployment
+        roks_deployment = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if roks_deployment:
+            # get all cluster configs except acm
+            non_acm_clusters = [
+                cluster
+                for cluster in config.clusters
+                if not cluster.MULTICLUSTER.get("acm_cluster")
+            ]
+            for cluster in non_acm_clusters:
+                with config.RunWithConfigContext(
+                    cluster.MULTICLUSTER["multicluster_index"]
+                ):
+                    run_cmd(
+                        f'oc patch --kubeconfig {cluster.RUN["kubeconfig"]} '
+                        '--type=json Installation default -p \'[{"op": "replace", "path":'
+                        ' "/spec/calicoNetwork/ipPools/0/encapsulation", "value": "IPIP"}]\''
+                    )
         if (
             is_ibm_platform()
             and get_primary_cluster_config().ENV_DATA.get("deployment_type")
             == constants.IPI_DEPL_TYPE
-        ):
-            logger.info("Logging into IBMCLOUD CLI")
-            login()
+        ) or config.DEPLOYMENT.get("submariner_cli_deployment"):
 
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-
-                set_region()
-                set_resource_group_name()
-                floating_ips_dict = assign_floating_ips_to_workers()
-                for node in get_worker_nodes():
-                    cmd = (
-                        f"oc annotate node {node} "
-                        f"gateway.submariner.io/public-ip=ipv4:{floating_ips_dict.get(node)} --overwrite"
-                    )
-                    run_cmd(cmd=cmd, secrets=[floating_ips_dict.get(node)])
+                if (
+                    config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM
+                    and config.ENV_DATA.get("deployment_type")
+                    == constants.IPI_DEPL_TYPE
+                ):
+                    logger.info("Logging into IBMCLOUD CLI")
+                    login()
+                    set_region()
+                    set_resource_group_name()
+                    floating_ips_dict = assign_floating_ips_to_workers()
+                    for node in get_worker_nodes():
+                        cmd = (
+                            f"oc annotate node {node} "
+                            f"gateway.submariner.io/public-ip=ipv4:{floating_ips_dict.get(node)} --overwrite"
+                        )
+                        run_cmd(cmd=cmd, secrets=[floating_ips_dict.get(node)])
 
             acm_obj.install_submariner_cli(globalnet=global_net)
         else:
@@ -187,7 +212,7 @@ class Submariner(object):
             # This script puts the platform specific binary in ~/.local/bin
             # we need to move the subctl binary to ocs-ci/bin dir
             try:
-                resp = requests.get(constants.SUBMARINER_DOWNLOAD_URL)
+                resp = requests.get(constants.SUBMARINER_DOWNLOAD_URL, timeout=120)
             except requests.ConnectionError:
                 logger.exception(
                     "Failed to download the downloader script from submariner site"
@@ -217,7 +242,12 @@ class Submariner(object):
                 os.path.join(config.RUN["bin_dir"], "subctl"),
             )
         elif self.source == "downstream":
-            self.download_downstream_binary()
+            try:
+                self.download_downstream_binary()
+            except IndexError:
+                self.download_downstream_binary(
+                    download_url=constants.SUBCTL_BREW_DOWNSTREAM_URL
+                )
 
     @retry((tarfile.TarError, EOFError, FileNotFoundError), tries=8, delay=5)
     def wait_for_tar_file(self, subctl_download_tar_file):
@@ -251,7 +281,7 @@ class Submariner(object):
             raise tarfile.TarError()
 
     @retry((SubctlDownloadFailed, CommandFailed))
-    def download_downstream_binary(self):
+    def download_downstream_binary(self, download_url=constants.SUBCTL_DOWNSTREAM_URL):
         """
         Download downstream subctl binary
 
@@ -274,7 +304,7 @@ class Submariner(object):
             )
         cmd = (
             f"oc image extract --filter-by-os linux/{binary_pltfrm} --registry-config "
-            f"{pull_secret_path} {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
+            f"{pull_secret_path} {download_url}{subctl_ver} "
             f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
         )
         run_cmd(cmd)

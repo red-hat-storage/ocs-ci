@@ -6,5 +6,5 @@ metadata:
 spec:
   storageClient:
     name: storage-client
-    namespace: openshift-storage-client
+    namespace: openshift-storage
   type: sharedfilesystem

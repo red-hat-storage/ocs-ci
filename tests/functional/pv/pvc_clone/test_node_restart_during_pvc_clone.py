@@ -90,6 +90,7 @@ class TestNodeRestartDuringPvcClone(ManageTest):
                 runtime=20,
                 fio_filename=file_name,
                 end_fsync=1,
+                direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
             log.info(f"IO started on pod {pod_obj.name}")
         log.info("Started IO on all pods")
@@ -200,6 +201,7 @@ class TestNodeRestartDuringPvcClone(ManageTest):
                 runtime=20,
                 fio_filename=f"{file_name}_1",
                 end_fsync=1,
+                direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
             log.info(f"IO started on pod {pod_obj.name}")
         log.info("Started IO on the new pods")

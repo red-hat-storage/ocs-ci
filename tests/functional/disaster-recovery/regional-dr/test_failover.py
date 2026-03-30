@@ -10,6 +10,7 @@ from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers import (
     wait_for_replication_destinations_creation,
     wait_for_replication_destinations_deletion,
+    is_cg_cephfs_enabled,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
@@ -90,6 +91,18 @@ class TestFailover:
             # Verify the creation of ReplicationDestination resources on secondary cluster
             config.switch_to_cluster_by_name(secondary_cluster_name)
             for wl in workloads:
+                # Verifying the existence of replication group destination and volume snapshots
+                if is_cg_cephfs_enabled():
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
                 wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
@@ -127,6 +140,7 @@ class TestFailover:
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                performed_dr_action=True,
             )
 
         # Verify resources deletion from primary cluster
@@ -156,14 +170,39 @@ class TestFailover:
 
         if pvc_interface == constants.CEPHFILESYSTEM:
             for wl in workloads:
-                # Verify the deletion of ReplicationDestination resources on secondary cluster
+                # Verify the deletion of Replication Group Destination resources
+                # on the old secondary cluster
                 config.switch_to_cluster_by_name(secondary_cluster_name)
+                cg_enabled = is_cg_cephfs_enabled()
+
                 wait_for_replication_destinations_deletion(wl.workload_namespace)
-                # Verify the creation of ReplicationDestination resources on primary cluster
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=False,
+                    )
+
+                # Verify the creation of Replication Group Destination resources
+                # on the current secondary cluster
                 config.switch_to_cluster_by_name(primary_cluster_name)
-                wait_for_replication_destinations_creation(
+
+                dr_helpers.wait_for_replication_destinations_creation(
                     wl.workload_pvc_count, wl.workload_namespace
                 )
+                if cg_enabled:
+                    dr_helpers.wait_for_resource_existence(
+                        kind=constants.REPLICATION_GROUP_DESTINATION,
+                        namespace=wl.workload_namespace,
+                        should_exist=True,
+                    )
+
+                    # Verify the creation of Volume Snapshot
+                    dr_helpers.wait_for_resource_count(
+                        kind=constants.VOLUMESNAPSHOT,
+                        namespace=wl.workload_namespace,
+                        expected_count=wl.workload_pvc_count,
+                    )
 
         if pvc_interface == constants.CEPHBLOCKPOOL:
             dr_helpers.wait_for_mirroring_status_ok(

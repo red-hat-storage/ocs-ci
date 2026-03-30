@@ -5,10 +5,12 @@ import os
 import pickle
 import re
 import threading
+import tarfile
 import time
 import traceback
 import subprocess
 import shlex
+import shutil
 from subprocess import TimeoutExpired
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -388,24 +390,6 @@ def setup_deb_repos(node, ubuntu_repo):
         wget_cmd = "sudo wget -O - " + key + " | sudo apt-key add -"
         node.exec_command(cmd=wget_cmd)
     node.exec_command(cmd="sudo apt-get update")
-
-
-def setup_deb_cdn_repo(node, build=None):
-    user = "redhat"
-    passwd = "OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9"
-    num = build.split(".")[0]
-    cmd = (
-        "umask 0077; echo deb https://{user}:{passwd}@rhcs.download.redhat.com/{num}-updates/Tools "
-        "$(lsb_release -sc) main | tee /etc/apt/sources.list.d/Tools.list".format(
-            user=user, passwd=passwd, num=num
-        )
-    )
-    node.exec_command(sudo=True, cmd=cmd)
-    node.exec_command(
-        sudo=True,
-        cmd="wget -O - https://www.redhat.com/security/fd431d51.txt | apt-key add -",
-    )
-    node.exec_command(sudo=True, cmd="apt-get update")
 
 
 def setup_cdn_repos(ceph_nodes, build=None):
@@ -960,12 +944,14 @@ def run_must_gather(
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
     mg_options=None,
+    since_time=None,
 ):
     """
     Runs the must-gather tool against the cluster
 
     Args:
-        log_dir_path (str): directory for dumped must-gather logs
+        log_dir_path (str): directory for dumped must-gather logs (if REPORTING["tarball_mg_logs"] is set, this
+            directory will be packed to the parent directory with extension .tar.gz)
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
         cluster_config (MultiClusterConfig): Holds specifc cluster config object in case of multicluster
@@ -976,6 +962,7 @@ def run_must_gather(
             MG collection.
         timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
         mg_options (str): Options of must gather command For example "--host_network=True"
+        since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
 
     Returns:
         mg_output (str): must-gather cli output
@@ -1001,12 +988,14 @@ def run_must_gather(
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
     cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
+    if since_time:
+        cmd += f" --since-time={since_time}"
     if mg_options:
         cmd += f" {mg_options}"
     if command:
         cmd += f" -- {command}"
 
-    log.info(f"OCS logs will be placed in location {log_dir_path}")
+    log.info(f"MG logs will be placed in location {log_dir_path}")
     if output_file:
         output_file = os.path.join(log_dir_path, f"mg_output_{timestamp}.log")
         log.info(f"Must gather std error log will be placed in: {output_file}")
@@ -1020,10 +1009,6 @@ def run_must_gather(
             silent=silent,
             output_file=output_file,
         )
-        if config.DEPLOYMENT["external_mode"] and not ocsci_config.RUN.get(
-            "is_ocp_deployment_failed"
-        ):
-            collect_ceph_external(path=log_dir_path)
         with mg_lock:
             mg_collected_logs += 1
     except (CommandFailed, TimeoutExpired) as ex:
@@ -1035,6 +1020,16 @@ def run_must_gather(
         if mg_output:
             log.error(f"Must-Gather Output: {mg_output}")
         export_mg_pods_logs(log_dir_path=log_dir_path)
+
+    if config.REPORTING.get("tarball_mg_logs"):
+        tarball_path = f"{log_dir_path}.tar.gz"
+        try:
+            with tarfile.open(tarball_path, "w:gz") as tar:
+                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+            if config.REPORTING.get("delete_packed_mg_logs"):
+                shutil.rmtree(log_dir_path)
+        except Exception as err:
+            log.error(f"Failed during packing files! Error: {err}")
 
     return mg_output
 
@@ -1048,15 +1043,21 @@ def collect_ceph_external(path):
 
     """
     try:
+        # In case it fails in deployment sooner than we create the toolbox pod
+        # we need to make sure the toolbox pod is created
+        setup_ceph_toolbox()
+        log.info(f"Collecting external ceph logs to: {path}")
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
         current_dir = Path(__file__).parent.parent.parent
         script_path = os.path.join(current_dir, "scripts", "bash", "mg_external.sh")
+        # Make sure path exists recurisvely
+        os.makedirs(path, exist_ok=True)
         run_cmd(
             f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path} "
             f"{ocsci_config.ENV_DATA['cluster_namespace']}",
-            timeout=140,
+            timeout=600,
         )
     except Exception as ex:
         log.info(
@@ -1225,6 +1226,7 @@ def _collect_ocs_logs(
     output_file=None,
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
+    since_time=None,
 ):
     """
     This function runs in thread
@@ -1287,6 +1289,7 @@ def _collect_ocs_logs(
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
             mg_options=mg_options,
+            since_time=since_time,
         )
         mg_collected_types.add("ocs")
         if (
@@ -1296,8 +1299,19 @@ def _collect_ocs_logs(
             raise ValueError(
                 f"must-gather fails in an disconnected environment bz-1974959\n{mg_output}"
             )
+        if config.DEPLOYMENT["external_mode"] and not ocsci_config.RUN.get(
+            "is_ocp_deployment_failed"
+        ):
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            external_ceph_log_dir_path = os.path.join(
+                log_dir_path, f"external_ceph_logs_{timestamp}"
+            )
+            collect_ceph_external(path=external_ceph_log_dir_path)
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
+        ocp_service_log_dir_path = os.path.join(
+            log_dir_path, "ocp_service_logs_must_gather"
+        )
         ocp_must_gather_image = cluster_config.REPORTING["ocp_must_gather_image"]
         if cluster_config.DEPLOYMENT.get("disconnected"):
             ocp_must_gather_image = mirror_image(ocp_must_gather_image)
@@ -1308,15 +1322,17 @@ def _collect_ocs_logs(
             output_file=output_file,
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
+            since_time=since_time,
         )
         run_must_gather(
-            ocp_log_dir_path,
+            ocp_service_log_dir_path,
             ocp_must_gather_image,
             "/usr/bin/gather_service_logs worker",
             cluster_config=cluster_config,
             output_file=output_file,
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
+            since_time=since_time,
         )
         mg_collected_types.add("ocp")
     if mcg:
@@ -1387,7 +1403,7 @@ def _collect_ocs_logs(
                     f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
                 )
                 log.info("Collecting submariner logs")
-                out = run_cmd(submariner_log_collect)
+                out = run_cmd(submariner_log_collect, timeout=1200)
                 run_cmd(f"chmod -R 777 {submariner_log_path}")
                 os.chdir(cwd)
                 log.info(out)
@@ -1405,6 +1421,7 @@ def collect_ocs_logs(
     output_file=None,
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
+    since_time=None,
 ):
     """
     Collects OCS logs
@@ -1425,6 +1442,7 @@ def collect_ocs_logs(
         skip_after_max_fail (bool): When max number failed attempts to collect MG reached, will skip
             MG collection.
         timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
+        since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
 
     """
     cwd = os.getcwd()
@@ -1447,6 +1465,7 @@ def collect_ocs_logs(
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
+                        since_time=since_time,
                     )
                 )
             if ocs:
@@ -1465,6 +1484,7 @@ def collect_ocs_logs(
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
+                        since_time=since_time,
                     )
                 )
             if mcg:
@@ -1483,6 +1503,7 @@ def collect_ocs_logs(
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
                         timeout=timeout,
+                        since_time=since_time,
                     )
                 )
 
@@ -1963,7 +1984,8 @@ def collect_pod_container_rpm_package(dir_name):
     Collect information about rpm packages from all containers + go version
 
     Args:
-        dir_name(str): directory to store container rpm package info
+        dir_name(str): directory to store container rpm package info (if REPORTING["tarball_mg_logs"] is set, this
+            directory will be packed to the parent directory with extension .tar.gz)
 
     """
     # Import pod here to avoid circular dependency issue
@@ -2029,6 +2051,16 @@ def collect_pod_container_rpm_package(dir_name):
                     go_log_file_name = f"{package_log_dir_path}/{pod_obj.name}-{container_name}-go-version.log"
                     with open(go_log_file_name, "w") as f:
                         f.write(go_output)
+
+    if config.REPORTING.get("tarball_mg_logs"):
+        tarball_path = f"{package_log_dir_path}.tar.gz"
+        try:
+            with tarfile.open(tarball_path, "w:gz") as tar:
+                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+            if config.REPORTING.get("delete_packed_mg_logs"):
+                shutil.rmtree(log_dir_path)
+        except Exception as err:
+            log.error(f"Failed during packing files! Error: {err}")
 
 
 def is_dr_scenario():
@@ -2137,8 +2169,10 @@ def query_nb_db_psql_version():
 
     try:
         raw_output = exec_nb_db_query("SELECT version();")[0]
-    except IndexError:
-        raise UnexpectedBehaviour("Failed to query the NooBaa DB for its version")
+    except (IndexError, CommandFailed) as ex:
+        raise UnexpectedBehaviour(
+            f"Failed to query the NooBaa DB for its version. Exception: {ex}"
+        )
     return re.search(r"PostgreSQL (\S+)", raw_output).group(1)
 
 

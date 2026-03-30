@@ -1,5 +1,6 @@
 import os
 import platform
+import xattr
 from stat import S_IEXEC
 from logging import getLogger
 from typing import Union
@@ -24,17 +25,40 @@ class ODFCLIRetriever:
     def __init__(self):
         self.semantic_version = get_semantic_ocs_version_from_config()
         self.local_cli_path = os.path.join(config.RUN["bin_dir"], "odf")
+        self.version_attribute_name = (
+            "user.version"  # "user." prefix is required on Linux
+        )
 
     def check_odf_cli_binary(self):
         """
-        Check if the ODF CLI binary exists and is executable.
+        Check if the ODF CLI binary exists, is executable, and matches the cluster version.
 
         Returns:
-            bool: True if the binary exists and is executable, False otherwise.
+            bool: True if the binary exists, is executable, and matches the cluster version, False otherwise.
         """
-        return os.path.isfile(self.local_cli_path) and os.access(
-            self.local_cli_path, os.X_OK
+        path = self.local_cli_path
+
+        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+            log.warning(f"ODF CLI binary is not accessible at {path}")
+            return False
+
+        # Check if the binary's version matches the cluster's in upgrade runs
+        try:
+            binary_version = xattr.getxattr(path, self.version_attribute_name).decode()
+        except OSError:
+            log.warning("ODF CLI binary is not tagged with a version attribute")
+            return False
+
+        if binary_version != str(self.semantic_version):
+            log.warning(
+                f"ODF CLI binary is not tagged with the correct version {self.semantic_version}"
+            )
+            return False
+
+        log.info(
+            f"ODF CLI binary is compatible with the current cluster version {self.semantic_version}"
         )
+        return True
 
     def retrieve_odf_cli_binary(self):
         """
@@ -50,6 +74,17 @@ class ODFCLIRetriever:
             self._extract_cli_binary(image)
             self._set_executable_permissions()
             self.add_cli_to_path()
+
+            # Tag the CLI binary with its version for post-upgrade verification
+            log.info(f"Tagging ODF CLI binary with version {self.semantic_version}")
+            xattr.setxattr(
+                self.local_cli_path,
+                self.version_attribute_name,
+                str(
+                    self.semantic_version
+                ).encode(),  # setxattr expects the value as bytes
+            )
+            log.info(f"Tagged ODF CLI binary with version {self.semantic_version}")
 
         if not self.check_odf_cli_binary():
             raise RuntimeError(
@@ -309,9 +344,33 @@ class ODFCliRunner:
         else:
             output = exec_cmd(full_command, ignore_error=ignore_error, **kwargs)
 
-        log.info(f"output type: {type(output)}")
-        log.info(f"*Command output*: {output}")
         return output
+
+    def run_maintenance_start(self, deployment_name):
+        """
+        This starts the maintenance mode for the deployment.
+
+        Args:
+            deployment_name (str): Name of the deployment that you want
+            it to be in maintenance mode i.e, either Mon or OSD deployments
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+        """
+        return self.run_command(f" maintenance start {deployment_name}")
+
+    def run_maintenance_stop(self, deployment_name):
+        """
+        This stops the maintenance mode for the deployment.
+
+        Args:
+            deployment_name (str): Name of the maintenance mode deployment
+            that you want it to be stopped.
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+        """
+        return self.run_command(f" maintenance stop {deployment_name}")
 
 
 def odf_cli_setup_helper():

@@ -42,11 +42,16 @@ from ocs_ci.ocs.constants import (
     VAULT_KMS_PROVIDER,
     NFS_OUTCLUSTER_TEST_PLATFORMS,
     DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
+    ORDER_OCP_ON_KUBEVIRT_UPGRADE,
+    ORDER_MCE_UPGRADE,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
-from ocs_ci.deployment.hosted_cluster import hypershift_cluster_factory
+from ocs_ci.deployment.hub_spoke import hypershift_cluster_factory
+from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
+from ocs_ci.ocs.node import check_cluster_resources
+
 
 # tier marks
 
@@ -81,7 +86,10 @@ csi = pytest.mark.csi
 monitoring = pytest.mark.monitoring
 workloads = pytest.mark.workloads
 flowtests = pytest.mark.flowtests
-system_test = pytest.mark.system_test
+system = pytest.mark.system
+# system_test mark is deprecated, use system instead
+system_test = compose(system, pytest.mark.system_test)
+stress = pytest.mark.stress
 performance = pytest.mark.performance
 performance_a = pytest.mark.performance_a
 performance_b = pytest.mark.performance_b
@@ -97,6 +105,7 @@ acm_import = pytest.mark.acm_import
 rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
+chaos = pytest.mark.chaos
 
 tier_marks = [
     tier1,
@@ -116,6 +125,7 @@ tier_marks = [
     scale_changed_layout,
     workloads,
     resiliency,
+    chaos,
 ]
 
 # upgrade related markers
@@ -131,7 +141,9 @@ order_dr_hub_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
 # it's applicable only on the managed clusters
 order_dr_cluster_operator_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
 order_acm_upgrade = pytest.mark.order(ORDER_ACM_UPGRADE)
+order_mce_upgrade = pytest.mark.order(ORDER_MCE_UPGRADE)
 order_ocs_upgrade = pytest.mark.order(ORDER_OCS_UPGRADE)
+order_ocp_on_kubevirt_upgrade = pytest.mark.order(ORDER_OCP_ON_KUBEVIRT_UPGRADE)
 order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
@@ -144,13 +156,18 @@ dr_hub_upgrade = compose(order_dr_hub_upgrade, pytest.mark.dr_hub_upgrade)
 dr_cluster_operator_upgrade = compose(
     order_dr_cluster_operator_upgrade, pytest.mark.dr_cluster_operator_upgrade
 )
-# acm operator
+# acm or mce operator
 acm_upgrade = compose(order_acm_upgrade, pytest.mark.acm_upgrade)
+mce_upgrade = compose(order_mce_upgrade, pytest.mark.mce_upgrade)
+
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
 
 # provider operator upgrade
 provider_operator_upgrade = compose(
     order_ocs_upgrade, pytest.mark.provider_operator_upgrade
+)
+kubevirt_cluster_upgrade = compose(
+    order_ocp_on_kubevirt_upgrade, pytest.mark.kubevirt_cluster_upgrade
 )
 
 # pre_*_upgrade markers
@@ -394,31 +411,9 @@ ms_provider_and_consumer_required = pytest.mark.skipif(
     ),
     reason="Test runs ONLY on Managed service with provider and consumer clusters",
 )
-
-hci_client_required = pytest.mark.skipif(
-    not (
-        config.default_cluster_ctx.ENV_DATA["platform"].lower()
-        in HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == HCI_CLIENT
-    ),
-    reason="Test runs ONLY on Fusion HCI Client cluster",
-)
-
-hci_provider_required = pytest.mark.skipif(
-    not (
-        config.default_cluster_ctx.ENV_DATA["platform"].lower()
-        in HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == HCI_PROVIDER
-    ),
-    reason="Test runs ONLY on Fusion HCI Provider cluster",
-)
-hci_provider_and_client_required = pytest.mark.skipif(
-    not (
-        config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.hci_provider_exist()
-        and config.hci_client_exist()
-    ),
-    reason="Test runs ONLY on Fusion HCI provider and client clusters",
+fdf_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("fdf_cluster"),
+    reason="Test runs ONLY on FDF cluster",
 )
 
 
@@ -436,9 +431,9 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
         Parametrized marker or original marker if setup fails
     """
     try:
-        if push_missing_configs:
+        if push_missing_configs and not config.multicluster:
             # run this only if cluster type is provider and it is part of test execution stage (not deployment or
-            # teardown)
+            # teardown) and when configuration is not initially a multicluster one
             # FIXME: the usage of `sys.argv` here is not correct, but we can't use something like
             # `config.RUN["cli_params"]["deploy"]`, because this setup_multicluster_marker(...) function is called on
             # the module level (see the lines below this function definition) which means that it is actually called
@@ -446,7 +441,11 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
             # the command line arguments are not processed)
             # the solution will be to move following logic to some fixture (similarly as we have session scope autouse
             # fixture `cluster`, which is responsible for deploying and teardown of the whole cluster (when particular
-            # parameters are passed)
+            # parameters are passed). This solution will still not update cluster indexes on parametrization level,
+            # meaning, run_on_all_clients will continue execute only on the clients available at the time of the
+            # parametrization, but at least, we will be able to run tests with updated MultiCluster Config during the
+            # session and test clusters switching between contexts within the body of the test
+            # when the hypershift_cluster_factory fixture will be used.
             test_stage = not ("--deploy" in sys.argv or "--teardown" in sys.argv)
             if (
                 config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
@@ -475,6 +474,38 @@ run_on_all_clients_push_missing_configs = setup_multicluster_marker(
     pytest.mark.run_on_all_clients, True
 )
 
+
+hci_client_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == HCI_CLIENT
+    ),
+    reason="Test runs ONLY on Fusion HCI Client cluster",
+)
+
+hci_provider_required = pytest.mark.skipif(
+    not (
+        config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == HCI_PROVIDER
+    ),
+    reason="Test runs ONLY on Fusion HCI Provider cluster",
+)
+hci_provider_and_client_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.hci_provider_exist()
+        and config.hci_client_exist()
+    ),
+    reason="Test runs ONLY on Fusion HCI provider and client clusters",
+)
+
+data_replication_separation_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("enable_data_replication_separation") is False,
+    reason="Test runs only on deployments with enabled data replication separation",
+)
+
 kms_config_required = pytest.mark.skipif(
     (
         config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
@@ -496,9 +527,29 @@ azure_kv_config_required = pytest.mark.skipif(
     reason="Azure KV config required to run the test.",
 )
 
+azure_performance_plus_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA.get("azure_performance_plus")
+        or config.DEPLOYMENT.get("azure_performance_plus")
+    ),
+    reason="Test runs only when Azure Performance Plus is enabled",
+)
+
 rosa_hcp_required = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() != ROSA_HCP_PLATFORM,
     reason="Test runs ONLY on ROSA HCP cluster",
+)
+
+hcp_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA.get("deployment_type") == "managed_cp"
+        or config.hci_client_exist()
+        or any(
+            c.get("hosted_cluster_platform") == "aws"
+            for c in config.ENV_DATA.get("clusters", {}).values()
+        )
+    ),
+    reason="Test runs only on HCP clusters (ROSA HCP or AWS HCP)",
 )
 
 external_mode_required = pytest.mark.skipif(
@@ -587,8 +638,10 @@ skipif_hci_provider_or_client = pytest.mark.skipif(
     reason="Test will not run on Fusion HCI provider or Client clusters",
 )
 
-# Marker for skipping tests for provider clusters based on OCS version
-skip_for_provider_if_ocs_version = pytest.mark.skip_for_provider_if_ocs_version
+# Marker for skipping tests for provider or client clusters based on OCS version
+skip_for_provider_or_client_if_ocs_version = (
+    pytest.mark.skip_for_provider_or_client_if_ocs_version
+)
 
 skipif_rosa = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == ROSA_PLATFORM,
@@ -657,6 +710,11 @@ skipif_vsphere_ipi = pytest.mark.skipif(
 skipif_vsphere_platform = pytest.mark.skipif(
     (config.ENV_DATA["platform"].lower() == "vsphere"),
     reason="Test will not run on vSphere cluster",
+)
+
+skipif_azure_platform = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == "azure",
+    reason="Test will not run on Azure deployed cluster",
 )
 
 skipif_tainted_nodes = pytest.mark.skipif(
@@ -824,3 +882,23 @@ vault_kms_deployment_required = pytest.mark.skipif(
 )
 
 ui = compose(skipif_ibm_cloud_managed, pytest.mark.ui)
+
+skipif_lean_deployment = pytest.mark.skipif(
+    config.ENV_DATA.get("performance_profile") == "lean"
+    or not check_cluster_resources_for_nfs(),
+    reason="Test cannot run on lean profile or requires higher cluster resources (insufficient CPU/memory)",
+)
+
+
+def skipif_insufficient_resources(ram_gb=65, cpu_cores=6):
+    """
+    Dynamic decorator to skip tests if cluster resources are below the specified limits.
+
+    Args:
+        ram_gb (int): Required RAM in GB.
+        cpu_cores (int): Required CPU cores.
+    """
+    return pytest.mark.skipif(
+        not check_cluster_resources(ram_gb=ram_gb, cpu_cores=cpu_cores),
+        reason=f"Cluster hardware requirements not met: Need {ram_gb}GB RAM and {cpu_cores} Cores.",
+    )

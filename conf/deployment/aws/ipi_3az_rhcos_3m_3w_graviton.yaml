@@ -24,8 +24,10 @@ ENV_DATA:
   # config with RELEASE_IMG value under ENV_DATA to latest version of image.
   # TODO: Remove early_testing and find some dynamic way to get the latest
   # image dynamically.
-  early_testing: true
-  # RELEASE_IMG: 'quay.io/openshift-release-dev/ocp-release@sha256:0c13de057d9f75c40999778bb924f654be1d0def980acbe8a00096e6bf18cc2a'
+  multi_arch: true
+  # Example of multi arch release image, if not provided it will automatically
+  # find in quay.
+  # release_img: 'quay.io/openshift-release-dev/ocp-release:4.21.0-rc.0-multi'
 #REPORTING:
   #polarion:
     # TODO: add polarion ID for this graviton deployment

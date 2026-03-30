@@ -43,6 +43,7 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    NoRunningCephToolBoxException,
     ResourceNotFoundError,
     ResourceWrongStatusException,
     TimeoutExpiredError,
@@ -54,8 +55,10 @@ from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.vsphere import VSPHERE
+from ocs_ci.utility.operators import NMStateOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
+    ceph_health_check,
     TimeoutSampler,
     ocsci_log_path,
     run_cmd,
@@ -107,6 +110,25 @@ def create_resource(do_reload=True, **kwargs):
     resource_name = kwargs.get("metadata").get("name")
     created_resource = ocs_obj.create(do_reload=do_reload)
     assert created_resource, f"Failed to create resource {resource_name}"
+    return ocs_obj
+
+
+def apply_resource(**kwargs):
+    """
+    Apply a resource. Safe for both create and update operations.
+
+    Args:
+        kwargs (dict): Dictionary of the OCS resource
+
+    Returns:
+        OCS: An OCS instance
+
+    Raises:
+        AssertionError: In case of any failure
+    """
+    ocs_obj = OCS(**kwargs)
+    kwargs.get("metadata").get("name")
+    ocs_obj.apply(**kwargs)
     return ocs_obj
 
 
@@ -309,7 +331,7 @@ def create_pod(
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
     if deployment:
-        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
+        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DEPLOY_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(f"test-{interface}", "pod")
@@ -318,6 +340,11 @@ def create_pod(
     if deployment:
         pod_data["metadata"]["labels"]["app"] = pod_name
         pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
+        # Ensure selector field exists (defensive check for custom pod_dict_path)
+        if "selector" not in pod_data["spec"]:
+            pod_data["spec"]["selector"] = {}
+        if "matchLabels" not in pod_data["spec"]["selector"]:
+            pod_data["spec"]["selector"]["matchLabels"] = {}
         pod_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
         pod_data["spec"]["replicas"] = replica_count
     if pvc_name:
@@ -461,9 +488,43 @@ def create_pod(
         logger.info(deployment_obj.name)
         deployment_name = deployment_obj.name
         label = f"name={deployment_name}"
+
+        # Determine how many pods to wait for based on PVC access mode and replica count
+        wait_resource_count = None
+        if pvc_name and replica_count > 1:
+            try:
+                # Get PVC object to check access mode
+                pvc_obj = pvc.PVC(name=pvc_name, namespace=namespace)
+                pvc_obj.reload()
+                pvc_access_mode = pvc_obj.get_pvc_access_mode
+
+                # For RWO volumes with multiple replicas, only one pod can be Running
+                # For RWX volumes, all replicas can be Running, so wait for all
+                if pvc_access_mode == constants.ACCESS_MODE_RWO:
+                    wait_resource_count = 1
+                    logger.info(
+                        f"PVC {pvc_name} has RWO access mode with {replica_count} replicas. "
+                        f"Waiting for 1 pod to be Running."
+                    )
+                # For RWX or other access modes, wait for all replicas (resource_count=None)
+                else:
+                    logger.info(
+                        f"PVC {pvc_name} has {pvc_access_mode} access mode with {replica_count} replicas. "
+                        f"Waiting for all pods to be Running."
+                    )
+            except Exception as ex:
+                # If we can't determine access mode, default to waiting for 1 pod
+                # to avoid timeout issues with RWO volumes
+                logger.warning(
+                    f"Could not determine PVC access mode for {pvc_name}: {ex}. "
+                    f"Defaulting to wait for 1 pod."
+                )
+                wait_resource_count = 1
+
         assert (ocp.OCP(kind="pod", namespace=namespace)).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=label,
+            resource_count=wait_resource_count,
             timeout=360,
             sleep=3,
         )
@@ -656,8 +717,8 @@ def create_ceph_file_system(cephfs_name=None, label=None, namespace=None):
 
 
 @retry(
-    CommandFailed,
-    tries=6,
+    (CommandFailed, IndexError),
+    tries=20,
     delay=30,
     backoff=1,
 )
@@ -2836,6 +2897,60 @@ def wait_for_ct_pod_recovery():
     return True
 
 
+def ceph_health_check_with_toolbox_recovery(
+    namespace: str,
+    tries: int = 20,
+    delay: int = 30,
+    fix_ceph_health: bool = True,
+    update_jira: bool = True,
+    no_exception_if_jira_issue_updated: bool = False,
+) -> bool:
+    """
+    Perform ceph health check with automatic toolbox pod recovery.
+
+    If the ceph toolbox pod is not running (e.g., after node disruption tests),
+    this function will wait for the toolbox pod to recover before retrying.
+
+    Args:
+        namespace (str): Kubernetes namespace for ceph cluster.
+        tries (int): Number of retries for health check.
+        delay (int): Delay between retries in seconds.
+        fix_ceph_health (bool): Whether to attempt fixing ceph health issues.
+        update_jira (bool): Whether to update Jira on health issues.
+        no_exception_if_jira_issue_updated (bool): Skip exception if Jira was updated.
+
+    Returns:
+        bool: True if ceph health check passes.
+
+    Raises:
+        NoRunningCephToolBoxException: If toolbox pod doesn't recover.
+        CephHealthException: If ceph health check fails after retries.
+    """
+    try:
+        return ceph_health_check(
+            namespace=namespace,
+            tries=tries,
+            delay=delay,
+            fix_ceph_health=fix_ceph_health,
+            update_jira=update_jira,
+            no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+        )
+    except NoRunningCephToolBoxException:
+        logger.warning(
+            "Ceph toolbox pod not running. Waiting for recovery before retry..."
+        )
+        if wait_for_ct_pod_recovery():
+            return ceph_health_check(
+                namespace=namespace,
+                tries=tries,
+                delay=delay,
+                fix_ceph_health=fix_ceph_health,
+                update_jira=update_jira,
+                no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
+            )
+        raise
+
+
 def label_worker_node(node_list, label_key, label_value):
     """
     Function to label worker node for running app pods on specific worker nodes.
@@ -3133,10 +3248,12 @@ def validate_pods_are_running_and_not_restarted(pod_name, pod_restart_count, nam
     )
     pod_state = pod_obj.get("status").get("phase")
     if pod_state == "Running" and restart_count == pod_restart_count:
-        logger.info("Pod is running state and restart count matches with previous one")
+        logger.info(
+            f"{pod_name} is running state and restart count matches with previous one"
+        )
         return True
     logger.error(
-        f"Pod is in {pod_state} state and restart count of pod {restart_count}"
+        f"{pod_name} is in {pod_state} state and restart count of pod {restart_count}"
     )
     logger.info(f"{pod_obj}")
     return False
@@ -3227,7 +3344,8 @@ def get_pv_size(storageclass=None):
     ocp_obj = ocp.OCP(kind=constants.PV)
     pv_objs = ocp_obj.get()["items"]
     for pv_obj in pv_objs:
-        if pv_obj["spec"]["storageClassName"] == storageclass:
+        pv_sc = pv_obj.get("spec", {}).get("storageClassName")
+        if pv_sc and pv_sc == storageclass:
             return_list.append(pv_obj["spec"]["capacity"]["storage"])
     return return_list
 
@@ -3315,6 +3433,54 @@ def default_volumesnapshotclass(interface_type):
     return OCS(**base_snapshot_class.data)
 
 
+def get_default_cluster_volumesnapshotclass():
+    """
+    Get the default VolumeSnapshotClass available in the OCS cluster.
+
+    This helper function retrieves the VolumeSnapshotClass that is marked as default
+    using the annotation 'snapshot.storage.kubernetes.io/is-default-class: "true"'.
+    If a driver is specified, it will return the default snapshot class for that driver.
+
+    Returns:
+        str: The name of the default VolumeSnapshotClass, or None if not found
+
+    Raises:
+        ResourceNotFoundError: If no default VolumeSnapshotClass is found
+
+    Examples:
+        >>> # Get the default volume snapshot class
+        >>> default_snapclass = get_default_volumesnapshotclass()
+        >>> print(default_snapclass)
+        'vpc-block-snapshot'
+    """
+    vsc_obj = ocp.OCP(kind=constants.VOLUMESNAPSHOTCLASS)
+
+    try:
+        volumesnapshotclasses = vsc_obj.get()
+    except Exception as e:
+        logger.error(f"Failed to get VolumeSnapshotClasses: {e}")
+        raise ResourceNotFoundError(
+            "Unable to retrieve VolumeSnapshotClasses from the cluster"
+        )
+
+    for vsc in volumesnapshotclasses.get("items", []):
+        annotations = vsc.get("metadata", {}).get("annotations", {})
+        is_default = (
+            annotations.get("snapshot.storage.kubernetes.io/is-default-class") == "true"
+        )
+
+        if is_default:
+            vsc_name = vsc["metadata"]["name"]
+            return vsc_name
+    else:
+        logger.error("No default VolumeSnapshotClass found in the cluster")
+        raise ResourceNotFoundError(
+            "No default VolumeSnapshotClass found in the cluster. "
+            "Please ensure at least one VolumeSnapshotClass has the annotation "
+            "'snapshot.storage.kubernetes.io/is-default-class: \"true\"'"
+        )
+
+
 def get_snapshot_content_obj(snap_obj):
     """
     Get volume snapshot content of a volume snapshot
@@ -3354,6 +3520,138 @@ def wait_for_pv_delete(pv_objs, timeout=180):
             wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
             pv_obj.delete()
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=timeout)
+
+
+def is_pvc_encrypted(pvc_obj):
+    """
+    Check if a PVC is encrypted by examining its StorageClass and PV attributes.
+
+    Args:
+        pvc_obj (PVC): PVC object to check
+
+    Returns:
+        bool: True if PVC is encrypted, False otherwise
+
+    """
+    try:
+        # Check 1: PV CSI volumeAttributes for encryption flag
+        pv_obj = pvc_obj.backed_pv_obj
+        if pv_obj:
+            pv_data = pv_obj.get()
+            csi_data = pv_data.get("spec", {}).get("csi", {})
+            volume_attributes = csi_data.get("volumeAttributes", {})
+
+            # Check if encrypted attribute is set to true
+            if volume_attributes.get("encrypted") == "true":
+                return True
+
+            # Check if encryptionKMSID is present (indicates encryption)
+            if volume_attributes.get("encryptionKMSID"):
+                return True
+
+        # Check 2: StorageClass parameters
+        if hasattr(pvc_obj, "storageclass") and pvc_obj.storageclass:
+            sc_data = pvc_obj.storageclass.get()
+            parameters = sc_data.get("parameters", {})
+
+            # Check if encrypted parameter is set
+            if parameters.get("encrypted") == "true":
+                return True
+
+            # Check if encryptionKMSID parameter is present
+            if parameters.get("encryptionKMSID"):
+                return True
+
+        return False
+
+    except Exception as e:
+        # If we can't determine encryption status, assume not encrypted
+        # to avoid unnecessary delays
+        logger.debug(
+            f"Could not determine encryption status for PVC {pvc_obj.name}: {e}"
+        )
+        return False
+
+
+def wait_for_volume_detachment(pvc_objs, timeout=180):
+    """
+    Wait until the volumes are fully detached from all nodes by checking the VolumeAttachment resources.
+    This makes sure the volumes are safely removed before deleting.
+
+    Args:
+        pvc_objs (list): List of PVC objects to check for detachment
+        timeout (int): Timeout in seconds to wait for detachment (default: 180)
+
+    Returns:
+        bool: True if all volumes are detached, False otherwise
+
+    """
+    logger.info(
+        f"Waiting for {len(pvc_objs)} volumes to detach from nodes (timeout: {timeout}s)"
+    )
+
+    # Get PV names from PVCs
+    pv_names = [pvc_obj.backed_pv_obj.name for pvc_obj in pvc_objs]
+
+    def check_volumes_detached():
+        """
+        Check if all volumes are detached by querying VolumeAttachment resources.
+
+        Returns:
+            bool: True if all volumes are detached, False otherwise
+
+        """
+        try:
+            # Query VolumeAttachment resources (cluster-scoped)
+            va_ocp = OCP(kind="VolumeAttachment", namespace="")
+            attachments = va_ocp.get()
+
+            # If no items key or empty list, all volumes are detached
+            if not attachments or "items" not in attachments:
+                logger.info("No VolumeAttachment resources found - volumes detached")
+                return True
+
+            # Check if any of our PVs are still attached
+            attached_pvs = []
+            for va in attachments.get("items", []):
+                pv_name = (
+                    va.get("spec", {}).get("source", {}).get("persistentVolumeName", "")
+                )
+                if pv_name in pv_names:
+                    attached_pvs.append(pv_name)
+
+            if attached_pvs:
+                logger.debug(
+                    f"Still waiting for {len(attached_pvs)} volume(s) to detach: "
+                    f"{attached_pvs}"
+                )
+                return False
+
+            logger.info("All volumes successfully detached from nodes")
+            return True
+
+        except CommandFailed as e:
+            # If the API call fails with NotFound, it means no VolumeAttachments exist
+            if "NotFound" in str(e):
+                logger.info("No VolumeAttachment resources found - volumes detached")
+                return True
+            # For other errors, log warning but continue checking
+            logger.warning(f"Error checking VolumeAttachment: {e}")
+            return False
+
+    # Use TimeoutSampler to poll until volumes are detached
+    try:
+        for detached in TimeoutSampler(
+            timeout=timeout, sleep=5, func=check_volumes_detached
+        ):
+            if detached:
+                return True
+    except Exception as e:
+        logger.warning(
+            f"Timeout waiting for volume detachment after {timeout}s: {e}. "
+            "Proceeding anyway."
+        )
+        return False
 
 
 @retry(UnexpectedBehaviour, tries=40, delay=10, backoff=1)
@@ -3794,10 +4092,10 @@ def get_event_line_datetime(event_line):
     """
     event_line_dt = None
     regex = r"\d{4}-\d{2}-\d{2}"
-    if re.search(regex + "T", event_line):
+    if re.match(regex + "T", event_line):
         dt_string = event_line[:23].replace("T", " ")
         event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
-    elif re.search(regex, event_line):
+    elif re.match(regex, event_line):
         dt_string = event_line[:26]
         event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
 
@@ -4004,25 +4302,9 @@ def induce_mon_quorum_loss():
     # Wait for sometime after the mon crashes
     time.sleep(300)
 
-    # Check the operator log mon quorum lost
-    operator_logs = get_logs_rook_ceph_operator()
-    pattern = (
-        "op-mon: failed to check mon health. "
-        "failed to get mon quorum status: mon "
-        "quorum status failed: exit status 1"
-    )
-    logger.info(f"Check the operator log for the pattern : {pattern}")
-    if not re.search(pattern=pattern, string=operator_logs):
-        logger.error(
-            f"Pattern {pattern} couldn't find in operator logs. "
-            "Mon quorum may not have been lost after deleting "
-            "var/lib/ceph/mon. Please check"
-        )
-        raise UnexpectedBehaviour(
-            f"Pattern {pattern} not found in operator logs. "
-            "Maybe mon quorum not failed or  mon crash failed Please check"
-        )
-    logger.info(f"Pattern found: {pattern}. Mon quorum lost")
+    # Check the mon pods status to verify mon quorum lost
+    for mon in mon_pod_obj:
+        wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
 
     return mon_pod_obj_list, mon_pod_running[0], ceph_mon_daemon_id
 
@@ -4427,7 +4709,7 @@ def get_noobaa_db_used_space():
 
     """
     noobaa_db_pod_obj = pod.get_noobaa_pods(
-        noobaa_label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+        noobaa_label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE
     )
     cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
         command="df -h /var/lib/pgsql/", out_yaml_format=False
@@ -4499,6 +4781,92 @@ def verify_quota_resource_exist(quota_name):
     return quota_name in [
         quota_resource.get("metadata").get("name") for quota_resource in quota_resources
     ]
+
+
+def verify_substrings_in_string(output_string, expected_strings):
+    """
+    Verify all expected substrings are present in the output string
+
+    Args:
+        output_string (str): String to check
+        expected_strings (list): Expected substrings
+
+    Returns:
+        bool: True if all expected strings found, False otherwise
+
+    """
+    for expected_string in expected_strings:
+        if expected_string not in output_string:
+            logger.error(f"Expected string: {expected_string} not in {output_string}")
+            return False
+    return True
+
+
+def wait_for_quota_usage_update(
+    clusterresourcequota_obj,
+    quota_name,
+    quota_key,
+    expected_strings,
+    operation_description,
+    timeout=120,
+):
+    """
+    Wait for ClusterResourceQuota usage to update and verify expected strings
+
+    Args:
+        clusterresourcequota_obj (obj): ClusterResourceQuota OCP object
+        quota_name (str): Name of the quota resource
+        quota_key (str): Quota key to check (e.g., 'requests.storage')
+        expected_strings (list): Strings to verify (e.g., ['8Gi', '7Gi'])
+        operation_description (str): Operation description for logging
+        timeout (int): Timeout in seconds (default: 120)
+
+    Raises:
+        TimeoutExpiredError: If quota usage doesn't update within timeout
+
+    """
+    logger.info(f"Waiting for quota usage to reflect {operation_description}")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=clusterresourcequota_obj.get,
+        resource_name=quota_name,
+    )
+    for quota_resource in sample:
+        # Extract used and hard quota values from the resource
+        try:
+            used = quota_resource.get("status", {}).get("total", {}).get("used", {})
+            hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
+
+            # Get storage request values using the specified quota key
+            used_storage = used.get(quota_key, "0")
+            hard_storage = hard.get(quota_key, "0")
+
+            logger.info(
+                f"Quota usage for {quota_name}: "
+                f"used={used_storage}, hard={hard_storage}"
+            )
+
+            # Check if the expected values are present
+            quota_info = f"{used_storage} {hard_storage}"
+            if verify_substrings_in_string(
+                output_string=quota_info,
+                expected_strings=expected_strings,
+            ):
+                logger.info(
+                    f"Quota usage updated successfully after {operation_description}"
+                )
+                return
+        except (KeyError, AttributeError) as e:
+            logger.warning(f"Failed to parse quota resource: {e}")
+            continue
+    else:
+        err_str = (
+            f"Quota usage did not update to show {expected_strings} after {timeout} seconds "
+            f"for {operation_description}."
+        )
+        logger.error(err_str)
+        raise TimeoutExpiredError(err_str)
 
 
 def check_cluster_is_compact():
@@ -4766,11 +5134,34 @@ def verify_log_exist_in_pods_logs(
             container=container,
             all_containers=all_containers_flag,
             since=since,
+            grep=expected_log,
+            return_empty_string=True,
         )
-        logger.info(f"logs osd:{pod_logs}")
         if expected_log in pod_logs:
             return True
     return False
+
+
+@retry(CommandFailed, tries=3, delay=10, backoff=2)
+def _extract_cli_image(pull_secret_path, image, remote_path, local_cli_dir):
+    """
+    Extract CLI binary from container image with retry for transient network errors.
+
+    Args:
+        pull_secret_path (str): Path to pull secret file
+        image (str): Container image URL
+        remote_path (str): Path inside container to extract
+        local_cli_dir (str): Local directory to extract to
+
+    Raises:
+        CommandFailed: If extraction fails after retries
+
+    """
+    exec_cmd(
+        f"oc image extract --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {remote_path}:{local_cli_dir}"
+    )
 
 
 def retrieve_cli_binary(cli_type="mcg"):
@@ -4846,10 +5237,8 @@ def retrieve_cli_binary(cli_type="mcg"):
             image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
     pull_secret_path = download_pull_secret()
-    exec_cmd(
-        f"oc image extract --registry-config {pull_secret_path} "
-        f"{image} --confirm "
-        f"--path {get_architecture_path(cli_type)}:{local_cli_dir}"
+    _extract_cli_image(
+        pull_secret_path, image, get_architecture_path(cli_type), local_cli_dir
     )
     os.rename(
         os.path.join(local_cli_dir, remote_cli_basename),
@@ -4912,16 +5301,16 @@ def odf_cli_set_log_level(service, log_level, subsystem):
     """
     from pathlib import Path
 
-    if not (Path(config.RUN["bin_dir"]) / "odf-cli").exists():
+    if not (Path(config.RUN["bin_dir"]) / "odf").exists():
         retrieve_cli_binary(cli_type="odf")
 
     logger.info(
         f"Setting ceph log level for {service} on {subsystem} to {log_level} using odf-cli tool."
     )
-    cmd = f"odf-cli set ceph log-level {service} {subsystem} {log_level}"
+    cmd = f"odf set ceph log-level {service} {subsystem} {log_level}"
 
     logger.info(cmd)
-    return exec_cmd(cmd, use_shell=True)
+    return exec_cmd(cmd, shell=True)
 
 
 def get_ceph_log_level(service, subsystem):
@@ -5024,18 +5413,27 @@ def add_route_public_nad():
     """
     Add route section to network_attachment_definitions object
 
+    Adds route to shim network for host-to-pod communication in VLAN mode.
+    The shim network is configured via 'multus_public_net_shim_network' ENV_DATA
+    parameter (default: 192.168.252.0/24). This route enables communication between
+    baremetal hosts and pods attached to the public Multus network.
     """
+
     nad_obj = get_network_attachment_definitions(
         nad_name=config.ENV_DATA.get("multus_public_net_name"),
         namespace=config.ENV_DATA.get("multus_public_net_namespace"),
     )
     nad_config_str = nad_obj.data["spec"]["config"]
     nad_config_dict = json.loads(nad_config_str)
-    nad_config_dict["ipam"]["routes"] = [
-        {"dst": config.ENV_DATA["multus_destination_route"]}
-    ]
+
+    shim_network = config.ENV_DATA.get(
+        "multus_public_net_shim_network", "192.168.252.0/24"
+    )
+    nad_config_dict["ipam"]["routes"] = [{"dst": shim_network}]
+    logger.info(f"VLAN mode: Adding route to shim network: {shim_network}")
+
     nad_config_dict_string = json.dumps(nad_config_dict)
-    logger.info("Creating Multus public network")
+
     if config.DEPLOYMENT.get("ipv6"):
         constants.MULTUS_PUBLIC_NET_YAML = constants.MULTUS_PUBLIC_NET_IPV6_YAML
     public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
@@ -5117,16 +5515,53 @@ def delete_csi_holder_pods():
         schedule_nodes([worker_node_name])
 
 
+def ip_from_subnet_offset(subnet: str, offset: int) -> str:
+    """
+    Return an IP address from a subnet offset from the network address.
+
+    The function takes a subnet in CIDR notation and returns the IP address
+    obtained by adding the given offset to the subnet's network address.
+
+    Args:
+        subnet (str): Subnet in CIDR notation (e.g. "192.168.252.0/24").
+        offset (int): Number of IP addresses to add to the network address.
+
+    Returns:
+        str: The resulting IP address as a string.
+
+    Raises:
+        ValueError: If the subnet is invalid or the resulting IP is outside
+            of the subnet range.
+
+    Example:
+        ip_from_subnet_offset("192.168.252.0/24", 5)
+        '192.168.252.5'
+        ip_from_subnet_offset("192.168.252.16/28", 5)
+        '192.168.252.21'
+    """
+    network = ipaddress.ip_network(subnet)
+
+    ip = network.network_address + offset
+    if ip not in network:
+        raise ValueError(f"Offset {offset} is outside of subnet {subnet}")
+
+    return str(ip)
+
+
 def configure_node_network_configuration_policy_on_all_worker_nodes():
     """
     Configure NodeNetworkConfigurationPolicy CR on each worker node in cluster
 
+    Supports both traditional shim-based approach and VLAN-based approach.
+    Use multus_use_vlan config parameter to enable VLAN mode.
     """
 
     # This function require changes for compact mode
     logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
     worker_node_names = node.get_worker_nodes()
     ip_version = "ipv4"
+    use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
+
     if (
         config.DEPLOYMENT.get("ipv6")
         and config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM
@@ -5135,37 +5570,228 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
             constants.NODE_NETWORK_CONFIGURATION_POLICY_IPV6
         )
         ip_version = "ipv6"
+
     interface_num = 0
     for worker_node_name in worker_node_names:
-        node_network_configuration_policy = templating.load_yaml(
-            constants.NODE_NETWORK_CONFIGURATION_POLICY
-        )
+        # Determine which template to use based on VLAN mode
+        if use_vlan:
+            # VLAN-based approach: check if we need single or dual VLAN
+            create_public_net = config.ENV_DATA.get("multus_create_public_net", False)
+            create_cluster_net = config.ENV_DATA.get("multus_create_cluster_net", False)
+
+            if create_public_net and create_cluster_net:
+                # Dual VLAN template
+                logger.info(f"Using dual VLAN template for {worker_node_name}")
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY_VLAN_DUAL
+                )
+            elif create_public_net or create_cluster_net:
+                # Single VLAN template
+                logger.info(f"Using single VLAN template for {worker_node_name}")
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY_VLAN
+                )
+            else:
+                logger.warning("VLAN mode enabled but no networks configured to create")
+                continue
+        else:
+            # Traditional shim-based approach
+            node_network_configuration_policy = templating.load_yaml(
+                constants.NODE_NETWORK_CONFIGURATION_POLICY
+            )
 
         if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
-            worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
-                worker_node_name
-            ]
+            # Set node selector
             node_network_configuration_policy["spec"]["nodeSelector"][
                 "kubernetes.io/hostname"
             ] = worker_node_name
-            node_network_configuration_policy["metadata"]["name"] = (
-                worker_network_configuration["node_network_configuration_policy_name"]
-            )
-            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                "ipv4"
-            ]["address"][0]["ip"] = worker_network_configuration[
-                "node_network_configuration_policy_ip"
-            ]
-            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                "ipv4"
-            ]["address"][0]["prefix-length"] = worker_network_configuration[
-                "node_network_configuration_policy_prefix_length"
-            ]
-            node_network_configuration_policy["spec"]["desiredState"]["routes"][
-                "config"
-            ][0]["destination"] = worker_network_configuration[
-                "node_network_configuration_policy_destination_route"
-            ]
+
+            if use_vlan:
+                # VLAN-based configuration for BAREMETAL
+                logger.info(
+                    f"Configuring VLAN interfaces for baremetal node {worker_node_name}"
+                )
+                create_public_net = config.ENV_DATA.get(
+                    "multus_create_public_net", False
+                )
+                create_cluster_net = config.ENV_DATA.get(
+                    "multus_create_cluster_net", False
+                )
+
+                if create_public_net and create_cluster_net:
+                    # Configure dual VLAN
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-networks-vlan-{worker_node_name}"
+
+                    # Public VLAN configuration (interface 0 - NO IP)
+                    public_vlan_id = config.ENV_DATA.get(
+                        "multus_public_net_vlan_id", 201
+                    )
+                    public_base_interface = config.ENV_DATA.get(
+                        "multus_public_net_interface", "enp1s0f1"
+                    )
+                    vlan_interface_name = f"{public_base_interface}.{public_vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = public_base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = public_vlan_id
+
+                    # Public Shim configuration (interface 1 - HAS IP)
+                    shim_name = config.ENV_DATA.get(
+                        "multus_public_net_shim_name", "odf-pub-shim"
+                    )
+                    shim_ip_cidr = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    shim_ip = ip_from_subnet_offset(shim_ip_cidr, 5 + interface_num)
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = shim_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["mac-vlan"]["base-iface"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["ipv4"]["address"][0]["ip"] = shim_ip
+
+                    # Cluster VLAN configuration (interface 2 - NO IP)
+                    cluster_vlan_id = config.ENV_DATA.get(
+                        "multus_cluster_net_vlan_id", 202
+                    )
+                    cluster_base_interface = config.ENV_DATA.get(
+                        "multus_cluster_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["name"] = f"{cluster_base_interface}.{cluster_vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["vlan"]["base-iface"] = cluster_base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["vlan"]["id"] = cluster_vlan_id
+
+                    # Routes configuration (route to pod network via shim)
+                    pod_network = config.ENV_DATA.get(
+                        "multus_public_net_ip_range", "192.168.20.0/24"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["destination"] = pod_network
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["next-hop-interface"] = shim_name
+
+                elif create_public_net:
+                    # Configure single VLAN for public network
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-public-net-vlan-{worker_node_name}"
+
+                    # Public VLAN configuration (interface 0 - NO IP)
+                    vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
+                    base_interface = config.ENV_DATA.get(
+                        "multus_public_net_interface", "enp1s0f1"
+                    )
+                    vlan_interface_name = f"{base_interface}.{vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = vlan_id
+
+                    # Public Shim configuration (interface 1 - HAS IP)
+                    shim_name = config.ENV_DATA.get(
+                        "multus_public_net_shim_name", "odf-pub-shim"
+                    )
+                    shim_ip_cidr = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    shim_ip = ip_from_subnet_offset(shim_ip_cidr, 5 + interface_num)
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = shim_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["mac-vlan"]["base-iface"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["ipv4"]["address"][0]["ip"] = shim_ip
+
+                    # Routes configuration (route to pod network via shim)
+                    pod_network = config.ENV_DATA.get(
+                        "multus_public_net_ip_range", "192.168.20.0/24"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["destination"] = pod_network
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["next-hop-interface"] = shim_name
+
+                elif create_cluster_net:
+                    # Configure single VLAN for cluster network
+                    # Note: Cluster network does NOT need shim interface per Red Hat docs
+                    # (cluster network is pod-to-pod only, no host connectivity needed)
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-cluster-net-vlan-{worker_node_name}"
+
+                    vlan_id = config.ENV_DATA.get("multus_cluster_net_vlan_id", 202)
+                    base_interface = config.ENV_DATA.get(
+                        "multus_cluster_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = f"{base_interface}.{vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = vlan_id
+
+                    # No shim interface or routes needed for cluster network
+
+                # Increment interface_num for next node (for shim IP allocation)
+                if create_public_net:
+                    interface_num += 1
+
+            else:
+                # Traditional shim-based configuration for BAREMETAL without VLANs
+                worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
+                    worker_node_name
+                ]
+                node_network_configuration_policy["metadata"]["name"] = (
+                    worker_network_configuration[
+                        "node_network_configuration_policy_name"
+                    ]
+                )
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["ip"] = worker_network_configuration[
+                    "node_network_configuration_policy_ip"
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["prefix-length"] = worker_network_configuration[
+                    "node_network_configuration_policy_prefix_length"
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                    "config"
+                ][0]["destination"] = worker_network_configuration[
+                    "node_network_configuration_policy_destination_route"
+                ]
         elif config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
 
             node_network_configuration_policy["spec"]["nodeSelector"][
@@ -5328,11 +5954,10 @@ def upgrade_multus_holder_design():
         return
     if config.ENV_DATA.get("multus_create_public_net"):
         add_route_public_nad()
-        from ocs_ci.deployment.nmstate import NMStateInstaller
-
-        logger.info("Install NMState operator and create an instance")
-        nmstate_obj = NMStateInstaller()
-        nmstate_obj.running_nmstate()
+        nmstate_operator = NMStateOperator(
+            create_catalog=True,
+        )
+        nmstate_operator.deploy()
         configure_node_network_configuration_policy_on_all_worker_nodes()
     reset_all_osd_pods()
     enable_csi_disable_holder_pods()
@@ -5633,6 +6258,7 @@ def update_volsync_channel():
             )
 
 
+@retry(CommandFailed, tries=30, delay=10, backoff=1)
 def verify_nb_db_psql_version(check_image_name_version=True):
     """
     Verify that the NooBaa DB PostgreSQL version matches the expectation
@@ -5756,9 +6382,10 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
             )
         else:
             param = (
-                f'"all": {tolerations}, "api-server": {tolerations}, "csi-plugin": {tolerations}, '
-                f'"csi-provisioner": {tolerations}, "mds": {tolerations}, "metrics-exporter": {tolerations}, '
-                f'"noobaa-core": {tolerations}, "rgw": {tolerations}, "toolbox": {tolerations}'
+                f'"all": {tolerations}, "api-server": {tolerations}, "blackbox-exporter": {tolerations}, '
+                f'"csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, "mds": {tolerations}, '
+                f'"metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, "rgw": {tolerations}, '
+                f'"toolbox": {tolerations}'
             )
             param = f'{{"spec": {{"placement": {{{param}}}}}}}'
 
@@ -5866,10 +6493,31 @@ def remove_toleration():
         namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
-    params = '[{"op": "remove", "path": "/spec/placement"}]'
-    result = storagecluster_obj.patch(params=params, format_type="json")
-    if not result:
-        logger.error("Failed to remove toleration from storagecluster")
+    try:
+        # Check if placement exists before trying to remove it
+        storagecluster_data = storagecluster_obj.get()
+        if "placement" in storagecluster_data.get("spec", {}):
+            params = '[{"op": "remove", "path": "/spec/placement"}]'
+            result = storagecluster_obj.patch(params=params, format_type="json")
+            if not result:
+                logger.error("Failed to remove toleration from storagecluster")
+                success = False
+            else:
+                logger.info(
+                    "Successfully removed placement section from storagecluster"
+                )
+        else:
+            logger.info(
+                "No placement section found in storagecluster, skipping removal"
+            )
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to remove placement from storagecluster: {e}. "
+            "This may be expected if placement was not previously set."
+        )
+        # Avoided to mark as failure since this might be expected
+    except Exception as e:
+        logger.error(f"Unexpected error removing placement from storagecluster: {e}")
         success = False
     logger.info("Remove tolerations from subscriptions")
 
@@ -5895,20 +6543,56 @@ def remove_toleration():
         )
         driver_list = ocp.get_all_resource_names_of_a_kind(kind=constants.DRIVER)
         for driver_name in driver_list:
-            params = (
-                '[{"op": "remove", "path": "/spec/controllerPlugin/tolerations"},'
-                '{"op": "remove", "path": "/spec/nodePlugin/tolerations"}]'
-            )
-            result = driver_obj.patch(
-                resource_name=driver_name, params=params, format_type="json"
-            )
-            if result:
-                logger.info(
-                    f"Successfully removed tolerations from CSI driver {driver_name}"
+            try:
+                # Check if tolerations exist before attempt to remove toleration
+                driver_data = driver_obj.get(resource_name=driver_name)
+                spec = driver_data.get("spec", {})
+                controller_plugin = spec.get("controllerPlugin") or {}
+                node_plugin = spec.get("nodePlugin") or {}
+
+                # Build patch command if paths exist
+                params = []
+                if (
+                    isinstance(controller_plugin, dict)
+                    and "tolerations" in controller_plugin
+                ):
+                    params.append(
+                        {"op": "remove", "path": "/spec/controllerPlugin/tolerations"}
+                    )
+                if isinstance(node_plugin, dict) and "tolerations" in node_plugin:
+                    params.append(
+                        {"op": "remove", "path": "/spec/nodePlugin/tolerations"}
+                    )
+
+                if params:
+                    result = driver_obj.patch(
+                        resource_name=driver_name,
+                        params=json.dumps(params),
+                        format_type="json",
+                    )
+                    if result:
+                        logger.info(
+                            f"Successfully removed tolerations from CSI driver {driver_name}"
+                        )
+                    else:
+                        logger.error(
+                            f"Failed to remove tolerations from CSI driver {driver_name}"
+                        )
+                        success = False
+                else:
+                    logger.info(
+                        f"No tolerations found in CSI driver {driver_name}, skipping removal"
+                    )
+            except CommandFailed as e:
+                # Handle case where patch fails (e.g., path doesn't exist)
+                logger.warning(
+                    f"Failed to remove tolerations from CSI driver {driver_name}: {e}. "
+                    "This may be expected if tolerations were not previously added."
                 )
-            else:
+                # Don't mark as failure since this might be expected in negative test cases
+            except Exception as e:
                 logger.error(
-                    f"Failed to remove tolerations from CSI driver {driver_name}"
+                    f"Unexpected error while removing tolerations from CSI driver {driver_name}: {e}"
                 )
                 success = False
 
@@ -6397,7 +7081,7 @@ def get_rbd_daemonset_csi_addons_node_object(node):
     namespace = config.ENV_DATA["cluster_namespace"]
     csi_addons_node = OCP(kind=constants.CSI_ADDONS_NODE_KIND, namespace=namespace)
     csi_addons_node_data = csi_addons_node.get(
-        resource_name=f"{node}-{namespace}-daemonset-openshift-storage.rbd.csi.ceph.com-nodeplugin"
+        resource_name=f"{node}-{namespace}-daemonset-openshift-storage.rbd.csi.ceph.com-nodeplugin-csi-addons"
     )
     return csi_addons_node_data
 
@@ -6434,61 +7118,6 @@ def create_network_fence_class():
             )
 
     _verify_csi_addons_objects()
-
-
-def get_csi_addon_pod():
-    """
-    Find a CSI addon pod that contains the 'csi-addons' container.
-
-    In ODF 4.20, CSI addon functionality is in dedicated pods with the label
-    'app=openshift-storage.rbd.csi.ceph.com-nodeplugin-csi-addons'.
-
-    Returns:
-        Pod: A Pod object that contains the 'csi-addons' container
-
-    Raises:
-        AssertionError: If no CSI addon pod with 'csi-addons' container is found
-    """
-    from ocs_ci.ocs.resources.pod import get_pods_having_label, get_all_pods, Pod
-    from ocs_ci.ocs.constants import CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
-
-    namespace = config.ENV_DATA["cluster_namespace"]
-
-    try:
-        addon_pods = get_pods_having_label(
-            CSI_RBD_ADDON_NODEPLUGIN_LABEL_420, namespace
-        )
-        if not addon_pods:
-            raise AssertionError(
-                f"No CSI addon pods found with label '{CSI_RBD_ADDON_NODEPLUGIN_LABEL_420}' "
-                f"in namespace {namespace}"
-            )
-
-        pod_obj = Pod(**addon_pods[0])
-
-        # Verify the pod actually has the 'csi-addons' container
-        csi_addon_container = pod_obj.get_container_data("csi-addons")
-        if not csi_addon_container:
-            raise AssertionError(
-                f"CSI addon pod '{pod_obj.name}' exists but does not contain 'csi-addons' container"
-            )
-
-        logger.info(f"Found CSI addon pod: {pod_obj.name}")
-        return pod_obj
-
-    except Exception as e:
-        # Provide helpful diagnostic information
-        try:
-            all_pods = get_all_pods(namespace=namespace)
-            csi_pod_names = [pod.name for pod in all_pods if "csi" in pod.name.lower()]
-            error_msg = (
-                f"Failed to find CSI addon pod in namespace {namespace}. "
-                f"Error: {str(e)}. Available CSI-related pods: {csi_pod_names}"
-            )
-        except Exception:
-            error_msg = f"Failed to find CSI addon pod in namespace {namespace}. Error: {str(e)}"
-
-        raise AssertionError(error_msg)
 
 
 def create_network_fence(node_name, cidr):
@@ -6743,3 +7372,87 @@ def get_schedule_precedance_value_from_csi_addons_configmap(
             default,
         )
         return default
+
+
+def verify_socket_on_node(node_name, host_path, socket_name):
+    """
+    Verify the existence of socket at host path on node.
+
+    Args:
+        node_name (str): The name of specific node
+        host_path (str): The host path where socket exist
+        socket_name (str): The name of socket file
+
+    Returns:
+        bool: True if the socket file exist at host path on given node.
+
+    """
+    ocp = OCP(kind="node")
+    debug_node_output = ocp.exec_oc_debug_cmd(
+        node=node_name, cmd_list=[f"ls -l {host_path}/{socket_name}"]
+    )
+    return socket_name in debug_node_output
+
+
+def set_rook_log_level():
+    """
+    Set the rook log level
+    """
+    rook_log_level = config.DEPLOYMENT.get("rook_log_level")
+    if rook_log_level:
+        set_configmap_log_level_rook_ceph_operator(rook_log_level)
+
+
+def check_osds_down(osd_ids: list[str]) -> bool:
+    """
+    Check if specified OSDs are marked as 'down' in Ceph
+
+    Args:
+        osd_ids (list[str]): List of OSD IDs to check
+
+    Returns:
+        bool: True if all OSDs are down, False otherwise
+    """
+    log = logging.getLogger(__name__)
+    ceph_pod = pod.get_ceph_tools_pod()
+    osd_dump = ceph_pod.exec_ceph_cmd("ceph osd dump")
+
+    osds_status = {}
+    for osd in osd_dump["osds"]:
+        osd_id = str(osd["osd"])
+        if osd_id in osd_ids:
+            osds_status[osd_id] = {"up": osd["up"], "in": osd["in"]}
+
+    for osd_id, status in osds_status.items():
+        state = "up" if status["up"] == 1 else "down"
+        log.info(f"OSD {osd_id}: {state}")
+
+    all_down = all(status["up"] == 0 for status in osds_status.values())
+    return all_down
+
+
+def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) -> None:
+    """
+    Wait for OSDs to be marked as 'down' in Ceph using polling
+
+    Args:
+        osd_ids (list[str]): List of OSD IDs to wait for
+        timeout (int): Timeout in seconds (default: 300)
+        sleep (int): Sleep interval between checks (default: 10)
+
+    Raises:
+        TimeoutExpiredError: If OSDs don't go down within timeout
+    """
+    log = logging.getLogger(__name__)
+    log.info(f"Waiting for OSDs {osd_ids} to be marked as 'down' in Ceph")
+
+    sample = TimeoutSampler(
+        timeout=timeout, sleep=sleep, func=check_osds_down, osd_ids=osd_ids
+    )
+
+    if not sample.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            f"OSDs {osd_ids} did not go down within {timeout} seconds"
+        )
+
+    log.info(f"All OSDs {osd_ids} are now marked as 'down'")

@@ -25,7 +25,6 @@ from ocs_ci.helpers.managed_services import (
 )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
-    CephHealthRecoveredException,
     CommandFailed,
     InvalidPodPresent,
     ResourceNotFoundError,
@@ -33,6 +32,7 @@ from ocs_ci.ocs.exceptions import (
     PVNotSufficientException,
     ResourceWrongStatusException,
 )
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv, deployment
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
@@ -48,7 +48,7 @@ from ocs_ci.ocs.resources.pod import (
     get_rbdfsplugin_provisioner_pods,
     get_ceph_tools_pod,
     get_osd_pod_id,
-    get_lvs_osd_pods,
+    get_deviceclass_osd_pods,
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
@@ -63,6 +63,7 @@ from ocs_ci.ocs.node import (
     get_nodes_where_ocs_pods_running,
     get_provider_internal_node_ips,
     add_disk_stretch_arbiter,
+    has_taint,
 )
 from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.ocs.version import get_ocp_version
@@ -183,6 +184,16 @@ def ocs_install_verification(
     from ocs_ci.ocs.resources.storageconsumer import verify_storage_consumer_resources
 
     number_of_worker_nodes = len(get_nodes())
+    if config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
+        number_of_worker_nodes = number_of_worker_nodes - len(
+            [
+                node_obj
+                for node_obj in get_nodes()
+                if has_taint(
+                    node_obj, taint="node-role.submariner.io/gateway=true:NoSchedule"
+                )
+            ]
+        )
     namespace = config.ENV_DATA["cluster_namespace"]
     log.info("Verifying OCS installation")
     if config.ENV_DATA.get("disable_components"):
@@ -261,9 +272,21 @@ def ocs_install_verification(
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
 
+    # From 4.21, new resource blackbox-exporter added as part of feature odf
+    # health overview
+    odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
+    if (
+        not external
+        and not config.DEPLOYMENT.get("mcg_only_deployment", False)
+        and (odf_running_version >= version.VERSION_4_21)
+    ):
+        resources_dict.update(
+            {
+                constants.BLACKBOX_POD_LABEL: 1,
+            }
+        )
     # From 4.19.0-69, we have noobaa-db-pg-cluster-1 and noobaa-db-pg-cluster-2 pods
     # 4.19.0-59 is the stable build which contains ONLY noobaa-db-pg-0 pod
-    odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
     if odf_running_version >= version.VERSION_4_19:
         del resources_dict[nb_db_label]
         resources_dict.update(
@@ -767,24 +790,17 @@ def ocs_install_verification(
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
         health_check_tries = 180
 
-    rdr_run = config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
-
     # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
     if not (fusion_aas_consumer or hci_cluster):
         # Temporarily disable health check for hci until we have enough healthy clusters
-        try:
-            assert utils.ceph_health_check(
-                namespace,
-                health_check_tries,
-                health_check_delay,
-                fix_ceph_health=True,
-            )
-        except CephHealthRecoveredException as ex:
-            if rdr_run and "slow ops" in str(ex):
-                # Related issue: https://github.com/red-hat-storage/ocs-ci/issues/11244
-                log.warning("For RDR run we ignore slow ops error as it was recovered!")
-            else:
-                raise
+        assert utils.ceph_health_check(
+            namespace,
+            health_check_tries,
+            health_check_delay,
+            fix_ceph_health=True,
+            update_jira=True,
+            no_exception_if_jira_issue_updated=True,
+        )
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
@@ -871,10 +887,11 @@ def ocs_install_verification(
             verify_device_class_in_osd_tree(ct_pod, device_class)
 
     # RDR with globalnet submariner
-    if config.MULTICLUSTER.get(
-        "multicluster_mode"
-    ) == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
-        "enable_globalnet", True
+    if (
+        config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        and get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
+        and get_provider_service_type() != "NodePort"
+        and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
     ):
         validate_serviceexport()
 
@@ -940,9 +957,9 @@ def ocs_install_verification(
     sc_obj = get_storage_cluster()
     sc_ob_spec = sc_obj.get().get("items")[0].get("spec")
     if sc_ob_spec.get("hostNetwork") is True:
-        assert (
-            sc_ob_spec.get("providerAPIServerServiceType")
-            == constants.SERVICE_TYPE_NODEPORT
+        assert sc_ob_spec.get("providerAPIServerServiceType") in (
+            constants.SERVICE_TYPE_NODEPORT,
+            constants.SERVICE_TYPE_CLUSTERIP,
         ), f"Provider API server service type is not {constants.SERVICE_TYPE_NODEPORT}"
         # check the rule in bz DFBUGS-2324 is followed:
         assert (
@@ -1218,10 +1235,10 @@ def verify_storage_device_class(
 
     """
     if check_multiple_deviceclasses:
-        deviceset_sc_name_per_deviceclass = get_deviceset_sc_name_per_deviceclass()
+        deviceset_name_per_deviceclass = get_deviceset_name_per_deviceclass()
     else:
-        deviceset_sc_name_per_deviceclass = {}
-    log.info(f"deviceset name per deviceclass = {deviceset_sc_name_per_deviceclass}")
+        deviceset_name_per_deviceclass = {}
+    log.info(f"deviceset name per deviceclass = {deviceset_name_per_deviceclass}")
 
     # If the user has not provided any specific DeviceClass in the StorageDeviceSet for internal deployment then
     # tunefastDeviceClass will be true and crushDeviceClass will set to "ssd"
@@ -1234,14 +1251,17 @@ def verify_storage_device_class(
         "storageClassDeviceSets"
     ]
 
+    log.info(f"storage class device sets: {storage_class_device_sets}")
+
     for each_devise_set in storage_class_device_sets:
-        if deviceset_sc_name_per_deviceclass:
-            sc_device_set_name = each_devise_set["volumeClaimTemplates"][0]["spec"].get(
-                "storageClassName"
-            )
+        if deviceset_name_per_deviceclass:
+            device_set_name = each_devise_set["name"]
+            # Remove the -<number> suffix from device set name to get the original device set name
+            orig_device_set_name = re.sub(r"-[0-9]$", "", device_set_name)
+            log.info(f"original device set name = {orig_device_set_name}")
             # Get the deviceclass per the storagecluster deviceset name if exist or get the provided deviceclass
-            device_class = deviceset_sc_name_per_deviceclass.get(
-                sc_device_set_name, device_class
+            device_class = deviceset_name_per_deviceclass.get(
+                orig_device_set_name, device_class
             )
 
         # check tuneFastDeviceClass
@@ -1267,7 +1287,7 @@ def verify_storage_device_class(
             crush_device_class == device_class
         ), f"{crush_device_class_msg} but it should be set to {device_class}"
 
-    sc_device_classes = deviceset_sc_name_per_deviceclass.values()
+    sc_device_classes = deviceset_name_per_deviceclass.values()
     # get deviceClasses for overall storage
     device_classes = cephcluster_data["items"][0]["status"]["storage"]["deviceClasses"]
     log.debug(f"deviceClasses are {device_classes}")
@@ -1448,6 +1468,9 @@ def verify_mcg_only_pods():
         constants.OPERATOR_LABEL: 1,
     }
     odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
+    # DFBUGS-5211 ocs-metrics-exporter disabled from ODF 4.21
+    if odf_running_version >= version.VERSION_4_21:
+        del resources_dict[constants.OCS_METRICS_EXPORTER]
     if odf_running_version >= version.VERSION_4_19:
         del resources_dict[constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL]
         del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
@@ -2072,9 +2095,12 @@ def get_osd_replica_count():
     return replica_count
 
 
-def verify_multus_network():
+def verify_multus_network(skip_mds=False):
     """
     Verify Multus network(s) created successfully and are present on relevant pods.
+
+    Args:
+        skip_mds (bool): If True, skip MDS pod and MDS map validation
     """
 
     public_net_created = config.ENV_DATA["multus_create_public_net"]
@@ -2155,10 +2181,13 @@ def verify_multus_network():
     if public_net_created:
         log.info("Verifying multus public network exists on ceph pods")
         mon_pods = get_mon_pods()
-        mds_pods = get_mds_pods()
         mgr_pods = get_mgr_pods()
         rgw_pods = get_rgw_pods()
-        ceph_pods = [*mon_pods, *mds_pods, *mgr_pods, *rgw_pods]
+        if skip_mds:
+            ceph_pods = [*mon_pods, *mgr_pods, *rgw_pods]
+        else:
+            mds_pods = get_mds_pods()
+            ceph_pods = [*mon_pods, *mds_pods, *mgr_pods, *rgw_pods]
         for _pod in ceph_pods:
             pod_networks = _pod.data["metadata"]["annotations"][
                 "k8s.v1.cni.cncf.io/networks"
@@ -2192,24 +2221,25 @@ def verify_multus_network():
             not pod_validation_failures
         ), f"There were several failues in multus annotation validations: {pod_validation_failures}"
 
-        log.info("Verifying MDS Map IPs are in the multus public network range")
-        ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd(
-            "ceph fs dump --format json"
-        )
-        mds_map = ceph_fs_dump_data["filesystems"][0]["mdsmap"]
-        for _, gid_data in mds_map["info"].items():
-            if not config.DEPLOYMENT.get("ipv6"):
-                ip = gid_data["addr"].split(":")[0]
-                range = config.ENV_DATA["multus_public_net_range"]
+        if not skip_mds:
+            log.info("Verifying MDS Map IPs are in the multus public network range")
+            ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd(
+                "ceph fs dump --format json"
+            )
+            mds_map = ceph_fs_dump_data["filesystems"][0]["mdsmap"]
+            for _, gid_data in mds_map["info"].items():
+                if not config.DEPLOYMENT.get("ipv6"):
+                    ip = gid_data["addr"].split(":")[0]
+                    range = config.ENV_DATA["multus_public_net_range"]
 
-            else:
-                gid_dt_ip = gid_data["addr"]
-                pattern = r"^\[([\da-f:]+)\]"
-                match = re.search(pattern, gid_dt_ip, re.IGNORECASE)
-                ip = match.group(1)
-                range = config.ENV_DATA["multus_public_ipv6_net_range"]
+                else:
+                    gid_dt_ip = gid_data["addr"]
+                    pattern = r"^\[([\da-f:]+)\]"
+                    match = re.search(pattern, gid_dt_ip, re.IGNORECASE)
+                    ip = match.group(1)
+                    range = config.ENV_DATA["multus_public_ipv6_net_range"]
 
-            assert ipaddress.ip_address(ip) in ipaddress.ip_network(range)
+                assert ipaddress.ip_address(ip) in ipaddress.ip_network(range)
 
     log.info("Verifying StorageCluster multus network data")
     sc = get_storage_cluster()
@@ -2824,6 +2854,39 @@ def get_storageclass_names_from_storagecluster_spec():
     return data
 
 
+def check_underlying_resource_exists(storage_class_type):
+    """
+    Check if the underlying Ceph resource exists for a given storage class type.
+
+    Args:
+        storage_class_type (str): The type of storage class (e.g., "cephFilesystems",
+                                 "cephBlockPools", "cephObjectStores", "nfs", "encryption")
+
+    Returns:
+        bool: True if the underlying resource exists or if it's a type that doesn't
+             need verification (nfs/encryption), False otherwise.
+    """
+    try:
+        namespace = config.ENV_DATA["cluster_namespace"]
+        resource_map = {
+            "cephFilesystems": "CephFilesystem",
+            "cephBlockPools": "CephBlockPool",
+            "cephObjectStores": "CephObjectStore",
+        }
+
+        if storage_class_type in resource_map:
+            kind = resource_map[storage_class_type]
+            resource_obj = OCP(kind=kind, namespace=namespace)
+            resources = resource_obj.get().get("items", [])
+            return len(resources) > 0
+        return True  # For nfs/encryption, assume resource exists
+    except Exception as e:
+        log.error(
+            f"Failed to check if underlying resource exists for storage class type '{storage_class_type}': {e}"
+        )
+        return True  # If we can't check, assume it exists
+
+
 def check_custom_storageclass_presence(interface=None):
     """
     Verify if the custom-defined storage class names are present in the `oc get sc` output.
@@ -2844,16 +2907,36 @@ def check_custom_storageclass_presence(interface=None):
 
     sc_list = get_all_storageclass_names()
 
-    missing_sc = [value for value in sc_from_spec.values() if value not in sc_list]
+    missing_sc = []
+    skipped_sc = []
+
+    for sc_type, sc_name in sc_from_spec.items():
+        if sc_name not in sc_list:
+            # Check if underlying resource exists
+            if not check_underlying_resource_exists(sc_type):
+                log.warning(
+                    f"StorageClass '{sc_name}' of type '{sc_type}' not found, but underlying "
+                    f"Ceph resource is missing. Skipping validation for this storage class."
+                )
+                skipped_sc.append(sc_name)
+            else:
+                missing_sc.append(sc_name)
 
     if missing_sc:
         missing_sc_str = ",".join(missing_sc)
         log.error(
-            f"StorageClasses {missing_sc_str}' mentioned in the spec is not exist in the `oc get sc` output"
+            f"StorageClasses {missing_sc_str}' mentioned in the spec do not exist in the `oc get sc` output"
         )
         return False
 
-    log.info("Custom-defined storage classes are correctly present.")
+    if skipped_sc:
+        log.info(
+            f"Skipped validation for {len(skipped_sc)} storage class(es) due to missing underlying Ceph resources."
+        )
+
+    log.info(
+        "Custom-defined storage classes are correctly present or skipped appropriately."
+    )
     return True
 
 
@@ -2877,41 +2960,69 @@ def patch_storage_cluster_for_custom_storage_class(
     if storage_class_name is None:
         storage_class_name = f"custom-{storage_class_type}"
 
+    if action not in ["add", "remove"]:
+        log.error(f"Not supported action '{action}' to patch StorageCluster spec.")
+        return False
+
     resource_name = (
         constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
         if config.DEPLOYMENT["external_mode"]
         else constants.DEFAULT_CLUSTERNAME
     )
 
-    if storage_class_type in ["nfs", "encryption"]:
-        path = f"/spec/{storage_class_type}/storageClassName"
+    is_managed_resource = storage_class_type not in ["nfs", "encryption"]
+    if is_managed_resource:
+        base_path = "/spec/managedResources"
+        path = f"{base_path}/{storage_class_type}/storageClassName"
     else:
-        path = f"/spec/managedResources/{storage_class_type}/storageClassName"
-
-    patch_data = []
+        base_path = f"/spec/{storage_class_type}"
+        path = f"{base_path}/storageClassName"
 
     if action == "add":
-        patch_data.append(
-            {
-                "op": "add",
-                "path": path,
-                "value": storage_class_name,
-            }
-        )
+        sc_obj = get_storage_cluster()
+        spec_data = sc_obj.get(resource_name=resource_name).get("spec", {})
 
+        if is_managed_resource:
+            managed_res = spec_data.get("managedResources", {})
+            component = managed_res.get(storage_class_type, {})
+            field_exists = component.get("storageClassName") is not None
+
+            if not managed_res:
+                op, op_path, value = (
+                    "add",
+                    base_path,
+                    {storage_class_type: {"storageClassName": storage_class_name}},
+                )
+            elif not component:
+                op, op_path, value = (
+                    "add",
+                    f"{base_path}/{storage_class_type}",
+                    {"storageClassName": storage_class_name},
+                )
+            elif field_exists:
+                op, op_path, value = "replace", path, storage_class_name
+            else:
+                op, op_path, value = "add", path, storage_class_name
+        else:
+            component = spec_data.get(storage_class_type, {})
+            field_exists = component.get("storageClassName") is not None
+
+            if not component:
+                op, op_path, value = (
+                    "add",
+                    base_path,
+                    {"storageClassName": storage_class_name},
+                )
+            elif field_exists:
+                op, op_path, value = "replace", path, storage_class_name
+            else:
+                op, op_path, value = "add", path, storage_class_name
+
+        patch_data = [{"op": op, "path": op_path, "value": value}]
         log_message = f"Added storage class '{storage_class_name}' of type '{storage_class_type}'."
-
-    elif action == "remove":
-        patch_data.append(
-            {
-                "op": "remove",
-                "path": path,
-            }
-        )
-        log_message = f"Removed storage class of type '{storage_class_type}'."
     else:
-        log.error(f"Not supported action '{action}' to patch StorageCluster spec.")
-        return False
+        patch_data = [{"op": "remove", "path": path}]
+        log_message = f"Removed storage class of type '{storage_class_type}'."
 
     try:
         sc_obj = get_storage_cluster()
@@ -2922,39 +3033,41 @@ def patch_storage_cluster_for_custom_storage_class(
         )
         log.info(log_message)
     except CommandFailed as err:
-        log.error(f"Command Failed with an error :{err}")
+        log.error(f"Command Failed with an error: {err}")
         return False
 
-    # Sleeping for 4 seconds to allow the recent patch command to take effect.
-    from time import sleep
-
-    sleep(4)
-
-    # Verify the patch operation has created/deleted the storageClass from the cluster.
     from ocs_ci.helpers.helpers import get_all_storageclass_names
 
-    storageclass_list = get_all_storageclass_names()
-    log.info(f"StorageClasses On the cluster : {','.join(storageclass_list)}")
+    if action == "add" and not check_underlying_resource_exists(storage_class_type):
+        log.warning(
+            f"Underlying Ceph resource for '{storage_class_type}' not found. "
+            f"Storage class '{storage_class_name}' may not be created automatically."
+        )
+        return True
 
-    if action == "remove":
-        if storage_class_name in storageclass_list:
-            log.error(
-                f" StorageClass '{storage_class_name}' not removed from the cluster."
+    def check_storage_class_exists():
+        """Check if storage class exists in the expected state."""
+        sc_exists = storage_class_name in get_all_storageclass_names()
+        expected_state = action == "add"
+        return sc_exists == expected_state
+
+    try:
+        # Retry till 120 seconds for the storage class to be created/removed
+        sample = TimeoutSampler(timeout=120, sleep=5, func=check_storage_class_exists)
+        if sample.wait_for_func_status(result=True):
+            log.info(
+                f"StorageClass '{storage_class_name}' successfully "
+                f"{'created on' if action == 'add' else 'removed from'} the cluster."
             )
-            return False
-        else:
-            log.info(f"StorageClass {storage_class_name} removed from the cluster.")
-    elif action == "add":
-        if storage_class_name not in storageclass_list:
-            log.error(
-                f" StorageClass '{storage_class_name}' not created on the cluster."
-            )
-            return False
-        else:
-            log.info(f"StorageClass '{storage_class_name}' created on the cluster.")
             return True
-    else:
-        log.error(f"Invalid action: '{action}'")
+
+        log.error(
+            f"Timeout: StorageClass '{storage_class_name}' was not "
+            f"{'created on' if action == 'add' else 'removed from'} the cluster after 120s."
+        )
+        return False
+    except Exception as e:
+        log.error(f"Error while waiting for storage class state: {e}")
         return False
 
 
@@ -3173,7 +3286,14 @@ def get_csi_images_for_client_ocp_version(ocp_version=None):
 
 
 def add_new_deviceset_in_storagecluster(
-    device_class, name, count=3, replica=1, access_modes=None, device_type="SSD"
+    device_class,
+    name,
+    count=3,
+    replica=1,
+    access_modes=None,
+    device_type="SSD",
+    sc_name=None,
+    storage_size=None,
 ):
     """
     Add a new DeviceSet to the StorageCluster.
@@ -3185,12 +3305,15 @@ def add_new_deviceset_in_storagecluster(
         replica (int): Number of replicas.
         access_modes (list): List of access modes.
         device_type (str): Device type for the DeviceSet.
+        sc_name (str): The storage class name for the DeviceSet. If None, use device_class name.
+        storage_size (str): Storage size for the DeviceSet.
 
     Returns:
         bool: True if the patch was applied successfully, False otherwise.
 
     """
     access_modes = access_modes or ["ReadWriteOnce"]
+    sc_name = sc_name or device_class
 
     template_data = templating.load_yaml(constants.STORAGE_DEVICESET_YAML)
     # Update the YAML with the relevant parameters
@@ -3200,11 +3323,16 @@ def add_new_deviceset_in_storagecluster(
     ] = access_modes
     template_data["spec"]["storageDeviceSets"][0]["dataPVCTemplate"]["spec"][
         "storageClassName"
-    ] = device_class
+    ] = sc_name
     template_data["spec"]["storageDeviceSets"][0]["deviceClass"] = device_class
     template_data["spec"]["storageDeviceSets"][0]["name"] = name
     template_data["spec"]["storageDeviceSets"][0]["replica"] = replica
     template_data["spec"]["storageDeviceSets"][0]["deviceType"] = device_type
+
+    if storage_size:
+        template_data["spec"]["storageDeviceSets"][0]["dataPVCTemplate"]["spec"][
+            "resources"
+        ]["requests"]["storage"] = storage_size
 
     new_device_set = template_data["spec"]["storageDeviceSets"][0]
 
@@ -3319,9 +3447,9 @@ def get_osd_id_per_deviceclass():
     device_sets = get_all_device_sets()
     deviceclass_names = [get_deviceclass_name(d) for d in device_sets]
     for d_name in deviceclass_names:
-        lvs_osd_pods = get_lvs_osd_pods(d_name)
+        deviceclass_osd_pods = get_deviceclass_osd_pods(d_name)
         # Add the osd ids per the device class to the dict
-        for p in lvs_osd_pods:
+        for p in deviceclass_osd_pods:
             osd_id = int(get_osd_pod_id(p))
             osd_id_per_deviceclass[osd_id] = d_name
 
@@ -3346,9 +3474,8 @@ def check_unnecessary_pods_present():
     present.
     """
     no_noobaa = config.COMPONENTS["disable_noobaa"]
-    no_ceph = (
-        config.DEPLOYMENT["external_mode"] or config.ENV_DATA["mcg_only_deployment"]
-    )
+    mcg_only = config.ENV_DATA["mcg_only_deployment"]
+    no_ceph = config.DEPLOYMENT["external_mode"]
     pod_names = [
         pod.name for pod in get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
     ]
@@ -3367,7 +3494,7 @@ def check_unnecessary_pods_present():
             raise InvalidPodPresent(
                 f"Pods {invalid_pods_found} should not be present because NooBaa is not available"
             )
-    if no_ceph:
+    if mcg_only:
         for invalid_pod_name in constants.CEPH_PODS_NAMES:
             invalid_pods_found.extend(
                 [
@@ -3380,3 +3507,82 @@ def check_unnecessary_pods_present():
             raise InvalidPodPresent(
                 f"Pods {invalid_pods_found} should not be present because Ceph is not available"
             )
+    if no_ceph:
+        for invalid_pod_name in constants.CEPH_PODS_NAMES:
+            if invalid_pod_name != constants.ROOK_CEPH_OPERATOR:
+                invalid_pods_found.extend(
+                    [
+                        pod_name
+                        for pod_name in pod_names
+                        if pod_name.startswith(invalid_pod_name)
+                    ]
+                )
+        if invalid_pods_found:
+            raise InvalidPodPresent(
+                f"Pods {invalid_pods_found} should not be present because Ceph is not available"
+            )
+
+
+def get_default_storagecluster(namespace=None):
+    """
+    Get the default storage cluster
+
+    Returns:
+        ocs_ci.ocs.ocp.OCP: The default storage cluster
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=namespace,
+    )
+    if sc_obj.is_exist(resource_name=constants.DEFAULT_CLUSTERNAME):
+        sc_name = constants.DEFAULT_CLUSTERNAME
+    elif sc_obj.is_exist(resource_name=constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE):
+        sc_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+    else:
+        sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
+
+    return ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=namespace,
+        resource_name=sc_name,
+    )
+
+
+def get_first_sc_name_from_storagecluster():
+    """
+    Get the first storageclass name from the storagecluster
+
+    Returns:
+        str: The first storageclass name from the storagecluster
+
+    """
+    devicesets = get_all_device_sets()
+    first_sc_name = get_deviceset_sc_name(devicesets[0])
+    return first_sc_name
+
+
+def get_deviceset_name_per_deviceclass():
+    """
+    Get the deviceset name per deviceclass dict
+
+    Returns:
+        dict: The deviceset name per deviceclass dict
+
+    """
+    device_sets = get_all_device_sets()
+    return {d.get("name"): get_deviceclass_name(d) for d in device_sets}
+
+
+def get_deviceset_name_per_count():
+    """
+    Get the deviceset name per count dict
+
+    Returns:
+        dict: The deviceset name per count dict
+
+    """
+    device_sets = get_all_device_sets()
+    return {d.get("name"): d["count"] for d in device_sets}

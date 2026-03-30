@@ -111,7 +111,7 @@ class TestNoobaaRouteAuthentication:
             Returns:
                 status code (int) : The HTTP status code.
         """
-        response = requests.get(url, headers=header, verify=verify)
+        response = requests.get(url, headers=header, verify=verify, timeout=60)
         logger.info(response)
         return response.status_code
 

@@ -1,10 +1,17 @@
 import logging
 import pytest
 import random
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import brown_squad
-from ocs_ci.framework.testlib import tier1, tier4b, polarion_id
+from ocs_ci.framework.testlib import (
+    tier1,
+    tier4b,
+    polarion_id,
+    runs_on_provider,
+    skipif_external_mode,
+)
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.node import (
     apply_node_affinity_for_ceph_toolbox,
@@ -24,14 +31,17 @@ log = logging.getLogger(__name__)
 
 
 @brown_squad
+@runs_on_provider
 class TestCephtoolboxPod:
-    @pytest.fixture(scope="session", autouse=True)
+    @pytest.fixture(scope="class", autouse=True)
     def teardown(self, request):
         def finalizer():
             """
             Finalizer will take care of below activities:
             1. Untaint the nodes: remove taints from nodes
             2. Removes nodeaffinity to bring storage cluster with default values.
+            3. Waits for all pods to be running (with extended timeout) since removing
+               placement triggers operator reconciliation and pod recreation.
 
             """
             if check_taint_on_nodes():
@@ -47,17 +57,22 @@ class TestCephtoolboxPod:
             params = '[{"op": "remove", "path": "/spec/placement/toolbox"},]'
             storagecluster_obj.patch(params=params, format_type="json")
             log.info("Patched storage cluster  back to the default")
-            assert (
-                wait_for_pods_to_be_running()
-            ), "some of the pods didn't came up running"
+            # After removing placement, operator reconciles and toolbox (and possibly
+            # other pods) may be recreated. Use longer timeout to avoid flaky teardown.
+            time.sleep(30)
+            assert wait_for_pods_to_be_running(
+                timeout=480, sleep=15
+            ), "some of the pods didn't come up running after teardown (timeout 480s)"
 
         request.addfinalizer(finalizer)
 
     @tier1
+    @skipif_external_mode
     @polarion_id("OCS-6086")
     def test_node_affinity_to_ceph_toolbox_pod(self):
         """
         This test verifies whether ceph toolbox failovered or not after applying node affinity
+        In provider-client mode, this runs in the provider cluster where toolbox exists
 
         """
         other_nodes = get_worker_node_where_ceph_toolbox_not_running()
@@ -76,6 +91,7 @@ class TestCephtoolboxPod:
         This test verifies ceph toolbox runs only on the node given in node-affinity.
         Reboot the node after applying node-affinity.
         Expectation is the pod should come up only on that node mentioned in affinity.
+        In provider-client mode, this runs in the provider cluster where toolbox exists
 
         """
         other_nodes = get_worker_node_where_ceph_toolbox_not_running()
@@ -104,7 +120,8 @@ class TestCephtoolboxPod:
     @polarion_id("OCS-6090")
     def test_nodeaffinity_to_ceph_toolbox_with_default_taints(self):
         """
-        This test verifies whether ceph toolbox failovered or not after applying node affinity on tainted node
+        This test verifies whether ceph toolbox failovered or not after applying node affinity on tainted node.
+        In provider-client mode, this runs in the provider cluster where toolbox exists.
 
         """
         worker_nodes = get_worker_nodes()

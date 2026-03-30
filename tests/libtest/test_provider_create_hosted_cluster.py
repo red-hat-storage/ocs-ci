@@ -1,3 +1,6 @@
+import types
+
+import pytest
 import logging
 import random
 
@@ -6,20 +9,26 @@ from ocs_ci.deployment.helpers.hypershift_base import (
     get_hosted_cluster_names,
     get_random_hosted_cluster_name,
 )
-from ocs_ci.deployment.hosted_cluster import (
+from ocs_ci.deployment.hub_spoke import (
     HypershiftHostedOCP,
+    HypershiftAWSHostedOCP,
     HostedODF,
     HostedClients,
 )
+from ocs_ci.deployment import hub_spoke as hs_module
+
+from ocs_ci.deployment.hub_spoke import deploy_hosted_ocp_clusters
 from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework.pytest_customization.marks import (
+    aws_platform_required,
     hci_provider_required,
     libtest,
     purple_squad,
     runs_on_provider,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import ClusterNotFoundException, CommandFailed
 from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
 from ocs_ci.utility.utils import (
     get_latest_release_version,
@@ -38,6 +47,24 @@ from ocs_ci.ocs.rados_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _ga_resolver_factory(ga_map=None, raise_for=None):
+    """
+    Returns a function suitable for monkeypatching get_ocp_ga_version.
+    - ga_map: dict of 'x.y' -> 'x.y.z'
+    - raise_for: set of 'x.y' that should raise Exception
+    """
+    ga_map = ga_map or {}
+    raise_for = set(raise_for or [])
+
+    def _resolver(xy):
+        if xy in raise_for:
+            raise RuntimeError(f"GA not found for {xy}")
+        # default behavior: append '.9' if not specified
+        return ga_map.get(xy, f"{xy}.9")
+
+    return _resolver
 
 
 @libtest
@@ -112,7 +139,7 @@ class TestProviderHosted(object):
         Test deploy hosted OCP on provider platform multiple times
         """
         logger.info("Test deploy hosted OCP on provider platform multiple times")
-        HostedClients().deploy_hosted_ocp_clusters()
+        deploy_hosted_ocp_clusters()
 
     @runs_on_provider
     @hci_provider_required
@@ -432,3 +459,471 @@ class TestProviderHosted(object):
         assert (
             metallb_installer_obj.upgrade_metallb()
         ), "Metallb operator upgrade not successful"
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            # 1: No configured version, provider GA -> QUAY:provider-x86_64
+            dict(
+                name="no_config_ga_provider",
+                cfg_ocp=None,
+                provider="4.19.9",
+                hosted="4.18.8",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.19.9-x86_64",
+            ),
+            # 2: No configured version, provider nightly -> REG:provider
+            dict(
+                name="no_config_nightly_provider",
+                cfg_ocp=None,
+                provider="4.19.0-0.nightly-2024-09-10-123456",
+                hosted="4.18.9",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.REGISTRY_SVC}:4.19.0-0.nightly-2024-09-10-123456",
+            ),
+            # 3: x.y resolves to GA, < provider, hosted < desired -> use desired GA
+            dict(
+                name="xy_lower_than_provider_use_desired",
+                cfg_ocp="4.18",
+                provider="4.19.3",
+                hosted="4.17.9",
+                ga_map={"4.18": "4.18.9"},
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.18.9-x86_64",
+            ),
+            # 4: x.y resolves to GA equal to provider -> None
+            dict(
+                name="xy_equal_provider_return_none",
+                cfg_ocp="4.18",
+                provider="4.18.9",
+                hosted="4.18.0",
+                ga_map={"4.18": "4.18.9"},
+                raise_for=None,
+                expected=lambda: None,
+            ),
+            # 5: desired xyz but hosted >= desired -> fallback to provider GA
+            dict(
+                name="xyz_hosted_greater_fallback_provider",
+                cfg_ocp="4.18.9",
+                provider="4.19.3",
+                hosted="4.18.10",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.19.3-x86_64",
+            ),
+            # 6: desired xyz and hosted < desired -> use desired
+            dict(
+                name="xyz_hosted_lower_use_desired",
+                cfg_ocp="4.18.9",
+                provider="4.19.3",
+                hosted="4.18.8",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.18.9-x86_64",
+            ),
+            # 7: GA resolver raises and desired (x.y) > provider -> None
+            dict(
+                name="ga_resolve_fails_desired_gt_provider_none",
+                cfg_ocp="4.99",
+                provider="4.19.3",
+                hosted="4.19.2",
+                ga_map=None,
+                raise_for={"4.99"},
+                expected=lambda: None,
+            ),
+            # 8: empty string -> use provider GA
+            dict(
+                name="empty_string_use_provider",
+                cfg_ocp="",
+                provider="4.19.3",
+                hosted="4.18.9",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.19.3-x86_64",
+            ),
+            # 9: whitespace -> use provider GA
+            dict(
+                name="whitespace_use_provider",
+                cfg_ocp="   ",
+                provider="4.19.3",
+                hosted="4.18.9",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.19.3-x86_64",
+            ),
+            # 10: None again -> use provider GA
+            dict(
+                name="none_use_provider_again",
+                cfg_ocp=None,
+                provider="4.19.3",
+                hosted="4.18.9",
+                ga_map=None,
+                raise_for=None,
+                expected=lambda: f"{constants.QUAY_REGISTRY_SVC}:4.19.3-x86_64",
+            ),
+        ],
+    )
+    def test_compute_target_release_image(self, monkeypatch, case):
+        """
+        Unit test for HypershiftHostedOCP._compute_target_release_image.
+
+        It:
+        - patches provider version (get_server_version)
+        - patches GA resolver (get_ocp_ga_version)
+        - injects the hosted cluster version by replacing:
+          hypershift_hosted_ocp.get_hosted_cluster_ocp_version = lambda: "<ver>"
+        - sets config.ENV_DATA["clusters"][cluster]["ocp_version"]
+        """
+        cluster = "cl-418-a"
+
+        # Prepare ENV_DATA
+        # Keep global config intact; only set the nested key needed for the test
+        clusters = ocsci_config.ENV_DATA.setdefault("clusters", {})
+        cluster_cfg = clusters.setdefault(cluster, {})
+        cluster_cfg.setdefault("cluster_type", "hci_client")
+        monkeypatch.setitem(cluster_cfg, "ocp_version", case["cfg_ocp"])
+
+        # Patch provider version
+        monkeypatch.setattr(hs_module, "get_server_version", lambda: case["provider"])
+
+        # Patch provider and GA resolver
+        monkeypatch.setattr(hs_module, "get_server_version", lambda: case["provider"])
+        ga_resolver = _ga_resolver_factory(
+            ga_map=case["ga_map"], raise_for=case["raise_for"]
+        )
+        monkeypatch.setattr(hs_module, "get_ocp_ga_version", ga_resolver)
+
+        self_stub = types.SimpleNamespace()
+        self_stub.name = cluster
+        self_stub.get_hosted_cluster_ocp_version = lambda: case["hosted"]
+
+        result = hs_module.HypershiftHostedOCP.compute_target_release_image(self_stub)
+        assert result == case["expected"]()
+
+    @runs_on_provider
+    def test_mce_upgrade(self):
+        """
+        Verify mce upgrade
+        """
+        logger.info("Verify mce upgrade")
+        from ocs_ci.deployment.mce import MCEInstaller
+
+        mce_installer_obj = MCEInstaller()
+        assert mce_installer_obj.upgrade_mce(), "MCE operator upgrade not successful"
+
+
+def _get_aws_hcp_cluster_names():
+    """
+    Get AWS HCP cluster names from configuration.
+
+    Returns:
+        list: List of AWS HCP cluster names
+    """
+    clusters = config.ENV_DATA.get("clusters", {})
+    return [
+        name
+        for name, cfg in clusters.items()
+        if cfg.get("hosted_cluster_platform") == "aws"
+    ]
+
+
+def _get_aws_hcp_instance(cluster_name=None):
+    """
+    Get HypershiftAWSHostedOCP instance for testing.
+
+    Args:
+        cluster_name (str): Optional cluster name. If not provided, uses first AWS HCP cluster.
+
+    Returns:
+        HypershiftAWSHostedOCP: Instance for AWS operations or None if not available
+    """
+    if not cluster_name:
+        aws_hcp_clusters = _get_aws_hcp_cluster_names()
+        if not aws_hcp_clusters:
+            return None
+        cluster_name = aws_hcp_clusters[0]
+
+    return HypershiftAWSHostedOCP(cluster_name)
+
+
+@libtest
+@purple_squad
+class TestAWSHCPNetworkRouting:
+    """
+    Test class for AWS HCP VPC peering and network routing functionality.
+
+    These tests verify the network routing setup between AWS HCP client clusters
+    and management clusters. Tests check if VPC peering is already established
+    and either verify the existing setup or establish new routing.
+    """
+
+    @aws_platform_required
+    def test_network_setup_exists_or_establish(self):
+        """
+        Test that network setup (VPC peering, routing, security groups) exists
+        between client and management clusters.
+
+        If network is not established and clusters are available, set it up.
+        If clusters are not available, skip the test.
+        """
+        aws_hcp_clusters = _get_aws_hcp_cluster_names()
+        if not aws_hcp_clusters:
+            pytest.skip("No AWS HCP clusters configured")
+
+        # Get the management cluster name (provider cluster)
+        mgmt_cluster_name = config.ENV_DATA.get("cluster_name")
+        if not mgmt_cluster_name:
+            pytest.skip("Management cluster name not configured")
+
+        aws_hcp = _get_aws_hcp_instance()
+        client_cluster_name = aws_hcp_clusters[0]
+
+        try:
+            client_vpc_id = aws_hcp.get_vpc_id_for_cluster(client_cluster_name)
+            mgmt_vpc_id = aws_hcp.get_mgmt_vpc_id()
+        except ValueError as e:
+            pytest.skip(f"VPCs not found for clusters: {e}")
+
+        # Check if peering already exists and is active
+        existing_peerings = aws_hcp.ec2_client.describe_vpc_peering_connections(
+            Filters=[
+                {"Name": "requester-vpc-info.vpc-id", "Values": [client_vpc_id]},
+                {"Name": "accepter-vpc-info.vpc-id", "Values": [mgmt_vpc_id]},
+                {"Name": "status-code", "Values": ["active"]},
+            ]
+        )
+
+        if existing_peerings.get("VpcPeeringConnections"):
+            pcx_id = existing_peerings["VpcPeeringConnections"][0][
+                "VpcPeeringConnectionId"
+            ]
+            logger.info(f"VPC peering already active: {pcx_id}")
+            # Verify security groups have Ceph ports
+            # This is informational - the main setup is already done
+            return
+
+        # Network not established - set it up using setup_network_for_client_cluster
+        logger.info(
+            "Network not established, setting up VPC peering, routing, and security groups"
+        )
+
+        # Find a running instance in management VPC to get security group
+        instances = aws_hcp.ec2_client.describe_instances(
+            Filters=[
+                {"Name": "vpc-id", "Values": [mgmt_vpc_id]},
+                {"Name": "instance-state-name", "Values": ["running"]},
+            ]
+        )
+
+        if not instances.get("Reservations"):
+            pytest.skip(f"No running instances found in management VPC {mgmt_vpc_id}")
+
+        mgmt_instance_id = instances["Reservations"][0]["Instances"][0]["InstanceId"]
+
+        # Setup complete network
+        result = aws_hcp.setup_network_for_client_cluster(
+            client_cluster_name=client_cluster_name,
+            mgmt_cluster_name=mgmt_cluster_name,
+            mgmt_instance_id=mgmt_instance_id,
+            nodeport=constants.NODEPORT,
+        )
+
+        logger.info(
+            f"Network setup completed:\n"
+            f"  VPC Peering: {result['pcx_id']}\n"
+            f"  Security Group: {result['mgmt_sg_id']}\n"
+            f"  Client CIDR allowed: {result['client_vpc_cidr']}"
+        )
+
+    @aws_platform_required
+    def test_security_group_ceph_ports(self):
+        """
+        Test that Ceph ports are open in security groups for AWS HCP clusters.
+
+        Checks if required Ceph ports are already configured. If not and
+        management instance is available, adds the rules.
+        """
+        aws_hcp_clusters = _get_aws_hcp_cluster_names()
+        if not aws_hcp_clusters:
+            pytest.skip("No AWS HCP clusters configured")
+
+        aws_hcp = _get_aws_hcp_instance()
+        if not aws_hcp:
+            pytest.skip("Could not create AWS HCP instance")
+
+        client_cluster_name = aws_hcp_clusters[0]
+
+        # Get client VPC CIDR
+        try:
+            client_vpc_id = aws_hcp.get_vpc_id_for_cluster(client_cluster_name)
+            client_vpc_cidr = aws_hcp.get_vpc_cidr_by_vpc_id(client_vpc_id)
+        except ValueError as e:
+            pytest.skip(f"Could not get client VPC info: {e}")
+
+        # Get management cluster info
+        mgmt_cluster_name = config.ENV_DATA.get("cluster_name")
+        if not mgmt_cluster_name:
+            pytest.skip("Management cluster name not configured")
+
+        try:
+            mgmt_vpc_id = aws_hcp.get_mgmt_vpc_id()
+        except ValueError as e:
+            pytest.skip(f"Could not get management VPC: {e}")
+
+        # Find security groups in management VPC
+        sgs = aws_hcp.ec2_client.describe_security_groups(
+            Filters=[{"Name": "vpc-id", "Values": [mgmt_vpc_id]}]
+        )
+
+        if not sgs.get("SecurityGroups"):
+            pytest.skip("No security groups found in management VPC")
+
+        # Check first security group for Ceph ports
+        sg_id = sgs["SecurityGroups"][0]["GroupId"]
+        ip_permissions = sgs["SecurityGroups"][0].get("IpPermissions", [])
+
+        ceph_ports = {
+            constants.CEPH_MON_MSGR2_PORT,
+            constants.CEPH_MON_LEGACY_PORT,
+            constants.CEPH_EXPORTER_PORT,
+        }
+        existing_ports = set()
+        for perm in ip_permissions:
+            from_port = perm.get("FromPort")
+            to_port = perm.get("ToPort")
+            if from_port and to_port and from_port == to_port:
+                existing_ports.add(from_port)
+
+        missing_ports = ceph_ports - existing_ports
+        if missing_ports:
+            logger.info(f"Missing Ceph ports: {missing_ports}, adding them")
+            aws_hcp.add_ceph_ports_to_security_group(
+                security_group_id=sg_id,
+                source_cidr=client_vpc_cidr,
+            )
+            logger.info("Ceph ports added to security group")
+        else:
+            logger.info("All Ceph ports already configured in security group")
+
+    @aws_platform_required
+    def test_network_connectivity_to_management(self):
+        """
+        Test network connectivity from client cluster to management cluster.
+
+        Uses oc debug to ping the management cluster node from client cluster.
+        Skips if clusters are not deployed or kubeconfig is not available.
+        """
+        aws_hcp_clusters = _get_aws_hcp_cluster_names()
+        if not aws_hcp_clusters:
+            pytest.skip("No AWS HCP clusters configured")
+
+        aws_hcp = _get_aws_hcp_instance()
+        if not aws_hcp:
+            pytest.skip("Could not create AWS HCP instance")
+
+        # Check if cluster kubeconfig exists
+        if not aws_hcp.cluster_kubeconfig:
+            pytest.skip("Cluster kubeconfig not available")
+
+        import os
+
+        if not os.path.exists(aws_hcp.cluster_kubeconfig):
+            pytest.skip(f"Kubeconfig not found: {aws_hcp.cluster_kubeconfig}")
+
+        # Get management cluster node IP
+        mgmt_cluster_name = config.ENV_DATA.get("cluster_name")
+        if not mgmt_cluster_name:
+            pytest.skip("Management cluster name not configured")
+
+        # Get management node private IP
+        try:
+            mgmt_node_ip = aws_hcp.get_node_private_ip()
+        except (ValueError, CommandFailed) as e:
+            pytest.skip(f"Could not get management node IP: {e}")
+
+        try:
+            result = aws_hcp.verify_network_connectivity(
+                target_ip=mgmt_node_ip,
+                timeout=10,
+            )
+            assert result, f"Network connectivity to {mgmt_node_ip} failed"
+            logger.info(
+                f"Network connectivity to management cluster ({mgmt_node_ip}) verified"
+            )
+        except CommandFailed as e:
+            pytest.fail(f"Network connectivity test failed: {e}")
+
+    @aws_platform_required
+    def test_setup_complete_network_and_verify(self):
+        """
+        Set up complete network connectivity between AWS HCP client and
+        management clusters, then verify it works.
+
+        Skips if prerequisites are not met (no clusters, no VPCs, no kubeconfig).
+        """
+        aws_hcp_clusters = _get_aws_hcp_cluster_names()
+        if not aws_hcp_clusters:
+            pytest.skip("No AWS HCP clusters configured")
+
+        client_cluster_name = aws_hcp_clusters[0]
+        aws_hcp = _get_aws_hcp_instance(client_cluster_name)
+        if not aws_hcp:
+            pytest.skip("Could not create AWS HCP instance")
+
+        aws_hcp.setup_and_verify_network(nodeport=constants.CEPH_NODE_PORT)
+
+
+@libtest
+@purple_squad
+class TestAWSHCPDestroy:
+    """
+    Test class for destroying AWS HCP clusters and cleaning up resources.
+    """
+
+    @aws_platform_required
+    def test_destroy_first_aws_hcp_cluster(self):
+        """
+        Destroy the first AWS HCP client cluster and clean up all associated
+        resources on both AWS and the management cluster.
+
+        destroy_aws_hcp_cluster() handles:
+        1. Destroy cluster via hypershift CLI
+        2. Verify/fallback infra cleanup
+        3. Manual VPC cleanup if needed
+        4. IAM roles and OIDC provider cleanup
+        5. S3 OIDC documents cleanup
+        6. VPC peering and routing cleanup
+        7. HostedCluster secrets cleanup
+        8. Management cluster resources (HostedCluster CR, NodePool CRs, namespace)
+        """
+        aws_hcp_clusters = _get_aws_hcp_cluster_names()
+        if not aws_hcp_clusters:
+            pytest.skip("No AWS HCP clusters configured")
+
+        cluster_name = aws_hcp_clusters[0]
+        logger.info(f"Destroying AWS HCP cluster: {cluster_name}")
+
+        aws_hcp = _get_aws_hcp_instance(cluster_name)
+
+        result = aws_hcp.destroy_aws_hcp_cluster()
+
+        try:
+            ocsci_config.remove_cluster_by_name(cluster_name)
+            logger.info(f"Removed '{cluster_name}' from multicluster config")
+        except (ClusterNotFoundException, KeyError, ValueError) as e:
+            logger.warning(f"Failed to remove '{cluster_name}' from config: {e}")
+
+        hc_ocp = OCP(
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=constants.CLUSTERS_NAMESPACE,
+        )
+        assert not hc_ocp.is_exist(
+            resource_name=cluster_name
+        ), f"HostedCluster '{cluster_name}' still exists after cleanup"
+
+        assert result, (
+            f"Final verification failed for '{cluster_name}': "
+            "VPC, IAM roles, or HostedCluster CR still exist in AWS/cluster"
+        )

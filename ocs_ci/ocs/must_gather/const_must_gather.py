@@ -11,6 +11,20 @@ https://github.com/openshift/ocs-operator/blob/fefc8a0e04e314801809df2e5292a20fa
 OCS4.5 Link:
 https://github.com/openshift/ocs-operator/blob/de48c9c00f8964f0f8813d7b3ddd25f7bc318449/must-gather/collection-scripts/
 
+OCS 4.20 Notes:
+
+- Significant structural changes: files now organized by API group in subdirectories
+  (e.g., apps/, core/, noobaa/, ceph/)
+- The existing os.walk() validation logic handles the new structure automatically
+- Added 33 new CEPH commands (see GATHER_COMMANDS_CEPH_4_20)
+- Added 12 new JSON commands (see GATHER_COMMANDS_JSON_4_20)
+- Deprecated commands removed via GATHER_COMMANDS_JSON_4_20_EXCLUDE:
+  * ceph_osd_blacklist_ls replaced by ceph_osd_blocklist_ls (terminology change)
+  * ceph_balancer_pool_ls no longer collected
+  * ceph_progress_json replaced by formatted version
+- Old NooBaa PostgreSQL files excluded via GATHER_COMMANDS_OTHERS_EXCLUDE_4_20
+  (NooBaa migrated to CNPG in 4.20)
+
 """
 
 from ocs_ci.framework import config
@@ -722,6 +736,78 @@ GATHER_COMMANDS_OTHERS_4_10 = [
     "odf-operator.yaml",
 ]
 
+# New commands added in 4.20
+GATHER_COMMANDS_CEPH_4_20 = [
+    "ceph-volume_raw_list",
+    "ceph_fs_subvolume_ls_ocs-storagecluster-cephfilesystem_csi",
+    "ceph_healthcheck_history_ls",
+    "ceph_log_last_10000_debug_audit",
+    "ceph_log_last_10000_debug_cluster",
+    "ceph_progress",
+    "ceph_progress_json",
+    "ceph_rbd_task_list",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_client_ls",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_damage_ls",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_dump_blocked_ops",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_dump_historic_ops",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_dump_ops_in_flight",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_session_ls",
+    "cephfs_subvol_and_snap_info",
+    "rados_cephfs_objects",
+    "rados_ls_--pool=ocs-storagecluster-cephblockpool",
+    "rados_ls_--pool=ocs-storagecluster-cephfilesystem-metadata_--namespace=csi",
+    "rados_lspools",
+    "rados_rbd_objects_ocs-storagecluster-cephblockpool",
+    "rbd_ls_ocs-storagecluster-cephblockpool",
+    "rbd_mirror_group_snapshot_schedule_ls",
+    "rbd_mirror_group_snapshot_schedule_status",
+    "rbd_mirror_image_status_ocs-storagecluster-cephblockpool",
+    "rbd_mirror_pool_info_builtin-mgr",
+    "rbd_mirror_pool_info_ocs-storagecluster-cephblockpool",
+    "rbd_mirror_pool_status_builtin-mgr",
+    "rbd_mirror_pool_status_ocs-storagecluster-cephblockpool",
+    "rbd_mirror_snapshot_schedule_ls",
+    "rbd_mirror_snapshot_schedule_status",
+    "rbd_trash_ls_ocs-storagecluster-cephblockpool",
+    "rbd_vol_and_snap_info_builtin-mgr",
+    "rbd_vol_and_snap_info_ocs-storagecluster-cephblockpool",
+]
+
+# New JSON commands added in 4.20
+# Note: blacklist→blocklist terminology change in ceph_osd commands
+GATHER_COMMANDS_JSON_4_20 = [
+    "ceph_fs_subvolume_ls_ocs-storagecluster-cephfilesystem_csi_--format_json-pretty",
+    "ceph_healthcheck_history_ls_--format_json-pretty",
+    "ceph_log_last_10000_debug_audit_--format_json-pretty",
+    "ceph_log_last_10000_debug_cluster_--format_json-pretty",
+    "ceph_osd_blocklist_ls_--format_json-pretty",
+    "ceph_rbd_task_list_--format_json-pretty",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_client_ls_--format_json-pretty",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_damage_ls_--format_json-pretty",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_dump_blocked_ops_--format_json-pretty",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_dump_historic_ops_--format_json-pretty",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_dump_ops_in_flight_--format_json-pretty",
+    "ceph_tell_mds.ocs-storagecluster-cephfilesystem:0_session_ls_--format_json-pretty",
+]
+
+# Commands removed/deprecated in 4.20
+GATHER_COMMANDS_JSON_4_20_EXCLUDE = [
+    "ceph_balancer_pool_ls_--format_json-pretty",
+    "ceph_osd_blacklist_ls_--format_json-pretty",
+    "ceph_progress_json",
+]
+
+# OTHERS files removed in 4.20 due to NooBaa migration to CNPG (CloudNativePG)
+# Old PostgreSQL pod files replaced by CNPG cluster files
+GATHER_COMMANDS_OTHERS_EXCLUDE_4_20 = [
+    "noobaa-db-pg-0-pod-describe.txt",
+    "db-noobaa-db-pg-0.yaml",
+    "noobaa-db-pg-0.log",
+    "db-noobaa-db-pg-0-pvc-describe.txt",
+    "noobaa-db-pg-0-db.log",
+    "noobaa-db-pg-0.yaml",
+]
+
 GATHER_COMMANDS_OTHERS_EXTERNAL = GATHER_COMMANDS_OTHERS + [
     "ocs-external-storagecluster-ceph-rbd.yaml",
     "ocs-external-storagecluster-ceph-rgw.yaml",
@@ -1073,6 +1159,43 @@ GATHER_COMMANDS_VERSION = {
             - set(
                 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
                 + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+            )
+        ),
+        "OTHERS_MANAGED_SERVICES": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE)
+        ),
+        "OTHERS_EXTERNAL": list(
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
+            - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+        ),
+    },
+    4.20: {
+        "CEPH": GATHER_COMMANDS_CEPH
+        + GATHER_COMMANDS_CEPH_4_7
+        + GATHER_COMMANDS_CEPH_4_20,
+        "JSON": list(
+            set(
+                GATHER_COMMANDS_JSON
+                + GATHER_COMMANDS_JSON_4_7
+                + GATHER_COMMANDS_JSON_4_20
+            )
+            - set(GATHER_COMMANDS_JSON_4_20_EXCLUDE)
+        ),
+        "OTHERS": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(
+                GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_20
             )
         ),
         "OTHERS_MANAGED_SERVICES": list(
