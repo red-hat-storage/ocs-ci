@@ -426,15 +426,16 @@ def get_autodistributed_volumegroup_snapshot_classes():
     Get the list of VolumeGroupSnapshotClasses that were provisioned by ODF
 
     Returns:
-        list: List of VolumeGroupSnapshotClass names that were provisioned by ODF
+        list: List of VolumeGroupSnapshotClass names that were created by ODF
 
     """
     groupsnapshot_class = OCP(
-        kind=constants.VOLUMESNAPSHOTCLASS,
+        kind=constants.VOLUMEGROUPSNAPSHOTCLASS,
         namespace=config.ENV_DATA["cluster_namespace"],
     )
     groupsnapshot_classes = groupsnapshot_class.get()
-    # filter only those that were provisioned by ODF
+
+    # Filter VolumeGroupSnapshotClass by ODF
     groupsnapshot_classes["items"] = [
         item
         for item in groupsnapshot_classes["items"]
