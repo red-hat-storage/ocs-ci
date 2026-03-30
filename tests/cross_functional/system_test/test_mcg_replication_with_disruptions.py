@@ -141,8 +141,6 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Uni-directional bucket replication working as expected")
-        import pdb 
-        pdb.set_trace()
 
         # change from uni-directional to bi-directional replication policy
         logger.info("Changing the replication policy from uni to bi-directional!")

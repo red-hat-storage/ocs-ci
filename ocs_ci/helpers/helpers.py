@@ -4709,9 +4709,7 @@ def get_noobaa_db_used_space():
 
     """
     noobaa_db_pod_obj = pod.get_noobaa_pods(
-
         noobaa_label=constants.NOOBAA_DB_LABEL_46_AND_UNDER
-
     )
     cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
         command="df -h /var/lib/pgsql/", out_yaml_format=False
@@ -5287,15 +5285,7 @@ def get_architecture_path(cli_type):
         elif machine == "s390x":
             path = os.path.join(path, f"{image_prefix}-s390x")
     elif system == "Darwin":  # Mac
-        path = os.path.join(path, "macosx")
-        # macOS binaries are architecture-specific (noobaa-amd64, noobaa-arm64)
-        if machine == "arm64":
-            path = os.path.join(path, f"{image_prefix}-arm64")
-        elif machine == "x86_64":
-            path = os.path.join(path, f"{image_prefix}-amd64")
-        else:
-            # Fallback to generic name for unknown architectures
-            path = os.path.join(path, image_prefix)
+        path = os.path.join(path, "macosx", image_prefix)
     return path
 
 
