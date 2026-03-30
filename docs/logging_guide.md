@@ -29,6 +29,63 @@ logger = logging.getLogger(__name__)
 
 The framework automatically provides a custom `OCSCILogger` with extended log levels.
 
+**Important:** The logger creation statement should be placed **immediately after import statements**, before any other code.
+
+#### Best Practice
+
+```python
+# test_example.py
+import logging
+import pytest
+from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.ocs.resources.pvc import create_pvc
+
+logger = logging.getLogger(__name__)  # First line after imports
+
+
+@tier1
+class TestExample(ManageTest):
+    """Example test class"""
+
+    def test_something(self):
+        logger.info("Test starting")
+        # Test code here
+```
+
+#### Why Use `__name__`?
+
+Using `logging.getLogger(__name__)` creates a logger named after the module (e.g., `tests.functional.test_pvc` or `ocs_ci.helpers.helpers`). This:
+- Creates a hierarchical logger structure
+- Makes it easy to filter logs by module
+- Helps identify the source of log messages
+- Follows Python logging best practices
+
+#### What NOT to Do
+
+```python
+# ❌ Wrong: Using a custom string
+logger = logging.getLogger("my_logger")
+
+# ❌ Wrong: Getting the root logger
+logger = logging.getLogger()
+
+# ❌ Wrong: Creating logger inside functions
+def my_function():
+    logger = logging.getLogger(__name__)  # Creates logger on every call
+    logger.info("Message")
+
+# ❌ Wrong: Placing logger creation after other code
+import logging
+from ocs_ci.framework.testlib import tier1
+
+CONSTANT = "value"
+
+def helper_function():
+    return "data"
+
+logger = logging.getLogger(__name__)  # Should be right after imports
+```
+
 ### Available Log Levels
 
 From highest to lowest severity:
