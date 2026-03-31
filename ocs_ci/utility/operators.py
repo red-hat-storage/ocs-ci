@@ -604,7 +604,7 @@ class OADPOperator(Operator):
         self.name = constants.OADP_OPERATOR_NAME
         ocp_version = get_semantic_ocp_version_from_config()
         self.unreleased_catalog_image_tag: str = (
-            f"oadp-{config.ENV_DATA.get('oadp_version')}__{ocp_version}__oadp-rhel9-operator"
+            f"oadp-{config.ENV_DATA.get('oadp_version')}__v{ocp_version}__oadp-rhel9-operator"
         )
         self.unreleased_images = [
             "registry.redhat.io/oadp/oadp-mustgather-rhel9",
