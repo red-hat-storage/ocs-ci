@@ -636,7 +636,6 @@ class OADPOperator(Operator):
         }
         operatorgroup_data["metadata"]["name"] = self.name
         operatorgroup_data["metadata"]["namespace"] = self.namespace
-        # metallb does not support InstallMode OwnNamespace
         operatorgroup_data["spec"]["targetNamespaces"] = [self.namespace]
 
     def _deployment_verification(self):
