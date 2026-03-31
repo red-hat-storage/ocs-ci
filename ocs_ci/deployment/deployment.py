@@ -705,6 +705,14 @@ class Deployment(object):
                         logger.warning(
                             f"OADP operator not availabe - bringing up unreleased content {ex}!"
                         )
+                        if config.MULTICLUSTER["acm_cluster"]:
+                            run_cmd(
+                                f"oc -n {constants.ACM_HUB_NAMESPACE} annotate mch multiclusterhub "
+                                f"installer.open-cluster-management.io"
+                                f'/oadp-subscription-spec=\'{{"source": "{constants.OADP_CATALOG_NAME}"}}\' --overwrite'
+                            )
+                            logger.info("Skipping oadp subscription for ACM hub")
+                            continue
                         oadp_operator = OADPOperator(create_catalog=True)
                         oadp_operator.deploy()
 
