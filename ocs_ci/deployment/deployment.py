@@ -160,7 +160,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
 from ocs_ci.utility.multicluster import create_mce_catsrc
-from ocs_ci.utility.operators import NMStateOperator
+from ocs_ci.utility.operators import NMStateOperator, OADPOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -172,7 +172,6 @@ from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
-    create_unreleased_oadp_catalog,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -666,52 +665,49 @@ class Deployment(object):
                             raise ResourceNotFoundError(
                                 f"Didn't find OADP {required_oadp_version}"
                             )
+                        oadp_default_channel = package_manifest.get_default_channel()
+                        if config.MULTICLUSTER["acm_cluster"]:
+                            logger.info("Skipping oadp subscription for ACM hub")
+                            continue
+
+                        oadp_subscription_yaml_data["spec"][
+                            "channel"
+                        ] = oadp_default_channel
+                        oadp_subscription_manifest = tempfile.NamedTemporaryFile(
+                            mode="w+", prefix="oadp_subscription_manifest", delete=False
+                        )
+                        templating.dump_data_to_temp_yaml(
+                            oadp_subscription_yaml_data, oadp_subscription_manifest.name
+                        )
+                        run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
+                        self.wait_for_subscription(
+                            constants.OADP_OPERATOR_NAME,
+                            namespace=constants.OADP_NAMESPACE,
+                        )
+                        logger.info(
+                            "Sleeping for 120 seconds after subscribing to OADP Operator"
+                        )
+                        time.sleep(120)
+                        oadp_subscriptions = ocp.OCP(
+                            kind=constants.SUBSCRIPTION_WITH_ACM,
+                            resource_name=constants.OADP_OPERATOR_NAME,
+                            namespace=constants.OADP_NAMESPACE,
+                        ).get()
+                        oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
+                        csv = CSV(
+                            resource_name=oadp_csv_name,
+                            namespace=constants.OADP_NAMESPACE,
+                        )
+                        csv.wait_for_phase("Succeeded", timeout=720)
+                        logger.info("OADP Operator Deployment Succeeded")
 
                     except ResourceNotFoundError as ex:
                         logger.warning(
                             f"OADP operator not availabe - bringing up unreleased content {ex}!"
                         )
-                        create_unreleased_oadp_catalog()
-                        package_manifest = PackageManifest(
-                            resource_name=constants.OADP_OPERATOR_NAME,
-                            selector=f"catalog={constants.OADP_CATALOG_NAME}",
-                        )
-                        oadp_subscription_yaml_data["spec"][
-                            "source"
-                        ] = constants.OADP_CATALOG_NAME
-                    oadp_default_channel = package_manifest.get_default_channel()
-                    if config.MULTICLUSTER["acm_cluster"]:
-                        logger.info("Skipping oadp subscription for ACM hub")
-                        continue
+                        oadp_operator = OADPOperator(create_catalog=True)
+                        oadp_operator.deploy()
 
-                    oadp_subscription_yaml_data["spec"][
-                        "channel"
-                    ] = oadp_default_channel
-                    oadp_subscription_manifest = tempfile.NamedTemporaryFile(
-                        mode="w+", prefix="oadp_subscription_manifest", delete=False
-                    )
-                    templating.dump_data_to_temp_yaml(
-                        oadp_subscription_yaml_data, oadp_subscription_manifest.name
-                    )
-                    run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
-                    self.wait_for_subscription(
-                        constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
-                    )
-                    logger.info(
-                        "Sleeping for 120 seconds after subscribing to OADP Operator"
-                    )
-                    time.sleep(120)
-                    oadp_subscriptions = ocp.OCP(
-                        kind=constants.SUBSCRIPTION_WITH_ACM,
-                        resource_name=constants.OADP_OPERATOR_NAME,
-                        namespace=constants.OADP_NAMESPACE,
-                    ).get()
-                    oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
-                    csv = CSV(
-                        resource_name=oadp_csv_name, namespace=constants.OADP_NAMESPACE
-                    )
-                    csv.wait_for_phase("Succeeded", timeout=720)
-                    logger.info("OADP Operator Deployment Succeeded")
                     if cluster.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
                         apply_oadp_workaround(namespace=constants.OADP_NAMESPACE)
 

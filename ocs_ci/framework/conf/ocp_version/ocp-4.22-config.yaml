@@ -19,4 +19,4 @@ ENV_DATA:
   submariner_source: "downstream"
   submariner_release_type: "unreleased"
   acm_hub_unreleased: true
-  oadp_version: "1.5"
+  oadp_version: "1.6"
