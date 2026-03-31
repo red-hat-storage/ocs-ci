@@ -123,11 +123,12 @@ class TestRDRBugVerification:
                on the secondary cluster after relocate.
         """
         rdr_workload = dr_workload(
-            num_of_subscription=0,
+            num_of_subscription=1,
             num_of_appset=1,
             pvc_interface=constants.CEPHFILESYSTEM,
         )
-        workload = rdr_workload[0]
+        # rdr_workload[0] is the Subscription workload, [1] is the ApplicationSet
+        workload = rdr_workload[1]
 
         drpc_obj = DRPC(
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
