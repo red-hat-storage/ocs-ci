@@ -378,13 +378,18 @@ def relocate(
 
 
 def check_mirroring_status_ok(
-    replaying_images=None, cephblockpoolradosns=None, storageclient_uid=None
+    replaying_images=None,
+    replaying_groups=None,
+    cephblockpoolradosns=None,
+    storageclient_uid=None,
 ):
     """
-    Check if mirroring status has health OK and expected number of replaying images
+    Check if mirroring status has health OK and expected number of replaying images and groups.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
         cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
         storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
             Applicable for provider - client configuration.
@@ -475,16 +480,32 @@ def check_mirroring_status_ok(
                 )
             return False
 
+    if is_cg_enabled():
+        if replaying_groups is not None:
+            current_replaying_groups = mirroring_status.get("group_states", {}).get(
+                "replaying"
+            )
+            if current_replaying_groups != replaying_groups:
+                logger.warning(
+                    f"Unexpected replaying groups. Current: {current_replaying_groups}, "
+                    f"expected: {replaying_groups}"
+                )
+                return False
+
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
+def wait_for_mirroring_status_ok(
+    replaying_images=None, replaying_groups=None, timeout=900
+):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
-    images for each of the ODF cluster
+    images and groups for each of the ODF cluster.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
         timeout (int): time in seconds to wait for mirroring status reach OK
 
     Returns:
@@ -505,6 +526,7 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
             sleep=5,
             func=check_mirroring_status_ok,
             replaying_images=replaying_images,
+            replaying_groups=replaying_groups,
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
@@ -1564,7 +1586,14 @@ def verify_last_group_sync_time(
                 "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
             )
     else:
-        last_group_sync_time = drpc_obj.get_last_group_sync_time()
+        logger.info("Waiting for lastGroupSyncTime to be set")
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
+                break
+            logger.info("lastGroupSyncTime not yet set, retrying...")
 
     # Verify lastGroupSyncTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
