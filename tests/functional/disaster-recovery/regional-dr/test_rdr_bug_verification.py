@@ -3,9 +3,11 @@ import json
 import logging
 import re
 from datetime import datetime
+from time import sleep
 
 import pytest
 
+from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.framework.testlib import tier1
@@ -15,15 +17,16 @@ from ocs_ci.helpers.ceph_helpers import (
     wait_for_mon_status,
     wait_for_mons_in_quorum,
 )
-from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.utility import version
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_deployments_having_label
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.resources.storage_cluster import ceph_mon_dump
 from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
+from ocs_ci.utility import version
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +87,189 @@ class TestRDRBugVerification:
     Automated bug verification tests for Regional Disaster Recovery.
     Each test method targets a specific bug fix to prevent regressions.
     """
+
+    # --- DFBUGS-5285 ---
+    # Custom annotations added to PVCs on the primary cluster before failover.
+    # After failover and relocate, both the destination PVCs and the secondary
+    # VRG spec.volSync.rdSpec[*].protectedPVC.annotations must carry these.
+    _DFBUGS_5285_ANNOTATIONS = {
+        "dfbugs-5285-test-key-1": "dfbugs-5285-test-value-1",
+        "dfbugs-5285-test-key-2": "dfbugs-5285-test-value-2",
+    }
+
+    @pytest.mark.polarion_id("OCS-7803")
+    def test_pvc_annotations_preserved_after_relocate(self, dr_workload):
+        """
+        Verify that PVC annotations on CephFS volumes are preserved across a
+        full failover + relocate cycle in Regional DR.
+
+        Bug: Annotations are missing in the destination cluster after relocate
+        process for CephFS volumes.
+        ref: https://redhat.atlassian.net/browse/DFBUGS-5285
+
+        Steps:
+            1. Deploy a CephFS ApplicationSet workload.
+            2. Add custom test annotations to every PVC on the primary cluster.
+            3. Wait for a full sync cycle so the VRG captures the annotated
+               PVC metadata.
+            4. Perform failover to the secondary cluster.
+            5. Verify annotations are present on PVCs at the failover
+               destination (secondary cluster).
+            6. Perform relocate back to the primary cluster.
+            7. Verify annotations are present on PVCs at the relocate
+               destination (primary cluster).
+            8. Verify annotations are present in
+               spec.volSync.rdSpec[*].protectedPVC.annotations of the VRG
+               on the secondary cluster after relocate.
+        """
+        rdr_workload = dr_workload(
+            num_of_subscription=0,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHFILESYSTEM,
+        )
+        workload = rdr_workload[0]
+
+        drpc_obj = DRPC(
+            namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+            resource_name=f"{workload.appset_placement_name}-drpc",
+        )
+
+        primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
+            workload.workload_namespace,
+            workload.workload_type,
+        )
+        secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
+            workload.workload_namespace,
+            workload.workload_type,
+        )
+
+        scheduling_interval = dr_helpers.get_scheduling_interval(
+            workload.workload_namespace,
+            workload.workload_type,
+        )
+        wait_time = 2 * scheduling_interval  # minutes
+
+        # --- Step 1: Wait for initial sync ---
+        logger.info(
+            f"Waiting {wait_time} minutes for initial sync before adding annotations"
+        )
+        sleep(wait_time * 60)
+        dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
+
+        # --- Step 2: Add custom annotations to all PVCs on the primary cluster ---
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        logger.info(
+            f"Adding test annotations to PVCs in {workload.workload_namespace} "
+            f"on primary cluster {primary_cluster_name}"
+        )
+        ocp_pvc = ocp.OCP(
+            kind=constants.PVC, namespace=workload.workload_namespace
+        )
+        pvc_objs = get_all_pvc_objs(namespace=workload.workload_namespace)
+        assert pvc_objs, (
+            f"No PVCs found in namespace {workload.workload_namespace} "
+            f"on primary cluster {primary_cluster_name}"
+        )
+        pvc_names = [pvc.name for pvc in pvc_objs]
+        logger.info(f"PVCs to annotate: {pvc_names}")
+
+        for pvc_name in pvc_names:
+            for key, value in self._DFBUGS_5285_ANNOTATIONS.items():
+                ocp_pvc.annotate(
+                    annotation=f"{key}={value}", resource_name=pvc_name
+                )
+        logger.info(
+            f"Added annotations {list(self._DFBUGS_5285_ANNOTATIONS.keys())} "
+            f"to PVCs: {pvc_names}"
+        )
+
+        # --- Step 3: Wait for sync to replicate updated PVC annotations ---
+        logger.info(
+            f"Waiting {wait_time} minutes for sync to capture annotated PVC metadata"
+        )
+        sleep(wait_time * 60)
+        dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
+
+        # --- Step 4: Failover to secondary cluster ---
+        logger.info(
+            f"Initiating failover to secondary cluster: {secondary_cluster_name}"
+        )
+        dr_helpers.failover(
+            failover_cluster=secondary_cluster_name,
+            namespace=workload.workload_namespace,
+            workload_type=workload.workload_type,
+            workload_placement_name=workload.appset_placement_name,
+        )
+
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        dr_helpers.wait_for_all_resources_creation(
+            workload.workload_pvc_count,
+            workload.workload_pod_count,
+            workload.workload_namespace,
+        )
+
+        # --- Step 5: Verify PVC annotations on secondary cluster after failover ---
+        logger.info(
+            f"Verifying PVC annotations on secondary cluster "
+            f"{secondary_cluster_name} after failover"
+        )
+        self._verify_annotations(
+            resource_type=constants.PVC,
+            namespace=workload.workload_namespace,
+            expected_pvc_names=pvc_names,
+            expected_annotations=self._DFBUGS_5285_ANNOTATIONS,
+            cluster_name=secondary_cluster_name,
+            operation="failover",
+        )
+
+        # --- Step 6: Relocate back to primary cluster ---
+        logger.info(
+            f"Initiating relocate back to primary cluster: {primary_cluster_name}"
+        )
+        dr_helpers.relocate(
+            preferred_cluster=primary_cluster_name,
+            namespace=workload.workload_namespace,
+            workload_type=workload.workload_type,
+            workload_placement_name=workload.appset_placement_name,
+        )
+
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        dr_helpers.wait_for_all_resources_creation(
+            workload.workload_pvc_count,
+            workload.workload_pod_count,
+            workload.workload_namespace,
+        )
+
+        # --- Step 7: Verify PVC annotations on primary cluster after relocate ---
+        logger.info(
+            f"Verifying PVC annotations on primary cluster "
+            f"{primary_cluster_name} after relocate"
+        )
+        self._verify_annotations(
+            resource_type=constants.PVC,
+            namespace=workload.workload_namespace,
+            expected_pvc_names=pvc_names,
+            expected_annotations=self._DFBUGS_5285_ANNOTATIONS,
+            cluster_name=primary_cluster_name,
+            operation="relocate",
+        )
+
+        # --- Step 8: Verify annotations in VRG on secondary cluster ---
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        vrg_name = f"{workload.appset_placement_name}-drpc"
+        logger.info(
+            f"Verifying VRG '{vrg_name}' spec.volSync.rdSpec[*].protectedPVC"
+            f".annotations on secondary cluster {secondary_cluster_name} "
+            f"after relocate"
+        )
+        self._verify_annotations(
+            resource_type=constants.VOLUME_REPLICATION_GROUP,
+            namespace=workload.workload_namespace,
+            expected_pvc_names=pvc_names,
+            expected_annotations=self._DFBUGS_5285_ANNOTATIONS,
+            cluster_name=secondary_cluster_name,
+            vrg_name=vrg_name,
+        )
 
     # --- DFBUGS-4801 ---
     @pytest.mark.polarion_id("OCS-7802")
@@ -397,6 +583,103 @@ class TestRDRBugVerification:
     # -------------------------------------------------------------------------
     # Shared helpers
     # -------------------------------------------------------------------------
+
+    def _verify_annotations(
+        self,
+        resource_type,
+        namespace,
+        expected_pvc_names,
+        expected_annotations,
+        cluster_name,
+        operation=None,
+        vrg_name=None,
+    ):
+        """
+        Assert that all expected annotations are present for each PVC name,
+        for either PVC resources or VRG spec.volSync.rdSpec entries.
+
+        Args:
+            resource_type (str): constants.PVC or
+                constants.VOLUME_REPLICATION_GROUP
+            namespace (str): Workload namespace
+            expected_pvc_names (list): PVC names that must be verified
+            expected_annotations (dict): key-value annotations that must exist
+            cluster_name (str): Cluster being checked (for logging/errors)
+            operation (str): DR operation just completed (for logging/errors)
+            vrg_name (str): VRG resource name; required when resource_type is
+                constants.VOLUME_REPLICATION_GROUP
+
+        Raises:
+            AssertionError: If any annotation is missing or has the wrong value
+        """
+        context = f"after {operation}" if operation else ""
+
+        if resource_type == constants.PVC:
+            pvc_objs = get_all_pvc_objs(namespace=namespace)
+            logger.info(
+                f"PVCs on {cluster_name} {context}: "
+                f"{[p.name for p in pvc_objs]}"
+            )
+            annotations_by_pvc = {
+                pvc.name: pvc.get().get("metadata", {}).get("annotations", {})
+                for pvc in pvc_objs
+                if pvc.name in expected_pvc_names
+            }
+            resource_label = "PVC annotations"
+        else:
+            assert vrg_name, (
+                "vrg_name is required when resource_type is "
+                "VOLUME_REPLICATION_GROUP"
+            )
+            vrg_obj = ocp.OCP(
+                kind=constants.VOLUME_REPLICATION_GROUP,
+                namespace=namespace,
+            )
+            vrg_data = vrg_obj.get(resource_name=vrg_name)
+            assert vrg_data, (
+                f"VRG {vrg_name!r} not found in namespace {namespace!r} "
+                f"on cluster {cluster_name}"
+            )
+            rd_specs = (
+                vrg_data.get("spec", {}).get("volSync", {}).get("rdSpec", [])
+            )
+            assert rd_specs, (
+                f"VRG {vrg_name!r} has no spec.volSync.rdSpec entries "
+                f"on cluster {cluster_name} {context}"
+            )
+            annotations_by_pvc = {
+                rd.get("protectedPVC", {})
+                .get("name", ""): rd.get("protectedPVC", {})
+                .get("annotations", {})
+                for rd in rd_specs
+            }
+            logger.info(
+                f"VRG rdSpec PVCs found: {list(annotations_by_pvc.keys())}"
+            )
+            resource_label = (
+                "VRG spec.volSync.rdSpec[*].protectedPVC.annotations"
+            )
+
+        missing = {}
+        for pvc_name in expected_pvc_names:
+            actual = annotations_by_pvc.get(pvc_name, {})
+            for key, value in expected_annotations.items():
+                if actual.get(key) != value:
+                    missing.setdefault(pvc_name, []).append(
+                        f"{key}={value!r} (found: {actual.get(key)!r})"
+                    )
+
+        assert not missing, (
+            f"{resource_label} missing on cluster {cluster_name!r} {context}:\n"
+            + "\n".join(
+                f"  PVC {name}: {', '.join(msgs)}"
+                for name, msgs in missing.items()
+            )
+        )
+        logger.info(
+            f"All expected {resource_label} verified on "
+            f"{cluster_name} {context}"
+        )
 
     def _get_rook_managed_field_time(self, secret_data):
         """
