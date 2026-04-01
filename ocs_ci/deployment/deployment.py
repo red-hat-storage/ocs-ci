@@ -296,7 +296,7 @@ class Deployment(object):
                 try:
                     if (
                         version.get_semantic_ocp_version_from_config()
-                        > version.VERSION_4_21
+                        >= version.VERSION_4_21
                     ):
                         logger.info(
                             "setting environment variable OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY to true"
