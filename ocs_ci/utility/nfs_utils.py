@@ -865,7 +865,6 @@ def fetch_nfs_server_details_on_client_cluster(default_server=False):
             )
             return server
 
-
 def get_file_checksum_from_nfs(con, file_path):
     """
     Get MD5 checksum for a file on NFS mount (out-of-cluster).
