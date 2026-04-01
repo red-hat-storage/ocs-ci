@@ -703,7 +703,7 @@ class Deployment(object):
 
                     except ResourceNotFoundError as ex:
                         logger.warning(
-                            f"OADP operator not availabe - bringing up unreleased content {ex}!"
+                            f"OADP operator not available - bringing up unreleased content {ex}!"
                         )
                         if config.MULTICLUSTER["acm_cluster"]:
                             run_cmd(
