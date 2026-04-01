@@ -3459,7 +3459,10 @@ class MultiClusterDROperatorsDeploy(object):
             else:
                 expected_phase = "ExchangingSecret"
         elif config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
-            expected_phase = "Ready"
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                expected_phase = "Ready"
+            else:
+                expected_phase = "S3ProfileSynced"
 
         try:
             # Need high timeout in case of MDR
