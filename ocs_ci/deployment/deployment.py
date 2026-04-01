@@ -637,25 +637,25 @@ class Deployment(object):
                             f"Found {constants.OADP_OPERATOR_NAME} skipping creation"
                         )
                         continue
-                    logger.info("Creating Namespace")
-                    # creating Namespace and operator group for cert-manager
-                    logger.info(
-                        "Creating namespace and operator group for Openshift-oadp"
-                    )
-                    run_cmd(f"oc apply -f {constants.OADP_NS_YAML}")
-                    logger.info("Creating OADP Operator Subscription")
-                    oadp_subscription_yaml_data = templating.load_yaml(
-                        constants.OADP_SUBSCRIPTION_YAML
-                    )
                     package_manifest = PackageManifest(
                         resource_name=constants.OADP_OPERATOR_NAME,
                         selector="catalog=redhat-operators",
                     )
                     try:
+
                         pm_data = package_manifest.get()
                         pm_list = pm_data if isinstance(pm_data, list) else [pm_data]
                         required_oadp_version = config.ENV_DATA["oadp_version"]
-
+                        logger.info("Creating Namespace")
+                        # creating Namespace and operator group for cert-manager
+                        logger.info(
+                            "Creating namespace and operator group for Openshift-oadp"
+                        )
+                        run_cmd(f"oc apply -f {constants.OADP_NS_YAML}")
+                        logger.info("Creating OADP Operator Subscription")
+                        oadp_subscription_yaml_data = templating.load_yaml(
+                            constants.OADP_SUBSCRIPTION_YAML
+                        )
                         if not any(
                             version_exist(pm, required_oadp_version)
                             and pm.get("status", {}).get("catalogSource")
