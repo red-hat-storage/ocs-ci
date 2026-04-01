@@ -3816,6 +3816,7 @@ CEPHFS_CSI_ADDONS_PLUGIN_DIR = (
     "/var/lib/kubelet/plugins/openshift-storage.cephfs.csi.ceph.com"
 )
 RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
+HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"
 CEPHFS_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
 
 HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"

@@ -11,6 +11,7 @@ import yaml
 
 from subprocess import TimeoutExpired
 
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
@@ -32,7 +33,12 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
+
+from ocs_ci.ocs.utils import (
+    get_primary_cluster_config,
+    get_non_acm_cluster_config,
+    get_non_acm_cluster_and_non_provider_cluster_config,
+)
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import clone_repo, run_cmd, TimeoutSampler
 
@@ -92,6 +98,27 @@ class BusyBox(DRWorkload):
             for cluster in dr_helpers.get_all_drclusters()
             if cluster != self.preferred_primary_cluster
         ][0]
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            # dr_cluster_relations is a list containing cluster pairs list
+            dr_cluster_names = dr_cluster_relations[0]
+            self.preferred_secondary_cluster = [
+                cluster_name
+                for cluster_name in dr_cluster_names
+                if cluster_name != self.preferred_primary_cluster
+            ][0]
+            if is_hosted_cluster(self.preferred_primary_cluster):
+                self.preferred_primary_cluster = (
+                    constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                    + "-"
+                    + self.preferred_primary_cluster
+                )
+            if is_hosted_cluster(self.preferred_secondary_cluster):
+                self.preferred_secondary_cluster = (
+                    constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                    + "-"
+                    + self.preferred_secondary_cluster
+                )
         self.target_clone_dir = config.ENV_DATA.get(
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
@@ -695,6 +722,27 @@ class BusyBox_AppSet(DRWorkload):
         self.preferred_primary_cluster = config.ENV_DATA.get(
             "preferred_primary_cluster"
         ) or (get_primary_cluster_config().ENV_DATA["cluster_name"])
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            # dr_cluster_relations is a list containing cluster pairs list
+            dr_cluster_names = dr_cluster_relations[0]
+            self.preferred_secondary_cluster = [
+                cluster_name
+                for cluster_name in dr_cluster_names
+                if cluster_name != self.preferred_primary_cluster
+            ][0]
+            if is_hosted_cluster(self.preferred_primary_cluster):
+                self.preferred_primary_cluster = (
+                    constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                    + "-"
+                    + self.preferred_primary_cluster
+                )
+            if is_hosted_cluster(self.preferred_secondary_cluster):
+                self.preferred_secondary_cluster = (
+                    constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                    + "-"
+                    + self.preferred_secondary_cluster
+                )
         self.target_clone_dir = config.ENV_DATA.get(
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
@@ -885,7 +933,7 @@ class BusyBox_AppSet(DRWorkload):
         """
 
         self.check_pod_pvc_status(skip_replication_resources=False)
-
+        config.switch_acm_ctx()
         appset_resource_name = (
             self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
         )
@@ -1389,6 +1437,27 @@ class BusyboxDiscoveredApps(DRWorkload):
         self.preferred_primary_cluster = kwargs.get("preferred_primary_cluster") or (
             get_primary_cluster_config().ENV_DATA["cluster_name"]
         )
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            # dr_cluster_relations is a list containing cluster pairs list
+            dr_cluster_names = dr_cluster_relations[0]
+            self.preferred_secondary_cluster = [
+                cluster_name
+                for cluster_name in dr_cluster_names
+                if cluster_name != self.preferred_primary_cluster
+            ][0]
+            if is_hosted_cluster(self.preferred_primary_cluster):
+                self.preferred_primary_cluster = (
+                    constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                    + "-"
+                    + self.preferred_primary_cluster
+                )
+            if is_hosted_cluster(self.preferred_secondary_cluster):
+                self.preferred_secondary_cluster = (
+                    constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                    + "-"
+                    + self.preferred_secondary_cluster
+                )
         self.workload_dir = kwargs.get("workload_dir")
 
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
@@ -1440,7 +1509,14 @@ class BusyboxDiscoveredApps(DRWorkload):
 
         """
         self._deploy_prereqs()
-        for cluster in get_non_acm_cluster_config():
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            non_acm_cluster_config = (
+                get_non_acm_cluster_and_non_provider_cluster_config()
+            )
+        else:
+            non_acm_cluster_config = get_non_acm_cluster_config()
+        for cluster in non_acm_cluster_config:
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             self.create_namespace()
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
@@ -1456,7 +1532,7 @@ class BusyboxDiscoveredApps(DRWorkload):
 
             # Switch back to primary, then to each managed cluster to apply recipe
             config.switch_to_cluster_by_name(self.preferred_primary_cluster)
-            for cluster in get_non_acm_cluster_config():
+            for cluster in non_acm_cluster_config:
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_recipe_with_checkhooks()
 
@@ -1733,7 +1809,14 @@ class BusyboxDiscoveredApps(DRWorkload):
                 f"{self.discovered_apps_placement_name}-plmnt-1 {ignore_not_found_param}"
             )
 
-        for cluster in get_non_acm_cluster_config():
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            non_acm_cluster_config = (
+                get_non_acm_cluster_and_non_provider_cluster_config()
+            )
+        else:
+            non_acm_cluster_config = get_non_acm_cluster_config()
+        for cluster in non_acm_cluster_config:
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
