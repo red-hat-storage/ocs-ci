@@ -621,6 +621,18 @@ class OCSUpgrade(object):
             channel: (str): OCS subscription channel
 
         """
+        upgrade_version = self.get_upgrade_version()
+        if upgrade_version:
+            target_version = version.get_semantic_version(
+                upgrade_version, only_major_minor=True
+            )
+            if target_version > version.VERSION_4_21:
+                log.info(
+                    "setting environment variable OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY to true"
+                )
+                os.environ["OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY"] = (
+                    "true"
+                )
         if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9:
             subscription_name = constants.ODF_SUBSCRIPTION
         else:

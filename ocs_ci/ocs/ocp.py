@@ -1885,6 +1885,16 @@ def upgrade_ocp(image_path, image):
         image_path (str): path to image
 
     """
+    upgrade_version = config.UPGRADE.get("ocp_upgrade_version", "")
+    if upgrade_version:
+        target_version = version.get_semantic_version(
+            upgrade_version, only_major_minor=True
+        )
+        if target_version > version.VERSION_4_21:
+            log.info(
+                "setting environment variable OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY to true"
+            )
+            os.environ["OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY"] = "true"
     ocp = OCP()
     ocp.exec_oc_cmd(
         f"adm upgrade --to-image={image_path}:{image} "
