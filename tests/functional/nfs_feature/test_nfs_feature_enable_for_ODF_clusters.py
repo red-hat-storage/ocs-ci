@@ -327,20 +327,20 @@ class TestNfsEnable(ManageTest):
 
     def get_nfs_client_connection(self, re_try=True):
         """
-        Create connection to NFS Client VM.
+                Create connection to NFS Client VM.
 
-        After establishing the SSH connection, if the NFS LB endpoint is a
-        hostname (not a raw IP), the hostname is resolved from within the
-        cluster and /etc/hosts on the client VM is updated. This is required
-        when the NFS client VM is in a different VPC from the OpenShift cluster
-        and cannot resolve IBM Cloud VPC LB hostnames via its DNS servers.
-<<<<<<< Updated upstream
-=======
+                After establishing the SSH connection, if the NFS LB endpoint is a
+                hostname (not a raw IP), the hostname is resolved from within the
+                cluster and /etc/hosts on the client VM is updated. This is required
+                when the NFS client VM is in a different VPC from the OpenShift cluster
+                and cannot resolve IBM Cloud VPC LB hostnames via its DNS servers.
+        <<<<<<< Updated upstream
+        =======
 
-        If hostname resolution from the cluster fails (timeout), the code will
-        proceed without updating /etc/hosts, assuming the NFS client VM can
-        resolve the hostname via its own DNS configuration.
->>>>>>> Stashed changes
+                If hostname resolution from the cluster fails (timeout), the code will
+                proceed without updating /etc/hosts, assuming the NFS client VM can
+                resolve the hostname via its own DNS configuration.
+        >>>>>>> Stashed changes
         """
         log.info("Connecting to nfs client test VM")
         tries = 3 if re_try else 1
@@ -410,6 +410,7 @@ class TestNfsEnable(ManageTest):
         """
 
         import random
+
         for index in range(1):
             # index = random.randint(1, 99999)
             pod_name = "test-pod-incluster-" + str(index)
@@ -422,7 +423,7 @@ class TestNfsEnable(ManageTest):
                 do_reload=True,
                 access_mode=constants.ACCESS_MODE_RWO,
                 volume_mode="Filesystem",
-                pvc_name=pvc_name
+                pvc_name=pvc_name,
             )
 
             # # Create nginx pod with nfs pvcs mounted
@@ -437,21 +438,22 @@ class TestNfsEnable(ManageTest):
             deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
 
             # Deployment name
-            deployment_data['metadata']['name'] = pod_name
+            deployment_data["metadata"]["name"] = pod_name
 
             # Label values (there are two places)
-            deployment_data['metadata']['labels']['app'] = pod_name
+            deployment_data["metadata"]["labels"]["app"] = pod_name
 
-            deployment_data['spec']['selector']['matchLabels']['name'] = pod_name
+            deployment_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
 
-            deployment_data['spec']['template']['metadata']['labels']['name'] = pod_name
+            deployment_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
 
             # PVC claimName
-            deployment_data['spec']['template']['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
+            deployment_data["spec"]["template"]["spec"]["volumes"][0][
+                "persistentVolumeClaim"
+            ]["claimName"] = pvc_name
 
             helpers.create_resource(**deployment_data)
             time.sleep(60)
-
 
             assert self.pod_obj.wait_for_resource(
                 resource_count=1,
@@ -465,7 +467,6 @@ class TestNfsEnable(ManageTest):
                 selector=[pod_name],
                 selector_label="name",
             )[0]
-
 
             file_name = pod_obj.name
             # Run IO
@@ -491,26 +492,28 @@ class TestNfsEnable(ManageTest):
                 pod_obj, file_path
             ), f"File {file_name} doesn't exist"
             log.info(f"File {file_name} exists in {pod_obj.name}")
-        import ipdb;ipdb.set_trace()
-            # # Deletion of Pods and PVCs
-            # log.info("Deleting pod")
-            # pod_obj.delete()
-            # pod_obj.ocp.wait_for_delete(
-            #     pod_obj.name, 180
-            # ), f"Pod {pod_obj.name} is not deleted"
-            #
-            # pv_obj = nfs_pvc_obj.backed_pv_obj
-            # log.info(f"pv object-----{pv_obj}")
-            #
-            # log.info("Deleting PVC")
-            # nfs_pvc_obj.delete()
-            # nfs_pvc_obj.ocp.wait_for_delete(
-            #     resource_name=nfs_pvc_obj.name
-            # ), f"PVC {nfs_pvc_obj.name} is not deleted"
-            # log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
-            #
-            # log.info("Check nfs pv is deleted")
-            # pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+        import ipdb
+
+        ipdb.set_trace()
+        # # Deletion of Pods and PVCs
+        # log.info("Deleting pod")
+        # pod_obj.delete()
+        # pod_obj.ocp.wait_for_delete(
+        #     pod_obj.name, 180
+        # ), f"Pod {pod_obj.name} is not deleted"
+        #
+        # pv_obj = nfs_pvc_obj.backed_pv_obj
+        # log.info(f"pv object-----{pv_obj}")
+        #
+        # log.info("Deleting PVC")
+        # nfs_pvc_obj.delete()
+        # nfs_pvc_obj.ocp.wait_for_delete(
+        #     resource_name=nfs_pvc_obj.name
+        # ), f"PVC {nfs_pvc_obj.name} is not deleted"
+        # log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+        #
+        # log.info("Check nfs pv is deleted")
+        # pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
     @nfs_outcluster_test_platform_required
@@ -546,6 +549,7 @@ class TestNfsEnable(ManageTest):
         """
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
         import random
+
         for index in range(1):
             # index = random.randint(1, 99999)
             pod_name = "test-pod-outcluster-" + str(index)
@@ -558,7 +562,7 @@ class TestNfsEnable(ManageTest):
                 do_reload=True,
                 access_mode=constants.ACCESS_MODE_RWX,
                 volume_mode="Filesystem",
-                pvc_name=pvc_name
+                pvc_name=pvc_name,
             )
 
             # # Create nginx pod with nfs pvcs mounted
@@ -573,18 +577,19 @@ class TestNfsEnable(ManageTest):
             deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
 
             # Deployment name
-            deployment_data['metadata']['name'] = pod_name
+            deployment_data["metadata"]["name"] = pod_name
 
             # Label values (there are two places)
-            deployment_data['metadata']['labels']['app'] = pod_name
+            deployment_data["metadata"]["labels"]["app"] = pod_name
 
-            deployment_data['spec']['selector']['matchLabels']['name'] = pod_name
+            deployment_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
 
-            deployment_data['spec']['template']['metadata']['labels']['name'] = pod_name
+            deployment_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
 
             # PVC claimName
-            deployment_data['spec']['template']['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
-
+            deployment_data["spec"]["template"]["spec"]["volumes"][0][
+                "persistentVolumeClaim"
+            ]["claimName"] = pvc_name
 
             helpers.create_resource(**deployment_data)
             time.sleep(120)
@@ -605,7 +610,9 @@ class TestNfsEnable(ManageTest):
 
             # Fetch sharing details for the nfs pvc
             fetch_vol_name_cmd = (
-                "get pvc " + nfs_pvc_obj.name + " --output jsonpath='{.spec.volumeName}'"
+                "get pvc "
+                + nfs_pvc_obj.name
+                + " --output jsonpath='{.spec.volumeName}'"
             )
             vol_name = self.pvc_obj.exec_oc_cmd(fetch_vol_name_cmd)
             log.info(f"For pvc {nfs_pvc_obj.name} volume name is, {vol_name}")
@@ -642,12 +649,7 @@ class TestNfsEnable(ManageTest):
             ), f"File {file_name} doesn't exist"
             log.info(f"File {file_name} exists in {pod_obj.name}")
             # Create /var/lib/www/html/index.html file inside the pod
-            command = (
-                "bash -c "
-                + '"echo '
-                + "'hello world'"
-                + '  > /mnt/index.html"'
-            )
+            command = "bash -c " + '"echo ' + "'hello world'" + '  > /mnt/index.html"'
             pod_obj.exec_cmd_on_pod(
                 command=command,
                 out_yaml_format=False,
@@ -704,7 +706,9 @@ class TestNfsEnable(ManageTest):
                 out_yaml_format=False,
             )
             assert result.rstrip() == "hello world" + """\n""" + "test_writing"
-        import ipdb;ipdb.set_trace()
+        import ipdb
+
+        ipdb.set_trace()
 
         # # Unmount
         # nfs_utils.unmount(self.con, self.test_folder)
