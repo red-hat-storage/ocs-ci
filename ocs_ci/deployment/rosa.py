@@ -154,7 +154,15 @@ class ROSAOCP(BaseOCPDeployment):
             oidc_config_id = (
                 get_associated_oidc_config_id(self.cluster_name) if rosa_hcp else None
             )
-            cluster_id = ocm.get_cluster_details(self.cluster_name).get("id")
+            try:
+                cluster_id = ocm.get_cluster_details(self.cluster_name).get("id")
+            except CommandFailed as e:
+                if "Cluster was Deprovisioned" in str(e):
+                    logger.warning(
+                        f"Cluster {self.cluster_name} is already deprovisioned, {e}"
+                    )
+                    return
+                raise
             subnet_ids = aws.get_cluster_subnet_ids(cluster_name=self.cluster_name)
             log_step(f"Destroying ROSA cluster. Hosted CP: {rosa_hcp}")
             delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
