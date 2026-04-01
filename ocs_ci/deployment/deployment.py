@@ -703,19 +703,28 @@ class Deployment(object):
 
                     except ResourceNotFoundError as ex:
                         logger.warning(
-                            f"OADP operator not available - bringing up unreleased content {ex}!"
+                            f"OADP operator not available - bringing up unreleased content: {ex}"
                         )
+
                         if config.MULTICLUSTER["acm_cluster"]:
+                            # ACM hub: Only create catalog, ACM handles operator deployment
+                            logger.info("Creating OADP catalog for ACM hub")
+                            oadp_operator = OADPOperator(create_catalog=True)
                             run_cmd(
                                 f"oc -n {constants.ACM_HUB_NAMESPACE} annotate mch multiclusterhub "
                                 f"installer.open-cluster-management.io"
-                                f'/oadp-subscription-spec=\'{{"source": "{constants.OADP_CATALOG_NAME}"}}\' --overwrite'
+                                f'/oadp-subscription-spec=\'{{"source": "{oadp_operator.catalog_name}"}}\' --overwrite'
                             )
-                            logger.info("Skipping oadp subscription for ACM hub")
+                            logger.info(
+                                f"OADP catalog '{oadp_operator.catalog_name}' created - ACM will deploy the operator"
+                            )
                             continue
-                        oadp_operator = OADPOperator(create_catalog=True)
-                        oadp_operator.deploy()
-
+                        else:
+                            # Non-ACM: Create catalog and deploy operator
+                            logger.info("Creating OADP catalog and deploying operator")
+                            oadp_operator = OADPOperator(create_catalog=True)
+                            oadp_operator.deploy()
+                            logger.info("OADP operator deployed successfully")
                     if cluster.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
                         apply_oadp_workaround(namespace=constants.OADP_NAMESPACE)
 
