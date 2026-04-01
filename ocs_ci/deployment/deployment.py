@@ -3438,7 +3438,7 @@ class MultiClusterDROperatorsDeploy(object):
         Begins with CTX: ACM
 
         1. Check phase: if RDR then state =  'Ready'
-                        if MDR then state = 'S3ProfileSynced'
+                        if MDR then state = 'Ready'
         2. Check token-exchange-agent pod in 'Running' phase
 
         Raises:
@@ -3459,7 +3459,7 @@ class MultiClusterDROperatorsDeploy(object):
             else:
                 expected_phase = "ExchangingSecret"
         elif config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
-            expected_phase = "S3ProfileSynced"
+            expected_phase = "Ready"
 
         try:
             # Need high timeout in case of MDR
