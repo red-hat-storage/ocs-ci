@@ -3218,10 +3218,47 @@ class RBDDRDeployOps(object):
         mirror_peer._has_phase = True
         mirror_peer.get()
         try:
-            mirror_peer.wait_for_phase(phase="ExchangedSecret", timeout=1200)
-            logger.info("Mirror peer is in expected phase 'ExchangedSecret'")
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                expected_phase = "Ready"
+            else:
+                expected_phase = "ExchangingSecret"
+            mirror_peer.wait_for_phase(phase=expected_phase, timeout=1200)
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                logger.info(
+                    "Waiting for MirrorPeer status message 'Setup is completed'"
+                )
+                try:
+                    for sample in TimeoutSampler(
+                        timeout=300,
+                        sleep=10,
+                        func=lambda: mirror_peer.get()
+                        .get("status", {})
+                        .get("message", ""),
+                    ):
+                        if sample == "Setup is completed":
+                            logger.info(f"MirrorPeer status message: {sample}")
+                            break
+                        logger.debug(
+                            f"Current MirrorPeer status message: '{sample}', waiting for 'Setup is completed'"
+                        )
+                except TimeoutExpiredError:
+                    current_message = (
+                        mirror_peer.get().get("status", {}).get("message", "")
+                    )
+                    raise ResourceWrongStatusException(
+                        f"Timeout waiting for MirrorPeer status message. "
+                        f"Current message: '{current_message}', expected: 'Setup is completed'"
+                    )
+            logger.info(f"Mirror peer is in expected phase {expected_phase}")
         except ResourceWrongStatusException:
             logger.exception("Mirror peer couldn't attain expected phase")
+            logger.error(
+                f"MirrorPeer Phase is {mirror_peer.get().get('status').get('phase')}"
+            )
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                logger.error(
+                    f"MirrorPeer Phase is {mirror_peer.get().get('status').get('message')}"
+                )
             raise
 
         # Check for token-exchange-agent pod and its status has to be running
@@ -3400,7 +3437,7 @@ class MultiClusterDROperatorsDeploy(object):
         Validate mirror peer,
         Begins with CTX: ACM
 
-        1. Check phase: if RDR then state =  'ExchangedSecret'
+        1. Check phase: if RDR then state =  'Ready'
                         if MDR then state = 'S3ProfileSynced'
         2. Check token-exchange-agent pod in 'Running' phase
 
@@ -3417,7 +3454,10 @@ class MultiClusterDROperatorsDeploy(object):
         mirror_peer._has_phase = True
         mirror_peer.get()
         if config.MULTICLUSTER["multicluster_mode"] == "regional-dr":
-            expected_phase = "ExchangedSecret"
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                expected_phase = "Ready"
+            else:
+                expected_phase = "ExchangingSecret"
         elif config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
             expected_phase = "S3ProfileSynced"
 
