@@ -3158,6 +3158,10 @@ external_systems = {
         "//td/a[contains(text(), '{}')]",
         By.XPATH,
     ),
+    "filesystem_status": (
+        "//td/a[contains(text(), '{}')]/../following-sibling::td",
+        By.XPATH,
+    ),
     "delete_filesystem": (
         "Delete",
         By.ID,
