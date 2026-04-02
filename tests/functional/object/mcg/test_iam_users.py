@@ -2,84 +2,17 @@ import logging
 import random
 import string
 import secrets
-from functools import lru_cache
 
-from ocs_ci.framework.pytest_customization.marks import tier1, red_squad, mcg
+from ocs_ci.framework.pytest_customization.marks import tier2, red_squad, mcg
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.helpers.performance_lib import run_oc_command
-from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
-
+from ocs_ci.utility.iam_utils import (
+    generate_random_iam_path,
+    run_iam_command,
+    get_user_access_keys,
+)
 
 logger = logging.getLogger(__name__)
-
-
-@lru_cache(maxsize=1)
-def get_base_iam_command(mcg_obj):
-    """
-    Builds base iam command, to which "a real command" should be added by the caller
-
-    Args:
-        mcg_obj: An MCG class instance
-
-    Returns:
-        str: base iam command
-    """
-
-    # iam_host of the iam is the endpoint of the iam command
-    routes = run_oc_command(f"get routes -n {config.ENV_DATA['cluster_namespace']}")
-
-    iam_host = None
-    for line in routes[1:]:  # skip header
-        parts = line.split()
-        if parts[0] == "iam":
-            iam_host = parts[1]
-            break
-    endpoint = "https://" + iam_host
-
-    return (
-        f'sh -c "'
-        f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
-        f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-        f"{f'AWS_DEFAULT_REGION={mcg_obj.region} ' if mcg_obj.region else ''}"
-        f"aws --endpoint={endpoint} iam --no-verify-ssl "
-    )
-
-
-def run_iam_command(mcg_obj, awscli_pod_session, cmd):
-    """
-    Builds base iam command, to which "a real command" should be added by the caller
-
-    Args:
-        mcg_obj: An MCG class instance
-        awscli_pod_session (pod): A pod running the AWSCLI tools
-        cmd (str): A command to run
-
-    Returns:
-        dict: command result
-    """
-
-    full_command = get_base_iam_command(mcg_obj) + cmd + '"'
-    return awscli_pod_session.exec_cmd_on_pod(full_command)
-
-
-def generate_random_iam_path(levels=3, length=8):
-    """
-        Generates random path of iam user
-
-    Args:
-        levels (int): Number of levels (nesting) of the path
-        length (int): Length of each part of path
-
-    Returns:
-           str: random iam user path
-    """
-
-    alphabet = string.ascii_lowercase + string.digits
-    parts = [
-        "".join(secrets.choice(alphabet) for _ in range(length)) for _ in range(levels)
-    ]
-    return "/" + "/".join(parts) + "/"
 
 
 def rand_str(n=5):
@@ -95,32 +28,12 @@ def rand_str(n=5):
     return "".join(secrets.choice(string.ascii_lowercase) for _ in range(n))
 
 
-def get_user_access_keys(mcg_obj, awscli_pod_session, user_name):
-    """
-    Runs user-access-keys command
-
-    Args:
-        mcg_obj: An MCG class instance
-        awscli_pod_session (pod): A pod running the AWSCLI tools
-        user_name (str): Name of the user whose access keys should be returned
-
-    Returns:
-        dict: user-access-keys command result
-    """
-
-    list_access_key_cmd = f"list-access-keys --user-name {user_name}"
-    list_access_key_result = run_iam_command(
-        mcg_obj, awscli_pod_session, list_access_key_cmd
-    )
-    return list_access_key_result.get("AccessKeyMetadata", [])
-
-
-@tier1
+@tier2
 @mcg
 @red_squad
 class TestIAMUsers(MCGTest):
 
-    def test_iam_user_actions(self, mcg_obj, awscli_pod_session):
+    def test_iam_user_actions(self, iam_users_factory, mcg_obj, awscli_pod_session):
         """
         Runs different iam users tests
         The scenario is as following:
@@ -137,21 +50,7 @@ class TestIAMUsers(MCGTest):
 
         """
         new_users_num = 3
-        new_users_list = []
-
-        # Test create-user and list-users command
-        for _ in range(new_users_num):
-            random_name_part = "".join(
-                random.choices(string.ascii_lowercase + string.digits, k=8)
-            )
-            new_user_name = f"iam_user_{random_name_part}"
-            new_user_path = generate_random_iam_path()
-            create_user_cmd = (
-                f"create-user --user-name {new_user_name} --path {new_user_path}"
-            )
-            run_iam_command(mcg_obj, awscli_pod_session, create_user_cmd)
-            logger.info(f"User {new_user_name} created")
-            new_users_list.append(new_user_name)
+        new_users_list = iam_users_factory(num=new_users_num)
 
         list_users_result = run_iam_command(mcg_obj, awscli_pod_session, "list-users")
         existing_usernames = {
@@ -292,16 +191,3 @@ class TestIAMUsers(MCGTest):
             first_key_name not in user_tags_dict
         ), f"Tag {first_key_name} should be absent but is present"
         logger.info("User tags work as expected")
-
-        # Now delete all the created users to restore the state before the test
-        for user_name in new_users_list:
-            access_keys = get_user_access_keys(mcg_obj, awscli_pod_session, user_name)
-            for (
-                key
-            ) in access_keys:  # access keys should be deleted before the user deletion
-                access_key_id = key["AccessKeyId"]
-                delete_key_cmd = f"delete-access-key --user-name {user_name} --access-key-id {access_key_id}"
-                run_iam_command(mcg_obj, awscli_pod_session, delete_key_cmd)
-
-            delete_user_cmd = f"delete-user --user-name {user_name}"
-            run_iam_command(mcg_obj, awscli_pod_session, delete_user_cmd)
