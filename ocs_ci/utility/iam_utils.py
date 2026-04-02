@@ -41,7 +41,7 @@ def run_iam_command(mcg_obj, awscli_pod_session, cmd):
 
 def generate_random_iam_path(levels=3, length=8):
     """
-        Generates random path of iam user
+    Generates random path of iam user
 
     Args:
         levels (int): Number of levels (nesting) of the path

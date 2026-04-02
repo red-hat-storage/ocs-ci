@@ -4,6 +4,7 @@ import logging
 import os
 import pandas as pd
 import random
+import secrets
 import string
 import time
 import tempfile
@@ -11781,7 +11782,7 @@ def iam_users_factory_fixture(request, mcg_obj, awscli_pod_session):
         """
         for _ in range(num):
             random_name_part = "".join(
-                random.choices(string.ascii_lowercase + string.digits, k=8)
+                secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8)
             )
             new_user_name = f"iam_user_{random_name_part}"
             new_user_path = generate_random_iam_path()
@@ -11799,9 +11800,8 @@ def iam_users_factory_fixture(request, mcg_obj, awscli_pod_session):
         """
         for user_name in created_iam_users_name_list:
             access_keys = get_user_access_keys(mcg_obj, awscli_pod_session, user_name)
-            for (
-                key
-            ) in access_keys:  # access keys should be deleted before the user deletion
+            # Access keys should be deleted before the user deletion
+            for key in access_keys:
                 access_key_id = key["AccessKeyId"]
                 delete_key_cmd = f"delete-access-key --user-name {user_name} --access-key-id {access_key_id}"
                 run_iam_command(mcg_obj, awscli_pod_session, delete_key_cmd)

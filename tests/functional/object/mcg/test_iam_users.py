@@ -141,13 +141,20 @@ class TestIAMUsers(MCGTest):
             f"Two access keys for the user {user_for_multiple_access_keys} created successfully"
         )
 
+        quota_enforced = False
         try:
             run_iam_command(mcg_obj, awscli_pod_session, create_access_key_cmd)
         except CommandFailed as ex:
             if "Cannot exceed quota for AccessKeysPerUser" in str(ex):
                 logger.info("As expected, cannot create access key above the quota (2)")
+                quota_enforced = True
             else:
                 raise ex
+
+        assert quota_enforced, (
+            f"Expected CommandFailed when exceeding access key quota for {user_for_multiple_access_keys}, "
+            "but command succeeded"
+        )
 
         # Test tag-user, list-user-tags, untag-users commands
         user_for_tags = random.choice(new_users_list)
