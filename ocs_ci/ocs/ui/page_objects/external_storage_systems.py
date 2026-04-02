@@ -238,6 +238,9 @@ class ExternalSystems(ResourceList):
             format_locator(self.external_systems["filesystem_link"], filesystem_name)
         )
         if filesystem_name_on_card != f"{scale_name}-{filesystem_name}":
+            self.do_click(
+                locator=self.page_nav["external_systems_page"],
+            )
             raise UnexpectedNameException(
                 f"Expected name: {scale_name}-{filesystem_name}."
                 f" Name found on the card: {filesystem_name_on_card}"
@@ -246,9 +249,15 @@ class ExternalSystems(ResourceList):
             format_locator(self.external_systems["filesystem_status"], filesystem_name)
         )
         if filesystem_status_on_card != status:
+            self.do_click(
+                locator=self.page_nav["external_systems_page"],
+            )
             raise UnexpectedStatusException(
                 f"Expected status: {status}. Status found on the card: {filesystem_status_on_card}"
             )
+        self.do_click(
+            locator=self.page_nav["external_systems_page"],
+        )
 
 
 class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):

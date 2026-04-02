@@ -54,6 +54,11 @@ class TestScaleConnection(object):
         # checking status temporarily disabled
         # until https://issues.redhat.com/browse/DFBUGS-4352 is fixed
         # assert external_systems.scale_status_ok(SCALE_CONNECTION_NAME)
+        external_systems.check_filesystem_details(
+            scale_name=SCALE_CONNECTION_NAME,
+            filesystem_name=FILESYSTEM_1,
+            status="Connected",
+        )
 
     @ui
     @skipif_ibm_cloud_managed
@@ -70,6 +75,11 @@ class TestScaleConnection(object):
         external_systems = scale_connect_obj.nav_external_systems_page()
         external_systems.connect_scale_filesystem(
             scale_name=SCALE_CONNECTION_NAME, filesystem_name=FILESYSTEM_2
+        )
+        external_systems.check_filesystem_details(
+            scale_name=SCALE_CONNECTION_NAME,
+            filesystem_name=FILESYSTEM_2,
+            status="Connected",
         )
         external_systems.delete_scale_filesystem(
             scale_name=SCALE_CONNECTION_NAME, filesystem_name=FILESYSTEM_2
