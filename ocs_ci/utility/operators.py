@@ -597,3 +597,61 @@ class MetalLBOperator(Operator):
             selector=constants.MANAGED_CONTROLLER_LABEL,
             timeout=600,
         ), "MetalLB operator did not reach running phase"
+
+
+class OADPOperator(Operator):
+    def __init__(self, create_catalog: bool = False):
+        self.name = constants.OADP_OPERATOR_NAME
+        ocp_version = get_semantic_ocp_version_from_config()
+        # Based on the format: oadp-1.6__v4.22__oadp-rhel9-operator
+        # We need to determine the OADP version dynamically or use a pattern
+        # For now, using a pattern that matches the FBC image tag structure.
+        # Because of OADP is not operator alligned with OCP releases we need to specify
+        # Operator version like 1.6 ourself and each release we need to adjust.
+        # See thread for more details:
+        # https://redhat-internal.slack.com/archives/CB95J6R4N/p1774873119645219
+        self.unreleased_catalog_image_tag: str = (
+            f"oadp-1.6__v{ocp_version}__oadp-rhel9-operator"
+        )
+        # Related images for OADP operator
+        # These need to be discovered using the oras command mentioned in the task
+        self.unreleased_images = [
+            "registry.redhat.io/oadp/oadp-operator-bundle",
+            "registry.redhat.io/oadp/oadp-rhel9-operator",
+            "registry.redhat.io/oadp/oadp-mustgather-rhel9",
+            "registry.redhat.io/oadp/oadp-registry-rhel9",
+            "registry.redhat.io/oadp/velero-rhel9",
+            "registry.redhat.io/oadp/velero-plugin-for-aws-rhel9",
+            "registry.redhat.io/oadp/velero-plugin-for-microsoft-azure-rhel9",
+            "registry.redhat.io/oadp/velero-plugin-for-gcp-rhel9",
+            "registry.redhat.io/oadp/velero-plugin-for-csi-rhel9",
+            "registry.redhat.io/oadp/velero-restic-restore-helper-rhel9",
+        ]
+        self.disconnected_required_packages = [
+            "redhat-oadp-operator",
+        ]
+        self.namespace = constants.OADP_NAMESPACE
+        super().__init__(create_catalog)
+
+    def _customize_post_deployment_steps(self):
+        """
+        Customize post deployment steps for OADPOperator
+        Handle ACM cluster annotation if needed
+        """
+        if config.MULTICLUSTER.get("acm_cluster"):
+            run_cmd(
+                f"oc -n {constants.ACM_HUB_NAMESPACE} annotate mch multiclusterhub "
+                f"installer.open-cluster-management.io/oadp-subscription-spec="
+                f'\'{{"source": "{self.catalog_name}"}}\' --overwrite'
+            )
+
+    def _deployment_verification(self):
+        """
+        Verify the deployment of the OADP operator
+        """
+        oadp_operator = OCP(kind=constants.POD, namespace=self.namespace)
+        assert oadp_operator.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector="app.kubernetes.io/name=oadp-operator",
+            timeout=600,
+        ), "OADP operator did not reach running phase"

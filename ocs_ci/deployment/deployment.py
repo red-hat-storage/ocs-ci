@@ -160,7 +160,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
 from ocs_ci.utility.multicluster import create_mce_catsrc
-from ocs_ci.utility.operators import NMStateOperator
+from ocs_ci.utility.operators import NMStateOperator, OADPOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -172,7 +172,6 @@ from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
-    create_unreleased_oadp_catalog,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -669,16 +668,17 @@ class Deployment(object):
 
                     except ResourceNotFoundError as ex:
                         logger.warning(
-                            f"OADP operator not availabe - bringing up unreleased content {ex}!"
+                            f"OADP operator not available - bringing up unreleased content {ex}!"
                         )
-                        create_unreleased_oadp_catalog()
+                        # Create unreleased OADP catalog using the new OADPOperator class
+                        oadp_operator = OADPOperator(create_catalog=True)
                         package_manifest = PackageManifest(
                             resource_name=constants.OADP_OPERATOR_NAME,
-                            selector=f"catalog={constants.OADP_CATALOG_NAME}",
+                            selector=f"catalog={oadp_operator.catalog_name}",
                         )
                         oadp_subscription_yaml_data["spec"][
                             "source"
-                        ] = constants.OADP_CATALOG_NAME
+                        ] = oadp_operator.catalog_name
                     oadp_default_channel = package_manifest.get_default_channel()
                     if config.MULTICLUSTER["acm_cluster"]:
                         logger.info("Skipping oadp subscription for ACM hub")
