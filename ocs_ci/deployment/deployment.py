@@ -3221,7 +3221,7 @@ class RBDDRDeployOps(object):
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
                 expected_phase = "Ready"
             else:
-                expected_phase = "ExchangingSecret"
+                expected_phase = "ExchangedSecret"
             mirror_peer.wait_for_phase(phase=expected_phase, timeout=1200)
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
                 logger.info(
@@ -3257,7 +3257,7 @@ class RBDDRDeployOps(object):
             )
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
                 logger.error(
-                    f"MirrorPeer Phase is {mirror_peer.get().get('status').get('message')}"
+                    f"MirrorPeer Status Message is {mirror_peer.get().get('status').get('message')}"
                 )
             raise
 
@@ -3457,7 +3457,7 @@ class MultiClusterDROperatorsDeploy(object):
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
                 expected_phase = "Ready"
             else:
-                expected_phase = "ExchangingSecret"
+                expected_phase = "ExchangedSecret"
         elif config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
                 expected_phase = "Ready"
