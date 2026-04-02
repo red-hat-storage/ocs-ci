@@ -77,6 +77,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     ACMClusterConfigurationException,
     ACMObservabilityNotEnabled,
+    WrongVersionExpression,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -3680,7 +3681,11 @@ class MultiClusterDROperatorsDeploy(object):
             bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
         return bucket_name
 
-    @retry((TimeoutExpiredError, ACMClusterConfigurationException), tries=20, delay=10)
+    @retry(
+        (TimeoutExpiredError, ACMClusterConfigurationException, WrongVersionExpression),
+        tries=20,
+        delay=10,
+    )
     def backup_pod_status_check(self):
         pods_list = get_all_pods(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
         oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
