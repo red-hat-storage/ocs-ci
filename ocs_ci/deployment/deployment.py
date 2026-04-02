@@ -3437,8 +3437,8 @@ class MultiClusterDROperatorsDeploy(object):
         Validate mirror peer,
         Begins with CTX: ACM
 
-        1. Check phase: if RDR then state =  'Ready'
-                        if MDR then state = 'Ready'
+        1. Check phase: if OCP >= 4.22: 'Ready' (both RDR and MDR)
+                        if OCP < 4.22:  RDR → 'ExchangedSecret', MDR → 'S3ProfileSynced'
         2. Check token-exchange-agent pod in 'Running' phase
 
         Raises:
