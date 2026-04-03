@@ -3789,10 +3789,14 @@ class MultiClusterDROperatorsDeploy(object):
             # Remove 'restic' under 'configuration' if it exists
             oadp_data["spec"]["configuration"].pop("restic", None)
 
+            if version.compare_versions(f"{oadp_version} >= 1.6"):
+                uploader_type = "kopia"
+            else:
+                uploader_type = "restic"
             # Add 'nodeAgent' under 'configuration'
             oadp_data["spec"]["configuration"]["nodeAgent"] = {
                 "enable": True,
-                "uploaderType": "restic",
+                "uploaderType": uploader_type,
             }
         oadp_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="oadp", delete=False)
         templating.dump_data_to_temp_yaml(oadp_data, oadp_yaml.name)
