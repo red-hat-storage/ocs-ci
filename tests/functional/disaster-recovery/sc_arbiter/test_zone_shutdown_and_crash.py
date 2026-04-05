@@ -5,7 +5,7 @@ import random
 import concurrent.futures as futures
 from datetime import datetime, timezone, timedelta
 
-from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, wait_for_kvm_devices_available
 from ocs_ci.helpers.stretchcluster_helper import (
     recover_from_ceph_stuck,
     check_for_logwriter_workload_pods,
@@ -200,6 +200,7 @@ class TestZoneShutdownsAndCrashes:
 
             # Validate all nodes are in READY state and up
             wait_for_nodes_status(timeout=600)
+            wait_for_kvm_devices_available()
 
             log.info(f"Nodes of zone {zone} are started successfully")
             log.info(f"Failure started at {start_time} and ended at {end_time}")
@@ -381,6 +382,7 @@ class TestZoneShutdownsAndCrashes:
             # wait for the nodes to come back to READY status
             log.info("Waiting for the nodes to come up automatically after the crash")
             wait_for_nodes_status(timeout=600)
+            wait_for_kvm_devices_available()
 
             end_time = datetime.now(timezone.utc)
             log.info(f"Crash start time : {start_time} & Crash end time : {end_time}")
@@ -562,6 +564,7 @@ class TestZoneShutdownsAndCrashes:
 
             # Validate all nodes are in READY state and up
             wait_for_nodes_status(timeout=600)
+            wait_for_kvm_devices_available()
 
             log.info(f"Nodes of zone {arbiter_zone} are started successfully")
             log.info(f"Failure started at {start_time} and ended at {end_time}")
@@ -676,6 +679,7 @@ class TestZoneShutdownsAndCrashes:
 
             # Validate all nodes are in READY state and up
             wait_for_nodes_status(timeout=900)
+            wait_for_kvm_devices_available()
 
             log.info(f"Nodes of zone {zone} are started successfully")
             log.info(f"Failure started at {start_time} and ended at {end_time}")

@@ -10,7 +10,7 @@ import time
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants, cluster
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.helpers.helpers import (
@@ -18,7 +18,12 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.node import get_worker_node_allocatable, get_pod_requests_per_node
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.node import (
+    get_worker_node_allocatable,
+    get_pod_requests_per_node,
+    get_worker_nodes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -676,3 +681,56 @@ def calculate_vm_cnt_cpu_ram(cpu_per_vm=1, mem_per_vm=4, buffer=0.9):
         cluster_vm_count += vm_count
 
     return cluster_vm_count, per_node_vm_count
+
+
+def wait_for_kvm_devices_available(timeout=300, sleep=15):
+    """
+    Wait until devices.kubevirt.io/kvm allocatable is non-zero on all worker
+    nodes.
+
+    After a node restart the virt-handler KVM device plugin re-registers
+    /dev/kvm with kubelet asynchronously.  Until registration completes the
+    node reports allocatable devices.kubevirt.io/kvm: "0", which causes any
+    VM scheduling attempt to fail with ErrorUnschedulable.
+
+    Args:
+        timeout (int): Maximum seconds to wait. Default 300.
+        sleep (int): Seconds between polls. Default 15.
+
+    Raises:
+        TimeoutExpiredError: If any worker node still reports 0 KVM devices
+            after *timeout* seconds.
+    """
+    worker_nodes = get_worker_nodes()
+    node_ocp = OCP(kind=constants.NODE)
+    logger.info(
+        "Waiting up to %ds for devices.kubevirt.io/kvm to become available "
+        "on all worker nodes: %s",
+        timeout,
+        worker_nodes,
+    )
+    try:
+        for _ in TimeoutSampler(timeout=timeout, sleep=sleep, func=lambda: None):
+            not_ready = []
+            for node_name in worker_nodes:
+                node_data = node_ocp.get(resource_name=node_name)
+                kvm_alloc = (
+                    node_data["status"]["allocatable"]
+                    .get("devices.kubevirt.io/kvm", "0")
+                    .rstrip("k")
+                )
+                if kvm_alloc == "0":
+                    not_ready.append(node_name)
+            if not not_ready:
+                logger.info("devices.kubevirt.io/kvm is available on all worker nodes")
+                return
+            logger.info(
+                "devices.kubevirt.io/kvm still 0 on nodes: %s — retrying in %ds",
+                not_ready,
+                sleep,
+            )
+    except TimeoutExpiredError:
+        raise TimeoutExpiredError(
+            f"devices.kubevirt.io/kvm did not become available within "
+            f"{timeout}s on nodes: {not_ready}"
+        )
