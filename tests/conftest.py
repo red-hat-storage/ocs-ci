@@ -242,7 +242,6 @@ from ocs_ci.helpers.cnv_helpers import (
     run_fio,
     compute_vm_count_from_storage_capacity,
     calculate_vm_cnt_cpu_ram,
-    wait_for_kvm_devices_available,
 )
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.utility.utils import exec_cmd
@@ -8199,7 +8198,6 @@ def cnv_workload_factory(request):
             object: cnv workload class instance
 
         """
-        wait_for_kvm_devices_available()
         vm_name = create_unique_resource_name("test", "vm")
         cnv_wl = VirtualMachine(vm_name=vm_name, namespace=namespace)
         cnv_wl.create_vm_workload(
