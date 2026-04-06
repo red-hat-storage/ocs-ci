@@ -4,6 +4,7 @@ import logging
 import os
 import pandas as pd
 import random
+import secrets
 import string
 import time
 import tempfile
@@ -248,6 +249,11 @@ from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.utility.iscsi_config import iscsi_teardown
+from ocs_ci.utility.iam_utils import (
+    generate_random_iam_path,
+    run_iam_command,
+    get_user_access_keys,
+)
 
 DEPLOYERS = {}
 
@@ -11898,3 +11904,55 @@ def keda_fixture(request):
         raise UnexpectedBehaviour("KEDA setup to read Thanos metrics failed")
 
     return keda
+
+
+@pytest.fixture(scope="function")
+def iam_users_factory(request, mcg_obj, awscli_pod_session):
+    return iam_users_factory_fixture(request, mcg_obj, awscli_pod_session)
+
+
+def iam_users_factory_fixture(request, mcg_obj, awscli_pod_session):
+    """
+    Create an iam users factory. Calling this fixture creates iam users
+    """
+    created_iam_users_name_list = []
+
+    def factory(num=1):
+        """
+        Args:
+            num (int): Number of new iam users to be created
+
+        Returns:
+            list: list of created users names
+        """
+        for _ in range(num):
+            random_name_part = "".join(
+                secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8)
+            )
+            new_user_name = f"iam_user_{random_name_part}"
+            new_user_path = generate_random_iam_path()
+            create_user_cmd = (
+                f"create-user --user-name {new_user_name} --path {new_user_path}"
+            )
+            run_iam_command(mcg_obj, awscli_pod_session, create_user_cmd)
+            created_iam_users_name_list.append(new_user_name)
+
+        return created_iam_users_name_list
+
+    def finalizer():
+        """
+        Deletes the created iam users
+        """
+        for user_name in created_iam_users_name_list:
+            access_keys = get_user_access_keys(mcg_obj, awscli_pod_session, user_name)
+            # Access keys should be deleted before the user deletion
+            for key in access_keys:
+                access_key_id = key["AccessKeyId"]
+                delete_key_cmd = f"delete-access-key --user-name {user_name} --access-key-id {access_key_id}"
+                run_iam_command(mcg_obj, awscli_pod_session, delete_key_cmd)
+
+            delete_user_cmd = f"delete-user --user-name {user_name}"
+            run_iam_command(mcg_obj, awscli_pod_session, delete_user_cmd)
+
+    request.addfinalizer(finalizer)
+    return factory
