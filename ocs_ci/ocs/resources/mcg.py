@@ -157,6 +157,14 @@ class MCG:
                 .get("serviceMgmt")
                 .get("externalDNS")[0]
             ) + "/rpc"
+            self.iam_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceIam")
+                .get("externalDNS")[0]
+            )
+
             self.region = config.ENV_DATA["region"]
 
             noobaa_cr_services = (

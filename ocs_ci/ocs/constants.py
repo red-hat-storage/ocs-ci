@@ -2586,6 +2586,14 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.21"] = (
     DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"]
 )
 
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.22"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] + [
+    # disabling mirroring of ceph-volsync-plugin-operator because of
+    # https://redhat.atlassian.net/browse/DFBUGS-6114
+    # "ceph-volsync-plugin-operator",
+]
+
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
 CINDER_CLNT_VERSION = "3.0"
@@ -3191,7 +3199,7 @@ ACM_BREW_BUILD_URL = (
     "&rows_per_page=25&delta=1296000&contains=acm"
 )
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
-SUBCTL_BREW_DOWNSTREAM_URL = "brew.registry.redhat.io/rh-osbs/rhacm2-"
+SUBCTL_BREW_DOWNSTREAM_URL = "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-"
 
 # OADP
 OADP_BREW_BUILD_URL = (

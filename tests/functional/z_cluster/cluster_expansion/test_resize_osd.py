@@ -27,7 +27,7 @@ from ocs_ci.framework.testlib import (
     tier4c,
     tier4a,
 )
-from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK, OSD, ROOK_OPERATOR, MON_DAEMON
+from ocs_ci.ocs.constants import OSD, ROOK_OPERATOR, MON_DAEMON
 from ocs_ci.helpers.osd_resize import (
     ceph_verification_steps_post_resize_osd,
     check_ceph_health_after_resize_osd,
@@ -36,9 +36,9 @@ from ocs_ci.helpers.osd_resize import (
     basic_resize_osd,
     check_storage_size_is_reflected_in_ui,
 )
+from ocs_ci.helpers.pod_helpers import run_io_on_small_groups_of_pods
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
-    calculate_md5sum_of_pod_files,
     verify_md5sum_on_pod_files,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_deviceset_pvs
@@ -137,33 +137,6 @@ class TestResizeOSD(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def run_io_on_pods(self, pods, size="1G", runtime=30):
-        """
-        Run IO on the pods
-
-        Args:
-            pods (list): The list of pods for running the IO
-            size (str): Size in MB or Gi, e.g. '200M'. Default value is '1G'
-            runtime (int): The number of seconds IO should run for
-
-        """
-        logger.info("Starting IO on all pods")
-        for pod_obj in pods:
-            storage_type = (
-                "block" if pod_obj.pvc.volume_mode == VOLUME_MODE_BLOCK else "fs"
-            )
-            rate = f"{random.randint(1, 5)}M"
-            pod_obj.run_io(
-                storage_type=storage_type,
-                size=size,
-                runtime=runtime,
-                rate=rate,
-                fio_filename=self.pod_file_name,
-                end_fsync=1,
-            )
-            logger.info(f"IO started on pod {pod_obj.name}")
-        logger.info("Started IO on all pods")
-
     def prepare_data_before_resize_osd(self):
         """
         Prepare the data before resizing the osd
@@ -178,12 +151,19 @@ class TestResizeOSD(ManageTest):
             pvc_size=pvc_size, num_of_rbd_pvc=5, num_of_cephfs_pvc=5
         )
         logger.info("Run IO on the pods for integrity check")
-        self.run_io_on_pods(self.pods_for_integrity_check)
-        logger.info("Calculate the md5sum of the pods for integrity check")
-        calculate_md5sum_of_pod_files(self.pods_for_integrity_check, self.pod_file_name)
+        run_io_on_small_groups_of_pods(
+            self.pods_for_integrity_check,
+            self.pod_file_name,
+            do_md5sum=True,
+        )
         runtime = 180
         logger.info(f"Run IO on the pods in the test background for {runtime} seconds")
-        self.run_io_on_pods(self.pods_for_run_io, size="2G", runtime=runtime)
+        run_io_on_small_groups_of_pods(
+            self.pods_for_run_io,
+            self.pod_file_name,
+            size="2G",
+            runtime=runtime,
+        )
 
     def verification_steps_post_resize_osd(self):
         ceph_verification_steps_post_resize_osd(
@@ -206,7 +186,11 @@ class TestResizeOSD(ManageTest):
         self.pvcs3, self.pods_for_run_io = self.create_pvcs_and_pods(
             pvc_size=pvc_size, num_of_rbd_pvc=6, num_of_cephfs_pvc=6
         )
-        self.run_io_on_pods(self.pods_for_run_io, size="2G")
+        run_io_on_small_groups_of_pods(
+            self.pods_for_run_io,
+            self.pod_file_name,
+            size="2G",
+        )
         logger.info("Check the cluster health")
         self.sanity_helpers.health_check()
 

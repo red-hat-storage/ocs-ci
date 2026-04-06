@@ -77,6 +77,10 @@ class MDSCountException(Exception):
     pass
 
 
+class ActiveMDSNotFoundException(Exception):
+    pass
+
+
 class DeploymentPlatformNotSupported(Exception):
     pass
 
