@@ -221,19 +221,19 @@ def mirror_rdr_images():
     try:
         exec_cmd(cmd, timeout=18000)
     except CommandFailed as e:
-        # if idms is configured, the oc mirror command might fail (return non 0 rc),
+        # if itms is configured, the oc mirror command might fail (return non 0 rc),
         # even though we use --continue-on-error and --skip-missing arguments
         # (not sure if it is because of a bug in oc mirror plugin or because of some other issue),
-        # but we want to continue to try to mirror the images manually with applied the idms rules
+        # but we want to continue to try to mirror the images manually with applied the itms rules
         log.warning(f"oc mirror command failed: {e}")
         raise
 
-    # Look for IDMS file in the workspace
+    # Look for itms file in the workspace
     itms_file_path = "oc-mirror-workspace/results-files/working-dir/cluster-resources/itms-oc-mirror.yaml"
 
     if os.path.exists(itms_file_path):
         log.info(f"Found ITMS file at {itms_file_path}")
-        _apply_idms_to_managed_clusters(itms_file_path)
+        _apply_itms_to_managed_clusters(itms_file_path)
     else:
         error_msg = f"ITMS file not found at expected location: {itms_file_path}"
         log.error(error_msg)
@@ -306,14 +306,14 @@ def _generate_rdr_mirror_images():
     return []
 
 
-def _apply_idms_to_managed_clusters(idms_file_path):
+def _apply_itms_to_managed_clusters(itms_file_path):
     """
-    Apply IDMS configuration to all managed clusters and wait for MCP to complete.
+    Apply itms configuration to all managed clusters and wait for MCP to complete.
 
     Args:
-        idms_file_path (str): Path to the idms-oc-mirror.yaml file
+        itms_file_path (str): Path to the itms-oc-mirror.yaml file
     """
-    log.info("Applying IDMS to managed clusters")
+    log.info("Applying itms to managed clusters")
 
     # Get all managed cluster configs
     managed_clusters = get_non_acm_cluster_config()
@@ -328,7 +328,7 @@ def _apply_idms_to_managed_clusters(idms_file_path):
     try:
         for cluster_config in managed_clusters:
             cluster_name = cluster_config.ENV_DATA.get("cluster_name", "unknown")
-            log.info(f"Applying IDMS to managed cluster: {cluster_name}")
+            log.info(f"Applying itms to managed cluster: {cluster_name}")
 
             # Switch to the managed cluster context
             cluster_index = cluster_config.MULTICLUSTER.get("multicluster_index")
@@ -336,9 +336,9 @@ def _apply_idms_to_managed_clusters(idms_file_path):
                 config.switch_ctx(cluster_index)
 
                 try:
-                    # Apply the IDMS file
-                    run_cmd(f"oc apply -f {idms_file_path}")
-                    log.info(f"Successfully applied IDMS to {cluster_name}")
+                    # Apply the itms file
+                    run_cmd(f"oc apply -f {itms_file_path}")
+                    log.info(f"Successfully applied itms to {cluster_name}")
 
                     # Wait for MachineConfigPool to complete
                     log.info(
@@ -348,10 +348,10 @@ def _apply_idms_to_managed_clusters(idms_file_path):
                     log.info(f"MachineConfigPool update completed on {cluster_name}")
 
                 except CommandFailed as e:
-                    log.error(f"Failed to apply IDMS to {cluster_name}: {e}")
+                    log.error(f"Failed to apply itms to {cluster_name}: {e}")
                     raise
                 except Exception as e:
-                    log.error(f"Error during IDMS application to {cluster_name}: {e}")
+                    log.error(f"Error during itms application to {cluster_name}: {e}")
                     raise
             else:
                 log.warning(f"Could not find cluster index for {cluster_name}")
