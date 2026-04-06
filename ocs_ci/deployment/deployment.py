@@ -647,9 +647,18 @@ class Deployment(object):
                             f"Found {constants.OADP_OPERATOR_NAME} skipping creation"
                         )
                         continue
+                    if config.DEPLOYMENT.get("disconnected"):
+                        oadp_catsrc_name = PackageManifest(
+                            resource_name=constants.OADP_OPERATOR_NAME,
+                        ).get()["metadata"]["labels"]["catalog"]
+                        oadp_selector = f"catalog={oadp_catsrc_name}"
+                    else:
+                        oadp_selector = "catalog=redhat-operators"
+                        oadp_catsrc_name = constants.OPERATOR_CATALOG_SOURCE_NAME
+
                     package_manifest = PackageManifest(
                         resource_name=constants.OADP_OPERATOR_NAME,
-                        selector="catalog=redhat-operators",
+                        selector=oadp_selector,
                     )
                     try:
 
@@ -666,37 +675,11 @@ class Deployment(object):
                         oadp_subscription_yaml_data = templating.load_yaml(
                             constants.OADP_SUBSCRIPTION_YAML
                         )
-                    logger.info("Creating Namespace")
-                    # creating Namespace and operator group for cert-manager
-                    logger.info(
-                        "Creating namespace and operator group for Openshift-oadp"
-                    )
-                    run_cmd(f"oc apply -f {constants.OADP_NS_YAML}")
-                    logger.info("Creating OADP Operator Subscription")
-                    oadp_subscription_yaml_data = templating.load_yaml(
-                        constants.OADP_SUBSCRIPTION_YAML
-                    )
-                    if config.DEPLOYMENT.get("disconnected"):
-                        oadp_selector_name = PackageManifest(
-                            resource_name=constants.OADP_OPERATOR_NAME,
-                        ).get()["metadata"]["labels"]["catalog"]
-                        oadp_selector = f"catalog={oadp_selector_name}"
-                    else:
-                        oadp_selector = "catalog=redhat-operators"
-
-                    package_manifest = PackageManifest(
-                        resource_name=constants.OADP_OPERATOR_NAME,
-                        selector=oadp_selector,
-                    )
-                    try:
-                        pm_data = package_manifest.get()
-                        pm_list = pm_data if isinstance(pm_data, list) else [pm_data]
-                        required_oadp_version = config.ENV_DATA["oadp_version"]
 
                         if not any(
                             version_exist(pm, required_oadp_version)
                             and pm.get("status", {}).get("catalogSource")
-                            == constants.OPERATOR_CATALOG_SOURCE_NAME
+                            == oadp_catsrc_name
                             for pm in pm_list
                         ):
                             raise ResourceNotFoundError(
@@ -710,6 +693,10 @@ class Deployment(object):
                         oadp_subscription_yaml_data["spec"][
                             "channel"
                         ] = oadp_default_channel
+                        if config.DEPLOYMENT.get("disconnected"):
+                            oadp_subscription_yaml_data["spec"][
+                                "source"
+                            ] = oadp_catsrc_name
                         oadp_subscription_manifest = tempfile.NamedTemporaryFile(
                             mode="w+", prefix="oadp_subscription_manifest", delete=False
                         )
@@ -762,38 +749,6 @@ class Deployment(object):
                             oadp_operator = OADPOperator(create_catalog=True)
                             oadp_operator.deploy()
                             logger.info("OADP operator deployed successfully")
-                    if config.DEPLOYMENT.get("disconnected"):
-                        oadp_subscription_yaml_data["spec"][
-                            "source"
-                        ] = oadp_selector_name
-                    oadp_subscription_yaml_data["spec"][
-                        "channel"
-                    ] = oadp_default_channel
-                    oadp_subscription_manifest = tempfile.NamedTemporaryFile(
-                        mode="w+", prefix="oadp_subscription_manifest", delete=False
-                    )
-                    templating.dump_data_to_temp_yaml(
-                        oadp_subscription_yaml_data, oadp_subscription_manifest.name
-                    )
-                    run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
-                    self.wait_for_subscription(
-                        constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
-                    )
-                    logger.info(
-                        "Sleeping for 120 seconds after subscribing to OADP Operator"
-                    )
-                    time.sleep(120)
-                    oadp_subscriptions = ocp.OCP(
-                        kind=constants.SUBSCRIPTION_WITH_ACM,
-                        resource_name=constants.OADP_OPERATOR_NAME,
-                        namespace=constants.OADP_NAMESPACE,
-                    ).get()
-                    oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
-                    csv = CSV(
-                        resource_name=oadp_csv_name, namespace=constants.OADP_NAMESPACE
-                    )
-                    csv.wait_for_phase("Succeeded", timeout=720)
-                    logger.info("OADP Operator Deployment Succeeded")
                     if cluster.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
                         apply_oadp_workaround(namespace=constants.OADP_NAMESPACE)
 
