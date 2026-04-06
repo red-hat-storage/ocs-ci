@@ -597,3 +597,54 @@ class MetalLBOperator(Operator):
             selector=constants.MANAGED_CONTROLLER_LABEL,
             timeout=600,
         ), "MetalLB operator did not reach running phase"
+
+
+class OADPOperator(Operator):
+    def __init__(self, create_catalog: bool = False):
+        self.name = constants.OADP_OPERATOR_NAME
+        ocp_version = get_semantic_ocp_version_from_config()
+        self.unreleased_catalog_image_tag: str = (
+            f"oadp-{config.ENV_DATA.get('oadp_version')}__v{ocp_version}__oadp-rhel9-operator"
+        )
+        self.unreleased_images = [
+            "registry.redhat.io/oadp/oadp-mustgather-rhel9",
+            "registry.redhat.io/oadp/oadp-non-admin-rhel9",
+            "registry.redhat.io/oadp/oadp-operator-bundle",
+            "registry.redhat.io/oadp/oadp-rhel9-operator",
+            "registry.redhat.io/oadp/oadp-velero-plugin-for-aws-rhel9",
+            "registry.redhat.io/oadp/oadp-velero-plugin-for-gcp-rhel9",
+            "registry.redhat.io/oadp/oadp-velero-plugin-for-legacy-aws-rhel9",
+            "registry.redhat.io/oadp/oadp-velero-plugin-for-microsoft-azure-rhel9",
+            "registry.redhat.io/oadp/oadp-velero-plugin-rhel9",
+            "registry.redhat.io/oadp/oadp-velero-rhel9",
+        ]
+        self.disconnected_required_packages = [
+            "redhat-oadp-operator",
+        ]
+        self.namespace = constants.OADP_NAMESPACE
+        super().__init__(create_catalog)
+
+    def _customize_operatorgroup(self, operatorgroup_data: dict):
+        """
+        Hook for OADP to customize OperatorGroup YAML
+
+        Args:
+            operatorgroup_data (dict): the OperatorGroup YAML data
+        """
+        operatorgroup_data["metadata"]["annotations"] = {
+            "olm.providedAPIs": "Backup.v1.velero.io",
+        }
+        operatorgroup_data["metadata"]["name"] = self.name
+        operatorgroup_data["metadata"]["namespace"] = self.namespace
+        operatorgroup_data["spec"]["targetNamespaces"] = [self.namespace]
+
+    def _deployment_verification(self):
+        """
+        Verify the deployment of the OADP operator
+        """
+        oadp_operator = OCP(kind=constants.POD, namespace=self.namespace)
+        assert oadp_operator.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.MANAGED_CONTROLLER_LABEL,
+            timeout=600,
+        ), "OADP operator did not reach running phase"
