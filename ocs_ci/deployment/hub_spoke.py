@@ -2061,6 +2061,10 @@ class HypershiftHostedOCP(
         data_replication_separation = config.DEPLOYMENT.get(
             "enable_data_replication_separation"
         )
+        auto_repair = config.ENV_DATA.get("auto_repair", True)
+        auto_repair = (
+            config.ENV_DATA["clusters"].get(self.name).get("auto_repair", auto_repair)
+        )
 
         hosted_cluster_platform = (
             config.ENV_DATA["clusters"]
@@ -2111,6 +2115,7 @@ class HypershiftHostedOCP(
                 cp_availability_policy=cp_availability_policy,
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
+                auto_repair=auto_repair,
             )
         else:
             return self.create_kubevirt_ocp_cluster(
@@ -2123,6 +2128,7 @@ class HypershiftHostedOCP(
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
                 data_replication_separation=data_replication_separation,
+                auto_repair=auto_repair,
             )
 
     def deploy_dependencies(
