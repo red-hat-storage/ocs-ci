@@ -2194,6 +2194,27 @@ def check_osds_in_hosts_are_up(osd_tree):
     return True
 
 
+@retry(
+    CommandFailed,
+    tries=5,
+    delay=15,
+    backoff=1,
+    text_in_exception="use of closed network connection",
+)
+def exec_ceph_osd_tree_with_retry():
+    """
+    Execute ceph osd tree command with retry logic for transient network errors.
+
+    This wrapper handles cases where kubelet API connections are interrupted
+    during operations like transit encryption upgrades or node replacements.
+
+    Returns:
+        dict: The output of ceph osd tree command
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    return ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+
+
 def check_ceph_osd_tree():
     """
     Checks whether an OSD tree is created/modified correctly.
@@ -2208,8 +2229,7 @@ def check_ceph_osd_tree():
     number_of_osds = len(osd_pods)
     # 'ceph osd tree' should show the new osds under right nodes/hosts
     #  Verification is different for 3 AZ and 1 AZ configs
-    ct_pod = pod.get_ceph_tools_pod()
-    tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+    tree_output = exec_ceph_osd_tree_with_retry()
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         if is_flexible_scaling_enabled():
             return check_osd_tree_1az_vmware_flex(tree_output, number_of_osds)
@@ -2238,8 +2258,7 @@ def check_ceph_osd_tree_after_node_replacement():
         and all the OSD's are up. Else False
 
     """
-    ct_pod = pod.get_ceph_tools_pod()
-    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+    osd_tree = exec_ceph_osd_tree_with_retry()
     if not check_ceph_osd_tree():
         logger.warning("Incorrect ceph osd tree formation found")
         return False
