@@ -796,3 +796,12 @@ class ResourceNotSupported(Exception):
     """Exception raised when resource is not supported."""
 
     pass
+
+
+class TemporaryPodsDuringDeployment(Exception):
+    """
+    Raised when temporary pods (like canary pods) are detected during deployment.
+    This triggers a retry to allow the deployment to stabilize.
+    """
+
+    pass
