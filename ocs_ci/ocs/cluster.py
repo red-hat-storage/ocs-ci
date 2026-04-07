@@ -37,6 +37,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     CephHealthException,
     ActiveMdsValueNotMatch,
+    TemporaryPodsDuringDeployment,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
@@ -1171,6 +1172,7 @@ def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label=None):
 
     Raises:
          AssertionError: If no PVC found for one of the pod
+         TemporaryPodsDuringDeployment: If pod is not found (may have been deleted/replaced)
 
     """
     logger.info(f"Validating if each pod from: {pods} has PVC from {pvc_names}.")
@@ -1185,20 +1187,33 @@ def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label=None):
                 continue
             assert found_pvc, f"No PVC found for pod: {pod_name}!"
         else:
-            pod_obj = ocp.OCP(
-                kind="Pod",
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=pod_name,
-            )
-            pod_data = pod_obj.get()
-            pod_labels = pod_data["metadata"].get("labels", {})
-            pvc_name = pod_labels[pvc_label]
-            assert (
-                pvc_name in pvc_names
-            ), f"No PVC {pvc_name} found for pod: {pod_name} in PVCs: {pvc_names}!"
+            try:
+                pod_obj = ocp.OCP(
+                    kind="Pod",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    resource_name=pod_name,
+                )
+                pod_data = pod_obj.get()
+                pod_labels = pod_data["metadata"].get("labels", {})
+                pvc_name = pod_labels[pvc_label]
+                assert (
+                    pvc_name in pvc_names
+                ), f"No PVC {pvc_name} found for pod: {pod_name} in PVCs: {pvc_names}!"
+                logger.info(f"PVC {pvc_name} found for pod {pod_name}")
+            except CommandFailed as e:
+                if "NotFound" in str(e):
+                    logger.warning(
+                        f"Pod {pod_name} not found - may have been replaced during "
+                        "deployment. Triggering retry to refresh both PVC and pod lists."
+                    )
+                    raise TemporaryPodsDuringDeployment(
+                        f"Pod {pod_name} disappeared - likely being replaced"
+                    )
+                else:
+                    raise
 
 
-@retry(CommandFailed, tries=3, delay=10, backoff=1)
+@retry(CommandFailed, tries=3, delay=30, backoff=1)
 def validate_claim_name_match_pvc(pvc_names, validated_pods=None):
     """
     Validate if OCS pods have mathching PVC and Claim name
@@ -1289,6 +1304,7 @@ def _collect_bound_ocs_pvcs(namespace, timeout=300, sleep=10):
     return None
 
 
+@retry((TemporaryPodsDuringDeployment, AssertionError), tries=3, delay=60, backoff=1)
 def validate_cluster_on_pvc():
     """
     Validate creation of PVCs for MON and OSD pods.
@@ -1296,6 +1312,7 @@ def validate_cluster_on_pvc():
 
     Raises:
          AssertionError: If PVC is not mounted on one or more OCS pods or some of the PVCs are not bound
+         TemporaryPodsDuringDeployment: If canary or temporary pods detected (triggers retry)
 
     """
     # Get the PVCs for selected label (MON/OSD)
@@ -1309,12 +1326,25 @@ def validate_cluster_on_pvc():
     if pvc_names is None:
         pvc_names = []
 
-    mon_pods = get_pod_name_by_pattern("rook-ceph-mon", ns)
     if not config.DEPLOYMENT.get("local_storage"):
         logger.info("Validating all mon pods have PVC")
         mon_pvc_label = constants.ROOK_CEPH_MON_PVC_LABEL
         if Version.coerce(config.ENV_DATA["ocs_version"]) < Version.coerce("4.6"):
             mon_pvc_label = None
+
+        mon_pods = get_pod_name_by_pattern("rook-ceph-mon", ns)
+
+        # Check for canary pods - these are temporary during mon replacement
+        # Raise exception to trigger retry with fresh PVC and pod lists
+        canary_pods = [pod for pod in mon_pods if "canary" in pod]
+        if canary_pods:
+            logger.warning(
+                f"Detected canary pods {canary_pods} - mon replacement in progress. "
+                "Will retry validation to allow deployment to stabilize."
+            )
+            raise TemporaryPodsDuringDeployment(f"Canary pods detected: {canary_pods}")
+
+        logger.info(f"Validating mon pods: {mon_pods}")
         validate_ocs_pods_on_pvc(
             mon_pods,
             pvc_names,
