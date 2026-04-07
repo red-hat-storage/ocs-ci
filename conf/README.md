@@ -189,6 +189,7 @@ version.
 * `hub_cluster_name` - Name of the Management cluster. Applicable for Agent deployments, where the hub cluster is pre-created.
 * `hub_cluster_path` - Path to the Management cluster directory to store auth_path, credentials files or cluster related files.
 * `partitioned_disk_primary_affinity` - Configure primaryAffinity for OSDs on partitioned disks, https://access.redhat.com/solutions/5807201 (default: "0.0")
+* `vsphere_vm_start_timeout` - Number of seconds to wait for vsphere vms to start up (default: 240)
 
 #### REPORTING
 
@@ -217,6 +218,8 @@ Reporting related config. (Do not store secret data in the repository!).
 * `max_mg_fail_attempts` - Maximum attempts to run MG commands to prevent
   spending time on MG which is timeouting.
 * `rp_additional_info` - any additional information placed to Report Portal launch description
+* `primary_assignee` - Primary assignee name to be added as an attribute in ReportPortal. This allows filtering runs by the primary assignee in RP
+* `backup_assignee` - Backup assignee name to be added as an attribute in ReportPortal. This allows filtering runs by the backup assignee in RP
 * `tarball_mg_logs` - pack MG files to tarball
 * `delete_packed_mg_logs` - applicable only if `tarball_mg_logs` is True, delete the individual MG files in case they were successfully packed
 

@@ -3344,7 +3344,8 @@ def get_pv_size(storageclass=None):
     ocp_obj = ocp.OCP(kind=constants.PV)
     pv_objs = ocp_obj.get()["items"]
     for pv_obj in pv_objs:
-        if pv_obj["spec"]["storageClassName"] == storageclass:
+        pv_sc = pv_obj.get("spec", {}).get("storageClassName")
+        if pv_sc and pv_sc == storageclass:
             return_list.append(pv_obj["spec"]["capacity"]["storage"])
     return return_list
 
@@ -5141,6 +5142,28 @@ def verify_log_exist_in_pods_logs(
     return False
 
 
+@retry(CommandFailed, tries=3, delay=10, backoff=2)
+def _extract_cli_image(pull_secret_path, image, remote_path, local_cli_dir):
+    """
+    Extract CLI binary from container image with retry for transient network errors.
+
+    Args:
+        pull_secret_path (str): Path to pull secret file
+        image (str): Container image URL
+        remote_path (str): Path inside container to extract
+        local_cli_dir (str): Local directory to extract to
+
+    Raises:
+        CommandFailed: If extraction fails after retries
+
+    """
+    exec_cmd(
+        f"oc image extract --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {remote_path}:{local_cli_dir}"
+    )
+
+
 def retrieve_cli_binary(cli_type="mcg"):
     """
     Download the MCG-CLI/ODF-CLI binary and store it locally.
@@ -5214,10 +5237,8 @@ def retrieve_cli_binary(cli_type="mcg"):
             image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
     pull_secret_path = download_pull_secret()
-    exec_cmd(
-        f"oc image extract --registry-config {pull_secret_path} "
-        f"{image} --confirm "
-        f"--path {get_architecture_path(cli_type)}:{local_cli_dir}"
+    _extract_cli_image(
+        pull_secret_path, image, get_architecture_path(cli_type), local_cli_dir
     )
     os.rename(
         os.path.join(local_cli_dir, remote_cli_basename),
@@ -6925,7 +6946,7 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
         f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
     )
 
-    cephbpradosns = ""
+    cephbpradosns = storageconsumer
 
     # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clusters have it,
     # but StorageRequest is not reconciled. StorageConsumer exists in storage hub cluster and in consumer clusters
@@ -6945,9 +6966,6 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
                         break
             if cephbpradosns:
                 break
-    else:
-        storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
-        cephbpradosns = storage_consumer.get_rbd_rados_ns()
     return cephbpradosns
 
 
@@ -7011,8 +7029,9 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
                 break
     else:
         storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
-        cephbfssubvolumegroup = storage_consumer.get_cephfs_subvolumegroup()
-
+        cephbfssubvolumegroup = storage_consumer.get("data").get(
+            "cephfs-subvolumegroup"
+        )
     return cephbfssubvolumegroup
 
 

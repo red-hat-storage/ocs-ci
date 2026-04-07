@@ -7,6 +7,11 @@ import logging
 import tempfile
 import time
 from datetime import datetime
+from time import sleep
+
+from novaclient.exceptions import ResourceNotFound
+
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -17,6 +22,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     NotFoundError,
     UnexpectedDeploymentConfiguration,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.ocp import OCP
@@ -42,6 +48,7 @@ from ocs_ci.ocs.utils import (
     enable_mco_console_plugin,
     set_recovery_as_primary,
     get_all_acm_indexes,
+    get_non_acm_cluster_and_non_provider_cluster_config,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -408,6 +415,11 @@ def check_mirroring_status_ok(
         if not cephbpradosns:
             raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
 
+        if "ocs-storagecluster-cephblockpool" not in cephbpradosns:
+            cephbpradosns = "ocs-storagecluster-cephblockpool-" + cephbpradosns
+
+        logger.info(f"Got cephblockpoolradosnamespace {cephbpradosns}")
+
         cbp_obj = ocp.OCP(
             kind=constants.CEPHBLOCKPOOLRADOSNS,
             namespace=config.clusters[config.get_provider_index()].ENV_DATA[
@@ -495,7 +507,12 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
 
     """
     restore_index = config.cur_index
-    for cluster in get_non_acm_cluster_config():
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        non_acm_cluster_config = get_non_acm_cluster_and_non_provider_cluster_config()
+    else:
+        non_acm_cluster_config = get_non_acm_cluster_config()
+    for cluster in non_acm_cluster_config:
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
         logger.info(
             f"Validating mirroring status on cluster {cluster.ENV_DATA['cluster_name']}"
@@ -1141,8 +1158,29 @@ def wait_for_all_resources_deletion(
     """
     logger.info("Waiting for all pods to be deleted")
     all_pods = get_all_pods(namespace=namespace)
+
+    # Bug https://redhat.atlassian.net/browse/DFBUGS-6048
+    for pod_obj in all_pods:
+        if "volsync-pvc-mount" in pod_obj.name:
+            # Wait for some time for all finalsync pods to schedule
+            logger.info("Wait for 90 seconds for all finalsync pods to schedule")
+            sleep(90)
+            break
+
     for pod_obj in all_pods:
         if "volsync-rsync-tls-dst" not in pod_obj.name:
+            if "volsync-pvc-mount" in pod_obj.name:
+                try:
+                    helpers.wait_for_resource_state(
+                        resource=pod_obj, state=constants.STATUS_COMPLETED, timeout=60
+                    )
+                except (ResourceWrongStatusException, CommandFailed, ResourceNotFound):
+                    # If the pod is deleted automatically
+                    pod_obj.ocp.wait_for_delete(
+                        resource_name=pod_obj.name, timeout=timeout, sleep=5
+                    )
+                    continue
+                pod_obj.delete()
             pod_obj.ocp.wait_for_delete(
                 resource_name=pod_obj.name, timeout=timeout, sleep=5
             )
@@ -1395,9 +1433,35 @@ def get_all_drpolicy():
 
     """
     config.switch_acm_ctx()
-    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
-    drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
-    return drpolicy_list
+    return_drpolicy_list = []
+    current_managed_clusters_list = []
+    acm_hub_name = config.get_cluster_name_by_index(get_active_acm_index())
+    with config.RunWithAcmConfigContext():
+        drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
+        drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
+    for cluster_name in config.clusters:
+        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+            current_managed_clusters_list.append(
+                cluster_name.ENV_DATA.get("cluster_name")
+            )
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        current_managed_clusters_list = [
+            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+            for item in dr_cluster_relations[0]
+            if is_hosted_cluster(cluster_name=item)
+        ]
+    else:
+        current_managed_clusters_list.remove(acm_hub_name)
+
+    for drpolicy in drpolicy_list:
+
+        if all(
+            mngcls in drpolicy["spec"]["drClusters"]
+            for mngcls in current_managed_clusters_list
+        ):
+            return_drpolicy_list.append(drpolicy)
+    return return_drpolicy_list
 
 
 @retry(UnexpectedBehaviour, tries=5, delay=10, backoff=2)
@@ -2484,12 +2548,26 @@ def get_cluster_set_name(switch_ctx=None):
         list: List of uniq cluster set name
     """
     cluster_set = []
+    current_managed_clusters_list = []
     restore_index = config.cur_index
     config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
-    current_managed_clusters_list = [
-        cluster_name.ENV_DATA.get("cluster_name") for cluster_name in config.clusters
-    ]
+    for cluster_name in config.clusters:
+        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+            current_managed_clusters_list.append(
+                cluster_name.ENV_DATA.get("cluster_name")
+            )
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        current_managed_clusters_list = [
+            (
+                f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+                if is_hosted_cluster(cluster_name=item)
+                else item
+            )
+            for item in dr_cluster_relations[0]
+        ]
+
     # ignore local-cluster here
     for i in managed_clusters:
         if (
@@ -2730,7 +2808,7 @@ def validate_volumegroupsnapshot(vgs_namespace):
     namespace = config.ENV_DATA["cluster_namespace"]
     odf_external_snapshotter_pod = get_pods_having_label(
         constants.ODF_EXTERNAL_SNAPSHOTTER, namespace
-    )[0]["metadata"]["name"]
+    )
     vgs_name = get_vgs_name(vgs_namespace)
     expected_output_lst = (
         f"{vgs_name} was successfully created by the CSI driver",
@@ -2739,16 +2817,26 @@ def validate_volumegroupsnapshot(vgs_namespace):
     try:
         for expected_val in expected_output_lst:
             wait_for_matching_pattern_in_pod_logs(
-                pod_name=odf_external_snapshotter_pod,
+                pod_name=odf_external_snapshotter_pod[0]["metadata"]["name"],
                 pattern=expected_val,
                 namespace=namespace,
                 timeout=300,
                 sleep=5,
             )
     except TimeoutExpiredError:
-        raise UnexpectedBehaviour(
-            f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
-        )
+        if len(odf_external_snapshotter_pod) > 1:
+            for expected_val in expected_output_lst:
+                wait_for_matching_pattern_in_pod_logs(
+                    pod_name=odf_external_snapshotter_pod[1]["metadata"]["name"],
+                    pattern=expected_val,
+                    namespace=namespace,
+                    timeout=300,
+                    sleep=5,
+                )
+        else:
+            raise UnexpectedBehaviour(
+                f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
+            )
 
 
 def is_cg_cephfs_enabled():

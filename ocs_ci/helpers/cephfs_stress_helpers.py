@@ -7,6 +7,8 @@ and resource cleanup.
 
 """
 
+import os
+from pathlib import Path
 import logging
 import threading
 
@@ -19,9 +21,11 @@ from ocs_ci.ocs.constants import (
     STATUS_RUNNING,
 )
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.job import get_job_pods
 from ocs_ci.helpers.helpers import (
     validate_pod_oomkilled,
     validate_pods_are_running_and_not_restarted,
@@ -29,6 +33,7 @@ from ocs_ci.helpers.helpers import (
     create_pod,
     create_pvc,
     wait_for_resource_state,
+    get_current_test_name,
 )
 from ocs_ci.ocs.resources.pod import (
     check_pods_in_running_state,
@@ -74,6 +79,7 @@ class CephFSStressTestManager:
         self.verification_failures = []
         self.created_resources = []
         self.background_checks_thread = None
+        self.checks_paused = False
         check_prometheus_alerts
 
     def setup_stress_test_environment(self, pvc_size):
@@ -160,9 +166,7 @@ class CephFSStressTestManager:
         self.created_resources.append(cephfs_stress_pod_obj)
 
         logger.info("Waiting for Cephfs stress pod to start")
-        wait_for_resource_state(
-            cephfs_stress_pod_obj, state=STATUS_RUNNING, timeout=300
-        )
+        self._wait_with_retry(cephfs_stress_pod_obj, STATUS_RUNNING, 300)
 
         return cephfs_stress_pod_obj
 
@@ -236,11 +240,30 @@ class CephFSStressTestManager:
         cephfs_stress_job_obj = OCS(**job_ocp_dict)
         self.created_resources.append(cephfs_stress_job_obj)
 
-        wait_for_resource_state(
-            cephfs_stress_job_obj, state=STATUS_RUNNING, timeout=300
-        )
+        self._wait_with_retry(cephfs_stress_job_obj, STATUS_RUNNING, 300)
 
         return cephfs_stress_job_obj
+
+    @retry(CommandFailed, tries=3, delay=2, backoff=1)
+    def _wait_with_retry(self, resource, state, timeout):
+        """
+        Wrapper to retry wait_for_resource_state in case of transient failures
+
+        Args:
+          resource (OCS): The OCS resource object to wait for
+          state (str): The desired state (e.g., constants.STATUS_RUNNING)
+          timeout (int): Maximum time in seconds to wait for the resource
+              to reach the desired state
+
+        Raises:
+          CommandFailed: If the resource fails to reach the desired state
+              after all retry attempts are exhausted, or if an oc command
+              fails due to kubeconfig issues that persist across retries
+          ResourceWrongStatusException: If the resource reaches a wrong status
+              within the timeout period
+
+        """
+        wait_for_resource_state(resource, state=state, timeout=timeout)
 
     def _set_env_vars(self, resource_data, env_vars, type):
         """
@@ -293,7 +316,7 @@ class CephFSStressTestManager:
         self.background_checks_thread.start()
         logger.info("Background checks ('StressWatchdog')thread started.")
 
-    def stop_background_checks(self):
+    def stop_background_checks(self, timeout=10):
         """
         Signals the background thread ('StressWatchdog') to stop and waits for it to join.
 
@@ -303,13 +326,43 @@ class CephFSStressTestManager:
                 "Signaling Background checks ('StressWatchdog') thread to stop..."
             )
             self.stop_event.set()
-            self.background_checks_thread.join()
+            self.background_checks_thread.join(timeout=timeout)
+
             if self.background_checks_thread.is_alive():
                 logger.warning(
-                    "Background checks ('StressWatchdog') thread did not exit cleanly!"
+                    f"Background thread did not stop within {timeout}s - "
+                    "abandoning (daemon thread will terminate on exit)"
                 )
             else:
                 logger.info("Background checks ('StressWatchdog') thread stopped.")
+
+    def pause_background_checks(self):
+        """
+        Pause background verification checks temporarily.
+
+        This is useful during intentional disruptions (e.g., node failures, pod restarts)
+        where verification failures are expected and should not fail the test.
+        """
+        with self.verification_lock:
+            self.checks_paused = True
+        logger.info(
+            "Background verification checks PAUSED - "
+            "Verifications will be skipped until resumed"
+        )
+
+    def resume_background_checks(self):
+        """
+        Resume background verification checks after they were paused.
+
+        Should be called after cluster has recovered from intentional disruptions
+        and is expected to be in a healthy state.
+        """
+        with self.verification_lock:
+            self.checks_paused = False
+        logger.info(
+            "Background verification checks RESUMED - "
+            "Verifications will now run normally"
+        )
 
     def _continuous_checks_runner(self, interval_minutes):
         """
@@ -327,6 +380,9 @@ class CephFSStressTestManager:
         logger.info(f"Monitor Loop Started (Interval: {interval_minutes}m)")
 
         while not self.stop_event.is_set():
+            if self.stop_event.is_set():
+                break
+
             try:
                 self._run_cluster_health_checks()
                 self._run_strict_verifications()
@@ -334,11 +390,16 @@ class CephFSStressTestManager:
                 logger.error(
                     f"Unexpected error in background checks loop: {e}", exc_info=True
                 )
+
+            if self.stop_event.is_set():
+                break
+
             logger.info(
                 f"Pausing for {interval_minutes} minutes before the next round "
                 "of periodic cluster and verification checks"
             )
-            if self.stop_event.wait(timeout=interval_minutes):
+            interval_seconds = interval_minutes * 60
+            if self.stop_event.wait(timeout=interval_seconds):
                 break
 
         logger.info("Stop signal received - Background checks loop exiting")
@@ -359,6 +420,18 @@ class CephFSStressTestManager:
             Exception: If any verification script fails unexpectedly
 
         """
+        # Check if verifications are paused (e.g., during intentional disruptions)
+        with self.verification_lock:
+            if self.checks_paused:
+                logger.info(
+                    "\n=================================================="
+                    "\n  VERIFICATION CHECKS PAUSED - SKIPPING          "
+                    "\n  (Checks paused during intentional disruptions) "
+                    "\n=================================================="
+                    "\n"
+                )
+                return
+
         logger.info(
             "\n=================================================="
             "\n      STARTING STRICT VERIFICATION CHECKS         "
@@ -369,13 +442,23 @@ class CephFSStressTestManager:
         verifications_to_run = [
             check_ceph_health,
             verify_openshift_storage_ns_pods_in_running_state,
-            verify_openshift_storage_ns_pods_health,
         ]
         try:
             for verification_func in verifications_to_run:
+                if self.stop_event.is_set():
+                    logger.info("Stop signal received - aborting checks")
+                    return
+                # Check if paused before each verification (handles mid-execution pause)
+                with self.verification_lock:
+                    if self.checks_paused:
+                        logger.info(
+                            "Verification checks were paused mid-execution - stopping verifications"
+                        )
+                        return
+
                 func_name = verification_func.__name__
                 logger.debug(f"Running verification: {func_name}")
-                result = verification_func()
+                result = verification_func(stress_manager=self)
                 if result is False:
                     logger.error(f"Verification {func_name} returned False")
                     raise AssertionError(
@@ -427,10 +510,14 @@ class CephFSStressTestManager:
             (get_nodes_resource_utilization, {}),
             (get_pods_resource_utilization, {}),
             (get_osd_disk_utilization, {}),
+            (verify_openshift_storage_ns_pods_health, {}),
         ]
         for check_func, kwargs in checks_to_run:
+            if self.stop_event.is_set():
+                logger.info("Stop signal received - aborting checks")
+                return
             func_name = check_func.__name__
-            logger.debug(f"Running cluster check: {func_name}")
+            logger.info(f"Running cluster check: {func_name}")
 
             try:
                 check_func(**kwargs)
@@ -467,14 +554,24 @@ class CephFSStressTestManager:
                 logger.warning(f"Failed to delete {resource.name}: {e}")
 
 
-def check_ceph_health():
+def check_ceph_health(stress_manager=None):
     """
     Checks the health of the Ceph cluster.
+
+    Args:
+        stress_manager: CephFSStressTestManager instance to check pause status
 
     Raises:
         Exception: If Ceph cluster is not healthy
 
     """
+    # Check if verifications are paused (for in-progress checks)
+    if stress_manager and hasattr(stress_manager, "checks_paused"):
+        with stress_manager.verification_lock:
+            if stress_manager.checks_paused:
+                logger.info("Ceph health check skipped - verifications are paused")
+                return True
+
     logger.info(
         "\n=================================================="
         "\n             VERIFICATION CHECK: Ceph health      "
@@ -485,27 +582,59 @@ def check_ceph_health():
     logger.info("\n Ceph cluster is healthy" "\n")
 
 
-@retry(CommandFailed, tries=3, delay=60, backoff=1)
-def verify_openshift_storage_ns_pods_in_running_state():
+def verify_openshift_storage_ns_pods_in_running_state(stress_manager=None):
     """
     Verifies that all pods in the openshift-storage namespace are in a 'Running' state.
+    Retries on CommandFailed, then raises PodsNotRunningError if verification fails after all retries.
+
+    Args:
+        stress_manager: CephFSStressTestManager instance to check pause status
 
     Raises:
-        PodsNotRunningError: If not all pods are in the 'Running' state
+        PodsNotRunningError: If not all pods are in the 'Running' state after all retries
 
     """
-    logger.info(
-        "\n===================================================="
-        "\n VERIFICATION CHECK: Openshift-storage pods status  "
-        "\n===================================================="
-        "\n"
-    )
-    result = check_pods_in_running_state(namespace=config.ENV_DATA["cluster_namespace"])
-    if not result:
-        raise PodsNotRunningError(
-            "Not all Pods in the openshift-storage are in Running state"
+    # Check if verifications are paused (for in-progress checks)
+    if stress_manager and hasattr(stress_manager, "checks_paused"):
+        with stress_manager.verification_lock:
+            if stress_manager.checks_paused:
+                logger.info(
+                    "Pods running state check skipped - verifications are paused"
+                )
+                return True
+
+    @retry(CommandFailed, tries=3, delay=60, backoff=1)
+    def _check_pods_running():
+        # Re-check pause status during retries
+        if stress_manager and hasattr(stress_manager, "checks_paused"):
+            with stress_manager.verification_lock:
+                if stress_manager.checks_paused:
+                    logger.info(
+                        "Pods running state check skipped during retry - verifications are paused"
+                    )
+                    return True
+        logger.info(
+            "\n===================================================="
+            "\n VERIFICATION CHECK: Openshift-storage pods status  "
+            "\n===================================================="
+            "\n"
         )
-    logger.info("All the Pods in the openshift-storage namespace are in Running state")
+        result = check_pods_in_running_state(
+            namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        if not result:
+            raise CommandFailed(
+                "Not all Pods in the openshift-storage are in Running state"
+            )
+        logger.info(
+            "All the Pods in the openshift-storage namespace are in Running state"
+        )
+        return True
+
+    try:
+        return _check_pods_running()
+    except CommandFailed as e:
+        raise PodsNotRunningError(str(e))
 
 
 @retry(CommandFailed, tries=3, delay=60, backoff=1)
@@ -534,57 +663,90 @@ def get_filtered_pods():
     return filtered_list_objs
 
 
-@retry(CommandFailed, tries=3, delay=60, backoff=1)
-def verify_openshift_storage_ns_pods_health():
+def verify_openshift_storage_ns_pods_health(stress_manager=None):
     """
-    Validates that all the Pods in the openshift-storage namespace are healthy
+    Validates that all the Pods in the openshift-storage namespace are healthy.
+    Retries on CommandFailed, then raises PodStabilityError if verification fails after all retries.
 
     It checks for two conditions:
     1. Pods have not been restarted
     2. Pods have not been OOMKilled
 
+    Args:
+        stress_manager: CephFSStressTestManager instance to check pause status
+
     Raises:
-        AssertionError: If any pod is found to have restarts or OOMKills.
+        PodStabilityError: If any pod is found to have restarts or OOMKills after all retries
 
     """
-    logger.info(
-        "\n===================================================="
-        "\n VERIFICATION CHECK: Openshift-storage pods health  "
-        "\n===================================================="
-        "\n"
-    )
-    pod_objs = get_filtered_pods()
-    pod_restarts = []
-    oomkilled_pods = []
-    for pod_obj in pod_objs:
-        pod_name = pod_obj.get().get("metadata").get("name")
-        if not validate_pods_are_running_and_not_restarted(
-            pod_name=pod_name,
-            pod_restart_count=0,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        ):
-            pod_restarts.append(pod_name)
+    # Check if verifications are paused (for in-progress checks)
+    if stress_manager and hasattr(stress_manager, "checks_paused"):
+        with stress_manager.verification_lock:
+            if stress_manager.checks_paused:
+                logger.info("Pods health check skipped - verifications are paused")
+                return True
 
-        for item in pod_obj.get().get("status").get("containerStatuses"):
-            container_name = item.get("name")
-            if not validate_pod_oomkilled(pod_name=pod_name, container=container_name):
-                oomkilled_pods.append(f"Pod: {pod_name}, Container: {container_name}")
+    @retry(CommandFailed, tries=3, delay=60, backoff=1)
+    def _check_pods_health():
+        # Re-check pause status during retries
+        if stress_manager and hasattr(stress_manager, "checks_paused"):
+            with stress_manager.verification_lock:
+                if stress_manager.checks_paused:
+                    logger.info(
+                        "Pods health check skipped during retry - verifications are paused"
+                    )
+                    return True
 
-    if pod_restarts or oomkilled_pods:
-        logger.error("Openshift-storage pods health check verification failed")
-        if pod_restarts:
-            logger.error(f"Found {len(pod_restarts)} restarted pods: {pod_restarts}")
-        if oomkilled_pods:
-            logger.error(
-                f"Found {len(oomkilled_pods)} OOMKilled containers: {oomkilled_pods}"
-            )
-        raise PodStabilityError(
-            "Openshift-storage pods health check verification failed"
+        logger.info(
+            "\n===================================================="
+            "\n VERIFICATION CHECK: Openshift-storage pods health  "
+            "\n===================================================="
+            "\n"
         )
+        pod_objs = get_filtered_pods()
+        pod_restarts = []
+        oomkilled_pods = []
+        for pod_obj in pod_objs:
+            pod_name = pod_obj.get().get("metadata").get("name")
+            if not validate_pods_are_running_and_not_restarted(
+                pod_name=pod_name,
+                pod_restart_count=0,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            ):
+                pod_restarts.append(pod_name)
 
-    logger.info(
-        "All pods in the openshift-storage namespace are healthy (no restarts or OOMs)"
-    )
+            for item in pod_obj.get().get("status").get("containerStatuses"):
+                container_name = item.get("name")
+                if not validate_pod_oomkilled(
+                    pod_name=pod_name, container=container_name
+                ):
+                    oomkilled_pods.append(
+                        f"Pod: {pod_name}, Container: {container_name}"
+                    )
+
+        if pod_restarts or oomkilled_pods:
+            logger.error("Openshift-storage pods health check verification failed")
+            if pod_restarts:
+                logger.error(
+                    f"Found {len(pod_restarts)} restarted pods: {pod_restarts}"
+                )
+            if oomkilled_pods:
+                logger.error(
+                    f"Found {len(oomkilled_pods)} OOMKilled containers: {oomkilled_pods}"
+                )
+            raise CommandFailed(
+                "Openshift-storage pods health check verification failed"
+            )
+
+        logger.info(
+            "All pods in the openshift-storage namespace are healthy (no restarts or OOMs)"
+        )
+        return True
+
+    try:
+        return _check_pods_health()
+    except CommandFailed as e:
+        raise PodStabilityError(str(e))
 
 
 @retry(CommandFailed, tries=3, delay=60, backoff=1)
@@ -783,3 +945,56 @@ def run_stress_cleanup(pod_obj, top_dir, timeout=3600, parallelism_count=25):
 
     except (KeyError, IndexError) as e:
         raise ValueError(f"Invalid pod structure: {e}")
+
+
+def collect_stress_job_pod_logs(stress_job_obj, dir_name=None):
+    """
+    Collect stress job pod logs and store them in ocs-ci log directory.
+
+    Args:
+        stress_job_obj: Stress job object whose pod logs need to be collected
+        dir_name (str): Optional subdirectory name. By default logs are stored in
+            ocs-ci-logs-<run_id>/<test_name>/failed_stress_job_logs directory.
+            When dir_name is provided, logs are stored in
+            ocs-ci-logs-<run_id>/<test_name>/failed_stress_job_logs/<dir_name>
+
+    """
+    tmp_path = Path(ocsci_log_path())
+    base_log_dir = os.path.join(
+        tmp_path, get_current_test_name(), "failed_stress_job_logs"
+    )
+    destination_dir = f"{base_log_dir}/{dir_name}" if dir_name else base_log_dir
+    if not os.path.isdir(destination_dir):
+        Path(destination_dir).mkdir(parents=True, exist_ok=True)
+
+    logger.info(
+        f"Collecting logs from stress job {stress_job_obj.name} pods to {destination_dir}"
+    )
+    try:
+        stress_job_pods = get_job_pods(
+            job_name=stress_job_obj.name, namespace=stress_job_obj.namespace
+        )
+        if not stress_job_pods:
+            logger.warning(f"No pods found for stress job {stress_job_obj.name}")
+            return
+        for stress_job_pod in stress_job_pods:
+            pod_name = stress_job_pod.get("metadata", {}).get("name")
+            if not pod_name:
+                logger.warning("Pod name not found in stress job pod metadata")
+                continue
+            try:
+                logger.info(f"Collecting logs from pod {pod_name}")
+                logs = pod.get_pod_logs(
+                    pod_name=pod_name,
+                    namespace=stress_job_obj.namespace,
+                    all_containers=True,
+                )
+                log_file_path = os.path.join(destination_dir, f"{pod_name}.log")
+                with open(log_file_path, "w") as log_file:
+                    log_file.write(logs if logs else "No logs available")
+
+                logger.info(f"Logs saved to {log_file_path}")
+            except Exception as e:
+                logger.error(f"Failed to collect logs from pod {pod_name}: {e}")
+    except Exception as e:
+        logger.error(f"Failed to collect stress job pod logs: {e}")
