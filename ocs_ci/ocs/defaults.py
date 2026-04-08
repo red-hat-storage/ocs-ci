@@ -170,8 +170,19 @@ MUST_GATHER_UPSTREAM_IMAGE = "quay.io/ocs-dev/ocs-must-gather"
 MUST_GATHER_UPSTREAM_TAG = "latest"
 MUST_GATHER_TIMEOUT = 3600
 
-# AI / Claude Code defaults:
+# AI Live Analysis with MCP Server:
+# Use ~/.claude/mcp/ as base directory (user-writable, no sudo required)
+AI_MCP_BASE_DIR = os.path.expanduser("~/.claude/mcp")
+AI_MCP_SERVER_REPO_URL = "https://github.com/shivamdurgbuns/ocs-ci-server.git"
+AI_MCP_SERVER_DIR = os.path.join(AI_MCP_BASE_DIR, "ocs-ci-server")
+AI_OCS_CI_REPO_URL = "https://github.com/red-hat-storage/ocs-ci.git"
+AI_OCS_CI_DIR = os.path.join(AI_MCP_BASE_DIR, "ocs-ci")
+AI_MCP_VENV_DIR = os.path.join(AI_MCP_BASE_DIR, "venv")
+AI_MCP_TEMPLATE_PATH = os.path.expanduser("~/.mcp.json")
 AI_GCP_CREDENTIALS_PATH = os.path.expanduser("~/.gcp/gcp-auth.json")
+AI_MCP_SERVER_NAME = "ocs-ci-server"
+# Full path to Python 3.12+ in MCP venv (will be created if doesn't exist)
+AI_PYTHON_PATH = os.path.join(AI_MCP_BASE_DIR, "venv/bin/python")
 
 # CrushDeviceClass
 CRUSH_DEVICE_CLASS = "ssd"
