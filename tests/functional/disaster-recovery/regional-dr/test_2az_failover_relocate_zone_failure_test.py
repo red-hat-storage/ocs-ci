@@ -84,6 +84,8 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
         """
         primary_cluster_down = True  # Always bring down primary cluster during failover
+        failover_batch = []
+        relocate_batch = []
 
         logger.info(
             f"Starting test with pvc_interface={pvc_interface}, "
@@ -216,6 +218,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 if is_discovered_app
                 else (f"{resource_name}-drpc" if is_appset else workload_namespace)
             )
+            action_old_primary = primary_cluster_name if is_discovered_app else None
 
             workload_metadata.append(
                 {
@@ -232,6 +235,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     "primary_cluster_nodes": primary_cluster_nodes,
                     "secondary_cluster_name": secondary_cluster_name,
                     "scheduling_interval": scheduling_interval,
+                    "old_primary": action_old_primary,
                 }
             )
 
@@ -292,7 +296,17 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
         # Perform failover for all workloads
         try:
+            failover_batch = []
             for wl_meta in workload_metadata:
+                failover_batch.append(
+                    {
+                        "drpc_name": wl_meta["drpc_name"],
+                        "namespace": wl_meta["workload_namespace"],
+                        "resource_name": wl_meta["resource_name"],
+                        "workload_type": wl_meta["workload_type"],
+                        "target_cluster": wl_meta["secondary_cluster_name"],
+                    }
+                )
                 logger.info(
                     f"Initiating failover for workload {wl_meta['idx']}/{len(all_workloads)} "
                     f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
@@ -304,6 +318,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     "namespace": wl_meta["workload_namespace"],
                     "workload_placement_name": wl_meta["resource_name"],
                     "discovered_apps": wl_meta["is_discovered_app"],
+                    "old_primary": wl_meta["old_primary"],
                 }
                 if not wl_meta["is_discovered_app"]:
                     failover_params["workload_type"] = (
@@ -312,6 +327,10 @@ class Test2AZFailoverAndRelocateZoneFailure:
                         else constants.SUBSCRIPTION
                     )
                 dr_helpers.failover(**failover_params)
+
+            logger.info(
+                f"Failover patches submitted for all workloads. Batch details: {failover_batch}"
+            )
 
             # Wait for all failovers to complete
             logger.info("Waiting for all failovers to complete")
@@ -352,12 +371,12 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 )
         except Exception as ex:
             logger.error(
-                f"Failover phase failed. Completed failovers before failure: "
-                f"{completed_failovers}"
+                f"Failover phase failed. Requested failover batch: {failover_batch}. "
+                f"Completed failovers before failure: {completed_failovers}"
             )
             raise type(ex)(
-                f"{str(ex)} | Failover phase context: completed_failovers="
-                f"{completed_failovers}"
+                f"{str(ex)} | Failover phase context: requested_failover_batch="
+                f"{failover_batch}, completed_failovers={completed_failovers}"
             ) from ex
 
         # Restart primary cluster zone nodes if they were stopped
@@ -399,7 +418,17 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
         # Perform relocate for all workloads
         try:
+            relocate_batch = []
             for wl_meta in workload_metadata:
+                relocate_batch.append(
+                    {
+                        "drpc_name": wl_meta["drpc_name"],
+                        "namespace": wl_meta["workload_namespace"],
+                        "resource_name": wl_meta["resource_name"],
+                        "workload_type": wl_meta["workload_type"],
+                        "target_cluster": wl_meta["primary_cluster_name"],
+                    }
+                )
                 logger.info(
                     f"Initiating relocate for workload {wl_meta['idx']}/{len(all_workloads)} "
                     f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
@@ -411,6 +440,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     "namespace": wl_meta["workload_namespace"],
                     "workload_placement_name": wl_meta["resource_name"],
                     "discovered_apps": wl_meta["is_discovered_app"],
+                    "old_primary": wl_meta["secondary_cluster_name"],
                 }
                 if not wl_meta["is_discovered_app"]:
                     relocate_params["workload_type"] = (
@@ -419,6 +449,10 @@ class Test2AZFailoverAndRelocateZoneFailure:
                         else constants.SUBSCRIPTION
                     )
                 dr_helpers.relocate(**relocate_params)
+
+            logger.info(
+                f"Relocate patches submitted for all workloads. Batch details: {relocate_batch}"
+            )
 
             # Wait for all relocates to complete
             logger.info("Waiting for all relocates to complete")
@@ -459,13 +493,14 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 )
         except Exception as ex:
             logger.error(
-                f"Relocate phase failed. Completed failovers before failure: "
-                f"{completed_failovers}. Completed relocates before failure: "
-                f"{completed_relocates}"
+                f"Relocate phase failed. Requested relocate batch: {relocate_batch}. "
+                f"Completed failovers before failure: {completed_failovers}. "
+                f"Completed relocates before failure: {completed_relocates}"
             )
             raise type(ex)(
-                f"{str(ex)} | Relocate phase context: completed_failovers="
-                f"{completed_failovers}, completed_relocates={completed_relocates}"
+                f"{str(ex)} | Relocate phase context: requested_relocate_batch="
+                f"{relocate_batch}, completed_failovers={completed_failovers}, "
+                f"completed_relocates={completed_relocates}"
             ) from ex
 
         # ========================================
