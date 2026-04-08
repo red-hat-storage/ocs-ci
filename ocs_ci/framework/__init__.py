@@ -551,7 +551,18 @@ class MultiClusterConfig:
             from ocs_ci.ocs.utils import get_primary_cluster_config
 
             primary_config = get_primary_cluster_config()
-            primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
+            if primary_config is not None:
+                primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
+            else:
+                # No DR-style primary (e.g. provider/client multicluster). Prefer provider
+                # for ODF-related context; otherwise keep current index.
+                try:
+                    primary_index = config.get_provider_index()
+                except ClusterNotFoundException:
+                    logger.debug(
+                        "No primary cluster and no provider cluster - using current cluster"
+                    )
+                    primary_index = config.cur_index
             super().__init__(primary_index)
 
     class RunWithProviderConfigContextIfAvailable(RunWithConfigContext):
