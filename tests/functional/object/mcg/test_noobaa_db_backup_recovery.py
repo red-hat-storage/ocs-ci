@@ -1,4 +1,5 @@
 import logging
+import pytest
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     get_default_cluster_volumesnapshotclass,
@@ -33,11 +34,13 @@ class TestNoobaaDbBackupRecoveryOps:
     Test CNPG based noobaa DB Backup and recovery functionality
     """
 
-    SNAPSHOT_CLASS = (
-        get_default_cluster_volumesnapshotclass()
-        if config.ENV_DATA["mcg_only_deployment"]
-        else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
-    )
+    @pytest.fixture(autouse=True)
+    def determine_snapshot_class_value(self):
+        self.SNAPSHOT_CLASS = (
+            get_default_cluster_volumesnapshotclass()
+            if config.ENV_DATA["mcg_only_deployment"]
+            else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+        )
 
     def trigger_cluster_recovery(self, db_cluster_name):
         """
