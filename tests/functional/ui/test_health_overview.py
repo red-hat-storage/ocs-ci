@@ -517,6 +517,7 @@ class TestHealthOverview(ManageTest):
             self.wait_for_health_score_recovery(baseline_score)
         else:
             logger.info("Alert already present no need to trigger again")
+            infra_health_overview = df_overview.nav_health_view_checks()
             infra_health_overview.unsilence_alert_by_name(alert_name)
             self.wait_for_health_score_change(
                 ALERT_MAP[alert_name] * expected_drop, baseline_score
