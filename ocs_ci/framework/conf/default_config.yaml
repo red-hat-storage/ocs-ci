@@ -124,7 +124,7 @@ DEPLOYMENT:
   # STS in CCO manual mode
   sts_enabled: false
   ocm_cli_version: "0.1.75"
-  rosa_cli_version: "1.2.51"
+  rosa_cli_version: "1.2.61"
   # Multicluster engine
   deploy_mce: false
   fusion_channel: v2.0
