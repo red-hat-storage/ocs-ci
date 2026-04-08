@@ -157,6 +157,8 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # ========================================
         logger.info("Preparing workload metadata for batch failover and relocate")
         workload_metadata = []
+        completed_failovers = []
+        completed_relocates = []
 
         for idx, workload in enumerate(all_workloads, 1):
             workload_type = (
@@ -209,6 +211,12 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 resource_name=resource_name,
             )
 
+            drpc_name = (
+                resource_name
+                if is_discovered_app
+                else (f"{resource_name}-drpc" if is_appset else workload_namespace)
+            )
+
             workload_metadata.append(
                 {
                     "idx": idx,
@@ -218,6 +226,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     "is_discovered_app": is_discovered_app,
                     "is_appset": is_appset,
                     "resource_name": resource_name,
+                    "drpc_name": drpc_name,
                     "primary_cluster_name": primary_cluster_name,
                     "primary_cluster_index": primary_cluster_index,
                     "primary_cluster_nodes": primary_cluster_nodes,
@@ -228,7 +237,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
             logger.info(
                 f"Workload {idx}/{len(all_workloads)} ({workload_type}): "
-                f"Primary={primary_cluster_name}, Secondary={secondary_cluster_name}"
+                f"namespace={workload_namespace}, resource_name={resource_name}, "
+                f"drpc_name={drpc_name}, Primary={primary_cluster_name}, "
+                f"Secondary={secondary_cluster_name}"
             )
 
         # Get max scheduling interval for wait time
@@ -280,46 +291,74 @@ class Test2AZFailoverAndRelocateZoneFailure:
             logger.info(f"Nodes in zone '{power_off_zone}' stopped")
 
         # Perform failover for all workloads
-        for wl_meta in workload_metadata:
-            logger.info(
-                f"Initiating failover for workload {wl_meta['idx']}/{len(all_workloads)} "
-                f"({wl_meta['workload_type']}) to {wl_meta['secondary_cluster_name']}"
-            )
-            failover_params = {
-                "failover_cluster": wl_meta["secondary_cluster_name"],
-                "namespace": wl_meta["workload_namespace"],
-                "workload_placement_name": wl_meta["resource_name"],
-                "discovered_apps": wl_meta["is_discovered_app"],
-            }
-            if not wl_meta["is_discovered_app"]:
-                failover_params["workload_type"] = (
-                    constants.APPLICATION_SET
-                    if wl_meta["is_appset"]
-                    else constants.SUBSCRIPTION
+        try:
+            for wl_meta in workload_metadata:
+                logger.info(
+                    f"Initiating failover for workload {wl_meta['idx']}/{len(all_workloads)} "
+                    f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
+                    f"resource_name={wl_meta['resource_name']} drpc_name={wl_meta['drpc_name']} "
+                    f"to {wl_meta['secondary_cluster_name']}"
                 )
-            dr_helpers.failover(**failover_params)
+                failover_params = {
+                    "failover_cluster": wl_meta["secondary_cluster_name"],
+                    "namespace": wl_meta["workload_namespace"],
+                    "workload_placement_name": wl_meta["resource_name"],
+                    "discovered_apps": wl_meta["is_discovered_app"],
+                }
+                if not wl_meta["is_discovered_app"]:
+                    failover_params["workload_type"] = (
+                        constants.APPLICATION_SET
+                        if wl_meta["is_appset"]
+                        else constants.SUBSCRIPTION
+                    )
+                dr_helpers.failover(**failover_params)
 
-        # Wait for all failovers to complete
-        logger.info("Waiting for all failovers to complete")
-        for wl_meta in workload_metadata:
-            logger.info(
-                f"Verifying failover completion for workload {wl_meta['idx']}/{len(all_workloads)}"
+            # Wait for all failovers to complete
+            logger.info("Waiting for all failovers to complete")
+            for wl_meta in workload_metadata:
+                logger.info(
+                    f"Verifying failover completion for workload "
+                    f"{wl_meta['idx']}/{len(all_workloads)} "
+                    f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
+                    f"resource_name={wl_meta['resource_name']} "
+                    f"drpc_name={wl_meta['drpc_name']}"
+                )
+                dr_helpers.wait_for_all_resources_creation(
+                    wl_meta["workload"].workload_pvc_count,
+                    wl_meta["workload"].workload_pod_count,
+                    wl_meta["workload_namespace"],
+                    discovered_apps=wl_meta["is_discovered_app"],
+                )
+                config.switch_to_cluster_by_name(wl_meta["secondary_cluster_name"])
+                wait_for_pods_to_be_running(
+                    namespace=wl_meta["workload_namespace"],
+                    timeout=720,
+                )
+                completed_failovers.append(
+                    {
+                        "drpc_name": wl_meta["drpc_name"],
+                        "namespace": wl_meta["workload_namespace"],
+                        "resource_name": wl_meta["resource_name"],
+                        "workload_type": wl_meta["workload_type"],
+                        "target_cluster": wl_meta["secondary_cluster_name"],
+                    }
+                )
+                logger.info(
+                    f"Workload {wl_meta['idx']} successfully failed over to "
+                    f"{wl_meta['secondary_cluster_name']} "
+                    f"(drpc_name={wl_meta['drpc_name']}, "
+                    f"namespace={wl_meta['workload_namespace']}, "
+                    f"resource_name={wl_meta['resource_name']})"
+                )
+        except Exception as ex:
+            logger.error(
+                f"Failover phase failed. Completed failovers before failure: "
+                f"{completed_failovers}"
             )
-            dr_helpers.wait_for_all_resources_creation(
-                wl_meta["workload"].workload_pvc_count,
-                wl_meta["workload"].workload_pod_count,
-                wl_meta["workload_namespace"],
-                discovered_apps=wl_meta["is_discovered_app"],
-            )
-            config.switch_to_cluster_by_name(wl_meta["secondary_cluster_name"])
-            wait_for_pods_to_be_running(
-                namespace=wl_meta["workload_namespace"],
-                timeout=720,
-            )
-            logger.info(
-                f"Workload {wl_meta['idx']} successfully failed over to "
-                f"{wl_meta['secondary_cluster_name']}"
-            )
+            raise type(ex)(
+                f"{str(ex)} | Failover phase context: completed_failovers="
+                f"{completed_failovers}"
+            ) from ex
 
         # Restart primary cluster zone nodes if they were stopped
         if primary_cluster_down and workload_metadata:
@@ -359,46 +398,75 @@ class Test2AZFailoverAndRelocateZoneFailure:
         sleep(max_scheduling_interval * 60)
 
         # Perform relocate for all workloads
-        for wl_meta in workload_metadata:
-            logger.info(
-                f"Initiating relocate for workload {wl_meta['idx']}/{len(all_workloads)} "
-                f"({wl_meta['workload_type']}) back to {wl_meta['primary_cluster_name']}"
-            )
-            relocate_params = {
-                "preferred_cluster": wl_meta["primary_cluster_name"],
-                "namespace": wl_meta["workload_namespace"],
-                "workload_placement_name": wl_meta["resource_name"],
-                "discovered_apps": wl_meta["is_discovered_app"],
-            }
-            if not wl_meta["is_discovered_app"]:
-                relocate_params["workload_type"] = (
-                    constants.APPLICATION_SET
-                    if wl_meta["is_appset"]
-                    else constants.SUBSCRIPTION
+        try:
+            for wl_meta in workload_metadata:
+                logger.info(
+                    f"Initiating relocate for workload {wl_meta['idx']}/{len(all_workloads)} "
+                    f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
+                    f"resource_name={wl_meta['resource_name']} drpc_name={wl_meta['drpc_name']} "
+                    f"back to {wl_meta['primary_cluster_name']}"
                 )
-            dr_helpers.relocate(**relocate_params)
+                relocate_params = {
+                    "preferred_cluster": wl_meta["primary_cluster_name"],
+                    "namespace": wl_meta["workload_namespace"],
+                    "workload_placement_name": wl_meta["resource_name"],
+                    "discovered_apps": wl_meta["is_discovered_app"],
+                }
+                if not wl_meta["is_discovered_app"]:
+                    relocate_params["workload_type"] = (
+                        constants.APPLICATION_SET
+                        if wl_meta["is_appset"]
+                        else constants.SUBSCRIPTION
+                    )
+                dr_helpers.relocate(**relocate_params)
 
-        # Wait for all relocates to complete
-        logger.info("Waiting for all relocates to complete")
-        for wl_meta in workload_metadata:
-            logger.info(
-                f"Verifying relocate completion for workload {wl_meta['idx']}/{len(all_workloads)}"
+            # Wait for all relocates to complete
+            logger.info("Waiting for all relocates to complete")
+            for wl_meta in workload_metadata:
+                logger.info(
+                    f"Verifying relocate completion for workload "
+                    f"{wl_meta['idx']}/{len(all_workloads)} "
+                    f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
+                    f"resource_name={wl_meta['resource_name']} "
+                    f"drpc_name={wl_meta['drpc_name']}"
+                )
+                dr_helpers.wait_for_all_resources_creation(
+                    wl_meta["workload"].workload_pvc_count,
+                    wl_meta["workload"].workload_pod_count,
+                    wl_meta["workload_namespace"],
+                    discovered_apps=wl_meta["is_discovered_app"],
+                )
+                config.switch_to_cluster_by_name(wl_meta["primary_cluster_name"])
+                wait_for_pods_to_be_running(
+                    namespace=wl_meta["workload_namespace"],
+                    timeout=720,
+                )
+                completed_relocates.append(
+                    {
+                        "drpc_name": wl_meta["drpc_name"],
+                        "namespace": wl_meta["workload_namespace"],
+                        "resource_name": wl_meta["resource_name"],
+                        "workload_type": wl_meta["workload_type"],
+                        "target_cluster": wl_meta["primary_cluster_name"],
+                    }
+                )
+                logger.info(
+                    f"Workload {wl_meta['idx']} successfully relocated back to "
+                    f"{wl_meta['primary_cluster_name']} "
+                    f"(drpc_name={wl_meta['drpc_name']}, "
+                    f"namespace={wl_meta['workload_namespace']}, "
+                    f"resource_name={wl_meta['resource_name']})"
+                )
+        except Exception as ex:
+            logger.error(
+                f"Relocate phase failed. Completed failovers before failure: "
+                f"{completed_failovers}. Completed relocates before failure: "
+                f"{completed_relocates}"
             )
-            dr_helpers.wait_for_all_resources_creation(
-                wl_meta["workload"].workload_pvc_count,
-                wl_meta["workload"].workload_pod_count,
-                wl_meta["workload_namespace"],
-                discovered_apps=wl_meta["is_discovered_app"],
-            )
-            config.switch_to_cluster_by_name(wl_meta["primary_cluster_name"])
-            wait_for_pods_to_be_running(
-                namespace=wl_meta["workload_namespace"],
-                timeout=720,
-            )
-            logger.info(
-                f"Workload {wl_meta['idx']} successfully relocated back to "
-                f"{wl_meta['primary_cluster_name']}"
-            )
+            raise type(ex)(
+                f"{str(ex)} | Relocate phase context: completed_failovers="
+                f"{completed_failovers}, completed_relocates={completed_relocates}"
+            ) from ex
 
         # ========================================
         # Step 8: Verify data integrity for CNV workloads

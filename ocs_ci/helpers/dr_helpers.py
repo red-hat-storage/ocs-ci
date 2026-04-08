@@ -2631,14 +2631,26 @@ def wait_for_vrg_state(vrg_state, vrg_namespace, resource_name, timeout=900):
         resource_name (str): VRG resource name
         timeout (int): Timeout for wait
 
+    Raises:
+        TimeoutExpiredError: With VRG specific context to make failures actionable
+
     """
-    wait_for_resource_state(
-        kind=constants.VOLUME_REPLICATION_GROUP,
-        state=vrg_state,
-        namespace=vrg_namespace,
-        resource_name=resource_name,
-        timeout=timeout,
-    )
+    try:
+        wait_for_resource_state(
+            kind=constants.VOLUME_REPLICATION_GROUP,
+            state=vrg_state,
+            namespace=vrg_namespace,
+            resource_name=resource_name,
+            timeout=timeout,
+        )
+    except TimeoutExpiredError as ex:
+        error_msg = (
+            f"VolumeReplicationGroup '{resource_name}' in namespace '{vrg_namespace}' "
+            f"did not reach expected state '{vrg_state}' within {timeout} seconds. "
+            f"Original error: {str(ex)}"
+        )
+        logger.error(error_msg)
+        raise TimeoutExpiredError(error_msg) from ex
 
 
 def validate_storage_cluster_peer_state():
