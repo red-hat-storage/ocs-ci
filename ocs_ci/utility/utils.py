@@ -1246,7 +1246,23 @@ def get_rosa_cli(
     """
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     rosa_filename = "rosa"
-    rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
+
+    # Detect platform and architecture
+    system = platform.system()
+    machine = platform.machine()
+    if system == "Darwin":
+        if machine == "arm64":
+            rosa_tarball_name = "rosa_Darwin_arm64.tar.gz"
+        else:
+            rosa_tarball_name = "rosa_Darwin_x86_64.tar.gz"
+    elif system == "Linux":
+        if machine == "aarch64":
+            rosa_tarball_name = "rosa_Linux_arm64.tar.gz"
+        else:
+            rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
+    else:
+        raise NotImplementedError(f"Unsupported platform: {system} {machine}")
+
     rosa_binary_path = os.path.join(bin_dir, rosa_filename)
     if os.path.isfile(rosa_binary_path) and force_download:
         delete_file(rosa_binary_path)

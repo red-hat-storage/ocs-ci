@@ -1327,13 +1327,24 @@ def get_rosa_version():
         "--ocsci-conf",
         action="append",
         default=[],
-        help="Path to OCS-CI configuration file(s). Can be specified multiple times.",
+        required=True,
+        help=(
+            "Path to OCS-CI configuration file(s) with ROSA credentials. "
+            "Must include AUTH.openshiftdedicated.token. "
+            "Can be specified multiple times for different configs (e.g., auth + region)."
+        ),
     )
     parser.add_argument(
         "--ocp-version",
         action="store",
         default=None,
         help="OCP version to check (e.g., '4.16'). Returns latest z-stream if available.",
+    )
+    parser.add_argument(
+        "--hosted-cp",
+        action="store_true",
+        default=False,
+        help="List versions available for ROSA Hosted Control Plane (HCP) clusters.",
     )
     parser.add_argument(
         "--debug",
@@ -1349,26 +1360,25 @@ def get_rosa_version():
         logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 
     # Initialize config like run-ci does
+    # This automatically loads default_config.yaml which has rosa_cli_version: "1.2.61"
     framework.config.init_cluster_configs()
 
-    # Load default rosa config to get rosa_cli_version
-    default_rosa_config = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        "conf",
-        "ocsci",
-        "rosa.yaml",
-    )
-    if os.path.exists(default_rosa_config):
-        with open(default_rosa_config) as f:
-            default_config = yaml.safe_load(f)
-            framework.config.update(default_config)
-
     # Load user-provided config files
-    if args.ocsci_conf:
-        for config_file in args.ocsci_conf:
-            with open(os.path.abspath(os.path.expanduser(config_file))) as f:
-                custom_config = yaml.safe_load(f)
-                framework.config.update(custom_config)
+    for config_file in args.ocsci_conf:
+        with open(os.path.abspath(os.path.expanduser(config_file))) as f:
+            custom_config = yaml.safe_load(f)
+            framework.config.update(custom_config)
+
+    # Verify ROSA auth token is present
+    if not config.AUTH.get("openshiftdedicated", {}).get("token"):
+        logger.error(
+            "ROSA authentication token not found in config.\n"
+            "Please ensure --ocsci-conf file includes:\n"
+            "  AUTH:\n"
+            "    openshiftdedicated:\n"
+            "      token: '<YOUR_OCM_TOKEN>'"
+        )
+        sys.exit(1)
 
     # Ensure bin_dir is in PATH
     bin_dir = config.RUN.get("bin_dir")
@@ -1392,7 +1402,9 @@ def get_rosa_version():
     # Get versions or check specific version
     if args.ocp_version:
         try:
-            rosa_version = version.get_latest_rosa_ocp_version(args.ocp_version)
+            rosa_version = version.get_latest_rosa_ocp_version(
+                args.ocp_version, hosted_cp=args.hosted_cp
+            )
             print(rosa_version)
             sys.exit(0)
         except UnsupportedPlatformVersionError as e:
@@ -1400,7 +1412,9 @@ def get_rosa_version():
             sys.exit(1)
     else:
         # If no version specified, show all available versions
-        versions = version.get_ocp_versions_rosa(yaml_format=True)
+        versions = version.get_ocp_versions_rosa(
+            yaml_format=True, hosted_cp=args.hosted_cp
+        )
         for v in versions:
             print(v["raw_id"])
         sys.exit(0)
