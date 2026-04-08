@@ -21,6 +21,7 @@ from ocs_ci.ocs.exceptions import (
     ConfigurationError,
     ResourceWrongStatusException,
     TimeoutExpiredError,
+    UnsupportedPlatformVersionError,
 )
 from ocs_ci.ocs.machinepool import MachinePools, NodeConf
 from ocs_ci.utility import openshift_dedicated as ocm
@@ -1312,3 +1313,94 @@ def rosa_ocp_version_endpoint():
                 file=sys.stderr,
             )
             sys.exit(255)
+
+
+def get_rosa_version():
+    """
+    Entry point for getting ROSA versions with config initialization.
+    Supports --ocsci-conf to load configuration files and --ocp-version to check specific version.
+    """
+    parser = argparse.ArgumentParser(
+        description="Get ROSA version information with full config support"
+    )
+    parser.add_argument(
+        "--ocsci-conf",
+        action="append",
+        default=[],
+        help="Path to OCS-CI configuration file(s). Can be specified multiple times.",
+    )
+    parser.add_argument(
+        "--ocp-version",
+        action="store",
+        default=None,
+        help="OCP version to check (e.g., '4.16'). Returns latest z-stream if available.",
+    )
+    parser.add_argument(
+        "--debug",
+        "-d",
+        action="store_true",
+        default=False,
+        help="Enable debug logging.",
+    )
+    args = parser.parse_args()
+
+    if args.debug:
+        FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
+        logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+
+    # Initialize config like run-ci does
+    framework.config.init_cluster_configs()
+
+    # Load default rosa config to get rosa_cli_version
+    default_rosa_config = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        "conf",
+        "ocsci",
+        "rosa.yaml",
+    )
+    if os.path.exists(default_rosa_config):
+        with open(default_rosa_config) as f:
+            default_config = yaml.safe_load(f)
+            framework.config.update(default_config)
+
+    # Load user-provided config files
+    if args.ocsci_conf:
+        for config_file in args.ocsci_conf:
+            with open(os.path.abspath(os.path.expanduser(config_file))) as f:
+                custom_config = yaml.safe_load(f)
+                framework.config.update(custom_config)
+
+    # Ensure bin_dir is in PATH
+    bin_dir = config.RUN.get("bin_dir")
+    if bin_dir:
+        utils.add_path_to_env_path(os.path.expanduser(bin_dir))
+
+    # Download ROSA CLI if not available
+    try:
+        download_rosa_cli()
+    except Exception as e:
+        logger.error(f"Failed to download ROSA CLI: {e}")
+        sys.exit(1)
+
+    # Login to ROSA
+    try:
+        login()
+    except Exception as e:
+        logger.error(f"Failed to login to ROSA: {e}")
+        sys.exit(1)
+
+    # Get versions or check specific version
+    if args.ocp_version:
+        try:
+            rosa_version = version.get_latest_rosa_ocp_version(args.ocp_version)
+            print(rosa_version)
+            sys.exit(0)
+        except UnsupportedPlatformVersionError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+    else:
+        # If no version specified, show all available versions
+        versions = version.get_ocp_versions_rosa(yaml_format=True)
+        for v in versions:
+            print(v["raw_id"])
+        sys.exit(0)
