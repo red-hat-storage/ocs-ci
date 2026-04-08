@@ -8,6 +8,7 @@ from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.exceptions import UnexpectedNameException, UnexpectedStatusException
+from ocs_ci.utility.utils import exec_cmd
 
 
 class ExternalSystems(ResourceList):
@@ -73,9 +74,9 @@ class ExternalSystems(ResourceList):
         system_name,
         endpoint,
         port,
-        username,
-        password,
         filesystem_name,
+        username=None,
+        password=None,
     ):
         """
         Connect IBM Scale as External system
@@ -88,6 +89,12 @@ class ExternalSystems(ResourceList):
             password (str): password
             filesystem_name (str): name of the filesystem
         """
+        if not username:
+            username = f"{system_name}_user"
+            password = f"{system_name}_passw0rd"
+            create_user_cmd = f"ssh root@{endpoint} -i ~/.ssh/openshift-dev.pem"
+            " /usr/lpp/mmfs/gui/cli/mkuser {username} -p {password} -g CsiAdmin,ContainerOperator"
+            exec_cmd(create_user_cmd)
         self.connect_external_system()
         logger.info("Choose Scale option")
         self.do_click(locator=self.external_systems["connect_scale"])
@@ -131,10 +138,18 @@ class ExternalSystems(ResourceList):
             logger.info(f"{scale_name} not found on External Systems page")
             return False
 
-    def disconnect_scale(self, scale_name):
+    def disconnect_scale(
+        self, scale_name, delete_user=False, endpoint=None, username=None
+    ):
         """
         Removing a connection to scale is going to be possible in UI
         but now it's only done via CLI
+
+        Args:
+            scale_name (str): scale connection name
+            delete_user (bool): True if scale user needs to be deleted, False otherwise
+            endpoint (str): Scale management endpoint
+            username (str): username
         """
         logger.info(f"Deleting connection to {scale_name}")
         delete_cmd = "delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale"
@@ -143,6 +158,9 @@ class ExternalSystems(ResourceList):
             f"delete secret {scale_name}-user-details-secret -n ibm-spectrum-scale"
         )
         ocp.OCP().exec_oc_cmd(delete_secret_cmd)
+        if delete_user:
+            delete_cmd = f"ssh root@{endpoint} -i ~/.ssh/openshift-dev.pem /usr/lpp/mmfs/gui/cli/rmuser {username}"
+            exec_cmd(delete_cmd)
 
     def scale_status_ok(self, scale_name):
         """
