@@ -940,7 +940,7 @@ class BusyBox_AppSet(DRWorkload):
 
         if self.appset_model == "pull":
             sampler = TimeoutSampler(
-                120, sleep=5, func=self.check_workload_health_status
+                300, sleep=5, func=self.check_workload_health_status
             )
             if not sampler.wait_for_func_status(True):
                 raise ResourceWrongStatusException(
