@@ -2347,7 +2347,7 @@ validation_4_21 = {
         By.XPATH,
     ),
     "infra_health_checks": (
-        "//a[text()='View health checks']",
+        "//a[contains(normalize-space(.), 'View health checks')]",
         By.XPATH,
     ),
     # web element returns overall score with text like '66%'
@@ -2627,7 +2627,7 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
     "submit_button_folder": (
-        "//button[contains(@class, 'm-primary')]",
+        "//footer//button[@type='button'][contains(@class, 'm-primary')]",
         By.XPATH,
     ),
     "upload_button": (
@@ -2693,7 +2693,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "versioning_enable_confirm_button": (
-        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'm-primary') and text()='Enable']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'm-primary') and text()='Enable'] | "
+        "//div[@role='dialog']//footer//button[normalize-space(.)='Enable']",
         By.XPATH,
     ),
     "versioning_cancel_confirm_button": (
@@ -2782,7 +2783,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "policy_editor_start_scratch": (
-        "//button[contains(normalize-space(), 'Start from scratch')]",
+        "//button[contains(normalize-space(), 'Start from scratch')] | "
+        "//button//span[contains(text(),'Start from scratch or use predefined policy config')]",
         By.XPATH,
     ),
     "edit_policy_button": (
