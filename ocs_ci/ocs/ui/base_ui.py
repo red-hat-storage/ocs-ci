@@ -4,6 +4,7 @@ import logging
 import os
 import gc
 import time
+import traceback
 import zipfile
 from functools import reduce
 
@@ -243,7 +244,9 @@ class BaseUI:
                 self.take_screenshot(f"{type(self).__name__}-{date_time}")
                 self.copy_dom(f"{type(self).__name__}-{date_time}")
                 logger.error(e)
-                new_locator = self.locator_fallback.attempt_fallback(locator, "click")
+                new_locator = self.locator_fallback.attempt_fallback(
+                    locator, "click", stack_trace=traceback.format_exc()
+                )
                 if new_locator:
                     element = WebDriverWait(self.driver, timeout).until(
                         ec.element_to_be_clickable((new_locator[1], new_locator[0]))
@@ -333,7 +336,9 @@ class BaseUI:
             self.take_screenshot()
             self.copy_dom()
             logger.error(e)
-            new_locator = self.locator_fallback.attempt_fallback(locator, "send_keys")
+            new_locator = self.locator_fallback.attempt_fallback(
+                locator, "send_keys", stack_trace=traceback.format_exc()
+            )
             if new_locator:
                 element = WebDriverWait(self.driver, timeout).until(
                     ec.visibility_of_element_located((new_locator[1], new_locator[0]))
@@ -477,7 +482,9 @@ class BaseUI:
             return self.driver.find_element(by=locator[1], value=locator[0]).text
         except NoSuchElementException as e:
             logger.error(e)
-            new_locator = self.locator_fallback.attempt_fallback(locator, "get_text")
+            new_locator = self.locator_fallback.attempt_fallback(
+                locator, "get_text", stack_trace=traceback.format_exc()
+            )
             if new_locator:
                 return self.driver.find_element(
                     by=new_locator[1], value=new_locator[0]
@@ -519,7 +526,7 @@ class BaseUI:
         except TimeoutException as e:
             logger.error(e)
             new_locator = self.locator_fallback.attempt_fallback(
-                locator, "wait_visible"
+                locator, "wait_visible", stack_trace=traceback.format_exc()
             )
             if new_locator:
                 return WebDriverWait(self.driver, min(timeout, 10)).until(
@@ -549,7 +556,7 @@ class BaseUI:
         except TimeoutException as e:
             logger.error(e)
             new_locator = self.locator_fallback.attempt_fallback(
-                locator, "wait_present"
+                locator, "wait_present", stack_trace=traceback.format_exc()
             )
             if new_locator:
                 return WebDriverWait(self.driver, min(timeout, 10)).until(
@@ -696,7 +703,9 @@ class BaseUI:
             element.clear()
         except TimeoutException as e:
             logger.error(e)
-            new_locator = self.locator_fallback.attempt_fallback(locator, "clear")
+            new_locator = self.locator_fallback.attempt_fallback(
+                locator, "clear", stack_trace=traceback.format_exc()
+            )
             if new_locator:
                 element = WebDriverWait(self.driver, timeout).until(
                     ec.element_to_be_clickable((new_locator[1], new_locator[0]))
@@ -748,7 +757,9 @@ class BaseUI:
             logger.warning(
                 f"Locator {locator[1]} {locator[0]} did not find text {expected_text}"
             )
-            new_locator = self.locator_fallback.attempt_fallback(locator, "wait_text")
+            new_locator = self.locator_fallback.attempt_fallback(
+                locator, "wait_text", stack_trace=traceback.format_exc()
+            )
             if new_locator:
                 try:
                     WebDriverWait(self.driver, min(timeout, 10)).until(
@@ -791,7 +802,9 @@ class BaseUI:
             self.take_screenshot()
             # locator here is (By, value) — reverse for fallback which expects (value, By)
             new_locator = self.locator_fallback.attempt_fallback(
-                (locator[1], locator[0]), "check_presence"
+                (locator[1], locator[0]),
+                "check_presence",
+                stack_trace=traceback.format_exc(),
             )
             if new_locator:
                 try:
@@ -807,7 +820,9 @@ class BaseUI:
             self.take_screenshot()
             # locator here is (By, value) — reverse for fallback which expects (value, By)
             new_locator = self.locator_fallback.attempt_fallback(
-                (locator[1], locator[0]), "check_presence"
+                (locator[1], locator[0]),
+                "check_presence",
+                stack_trace=traceback.format_exc(),
             )
             if new_locator:
                 try:
