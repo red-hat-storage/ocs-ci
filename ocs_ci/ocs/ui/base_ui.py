@@ -1406,16 +1406,21 @@ def close_browser():
 
     """
     logger.info("Close browser")
-    session_cost = ocsci_config.UI_SELENIUM.get("ai_fallback_session_cost", 0.0)
-    session_requests = ocsci_config.UI_SELENIUM.get("ai_fallback_session_requests", 0)
-    if session_requests > 0:
+    total_cost = ocsci_config.UI_SELENIUM.get("llm_session_cost", 0.0)
+    total_requests = ocsci_config.UI_SELENIUM.get("llm_session_requests", 0)
+    fallback_cost = ocsci_config.UI_SELENIUM.get("ai_fallback_session_cost", 0.0)
+    fallback_requests = ocsci_config.UI_SELENIUM.get("ai_fallback_session_requests", 0)
+    other_cost = total_cost - fallback_cost
+    other_requests = total_requests - fallback_requests
+    if total_requests > 0:
         logger.info(
             "\n"
             "╔══════════════════════════════════════════════════════════════╗\n"
-            "║           AI FALLBACK: SESSION COST SUMMARY                  ║\n"
+            "║                 LLM SESSION COST SUMMARY                     ║\n"
             "╚══════════════════════════════════════════════════════════════╝\n"
-            f"  Total cost    : ${session_cost:.4f}\n"
-            f"  Total requests: {session_requests}"
+            f"  Total           : ${total_cost:.4f}  ({total_requests} requests)\n"
+            f"  ├─ AI fallback  : ${fallback_cost:.4f}  ({fallback_requests} requests)\n"
+            f"  └─ Other LLM    : ${other_cost:.4f}  ({other_requests} requests)"
         )
     try:
         take_screenshot("close_browser")

@@ -32,7 +32,7 @@ from ocs_ci.utility.retry import retry
 SIDEBAR_SCROLL_JS = """
 var sidebar = document.querySelector('.odf-topology__sidebar');
 if (sidebar) {
-    sidebar.scrollTop = sidebar.scrollHeight / 2;
+    sidebar.scrollTop = sidebar.clientHeight;
     return true;
 }
 return false;
