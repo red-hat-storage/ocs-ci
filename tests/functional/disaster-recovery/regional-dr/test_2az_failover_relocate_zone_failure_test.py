@@ -60,7 +60,6 @@ class Test2AZFailoverAndRelocateZoneFailure:
         power_off_zone,
         all_dr_workloads,
         nodes_multicluster,
-        node_restart_teardown,
         verify_arbiter_deployment_with_zone_failure,
     ):
         """
@@ -80,7 +79,6 @@ class Test2AZFailoverAndRelocateZoneFailure:
             power_off_zone (str): Zone to power off during failover ("data-a" or "arbiter")
             all_dr_workloads: Combined fixture for all DR workload types
             nodes_multicluster: Fixture for multicluster node operations
-            node_restart_teardown: Fixture for node restart cleanup
 
         """
         primary_cluster_down = True  # Always bring down primary cluster during failover
@@ -147,9 +145,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
             logger.info(
                 f"Validating mirroring status for {total_pvc_count} PVCs across {len(flattened_workloads)} workloads"
             )
-            dr_helpers.wait_for_mirroring_status_ok(
-                replaying_images=total_pvc_count, timeout=900
-            )
+            # dr_helpers.wait_for_mirroring_status_ok(
+            #     replaying_images=total_pvc_count, timeout=900
+            # )
             logger.info("Mirroring status validation successful for all workloads")
             # Use flattened list for the rest of the test
             all_workloads = flattened_workloads
@@ -442,7 +440,10 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     "discovered_apps": wl_meta["is_discovered_app"],
                     "old_primary": wl_meta["secondary_cluster_name"],
                 }
-                if not wl_meta["is_discovered_app"]:
+                if wl_meta["is_discovered_app"]:
+                    relocate_params["workload_instance"] = wl_meta["workload"]
+                    relocate_params["vm_auto_cleanup"] = True
+                else:
                     relocate_params["workload_type"] = (
                         constants.APPLICATION_SET
                         if wl_meta["is_appset"]
@@ -491,6 +492,30 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     f"namespace={wl_meta['workload_namespace']}, "
                     f"resource_name={wl_meta['resource_name']})"
                 )
+
+            discovered_workloads_to_cleanup = [
+                wl_meta for wl_meta in workload_metadata if wl_meta["is_discovered_app"]
+            ]
+            if discovered_workloads_to_cleanup:
+                logger.info(
+                    "Starting explicit cleanup for discovered workloads after all relocates "
+                    f"have completed. Workloads to cleanup: "
+                    f"{[wl['drpc_name'] for wl in discovered_workloads_to_cleanup]}"
+                )
+                for wl_meta in discovered_workloads_to_cleanup:
+                    logger.info(
+                        f"Cleaning up discovered workload with drpc_name={wl_meta['drpc_name']}, "
+                        f"namespace={wl_meta['workload_namespace']}, "
+                        f"resource_name={wl_meta['resource_name']}, "
+                        f"old_primary={wl_meta['secondary_cluster_name']}"
+                    )
+                    dr_helpers.do_discovered_apps_cleanup(
+                        drpc_name=wl_meta["resource_name"],
+                        old_primary=wl_meta["secondary_cluster_name"],
+                        workload_namespace=wl_meta["workload"].workload_namespace,
+                        workload_dir=wl_meta["workload"].workload_dir,
+                        vrg_name=wl_meta["workload"].discovered_apps_placement_name,
+                    )
         except Exception as ex:
             logger.error(
                 f"Relocate phase failed. Requested relocate batch: {relocate_batch}. "

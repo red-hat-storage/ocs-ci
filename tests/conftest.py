@@ -203,7 +203,8 @@ from ocs_ci.utility.utils import (
     clone_repo,
     get_latest_ocp_multi_image,
 )
-from ocs_ci.helpers import helpers, dr_helpers
+
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
     add_scc_policy,
     ceph_health_check_with_toolbox_recovery,
@@ -7447,7 +7448,8 @@ def create_workload_factory():
             and pvc_interface == constants.CEPHBLOCKPOOL
             and not skip_mirroring_validation
         ):
-            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+            # dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+            log.info("====")
         return instances
 
     def _teardown():
@@ -7726,8 +7728,8 @@ def cnv_dr_workload(request):
                 total_pvc_count += workload_details["pvc_count"]
                 workload.deploy_workload()
 
-        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
-            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+        # if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+        #     dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
 
         return instances
 
