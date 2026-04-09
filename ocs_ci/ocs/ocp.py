@@ -1991,20 +1991,21 @@ def get_all_cluster_operators():
     return operator_names
 
 
-def verify_cluster_operator_status(cluster_operator):
+def verify_cluster_operator_status(cluster_operator, skip_tls_verify=False):
     """
     Checks if cluster operator status is degraded or progressing,
     as sign that upgrade not yet completed
 
     Args:
         cluster_operator (str): OCP cluster operator name
+        skip_tls_verify (bool): True if allow skipping TLS verification
 
     Returns:
         bool: True if cluster operator status is valid, False if cluster operator status
         is "degraded" or "progressing"
 
     """
-    ocp = OCP(kind="clusteroperators")
+    ocp = OCP(kind="clusteroperators", skip_tls_verify=skip_tls_verify)
     operator_data = ocp.get(
         resource_name=f"{cluster_operator} -o json", out_yaml_format=False
     )
