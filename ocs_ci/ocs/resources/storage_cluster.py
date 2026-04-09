@@ -876,8 +876,18 @@ def ocs_install_verification(
             or config.UPGRADE.get("upgrade_ocs_registry_image")
         ):
             device_class = get_device_class()
-            verify_storage_device_class(device_class)
-            verify_device_class_in_osd_tree(ct_pod, device_class)
+            check_multiple_deviceclasses = config.DEPLOYMENT.get(
+                "deploy_multiple_device_classes", False
+            )
+            verify_storage_device_class(
+                device_class,
+                check_multiple_deviceclasses=check_multiple_deviceclasses,
+            )
+            verify_device_class_in_osd_tree(
+                ct_pod,
+                device_class,
+                check_multiple_deviceclasses=check_multiple_deviceclasses,
+            )
 
     # RDR with globalnet submariner
     if (
