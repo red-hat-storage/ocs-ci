@@ -1,6 +1,8 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import ManageTest, tier1
+
+from ocs_ci.framework.pytest_customization.marks import orange_squad
+from ocs_ci.framework.testlib import scale, ManageTest, tier1
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.ocs import OCP, OCS
@@ -8,6 +10,8 @@ from ocs_ci.ocs.resources.ocs import OCP, OCS
 log = logging.getLogger(__name__)
 
 
+@orange_squad
+@scale
 @pytest.mark.ignore_leftovers
 class TestMultiStorageCoexistence(ManageTest):
     """
