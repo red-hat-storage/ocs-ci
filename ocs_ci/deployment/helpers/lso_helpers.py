@@ -19,6 +19,7 @@ from ocs_ci.ocs.node import (
     get_all_nodes,
     get_node_objs,
     get_master_nodes,
+    untaint_nodes,
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
@@ -151,6 +152,23 @@ def setup_local_storage(storageclass):
     elif platform == constants.VSPHERE_PLATFORM:
         # extra_disks is used in vSphere attach_disk() method
         storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
+        logger.info(
+            "Clearing stale cloud-provider uninitialized taints on workers "
+            "(required for LSO diskmaker to schedule)"
+        )
+        try:
+            untaint_nodes(
+                taint_label=(
+                    f"{constants.CLOUD_PROVIDER_UNINITIALIZED_TAINT_KEY}"
+                    f"=true:NoSchedule"
+                ),
+                nodes_to_untaint=workers,
+            )
+        except CommandFailed as exc:
+            logger.warning(
+                "Could not clear cloud-provider uninitialized taint on workers: %s",
+                exc,
+            )
     expected_pvs = len(worker_names) * storage_class_device_count
     if platform in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
         verify_pvs_created(expected_pvs, storageclass, False)
