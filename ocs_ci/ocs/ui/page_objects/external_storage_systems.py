@@ -7,6 +7,7 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs.exceptions import UnexpectedNameException, UnexpectedStatusException
 
 
 class ExternalSystems(ResourceList):
@@ -213,6 +214,41 @@ class ExternalSystems(ResourceList):
         self.do_click(locator=self.external_systems["delete_filesystem"])
         self.do_click(locator=self.external_systems["confirm_delete"])
         logger.info("Deletion confirmed")
+
+    def check_filesystem_details(self, scale_name, filesystem_name, status="Connected"):
+        """
+        Check filesystem details on the Filesystems card of Scale dashboard
+
+        Args:
+            scale_name (str): name of the scale cluster
+            filesystem_name (str): name of the  filesystem
+            status (str): the expected status of the filesystem
+        """
+        logger.info(f"Filtering connections to find {scale_name}")
+        self.do_clear(self.external_systems["filter"])
+        wait_for_element_to_be_clickable(self.external_systems["filter"])
+        self.do_send_keys(self.external_systems["filter"], scale_name)
+        logger.info(f"Clicking on {scale_name} to go to Scale dashboard")
+        wait_for_element_to_be_clickable(self.external_systems["scale_dashboard_link"])
+        self.do_click(self.external_systems["scale_dashboard_link"])
+        logger.info(
+            f"Checking the name of the filesystem is {scale_name}-{filesystem_name}"
+        )
+        filesystem_name_on_card = self.get_element_text(
+            format_locator(self.external_systems["filesystem_link"], filesystem_name)
+        )
+        if filesystem_name_on_card != f"{scale_name}-{filesystem_name}":
+            raise UnexpectedNameException(
+                f"Expected name: {scale_name}-{filesystem_name}."
+                f" Name found on the card: {filesystem_name_on_card}"
+            )
+        filesystem_status_on_card = self.get_element_text(
+            format_locator(self.external_systems["filesystem_status"], filesystem_name)
+        )
+        if filesystem_status_on_card != status:
+            raise UnexpectedStatusException(
+                f"Expected status: {status}. Status found on the card: {filesystem_status_on_card}"
+            )
 
 
 class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
