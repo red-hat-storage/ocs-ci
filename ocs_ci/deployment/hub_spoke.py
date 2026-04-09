@@ -7010,6 +7010,7 @@ class SpokeODF(SpokeOCP, ABC):
         Returns:
             bool: True if the catalog source exists, False otherwise
         """
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
         ocp_obj = OCP(
             kind=constants.CATSRC,
             namespace=constants.MARKETPLACE_NAMESPACE,
@@ -7017,7 +7018,7 @@ class SpokeODF(SpokeOCP, ABC):
         )
         return ocp_obj.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
-            resource_name="ocs-catalogsource",
+            resource_name=catalog_source_data["metadata"]["name"],
             should_exist=True,
         )
 
@@ -7039,9 +7040,7 @@ class SpokeODF(SpokeOCP, ABC):
             if not reapply:
                 return True
 
-        catalog_source_data = templating.load_yaml(
-            constants.PROVIDER_MODE_CATALOGSOURCE
-        )
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
 
         if not config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"):
             if not reapply:
