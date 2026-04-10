@@ -177,8 +177,10 @@ def wait_for_nodes_status(
     Args:
         node_names (list): The node names to wait for to reached the desired state
             If None, will wait for all cluster nodes
-        status (str): The node status to wait for
-            (e.g. 'Ready', 'NotReady', 'SchedulingDisabled')
+        status (str or list): The node status (or list of acceptable statuses) to
+            wait for (e.g. 'Ready', 'NotReady', 'SchedulingDisabled', 'Unknown').
+            When a list is given, a node is considered done as soon as its status
+            matches any entry in the list.
         timeout (int): The number in seconds to wait for the nodes to reach
             the status
         sleep (int): Time in seconds to sleep between attempts
@@ -188,6 +190,7 @@ def wait_for_nodes_status(
             reached the desired state
 
     """
+    accepted_statuses = status if isinstance(status, list) else [status]
     try:
         if not node_names:
             for sample in TimeoutSampler(60, 3, get_node_objs):
@@ -199,7 +202,7 @@ def wait_for_nodes_status(
         for sample in TimeoutSampler(timeout, sleep, get_node_objs, nodes_not_in_state):
             for node in sample:
                 try:
-                    if node.ocp.get_resource_status(node.name) == status:
+                    if node.ocp.get_resource_status(node.name) in accepted_statuses:
                         log.info(f"Node {node.name} reached status {status}")
                         nodes_not_in_state.remove(node.name)
                 except CommandFailed as ex:
