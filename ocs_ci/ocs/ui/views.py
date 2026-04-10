@@ -434,7 +434,7 @@ generic_locators = {
     ),
     "searchbar-dropdown": (
         "//div[contains(@class, 'toolbar__item')]//span[contains(@class, 'dropdown__toggle-text')] | "
-        "//div[contains(@class, 'input-group') and contains(@class, 'co-filter-group')]//button/span",
+        "//div[contains(@class, 'input-group')]//button/span",
         By.XPATH,
     ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
