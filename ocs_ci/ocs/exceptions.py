@@ -833,3 +833,12 @@ class TemporaryPodsDuringDeployment(Exception):
     """
 
     pass
+
+
+class UnexpectedCatalogBuildException(Exception):
+    """
+    Raised when catalog source contains an unexpected build version that
+    would cause OLM to initiate an upgrade to a different version than intended.
+    """
+
+    pass
