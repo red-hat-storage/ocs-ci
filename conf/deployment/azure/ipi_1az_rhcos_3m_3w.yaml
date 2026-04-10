@@ -7,6 +7,7 @@ ENV_DATA:
   deployment_type: 'ipi'
   region: 'westeurope'
   azure_base_domain_resource_group_name: 'odfqe'
+  azure_performance_plus_disk_type: 'Premium_LRS'
   worker_availability_zones:
     - '1'
   master_availability_zones:
