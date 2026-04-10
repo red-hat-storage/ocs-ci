@@ -5,7 +5,7 @@ This file contains the testcases for openshift-logging
 import logging
 import json
 import pytest
-
+import time
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -53,8 +53,8 @@ class Testopenshiftloggingonocs(E2ETest):
 
         request.addfinalizer(finalizer)
 
-        # Create pvc
-        pvc_obj = pvc_factory()
+        # Create pvc of 10GB
+        pvc_obj = pvc_factory(size=10)
 
         # Create service_account to get privilege for deployment pods
         sa_name = helpers.create_serviceaccount(pvc_obj.project.namespace)
@@ -69,6 +69,13 @@ class Testopenshiftloggingonocs(E2ETest):
             namespace=pvc_obj.project.namespace,
             sa_name=sa_name.name,
             deployment=True,
+            command=["/bin/bash"],
+            command_args=[
+                "-c",
+                # Run FIO in background and generate logs in foreground
+                "fio --name=test --filename=/mnt/test --size=6G --runtime=300 & "
+                'while true; do echo "$(date) - Application running"; sleep 5; done',
+            ],
         )
 
         helpers.wait_for_resource_state(
@@ -115,6 +122,9 @@ class Testopenshiftloggingonocs(E2ETest):
         Args:
             project (str): The project
 
+        Raises:
+            AssertionError: If curl command fails or logs are not accessible
+
         """
         route, TOKEN = self.setup_prerequisites(project)
         curl_command = (
@@ -123,12 +133,30 @@ class Testopenshiftloggingonocs(E2ETest):
             f" https://{route}/api/logs/v1/application/loki/api/v1/query_range?"
             f"query=%7Bk8s_namespace_name%3D%22{project}%22%7D&limit=30&direction=BACKWARD"
         )
+
         try:
-            curl_output = exec_cmd(curl_command).stdout.decode("utf-8")
-            logger.info(curl_output)
-        except CommandFailed:
-            logger.error("failed to fetch logs")
-        return False
+            curl_output_str = exec_cmd(curl_command).stdout.decode("utf-8")
+            logger.info(f"Curl command output: {curl_output_str}")
+        except CommandFailed as e:
+            logger.error(f"Failed to fetch logs: {e}")
+            raise AssertionError(f"Curl command failed to fetch logs: {e}")
+
+        # Parse JSON output
+        try:
+            curl_output = json.loads(curl_output_str)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON output: {curl_output_str}")
+            raise AssertionError(f"Invalid JSON response from curl command: {e}")
+
+        # Check for error in response
+        if "error" in curl_output:
+            error_msg = curl_output.get("error", "Unknown error")
+            error_type = curl_output.get("errorType", "Unknown type")
+            logger.error(f"Error in curl response: {error_msg} (Type: {error_type})")
+            raise AssertionError(
+                f"Curl query returned error: {error_msg} (Type: {error_type}). "
+                f"Full response: {curl_output_str}"
+            )
 
         assert (
             curl_output["data"]["result"][0]["stream"]["openshift_log_type"]
@@ -150,8 +178,8 @@ class Testopenshiftloggingonocs(E2ETest):
 
         pod_obj, pvc_obj = create_pvc_and_deployment_pod
 
-        # Running IO on the app_pod
-        pod_obj.run_io(storage_type="fs", size=6000)
+        logger.info("Waiting for logs to be collected...")
+        time.sleep(60)  # Wait 60 seconds for log collection
 
         # Validating if the project exists in lokistack
         project = pvc_obj.project.namespace
