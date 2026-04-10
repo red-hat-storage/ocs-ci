@@ -434,27 +434,32 @@ def compare_mem_usage(
     return deviation <= deviation_accepted
 
 
-def wait_for_container_status_ready(pod: Pod):
+def wait_for_container_status_ready(pod: Pod, timeout=300, interval=5):
     """
     Wait for all containers of the pod to move to ready state.
 
     :param pod: a pod object of the pod whose containers are to be checked
+    :param timeout: overall timeout in seconds
+    :param interval: polling interval in seconds
     :return: True if all containers are ready within timeout, False otherwise
     """
     logger.info(f"Wait for all containers of the pod {pod.name} to be ready")
 
-    def do_wait_for_container_status_ready(pod_obj: Pod, timeout=300):
+    def do_wait_for_container_status_ready(
+        pod_obj: Pod, wait_timeout=timeout, wait_interval=interval
+    ):
         logger.info(
-            f"Waiting for all containers in pod {pod_obj.name} to be ready for {timeout}s"
+            f"Waiting for all containers in pod {pod_obj.name} to be ready for {wait_timeout}s"
         )
         start_time = time.time()
         all_ready = False
-        while not all_ready and (time.time() - start_time < timeout):
-            pod_status = pod_obj.get().get("status") or {}
+        while not all_ready and (time.time() - start_time < wait_timeout):
+            pod_data = pod_obj.get()
+            pod_status = pod_data["status"] if isinstance(pod_data, dict) else {}
             container_statuses = pod_status.get("containerStatuses") or []
             if not container_statuses:
                 logger.info("No container statuses yet, waiting...")
-                time.sleep(5)
+                time.sleep(wait_interval)
                 continue
             container_names = [cs.get("name", "?") for cs in container_statuses]
             all_ready = all(cs.get("ready", False) for cs in container_statuses)
@@ -471,7 +476,7 @@ def wait_for_container_status_ready(pod: Pod):
             logger.info(
                 f"Waiting for container(s) to be ready in pod {pod_obj.name}: {not_ready}"
             )
-            time.sleep(5)
+            time.sleep(wait_interval)
         return False
 
     retry(
