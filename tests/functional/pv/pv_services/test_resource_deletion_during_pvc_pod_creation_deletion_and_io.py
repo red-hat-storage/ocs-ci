@@ -1,6 +1,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
+from math import floor
 from time import sleep
 import pytest
 from functools import partial
@@ -213,21 +214,28 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         """
         # Start IO on each pod. RWX PVC will be used on two pods. So split the
         # size accordingly
+        pvcs_used = []
         for pod_obj in pod_objs:
             if pod_obj.pvc.get_pvc_vol_mode == "Block":
                 storage_type = "block"
             else:
                 storage_type = "fs"
             if pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX:
-                io_size = int((self.pvc_size - 1) / 2)
+                io_size = floor((self.pvc_size - 2) / 2)
             else:
-                io_size = self.pvc_size - 1
+                io_size = self.pvc_size - 2
+            # If volumemode is block , run I/O from one pod only
+            if pod_obj.pvc.get_pvc_vol_mode == constants.VOLUME_MODE_BLOCK:
+                if pod_obj.pvc.name in pvcs_used:
+                    continue
             pod_obj.run_io(
                 storage_type=storage_type,
                 size=f"{io_size}G",
                 runtime=30,
                 fio_filename=f"{pod_obj.name}_io",
             )
+            pod_obj.io_running = True
+            pvcs_used.append(pod_obj.pvc.name)
 
     @polarion_id("OCS-5176")
     def test_resource_deletion_during_pvc_pod_creation_deletion_and_io(
@@ -442,7 +450,9 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the pods having PVCs to delete.")
         for pod_obj in pods_for_pvc_io:
-            pod_obj.get_fio_results(300)
+            if getattr(pod_obj, "io_running", False):
+                pod_obj.get_fio_results(300)
+                pod_obj.io_running = False
         log.info("Verified IO result on pods having PVCs to delete.")
 
         # Delete pods having PVCs to delete.
@@ -628,11 +638,13 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the pods.")
         for pod_obj in io_pods:
-            fio_result = pod_obj.get_fio_results()
-            err_count = fio_result.get("jobs")[0].get("error")
-            assert (
-                err_count == 0
-            ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
+            if getattr(pod_obj, "io_running", False):
+                fio_result = pod_obj.get_fio_results()
+                pod_obj.io_running = False
+                err_count = fio_result.get("jobs")[0].get("error")
+                assert (
+                    err_count == 0
+                ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
         log.info("Verified IO result on pods.")
 
         # Verify that the new PVCs are usable by creating new pods
@@ -689,7 +701,9 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the new pods.")
         for pod_obj in new_pods:
-            get_fio_rw_iops(pod_obj)
+            if getattr(pod_obj, "io_running", False):
+                get_fio_rw_iops(pod_obj)
+                pod_obj.io_running = False
         log.info("Verified IO result on the new pods.")
 
         # Verify number of pods of each daemon type
