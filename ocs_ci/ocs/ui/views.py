@@ -2971,7 +2971,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "lifecycle_create_button": (
-        "//button[text()='Create' and contains(@class, 'pf-m-primary')]",
+        "//button[contains(normalize-space(),'Create') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_save_button": (
