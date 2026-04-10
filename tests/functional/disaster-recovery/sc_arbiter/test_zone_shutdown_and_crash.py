@@ -160,7 +160,7 @@ class TestZoneShutdownsAndCrashes:
             nodes.stop_nodes(nodes=nodes_to_shutdown)
             wait_for_nodes_status(
                 node_names=[node.name for node in nodes_to_shutdown],
-                status=constants.NODE_NOT_READY,
+                status=[constants.NODE_NOT_READY, constants.NODE_READY_UNKNOWN],
                 timeout=300,
             )
             log.info(f"Nodes of zone {zone} are shutdown successfully")
@@ -457,18 +457,18 @@ class TestZoneShutdownsAndCrashes:
             1) Run both the logwriter and logreader CephFS and RBD workloads
                CephFS workload uses RWX volume and RBD workload uses RWO volumes
             2) Create VM using standalone PVC. Create some data inside the VM instance
-            3) Reset the connection scores for the mons
-            4) Bring arbiter node down and bring it back.
-            5) Bring the data zone down.
-            5) Make sure ceph is accessible during the crash duration
-            6) Repeat the shutdown process as many times as number of iterations
-            7) Check VM data integrity is maintained post netsplit. Check if New IO is possible in VM and out of VM.
-            8) Make sure logreader job pods have Completed state.
-               Check if there is any write or read pause. Fail only when neccessary.
-            9) Delete the old logreader job and create new logreader job to verify the data corruption
-            10) Make sure there is no data loss
-            11) Validate the connection scores
-            12) Do a complete cluster sanity and make sure there is no issue post recovery
+            3) Reset the connection scores for the mons (handled by reset_conn_score fixture)
+            4) Bring arbiter node down, verify ceph accessibility, bring it back up.
+               Verify post-recovery workload health for the arbiter failure window.
+            5) Drain a randomly selected data zone and uncordon it.
+               Verify post-recovery workload health and VM data integrity.
+            6) Check for data loss and data corruption covering arbiter and drain phases.
+            7) Bring a different data zone down, verify ceph accessibility, bring it back up.
+               Verify post-recovery workload health for the zone failure window.
+            8) Repeat steps 4-7 as many times as the number of iterations.
+            9) Check VM data integrity is maintained after the data zone recovery.
+            10) Check for data loss and data corruption covering the data zone shutdown phase.
+            11) Do a complete cluster sanity and make sure there is no issue post recovery
 
         """
 
@@ -498,9 +498,6 @@ class TestZoneShutdownsAndCrashes:
             f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /test/file_1.txt')}"
         )
 
-        start_time = None
-        end_time = None
-
         for i in range(iteration):
             log.info(f"------ Iteration {i+1} ------")
 
@@ -511,7 +508,7 @@ class TestZoneShutdownsAndCrashes:
             sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
             sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
-            # Bring arbiter node down
+            # --- Phase 1: Arbiter node shutdown ---
             arbiter_zone = constants.ARBITER_ZONE_LABEL[0]
             nodes_to_shutdown = sc_obj.get_nodes_in_zone(arbiter_zone)
 
@@ -522,39 +519,35 @@ class TestZoneShutdownsAndCrashes:
             nodes.stop_nodes(nodes=nodes_to_shutdown)
             wait_for_nodes_status(
                 node_names=[node.name for node in nodes_to_shutdown],
-                status=constants.NODE_NOT_READY,
+                status=[constants.NODE_NOT_READY, constants.NODE_READY_UNKNOWN],
                 timeout=300,
             )
             log.info(f"Nodes of zone {arbiter_zone} are shutdown successfully")
 
-            # note down the start_time and calculate the end_time
-            if not immediate or not start_time:
-                start_time = datetime.now(timezone.utc)
-                end_time = start_time + timedelta(
-                    minutes=sc_obj.default_shutdown_duration / 60
-                )
-            else:
-                end_time += timedelta(minutes=sc_obj.default_shutdown_duration / 60)
+            arbiter_start_time = datetime.now(timezone.utc)
+            arbiter_end_time = arbiter_start_time + timedelta(
+                minutes=sc_obj.default_shutdown_duration / 60
+            )
 
             # get the nodes not in quorum
             sc_obj.non_quorum_nodes = [
                 node_obj.name for node_obj in sc_obj.get_nodes_in_zone(arbiter_zone)
             ]
 
-            # check ceph accessibility while the nodes are down
-            if not sc_obj.check_ceph_accessibility(
-                timeout=sc_obj.default_shutdown_duration
-                - int(((datetime.now(timezone.utc)) - start_time).total_seconds())
-            ):
+            # check ceph accessibility while the arbiter is down
+            remaining = sc_obj.default_shutdown_duration - int(
+                (datetime.now(timezone.utc) - arbiter_start_time).total_seconds()
+            )
+            if not sc_obj.check_ceph_accessibility(timeout=max(10, remaining)):
                 assert recover_from_ceph_stuck(
                     sc_obj,
                 ), "Something went wrong. not expected. please check rook-ceph logs"
             log.info("There is no issue with ceph access seen")
             time_now = datetime.now(timezone.utc)
-            if time_now < end_time:
-                time.sleep((end_time - time_now).total_seconds())
+            if time_now < arbiter_end_time:
+                time.sleep((arbiter_end_time - time_now).total_seconds())
 
-            # start the nodes
+            # start the arbiter nodes back
             try:
                 nodes.start_nodes(nodes=nodes_to_shutdown)
             except Exception:
@@ -564,32 +557,11 @@ class TestZoneShutdownsAndCrashes:
             wait_for_nodes_status(timeout=600)
 
             log.info(f"Nodes of zone {arbiter_zone} are started successfully")
-            log.info(f"Failure started at {start_time} and ended at {end_time}")
-
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=0
-            )
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGREADER_CEPHFS_LABEL, exp_num_replicas=0
-            )
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=0
+            log.info(
+                f"Arbiter failure started at {arbiter_start_time} "
+                f"and ended at {arbiter_end_time}"
             )
 
-            # randomly select a zone to drain the nodes from
-            zone = random.choice(self.zones)
-            nodes_to_drain = sc_obj.get_nodes_in_zone(zone)
-
-            # drain nodes in the selected zone
-            start_time = datetime.now(timezone.utc)
-            drain_nodes(
-                node_names=[node_obj.name for node_obj in nodes_to_drain], timeout=3600
-            )
-            time.sleep(300)
-            schedule_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
-            end_time = datetime.now(timezone.utc)
-
-            # verify the io after all the nodes are scheduled
             sc_obj.get_logwriter_reader_pods(
                 label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=0
             )
@@ -601,23 +573,45 @@ class TestZoneShutdownsAndCrashes:
             )
 
             sc_obj.post_failure_checks(
-                start_time, end_time, wait_for_read_completion=False
+                arbiter_start_time, arbiter_end_time, wait_for_read_completion=False
+            )
+            log.info("Successfully verified post failure checks after arbiter shutdown")
+
+            # --- Phase 2: Data zone drain ---
+            drain_zone = random.choice(self.zones)
+            nodes_to_drain = sc_obj.get_nodes_in_zone(drain_zone)
+
+            drain_start_time = datetime.now(timezone.utc)
+            drain_nodes(
+                node_names=[node_obj.name for node_obj in nodes_to_drain], timeout=3600
+            )
+            # Wait for workload pods to reschedule after drain before uncordoning
+            time.sleep(300)
+            schedule_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
+            drain_end_time = datetime.now(timezone.utc)
+
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=0
+            )
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGREADER_CEPHFS_LABEL, exp_num_replicas=0
+            )
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=0
             )
 
-            # check vm data written before the failure for integrity
+            sc_obj.post_failure_checks(
+                drain_start_time, drain_end_time, wait_for_read_completion=False
+            )
+            log.info("Successfully verified post failure checks after zone drain")
+
+            # check vm data integrity after drain
             verify_vm_workload(vm_obj, md5sum_before)
 
-            # stop the VM
-            vm_obj.stop()
-            log.info("Stoped the VM successfully")
-
-            # check for any data loss
+            # check for data loss and corruption covering arbiter and drain phases
             check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
-
-            # check for any data loss through logwriter logs
             verify_data_loss(sc_obj)
 
-            # check for data corruption through logreader logs
             sc_obj.cephfs_logreader_job.delete()
             log.info(sc_obj.cephfs_logreader_pods)
             for pod in sc_obj.cephfs_logreader_pods:
@@ -625,50 +619,57 @@ class TestZoneShutdownsAndCrashes:
             log.info("All old CephFS logreader pods are deleted")
             verify_data_corruption(sc_obj, logreader_workload_factory)
 
-            # Fetch the nodes in zone that needs to be shutdown
-            zone = random.choice(self.zones)
-            nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
+            # --- Phase 3: Data zone shutdown ---
+            # Pick a zone different from the drained zone to avoid back-to-back failure
+            # on the same zone before it has fully recovered
+            available_zones = [z for z in self.zones if z != drain_zone]
+            shutdown_zone = (
+                random.choice(available_zones)
+                if available_zones
+                else random.choice(self.zones)
+            )
+            nodes_to_shutdown = sc_obj.get_nodes_in_zone(shutdown_zone)
 
             assert (
                 len(nodes_to_shutdown) != 0
-            ), f"There are 0 zone nodes labeled as {constants.ZONE_LABEL}={zone}!!"
+            ), f"There are 0 zone nodes labeled as {constants.ZONE_LABEL}={shutdown_zone}!!"
+
+            # note the file names created before the data zone shutdown
+            sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
+            sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
             nodes.stop_nodes(nodes=nodes_to_shutdown)
             wait_for_nodes_status(
                 node_names=[node.name for node in nodes_to_shutdown],
-                status=constants.NODE_NOT_READY,
+                status=[constants.NODE_NOT_READY, constants.NODE_READY_UNKNOWN],
                 timeout=300,
             )
-            log.info(f"Nodes of zone {zone} are shutdown successfully")
+            log.info(f"Nodes of zone {shutdown_zone} are shutdown successfully")
 
-            # note down the start_time and calculate the end_time
-            if not immediate or not start_time:
-                start_time = datetime.now(timezone.utc)
-                end_time = start_time + timedelta(
-                    minutes=sc_obj.default_shutdown_duration / 60
-                )
-            else:
-                end_time += timedelta(minutes=sc_obj.default_shutdown_duration / 60)
+            zone_start_time = datetime.now(timezone.utc)
+            zone_end_time = zone_start_time + timedelta(
+                minutes=sc_obj.default_shutdown_duration / 60
+            )
 
             # get the nodes not in quorum
             sc_obj.non_quorum_nodes = [
-                node_obj.name for node_obj in sc_obj.get_nodes_in_zone(zone)
+                node_obj.name for node_obj in sc_obj.get_nodes_in_zone(shutdown_zone)
             ]
 
-            # check ceph accessibility while the nodes are down
-            if not sc_obj.check_ceph_accessibility(
-                timeout=sc_obj.default_shutdown_duration
-                - int(((datetime.now(timezone.utc)) - start_time).total_seconds())
-            ):
+            # check ceph accessibility while the data zone is down
+            remaining = sc_obj.default_shutdown_duration - int(
+                (datetime.now(timezone.utc) - zone_start_time).total_seconds()
+            )
+            if not sc_obj.check_ceph_accessibility(timeout=max(10, remaining)):
                 assert recover_from_ceph_stuck(
                     sc_obj,
                 ), "Something went wrong. not expected. please check rook-ceph logs"
             log.info("There is no issue with ceph access seen")
             time_now = datetime.now(timezone.utc)
-            if time_now < end_time:
-                time.sleep((end_time - time_now).total_seconds())
+            if time_now < zone_end_time:
+                time.sleep((zone_end_time - time_now).total_seconds())
 
-            # start the nodes
+            # start the data zone nodes back
             try:
                 nodes.start_nodes(nodes=nodes_to_shutdown)
             except Exception:
@@ -677,8 +678,11 @@ class TestZoneShutdownsAndCrashes:
             # Validate all nodes are in READY state and up
             wait_for_nodes_status(timeout=900)
 
-            log.info(f"Nodes of zone {zone} are started successfully")
-            log.info(f"Failure started at {start_time} and ended at {end_time}")
+            log.info(f"Nodes of zone {shutdown_zone} are started successfully")
+            log.info(
+                f"Zone failure started at {zone_start_time} "
+                f"and ended at {zone_end_time}"
+            )
 
             sc_obj.get_logwriter_reader_pods(
                 label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=0
@@ -690,18 +694,17 @@ class TestZoneShutdownsAndCrashes:
                 label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=0
             )
 
-            if not immediate:
-                sc_obj.post_failure_checks(
-                    start_time, end_time, wait_for_read_completion=False
-                )
-                log.info(
-                    "Successfully verified with post failure checks for the workloads"
-                )
+            sc_obj.post_failure_checks(
+                zone_start_time, zone_end_time, wait_for_read_completion=False
+            )
+            log.info(
+                "Successfully verified post failure checks after data zone shutdown"
+            )
 
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
 
-        # check vm data written before the failure for integrity
+        # check vm data integrity after data zone recovery — VM is still running
         log.info("Waiting for VM SSH connectivity!")
         retry(CommandFailed, tries=5, delay=10)(vm_obj.wait_for_ssh_connectivity)()
         retry(CommandFailed, tries=5, delay=10)(verify_vm_workload)(
@@ -710,22 +713,14 @@ class TestZoneShutdownsAndCrashes:
 
         # stop the VM
         vm_obj.stop()
-        log.info("Stoped the VM successfully")
-
-        # In-case of immediate shutdown-restart check the for failures now
-        if immediate:
-            sc_obj.post_failure_checks(
-                start_time, end_time, wait_for_read_completion=False
-            )
-            log.info("Successfully verified with post failure checks for the workloads")
+        log.info("Stopped the VM successfully")
 
         # update the logwriter/reader pod details with the latest
         check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
 
-        # check for any data loss through logwriter logs
+        # check for data loss and corruption covering the data zone shutdown phase
         verify_data_loss(sc_obj)
 
-        # check for data corruption through logreader logs
         sc_obj.cephfs_logreader_job.delete()
         log.info(sc_obj.cephfs_logreader_pods)
         for pod in sc_obj.cephfs_logreader_pods:
