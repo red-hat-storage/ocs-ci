@@ -1,3 +1,12 @@
 graft conf
-global-exclude *.py[cod] __pycache__ .gitignore *.html
 graft ocs_ci
+global-exclude *.py[cod] __pycache__ .gitignore *.html
+prune .venv*
+prune .tox*
+prune logs
+prune .py2venv
+prune .toxvenv
+prune .vev-s3-logs
+prune Docker_files
+prune DocsIssue
+prune docs/_build

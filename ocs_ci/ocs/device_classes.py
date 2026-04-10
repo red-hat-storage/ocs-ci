@@ -4,7 +4,11 @@ import random
 from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs.cluster import check_ceph_osd_tree
 from ocs_ci.ocs.exceptions import CephHealthException, ResourceNotFoundError
-from ocs_ci.ocs.node import add_disk_to_node, get_node_objs
+from ocs_ci.ocs.node import add_disk_to_node, get_node_objs, get_osd_running_nodes
+from ocs_ci.ocs.resources.pv import (
+    get_pv_in_status,
+    wait_for_pvs_in_lvs_to_reach_status,
+)
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.ocs.resources.pvc import wait_for_pvcs_in_deviceset_to_reach_status
 from ocs_ci.ocs.resources.storage_cluster import (
@@ -13,6 +17,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     verify_storage_device_class,
     verify_device_class_in_osd_tree,
     get_deviceset_name_per_count,
+    get_first_sc_name_from_storagecluster,
 )
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import sum_of_two_storage_sizes
@@ -200,3 +205,48 @@ def verify_deviceclasses_steps():
     )
 
     check_ceph_state_post_add_deviceclass()
+
+
+def verify_available_pvs_for_deviceclass(sc_name=None, wait=True, timeout=180):
+    """
+    Verify that sufficient available PVs exist for a new device class, and add
+    disks to OSD nodes if needed.
+
+    Args:
+        sc_name (str): The storage class name to be used for the new device class. If None, it will use
+            the first storage class name from the storage cluster.
+        wait (bool): If True, it will wait for the new PVs to be available after adding disks.
+        timeout (int): The maximum time to wait for the new PVs to be available after adding disks,
+            in seconds.
+
+    Returns:
+        int: The number of PVs that are available for the new device class after adding disks if needed.
+
+    """
+    sc_name = sc_name or get_first_sc_name_from_storagecluster()
+    osd_node_names = get_osd_running_nodes()
+    log.info(f"osd node names = {osd_node_names}")
+    available_pvs = get_pv_in_status(
+        storage_class=sc_name, status=constants.STATUS_AVAILABLE
+    )
+
+    available_pvs_count = len(available_pvs)
+    available_nodes_count = len(osd_node_names)
+    if available_pvs_count >= available_nodes_count:
+        log.info(
+            f"There are already enough available PVs ({available_pvs_count}) to create a new device class, "
+            f"no need to add new disks. The existing available PVs will be used for the new device class."
+        )
+        return available_pvs_count
+    log.info("Adding new disks to the osd nodes to be used for the new device class")
+    provision_pvs_count = available_nodes_count - available_pvs_count
+    log.info(f"Number of PVs needed to be provisioned: {provision_pvs_count}")
+    add_disks_matching_lvs_size(osd_node_names[:provision_pvs_count])
+
+    if wait:
+        log.info("Waiting for the new PVs to be available after adding disks")
+        wait_for_pvs_in_lvs_to_reach_status(
+            sc_name, available_nodes_count, constants.STATUS_AVAILABLE, timeout=timeout
+        )
+
+    return available_nodes_count

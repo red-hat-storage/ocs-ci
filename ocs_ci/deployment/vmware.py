@@ -1109,6 +1109,11 @@ class VSPHEREUPI(VSPHEREBASE):
                 # Update kubeconfig with proxy-url (if client_http_proxy
                 # configured) to redirect client access through proxy server.
                 update_kubeconfig_with_proxy_url_for_client(self.kubeconfig)
+                logger.info(
+                    "Waiting 10 minutes to allow cluster infrastructure to stabilize "
+                    "before checking bootstrap status"
+                )
+                time.sleep(600)
                 logger.info("waiting for bootstrap to complete")
                 try:
                     run_cmd(
@@ -1118,7 +1123,8 @@ class VSPHEREUPI(VSPHEREBASE):
                         timeout=3600,
                     )
                 except (CommandFailed, TimeoutExpired) as e:
-                    if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
+                    err = str(e)
+                    if constants.GATHER_BOOTSTRAP_PATTERN in err or "timed out" in err:
                         try:
                             gather_bootstrap()
                         except Exception as ex:

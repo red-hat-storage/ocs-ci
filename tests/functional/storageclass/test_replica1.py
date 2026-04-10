@@ -30,7 +30,11 @@ from ocs_ci.ocs.constants import (
     ZONE_LABEL,
 )
 from ocs_ci.helpers.helpers import create_pvc, create_pod, wait_for_resource_state
-from ocs_ci.utility.utils import validate_dict_values, compare_dictionaries
+from ocs_ci.utility.utils import (
+    validate_dict_values,
+    compare_dictionaries,
+    TimeoutSampler,
+)
 from ocs_ci.ocs.replica_one import (
     delete_replica_1_sc,
     get_osd_pgs_used,
@@ -42,6 +46,7 @@ from ocs_ci.ocs.replica_one import (
     get_device_class_from_ceph,
     get_all_osd_names_by_device_class,
     get_failure_domains,
+    get_failures_domain_name,
 )
 from ocs_ci.ocs.resources.pvc import get_pvcs_using_storageclass
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
@@ -159,10 +164,14 @@ class TestReplicaOne:
         set_non_resilient_pool(storage_cluster)
         self.replica1_enabled = True
         validate_non_resilient_pool(storage_cluster)
-        storage_cluster.wait_for_resource(
-            condition=STATUS_READY, column="PHASE", timeout=180, sleep=15
-        )
-        osd_names_n_id = wait_for_replica1_osds(timeout=150, sleep=15)
+        failure_domains = get_failure_domains()
+        for domains in TimeoutSampler(
+            timeout=180, sleep=10, func=get_failures_domain_name
+        ):
+            if set(failure_domains).issubset(set(domains)):
+                log.info(f"All replica-1 CephBlockPools created: {domains}")
+                break
+        osd_names_n_id = wait_for_replica1_osds(sleep=15)
         osd_names = list(osd_names_n_id.keys())
 
         for osd in osd_names:

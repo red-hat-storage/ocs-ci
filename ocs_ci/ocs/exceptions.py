@@ -77,6 +77,10 @@ class MDSCountException(Exception):
     pass
 
 
+class ActiveMDSNotFoundException(Exception):
+    pass
+
+
 class DeploymentPlatformNotSupported(Exception):
     pass
 
@@ -818,5 +822,14 @@ class PodsNotRunningError(Exception):
 
 class PodStabilityError(Exception):
     """Raised when pods show signs of instability (Restarts or OOMKills)"""
+
+    pass
+
+
+class TemporaryPodsDuringDeployment(Exception):
+    """
+    Raised when temporary pods (like canary pods) are detected during deployment.
+    This triggers a retry to allow the deployment to stabilize.
+    """
 
     pass

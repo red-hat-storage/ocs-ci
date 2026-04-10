@@ -124,8 +124,7 @@ class TestCephMonHealthCheck(ManageTest):
         wait_for_mon_healthcheck_consistency()
 
         mon_id, node_name = select_mon_id_and_node()
-
-        drain_nodes([node_name])
+        drain_nodes([node_name], disable_eviction=True)
         wait_for_mon_status(
             mon_id=mon_id, status=constants.MON_STATUS_DOWN, timeout=180
         )

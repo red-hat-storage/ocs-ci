@@ -1548,6 +1548,23 @@ add_capacity = {
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
 }
 
+attach_storage = {
+    "storage_cluster_actions": (
+        '[data-test-id="details-actions"] button[data-test="kebab-button"]',
+        By.CSS_SELECTOR,
+    ),
+    "attach_storage_button": ("ATTACH_STORAGE", By.ID),
+    "device_class_input": ("device-class", By.ID),
+    "type_block_btn": ("type-block", By.ID),
+    "type_fs_btn": ("type-filesystem", By.ID),
+    "pool_name_input": ("pool-name", By.ID),
+    "select_replication_dropdown": ("replica-dropdown", By.ID),
+    "replication_2": ("//button[contains(., '2-way Replication')]", By.XPATH),
+    "replication_3": ("//button[contains(., '3-way Replication')]", By.XPATH),
+    "new_sc_name_input": ("attach-storage-storageclass-name", By.ID),
+    "confirm_action_btn": ('[data-test-id="confirm-action"]', By.CSS_SELECTOR),
+}
+
 add_capacity_4_11 = {
     "thin_sc": ("thin-link", By.ID),
     "gp2_sc": ("gp2-link", By.ID),
@@ -1565,13 +1582,15 @@ add_capacity_4_12 = {
 
 block_pool_4_12 = {
     "actions_inside_pool": (
-        "//span[text()='Actions']/.. | //button[@data-test='kebab-button']",
+        "//button[@data-test='storage-pool-kebab-button'] | //button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
-        By.XPATH,
+        "li[data-test-action='Delete Pool'] button,"
+        " li[data-test-action='Delete BlockPool'] button",
+        By.CSS_SELECTOR,
     ),
+    "title_pool_details_page": ("//title[@data-telemetry='Details']", By.XPATH),
 }
 block_pool_4_13 = {
     "second_select_replica_2": ("//div[text()='2-way Replication']/..", By.XPATH),
@@ -1665,8 +1684,9 @@ block_pool = {
     ),
     "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
-        By.XPATH,
+        "li[data-test-action='Delete Pool'] button,"
+        " li[data-test-action='Delete BlockPool'] button",
+        By.CSS_SELECTOR,
     ),
     "status_text_in_pool": (
         "//div[contains(@class, '-c-card__body')]//span[@data-test='status-text']",
@@ -1914,6 +1934,7 @@ validation = {
         "button[data-test='horizontal-link-Block and File']",
         By.CSS_SELECTOR,
     ),
+    "storage_cluster_title": ('[data-test-id="resource-title"]', By.CSS_SELECTOR),
 }
 
 validation_4_7 = {
@@ -2326,7 +2347,7 @@ validation_4_21 = {
         By.XPATH,
     ),
     "infra_health_checks": (
-        "//a[text()='View health checks']",
+        "//a[contains(normalize-space(.), 'View health checks')]",
         By.XPATH,
     ),
     # web element returns overall score with text like '66%'
@@ -2606,7 +2627,7 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
     "submit_button_folder": (
-        "//button[contains(@class, 'm-primary')]",
+        "//footer//button[@type='button'][contains(@class, 'm-primary')]",
         By.XPATH,
     ),
     "upload_button": (
@@ -2672,7 +2693,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "versioning_enable_confirm_button": (
-        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'm-primary') and text()='Enable']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'm-primary') and text()='Enable'] | "
+        "//div[@role='dialog']//footer//button[normalize-space(.)='Enable']",
         By.XPATH,
     ),
     "versioning_cancel_confirm_button": (
@@ -2761,7 +2783,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "policy_editor_start_scratch": (
-        "//button[contains(normalize-space(), 'Start from scratch')]",
+        "//button[contains(normalize-space(), 'Start from scratch')] | "
+        "//button//span[contains(text(),'Start from scratch or use predefined policy config')]",
         By.XPATH,
     ),
     "edit_policy_button": (
@@ -3054,6 +3077,112 @@ data_foundation_overview = {
         By.XPATH,
     ),
 }
+external_systems = {
+    "connect_external_system": (
+        "//button[@data-test='configure-external-systems']",
+        By.XPATH,
+    ),
+    "connect_flash": (
+        "connect-flash-system",
+        By.ID,
+    ),
+    "connect_scale": (
+        "setup-scale-storage",
+        By.ID,
+    ),
+    "next_button": (
+        "//button[contains(text(), 'Next')]",
+        By.XPATH,
+    ),
+    "scale_name": (
+        "name",
+        By.ID,
+    ),
+    "selected_nodes": (
+        "use-selected-nodes",
+        By.ID,
+    ),
+    "mandatory_endpoit": (
+        "mandatory-endpoint-host",
+        By.ID,
+    ),
+    "mandatory_port": (
+        "mandatory-endpoint-port",
+        By.ID,
+    ),
+    "scale_username": (
+        "userName",
+        By.ID,
+    ),
+    "scale_password": (
+        "password",
+        By.ID,
+    ),
+    "filesystem_name": (
+        "fileSystemName",
+        By.ID,
+    ),
+    "connect_scale_final": (
+        "button[data-test='connect-scale-system']",
+        By.CSS_SELECTOR,
+    ),
+    "alert_description": (
+        "[class*='-c-alert__description']",
+        By.CSS_SELECTOR,
+    ),
+    "filter": (
+        "//input[@data-test='name-filter-input']",
+        By.XPATH,
+    ),
+    "actions_button": (
+        "//button[@data-test='kebab-button']",
+        By.XPATH,
+    ),
+    "add_filesystem": (
+        "ADD_REMOTE_FILE_SYSTEM",
+        By.ID,
+    ),
+    "filesystem_name_input": (
+        "input[name='remoteFileSystemName']",
+        By.CSS_SELECTOR,
+    ),
+    "add_button": (
+        "//footer//button[contains(text(), 'Add')]",
+        By.XPATH,
+    ),
+    "scale_link": (
+        "//a[contains(@href, '/odf/external-systems/scale')]",
+        By.XPATH,
+    ),
+    "filesystem_link": (
+        "//td/a[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "delete_filesystem": (
+        "Delete",
+        By.ID,
+    ),
+    "confirm_delete": (
+        "//button[@data-test='delete-action']",
+        By.XPATH,
+    ),
+    "scale_dashboard_link": (
+        "a[href*='scale.spectrum.ibm']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_operator_health": (
+        "div[data-item-id='Operator-health-item'] title",
+        By.CSS_SELECTOR,
+    ),
+    "scale_connection_health": (
+        "div[data-item-id='Connection-health-item'] title",
+        By.CSS_SELECTOR,
+    ),
+    "breadcrumb-link": (
+        "a[data-test-id='breadcrumb-link-0']",
+        By.CSS_SELECTOR,
+    ),
+}
 locators = {
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -3120,7 +3249,9 @@ locators = {
         "mcg_stores": mcg_stores,
         "alerting": alerting,
         "bucket_tab": bucket_tab,
+        "external_systems": external_systems,
         "data_foundation_overview": data_foundation_overview,
+        "attach_storage": attach_storage,
     },
     "4.20": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -3184,6 +3315,7 @@ locators = {
         "alerting": alerting,
         "bucket_tab": bucket_tab,
         "data_foundation_overview": data_foundation_overview,
+        "external_systems": external_systems,
     },
     "4.19": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},

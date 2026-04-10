@@ -320,6 +320,7 @@ TRIGGER_AUTHENTICATION = "TriggerAuthentication"
 SCALED_OBJECT = "ScaledObject"
 ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME = "addon-ns-config"
 ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG = "hypershift-addon-deploy-config"
+SUBMARINERCONFIG = "SubmarinerConfig"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -646,7 +647,7 @@ HYPERCONVERGED_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged.yaml"
 )
 HYPERCONVERGED_CRD = "hyperconvergeds.hco.kubevirt.io"
-
+MACHINESET_KIND = "machinesets.machine.openshift.io"
 
 # CNV deployment constants
 CNV_NAMESPACE = "openshift-cnv"
@@ -1307,6 +1308,20 @@ NODE_NETWORK_CONFIGURATION_POLICY_IPV6 = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy_ipv6.yaml"
 )
 
+# VLAN-based Multus Networks (without shim interfaces)
+NODE_NETWORK_CONFIGURATION_POLICY_VLAN = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy_vlan.yaml"
+)
+NODE_NETWORK_CONFIGURATION_POLICY_VLAN_DUAL = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy_vlan_dual.yaml"
+)
+MULTUS_PUBLIC_NET_VLAN_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "multus-public-net-vlan.yaml"
+)
+MULTUS_CLUSTER_NET_VLAN_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "multus-cluster-net-vlan.yaml"
+)
+
 
 NETWORK_ATTACHEMENT_DEFINITION = "network-attachment-definitions.k8s.cni.cncf.io"
 VSPHERE_MULTUS_INTERFACE = "ens224"
@@ -1603,6 +1618,10 @@ ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
 ALERT_MDSCACHEUSAGEHIGH = "MDSCacheUsageHigh"
 ALERT_MDSCPUUSAGEHIGH = "MDSCPUUsageHigh"
 ALERT_ODFOPERATORNOTUPGRADABLE = "ODFOperatorNotUpgradeable"
+RUNBOOK_URL_ODFOPERATORNOTUPGRADABLE = (
+    "https://github.com/openshift/runbooks/blob/master/alerts/"
+    "openshift-container-storage-operator/ODFOperatorNotUpgradeable.md"
+)
 # ODF 4.21 new alerts
 ALERT_ODF_CORE_POD_RESTART = "ODFCorePodRestarted"
 ALERT_ODF_DISK_UTILIZATION_HIGH = "ODFDiskUtilizationHigh"
@@ -2568,6 +2587,14 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.21"] = (
     DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"]
 )
 
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.22"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] + [
+    # disabling mirroring of ceph-volsync-plugin-operator because of
+    # https://redhat.atlassian.net/browse/DFBUGS-6114
+    # "ceph-volsync-plugin-operator",
+]
+
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
 CINDER_CLNT_VERSION = "3.0"
@@ -2718,6 +2745,9 @@ OPERATOR_ROLE_PREFIX_ROSA_HCP = "oproleshcp"
 HCP_DEPLOYER_POLICY = os.path.join(
     TEMPLATE_DIR, "ocs-deployment", "provider-mode", "aws-hcp", "iam_role_policy.json"
 )
+HCP_DEPLOYER_IAM_ROLE = "aws-agent-deployer-role"
+HCP_DEPLOYER_IAM_POLICY = "aws-hcp-deployer-policy"
+HCP_OIDC_S3_SECRET = "hypershift-operator-oidc-provider-s3-credentials"
 
 
 # aws volume constants
@@ -3170,7 +3200,7 @@ ACM_BREW_BUILD_URL = (
     "&rows_per_page=25&delta=1296000&contains=acm"
 )
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
-SUBCTL_BREW_DOWNSTREAM_URL = "brew.registry.redhat.io/rh-osbs/rhacm2-"
+SUBCTL_BREW_DOWNSTREAM_URL = "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-"
 
 # OADP
 OADP_BREW_BUILD_URL = (
@@ -3795,6 +3825,7 @@ CEPHFS_CSI_ADDONS_PLUGIN_DIR = (
     "/var/lib/kubelet/plugins/openshift-storage.cephfs.csi.ceph.com"
 )
 RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
+HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"
 CEPHFS_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
 
 HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"

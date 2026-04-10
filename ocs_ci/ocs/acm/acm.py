@@ -41,6 +41,8 @@ from ocs_ci.utility.utils import (
     get_running_acm_version,
     string_chunkify,
     run_cmd,
+    get_client_type_by_name,
+    exec_cmd,
 )
 from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import (
@@ -339,6 +341,25 @@ class AcmAddClusters(AcmPageNavigator):
         self.take_screenshot()
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
+
+        # Add loadBalancerEnable: true and hostedCluster: true in the submarinerconfig for kubevirt hcp clusters
+        if dr_cluster_relations:
+            for dr_cluster in [primary_index, secondary_index]:
+                cluster_name = config.get_cluster_name_by_index(dr_cluster)
+                if get_client_type_by_name(cluster_name) == "kubevirt":
+                    cluster_name = (
+                        f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name}"
+                    )
+                    submariner_config = OCP(
+                        kind=constants.SUBMARINERCONFIG,
+                        namespace=cluster_name,
+                        resource_name="submariner",
+                    )
+                    patch_param = (
+                        '[{"op": "replace", "path": "/spec/hostedCluster", "value": true }, '
+                        '{"op": "replace", "path": "/spec/loadBalancerEnable", "value": true }]'
+                    )
+                    submariner_config.patch(params=patch_param, format_type="json")
         return cluster_set_name
 
     def submariner_downstream_info(self):
@@ -510,12 +531,6 @@ class AcmAddClusters(AcmPageNavigator):
                     else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
                 )
 
-                if (
-                    submariner_channel == "0.22"
-                    and config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM
-                ):
-                    log.info("Temp Fix Until we have 0.22.1")
-                    submariner_channel = "0.21"
                 channel_name = "stable-" + submariner_channel
                 subscription_config = {
                     "source": "submariner-catalogsource",
@@ -989,7 +1004,10 @@ def discover_hosted_clusters():
         resource_name="hypershift-addon-deploy-config"
     )["spec"]["customizedVariables"]
 
-    discovery_prefix_data_to_add = {"name": "discoveryPrefix", "value": "dr"}
+    discovery_prefix_data_to_add = {
+        "name": "discoveryPrefix",
+        "value": constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX,
+    }
     spec_data.append(discovery_prefix_data_to_add)
     addondeploymentconfig.patch(
         resource_name="hypershift-addon-deploy-config",
@@ -1044,9 +1062,10 @@ def install_clusteradm():
         run_cmd("clusteradm")
     except (CommandFailed, FileNotFoundError):
         # Install/reinstall clusteradm
-        run_cmd(
+        exec_cmd(
             "bash -c 'curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh "
-            "| bash'"
+            "| bash'",
+            shell=True,
         )
 
 

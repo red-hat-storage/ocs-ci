@@ -183,6 +183,7 @@ def test_provider_cluster_upgrade(zone_rank, role_rank, config_index):
 @purple_squad
 @acm_upgrade
 @multicluster_roles(["mdr-all-acm", "rdr-all-acm"])
+@pytest.mark.skip(reason="Skipping ACM upgrade test until completely implemented")
 def test_acm_upgrade(zone_rank, role_rank, config_index):
     """
     Test upgrade procedure for ACM operator

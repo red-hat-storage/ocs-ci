@@ -4,6 +4,7 @@ import logging
 import os
 import pandas as pd
 import random
+import secrets
 import string
 import time
 import tempfile
@@ -28,6 +29,7 @@ from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hub_spoke import (
+    destroy_aws_hcp_clusters,
     hypershift_cluster_factory,
     get_autodistributed_storage_classes,
     skip_if_not_hcp_provider,
@@ -89,7 +91,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.fill_pool_job import FillPoolJob
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
@@ -216,7 +218,6 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
     get_schedule_precedance_value_from_csi_addons_configmap,
     set_schedule_precedence,
-    get_reclaimspacecronjob_for_pvc,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -248,6 +249,11 @@ from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.utility.iscsi_config import iscsi_teardown
+from ocs_ci.utility.iam_utils import (
+    generate_random_iam_path,
+    run_iam_command,
+    get_user_access_keys,
+)
 
 DEPLOYERS = {}
 
@@ -2230,6 +2236,17 @@ def cluster(
                     iscsi_teardown()
                 except Exception as ex:
                     log.error(f"Failed to teardown iSCSI: {ex}")
+            # Destroy AWS HCP hosted clusters before the management cluster.
+            # This terminates EC2 worker instances, cleans up VPCs, IAM roles,
+            # peering connections, and HostedCluster CRs.
+            try:
+                if ocsci_config.ENV_DATA["cluster_type"] == constants.HCI_PROVIDER:
+                    if not destroy_aws_hcp_clusters():
+                        log.error(
+                            "!!!!! Cluster teardown failed. Delete manually !!!!!"
+                        )
+            except Exception as ex:
+                log.error(f"Failed to destroy AWS HCP clusters: {ex}")
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
@@ -6233,7 +6250,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             if not blockpool_ui_obj.delete_pool(instance.name):
                 instance.delete()
                 raise PoolNotDeletedFromUI(
-                    f"Could not delete block pool {instances.name} from UI."
+                    f"Could not delete block pool {instance.name} from UI."
                     " Deleted from CLI"
                 )
 
@@ -10434,6 +10451,151 @@ def nb_assign_user_role_fixture(request, mcg_obj_session):
 
 
 @pytest.fixture()
+def noobaa_db_backup_patch(request):
+    """
+    Patch custom Noobaa db backup info
+    """
+
+    ocs_storage_obj = OCP(
+        kind="storagecluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+
+    # Get the initial dbBackup value from DEFAULT_STORAGE_CLUSTER
+    initial_db_backup_info = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+        "multiCloudGateway"
+    ]["dbBackup"]
+    log.info(f"Initial dbBackup value: {initial_db_backup_info}")
+
+    def factory(schedule_cron_interval, num_backups, snapshot_class):
+        """
+        Patch the storage cluster with DB recovery configuration.
+
+        Args:
+            schedule_cron_interval (int): Automatic backup schedule interval
+            num_backups (int): Number of backups to be taken
+            snapshot_class (str): Snapshot class to be used for backup
+        Returns:
+            None
+        """
+
+        db_backup_param = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
+            f'"volumeSnapshot": {{"maxSnapshots": {num_backups}, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+        )
+        ocs_storage_obj.patch(params=db_backup_param, format_type="merge")
+        log.info(
+            f"DB backup info patched successfully with maxSnapshots={num_backups}, "
+            f"schedule=*/{schedule_cron_interval} * * * *"
+        )
+        time.sleep(15)
+
+    def finalizer():
+        # Restore the original dbBackup value
+        if initial_db_backup_info is None:
+            backup_params = (
+                '[{"op": "remove", "path": "/spec/multiCloudGateway/dbBackup"}]'
+            )
+            ocs_storage_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=backup_params,
+                format_type="json",
+            )
+            log.info("Successfully removed backup section from Storage cluster")
+        else:
+            db_backup_restore_param = json.dumps(
+                {"spec": {"multiCloudGateway": {"dbBackup": initial_db_backup_info}}}
+            )
+            ocs_storage_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=db_backup_restore_param,
+                format_type="merge",
+            )
+            log.info(
+                f"Successfully restored original dbBackup value: {initial_db_backup_info}"
+            )
+        log.info("Removing created backups now")
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+        backup_names = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+        )
+        for bkp_name in backup_names:
+            backup_obj.delete(resource_name=bkp_name, force=True)
+            backup_obj.wait_for_delete(resource_name=bkp_name)
+        log.info("Backups created by CNPG operator Removed successfully")
+
+        log.info("Removing created volumesnapshots now")
+        volumesnapshot_obj = OCP(
+            kind="volumesnapshot", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        volumesnapshot_names = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "volumesnapshot"
+        )
+        for volumesnapshot_name in volumesnapshot_names:
+            volumesnapshot_obj.delete(resource_name=volumesnapshot_name, force=True)
+            volumesnapshot_obj.wait_for_delete(resource_name=volumesnapshot_name)
+        log.info("volumesnapshots created by CNPG operator Removed successfully")
+
+    request.addfinalizer(finalizer)
+
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_recovery_patch(request):
+    """
+    Patch custom Noobaa db recovery info
+    """
+
+    # OCS storagecluster object
+    ocs_storage_obj = OCP(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+
+    def factory(backup_name):
+        """
+        Patch the storage cluster with DB recovery configuration.
+
+        Args:
+            ocs_storage_obj (OCP): OCS storage cluster object
+            backup_name (str): Name of the backup to use for recovery
+
+        Returns:
+            None
+        """
+        db_recovery_param = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"dbRecovery": {{"volumeSnapshotName": "{backup_name}"}}}}}}}}'
+        )
+        ocs_storage_obj.patch(params=db_recovery_param, format_type="merge")
+        log.info("DB recovery info patched successfully")
+        time.sleep(15)
+
+    def finalizer():
+        recovery_params = (
+            '[{"op": "remove", "path": "/spec/multiCloudGateway/dbRecovery"}]'
+        )
+        try:
+            ocs_storage_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=recovery_params,
+                format_type="json",
+            )
+        except Exception as e:
+            log.error(e)
+            pass
+        log.info("Successfully removed recovery section from Storage cluster")
+
+    request.addfinalizer(finalizer)
+
+    return factory
+
+
+@pytest.fixture()
 def set_encryption_at_teardown(request):
     """
     Fixture to restore encryption state and clean up resources after the test.
@@ -11319,14 +11481,20 @@ class BaseStorageClassPrecedenceTest(ABC):
 
     def _wait_for_cronjob_creation(self, pvc_obj, timeout=120):
         """
-        Wait for CronJob to be created after PVC annotation.
+        Wait for CronJob CRD to be created after PVC schedule annotation.
+
+        Waits for either:
+        - The controller to set the cronjob-name annotation on the PVC and the
+          CRD to exist, or
+        - The CRD to exist by naming convention (<pvc_name>-reclaimspace or
+          <pvc_name>-keyrotation). Some controllers do not set the name annotation.
 
         Args:
             pvc_obj: PVC object
             timeout: Timeout in seconds (default: 120)
 
         Raises:
-            TimeoutExpiredError: If CronJob is not created within timeout
+            TimeoutExpiredError: If CronJob CRD is not found within timeout
         """
         annotation_key = self.get_annotation_key()
         cronjob_annotation_key = (
@@ -11334,48 +11502,49 @@ class BaseStorageClassPrecedenceTest(ABC):
             if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
             else "keyrotation.csiaddons.openshift.io/cronjob"
         )
+        crd_kind = (
+            constants.RECLAIMSPACECRONJOB
+            if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+            else constants.ENCRYPTIONKEYROTATIONCRONJOB
+        )
+        default_suffix = (
+            "-reclaimspace"
+            if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+            else "-keyrotation"
+        )
 
-        log.info(f"Waiting for CronJob creation for PVC: {pvc_obj.name}")
+        log.info(f"Waiting for CronJob CRD creation for PVC: {pvc_obj.name}")
 
         try:
             for _ in TimeoutSampler(timeout=timeout, sleep=5, func=lambda: None):
                 pvc_obj.reload()
+                # Prefer name from controller annotation; else use naming convention
                 cronjob_name = (
                     pvc_obj.data.get("metadata", {})
                     .get("annotations", {})
                     .get(cronjob_annotation_key)
-                )
+                ) or f"{pvc_obj.name}{default_suffix}"
 
-                if cronjob_name:
-                    # Verify the CronJob actually exists
-                    cronjob_kind = (
-                        constants.RECLAIMSPACECRONJOB
-                        if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
-                        else constants.ENCRYPTIONKEYROTATIONCRONJOB
+                try:
+                    cronjob_obj = OCP(
+                        kind=crd_kind,
+                        namespace=pvc_obj.namespace,
+                        resource_name=cronjob_name,
+                    )
+                    cronjob_obj.get()
+                    log.info(
+                        f"CronJob CRD '{cronjob_name}' found for PVC '{pvc_obj.name}'"
+                    )
+                    return
+                except Exception:
+                    log.debug(
+                        f"CronJob CRD '{cronjob_name}' not yet available, continuing to wait..."
                     )
 
-                    try:
-                        cronjob_obj = OCP(
-                            kind=cronjob_kind,
-                            namespace=pvc_obj.namespace,
-                            resource_name=cronjob_name,
-                        )
-                        cronjob_obj.get()  # This will raise an exception if not found
-                        log.info(
-                            f"CronJob '{cronjob_name}' found for PVC '{pvc_obj.name}'"
-                        )
-                        return
-                    except Exception:
-                        log.debug(
-                            f"CronJob '{cronjob_name}' not yet available, continuing to wait..."
-                        )
-
-                log.debug(
-                    f"CronJob annotation not yet present for PVC '{pvc_obj.name}', waiting..."
-                )
-
         except TimeoutExpiredError:
-            log.error(f"Timeout waiting for CronJob creation for PVC: {pvc_obj.name}")
+            log.error(
+                f"Timeout waiting for CronJob CRD creation for PVC: {pvc_obj.name}"
+            )
             raise
 
     def _verify_cronjob_schedule(
@@ -11385,7 +11554,14 @@ class BaseStorageClassPrecedenceTest(ABC):
         precedence_type,
     ):
         """
-        Verify that a PVC's CronJob has the expected schedule.
+        Verify that a PVC's CronJob has the expected schedule by reading the
+        schedule from the respective CRD (ReclaimSpaceCronJob or
+        EncryptionKeyRotationCronJob). Uses the cronjob name from the PVC
+        annotation when set (as set by the controller), otherwise falls back
+        to <pvc_name>-reclaimspace or <pvc_name>-keyrotation.
+
+        Equivalent to: oc get reclaimspacecronjobs <name> -n <ns> -o yaml
+        and checking spec.schedule (and similarly for keyrotation).
 
         Args:
             pvc_obj: PVC object
@@ -11397,20 +11573,75 @@ class BaseStorageClassPrecedenceTest(ABC):
         """
         log.debug(f"Verifying CronJob schedule for PVC: {pvc_obj.name}")
 
-        # Wait for CronJob to be created after PVC annotation
+        # Wait for CronJob CRD to be created after PVC annotation
         self._wait_for_cronjob_creation(pvc_obj)
 
-        # Use appropriate CronJob function based on annotation key
         annotation_key = self.get_annotation_key()
-        if annotation_key == KEYROTATION_SCHEDULE_ANNOTATION:
-            # For KeyRotation tests, use PVKeyrotation helper
-            keyrotation_helper = PVKeyrotation(pvc_obj.storageclass)
-            cronjob = keyrotation_helper.get_keyrotation_cronjob_for_pvc(pvc_obj)
-        else:
-            # For ReclaimSpace tests, use the existing helper
-            cronjob = get_reclaimspacecronjob_for_pvc(pvc_obj)
+        cronjob_annotation_key = (
+            "reclaimspace.csiaddons.openshift.io/cronjob"
+            if annotation_key == RECLAIMSPACE_SCHEDULE_ANNOTATION
+            else "keyrotation.csiaddons.openshift.io/cronjob"
+        )
 
-        actual_schedule = cronjob.data["spec"]["schedule"]
+        if annotation_key == KEYROTATION_SCHEDULE_ANNOTATION:
+            crd_kind = constants.ENCRYPTIONKEYROTATIONCRONJOB
+            default_suffix = "-keyrotation"
+        else:
+            crd_kind = constants.RECLAIMSPACECRONJOB
+            default_suffix = "-reclaimspace"
+
+        # Use cronjob name from PVC annotation (set by controller), else naming convention
+        pvc_obj.reload()
+        crd_name = (
+            pvc_obj.data.get("metadata", {})
+            .get("annotations", {})
+            .get(cronjob_annotation_key)
+            or f"{pvc_obj.name}{default_suffix}"
+        )
+
+        crd_obj = OCP(
+            kind=crd_kind,
+            namespace=pvc_obj.namespace,
+            resource_name=crd_name,
+        )
+
+        # Wait for CRD spec.schedule to match expected (controller may reconcile after
+        # precedence change in csi-addons-config, e.g. storageclass -> @weekly from SC).
+        schedule_timeout = 60
+        schedule_sleep = 5
+        log.debug(
+            f"Waiting up to {schedule_timeout}s for CRD '{crd_name}' schedule to match "
+            f"expected {precedence_type} schedule '{expected_schedule}'"
+        )
+        try:
+            for _ in TimeoutSampler(
+                timeout=schedule_timeout, sleep=schedule_sleep, func=lambda: None
+            ):
+                crd_data = crd_obj.get()
+                if not crd_data:
+                    raise AssertionError(
+                        f"ReclaimSpaceCronJob/KeyRotationCronJob '{crd_name}' not found in "
+                        f"namespace '{pvc_obj.namespace}' for PVC '{pvc_obj.name}'"
+                    )
+                actual_schedule = crd_data.get("spec", {}).get("schedule")
+                if actual_schedule is None:
+                    raise AssertionError(
+                        f"ReclaimSpaceCronJob/KeyRotationCronJob '{crd_name}' has no "
+                        f"spec.schedule for PVC '{pvc_obj.name}'"
+                    )
+                if actual_schedule == expected_schedule:
+                    break
+                log.debug(
+                    f"CRD '{crd_name}' schedule is '{actual_schedule}', expected "
+                    f"'{expected_schedule}'; retrying in {schedule_sleep}s..."
+                )
+        except TimeoutExpiredError:
+            raise AssertionError(
+                f"PVC {pvc_obj.name} CronJob schedule did not match expected {precedence_type} "
+                f"schedule within {schedule_timeout}s. Actual: '{actual_schedule}', "
+                f"expected: '{expected_schedule}' (csi-addons-config schedule-precedence "
+                f"determines whether StorageClass or PVC schedule is used)"
+            )
 
         assert expected_schedule == actual_schedule, (
             f"PVC {pvc_obj.name} CronJob schedule '{actual_schedule}' "
@@ -11673,3 +11904,55 @@ def keda_fixture(request):
         raise UnexpectedBehaviour("KEDA setup to read Thanos metrics failed")
 
     return keda
+
+
+@pytest.fixture(scope="function")
+def iam_users_factory(request, mcg_obj, awscli_pod_session):
+    return iam_users_factory_fixture(request, mcg_obj, awscli_pod_session)
+
+
+def iam_users_factory_fixture(request, mcg_obj, awscli_pod_session):
+    """
+    Create an iam users factory. Calling this fixture creates iam users
+    """
+    created_iam_users_name_list = []
+
+    def factory(num=1):
+        """
+        Args:
+            num (int): Number of new iam users to be created
+
+        Returns:
+            list: list of created users names
+        """
+        for _ in range(num):
+            random_name_part = "".join(
+                secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8)
+            )
+            new_user_name = f"iam_user_{random_name_part}"
+            new_user_path = generate_random_iam_path()
+            create_user_cmd = (
+                f"create-user --user-name {new_user_name} --path {new_user_path}"
+            )
+            run_iam_command(mcg_obj, awscli_pod_session, create_user_cmd)
+            created_iam_users_name_list.append(new_user_name)
+
+        return created_iam_users_name_list
+
+    def finalizer():
+        """
+        Deletes the created iam users
+        """
+        for user_name in created_iam_users_name_list:
+            access_keys = get_user_access_keys(mcg_obj, awscli_pod_session, user_name)
+            # Access keys should be deleted before the user deletion
+            for key in access_keys:
+                access_key_id = key["AccessKeyId"]
+                delete_key_cmd = f"delete-access-key --user-name {user_name} --access-key-id {access_key_id}"
+                run_iam_command(mcg_obj, awscli_pod_session, delete_key_cmd)
+
+            delete_user_cmd = f"delete-user --user-name {user_name}"
+            run_iam_command(mcg_obj, awscli_pod_session, delete_user_cmd)
+
+    request.addfinalizer(finalizer)
+    return factory

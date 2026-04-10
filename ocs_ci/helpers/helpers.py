@@ -3344,7 +3344,8 @@ def get_pv_size(storageclass=None):
     ocp_obj = ocp.OCP(kind=constants.PV)
     pv_objs = ocp_obj.get()["items"]
     for pv_obj in pv_objs:
-        if pv_obj["spec"]["storageClassName"] == storageclass:
+        pv_sc = pv_obj.get("spec", {}).get("storageClassName")
+        if pv_sc and pv_sc == storageclass:
             return_list.append(pv_obj["spec"]["capacity"]["storage"])
     return return_list
 
@@ -4091,10 +4092,10 @@ def get_event_line_datetime(event_line):
     """
     event_line_dt = None
     regex = r"\d{4}-\d{2}-\d{2}"
-    if re.search(regex + "T", event_line):
+    if re.match(regex + "T", event_line):
         dt_string = event_line[:23].replace("T", " ")
         event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
-    elif re.search(regex, event_line):
+    elif re.match(regex, event_line):
         dt_string = event_line[:26]
         event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
 
@@ -5141,6 +5142,28 @@ def verify_log_exist_in_pods_logs(
     return False
 
 
+@retry(CommandFailed, tries=3, delay=10, backoff=2)
+def _extract_cli_image(pull_secret_path, image, remote_path, local_cli_dir):
+    """
+    Extract CLI binary from container image with retry for transient network errors.
+
+    Args:
+        pull_secret_path (str): Path to pull secret file
+        image (str): Container image URL
+        remote_path (str): Path inside container to extract
+        local_cli_dir (str): Local directory to extract to
+
+    Raises:
+        CommandFailed: If extraction fails after retries
+
+    """
+    exec_cmd(
+        f"oc image extract --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {remote_path}:{local_cli_dir}"
+    )
+
+
 def retrieve_cli_binary(cli_type="mcg"):
     """
     Download the MCG-CLI/ODF-CLI binary and store it locally.
@@ -5214,10 +5237,8 @@ def retrieve_cli_binary(cli_type="mcg"):
             image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
     pull_secret_path = download_pull_secret()
-    exec_cmd(
-        f"oc image extract --registry-config {pull_secret_path} "
-        f"{image} --confirm "
-        f"--path {get_architecture_path(cli_type)}:{local_cli_dir}"
+    _extract_cli_image(
+        pull_secret_path, image, get_architecture_path(cli_type), local_cli_dir
     )
     os.rename(
         os.path.join(local_cli_dir, remote_cli_basename),
@@ -5392,18 +5413,27 @@ def add_route_public_nad():
     """
     Add route section to network_attachment_definitions object
 
+    Adds route to shim network for host-to-pod communication in VLAN mode.
+    The shim network is configured via 'multus_public_net_shim_network' ENV_DATA
+    parameter (default: 192.168.252.0/24). This route enables communication between
+    baremetal hosts and pods attached to the public Multus network.
     """
+
     nad_obj = get_network_attachment_definitions(
         nad_name=config.ENV_DATA.get("multus_public_net_name"),
         namespace=config.ENV_DATA.get("multus_public_net_namespace"),
     )
     nad_config_str = nad_obj.data["spec"]["config"]
     nad_config_dict = json.loads(nad_config_str)
-    nad_config_dict["ipam"]["routes"] = [
-        {"dst": config.ENV_DATA["multus_destination_route"]}
-    ]
+
+    shim_network = config.ENV_DATA.get(
+        "multus_public_net_shim_network", "192.168.252.0/24"
+    )
+    nad_config_dict["ipam"]["routes"] = [{"dst": shim_network}]
+    logger.info(f"VLAN mode: Adding route to shim network: {shim_network}")
+
     nad_config_dict_string = json.dumps(nad_config_dict)
-    logger.info("Creating Multus public network")
+
     if config.DEPLOYMENT.get("ipv6"):
         constants.MULTUS_PUBLIC_NET_YAML = constants.MULTUS_PUBLIC_NET_IPV6_YAML
     public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
@@ -5485,16 +5515,53 @@ def delete_csi_holder_pods():
         schedule_nodes([worker_node_name])
 
 
+def ip_from_subnet_offset(subnet: str, offset: int) -> str:
+    """
+    Return an IP address from a subnet offset from the network address.
+
+    The function takes a subnet in CIDR notation and returns the IP address
+    obtained by adding the given offset to the subnet's network address.
+
+    Args:
+        subnet (str): Subnet in CIDR notation (e.g. "192.168.252.0/24").
+        offset (int): Number of IP addresses to add to the network address.
+
+    Returns:
+        str: The resulting IP address as a string.
+
+    Raises:
+        ValueError: If the subnet is invalid or the resulting IP is outside
+            of the subnet range.
+
+    Example:
+        ip_from_subnet_offset("192.168.252.0/24", 5)
+        '192.168.252.5'
+        ip_from_subnet_offset("192.168.252.16/28", 5)
+        '192.168.252.21'
+    """
+    network = ipaddress.ip_network(subnet)
+
+    ip = network.network_address + offset
+    if ip not in network:
+        raise ValueError(f"Offset {offset} is outside of subnet {subnet}")
+
+    return str(ip)
+
+
 def configure_node_network_configuration_policy_on_all_worker_nodes():
     """
     Configure NodeNetworkConfigurationPolicy CR on each worker node in cluster
 
+    Supports both traditional shim-based approach and VLAN-based approach.
+    Use multus_use_vlan config parameter to enable VLAN mode.
     """
 
     # This function require changes for compact mode
     logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
     worker_node_names = node.get_worker_nodes()
     ip_version = "ipv4"
+    use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
+
     if (
         config.DEPLOYMENT.get("ipv6")
         and config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM
@@ -5503,37 +5570,228 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
             constants.NODE_NETWORK_CONFIGURATION_POLICY_IPV6
         )
         ip_version = "ipv6"
+
     interface_num = 0
     for worker_node_name in worker_node_names:
-        node_network_configuration_policy = templating.load_yaml(
-            constants.NODE_NETWORK_CONFIGURATION_POLICY
-        )
+        # Determine which template to use based on VLAN mode
+        if use_vlan:
+            # VLAN-based approach: check if we need single or dual VLAN
+            create_public_net = config.ENV_DATA.get("multus_create_public_net", False)
+            create_cluster_net = config.ENV_DATA.get("multus_create_cluster_net", False)
+
+            if create_public_net and create_cluster_net:
+                # Dual VLAN template
+                logger.info(f"Using dual VLAN template for {worker_node_name}")
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY_VLAN_DUAL
+                )
+            elif create_public_net or create_cluster_net:
+                # Single VLAN template
+                logger.info(f"Using single VLAN template for {worker_node_name}")
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY_VLAN
+                )
+            else:
+                logger.warning("VLAN mode enabled but no networks configured to create")
+                continue
+        else:
+            # Traditional shim-based approach
+            node_network_configuration_policy = templating.load_yaml(
+                constants.NODE_NETWORK_CONFIGURATION_POLICY
+            )
 
         if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
-            worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
-                worker_node_name
-            ]
+            # Set node selector
             node_network_configuration_policy["spec"]["nodeSelector"][
                 "kubernetes.io/hostname"
             ] = worker_node_name
-            node_network_configuration_policy["metadata"]["name"] = (
-                worker_network_configuration["node_network_configuration_policy_name"]
-            )
-            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                "ipv4"
-            ]["address"][0]["ip"] = worker_network_configuration[
-                "node_network_configuration_policy_ip"
-            ]
-            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                "ipv4"
-            ]["address"][0]["prefix-length"] = worker_network_configuration[
-                "node_network_configuration_policy_prefix_length"
-            ]
-            node_network_configuration_policy["spec"]["desiredState"]["routes"][
-                "config"
-            ][0]["destination"] = worker_network_configuration[
-                "node_network_configuration_policy_destination_route"
-            ]
+
+            if use_vlan:
+                # VLAN-based configuration for BAREMETAL
+                logger.info(
+                    f"Configuring VLAN interfaces for baremetal node {worker_node_name}"
+                )
+                create_public_net = config.ENV_DATA.get(
+                    "multus_create_public_net", False
+                )
+                create_cluster_net = config.ENV_DATA.get(
+                    "multus_create_cluster_net", False
+                )
+
+                if create_public_net and create_cluster_net:
+                    # Configure dual VLAN
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-networks-vlan-{worker_node_name}"
+
+                    # Public VLAN configuration (interface 0 - NO IP)
+                    public_vlan_id = config.ENV_DATA.get(
+                        "multus_public_net_vlan_id", 201
+                    )
+                    public_base_interface = config.ENV_DATA.get(
+                        "multus_public_net_interface", "enp1s0f1"
+                    )
+                    vlan_interface_name = f"{public_base_interface}.{public_vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = public_base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = public_vlan_id
+
+                    # Public Shim configuration (interface 1 - HAS IP)
+                    shim_name = config.ENV_DATA.get(
+                        "multus_public_net_shim_name", "odf-pub-shim"
+                    )
+                    shim_ip_cidr = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    shim_ip = ip_from_subnet_offset(shim_ip_cidr, 5 + interface_num)
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = shim_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["mac-vlan"]["base-iface"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["ipv4"]["address"][0]["ip"] = shim_ip
+
+                    # Cluster VLAN configuration (interface 2 - NO IP)
+                    cluster_vlan_id = config.ENV_DATA.get(
+                        "multus_cluster_net_vlan_id", 202
+                    )
+                    cluster_base_interface = config.ENV_DATA.get(
+                        "multus_cluster_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["name"] = f"{cluster_base_interface}.{cluster_vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["vlan"]["base-iface"] = cluster_base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["vlan"]["id"] = cluster_vlan_id
+
+                    # Routes configuration (route to pod network via shim)
+                    pod_network = config.ENV_DATA.get(
+                        "multus_public_net_ip_range", "192.168.20.0/24"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["destination"] = pod_network
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["next-hop-interface"] = shim_name
+
+                elif create_public_net:
+                    # Configure single VLAN for public network
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-public-net-vlan-{worker_node_name}"
+
+                    # Public VLAN configuration (interface 0 - NO IP)
+                    vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
+                    base_interface = config.ENV_DATA.get(
+                        "multus_public_net_interface", "enp1s0f1"
+                    )
+                    vlan_interface_name = f"{base_interface}.{vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = vlan_id
+
+                    # Public Shim configuration (interface 1 - HAS IP)
+                    shim_name = config.ENV_DATA.get(
+                        "multus_public_net_shim_name", "odf-pub-shim"
+                    )
+                    shim_ip_cidr = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    shim_ip = ip_from_subnet_offset(shim_ip_cidr, 5 + interface_num)
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = shim_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["mac-vlan"]["base-iface"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["ipv4"]["address"][0]["ip"] = shim_ip
+
+                    # Routes configuration (route to pod network via shim)
+                    pod_network = config.ENV_DATA.get(
+                        "multus_public_net_ip_range", "192.168.20.0/24"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["destination"] = pod_network
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["next-hop-interface"] = shim_name
+
+                elif create_cluster_net:
+                    # Configure single VLAN for cluster network
+                    # Note: Cluster network does NOT need shim interface per Red Hat docs
+                    # (cluster network is pod-to-pod only, no host connectivity needed)
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-cluster-net-vlan-{worker_node_name}"
+
+                    vlan_id = config.ENV_DATA.get("multus_cluster_net_vlan_id", 202)
+                    base_interface = config.ENV_DATA.get(
+                        "multus_cluster_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = f"{base_interface}.{vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = vlan_id
+
+                    # No shim interface or routes needed for cluster network
+
+                # Increment interface_num for next node (for shim IP allocation)
+                if create_public_net:
+                    interface_num += 1
+
+            else:
+                # Traditional shim-based configuration for BAREMETAL without VLANs
+                worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
+                    worker_node_name
+                ]
+                node_network_configuration_policy["metadata"]["name"] = (
+                    worker_network_configuration[
+                        "node_network_configuration_policy_name"
+                    ]
+                )
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["ip"] = worker_network_configuration[
+                    "node_network_configuration_policy_ip"
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["prefix-length"] = worker_network_configuration[
+                    "node_network_configuration_policy_prefix_length"
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                    "config"
+                ][0]["destination"] = worker_network_configuration[
+                    "node_network_configuration_policy_destination_route"
+                ]
         elif config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
 
             node_network_configuration_policy["spec"]["nodeSelector"][
@@ -6124,9 +6382,10 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
             )
         else:
             param = (
-                f'"all": {tolerations}, "api-server": {tolerations}, "csi-plugin": {tolerations}, '
-                f'"csi-provisioner": {tolerations}, "mds": {tolerations}, "metrics-exporter": {tolerations}, '
-                f'"noobaa-core": {tolerations}, "rgw": {tolerations}, "toolbox": {tolerations}'
+                f'"all": {tolerations}, "api-server": {tolerations}, "blackbox-exporter": {tolerations}, '
+                f'"csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, "mds": {tolerations}, '
+                f'"metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, "rgw": {tolerations}, '
+                f'"toolbox": {tolerations}'
             )
             param = f'{{"spec": {{"placement": {{{param}}}}}}}'
 
@@ -6687,7 +6946,7 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
         f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
     )
 
-    cephbpradosns = ""
+    cephbpradosns = storageconsumer
 
     # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clusters have it,
     # but StorageRequest is not reconciled. StorageConsumer exists in storage hub cluster and in consumer clusters
@@ -6707,9 +6966,6 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
                         break
             if cephbpradosns:
                 break
-    else:
-        storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
-        cephbpradosns = storage_consumer.get_rbd_rados_ns()
     return cephbpradosns
 
 
@@ -6773,8 +7029,9 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
                 break
     else:
         storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
-        cephbfssubvolumegroup = storage_consumer.get_cephfs_subvolumegroup()
-
+        cephbfssubvolumegroup = storage_consumer.get("data").get(
+            "cephfs-subvolumegroup"
+        )
     return cephbfssubvolumegroup
 
 

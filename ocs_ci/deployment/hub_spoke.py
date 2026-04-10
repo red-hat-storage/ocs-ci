@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+import subprocess
 import tempfile
 import time
 import traceback
@@ -82,8 +83,9 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     wait_for_machineconfigpool_status,
     get_server_version,
+    get_client_type_by_name,
 )
-from ocs_ci.utility.aws import AWS, get_unused_vpc_cidr
+from ocs_ci.utility.aws import AWS, get_unused_vpc_cidr, get_cluster_region
 from botocore.exceptions import ClientError
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.utility.ssl_certs import (
@@ -419,6 +421,36 @@ def get_autodistributed_volume_snapshot_classes():
     return snapshot_class_names
 
 
+def get_autodistributed_volumegroup_snapshot_classes():
+    """
+    Get the list of VolumeGroupSnapshotClasses that were provisioned by ODF
+
+    Returns:
+        list: List of VolumeGroupSnapshotClass names that were created by ODF
+
+    """
+    groupsnapshot_class = OCP(
+        kind=constants.VOLUMEGROUPSNAPSHOTCLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    groupsnapshot_classes = groupsnapshot_class.get()
+
+    # Filter VolumeGroupSnapshotClass by ODF
+    groupsnapshot_classes["items"] = [
+        item
+        for item in groupsnapshot_classes["items"]
+        if item["driver"]
+        in [
+            constants.RBD_PROVISIONER,
+            constants.CEPHFS_PROVISIONER,
+        ]
+    ]
+    groupsnapshot_class_names = [
+        item["metadata"]["name"] for item in groupsnapshot_classes["items"]
+    ]
+    return groupsnapshot_class_names
+
+
 def get_provider_address():
     """
     Get the provider address
@@ -452,6 +484,113 @@ def config_has_hosted_odf_image(cluster_name):
     )
 
     return version_exists
+
+
+def is_fdf_on_provider():
+    """
+    Check if FDF (Fusion Data Foundation) is installed on the management/provider cluster
+    by examining the odf-operator CSV displayName for 'Fusion'.
+
+    Returns:
+        bool: True if FDF is installed, False otherwise
+
+    """
+    ocp_obj = OCP(
+        kind=constants.CLUSTER_SERVICE_VERSION,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    try:
+        csvs = ocp_obj.get(all_namespaces=False)
+        for csv in csvs.get("items", []):
+            name = csv.get("metadata", {}).get("name", "")
+            if name.startswith("odf-operator"):
+                display_name = csv.get("spec", {}).get("displayName", "")
+                if "Fusion" in display_name:
+                    logger.info(
+                        f"FDF detected on provider: {name} displayName='{display_name}'"
+                    )
+                    return True
+    except CommandFailed as e:
+        logger.warning(f"Failed to check for FDF on provider: {e}")
+    return False
+
+
+_fdf_catalog_image_cache = None
+
+
+def _resolve_image_through_itms(image):
+    """
+    Resolve a container image reference through ImageTagMirrorSet on the
+    management cluster. If the image source matches an ITMS entry, replace
+    the source with the mirror URL so it is pullable from spoke clusters
+    that lack ITMS support (e.g. HyperShift hosted clusters).
+
+    Args:
+        image (str): Original image reference (e.g. icr.io/cpopen/catalog:v4.21)
+
+    Returns:
+        str: Resolved image with mirror URL, or original if no ITMS match
+
+    """
+    ocp_obj = OCP(kind="ImageTagMirrorSet")
+    try:
+        itms_list = ocp_obj.get(all_namespaces=True)
+    except CommandFailed:
+        logger.debug("No ImageTagMirrorSet resources found on management cluster")
+        return image
+
+    for itms in itms_list.get("items", []):
+        for entry in itms.get("spec", {}).get("imageTagMirrors", []):
+            source = entry.get("source", "")
+            mirrors = entry.get("mirrors", [])
+            if source and mirrors and image.startswith(source):
+                resolved = image.replace(source, mirrors[0], 1)
+                logger.info(f"Resolved image through ITMS: {image} -> {resolved}")
+                return resolved
+    return image
+
+
+def get_fdf_catalog_image():
+    """
+    Get the FDF CatalogSource image from the management cluster.
+    If the image uses a registry that requires ITMS (tag-based mirrors),
+    resolve it through the management cluster's ImageTagMirrorSet so it is
+    pullable from spoke clusters.
+    Result is cached to avoid redundant API calls across HostedFDF instances.
+
+    Returns:
+        str: The pullable image reference for the FDF CatalogSource
+
+    Raises:
+        ValueError: If the CatalogSource is not found or has no image
+
+    """
+    global _fdf_catalog_image_cache
+    if _fdf_catalog_image_cache:
+        return _fdf_catalog_image_cache
+
+    ocp_obj = OCP(
+        kind=constants.CATSRC,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    try:
+        catsrc = ocp_obj.get(resource_name=defaults.FUSION_CATALOG_NAME)
+    except CommandFailed as e:
+        raise ValueError(
+            f"FDF CatalogSource '{defaults.FUSION_CATALOG_NAME}' not found "
+            f"on management cluster: {e}"
+        )
+    image = catsrc.get("spec", {}).get("image", "")
+    if not image:
+        raise ValueError(
+            f"FDF CatalogSource '{defaults.FUSION_CATALOG_NAME}' has no image in spec"
+        )
+
+    image = _resolve_image_through_itms(image)
+
+    logger.info(f"FDF CatalogSource image for spoke: {image}")
+    _fdf_catalog_image_cache = image
+    return image
 
 
 def storage_installation_requested(cluster_name):
@@ -538,6 +677,53 @@ def check_odf_prerequisites():
         raise AssertionError(
             "Storage Cluster resource of hub cluster has hostNetwork not set to true"
         )
+
+
+def destroy_aws_hcp_clusters(cluster_names_list=None):
+    """
+    Destroy all AWS HCP hosted clusters and clean up their AWS resources.
+
+    Uses ``get_hosted_cluster_names()`` and ``get_client_type_by_name()`` to
+    discover AWS HCP clusters and calls ``destroy_aws_hcp_cluster()``
+    on each one. Must be called before the management cluster is destroyed.
+
+    Args:
+        cluster_names_list (list): Optional list of cluster names to destroy.
+            If not provided, discovers all hosted clusters from the hub.
+
+    Returns:
+        bool: True if all clusters destroyed successfully, False otherwise
+    """
+    if not cluster_names_list:
+        cluster_names_list = get_hosted_cluster_names()
+    aws_hcp_names = [
+        name
+        for name in cluster_names_list
+        if get_client_type_by_name(name) == constants.AWS_PLATFORM
+    ]
+
+    if not aws_hcp_names:
+        logger.info("No AWS HCP clusters found to destroy")
+        return True
+
+    logger.info(f"Destroying {len(aws_hcp_names)} AWS HCP cluster(s): {aws_hcp_names}")
+
+    all_success = True
+    for cluster_name in aws_hcp_names:
+        logger.info(f"--- Destroying AWS HCP cluster '{cluster_name}' ---")
+        try:
+            aws_hcp = HypershiftAWSHostedOCP(cluster_name)
+            result = aws_hcp.destroy_aws_hcp_cluster()
+            if not result:
+                logger.warning(f"Destroy of '{cluster_name}' completed with issues")
+                all_success = False
+            else:
+                logger.info(f"Successfully destroyed '{cluster_name}'")
+        except (ClientError, CommandFailed, ValueError, OSError) as e:
+            logger.error(f"Failed to destroy '{cluster_name}': {e}")
+            all_success = False
+
+    return all_success
 
 
 def deploy_hosted_ocp_clusters(cluster_names_list=None):
@@ -1044,29 +1230,42 @@ class HostedClients(HyperShiftBase):
                         "Continuing with deployment, but network connectivity may fail"
                     )
 
-        # stage 4 deploy ODF on all hosted clusters if not already deployed
-        log_step("Deploy ODF client on hosted OCP clusters")
+        # stage 4 deploy ODF/FDF client on all hosted clusters if not already deployed
+        fdf_on_provider = is_fdf_on_provider()
+        if fdf_on_provider:
+            logger.info(
+                "FDF detected on provider, will deploy FDF Client on spoke clusters"
+            )
+        log_step("Deploy storage client on hosted OCP clusters")
         for cluster_name in cluster_names:
 
             if not config_has_hosted_odf_image(cluster_name):
                 logger.info(
-                    f"Hosted ODF image not set for cluster '{cluster_name}', skipping ODF deployment"
+                    f"Hosted ODF image not set for cluster '{cluster_name}', skipping deployment"
                 )
                 continue
 
-            logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
-            hosted_odf = HostedODF(cluster_name)
+            if fdf_on_provider:
+                logger.info(f"Setup FDF client on hosted OCP cluster '{cluster_name}'")
+                hosted_odf = HostedFDF(cluster_name)
+            else:
+                logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
+                hosted_odf = HostedODF(cluster_name)
             hosted_odf.do_deploy()
 
-        # stage 5 verify ODF client is installed on all hosted clusters
+        # stage 5 verify ODF/FDF client is installed on all hosted clusters
         odf_installed = []
-        log_step("Verify ODF client is installed on all hosted OCP clusters")
+        log_step("Verify storage client is installed on all hosted OCP clusters")
         for cluster_name in cluster_names:
             if config_has_hosted_odf_image(cluster_name):
                 logger.info(
-                    f"Validate ODF client operator installed on hosted OCP cluster '{cluster_name}'"
+                    f"Validate storage client operator installed on hosted OCP cluster '{cluster_name}'"
                 )
-                hosted_odf = HostedODF(cluster_name)
+                hosted_odf = (
+                    HostedFDF(cluster_name)
+                    if fdf_on_provider
+                    else HostedODF(cluster_name)
+                )
                 if not hosted_odf.odf_client_installed():
                     hosted_odf.exec_oc_cmd(
                         "delete catalogsource --all -n openshift-marketplace"
@@ -1085,7 +1284,11 @@ class HostedClients(HyperShiftBase):
                 logger.info(
                     f"Setting up Storage client on hosted OCP cluster '{cluster_name}'"
                 )
-                hosted_odf = HostedODF(cluster_name)
+                hosted_odf = (
+                    HostedFDF(cluster_name)
+                    if fdf_on_provider
+                    else HostedODF(cluster_name)
+                )
 
                 client_installed = hosted_odf.setup_storage_client_converged(
                     storage_consumer_name=f"{constants.STORAGECONSUMER_NAME_PREFIX}{cluster_name}"
@@ -1888,6 +2091,10 @@ class HypershiftHostedOCP(
         data_replication_separation = config.DEPLOYMENT.get(
             "enable_data_replication_separation"
         )
+        auto_repair = config.ENV_DATA.get("auto_repair", True)
+        auto_repair = (
+            config.ENV_DATA["clusters"].get(self.name).get("auto_repair", auto_repair)
+        )
 
         hosted_cluster_platform = (
             config.ENV_DATA["clusters"]
@@ -1938,6 +2145,7 @@ class HypershiftHostedOCP(
                 cp_availability_policy=cp_availability_policy,
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
+                auto_repair=auto_repair,
             )
         else:
             return self.create_kubevirt_ocp_cluster(
@@ -1950,6 +2158,7 @@ class HypershiftHostedOCP(
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
                 data_replication_separation=data_replication_separation,
+                auto_repair=auto_repair,
             )
 
     def deploy_dependencies(
@@ -2310,12 +2519,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         """
         cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
 
-        self.aws_region = cluster_config.get("region", "us-west-2")
-        if not self.aws_region:
-            logger.warning(
-                f"region not set for cluster '{self.name}' in config. Using default 'us-west-2'."
-            )
-            self.aws_region = config.ENV_DATA["region"]
+        # client cluster region must match the region of hosting cluster, hence safe to fetch region from
+        # running infrastructure
+        self.aws_region = cluster_config.get("region") or get_cluster_region()
 
         self.worker_instance_type = cluster_config.get(
             "worker_instance_type", "m5.xlarge"
@@ -2654,12 +2860,22 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         try:
             result = exec_cmd(cmd, timeout=timeout)
             logger.info("AWS infrastructure creation command completed successfully")
-            logger.debug(
-                f"Output: {result.stdout.decode('utf-8') if result.stdout else ''}"
-            )
+            stdout = result.stdout.decode("utf-8") if result.stdout else ""
+            stderr = result.stderr.decode("utf-8") if result.stderr else ""
+            if stdout:
+                logger.info(f"hypershift create infra stdout:\n{stdout}")
+            if stderr:
+                logger.warning(f"hypershift create infra stderr:\n{stderr}")
         except CommandFailed as e:
-            logger.error(f"Failed to create AWS infrastructure: {e}")
+            logger.error("Failed to create AWS infrastructure")
+            self._log_cmd_output(e)
             raise
+        except subprocess.TimeoutExpired as e:
+            logger.error(f"hypershift create infra aws timed out after {timeout}s")
+            self._log_cmd_output(e)
+            raise CommandFailed(
+                f"hypershift create infra aws timed out after {timeout}s"
+            )
 
         # Verify output file was created
         if not os.path.exists(self.output_infra_file):
@@ -2881,19 +3097,20 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         try:
             result = exec_cmd(cmd, timeout=timeout)
             logger.info("AWS IAM creation command completed successfully")
-
-            # Log the full output for debugging
             stdout = result.stdout.decode("utf-8") if result.stdout else ""
             stderr = result.stderr.decode("utf-8") if result.stderr else ""
-
             if stdout:
                 logger.info(f"hypershift create iam stdout:\n{stdout}")
             if stderr:
                 logger.warning(f"hypershift create iam stderr:\n{stderr}")
-
         except CommandFailed as e:
-            logger.error(f"Failed to create AWS IAM resources: {e}")
+            logger.error("Failed to create AWS IAM resources")
+            self._log_cmd_output(e)
             raise
+        except subprocess.TimeoutExpired as e:
+            logger.error(f"hypershift create iam aws timed out after {timeout}s")
+            self._log_cmd_output(e)
+            raise CommandFailed(f"hypershift create iam aws timed out after {timeout}s")
 
         # Verify output file was created
         if not os.path.exists(self.output_iam_file):
@@ -3489,12 +3706,14 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         logger.debug(f"Command: {cmd}")
 
         try:
-            # Execute with exec timeout 45 minutes timeout (2700 seconds) to allow cluster creation to complete
             result = exec_cmd(cmd, timeout=2700)
             logger.info("Cluster creation command completed successfully")
-            logger.debug(
-                f"Output: {result.stdout.decode('utf-8') if result.stdout else ''}"
-            )
+            stdout = result.stdout.decode("utf-8") if result.stdout else ""
+            stderr = result.stderr.decode("utf-8") if result.stderr else ""
+            if stdout:
+                logger.info(f"hypershift create cluster stdout:\n{stdout}")
+            if stderr:
+                logger.info(f"hypershift create cluster stderr:\n{stderr}")
 
             logger.info(f"Verifying HostedCluster '{self.name}' was created...")
             for sample in TimeoutSampler(
@@ -3510,16 +3729,19 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             return ""
 
         except CommandFailed as e:
-            logger.error(f"Failed to create AWS HCP cluster '{self.name}': {e}")
+            logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
+            self._log_cmd_output(e)
             raise
+        except subprocess.TimeoutExpired as e:
+            logger.error(
+                f"hypershift create cluster aws timed out after 2700s "
+                f"for '{self.name}'"
+            )
+            self._log_cmd_output(e)
+            return ""
         except TimeoutExpiredError as e:
             logger.error(
                 f"Timeout waiting for AWS HCP cluster '{self.name}' creation: {e}"
-            )
-            return ""
-        except Exception as e:
-            logger.error(
-                f"Unexpected error creating AWS HCP cluster '{self.name}': {e}"
             )
             return ""
 
@@ -3799,27 +4021,1499 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         # Check .status.replicas == .status.readyReplicas
         return False
 
-    def cleanup_aws_resources(self):
+    def destroy_aws_hcp_cluster(self, timeout=1200):
         """
-        Cleanup AWS resources when cluster is destroyed.
+        Orchestrate the full destruction of an AWS HCP cluster and its resources.
 
-        This method should be called during cluster teardown to ensure
-        all AWS resources (EC2 instances, networking, etc.) are properly cleaned up.
+        Runs the following steps in order:
+        1. Destroy cluster via hypershift CLI
+        2. Verify infrastructure is gone, fallback to hypershift destroy infra
+        3. Manual VPC cleanup if infrastructure still exists
+        4. Clean up IAM resources (roles, OIDC provider)
+        5. Clean up S3 OIDC documents for this infra_id
+        6. Delete stale OIDC providers for this cluster's OIDC bucket
+        7. Clean up VPC peering routes from management cluster
+        8. Clean up HostedCluster secrets from management cluster
+
+        Args:
+            timeout (int): Timeout in seconds for the hypershift destroy cluster command
 
         Returns:
-            bool: True if cleanup successful, False otherwise
+            bool: True if all resources cleaned up, False if any remain
         """
-        logger.info(f"Cleaning up AWS resources for cluster '{self.name}'")
+        all_clean = True
 
-        # TODO: Implement AWS resource cleanup
-        # This should:
-        # 1. Delete the HostedCluster resource (triggers HCP cleanup)
-        # 2. Verify EC2 instances are terminated
-        # 3. Clean up any orphaned AWS resources
-        # 4. Delete VPC/subnets if they were created by the deployment
+        hypershift_cli_available = self._ensure_sts_credentials()
 
-        logger.warning("AWS resource cleanup not yet fully implemented")
-        return True
+        if not self.role_arn:
+            try:
+                existing_role = self.iam_client.get_role(
+                    RoleName=constants.HCP_DEPLOYER_IAM_ROLE
+                )
+                self.role_arn = existing_role["Role"]["Arn"]
+                logger.info(f"Discovered deployer IAM role ARN: {self.role_arn}")
+            except ClientError as e:
+                logger.warning(f"Could not discover deployer IAM role: {e}")
+                hypershift_cli_available = False
+
+        if hypershift_cli_available:
+            if not self._destroy_cluster_via_hypershift(timeout=timeout):
+                all_clean = False
+
+            if not self._verify_infra_destroyed(timeout=60, interval=15):
+                if not self._terminate_cluster_ec2_instances():
+                    all_clean = False
+
+                if not self._destroy_infra_via_hypershift():
+                    all_clean = False
+
+                if not self._verify_infra_destroyed():
+                    vpcs = self.get_vpc_from_existing_infra()
+                    for vpc in vpcs:
+                        if not self._cleanup_vpc_resources(vpc["VpcId"]):
+                            all_clean = False
+        else:
+            logger.warning(
+                "Hypershift CLI not available (STS creds or role ARN missing). "
+                "Skipping CLI-based destroy, proceeding with manual cleanup."
+            )
+            if not self._terminate_cluster_ec2_instances():
+                all_clean = False
+            vpcs = self.get_vpc_from_existing_infra()
+            for vpc in vpcs:
+                if not self._cleanup_vpc_resources(vpc["VpcId"]):
+                    all_clean = False
+
+        if not self._cleanup_iam_resources():
+            all_clean = False
+
+        if not self._cleanup_s3_oidc_objects():
+            all_clean = False
+
+        if not self._cleanup_stale_oidc_providers():
+            all_clean = False
+
+        if not self._cleanup_vpc_peering():
+            all_clean = False
+
+        if not self._cleanup_hosted_cluster_secrets():
+            all_clean = False
+
+        if not self._cleanup_management_cluster_resources():
+            all_clean = False
+
+        verified = self._verify_destroy_complete()
+        if not verified:
+            all_clean = False
+
+        if all_clean:
+            logger.info(
+                f"All AWS resources for cluster '{self.name}' cleaned up successfully"
+            )
+        else:
+            if verified:
+                logger.warning(
+                    f"Cleanup of '{self.name}' had non-fatal errors during "
+                    "intermediate steps, but final verification confirms all "
+                    "critical resources are gone."
+                )
+            else:
+                logger.warning(
+                    f"Some AWS resources for cluster '{self.name}' may not "
+                    "have been fully cleaned up. Check the logs above."
+                )
+
+        return verified
+
+    def _ensure_sts_credentials(self):
+        """
+        Ensure STS credentials are available and not expired.
+
+        Checks if STS credentials file exists and is valid. If missing or expired,
+        attempts to refresh them via CLI.
+
+        Returns:
+            bool: True if valid STS credentials are available, False otherwise
+        """
+        try:
+            if (
+                self.sts_credentials_file
+                and self.validate_sts_credentials_not_expired()
+            ):
+                return True
+        except FileNotFoundError:
+            logger.warning("STS credentials file not found, will attempt to refresh")
+        except (ValueError, json.JSONDecodeError, OSError) as e:
+            logger.warning(f"STS credentials validation failed: {e}")
+
+        try:
+            self.retrieve_sts_session_token_via_cli()
+            return True
+        except (CommandFailed, FileNotFoundError, OSError) as e:
+            logger.error(f"Failed to refresh STS credentials: {e}")
+            return False
+
+    def _destroy_cluster_via_hypershift(self, timeout=1200):
+        """
+        Destroy AWS HCP cluster using the hypershift CLI.
+
+        Runs ``hypershift destroy cluster aws`` which handles deleting the
+        HostedCluster CR, waiting for finalizers, destroying AWS infrastructure,
+        and deleting K8s secrets.
+
+        Includes ``--infra-id`` and ``--base-domain`` so the command can
+        proceed even if the HostedCluster CR is already gone.
+
+        Uses ``--preserve-iam`` so IAM cleanup is handled separately.
+
+        Args:
+            timeout (int): Timeout in seconds for the command
+
+        Returns:
+            bool: True if command succeeded, False otherwise
+        """
+        logger.info(f"Destroying AWS HCP cluster '{self.name}' via hypershift CLI")
+
+        cmd = (
+            f"{self.hypershift_binary_path} destroy cluster aws "
+            f"--name {self.name} "
+            f"--infra-id {self.infra_id} "
+            f"--base-domain {self.base_domain} "
+            f"--region {self.aws_region} "
+            f"--role-arn {self.role_arn} "
+            f"--sts-creds {self.sts_credentials_file} "
+            f"--preserve-iam"
+        )
+
+        try:
+            result = exec_cmd(cmd, timeout=timeout)
+            stdout = result.stdout.decode("utf-8") if result.stdout else ""
+            stderr = result.stderr.decode("utf-8") if result.stderr else ""
+            logger.info(
+                f"Hypershift destroy cluster command completed for '{self.name}'"
+            )
+            if stdout:
+                logger.info(f"stdout: {stdout}")
+            if stderr:
+                logger.info(f"stderr: {stderr}")
+            return True
+        except CommandFailed as e:
+            logger.error(f"Hypershift destroy cluster command failed for '{self.name}'")
+            self._log_cmd_output(e)
+            return False
+        except subprocess.TimeoutExpired as e:
+            logger.error(
+                f"Hypershift destroy cluster timed out after {timeout}s "
+                f"for '{self.name}'"
+            )
+            self._log_cmd_output(e)
+            return False
+        except (FileNotFoundError, OSError) as e:
+            logger.error(f"Hypershift binary not found for '{self.name}': {e}")
+            return False
+
+    @staticmethod
+    def _log_cmd_output(exc):
+        """
+        Log stdout/stderr from a failed command exception.
+
+        Args:
+            exc: CommandFailed or subprocess.TimeoutExpired exception
+        """
+        stdout = getattr(exc, "stdout", None) or getattr(exc, "output", None)
+        stderr = getattr(exc, "stderr", None)
+        if stdout:
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode("utf-8", errors="replace")
+            logger.info(f"Command stdout:\n{stdout}")
+        if stderr:
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode("utf-8", errors="replace")
+            logger.info(f"Command stderr:\n{stderr}")
+
+    def _destroy_infra_via_hypershift(self, timeout=600):
+        """
+        Destroy AWS infrastructure using the hypershift CLI as a fallback.
+
+        Runs ``hypershift destroy infra aws`` to clean up VPC, subnets,
+        route tables, NAT gateways, etc.
+
+        Args:
+            timeout (int): Timeout in seconds for the command
+
+        Returns:
+            bool: True if command succeeded, False otherwise
+        """
+        logger.info(
+            f"Running hypershift destroy infra aws for infra_id '{self.infra_id}'"
+        )
+
+        cmd = (
+            f"{self.hypershift_binary_path} destroy infra aws "
+            f"--infra-id {self.infra_id} "
+            f"--sts-creds {self.sts_credentials_file} "
+            f"--base-domain {self.base_domain} "
+            f"--role-arn {self.role_arn} "
+            f"--region {self.aws_region}"
+        )
+
+        try:
+            result = exec_cmd(cmd, timeout=timeout)
+            stdout = result.stdout.decode("utf-8") if result.stdout else ""
+            stderr = result.stderr.decode("utf-8") if result.stderr else ""
+            logger.info("Hypershift destroy infra command completed")
+            if stdout:
+                logger.info(f"stdout: {stdout}")
+            if stderr:
+                logger.info(f"stderr: {stderr}")
+            return True
+        except CommandFailed as e:
+            logger.error("Hypershift destroy infra command failed")
+            self._log_cmd_output(e)
+            return False
+        except subprocess.TimeoutExpired as e:
+            logger.error(f"Hypershift destroy infra timed out after {timeout}s")
+            self._log_cmd_output(e)
+            return False
+        except (FileNotFoundError, OSError) as e:
+            logger.error(f"Hypershift binary not found: {e}")
+            return False
+
+    def _verify_infra_destroyed(self, timeout=300, interval=30):
+        """
+        Verify that AWS infrastructure (VPC) has been destroyed.
+
+        Polls ``get_vpc_from_existing_infra()`` until no VPCs are found
+        or timeout is reached.
+
+        Args:
+            timeout (int): Maximum time to wait in seconds
+            interval (int): Polling interval in seconds
+
+        Returns:
+            bool: True if no VPC found (infra destroyed), False if VPC still exists
+        """
+        logger.info(
+            f"Verifying infrastructure destroyed for infra_id '{self.infra_id}'"
+        )
+
+        try:
+            for sample in TimeoutSampler(
+                timeout=timeout,
+                sleep=interval,
+                func=self.get_vpc_from_existing_infra,
+            ):
+                if not sample:
+                    logger.info(
+                        f"No VPC found for infra_id '{self.infra_id}' — "
+                        "infrastructure is destroyed"
+                    )
+                    return True
+                logger.info(
+                    f"VPC still exists for infra_id '{self.infra_id}', waiting..."
+                )
+        except TimeoutExpiredError:
+            logger.warning(
+                f"Timeout waiting for infrastructure to be destroyed "
+                f"(infra_id: {self.infra_id})"
+            )
+            return False
+
+    def _cleanup_vpc_resources(self, vpc_id):
+        """
+        Manually clean up all resources within a VPC using boto3.
+
+        Deletes VPC child resources in the correct order:
+        EC2 instances, VPC endpoints, NAT gateways, EIPs, internet
+        gateways, ELBs, ENIs, security groups, subnets, VPC peering
+        connections (with route cleanup on both sides), route tables,
+        and finally the VPC itself.
+
+        Args:
+            vpc_id (str): VPC ID to clean up
+
+        Returns:
+            bool: True if VPC was deleted, False if any step failed
+        """
+        logger.info(f"Starting manual VPC cleanup for VPC {vpc_id}")
+        success = True
+
+        try:
+            instances = self.ec2_client.describe_instances(
+                Filters=[
+                    {"Name": "vpc-id", "Values": [vpc_id]},
+                    {
+                        "Name": "instance-state-name",
+                        "Values": [
+                            "pending",
+                            "running",
+                            "stopping",
+                            "stopped",
+                        ],
+                    },
+                ]
+            )
+            instance_ids = [
+                inst["InstanceId"]
+                for res in instances.get("Reservations", [])
+                for inst in res.get("Instances", [])
+            ]
+            if instance_ids:
+                logger.info(
+                    f"Terminating {len(instance_ids)} EC2 instance(s) "
+                    f"in VPC {vpc_id}: {instance_ids}"
+                )
+                self.ec2_client.terminate_instances(InstanceIds=instance_ids)
+                waiter = self.ec2_client.get_waiter("instance_terminated")
+                logger.info("Waiting for EC2 instances to terminate...")
+                waiter.wait(
+                    InstanceIds=instance_ids,
+                    WaiterConfig={"Delay": 15, "MaxAttempts": 40},
+                )
+                logger.info("All EC2 instances terminated")
+            else:
+                logger.info(f"No running EC2 instances in VPC {vpc_id}")
+        except ClientError as e:
+            logger.warning(f"Failed to terminate EC2 instances in {vpc_id}: {e}")
+            success = False
+
+        try:
+            endpoints = self.ec2_client.describe_vpc_endpoints(
+                Filters=[
+                    {"Name": "vpc-id", "Values": [vpc_id]},
+                    {
+                        "Name": "vpc-endpoint-state",
+                        "Values": [
+                            "available",
+                            "pending",
+                            "pendingAcceptance",
+                        ],
+                    },
+                ]
+            ).get("VpcEndpoints", [])
+            if endpoints:
+                ep_ids = [ep["VpcEndpointId"] for ep in endpoints]
+                logger.info(f"Deleting {len(ep_ids)} VPC endpoint(s): {ep_ids}")
+                self.ec2_client.delete_vpc_endpoints(VpcEndpointIds=ep_ids)
+                for sample in TimeoutSampler(
+                    timeout=120,
+                    sleep=10,
+                    func=self._check_vpc_endpoints_deleted,
+                    vpc_id=vpc_id,
+                ):
+                    if sample:
+                        logger.info("All VPC endpoints deleted")
+                        break
+        except (ClientError, TimeoutExpiredError) as e:
+            logger.warning(f"Issue with VPC endpoint cleanup for {vpc_id}: {e}")
+            success = False
+
+        nat_eip_alloc_ids = set()
+        try:
+            nat_gateways = self.ec2_client.describe_nat_gateways(
+                Filters=[
+                    {"Name": "vpc-id", "Values": [vpc_id]},
+                    {
+                        "Name": "state",
+                        "Values": ["available", "pending", "deleting", "failed"],
+                    },
+                ]
+            ).get("NatGateways", [])
+
+            for ngw in nat_gateways:
+                ngw_id = ngw["NatGatewayId"]
+                for addr in ngw.get("NatGatewayAddresses", []):
+                    if addr.get("AllocationId"):
+                        nat_eip_alloc_ids.add(addr["AllocationId"])
+                if ngw["State"] in ("available", "pending", "failed"):
+                    try:
+                        self.ec2_client.delete_nat_gateway(NatGatewayId=ngw_id)
+                        logger.info(f"Initiated deletion of NAT gateway: {ngw_id}")
+                    except ClientError as e:
+                        logger.warning(f"Failed to delete NAT gateway {ngw_id}: {e}")
+                        success = False
+
+            if nat_gateways:
+                logger.info("Waiting for NAT gateways to be deleted...")
+                for sample in TimeoutSampler(
+                    timeout=300,
+                    sleep=15,
+                    func=self._check_nat_gateways_deleted,
+                    vpc_id=vpc_id,
+                ):
+                    if sample:
+                        logger.info("All NAT gateways deleted")
+                        break
+        except (ClientError, TimeoutExpiredError) as e:
+            logger.warning(f"Issue with NAT gateway cleanup for {vpc_id}: {e}")
+            success = False
+
+        try:
+            addresses = self.ec2_client.describe_addresses(
+                Filters=[
+                    {
+                        "Name": "tag:kubernetes.io/cluster/" + self.infra_id,
+                        "Values": ["owned"],
+                    }
+                ]
+            ).get("Addresses", [])
+            for addr in addresses:
+                nat_eip_alloc_ids.add(addr["AllocationId"])
+
+            for alloc_id in nat_eip_alloc_ids:
+                try:
+                    addr_info = self.ec2_client.describe_addresses(
+                        AllocationIds=[alloc_id]
+                    ).get("Addresses", [])
+                    if addr_info and addr_info[0].get("AssociationId"):
+                        self.ec2_client.disassociate_address(
+                            AssociationId=addr_info[0]["AssociationId"]
+                        )
+                    self.ec2_client.release_address(AllocationId=alloc_id)
+                    logger.info(f"Released EIP: {alloc_id}")
+                except ClientError as e:
+                    error_code = e.response.get("Error", {}).get("Code", "")
+                    if error_code == "InvalidAllocationID.NotFound":
+                        logger.debug(f"EIP {alloc_id} already released")
+                    else:
+                        logger.warning(f"Failed to release EIP {alloc_id}: {e}")
+                        success = False
+        except ClientError as e:
+            logger.warning(f"Failed to list EIPs for {self.infra_id}: {e}")
+            success = False
+
+        try:
+            igws = self.ec2_client.describe_internet_gateways(
+                Filters=[{"Name": "attachment.vpc-id", "Values": [vpc_id]}]
+            ).get("InternetGateways", [])
+            for igw in igws:
+                igw_id = igw["InternetGatewayId"]
+                try:
+                    self.ec2_client.detach_internet_gateway(
+                        InternetGatewayId=igw_id, VpcId=vpc_id
+                    )
+                    self.ec2_client.delete_internet_gateway(InternetGatewayId=igw_id)
+                    logger.info(f"Detached and deleted internet gateway: {igw_id}")
+                except ClientError as e:
+                    logger.warning(f"Failed to delete internet gateway {igw_id}: {e}")
+                    success = False
+        except ClientError as e:
+            logger.warning(f"Failed to list internet gateways for {vpc_id}: {e}")
+            success = False
+
+        try:
+            nis = self.ec2_client.describe_network_interfaces(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            ).get("NetworkInterfaces", [])
+
+            elb_names = set()
+            for ni in nis:
+                description = ni.get("Description", "")
+                if description.startswith("ELB "):
+                    elb_name = description.split(" ", 1)[1]
+                    elb_names.add(elb_name)
+
+            for elb_name in elb_names:
+                try:
+                    self.elb_client.delete_load_balancer(LoadBalancerName=elb_name)
+                    logger.info(f"Deleted Classic ELB: {elb_name}")
+                except ClientError as e:
+                    logger.warning(f"Failed to delete Classic ELB {elb_name}: {e}")
+                    success = False
+
+            if elb_names:
+                logger.info("Waiting for ELB network interfaces to be released...")
+                time.sleep(15)
+
+            for ni in nis:
+                ni_id = ni["NetworkInterfaceId"]
+                try:
+                    if ni.get("Attachment", {}).get("AttachmentId"):
+                        self.ec2_client.detach_network_interface(
+                            AttachmentId=ni["Attachment"]["AttachmentId"],
+                            Force=True,
+                        )
+                        time.sleep(5)
+                    self.ec2_client.delete_network_interface(NetworkInterfaceId=ni_id)
+                    logger.info(f"Deleted network interface: {ni_id}")
+                except ClientError as e:
+                    logger.warning(f"Failed to delete network interface {ni_id}: {e}")
+                    success = False
+        except ClientError as e:
+            logger.warning(f"Failed to list network interfaces for {vpc_id}: {e}")
+            success = False
+
+        try:
+            sgs = self.ec2_client.describe_security_groups(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            ).get("SecurityGroups", [])
+
+            for sg in sgs:
+                sg_id = sg["GroupId"]
+                for perm in sg.get("IpPermissions", []):
+                    sg_refs = [
+                        pair
+                        for pair in perm.get("UserIdGroupPairs", [])
+                        if pair.get("GroupId") != sg_id
+                    ]
+                    if sg_refs:
+                        try:
+                            self.ec2_client.revoke_security_group_ingress(
+                                GroupId=sg_id, IpPermissions=[perm]
+                            )
+                        except ClientError:
+                            pass
+                for perm in sg.get("IpPermissionsEgress", []):
+                    sg_refs = [
+                        pair
+                        for pair in perm.get("UserIdGroupPairs", [])
+                        if pair.get("GroupId") != sg_id
+                    ]
+                    if sg_refs:
+                        try:
+                            self.ec2_client.revoke_security_group_egress(
+                                GroupId=sg_id, IpPermissions=[perm]
+                            )
+                        except ClientError:
+                            pass
+
+            for sg in sgs:
+                if sg["GroupName"] == "default":
+                    continue
+                sg_id = sg["GroupId"]
+                try:
+                    self.ec2_client.delete_security_group(GroupId=sg_id)
+                    logger.info(f"Deleted security group: {sg_id}")
+                except ClientError as e:
+                    logger.warning(f"Failed to delete security group {sg_id}: {e}")
+                    success = False
+        except ClientError as e:
+            logger.warning(f"Failed to list security groups for {vpc_id}: {e}")
+            success = False
+
+        try:
+            subnets = self.ec2_client.describe_subnets(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            ).get("Subnets", [])
+            for subnet in subnets:
+                subnet_id = subnet["SubnetId"]
+                try:
+                    self.ec2_client.delete_subnet(SubnetId=subnet_id)
+                    logger.info(f"Deleted subnet: {subnet_id}")
+                except ClientError as e:
+                    logger.warning(f"Failed to delete subnet {subnet_id}: {e}")
+                    success = False
+        except ClientError as e:
+            logger.warning(f"Failed to list subnets for {vpc_id}: {e}")
+            success = False
+
+        try:
+            pcxs = self._find_all_vpc_peering_connections(vpc_id)
+            for pcx in pcxs:
+                pcx_id = pcx["VpcPeeringConnectionId"]
+                requester_vpc = pcx.get("RequesterVpcInfo", {}).get("VpcId")
+                accepter_vpc = pcx.get("AccepterVpcInfo", {}).get("VpcId")
+                if requester_vpc == vpc_id:
+                    peer_vpc_id = accepter_vpc
+                else:
+                    peer_vpc_id = requester_vpc
+
+                self._delete_peering_routes_from_vpc(vpc_id, pcx_id)
+
+                if peer_vpc_id:
+                    client_cidr = (
+                        pcx.get("RequesterVpcInfo", {}).get("CidrBlock")
+                        if requester_vpc == vpc_id
+                        else pcx.get("AccepterVpcInfo", {}).get("CidrBlock")
+                    )
+                    if client_cidr:
+                        self._remove_peering_routes(peer_vpc_id, client_cidr)
+                        self._remove_ceph_sg_rules(peer_vpc_id, client_cidr)
+
+                try:
+                    self.ec2_client.delete_vpc_peering_connection(
+                        VpcPeeringConnectionId=pcx_id
+                    )
+                    logger.info(f"Deleted VPC peering connection: {pcx_id}")
+                except ClientError as e:
+                    logger.warning(
+                        f"Failed to delete VPC peering connection " f"{pcx_id}: {e}"
+                    )
+                    success = False
+        except ClientError as e:
+            logger.warning(
+                f"Failed to clean up VPC peering connections for " f"{vpc_id}: {e}"
+            )
+            success = False
+
+        try:
+            rts = self.ec2_client.describe_route_tables(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            ).get("RouteTables", [])
+            for rt in rts:
+                rt_id = rt["RouteTableId"]
+                is_main = any(
+                    assoc.get("Main", False) for assoc in rt.get("Associations", [])
+                )
+
+                for route in rt.get("Routes", []):
+                    if route.get("GatewayId") == "local":
+                        continue
+                    dest_cidr = route.get("DestinationCidrBlock")
+                    dest_prefix = route.get("DestinationPrefixListId")
+                    if not dest_cidr and not dest_prefix:
+                        continue
+                    try:
+                        delete_args = {"RouteTableId": rt_id}
+                        if dest_cidr:
+                            delete_args["DestinationCidrBlock"] = dest_cidr
+                        else:
+                            delete_args["DestinationPrefixListId"] = dest_prefix
+                        self.ec2_client.delete_route(**delete_args)
+                        dest_display = dest_cidr or dest_prefix
+                        logger.info(
+                            f"Deleted route {dest_display} from " f"route table {rt_id}"
+                        )
+                    except ClientError as e:
+                        dest_display = dest_cidr or dest_prefix
+                        logger.warning(
+                            f"Failed to delete route {dest_display} "
+                            f"from {rt_id}: {e}"
+                        )
+
+                if is_main:
+                    continue
+                try:
+                    for assoc in rt.get("Associations", []):
+                        if not assoc.get("Main", False):
+                            self.ec2_client.disassociate_route_table(
+                                AssociationId=assoc["RouteTableAssociationId"]
+                            )
+                    self.ec2_client.delete_route_table(RouteTableId=rt_id)
+                    logger.info(f"Deleted route table: {rt_id}")
+                except ClientError as e:
+                    logger.warning(f"Failed to delete route table {rt_id}: {e}")
+                    success = False
+        except ClientError as e:
+            logger.warning(f"Failed to list route tables for {vpc_id}: {e}")
+            success = False
+
+        try:
+            self.ec2_client.delete_vpc(VpcId=vpc_id)
+            logger.info(f"Deleted VPC: {vpc_id}")
+        except ClientError as e:
+            logger.error(f"Failed to delete VPC {vpc_id}: {e}")
+            success = False
+
+        return success
+
+    def _check_nat_gateways_deleted(self, vpc_id):
+        """
+        Check if all NAT gateways in a VPC have been deleted.
+
+        Args:
+            vpc_id (str): VPC ID to check
+
+        Returns:
+            bool: True if no active/pending NAT gateways remain
+        """
+        nat_gateways = self.ec2_client.describe_nat_gateways(
+            Filters=[
+                {"Name": "vpc-id", "Values": [vpc_id]},
+                {"Name": "state", "Values": ["available", "pending", "deleting"]},
+            ]
+        ).get("NatGateways", [])
+        return len(nat_gateways) == 0
+
+    def _check_vpc_endpoints_deleted(self, vpc_id):
+        """
+        Check if all VPC endpoints in a VPC have been deleted.
+
+        Args:
+            vpc_id (str): VPC ID to check
+
+        Returns:
+            bool: True if no active/pending/deleting VPC endpoints remain
+        """
+        endpoints = self.ec2_client.describe_vpc_endpoints(
+            Filters=[
+                {"Name": "vpc-id", "Values": [vpc_id]},
+                {
+                    "Name": "vpc-endpoint-state",
+                    "Values": ["available", "pending", "deleting"],
+                },
+            ]
+        ).get("VpcEndpoints", [])
+        return len(endpoints) == 0
+
+    def _find_all_vpc_peering_connections(self, vpc_id):
+        """
+        Find all VPC peering connections where the given VPC is either
+        the requester or the accepter.
+
+        Args:
+            vpc_id (str): VPC ID to search for
+
+        Returns:
+            list: List of VPC peering connection dicts
+        """
+        active_states = ["active", "pending-acceptance", "provisioning"]
+
+        as_requester = self.ec2_client.describe_vpc_peering_connections(
+            Filters=[
+                {"Name": "requester-vpc-info.vpc-id", "Values": [vpc_id]},
+                {"Name": "status-code", "Values": active_states},
+            ]
+        ).get("VpcPeeringConnections", [])
+
+        as_accepter = self.ec2_client.describe_vpc_peering_connections(
+            Filters=[
+                {"Name": "accepter-vpc-info.vpc-id", "Values": [vpc_id]},
+                {"Name": "status-code", "Values": active_states},
+            ]
+        ).get("VpcPeeringConnections", [])
+
+        seen_ids = set()
+        result = []
+        for pcx in as_requester + as_accepter:
+            pcx_id = pcx["VpcPeeringConnectionId"]
+            if pcx_id not in seen_ids:
+                seen_ids.add(pcx_id)
+                result.append(pcx)
+
+        logger.info(f"Found {len(result)} VPC peering connection(s) for VPC {vpc_id}")
+        return result
+
+    def _delete_peering_routes_from_vpc(self, vpc_id, pcx_id):
+        """
+        Delete all routes that target a specific VPC peering connection
+        from all route tables in a VPC (including the main route table).
+
+        Args:
+            vpc_id (str): VPC ID containing the route tables
+            pcx_id (str): Peering connection ID to remove routes for
+        """
+        logger.info(f"Deleting routes targeting peering {pcx_id} from VPC {vpc_id}")
+        try:
+            rts = self.ec2_client.describe_route_tables(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            ).get("RouteTables", [])
+
+            for rt in rts:
+                rt_id = rt["RouteTableId"]
+                for route in rt.get("Routes", []):
+                    if route.get("VpcPeeringConnectionId") == pcx_id:
+                        dest = route.get("DestinationCidrBlock")
+                        if dest:
+                            try:
+                                self.ec2_client.delete_route(
+                                    RouteTableId=rt_id,
+                                    DestinationCidrBlock=dest,
+                                )
+                                logger.info(
+                                    f"Deleted peering route {dest} -> "
+                                    f"{pcx_id} from {rt_id}"
+                                )
+                            except ClientError as e:
+                                logger.warning(
+                                    f"Failed to delete route {dest} "
+                                    f"from {rt_id}: {e}"
+                                )
+        except ClientError as e:
+            logger.warning(f"Failed to list route tables for VPC {vpc_id}: {e}")
+
+    def _cleanup_iam_resources(self):
+        """
+        Clean up IAM resources created by ``hypershift create iam aws``.
+
+        Finds all IAM roles prefixed with ``{infra_id}-``, detaches policies,
+        removes from instance profiles, deletes instance profiles, and deletes
+        the roles. Also deletes the OIDC provider for this infra_id.
+
+        Returns:
+            bool: True if all IAM resources cleaned up, False otherwise
+        """
+        logger.info(f"Cleaning up IAM resources for infra_id '{self.infra_id}'")
+        success = True
+
+        try:
+            iam_roles = self.get_iam_roles(self.infra_id)
+            logger.info(
+                f"Found {len(iam_roles)} IAM roles with prefix '{self.infra_id}'"
+            )
+
+            for role_info in iam_roles:
+                role_name = role_info["RoleName"]
+                try:
+                    attached_policies = self.get_attached_role_policies(role_name)
+                    for policy in attached_policies:
+                        try:
+                            self.detach_role_policy(role_name, policy["PolicyArn"])
+                        except ClientError as e:
+                            logger.warning(
+                                f"Failed to detach policy "
+                                f"{policy['PolicyArn']} from {role_name}: {e}"
+                            )
+                            success = False
+
+                    inline_policies = self.get_role_policies(role_name)
+                    for policy_name in inline_policies:
+                        try:
+                            self.delete_role_policy(role_name, policy_name)
+                        except ClientError as e:
+                            logger.warning(
+                                f"Failed to delete inline policy "
+                                f"{policy_name} from {role_name}: {e}"
+                            )
+                            success = False
+
+                    instance_profiles = self.get_instance_profiles_for_role(role_name)
+                    for profile in instance_profiles:
+                        profile_name = profile["InstanceProfileName"]
+                        try:
+                            self.remove_role_from_instance_profile(
+                                role_name, profile_name
+                            )
+                        except ClientError as e:
+                            logger.warning(
+                                f"Failed to remove {role_name} from "
+                                f"instance profile {profile_name}: {e}"
+                            )
+                            success = False
+                        try:
+                            self.iam_client.delete_instance_profile(
+                                InstanceProfileName=profile_name
+                            )
+                            logger.info(f"Deleted instance profile: {profile_name}")
+                        except ClientError as e:
+                            logger.warning(
+                                f"Failed to delete instance profile "
+                                f"{profile_name}: {e}"
+                            )
+                            success = False
+
+                    try:
+                        self.delete_iam_role(role_name)
+                    except ClientError as e:
+                        logger.error(f"Failed to delete IAM role {role_name}: {e}")
+                        success = False
+
+                except (ClientError, CommandFailed) as e:
+                    logger.error(f"Failed to clean up IAM role {role_name}: {e}")
+                    success = False
+
+        except (ClientError, KeyError) as e:
+            logger.error(f"Failed to list IAM roles for '{self.infra_id}': {e}")
+            success = False
+
+        try:
+            if self.oidc_bucket_name and self.oidc_bucket_region:
+                provider_name = (
+                    f"{self.oidc_bucket_name}.s3.{self.oidc_bucket_region}"
+                    f".amazonaws.com/{self.infra_id}"
+                )
+                self.delete_oidc_provider(provider_name)
+                logger.info(f"Deleted OIDC provider: {provider_name}")
+            else:
+                logger.warning(
+                    "OIDC bucket name or region not set, skipping OIDC provider cleanup"
+                )
+        except ClientError as e:
+            logger.warning(f"Failed to delete OIDC provider: {e}")
+            success = False
+
+        return success
+
+    def _cleanup_stale_oidc_providers(self):
+        """
+        Delete all OIDC providers associated with this cluster's OIDC bucket.
+
+        Each HCP deployment creates an OIDC provider with a URL like
+        ``{bucket}.s3.{region}.amazonaws.com/{infra_id}``. When a deployment
+        is aborted or destroyed without proper cleanup, stale providers
+        accumulate in the AWS account. AWS enforces a hard limit of 100
+        OIDC providers per account, and exceeding it blocks new deployments
+        with ``LimitExceeded: Cannot exceed quota for
+        OpenIdConnectProvidersPerAccount: 100``.
+
+        This method finds and deletes all OIDC providers whose URL starts
+        with this cluster's bucket prefix
+        (``{oidc_bucket_name}.s3.{oidc_bucket_region}.amazonaws.com``).
+        This is safe because the bucket name contains the cluster name,
+        so only this cluster's providers are affected.
+
+        Returns:
+            bool: True if cleanup succeeded or was skipped, False on error.
+        """
+        if not self.oidc_bucket_name or not self.oidc_bucket_region:
+            logger.debug(
+                "OIDC bucket name or region not set, "
+                "skipping stale OIDC provider cleanup"
+            )
+            return True
+
+        url_prefix = (
+            f"{self.oidc_bucket_name}.s3.{self.oidc_bucket_region}.amazonaws.com"
+        )
+        logger.info(f"Cleaning up all OIDC providers matching prefix '{url_prefix}'")
+        try:
+            self.cleanup_oidc_providers_by_prefix(url_prefix)
+            return True
+        except Exception as e:
+            logger.warning(f"Stale OIDC provider cleanup failed: {e}")
+            return False
+
+    def _cleanup_s3_oidc_objects(self):
+        """
+        Clean up S3 OIDC documents for this infra_id.
+
+        Deletes all objects under the ``{infra_id}/`` prefix from the shared
+        OIDC S3 bucket. Does not delete the bucket itself.
+
+        Returns:
+            bool: True if all objects deleted, False otherwise
+        """
+        logger.info(f"Cleaning up S3 OIDC objects for infra_id '{self.infra_id}'")
+
+        if not self.oidc_bucket_name:
+            logger.warning("OIDC bucket name not set, skipping S3 OIDC object cleanup")
+            return True
+
+        success = True
+        prefix = f"{self.infra_id}/"
+
+        try:
+            paginator = self.s3_client.get_paginator("list_objects_v2")
+            objects_to_delete = []
+
+            for page in paginator.paginate(Bucket=self.oidc_bucket_name, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    objects_to_delete.append({"Key": obj["Key"]})
+
+            if not objects_to_delete:
+                logger.info(
+                    f"No S3 objects found under prefix '{prefix}' "
+                    f"in bucket '{self.oidc_bucket_name}'"
+                )
+                return True
+
+            logger.info(
+                f"Deleting {len(objects_to_delete)} S3 objects from "
+                f"'{self.oidc_bucket_name}' with prefix '{prefix}'"
+            )
+
+            batch_size = 1000
+            for i in range(0, len(objects_to_delete), batch_size):
+                batch = objects_to_delete[i : i + batch_size]
+                self.s3_client.delete_objects(
+                    Bucket=self.oidc_bucket_name,
+                    Delete={"Objects": batch},
+                )
+
+            logger.info("S3 OIDC objects deleted successfully")
+
+        except ClientError as e:
+            logger.error(f"Failed to clean up S3 OIDC objects: {e}")
+            success = False
+        except (KeyError, ValueError) as e:
+            logger.error(f"Unexpected error cleaning up S3 OIDC objects: {e}")
+            success = False
+
+        return success
+
+    def _cleanup_vpc_peering(self):
+        """
+        Clean up VPC peering connection and related routes/security group rules
+        between the client VPC and the management cluster VPC.
+
+        Removes:
+        - Ceph port ingress rules from management security group for the client CIDR
+        - Route to client VPC CIDR from management route tables
+        - The VPC peering connection itself
+
+        Returns:
+            bool: True if cleanup succeeded, False otherwise
+        """
+        logger.info(f"Cleaning up VPC peering for cluster '{self.name}'")
+        success = True
+
+        try:
+            client_vpcs = self.get_vpc_from_existing_infra()
+            if not client_vpcs:
+                logger.info(
+                    "Client VPC already deleted, looking for peering connections "
+                    "by infra_id tag"
+                )
+                return self._cleanup_orphaned_peering_connections()
+
+            client_vpc_id = client_vpcs[0]["VpcId"]
+            client_vpc_cidr = client_vpcs[0].get("CidrBlock")
+
+            mgmt_vpc_id = None
+            try:
+                mgmt_vpc_id = self.get_mgmt_vpc_id()
+            except (ValueError, ClientError, CommandFailed) as e:
+                logger.warning(f"Could not determine management VPC ID: {e}")
+
+            peerings = self.ec2_client.describe_vpc_peering_connections(
+                Filters=[
+                    {
+                        "Name": "requester-vpc-info.vpc-id",
+                        "Values": [client_vpc_id],
+                    },
+                    {
+                        "Name": "status-code",
+                        "Values": [
+                            "active",
+                            "pending-acceptance",
+                            "provisioning",
+                        ],
+                    },
+                ]
+            ).get("VpcPeeringConnections", [])
+
+            if not peerings:
+                logger.info("No active VPC peering connections found")
+                return True
+
+            for pcx in peerings:
+                pcx_id = pcx["VpcPeeringConnectionId"]
+                accepter_vpc_id = pcx.get("AccepterVpcInfo", {}).get("VpcId")
+
+                if client_vpc_cidr and accepter_vpc_id:
+                    self._remove_ceph_sg_rules(accepter_vpc_id, client_vpc_cidr)
+                    self._remove_peering_routes(accepter_vpc_id, client_vpc_cidr)
+
+                if mgmt_vpc_id and client_vpc_cidr:
+                    self._remove_peering_routes(mgmt_vpc_id, client_vpc_cidr)
+
+                try:
+                    self.ec2_client.delete_vpc_peering_connection(
+                        VpcPeeringConnectionId=pcx_id
+                    )
+                    logger.info(f"Deleted VPC peering connection: {pcx_id}")
+                except ClientError as e:
+                    logger.warning(
+                        f"Failed to delete VPC peering connection {pcx_id}: {e}"
+                    )
+                    success = False
+
+        except (ClientError, ValueError) as e:
+            logger.error(f"Failed to clean up VPC peering: {e}")
+            success = False
+
+        return success
+
+    def _cleanup_orphaned_peering_connections(self):
+        """
+        Clean up VPC peering connections that reference a deleted client VPC.
+
+        Searches for peering connections tagged with the infra_id.
+
+        Returns:
+            bool: True if cleanup succeeded, False otherwise
+        """
+        success = True
+
+        try:
+            mgmt_vpc_id = self.get_mgmt_vpc_id()
+            peerings = self.ec2_client.describe_vpc_peering_connections(
+                Filters=[
+                    {
+                        "Name": "accepter-vpc-info.vpc-id",
+                        "Values": [mgmt_vpc_id],
+                    },
+                    {
+                        "Name": "status-code",
+                        "Values": [
+                            "active",
+                            "pending-acceptance",
+                        ],
+                    },
+                ]
+            ).get("VpcPeeringConnections", [])
+
+            for pcx in peerings:
+                requester_vpc_id = pcx.get("RequesterVpcInfo", {}).get("VpcId")
+                requester_cidr = pcx.get("RequesterVpcInfo", {}).get("CidrBlock")
+                pcx_id = pcx["VpcPeeringConnectionId"]
+
+                vpcs_for_requester = []
+                try:
+                    vpcs_for_requester = self.ec2_client.describe_vpcs(
+                        VpcIds=[requester_vpc_id]
+                    ).get("Vpcs", [])
+                except ClientError:
+                    pass
+
+                if not vpcs_for_requester:
+                    if requester_cidr:
+                        self._remove_peering_routes(mgmt_vpc_id, requester_cidr)
+                        self._remove_ceph_sg_rules(mgmt_vpc_id, requester_cidr)
+                    try:
+                        self.ec2_client.delete_vpc_peering_connection(
+                            VpcPeeringConnectionId=pcx_id
+                        )
+                        logger.info(
+                            f"Deleted orphaned VPC peering connection: {pcx_id}"
+                        )
+                    except ClientError as e:
+                        logger.warning(
+                            f"Failed to delete orphaned peering {pcx_id}: {e}"
+                        )
+                        success = False
+
+        except (ValueError, ClientError, CommandFailed) as e:
+            logger.warning(f"Could not clean up orphaned peering connections: {e}")
+
+        return success
+
+    def _remove_ceph_sg_rules(self, vpc_id, source_cidr):
+        """
+        Remove Ceph port ingress rules from security groups in a VPC for a given CIDR.
+
+        Args:
+            vpc_id (str): VPC ID containing the security groups
+            source_cidr (str): CIDR block to revoke rules for
+        """
+        logger.info(
+            f"Removing Ceph port SG rules for CIDR {source_cidr} from VPC {vpc_id}"
+        )
+        ports_config = [
+            {
+                "FromPort": constants.CEPH_MON_MSGR2_PORT,
+                "ToPort": constants.CEPH_MON_MSGR2_PORT,
+            },
+            {
+                "FromPort": constants.CEPH_MON_LEGACY_PORT,
+                "ToPort": constants.CEPH_MON_LEGACY_PORT,
+            },
+            {
+                "FromPort": constants.CEPH_EXPORTER_PORT,
+                "ToPort": constants.CEPH_EXPORTER_PORT,
+            },
+            {
+                "FromPort": constants.CEPH_OSD_PORT_MIN,
+                "ToPort": constants.CEPH_OSD_PORT_MAX,
+            },
+        ]
+
+        try:
+            sgs = self.ec2_client.describe_security_groups(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            ).get("SecurityGroups", [])
+
+            for sg in sgs:
+                sg_id = sg["GroupId"]
+                for port in ports_config:
+                    try:
+                        self.ec2_client.revoke_security_group_ingress(
+                            GroupId=sg_id,
+                            IpPermissions=[
+                                {
+                                    "IpProtocol": "tcp",
+                                    "FromPort": port["FromPort"],
+                                    "ToPort": port["ToPort"],
+                                    "IpRanges": [{"CidrIp": source_cidr}],
+                                }
+                            ],
+                        )
+                        logger.debug(f"Revoked rule {port} from SG {sg_id}")
+                    except ClientError as e:
+                        error_code = e.response.get("Error", {}).get("Code", "")
+                        if error_code == "InvalidPermission.NotFound":
+                            continue
+                        logger.warning(f"Failed to revoke SG rule from {sg_id}: {e}")
+        except ClientError as e:
+            logger.warning(f"Failed to list security groups for VPC {vpc_id}: {e}")
+
+    def _remove_peering_routes(self, vpc_id, destination_cidr):
+        """
+        Remove routes for a given destination CIDR from all route tables in a VPC.
+
+        Args:
+            vpc_id (str): VPC ID
+            destination_cidr (str): Destination CIDR to remove routes for
+        """
+        logger.info(f"Removing routes for CIDR {destination_cidr} from VPC {vpc_id}")
+        try:
+            rts = self.ec2_client.describe_route_tables(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            ).get("RouteTables", [])
+
+            for rt in rts:
+                rt_id = rt["RouteTableId"]
+                for route in rt.get("Routes", []):
+                    if route.get("DestinationCidrBlock") == destination_cidr:
+                        try:
+                            self.ec2_client.delete_route(
+                                RouteTableId=rt_id,
+                                DestinationCidrBlock=destination_cidr,
+                            )
+                            logger.info(
+                                f"Deleted route {destination_cidr} from "
+                                f"route table {rt_id}"
+                            )
+                        except ClientError as e:
+                            logger.warning(f"Failed to delete route from {rt_id}: {e}")
+        except ClientError as e:
+            logger.warning(f"Failed to list route tables for VPC {vpc_id}: {e}")
+
+    def _cleanup_hosted_cluster_secrets(self):
+        """
+        Clean up remaining HostedCluster secrets from the management cluster.
+
+        Deletes secrets in the ``clusters`` namespace that are prefixed with
+        the cluster name.
+
+        Returns:
+            bool: True if cleanup succeeded, False otherwise
+        """
+        logger.info(f"Cleaning up HostedCluster secrets for cluster '{self.name}'")
+        success = True
+
+        try:
+            if self.name in get_hosted_cluster_names():
+                logger.warning(
+                    f"HostedCluster '{self.name}' still exists on management cluster"
+                )
+                success = False
+
+            ocp_secrets = OCP(kind="secret", namespace="clusters")
+            secrets = ocp_secrets.get()
+            matching_secrets = [
+                s
+                for s in secrets.get("items", [])
+                if s["metadata"]["name"].startswith(self.name)
+            ]
+
+            for secret in matching_secrets:
+                secret_name = secret["metadata"]["name"]
+                try:
+                    ocp_secrets.delete(resource_name=secret_name)
+                    logger.info(
+                        f"Deleted secret '{secret_name}' from 'clusters' namespace"
+                    )
+                except CommandFailed as e:
+                    logger.warning(f"Failed to delete secret '{secret_name}': {e}")
+                    success = False
+
+        except (CommandFailed, TimeoutExpiredError) as e:
+            logger.warning(f"Failed to clean up HostedCluster secrets: {e}")
+            success = False
+
+        return success
+
+    def _cleanup_management_cluster_resources(self):
+        """
+        Clean up OCP resources on the management cluster that may survive
+        ``hypershift destroy cluster aws``.
+
+        Deletes:
+        - HostedCluster CR in the ``clusters`` namespace
+        - NodePool CRs belonging to this cluster in the ``clusters`` namespace
+        - The ``clusters-{name}`` control plane namespace
+
+        Returns:
+            bool: True if all resources cleaned up, False otherwise
+        """
+        logger.info(f"Cleaning up management cluster resources for '{self.name}'")
+        success = True
+
+        hc_ocp = OCP(
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=constants.CLUSTERS_NAMESPACE,
+        )
+        if hc_ocp.is_exist(resource_name=self.name):
+            logger.warning(
+                f"HostedCluster '{self.name}' still exists after destroy, "
+                "deleting manually"
+            )
+            try:
+                logger.info(
+                    f"Attempting graceful delete of HostedCluster "
+                    f"'{self.name}' (grace-period=180s)"
+                )
+                hc_ocp.exec_oc_cmd(
+                    f"delete {constants.HOSTED_CLUSTERS} {self.name} "
+                    f"--grace-period=180 --wait=true",
+                    timeout=300,
+                )
+                logger.info(f"Gracefully deleted HostedCluster CR '{self.name}'")
+            except CommandFailed as e:
+                logger.warning(
+                    f"Graceful delete failed for HostedCluster "
+                    f"'{self.name}': {e}. Retrying with force delete."
+                )
+                try:
+                    hc_ocp.delete(resource_name=self.name, wait=True, force=True)
+                    logger.info(f"Force deleted HostedCluster CR '{self.name}'")
+                except CommandFailed as e:
+                    logger.error(f"Failed to force delete HostedCluster CR: {e}")
+                    success = False
+
+        np_ocp = OCP(
+            kind="nodepools",
+            namespace=constants.CLUSTERS_NAMESPACE,
+        )
+        try:
+            nodepools = np_ocp.get()
+            for np_item in nodepools.get("items", []):
+                np_name = np_item["metadata"]["name"]
+                cluster_ref = np_item.get("spec", {}).get("clusterName", "")
+                if np_name.startswith(self.name) or cluster_ref == self.name:
+                    logger.info(f"Deleting NodePool '{np_name}'")
+                    try:
+                        np_ocp.delete(resource_name=np_name, wait=True, force=True)
+                        logger.info(f"Deleted NodePool CR '{np_name}'")
+                    except CommandFailed as e:
+                        logger.error(f"Failed to delete NodePool '{np_name}': {e}")
+                        success = False
+        except CommandFailed as e:
+            logger.warning(f"Failed to list NodePools: {e}")
+            success = False
+
+        cp_namespace = f"clusters-{self.name}"
+        ns_ocp = OCP(kind="namespace")
+        if ns_ocp.is_exist(resource_name=cp_namespace):
+            logger.info(
+                f"Control plane namespace '{cp_namespace}' still exists, " "deleting"
+            )
+            try:
+                ns_ocp.delete(resource_name=cp_namespace, wait=True)
+                logger.info(f"Deleted namespace '{cp_namespace}'")
+            except CommandFailed as e:
+                logger.error(f"Failed to delete namespace '{cp_namespace}': {e}")
+                success = False
+
+        return success
+
+    def _verify_destroy_complete(self):
+        """
+        Final verification that all critical resources have been destroyed.
+
+        Checks:
+        - No VPC with the infra_id tag exists
+        - No IAM roles with the infra_id prefix exist
+        - HostedCluster CR is gone from the management cluster
+
+        Returns:
+            bool: True if all critical resources are confirmed gone
+        """
+        logger.info(f"Running final verification for cluster '{self.name}'")
+        verified = True
+
+        remaining_vpcs = self.get_vpc_from_existing_infra()
+        if remaining_vpcs:
+            vpc_ids = [v["VpcId"] for v in remaining_vpcs]
+            logger.error(
+                f"VPC(s) still exist for infra_id '{self.infra_id}': {vpc_ids}"
+            )
+            verified = False
+        else:
+            logger.info("Verified: no VPC remains")
+
+        try:
+            remaining_roles = self.get_iam_roles(self.infra_id)
+            if remaining_roles:
+                role_names = [r["RoleName"] for r in remaining_roles]
+                logger.error(
+                    f"IAM roles still exist with prefix '{self.infra_id}': "
+                    f"{role_names}"
+                )
+                verified = False
+            else:
+                logger.info("Verified: no IAM roles remain")
+        except (ClientError, KeyError) as e:
+            logger.warning(f"Could not verify IAM roles: {e}")
+
+        try:
+            if self.name in get_hosted_cluster_names():
+                logger.error(
+                    f"HostedCluster '{self.name}' still exists on " "management cluster"
+                )
+                verified = False
+            else:
+                logger.info("Verified: HostedCluster CR is gone")
+        except CommandFailed as e:
+            logger.warning(f"Could not verify HostedCluster status: {e}")
+
+        if verified:
+            logger.info(
+                f"Final verification passed: all critical resources for "
+                f"'{self.name}' are confirmed destroyed"
+            )
+
+        return verified
+
+    def _terminate_cluster_ec2_instances(self):
+        """
+        Terminate all EC2 instances belonging to this cluster's VPC.
+
+        Finds the VPC by infra_id tag, discovers all running/pending/stopped
+        instances, terminates them, and waits for termination to complete.
+
+        This is called as the first step of destroy to ensure worker nodes
+        are stopped before any infrastructure cleanup begins.
+
+        Returns:
+            bool: True if no instances remain, False on failure
+        """
+        logger.info(f"Terminating EC2 instances for cluster '{self.name}'")
+
+        vpcs = self.get_vpc_from_existing_infra()
+        if not vpcs:
+            logger.info("No VPC found, no EC2 instances to terminate")
+            return True
+
+        success = True
+        for vpc in vpcs:
+            vpc_id = vpc["VpcId"]
+            try:
+                reservations = self.ec2_client.describe_instances(
+                    Filters=[
+                        {"Name": "vpc-id", "Values": [vpc_id]},
+                        {
+                            "Name": "instance-state-name",
+                            "Values": [
+                                "pending",
+                                "running",
+                                "stopping",
+                                "stopped",
+                            ],
+                        },
+                    ]
+                ).get("Reservations", [])
+
+                instance_ids = [
+                    inst["InstanceId"]
+                    for res in reservations
+                    for inst in res.get("Instances", [])
+                ]
+
+                if not instance_ids:
+                    logger.info(f"No running EC2 instances in VPC {vpc_id}")
+                    continue
+
+                logger.info(
+                    f"Terminating {len(instance_ids)} EC2 instance(s) "
+                    f"in VPC {vpc_id}: {instance_ids}"
+                )
+                self.ec2_client.terminate_instances(InstanceIds=instance_ids)
+                waiter = self.ec2_client.get_waiter("instance_terminated")
+                logger.info("Waiting for EC2 instances to terminate...")
+                waiter.wait(
+                    InstanceIds=instance_ids,
+                    WaiterConfig={"Delay": 15, "MaxAttempts": 40},
+                )
+                logger.info(f"All EC2 instances terminated in VPC {vpc_id}")
+            except ClientError as e:
+                logger.error(
+                    f"Failed to terminate EC2 instances in " f"VPC {vpc_id}: {e}"
+                )
+                success = False
+
+        return success
 
     def _get_nodepool_replicas(self):
         """
@@ -4861,9 +6555,18 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             logger.warning(f"Ping to {target_ip} failed:\n{result}")
             return False
 
-        except CommandFailed as e:
+        except (CommandFailed, TimeoutExpiredError) as e:
             logger.error(f"Failed to verify network connectivity to {target_ip}: {e}")
             return False
+        # this block must be reliable during multistep deployment process, hence using wide Exception
+        except Exception as e:
+            if "TimeoutExpired" in type(e).__name__:
+                logger.error(
+                    f"oc debug command timed out verifying connectivity "
+                    f"to {target_ip}: {e}"
+                )
+                return False
+            raise
 
     def get_node_private_ip(self, node_name=None):
         """
@@ -4950,10 +6653,23 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             logger.warning(f"Could not get management node IP: {e}")
             return network_result
 
-        if not self.verify_network_connectivity(target_ip=mgmt_node_ip, timeout=10):
+        try:
+            for sample in TimeoutSampler(
+                timeout=300,
+                sleep=30,
+                func=self.verify_network_connectivity,
+                target_ip=mgmt_node_ip,
+            ):
+                if sample:
+                    break
+                logger.warning(
+                    f"Connectivity check to {mgmt_node_ip} failed, " "retrying..."
+                )
+        except TimeoutExpiredError:
             raise ConnectivityFail(
                 f"Network connectivity from client cluster '{self.name}' "
-                f"to management node {mgmt_node_ip} failed"
+                f"to management node {mgmt_node_ip} failed after "
+                "multiple attempts (300s timeout)"
             )
 
         logger.info(
@@ -4979,9 +6695,27 @@ class SpokeODF(SpokeOCP, ABC):
             .get("hosted_odf_registry", defaults.HOSTED_ODF_REGISTRY_DEFAULT)
         )
         self.catsrc_image = f"{self.odf_registry}:{self.odf_version}"
-        self.namespace_client = config.ENV_DATA.get(
-            "client_namespace", "openshift-storage"
-        )
+
+        # Get cluster namespace - parse from yaml_text_config if present
+        cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+        self.namespace_client = None
+
+        if "yaml_text_config" in cluster_config:
+            try:
+                nested_config = yaml.safe_load(cluster_config["yaml_text_config"])
+                self.namespace_client = nested_config.get("ENV_DATA", {}).get(
+                    "cluster_namespace"
+                )
+            except (yaml.YAMLError, AttributeError, KeyError) as e:
+                logger.warning(
+                    f"Failed to parse yaml_text_config for cluster {self.name}: {e}"
+                )
+
+        # Fall back to direct path or global default
+        if not self.namespace_client:
+            self.namespace_client = cluster_config.get(
+                "cluster_namespace"
+            ) or config.ENV_DATA.get("client_namespace", "openshift-storage")
         # default cluster name picked from the storage client yaml
         storage_client_data = templating.load_yaml(
             constants.PROVIDER_MODE_STORAGE_CLIENT
@@ -5042,12 +6776,16 @@ class SpokeODF(SpokeOCP, ABC):
 
         storage_class_names = get_autodistributed_storage_classes()
         volumesnapshot_class_names = get_autodistributed_volume_snapshot_classes()
+        volumegroup_snapshot_classes = (
+            get_autodistributed_volumegroup_snapshot_classes()
+        )
 
         start_time = time.time()
         storage_consumer_obj = create_storage_consumer_on_default_cluster(
             storage_consumer_name,
             storage_classes=storage_class_names,
             volume_snapshot_classes=volumesnapshot_class_names,
+            volume_group_snapshot_classes=volumegroup_snapshot_classes,
         )
         secret_name = storage_consumer_obj.get_onboarding_ticket_secret()
 
@@ -5283,6 +7021,9 @@ class SpokeODF(SpokeOCP, ABC):
             constants.PROVIDER_MODE_OPERATORGROUP
         )
 
+        # Set the correct namespace for the operator group
+        operator_group_data["metadata"]["namespace"] = self.namespace_client
+
         operator_group_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="operator_group", delete=False
         )
@@ -5303,6 +7044,7 @@ class SpokeODF(SpokeOCP, ABC):
         Returns:
             bool: True if the catalog source exists, False otherwise
         """
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
         ocp_obj = OCP(
             kind=constants.CATSRC,
             namespace=constants.MARKETPLACE_NAMESPACE,
@@ -5310,7 +7052,7 @@ class SpokeODF(SpokeOCP, ABC):
         )
         return ocp_obj.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
-            resource_name="ocs-catalogsource",
+            resource_name=catalog_source_data["metadata"]["name"],
             should_exist=True,
         )
 
@@ -5332,9 +7074,7 @@ class SpokeODF(SpokeOCP, ABC):
             if not reapply:
                 return True
 
-        catalog_source_data = templating.load_yaml(
-            constants.PROVIDER_MODE_CATALOGSOURCE
-        )
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
 
         if not config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"):
             if not reapply:
@@ -5421,6 +7161,9 @@ class SpokeODF(SpokeOCP, ABC):
             return
 
         subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
+
+        # Set the correct namespace for the subscription
+        subscription_data["metadata"]["namespace"] = self.namespace_client
 
         # since we are allowed to install N+1 on hosted clusters we can not rely on PackageManifest default channel
         hosted_odf_version = (
@@ -5709,6 +7452,148 @@ class HostedODF(HypershiftHostedOCP, SpokeODF):
         """
         HypershiftHostedOCP.__init__(self, name)
         SpokeODF.__init__(self, name)
+
+
+class HostedFDF(HypershiftHostedOCP, SpokeODF):
+    """
+    Class for managing Hosted FDF (Fusion Data Foundation) client clusters.
+    When FDF is installed on the management/provider cluster, this class
+    deploys the FDF Client operator on hosted spoke clusters using the
+    FDF CatalogSource image from the management cluster.
+    """
+
+    FDF_CATALOGSOURCE_NAME = defaults.FUSION_CATALOG_NAME
+
+    def __init__(self, name: str):
+        HypershiftHostedOCP.__init__(self, name)
+        SpokeODF.__init__(self, name)
+        self.catsrc_image = get_fdf_catalog_image()
+
+    @kubeconfig_exists_decorator
+    def create_catalog_source(self, reapply=False, odf_version_tag=None):
+        """
+        Create FDF CatalogSource on the spoke cluster using the same image
+        as the management cluster's FDF CatalogSource.
+        """
+        catalog_source_name = self.FDF_CATALOGSOURCE_NAME
+        ocp_obj = OCP(
+            kind=constants.CATSRC,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        if ocp_obj.check_resource_existence(
+            timeout=10,
+            resource_name=catalog_source_name,
+            should_exist=True,
+        ):
+            logger.info(f"FDF CatalogSource '{catalog_source_name}' already exists")
+            if not reapply:
+                return True
+
+        catalog_source_data = templating.load_yaml(
+            constants.PROVIDER_MODE_CATALOGSOURCE
+        )
+        catalog_source_data["metadata"]["name"] = catalog_source_name
+        catalog_source_data["spec"]["image"] = self.catsrc_image
+        catalog_source_data["spec"]["displayName"] = "Data Foundation Catalog"
+        catalog_source_data["spec"]["publisher"] = "IBM"
+
+        catalog_source_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="fdf_catalog_source", delete=False
+        )
+        templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_file.name)
+
+        try:
+            self.exec_oc_cmd(f"apply -f {catalog_source_file.name}", timeout=120)
+        except CommandFailed as e:
+            logger.error(f"Error during FDF CatalogSource creation: {e}")
+            return False
+
+        ocs_client_catsrc = CatalogSource(
+            resource_name=catalog_source_name,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        try:
+            ocs_client_catsrc.wait_for_state("READY")
+        except (TimeoutExpiredError, ResourceWrongStatusException) as e:
+            logger.error(f"Error during FDF CatalogSource readiness wait: {e}")
+            return False
+
+        return ocp_obj.check_resource_existence(
+            timeout=10,
+            resource_name=catalog_source_name,
+            should_exist=True,
+        )
+
+    @kubeconfig_exists_decorator
+    def catalog_source_exists(self):
+        """
+        Check if the FDF CatalogSource exists on the spoke cluster.
+        """
+        ocp_obj = OCP(
+            kind=constants.CATSRC,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp_obj.check_resource_existence(
+            timeout=self.timeout_check_resources_exist_sec,
+            resource_name=self.FDF_CATALOGSOURCE_NAME,
+            should_exist=True,
+        )
+
+    @kubeconfig_exists_decorator
+    def create_subscription(self):
+        """
+        Create subscription for FDF Client operator, sourcing from the FDF CatalogSource.
+        """
+        if self.subscription_exists():
+            logger.info("FDF Client Subscription already exists")
+            return
+
+        subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
+        subscription_data["metadata"]["namespace"] = self.namespace_client
+        subscription_data["spec"]["source"] = self.FDF_CATALOGSOURCE_NAME
+
+        hosted_odf_version = (
+            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+        )
+        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
+            hosted_odf_version = hosted_odf_version.split("-")[-1]
+
+        version_semantic = version.get_semantic_version(hosted_odf_version)
+        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
+        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
+
+        subscription_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="fdf_subscription", delete=False
+        )
+        templating.dump_data_to_temp_yaml(subscription_data, subscription_file.name)
+
+        self.exec_oc_cmd(f"apply -f {subscription_file.name}", timeout=120)
+        return self.subscription_exists()
+
+    def do_deploy(self):
+        """
+        Deploy FDF Client on hosted OCP cluster.
+        """
+        if self.odf_csv_installed():
+            logger.info(
+                "FDF Client CSV exists, assuming FDF client is already installed"
+            )
+            return
+
+        logger.info(f"Deploying FDF client on hosted OCP cluster '{self.name}'")
+        self.create_ns()
+
+        logger.info("Creating FDF client operator group")
+        self.create_operator_group()
+
+        logger.info("Creating FDF client catalog source")
+        self.create_catalog_source()
+
+        logger.info("Creating FDF client subscription")
+        self.create_subscription()
 
 
 @skip_if_not_hcp_provider

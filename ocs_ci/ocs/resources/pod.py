@@ -3838,21 +3838,25 @@ def exit_osd_maintenance_mode(osd_deployment):
     helpers.modify_deployment_replica_count(
         deployment_name=constants.OCS_CSV_PREFIX, replica_count=1
     )
+    try:
+        # UnSet ceph osd noout and pause flags BEFORE waiting for pods.
+        # Pods cannot fully start while I/O is paused, so unsetting first
+        # avoids a deadlock where we wait for pods that can never be ready.
+        ct_pod = get_ceph_tools_pod()
+        logger.info("UnSet osd noout flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset noout")
+        logger.info("UnSet osd pause flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset pause")
+    finally:
+        # Remove the backup files regardless of flag-unset outcome
+        for deployment in osd_deployment:
+            if os.path.isfile(f"backup_{deployment.name}.yaml"):
+                os.remove(f"backup_{deployment.name}.yaml")
     # Sleep for 60 sec for the OSD pods to respin
     logger.info("Sleeping for 60s for the osd pods to stabilize")
     time.sleep(60)
     for pod in get_osd_pods():
         helpers.wait_for_resource_state(resource=pod, state=constants.STATUS_RUNNING)
-    ct_pod = get_ceph_tools_pod()
-    # UnSet ceph osd noout and pause flags
-    logger.info("UnSet osd noout flag")
-    ct_pod.exec_ceph_cmd("ceph osd unset noout")
-    logger.info("UnSet osd pause flag")
-    ct_pod.exec_ceph_cmd("ceph osd unset pause")
-    # Remove the backup files
-    for deployment in osd_deployment:
-        if os.path.isfile(f"backup_{deployment.name}.yaml"):
-            os.remove(f"backup_{deployment.name}.yaml")
 
 
 def restart_pods_having_label(label, namespace=None):
