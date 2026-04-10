@@ -291,7 +291,9 @@ def get_ocs_csv():
     ocs_csv_name = None
     # OCS CSV is extracted from the available CSVs in cluster namespace
     # for Openshift dedicated platform
-    if config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+    if config.ENV_DATA[
+        "platform"
+    ].lower() in constants.HCI_PC_OR_MS_PLATFORM or config.RUN.get("get_installed_csv"):
         ocp_cluster = OCP(namespace=config.ENV_DATA["cluster_namespace"], kind="csv")
         for item in ocp_cluster.get()["items"]:
             if item["metadata"]["name"].startswith(defaults.OCS_OPERATOR_NAME) or item[

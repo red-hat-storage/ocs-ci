@@ -71,6 +71,8 @@ run it belongs here.
 * `skipped_on_ceph_health_threshold` - The allowed threshold for the ratio of tests skipped due to Ceph unhealthy against the
   number of tests being collected for the test execution. The default value is set to 0.
   For acceptance suite, the value would be always overwritten to 0.
+* `get_installed_csv` - in case of OCP catalog doesn't match installed ODF version use this config value to avoid run to wait
+  match ODF version with the one from packageManifest
 
 #### DEPLOYMENT
 
