@@ -408,8 +408,8 @@ generic_locators = {
         By.CSS_SELECTOR,
     ),
     "confirm_dilog_input": ("//input[@placeholder='{}']", By.XPATH),
-    "confirm_delete_resource": ("//button[contains(text(), 'Delete')]", By.XPATH),
-    "cancel_delete_resource": ("//button[contains(text(), 'Cancel')]", By.XPATH),
+    "confirm_delete_resource": ("//button[contains(normalize-space(), 'Delete')]", By.XPATH),
+    "cancel_delete_resource": ("//button[contains(normalize-space(), 'Cancel')]", By.XPATH),
     "close_dialog": ("button[aria-label='Close']", By.XPATH),
     "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
     "ocs_operator": ('//h1[text()="OpenShift Container Storage"]', By.XPATH),
@@ -2897,7 +2897,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "create_lifecycle_rule_button": (
-        "//button[text()='Create lifecycle rule']",
+        "//button[normalize-space()='Create lifecycle rule']",
         By.XPATH,
     ),
     "lifecycle_rules_list": (
@@ -2909,7 +2909,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "rule_kebab_menu": (
-        "//tr[contains(., '{}')]//button[@data-ouia-component-type='PF5/MenuToggle']",
+        "//tr[contains(., '{}')]//button[contains(@data-ouia-component-type, 'MenuToggle')]",
         By.XPATH,
     ),
     "edit_rule_option": (
@@ -2971,15 +2971,15 @@ bucket_tab = {
         By.XPATH,
     ),
     "lifecycle_create_button": (
-        "//button[text()='Create' and contains(@class, 'pf-m-primary') and @aria-disabled='false']",
+        "//button[normalize-space()='Create' and contains(@class, 'pf-m-primary') and @aria-disabled='false']",
         By.XPATH,
     ),
     "lifecycle_save_button": (
-        "//button[text()='Save' and contains(@class, 'pf-m-primary')]",
+        "//button[normalize-space()='Save' and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_cancel_button": (
-        "//button[text()='Cancel']",
+        "//button[normalize-space()='Cancel']",
         By.XPATH,
     ),
     # Current objects (Expiration) section

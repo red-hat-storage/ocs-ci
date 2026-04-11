@@ -380,16 +380,9 @@ class TestBucketLifecycleUI:
             log_step("No buckets from previous tests, creating a new one")
             lifecycle_ui, bucket_name = self._setup_bucket_and_navigate_to_lifecycle()
         else:
-            # Validate list is not empty before accessing first element
-            if len(self.created_buckets) == 0:
-                log_step("Created buckets list is empty, creating a new bucket")
-                lifecycle_ui, bucket_name = (
-                    self._setup_bucket_and_navigate_to_lifecycle()
-                )
-            else:
-                bucket_name = self.created_buckets[0]
-                log_step(f"Using existing bucket from previous tests: {bucket_name}")
-                lifecycle_ui.navigate_to_bucket_lifecycle(bucket_name)
+            bucket_name = self.created_buckets[0]
+            log_step(f"Using existing bucket from previous tests: {bucket_name}")
+            lifecycle_ui.navigate_to_bucket_lifecycle(bucket_name)
 
         rules = lifecycle_ui.get_lifecycle_rules_list()
 
