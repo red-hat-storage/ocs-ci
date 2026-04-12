@@ -1038,10 +1038,9 @@ def wait_for_replication_resources_deletion(
                 timeout=timeout,
             )
 
-    if (
+    if not skip_vrg_check and (
         not check_state
         or (ocs_version <= version.VERSION_4_17 and "cephfs" not in namespace)
-        and not skip_vrg_check
     ):
         wait_for_resource_existence(
             kind=constants.VOLUME_REPLICATION_GROUP,
@@ -2295,16 +2294,33 @@ def do_discovered_apps_cleanup(
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
     if not ignore_resource_not_found:
-
         # --ignore-not-found is needed to avoid https://issues.redhat.com/browse/DFBUGS-3706
         logger.info("Using '--ignore-not-found' during workload deletion")
-        run_cmd(
-            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --ignore-not-found --force "
+        delete_cmd = (
+            f"oc delete -k {workload_path} -n {workload_namespace} "
+            f"--wait=false --ignore-not-found --force "
         )
     else:
-        run_cmd(
-            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
+        delete_cmd = (
+            f"oc delete -k {workload_path} -n {workload_namespace} "
+            f"--wait=false --force "
         )
+    retryable_errors = ("etcdserver", "Timeout", "context deadline exceeded")
+    for attempt in range(3):
+        try:
+            run_cmd(delete_cmd)
+            break
+        except CommandFailed as e:
+            err_msg = str(e)
+            if any(err in err_msg for err in retryable_errors) and attempt < 2:
+                logger.warning(
+                    "Server error during workload deletion (attempt %d/3), "
+                    "retrying in 60s",
+                    attempt + 1,
+                )
+                time.sleep(60)
+            else:
+                raise
     if not skip_resource_deletion_verification:
         wait_for_all_resources_deletion(
             namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
@@ -2886,3 +2902,60 @@ def validate_protection_label(kind, namespace, protection_name=None):
     logger.info(
         f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
     )
+
+
+def wait_for_managed_cluster_unreachable(cluster_name, timeout=600, sleep=15):
+    """
+    Wait until the ACM hub reports a managed cluster as unreachable (AVAILABLE=Unknown).
+
+    After stopping cluster nodes, the ACM hub detects the loss of connectivity
+    and sets the ManagedCluster AVAILABLE condition to ``Unknown``. Ramen requires
+    this state before it will complete a failover operation. Using a fixed sleep
+    is unreliable — this function polls the actual cluster status instead.
+
+    Args:
+        cluster_name (str): Name of the managed cluster to wait for.
+        timeout (int): Maximum seconds to wait (default: 600).
+        sleep (int): Seconds between polling attempts (default: 15).
+
+    Raises:
+        TimeoutExpiredError: If the cluster does not become unreachable within timeout.
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    mc_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
+    logger.info(
+        "Waiting for managed cluster '%s' to become unreachable on ACM hub",
+        cluster_name,
+    )
+
+    def _is_unreachable():
+        try:
+            conditions = (
+                mc_obj.get(resource_name=cluster_name)
+                .get("status", {})
+                .get("conditions", [])
+            )
+        except Exception:
+            return False
+        for condition in conditions:
+            if condition.get("type") == "ManagedClusterConditionAvailable":
+                status = condition.get("status", "True")
+                if status in ("False", "Unknown"):
+                    logger.info(
+                        "Managed cluster '%s' is unreachable (AVAILABLE=%s)",
+                        cluster_name,
+                        status,
+                    )
+                    return True
+        return False
+
+    from ocs_ci.utility.utils import TimeoutSampler
+
+    for reachable in TimeoutSampler(timeout=timeout, sleep=sleep, func=_is_unreachable):
+        if reachable:
+            break
+        logger.info("Managed cluster '%s' still reachable, retrying...", cluster_name)
+
+    config.switch_ctx(restore_index)

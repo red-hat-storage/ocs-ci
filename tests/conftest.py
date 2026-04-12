@@ -8112,8 +8112,18 @@ def discovered_apps_dr_workload_cnv(request):
         if custom_sc:
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
 
+        shared_already = (
+            sum(
+                1
+                for i in instances[1:]
+                if i.workload_namespace == instances[0].workload_namespace
+            )
+            if instances
+            else 0
+        )
         for index in range(pvc_vm):
-            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            config_index = shared_already + index if shared_drpc_protection else index
+            workload_details = ocsci_config.ENV_DATA[workload_key][config_index]
             workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[:20]
             if shared_drpc_protection and instances:
                 workload_details["workload_namespace"] = instances[0].workload_namespace
@@ -8153,9 +8163,24 @@ def discovered_apps_dr_workload_cnv(request):
         return instances
 
     def teardown():
-        if "shared" in request.node.nodeid:
-            instances[0].delete_workload(skip_resource_deletion_verification=True)
-            instances[1].delete_workload(shared_drpc_protection=True)
+        # Detect whether all instances share the same namespace.
+        # When they do, we must delete all VMs before triggering
+        # wait_for_all_resources_deletion, otherwise pods from the
+        # remaining VMs block the wait.
+        same_namespace = len(instances) > 1 and (
+            len({i.workload_namespace for i in instances}) == 1
+        )
+        if same_namespace:
+            # Delete all but the last instance without waiting, skipping
+            # per-instance namespace/project cleanup.
+            # DRPC deletion uses --ignore-not-found so it is safe even if
+            # another instance already removed the shared DRPC.
+            for instance in instances[:-1]:
+                instance.delete_workload(skip_resource_deletion_verification=True)
+            # Last instance: delete its own DRPC (--ignore-not-found handles
+            # the case where it was already removed as a Shared DRPC), then
+            # wait for all pods in the namespace and remove the project.
+            instances[-1].delete_workload()
         else:
             for instance in instances:
                 try:
