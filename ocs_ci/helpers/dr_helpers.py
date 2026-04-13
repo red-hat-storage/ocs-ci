@@ -4,6 +4,7 @@ Helper functions specific for DR
 
 import json
 import logging
+import os
 import tempfile
 import time
 from datetime import datetime
@@ -27,7 +28,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
     ResourceWrongStatusException,
 )
-from ocs_ci.ocs.managedservice import get_provider_service_type, is_hostnetwork_enabled
+from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
@@ -46,11 +47,13 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster, validate_serviceexport
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.utils import (
+    enable_literal_block_style,
     get_non_acm_cluster_config,
     get_active_acm_index,
     get_primary_cluster_config,
     get_passive_acm_index,
     enable_mco_console_plugin,
+    is_hostnetwork_enabled,
     set_recovery_as_primary,
     get_all_acm_indexes,
     get_non_acm_cluster_and_non_provider_cluster_config,
@@ -62,6 +65,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     CommandFailed,
+    clone_repo,
     run_cmd,
     exec_cmd,
     is_cluster_y_version_upgraded,
@@ -2718,8 +2722,10 @@ def create_service_exporter(annotate=True):
     for cluster in managed_clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
+
         if not (
-            get_provider_service_type() == "NodePort"
+            cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
+            and get_provider_service_type() == "NodePort"
             or is_hostnetwork_enabled()
             or cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
         ):
@@ -2895,20 +2901,6 @@ def is_cg_cephfs_enabled():
     return vgsc.is_exist(resource_name=resource_name)
 
 
-def enable_literal_block_style():
-    class LiteralString(str):
-        pass
-
-    yaml.add_representer(
-        LiteralString,
-        lambda dumper, data: dumper.represent_scalar(
-            "tag:yaml.org,2002:str", data, style="|"
-        ),
-    )
-
-    return LiteralString
-
-
 def create_ingress_cert_dr(
     cert_name="user-ca-bundle",
     namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
@@ -3071,3 +3063,164 @@ def validate_protection_label(kind, namespace, protection_name=None):
     logger.info(
         f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
     )
+
+
+def _generate_rdr_mirror_images():
+    """
+    Extract and return list of container images from RDR workload repository.
+
+    Returns:
+        list: List of container image strings for mirroring in disconnected environments
+    """
+    # Check whether deployment is disconnected
+    if config.DEPLOYMENT.get("disconnected"):
+
+        workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
+        logger.info(f"Repo used: {workload_repo_url}")
+        workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
+        clone_repo(
+            url=workload_repo_url,
+            location="/tmp/ocs-workload-repo",
+            branch=workload_repo_branch,
+        )
+
+        # List all Kubernetes container images under rdr/ folder
+        rdr_path = "/tmp/ocs-workload-repo/rdr"
+        if os.path.exists(rdr_path):
+            logger.info(f"Extracting Kubernetes container images from {rdr_path}:")
+            images_found = set()
+
+            for root, dirs, files in os.walk(rdr_path):
+                for file in files:
+                    # Process YAML files
+                    if file.lower().endswith((".yaml", ".yml")):
+                        yaml_file_path = os.path.join(root, file)
+                        relative_path = os.path.relpath(yaml_file_path, rdr_path)
+
+                        try:
+                            with open(yaml_file_path, "r") as f:
+                                yaml_content = yaml.safe_load_all(f)
+
+                                for doc in yaml_content:
+                                    if doc:
+                                        # Extract images from the YAML document
+                                        images = extract_images_from_yaml(doc)
+                                        for image in images:
+                                            if image not in images_found:
+                                                images_found.add(image)
+                                                logger.info(
+                                                    f"  - {image} (from {relative_path})"
+                                                )
+                        except Exception as e:
+                            logger.warning(f"Failed to parse {relative_path}: {e}")
+
+            # Convert set to sorted list for consistent ordering
+            image_list = sorted(list(images_found))
+
+            if image_list:
+                logger.info(f"Total unique container images found: {len(image_list)}")
+                logger.info("Images ready for mirroring in disconnected environment")
+            else:
+                logger.warning("No container images found in YAML files")
+            logger.info(image_list)
+            return image_list
+        else:
+            logger.warning(f"RDR path does not exist: {rdr_path}")
+            return []
+
+    return []
+
+
+def _apply_itms_to_managed_clusters(itms_file_path):
+    """
+    Apply itms configuration to all managed clusters and wait for MCP to complete.
+
+    Args:
+        itms_file_path (str): Path to the itms-oc-mirror.yaml file
+    """
+    logger.info("Applying itms to managed clusters")
+
+    # Get all managed cluster configs
+    managed_clusters = get_non_acm_cluster_config()
+
+    if not managed_clusters:
+        logger.warning("No managed clusters found")
+        return
+
+    # Store original context to restore later
+    original_ctx = config.cur_index
+
+    try:
+        for cluster_config in managed_clusters:
+            cluster_name = cluster_config.ENV_DATA.get("cluster_name", "unknown")
+            logger.info(f"Applying itms to managed cluster: {cluster_name}")
+
+            # Switch to the managed cluster context
+            cluster_index = cluster_config.MULTICLUSTER.get("multicluster_index")
+            if cluster_index is not None:
+                config.switch_ctx(cluster_index)
+
+                try:
+                    # Apply the itms file
+                    run_cmd(f"oc apply -f {itms_file_path}")
+                    logger.info(f"Successfully applied itms to {cluster_name}")
+
+                    # Wait for MachineConfigPool to complete
+                    logger.info(
+                        f"Waiting for MachineConfigPool to complete on {cluster_name}"
+                    )
+                    wait_for_machineconfigpool_status("all", timeout=1800)
+                    logger.info(f"MachineConfigPool update completed on {cluster_name}")
+
+                except CommandFailed as e:
+                    logger.error(f"Failed to apply itms to {cluster_name}: {e}")
+                    raise
+                except Exception as e:
+                    logger.error(
+                        f"Error during itms application to {cluster_name}: {e}"
+                    )
+                    raise
+            else:
+                logger.warning(f"Could not find cluster index for {cluster_name}")
+
+    finally:
+        # Restore original context
+        config.switch_ctx(original_ctx)
+        logger.info("Restored original cluster context")
+
+
+def extract_images_from_yaml(obj, images=None):
+    """
+    Recursively extract container image references from a YAML object.
+    Extracts values from 'image', 'url', and 'value' keys that contain image references.
+
+    Args:
+        obj: YAML object (dict, list, or primitive)
+        images: Set to collect images (created if None)
+
+    Returns:
+        set: Set of container image strings
+    """
+    if images is None:
+        images = set()
+
+    if isinstance(obj, dict):
+        # Check for 'image', 'url', and 'value' keys that contain image references
+        for key in ["image", "url", "value"]:
+            if key in obj and isinstance(obj[key], str):
+                # Only add if it looks like a container image reference
+                # (contains registry path or common image patterns)
+                value = obj[key].strip()
+                if value and ("/" in value or ":" in value):
+                    images.add(value)
+
+        # Recursively process all values
+        for value in obj.values():
+            extract_images_from_yaml(value, images)
+
+    elif isinstance(obj, list):
+        # Recursively process all items
+        for item in obj:
+            extract_images_from_yaml(item, images)
+
+    return images

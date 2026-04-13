@@ -2239,3 +2239,39 @@ def get_expected_nb_db_psql_version():
         raise UnexpectedBehaviour(
             f"Failed to extract the NooBaa DB version from the NooBaa CR: {e}"
         )
+
+
+def enable_literal_block_style():
+    class LiteralString(str):
+        pass
+
+    yaml.add_representer(
+        LiteralString,
+        lambda dumper, data: dumper.represent_scalar(
+            "tag:yaml.org,2002:str", data, style="|"
+        ),
+    )
+
+    return LiteralString
+
+
+def is_hostnetwork_enabled():
+    """
+    Check if host networking is enabled in the storage cluster
+
+    Returns:
+        bool: True if host networking is enabled, False otherwise
+
+    """
+    storagecluster_obj = OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+    spec = storagecluster_obj.get().get("spec", {})
+    host_network = spec.get("hostNetwork", False)
+    if host_network:
+        log.info("Cluster has HostNetworking enabled")
+    else:
+        log.info("Cluster has HostNetworking disabled")
+    return host_network
