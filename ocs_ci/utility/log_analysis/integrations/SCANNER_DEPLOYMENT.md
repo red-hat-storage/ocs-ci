@@ -68,7 +68,7 @@ CLOUD_ML_REGION=us-east5
 GOOGLE_APPLICATION_CREDENTIALS=/opt/claude/auth/gcp-auth.json
 PATH=/home/jenkins/.local/bin:/usr/local/bin:/usr/bin:/bin
 
-*/5 * * * * cd /home/jenkins/ocs-ci-analysis/ocs-ci && /home/jenkins/ocs-ci-analysis/venv/bin/python -m ocs_ci.utility.log_analysis.integrations.scanner --ocs-ci-path /home/jenkins/ocs-ci-analysis/ocs-ci --no-git-pull >> /mnt/ocsci-jenkins/log_analysis/session_manage/scanner.log 2>&1
+*/5 * * * * cd /home/jenkins/ocs-ci-analysis/ocs-ci && /home/jenkins/ocs-ci-analysis/venv/bin/python -m ocs_ci.utility.log_analysis.integrations.scanner --ocs-ci-path /home/jenkins/ocs-ci-analysis/ocs-ci --no-git-pull --parallel 4 >> /mnt/ocsci-jenkins/log_analysis/session_manage/scanner.log 2>&1
 EOF
 ```
 
@@ -101,11 +101,12 @@ These must be in the crontab because cron has a minimal environment:
 ## Scanner defaults
 
 - `--max-age-days 7` - only discover runs from last 7 days (once discovered, they stay in the pending queue regardless of age)
-- `--max-runs-per-cycle 5` - process up to 5 runs per cron invocation
-- `--parallel 3` - run up to 3 analyses concurrently
+- `--max-runs-per-cycle 5` - max new workers to launch per cron cycle
+- `--parallel 4` - max concurrent worker processes (production setting)
+- `--long-run-hours 3` - flag workers running longer than 3 hours in `long_run` list
 - `--max-budget 2.0` - $2.00 max per analysis run
 - `--max-failures 70` - analyze up to 70 failures per run
-- Lock file prevents concurrent scanner instances
+- Lock file prevents concurrent scanner instances (held only during discovery, not during analysis)
 
 ## Per-XML tracking
 
@@ -121,18 +122,37 @@ multiple `test_results_*.xml` files (e.g., tier1 on 4.16, then upgrade and tier1
 - ODF version is detected per-XML from `rp_ocs_build`, so upgrade runs
   use the correct version-specific cache/history for each phase
 
-## Pending queue
+## Non-blocking architecture
 
-Entries go through three states: **discovered → pending → processed**.
+The scanner uses a non-blocking worker model. Each cron cycle (every 5 min):
 
-- **Discovery**: directory scan finds new XML files with failures (age filter applies only here)
-- **Pending**: saved in the `"pending"` list in the state file — survives across scanner cycles, cannot age out
-- **Processed**: moved to `"processed"` dict after analysis completes (status: `done` or `failed`)
+1. **Reap** — Check PIDs in `in_progress`. Dead PIDs → move to `processed`.
+2. **Flag** — Workers running > `--long-run-hours` (default 3h) → added to `long_run` list (informational, stays in `in_progress`).
+3. **Discover** — Scan NFS for new XML files with failures.
+4. **Launch** — Spawn new worker processes to fill available slots (`--parallel` minus current `in_progress` count).
+5. **Exit** — Save state and release lock. Workers run detached (`start_new_session`).
 
-Each cycle: discover new XMLs → merge into pending → sort oldest-first → process up to `--max-runs-per-cycle` from the front → move completed to processed.
+Lock is held only during steps 1-5 (~30 seconds), not during analysis. This means discovery happens every 5 minutes regardless of how long individual analyses take.
 
-This prevents runs from being missed when the backlog takes multiple cycles to drain. Pending entries whose XML files no longer exist on disk are automatically dropped.
+## State file
 
+Entries go through these states: **discovered → pending → in_progress → processed**.
+
+```json
+{
+  "processed": { "<xml_path>": { "timestamp": "...", "status": "done|failed", ... } },
+  "pending": [ { "logs_dir": "...", "xml_path": "...", "version": "4_21" } ],
+  "in_progress": [ { "...", "pid": 12345, "started_at": "...", "output_path": "..." } ],
+  "long_run": [ { "xml_path": "...", "pid": 12345, "started_at": "...", "flagged_at": "..." } ]
+}
+```
+
+- `in_progress` entries have `pid` and `started_at` for worker tracking
+- `long_run` is informational — entries also remain in `in_progress`
+- Dead PIDs are detected via `os.kill(pid, 0)` each cycle
+- Timestamps use the machine's local timezone
+
+Pending entries whose XML files no longer exist on disk are automatically dropped.
 Per-XML analysis logs are written to `<logs_dir>/ai_analysis_<suffix>.log` for live tailing.
 
 ## Troubleshooting
@@ -172,14 +192,20 @@ tail -f /mnt/ocsci-jenkins/openshift-clusters/j-xxx/j-xxx_TIMESTAMP/logs/ai_anal
 
 # Summary of state
 python3 -c '
-import json, sys
+import json
 with open("/mnt/ocsci-jenkins/log_analysis/session_manage/scanner_state.json") as f:
     d = json.load(f)
 p = d.get("processed", {})
 done = sum(1 for v in p.values() if v.get("status") == "done")
 failed = sum(1 for v in p.values() if v.get("status") == "failed")
 pending = d.get("pending", [])
+ip = d.get("in_progress", [])
+lr = d.get("long_run", [])
 print(f"Processed: {len(p)} (done={done}, failed={failed})")
+print(f"In-progress: {len(ip)}")
+for e in ip:
+    print(f"  PID {e.get(\"pid\")} - {e.get(\"logs_dir\",\"\").split(\"/\")[-2]} (since {e.get(\"started_at\",\"?\")[:19]})")
+print(f"Long-run: {len(lr)}")
 print(f"Pending: {len(pending)}")
 if pending:
     print(f"  Oldest: {pending[0][\"logs_dir\"]}")
