@@ -277,6 +277,56 @@ class ExternalSystems(ResourceList):
             locator=self.page_nav["external_systems_page"],
         )
 
+    def get_scale_version_from_dashboard(self, scale_name):
+        """
+        Get scale version from the dashboard
+
+        Args:
+            scale_name (str): name of the scale cluster
+
+        Returns:
+            str: scale version found on the scale dashboard
+
+        """
+        logger.info(f"Filtering connections to find {scale_name}")
+        self.do_clear(self.external_systems["filter"])
+        wait_for_element_to_be_clickable(self.external_systems["filter"])
+        self.do_send_keys(self.external_systems["filter"], scale_name)
+        logger.info(f"Clicking on {scale_name} to go to Scale dashboard")
+        wait_for_element_to_be_clickable(self.external_systems["scale_dashboard_link"])
+        self.do_click(self.external_systems["scale_dashboard_link"])
+        scale_version_ui = self.get_element_text(
+            locator=self.external_systems["scale_version"]
+        )
+        logger.info(f"Scale version on the dashboard is {scale_version_ui}")
+        self.do_click(
+            locator=self.page_nav["external_systems_page"],
+        )
+        return scale_version_ui
+
+    def get_scale_version_from_remotecluster(self, scale_name):
+        """
+        Get scale version from the remotecluster CR
+
+        Args:
+            scale_name (str): name of the scale cluster
+
+        Returns:
+            str: scale version found in the remotecluster CR
+
+        """
+        remotecluster_obj = ocp.OCP(
+            kind="remotecluster",
+            namespace="ibm-spectrum-scale",
+            resource_name=scale_name,
+        )
+        scale_version_from_remotecluster = (
+            remotecluster_obj.get().get("status").get("guiVersion")
+        )
+        scale_version_cli = scale_version_from_remotecluster.split("-")[0]
+        logger.info(f"Scale version in Remotecluster is {scale_version_cli}")
+        return scale_version_cli
+
 
 class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
     """

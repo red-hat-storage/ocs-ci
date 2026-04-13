@@ -63,6 +63,23 @@ class TestScaleConnection(object):
     @ui
     @skipif_ibm_cloud_managed
     @tier2
+    @skipif_ocs_version("<4.22")
+    @black_squad
+    def test_scale_version(self, setup_ui_class):
+        """
+        Test that scale version on the dashboard is the same as in Scale cluster
+        """
+        scale_connect_obj = PageNavigator()
+        external_systems = scale_connect_obj.nav_external_systems_page()
+        scale_version_ui = external_systems.get_scale_version_from_dashboard()
+        scale_version_cli = external_systems.get_scale_version_from_remotecluster()
+        assert scale_version_ui == scale_version_cli(
+            f"Scale version on the dashboard is {scale_version_cli} while in remotecluster it's {scale_version_cli}"
+        )
+
+    @ui
+    @skipif_ibm_cloud_managed
+    @tier2
     @skipif_ocs_version("<4.21")
     @black_squad
     @polarion_id("OCS-7758")

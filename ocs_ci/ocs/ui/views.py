@@ -3182,6 +3182,10 @@ external_systems = {
         "div[data-item-id='Connection-health-item'] title",
         By.CSS_SELECTOR,
     ),
+    "scale_version": (
+        "//dt/*[text()='Version']/../following-sibling::dd",
+        By.XPATH,
+    ),
     "breadcrumb-link": (
         "a[data-test-id='breadcrumb-link-0']",
         By.CSS_SELECTOR,
