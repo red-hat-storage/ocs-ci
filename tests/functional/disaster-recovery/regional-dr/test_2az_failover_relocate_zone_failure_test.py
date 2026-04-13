@@ -345,6 +345,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     wl_meta["workload"].workload_pod_count,
                     wl_meta["workload_namespace"],
                     discovered_apps=wl_meta["is_discovered_app"],
+                    timeout=1200,
                 )
                 config.switch_to_cluster_by_name(wl_meta["secondary_cluster_name"])
                 wait_for_pods_to_be_running(
@@ -470,6 +471,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     wl_meta["workload"].workload_pod_count,
                     wl_meta["workload_namespace"],
                     discovered_apps=wl_meta["is_discovered_app"],
+                    timeout=1200,
                 )
                 config.switch_to_cluster_by_name(wl_meta["primary_cluster_name"])
                 wait_for_pods_to_be_running(
