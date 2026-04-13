@@ -58,12 +58,12 @@ class DRWorkload(object):
         workload_name=None,
         workload_repo_url=None,
         workload_repo_branch=None,
-        workload_repo_url_login=None,
+        workload_repo_login=None,
     ):
         self.workload_name = workload_name
         self.workload_repo_url = workload_repo_url
         self.workload_repo_branch = workload_repo_branch
-        self.workload_repo_login = workload_repo_url_login
+        self.workload_repo_login = workload_repo_login
 
     def deploy_workload(self):
         raise NotImplementedError("Method not implemented")
