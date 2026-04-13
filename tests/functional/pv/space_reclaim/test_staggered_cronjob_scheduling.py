@@ -68,9 +68,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         )
 
         def finalizer():
-            logger.info(
-                "Restoring stagger window to: %s", self.original_stagger_window
-            )
+            logger.info("Restoring stagger window to: %s", self.original_stagger_window)
             update_csi_addons_config(
                 CRONJOB_STAGGER_WINDOW_KEY, self.original_stagger_window
             )
@@ -162,11 +160,16 @@ class TestStaggeredCronjobScheduling(ManageTest):
                 f"expected '{SHORT_SCHEDULE}'"
             )
             uid = cj_data["metadata"]["uid"]
-            logger.info("CronJob for PVC '%s': schedule=%s, UID=%s", pvc_name, actual_schedule, uid)
+            logger.info(
+                "CronJob for PVC '%s': schedule=%s, UID=%s",
+                pvc_name,
+                actual_schedule,
+                uid,
+            )
             uids.add(uid)
-        assert len(uids) == NUM_PVCS, (
-            f"Expected {NUM_PVCS} unique CronJob UIDs, got {len(uids)}: {uids}"
-        )
+        assert (
+            len(uids) == NUM_PVCS
+        ), f"Expected {NUM_PVCS} unique CronJob UIDs, got {len(uids)}: {uids}"
 
         # Step 7: Wait for ReclaimSpaceJobs and compare timestamps
         logger.info("Step 7: Waiting for ReclaimSpaceJobs to appear")
@@ -183,16 +186,16 @@ class TestStaggeredCronjobScheduling(ManageTest):
         readback = get_csi_addons_config_value(
             CRONJOB_STAGGER_WINDOW_KEY, default=CRONJOB_STAGGER_WINDOW_DEFAULT
         )
-        assert readback == "0", (
-            f"Expected stagger window '0' after disable, got '{readback}'"
-        )
+        assert (
+            readback == "0"
+        ), f"Expected stagger window '0' after disable, got '{readback}'"
 
         logger.info("Step 8: Verifying CronJobs survive stagger disable")
         for pvc_name, cj_obj in cronjob_map.items():
             cj_data = cj_obj.get()
-            assert cj_data["spec"]["schedule"] == SHORT_SCHEDULE, (
-                f"CronJob for PVC '{pvc_name}' schedule changed after stagger disable"
-            )
+            assert (
+                cj_data["spec"]["schedule"] == SHORT_SCHEDULE
+            ), f"CronJob for PVC '{pvc_name}' schedule changed after stagger disable"
         logger.info("All CronJobs intact after stagger disable")
 
     def _wait_for_cronjob(self, pvc_obj) -> OCP:
@@ -252,14 +255,10 @@ class TestStaggeredCronjobScheduling(ManageTest):
         timestamps = {}
         for cj_name in cronjob_names:
             prefix = f"{cj_name}-"
-            matching = [
-                j for j in all_jobs if j["metadata"]["name"].startswith(prefix)
-            ]
+            matching = [j for j in all_jobs if j["metadata"]["name"].startswith(prefix)]
             if not matching:
                 return None
-            earliest = min(
-                matching, key=lambda j: j["metadata"]["creationTimestamp"]
-            )
+            earliest = min(matching, key=lambda j: j["metadata"]["creationTimestamp"])
             ts_str = earliest["metadata"]["creationTimestamp"]
             timestamps[cj_name] = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ")
         return timestamps
@@ -312,7 +311,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         max_spread = max(
             abs((a - b).total_seconds())
             for i, a in enumerate(ts_values)
-            for b in ts_values[i + 1:]
+            for b in ts_values[i + 1 :]
         )
         logger.info("Maximum timestamp spread: %.1f seconds", max_spread)
         logger.info("Timestamps: %s", timestamps)

@@ -70,9 +70,7 @@ def update_csi_addons_config(key: str, value: str) -> None:
             "metadata": {"name": configmap_name, "namespace": namespace},
             "data": {key: value},
         }
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False, suffix=".yaml"
-        ) as fp:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".yaml") as fp:
             yaml.safe_dump(cm_manifest, fp, sort_keys=False)
             tmp_path = fp.name
         try:
