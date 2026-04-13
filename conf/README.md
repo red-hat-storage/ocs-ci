@@ -190,6 +190,7 @@ version.
 * `hub_cluster_path` - Path to the Management cluster directory to store auth_path, credentials files or cluster related files.
 * `partitioned_disk_primary_affinity` - Configure primaryAffinity for OSDs on partitioned disks, https://access.redhat.com/solutions/5807201 (default: "0.0")
 * `vsphere_vm_start_timeout` - Number of seconds to wait for vsphere vms to start up (default: 240)
+* `deploy_multiple_device_classes` - Deploy a second storageDeviceSet with a separate device class on LSO-backed vSphere clusters. When enabled, additional disks are attached to each worker node and a second device class (e.g. `localblock-1`) is added to the StorageCluster (Default: false)
 
 #### REPORTING
 
@@ -263,6 +264,8 @@ higher priority).
 * `disk_enable_uuid` - Enable the disk UUID on VMs, this is required for VMDK
 * `ignition_data_encoding` - Encoding type used for the ignition config data
 * `device_size` - Size (in GB) to use for storage device sets
+* `second_device_size` - Size (in GB) for the second device class disks when `deploy_multiple_device_classes` is enabled. Defaults to the value of `device_size` for disk attachment and `1` (minimum PVC size) for the StorageCluster resource request
+* `second_device_type` - Device type for the second device class when `deploy_multiple_device_classes` is enabled (Default: "SSD")
 * `rhel_workers` - Use RHEL workers instead of RHCOS, for UPI deployments (Default: false)
 * `rhel_version` - For AWS UPI deployment over RHEL. Based on this value we
   will select one of rhelX.Y RHEL AMI mentioned below. (e.g 7.9 or 8.4)
