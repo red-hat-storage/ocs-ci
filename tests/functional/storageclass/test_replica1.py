@@ -19,6 +19,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
 from ocs_ci.ocs.constants import (
     CEPHBLOCKPOOL,
     ACCESS_MODE_RWO,
+    LOCALSTORAGE_SC,
     POD,
     STATUS_READY,
     REPLICA1_STORAGECLASS,
@@ -157,6 +158,28 @@ class TestReplicaOne:
         self.created_pods = []
 
         log.info("Setup function called")
+
+        if config.DEPLOYMENT.get("local_storage"):
+            failure_domains = get_failure_domains()
+            pv_obj = OCP(kind="PersistentVolume")
+            available_pvs = [
+                pv
+                for pv in pv_obj.get()["items"]
+                if pv["status"]["phase"] == "Available"
+                and pv["spec"].get("storageClassName") == LOCALSTORAGE_SC
+            ]
+            log.info(
+                f"LSO cluster: {len(available_pvs)} available PVs in "
+                f"{LOCALSTORAGE_SC}, need {len(failure_domains)} for replica-1"
+            )
+            if len(available_pvs) < len(failure_domains):
+                pytest.skip(
+                    f"Replica-1 requires {len(failure_domains)} extra PVs "
+                    f"(one per failure domain) but only "
+                    f"{len(available_pvs)} available in {LOCALSTORAGE_SC} "
+                    f"(DFBUGS-6355)"
+                )
+
         storage_cluster = StorageCluster(
             resource_name=config.ENV_DATA["storage_cluster_name"],
             namespace=config.ENV_DATA["cluster_namespace"],
