@@ -442,7 +442,7 @@ generic_locators = {
     ),
     "searchbar-dropdown": (
         "//div[contains(@class, 'toolbar__item')]//span[contains(@class, 'dropdown__toggle-text')] | "
-        "//div[contains(@class, 'input-group') and contains(@class, 'co-filter-group')]//button/span",
+        "//div[contains(@class, 'input-group')]//button/span",
         By.XPATH,
     ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
@@ -2706,7 +2706,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "versioning_cancel_confirm_button": (
-        "//div[contains(@class, 'c-modal-box')]//button[contains(@class,  'm-link') and text()='Cancel']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class,  'm-link') and normalize-space(.)='Cancel']",
         By.XPATH,
     ),
     "file_input_directory": (
@@ -2770,11 +2770,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "delete_version_confirm_button": (
-        "//button[contains(@class, 'm-danger') and contains(text(), 'Delete object')]",
+        "//button[contains(@class, 'm-danger') and contains(normalize-space(.), 'Delete object')]",
         By.XPATH,
     ),
     "delete_version_cancel_button": (
-        "//button[contains(@class, 'c-button') and contains(@class, 'm-link') and text()='Cancel']",
+        "//button[contains(@class, 'c-button') and contains(@class, 'm-link') and normalize-space(.)='Cancel']",
         By.XPATH,
     ),
     "version_row_checkboxes": (
@@ -2905,7 +2905,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "create_lifecycle_rule_button": (
-        "//button[text()='Create lifecycle rule']",
+        "//button[contains(normalize-space(),'Create lifecycle rule')]",
         By.XPATH,
     ),
     "lifecycle_rules_list": (
@@ -2917,7 +2917,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "rule_kebab_menu": (
-        "//tr[contains(., '{}')]//button[@data-ouia-component-type='PF5/MenuToggle']",
+        "//tr[contains(., '{}')]//button[contains(@data-ouia-component-type, 'MenuToggle')]",
         By.XPATH,
     ),
     "edit_rule_option": (
@@ -2979,15 +2979,15 @@ bucket_tab = {
         By.XPATH,
     ),
     "lifecycle_create_button": (
-        "//button[text()='Create' and contains(@class, 'pf-m-primary') and @aria-disabled='false']",
+        "//button[contains(normalize-space(),'Create') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_save_button": (
-        "//button[text()='Save' and contains(@class, 'pf-m-primary')]",
+        "//button[contains(normalize-space(),'Save') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_cancel_button": (
-        "//button[text()='Cancel']",
+        "//button[contains(normalize-space(),'Cancel')]",
         By.XPATH,
     ),
     # Current objects (Expiration) section
@@ -3070,8 +3070,8 @@ locate_aws_regions = {
 }
 locate_noobaa_regions = {"regions_list": '//*[@id="read-only-cursor-text-area"]'}
 data_foundation_overview = {
-    "view_storage_link": ("//a[contains(text(),'View storage')]", By.XPATH),
-    "view_buckets_link": ("//a[contains(text(),'View buckets')]", By.XPATH),
+    "view_storage_link": ("//a[contains(normalize-space(.),'View storage')]", By.XPATH),
+    "view_buckets_link": ("//a[contains(normalize-space(.),'View buckets')]", By.XPATH),
     "used_capacity_legend": (
         "//*[name()='text' and @id='legend-labels-0']//*[name()='tspan' and contains(text(), 'Used:')]",
         By.XPATH,
