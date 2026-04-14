@@ -2,6 +2,8 @@ import logging
 import random
 import string
 import secrets
+import json
+import boto3
 
 from ocs_ci.framework.pytest_customization.marks import tier2, red_squad, mcg
 from ocs_ci.framework.testlib import MCGTest
@@ -45,6 +47,7 @@ class TestIAMUsers(MCGTest):
         6. Delete all the created users
 
         Args:
+            iam_users_factory: calling this fixture creates new iam users
             mcg_obj: An MCG class instance
             awscli_pod_session (pod): A pod running the AWSCLI tools
 
@@ -198,3 +201,82 @@ class TestIAMUsers(MCGTest):
             first_key_name not in user_tags_dict
         ), f"Tag {first_key_name} should be absent but is present"
         logger.info("User tags work as expected")
+
+    def test_iam_user_policy(self, iam_users_factory, mcg_obj, awscli_pod_session):
+        """
+        Runs iam user policy tests
+        The scenario is as following:
+            1. Create an iam user add a policy to him, verify put_user_policy command
+            2. Verify get_user_policy and list_user_policies commands
+            3. Delete the policy and verify that the deletion was successful
+
+        Args:
+            iam_users_factory: calling this fixture creates new iam users
+            mcg_obj: An MCG class instance
+            awscli_pod_session (pod): A pod running the AWSCLI tools
+
+        """
+        new_users_num = 1
+        new_users_list = iam_users_factory(num=new_users_num)
+        user_name = new_users_list[0]
+
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": [{"Effect": "Allow", "Action": ["s3:*"], "Resource": "*"}],
+        }
+
+        policy_name = "test_policy"
+
+        iam_client = boto3.client(
+            "iam",
+            endpoint_url=mcg_obj.iam_endpoint,
+            aws_access_key_id=mcg_obj.access_key_id,
+            aws_secret_access_key=mcg_obj.access_key,
+            verify=False,
+            region_name=mcg_obj.region if mcg_obj.region else "",
+        )
+        iam_client.put_user_policy(
+            UserName=user_name,
+            PolicyName=policy_name,
+            PolicyDocument=json.dumps(policy),
+        )
+
+        get_policy_cmd = (
+            f"get-user-policy --user-name {user_name} --policy-name {policy_name}"
+        )
+        get_policy_result = run_iam_command(mcg_obj, awscli_pod_session, get_policy_cmd)
+
+        assert (
+            get_policy_result.get("PolicyName") == policy_name
+        ), f'Policy name mismatch: expected {policy_name}, got {get_policy_result.get("PolicyName")}'
+
+        policy_doc = get_policy_result.get("PolicyDocument")
+        assert (
+            isinstance(policy_doc, dict) and policy_doc
+        ), f"PolicyDocument section in policy {policy_name} for user {user_name} is missing or empty"
+        logger.info(f"Policy {policy_name} for user {user_name} was successfully put")
+
+        list_policy_cmd = f"list-user-policies --user-name {user_name}"
+        list_policy_result = run_iam_command(
+            mcg_obj, awscli_pod_session, list_policy_cmd
+        )
+        policy_names = list_policy_result.get("PolicyNames")
+        assert (
+            isinstance(policy_names, list)
+            and len(policy_names) == 1
+            and policy_names[0] == policy_name
+        ), f'Expected one policy "{policy_name}", got: {policy_names}'
+        logger.info(f"List user policies for user {user_name} was successful")
+
+        delete_policy_cmd = (
+            f"delete-user-policy --user-name {user_name} --policy-name {policy_name}"
+        )
+        run_iam_command(mcg_obj, awscli_pod_session, delete_policy_cmd)
+
+        list_policy_result = run_iam_command(
+            mcg_obj, awscli_pod_session, list_policy_cmd
+        )
+        assert (
+            list_policy_result.get("PolicyNames") == []
+        ), f'Expected no policies, got: {list_policy_result.get("PolicyNames")}'
+        logger.info(f"Delete user policies for user {user_name} was successful")
