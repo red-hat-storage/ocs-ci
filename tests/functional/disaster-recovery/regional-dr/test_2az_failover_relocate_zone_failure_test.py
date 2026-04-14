@@ -61,6 +61,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
         all_dr_workloads,
         nodes_multicluster,
         verify_arbiter_deployment_with_zone_failure,
+        node_restart_teardown,
     ):
         """
         Tests to verify application failover and relocate with multiple workloads:
