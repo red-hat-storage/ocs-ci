@@ -1447,7 +1447,6 @@ class Deployment(object):
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        ocs_version = version.get_semantic_ocs_version_from_config()
         ocs_operator_names = get_required_csvs()
 
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
