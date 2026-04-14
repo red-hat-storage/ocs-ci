@@ -18,5 +18,4 @@ ENV_DATA:
   # Below values needs to be changed when acm and submariner are GAed
   submariner_source: "downstream"
   submariner_release_type: "unreleased"
-  acm_hub_unreleased: true
   oadp_version: "1.6"
