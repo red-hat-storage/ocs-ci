@@ -1,0 +1,80 @@
+import os
+import re
+import subprocess
+from pathlib import Path
+
+from ocs_ci.framework import config
+
+
+def _repo_root():
+    # ocs_ci/ocs/must_gather/report_generator_hook.py -> parents[4] is repo root
+    return Path(__file__).resolve().parents[4]
+
+
+def run_report_generator(mg_dir_path: str, report_dir: str, *, prefix: str) -> None:
+    """
+    Run scripts/python/must_gather_report_generator/main.py after must-gather is complete.
+    The report generator script itself is responsible for handling tarballs,
+    symlinks, etc. This hook only triggers the script after log collection.
+    """
+    if not config.REPORTING.get("generate_must_gather_report", False):
+        return
+
+    mg_dir_path = os.path.abspath(mg_dir_path)
+    tarball_path = f"{mg_dir_path}.tar.gz"
+    if not (os.path.isdir(mg_dir_path) or os.path.isfile(tarball_path)):
+        return
+
+    os.makedirs(report_dir, exist_ok=True)
+
+    script_path = _repo_root() / "scripts/python/must_gather_report_generator/main.py"
+    if not script_path.is_file():
+        return
+
+    safe_prefix = re.sub(r"[^A-Za-z0-9_.-]+", "_", prefix)
+    text_out = os.path.join(report_dir, f"{safe_prefix}_mg_analysis.txt")
+    xml_out = os.path.join(report_dir, f"{safe_prefix}_mg_analysis.xml")
+
+    cmd = [
+        "python",
+        str(script_path),
+        mg_dir_path,
+        "--output-file",
+        text_out,
+        "--xml-output",
+        xml_out,
+    ]
+    subprocess.run(cmd, check=False)
+
+
+def trigger_reports_after_collect_ocs_logs(
+    *,
+    dir_name: str,
+    status_failure: bool,
+    cluster_configs,
+) -> None:
+    """
+    Trigger report generation for the OCS must-gather directory per cluster.
+    Should be called only AFTER collect_ocs_logs() returns.
+    """
+    if not config.REPORTING.get("generate_must_gather_report", False):
+        return
+
+    for cluster in cluster_configs:
+        if status_failure:
+            base = os.path.join(
+                os.path.expanduser(cluster.RUN["log_dir"]),
+                f"failed_testcase_ocs_logs_{cluster.RUN['run_id']}",
+                f"{dir_name}_ocs_logs",
+                f"{cluster.ENV_DATA['cluster_name']}",
+            )
+        else:
+            base = os.path.join(
+                os.path.expanduser(cluster.RUN["log_dir"]),
+                f"{dir_name}_{cluster.RUN['run_id']}",
+                f"{cluster.ENV_DATA['cluster_name']}",
+            )
+
+        mg_dir = os.path.join(base, "ocs_must_gather")
+        report_dir = os.path.join(base, "must_gather_report")
+        run_report_generator(mg_dir, report_dir, prefix=dir_name)
