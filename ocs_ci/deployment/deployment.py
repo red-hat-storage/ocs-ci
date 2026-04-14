@@ -120,12 +120,15 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_by_label_count,
     wait_for_pods_to_be_running,
     wait_for_pods_to_be_in_statuses,
+    wait_for_storage_pods,
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     get_osd_count,
     StorageCluster,
     validate_serviceexport,
+    verify_storage_cluster,
+    verify_multus_network,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -1545,6 +1548,15 @@ class Deployment(object):
         if config.ENV_DATA.get("multus_after_odf_install"):
             log_step("Establish Multus Network (post-ODF)")
             setup_multus_networks(patch_storagecluster=True)
+
+            logger.info("Waiting for StorageCluster to be Ready after multus patching")
+            verify_storage_cluster()
+
+            logger.info("Waiting for storage pods to restart with multus configuration")
+            wait_for_storage_pods()
+
+            logger.info("Verifying multus network configuration")
+            verify_multus_network()
 
         if config.DEPLOYMENT["infra_nodes"]:
             log_step("Labeling infra nodes")
