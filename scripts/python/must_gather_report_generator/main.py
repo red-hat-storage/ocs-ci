@@ -7,6 +7,8 @@ Run as: python main.py <must-gather-dir> [options]
 import argparse
 import logging
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 
 # Add parent directory to path so imports work
@@ -31,6 +33,54 @@ from must_gather_report_generator.analyzers import (
     analyze_events,
 )
 from must_gather_report_generator.outputs import generate_xml_output
+
+
+def _safe_extract_tar(tar: tarfile.TarFile, dest_dir: Path) -> None:
+    """
+    Safely extract a tar archive to dest_dir (prevents path traversal).
+    """
+
+    def is_within_directory(directory: Path, target: Path) -> bool:
+        directory_resolved = directory.resolve()
+        target_resolved = target.resolve()
+        try:
+            target_resolved.relative_to(directory_resolved)
+            return True
+        except ValueError:
+            return False
+
+    for member in tar.getmembers():
+        member_path = dest_dir / member.name
+        if not is_within_directory(dest_dir, member_path):
+            raise ValueError(f"Unsafe path detected in archive member: {member.name!r}")
+
+    tar.extractall(path=dest_dir)
+
+
+def prepare_must_gather_base(must_gather_path: Path) -> tuple[Path, Path | None]:
+    """
+    Accept either a directory or a compressed archive path.
+
+    Returns:
+      (mg_base_dir, temp_extract_dir)
+        - mg_base_dir is the directory to use as "base directory"
+        - temp_extract_dir is a temp directory to optionally clean up later
+    """
+    if must_gather_path.is_dir():
+        return must_gather_path, None
+
+    if must_gather_path.is_file() and tarfile.is_tarfile(must_gather_path):
+        tmp_dir = Path(tempfile.mkdtemp(prefix="ocs-ci-must-gather-"))
+        with tarfile.open(must_gather_path, mode="r:*") as tar:
+            _safe_extract_tar(tar, tmp_dir)
+
+        # If archive has a single top-level directory, use it as base.
+        children = [p for p in tmp_dir.iterdir() if p.name not in {".DS_Store"}]
+        if len(children) == 1 and children[0].is_dir():
+            return children[0], tmp_dir
+        return tmp_dir, tmp_dir
+
+    return must_gather_path, None
 
 
 def main():
@@ -74,16 +124,26 @@ Examples:
 
     args = parser.parse_args()
 
-    mg_base = Path(args.must_gather_dir)
+    mg_input = Path(args.must_gather_dir)
 
-    if not mg_base.exists():
-        print(f"{Colors.RED}Error: Directory not found: {mg_base}{Colors.END}")
+    if not mg_input.exists():
+        print(f"{Colors.RED}Error: Path not found: {mg_input}{Colors.END}")
+        return 1
+
+    try:
+        mg_base, _tmp_extract_dir = prepare_must_gather_base(mg_input)
+    except (tarfile.TarError, OSError, ValueError) as exc:
+        print(
+            f"{Colors.RED}Error: failed to extract archive {mg_input}: {exc}{Colors.END}",
+            file=sys.stderr,
+        )
         return 1
 
     # Find actual must-gather data directory
     mg_dir = find_must_gather_dir(mg_base)
 
     print(f"\n{Colors.BOLD}ODF Must-Gather Health Analyzer{Colors.END}")
+    print(f"{Colors.CYAN}Input Path: {mg_input}{Colors.END}")
     print(f"{Colors.CYAN}Base Directory: {mg_base}{Colors.END}")
     print(f"{Colors.CYAN}Data Directory: {mg_dir}{Colors.END}")
 
