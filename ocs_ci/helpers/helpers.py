@@ -5629,9 +5629,7 @@ def setup_multus_networks(patch_storagecluster=False):
             base_interface = config.ENV_DATA.get("multus_public_net_interface")
             vlan_interface = f"{base_interface}.{vlan_id}"
             public_net_config_dict["master"] = vlan_interface
-            logger.info(
-                f"Public network using VLAN interface: {vlan_interface}"
-            )
+            logger.info(f"Public network using VLAN interface: {vlan_interface}")
         else:
             # For non-VLAN mode, master is the base interface
             public_net_config_dict["master"] = config.ENV_DATA.get(
@@ -5667,17 +5665,11 @@ def setup_multus_networks(patch_storagecluster=False):
                 r.get("dst") == shim_network
                 for r in public_net_config_dict["ipam"]["routes"]
             ):
-                public_net_config_dict["ipam"]["routes"].append(
-                    {"dst": shim_network}
-                )
+                public_net_config_dict["ipam"]["routes"].append({"dst": shim_network})
             logger.info(f"Added route to shim network: {shim_network}")
 
-        public_net_config_dict["type"] = config.ENV_DATA.get(
-            "multus_public_net_type"
-        )
-        public_net_config_dict["mode"] = config.ENV_DATA.get(
-            "multus_public_net_mode"
-        )
+        public_net_config_dict["type"] = config.ENV_DATA.get("multus_public_net_type")
+        public_net_config_dict["mode"] = config.ENV_DATA.get("multus_public_net_mode")
         public_net_data["spec"]["config"] = json.dumps(public_net_config_dict)
         public_net_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="multus_public", delete=False
@@ -5716,9 +5708,7 @@ def setup_multus_networks(patch_storagecluster=False):
             base_interface = config.ENV_DATA.get("multus_cluster_net_interface")
             vlan_interface = f"{base_interface}.{vlan_id}"
             cluster_net_config_dict["master"] = vlan_interface
-            logger.info(
-                f"Cluster network using VLAN interface: {vlan_interface}"
-            )
+            logger.info(f"Cluster network using VLAN interface: {vlan_interface}")
         else:
             # For non-VLAN mode, master is the base interface
             cluster_net_config_dict["master"] = config.ENV_DATA.get(
@@ -5743,26 +5733,22 @@ def setup_multus_networks(patch_storagecluster=False):
         # Configure IP range limits for VLAN mode
         if use_vlan:
             if config.ENV_DATA.get("multus_cluster_net_ip_range_start"):
-                cluster_net_config_dict["ipam"]["range_start"] = (
-                    config.ENV_DATA.get("multus_cluster_net_ip_range_start")
+                cluster_net_config_dict["ipam"]["range_start"] = config.ENV_DATA.get(
+                    "multus_cluster_net_ip_range_start"
                 )
             if config.ENV_DATA.get("multus_cluster_net_ip_range_end"):
-                cluster_net_config_dict["ipam"]["range_end"] = (
-                    config.ENV_DATA.get("multus_cluster_net_ip_range_end")
+                cluster_net_config_dict["ipam"]["range_end"] = config.ENV_DATA.get(
+                    "multus_cluster_net_ip_range_end"
                 )
             # Remove routes for VLAN mode (not needed)
             cluster_net_config_dict["ipam"].pop("routes", None)
 
-        cluster_net_config_dict["mode"] = config.ENV_DATA.get(
-            "multus_cluster_net_mode"
-        )
+        cluster_net_config_dict["mode"] = config.ENV_DATA.get("multus_cluster_net_mode")
         cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
         cluster_net_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="multus_cluster", delete=False
         )
-        templating.dump_data_to_temp_yaml(
-            cluster_net_data, cluster_net_yaml.name
-        )
+        templating.dump_data_to_temp_yaml(cluster_net_data, cluster_net_yaml.name)
         run_cmd(f"oc create -f {cluster_net_yaml.name}")
 
     # Patch StorageCluster with multus network selectors if requested
@@ -5801,9 +5787,7 @@ def setup_multus_networks(patch_storagecluster=False):
             params=json.dumps(patch),
             format_type="merge",
         )
-        logger.info(
-            f"StorageCluster patched with multus configuration: {selectors}"
-        )
+        logger.info(f"StorageCluster patched with multus configuration: {selectors}")
 
 
 def configure_node_network_configuration_policy_on_all_worker_nodes():
