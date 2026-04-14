@@ -24,7 +24,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
-from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_pvc_objs
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +109,21 @@ class TestBucketLogs(MCGTest):
         # 1. Enable guaranteed bucket logs on top of the noobaa CR
         logs_pvc_name = provided_logs_pvc.name if use_provided_logs_pvc else None
         logs_manager.enable_bucket_logging_on_cr(logs_pvc=logs_pvc_name)
+
+        # Label the PVC and its backing PV to exclude from leftover detection
+        pvc_to_label = (
+            provided_logs_pvc
+            if use_provided_logs_pvc
+            else get_pvc_objs(pvc_names=[constants.DEFAULT_MCG_BUCKET_LOGS_PVC])[0]
+        )
+        pvc_to_label.add_label(constants.CUSTOM_MCG_LABEL)
+        pv_ocp_obj = OCP(
+            namespace=config.ENV_DATA["cluster_namespace"], kind=constants.PV
+        )
+        pv_ocp_obj.add_label(
+            resource_name=pvc_to_label.backed_pv,
+            label=constants.CUSTOM_MCG_LABEL,
+        )
 
         # 2. Validate that the noobaa CR has been updated
         cr_logging_config = logs_manager.get_logging_config_from_cr()
