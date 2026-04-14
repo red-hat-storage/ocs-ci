@@ -5557,7 +5557,7 @@ def setup_multus_networks(patch_storagecluster=False):
     operator and configures promiscuous mode on worker node interfaces.
 
     When patch_storagecluster is True, patches an existing StorageCluster CR
-    with multus network selectors (used for multus_after_odf deployments
+    with multus network selectors (used for multus_after_odf_install deployments
     where the StorageCluster was created without multus configuration).
 
     Args:

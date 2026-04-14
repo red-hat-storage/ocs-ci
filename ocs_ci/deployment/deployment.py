@@ -1326,12 +1326,12 @@ class Deployment(object):
 
         # Validate multus flag mutual exclusivity
         if config.ENV_DATA.get("is_multus_enabled") and config.ENV_DATA.get(
-            "multus_after_odf"
+            "multus_after_odf_install"
         ):
             msg = (
-                "is_multus_enabled and multus_after_odf cannot both be set. "
+                "is_multus_enabled and multus_after_odf_install cannot both be set. "
                 "Use is_multus_enabled for pre-ODF multus setup or "
-                "multus_after_odf for post-ODF multus setup."
+                "multus_after_odf_install for post-ODF multus setup."
             )
             logger.error(msg)
             raise UnexpectedDeploymentConfiguration(msg)
@@ -1544,7 +1544,7 @@ class Deployment(object):
         storage_cluster_setup.setup_storage_cluster()
 
         # Create Multus Networks after ODF deployment
-        if config.ENV_DATA.get("multus_after_odf"):
+        if config.ENV_DATA.get("multus_after_odf_install"):
             log_step("Establish Multus Network (post-ODF)")
             setup_multus_networks(patch_storagecluster=True)
 
