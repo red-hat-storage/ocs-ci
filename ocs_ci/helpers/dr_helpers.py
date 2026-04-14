@@ -1451,7 +1451,15 @@ def get_all_drpolicy():
             for item in dr_cluster_relations[0]
             if is_hosted_cluster(cluster_name=item)
         ]
-    else:
+    elif not current_managed_clusters_list:
+        # Fall back to all clusters for MDR scenarios
+        current_managed_clusters_list = [
+            cluster_name.ENV_DATA.get("cluster_name")
+            for cluster_name in config.clusters
+        ]
+
+    # Remove ACM hub from the list if present
+    if acm_hub_name in current_managed_clusters_list:
         current_managed_clusters_list.remove(acm_hub_name)
 
     for drpolicy in drpolicy_list:
@@ -2567,6 +2575,12 @@ def get_cluster_set_name(switch_ctx=None):
             )
             for item in dr_cluster_relations[0]
         ]
+    elif not current_managed_clusters_list:
+        # Fall back to all clusters (for MDR scenarios where neither rbd_dr_scenario nor dr_cluster_relations is set)
+        current_managed_clusters_list = [
+            cluster_name.ENV_DATA.get("cluster_name")
+            for cluster_name in config.clusters
+        ]
 
     # ignore local-cluster here
     for i in managed_clusters:
@@ -2575,6 +2589,12 @@ def get_cluster_set_name(switch_ctx=None):
             and i["metadata"]["name"] in current_managed_clusters_list
         ):
             cluster_set.append(i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL])
+
+    if not cluster_set:
+        raise UnexpectedDeploymentConfiguration(
+            "No matching managed clusters found in current_managed_clusters_list"
+        )
+
     if all(x == cluster_set[0] for x in cluster_set):
         logger.info(f"Found the unique clusterset {cluster_set[0]}")
     else:
