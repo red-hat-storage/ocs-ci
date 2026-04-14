@@ -98,9 +98,14 @@ class TestScaleConnection(object):
             filesystem_name=FILESYSTEM_2,
             status="Connected",
         )
+        # try to connect a filesystem with the same name, verify alert message
+        alert_message = external_systems.connect_scale_filesystem(
+            scale_name=SCALE_CONNECTION_NAME, filesystem_name=FILESYSTEM_2
+        )
         external_systems.delete_scale_filesystem(
             scale_name=SCALE_CONNECTION_NAME, filesystem_name=FILESYSTEM_2
         )
+        assert "already exists" in alert_message
 
     @ui
     @skipif_ibm_cloud_managed

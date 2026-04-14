@@ -3162,6 +3162,10 @@ external_systems = {
         "//td/a[contains(text(), '{}')]/../following-sibling::td",
         By.XPATH,
     ),
+    "fs_alert": (
+        "//div[contains(@class, 'alert__description')]",
+        By.XPATH,
+    ),
     "delete_filesystem": (
         "Delete",
         By.ID,

@@ -9,6 +9,7 @@ from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.exceptions import UnexpectedNameException, UnexpectedStatusException
 from ocs_ci.utility.utils import exec_cmd
+from selenium.common.exceptions import TimeoutException
 
 
 class ExternalSystems(ResourceList):
@@ -196,6 +197,9 @@ class ExternalSystems(ResourceList):
         Args:
             scale_name (str): name of the scale cluster
             filesystem_name (str): name of the additional filesystem
+
+        Returns:
+            str: alert text if found, None if no alert
         """
         logger.info(f"Filtering connections to find {scale_name}")
         self.do_clear(self.external_systems["filter"])
@@ -207,6 +211,14 @@ class ExternalSystems(ResourceList):
             self.external_systems["filesystem_name_input"], filesystem_name
         )
         self.do_click(locator=self.external_systems["add_button"])
+        try:
+            self.wait_for_element_to_be_present(
+                locator=self.external_systems["fs_alert"]
+            )
+            return self.get_element_text(locator=self.external_systems["fs_alert"])
+        except TimeoutException:
+            logger.info("No alert after filesystem creation")
+            return None
 
     def delete_scale_filesystem(self, scale_name, filesystem_name):
         """
