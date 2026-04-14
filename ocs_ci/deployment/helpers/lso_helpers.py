@@ -27,14 +27,6 @@ from ocs_ci.utility.utils import (
     wipe_all_disk_partitions_for_node,
 )
 
-IMAGE_SOURCE_POLICY = ocp.OCP(
-    kind="ImageContentSourcePolicy", namespace=constants.MARKETPLACE_NAMESPACE
-)
-OPTIONAL_OPERATOR_CATALOG_SOURCE = ocp.OCP(
-    kind=constants.CATSRC,
-    namespace=constants.MARKETPLACE_NAMESPACE,
-    resource_name="optional-operators",
-)
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +80,9 @@ def setup_local_storage(storageclass):
     )
     lso_data_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="local_storage_operator", delete=False
+    )
+    IMAGE_SOURCE_POLICY = ocp.OCP(
+        kind="ImageContentSourcePolicy", namespace=constants.MARKETPLACE_NAMESPACE
     )
     if not IMAGE_SOURCE_POLICY.is_exist(resource_name=lso_data_yaml.name):
         templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
@@ -281,6 +276,11 @@ def create_optional_operators_catalogsource_non_ga(force=False):
         _dict["spec"]["image"] = mirrored_index_image
     templating.dump_data_to_temp_yaml(
         optional_operators_data, optional_operators_yaml.name
+    )
+    OPTIONAL_OPERATOR_CATALOG_SOURCE = ocp.OCP(
+        kind=constants.CATSRC,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+        resource_name="optional-operators",
     )
     if not OPTIONAL_OPERATOR_CATALOG_SOURCE.is_exist():
         with open(optional_operators_yaml.name, "r") as f:
