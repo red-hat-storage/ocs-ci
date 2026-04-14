@@ -5,7 +5,7 @@ DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
   type: 'VMDK'
-  provision_type: 'thick'
+  provision_type: 'thin'
 ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
