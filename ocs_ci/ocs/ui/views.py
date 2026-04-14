@@ -480,6 +480,39 @@ generic_locators = {
     "openshift-operators": (
         "//a[@data-test-operator-row='ODF Multicluster Orchestrator']"
     ),
+    # MCO operator locators (rebranded from ODF MCO to DF MCO)
+    "mco_operator_rebranded": (
+        "//a[@data-test-operator-row='DF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "mco_operator_old_name": (
+        "//a[@data-test-operator-row='ODF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "operator_display_name": (
+        "//h1[contains(@class, 'co-clusterserviceversion-details__name')]",
+        By.XPATH,
+    ),
+    "operator_provider": (
+        "//span[contains(text(), 'Provided by')]/following-sibling::span",
+        By.XPATH,
+    ),
+    "operator_description": (
+        "//p[contains(@class, 'co-clusterserviceversion-details__description')]",
+        By.XPATH,
+    ),
+    "operator_installed_status": (
+        "//span[contains(@class, 'co-icon-and-text')][contains(text(), 'Installed')]",
+        By.XPATH,
+    ),
+    "operator_channel": (
+        "//dt[text()='Channel']/following-sibling::dd",
+        By.XPATH,
+    ),
+    "operator_version": (
+        "//dt[text()='Installed Version']/following-sibling::dd",
+        By.XPATH,
+    ),
 }
 
 generic_locators_4_19 = {
