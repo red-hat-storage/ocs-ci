@@ -156,6 +156,8 @@ REPORTING:
   max_mg_fail_attempts: 3
   tarball_mg_logs: true
   delete_packed_mg_logs: true
+  # If True, run scripts/python/must_gather_report_generator/main.py after OCS must-gather is collected
+  generate_must_gather_report: false
 
 # This is the default information about environment.
 ENV_DATA:
