@@ -1546,6 +1546,11 @@ class Deployment(object):
 
         # Create Multus Networks after ODF deployment
         if config.ENV_DATA.get("multus_after_odf_install"):
+            logger.info(
+                "Waiting for StorageCluster to be Ready before multus configuration"
+            )
+            verify_storage_cluster()
+
             log_step("Establish Multus Network (post-ODF)")
             setup_multus_networks(patch_storagecluster=True)
 
