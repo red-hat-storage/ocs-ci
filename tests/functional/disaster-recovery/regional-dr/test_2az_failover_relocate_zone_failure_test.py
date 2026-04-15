@@ -254,9 +254,11 @@ class Test2AZFailoverAndRelocateZoneFailure:
         sleep(wait_time * 60)
 
         # ========================================
-        # Step 6: Batch Failover to Secondary Cluster
+        # Step 6: Sequential Failover to Secondary Cluster
         # ========================================
-        logger.info(f"Starting batch failover for all {len(all_workloads)} workloads")
+        logger.info(
+            f"Starting sequential failover for {len(all_workloads)} workloads (one by one)"
+        )
 
         # Stop primary cluster nodes if needed (only once for all workloads)
         if primary_cluster_down and workload_metadata:
@@ -293,25 +295,18 @@ class Test2AZFailoverAndRelocateZoneFailure:
             )
             logger.info(f"Nodes in zone '{power_off_zone}' stopped")
 
-        # Perform failover for all workloads
+        # Perform failover for workloads one by one
         try:
             failover_batch = []
             for wl_meta in workload_metadata:
-                failover_batch.append(
-                    {
-                        "drpc_name": wl_meta["drpc_name"],
-                        "namespace": wl_meta["workload_namespace"],
-                        "resource_name": wl_meta["resource_name"],
-                        "workload_type": wl_meta["workload_type"],
-                        "target_cluster": wl_meta["secondary_cluster_name"],
-                    }
-                )
                 logger.info(
-                    f"Initiating failover for workload {wl_meta['idx']}/{len(all_workloads)} "
+                    f"Starting failover for workload {wl_meta['idx']}/{len(all_workloads)} "
                     f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
                     f"resource_name={wl_meta['resource_name']} drpc_name={wl_meta['drpc_name']} "
                     f"to {wl_meta['secondary_cluster_name']}"
                 )
+
+                # Initiate failover for this workload
                 failover_params = {
                     "failover_cluster": wl_meta["secondary_cluster_name"],
                     "namespace": wl_meta["workload_namespace"],
@@ -327,13 +322,21 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     )
                 dr_helpers.failover(**failover_params)
 
-            logger.info(
-                f"Failover patches submitted for all workloads. Batch details: {failover_batch}"
-            )
+                failover_batch.append(
+                    {
+                        "drpc_name": wl_meta["drpc_name"],
+                        "namespace": wl_meta["workload_namespace"],
+                        "resource_name": wl_meta["resource_name"],
+                        "workload_type": wl_meta["workload_type"],
+                        "target_cluster": wl_meta["secondary_cluster_name"],
+                    }
+                )
+                logger.info(
+                    f"Failover initiated for workload {wl_meta['idx']}/{len(all_workloads)}. "
+                    f"Waiting for completion..."
+                )
 
-            # Wait for all failovers to complete
-            logger.info("Waiting for all failovers to complete")
-            for wl_meta in workload_metadata:
+                # Wait for this workload's failover to complete before moving to next
                 logger.info(
                     f"Verifying failover completion for workload "
                     f"{wl_meta['idx']}/{len(all_workloads)} "
@@ -363,7 +366,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     }
                 )
                 logger.info(
-                    f"Workload {wl_meta['idx']} successfully failed over to "
+                    f"Workload {wl_meta['idx']}/{len(all_workloads)} successfully failed over to "
                     f"{wl_meta['secondary_cluster_name']} "
                     f"(drpc_name={wl_meta['drpc_name']}, "
                     f"namespace={wl_meta['workload_namespace']}, "
@@ -409,32 +412,27 @@ class Test2AZFailoverAndRelocateZoneFailure:
             logger.info(f"Nodes in zone '{power_off_zone}' restarted and healthy")
 
         # ========================================
-        # Step 7: Batch Relocate back to Primary Cluster
+        # Step 7: Sequential Relocate back to Primary Cluster
         # ========================================
-        logger.info(f"Starting batch relocate for all {len(all_workloads)} workloads")
+        logger.info(
+            f"Starting sequential relocate for {len(all_workloads)} workloads (one by one)"
+        )
 
         # Wait before relocate
         sleep(max_scheduling_interval * 60)
 
-        # Perform relocate for all workloads
+        # Perform relocate for workloads one by one
         try:
             relocate_batch = []
             for wl_meta in workload_metadata:
-                relocate_batch.append(
-                    {
-                        "drpc_name": wl_meta["drpc_name"],
-                        "namespace": wl_meta["workload_namespace"],
-                        "resource_name": wl_meta["resource_name"],
-                        "workload_type": wl_meta["workload_type"],
-                        "target_cluster": wl_meta["primary_cluster_name"],
-                    }
-                )
                 logger.info(
-                    f"Initiating relocate for workload {wl_meta['idx']}/{len(all_workloads)} "
+                    f"Starting relocate for workload {wl_meta['idx']}/{len(all_workloads)} "
                     f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
                     f"resource_name={wl_meta['resource_name']} drpc_name={wl_meta['drpc_name']} "
                     f"back to {wl_meta['primary_cluster_name']}"
                 )
+
+                # Initiate relocate for this workload
                 relocate_params = {
                     "preferred_cluster": wl_meta["primary_cluster_name"],
                     "namespace": wl_meta["workload_namespace"],
@@ -453,13 +451,21 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     )
                 dr_helpers.relocate(**relocate_params)
 
-            logger.info(
-                f"Relocate patches submitted for all workloads. Batch details: {relocate_batch}"
-            )
+                relocate_batch.append(
+                    {
+                        "drpc_name": wl_meta["drpc_name"],
+                        "namespace": wl_meta["workload_namespace"],
+                        "resource_name": wl_meta["resource_name"],
+                        "workload_type": wl_meta["workload_type"],
+                        "target_cluster": wl_meta["primary_cluster_name"],
+                    }
+                )
+                logger.info(
+                    f"Relocate initiated for workload {wl_meta['idx']}/{len(all_workloads)}. "
+                    f"Waiting for completion..."
+                )
 
-            # Wait for all relocates to complete
-            logger.info("Waiting for all relocates to complete")
-            for wl_meta in workload_metadata:
+                # Wait for this workload's relocate to complete before moving to next
                 logger.info(
                     f"Verifying relocate completion for workload "
                     f"{wl_meta['idx']}/{len(all_workloads)} "
@@ -489,7 +495,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     }
                 )
                 logger.info(
-                    f"Workload {wl_meta['idx']} successfully relocated back to "
+                    f"Workload {wl_meta['idx']}/{len(all_workloads)} successfully relocated back to "
                     f"{wl_meta['primary_cluster_name']} "
                     f"(drpc_name={wl_meta['drpc_name']}, "
                     f"namespace={wl_meta['workload_namespace']}, "
