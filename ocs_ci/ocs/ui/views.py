@@ -905,6 +905,54 @@ page_nav_4_20 = {
     "external_systems_page": ("External systems", By.LINK_TEXT),
 }
 
+# FDF SAN UI Locators
+FDF_SAN_LOCATORS = {
+    # Connect to external storage button on External Systems page
+    "connect_external_storage_button": (
+        "//button[@data-test='configure-external-systems' or contains(text(), 'Connect external systems')]",
+        By.XPATH,
+    ),
+    # Storage Area Network radio button
+    "san_radio_button": ("//label[@for='san-storage']", By.XPATH),
+    # Next button in wizard
+    "next_button": ("//button[contains(text(), 'Next')]", By.XPATH),
+    # All nodes radio button
+    "all_nodes_radio": ("//input[@id='use-all-nodes']", By.XPATH),
+    # LUN group name input field
+    "lun_group_name_input": (
+        "//input[@id='lunGroupName' or @name='lunGroupName' or @placeholder='Enter LUN group name']",
+        By.XPATH,
+    ),
+    # Connect and create button
+    "connect_and_create_button": (
+        "//button[@data-test='connect-and-create-san-system' "
+        "or contains(text(), 'Connect and create') "
+        "or contains(text(), 'Connect and Create')]",
+        By.XPATH,
+    ),
+    # SAN storage page
+    "san_storage_link": (
+        "//a[normalize-space(text())='SAN_Storage' "
+        "and contains(@href, '/odf/external-systems/scale.spectrum.ibm.com')]",
+        By.XPATH,
+    ),
+}
+
+SCALE_DASHBOARD_LOCATORS = {
+    "scale_connection_green": (
+        "//*[@data-test='Connection-health-item-icon']//*[@data-test='success-icon']",
+        By.XPATH,
+    ),
+    "lun_group_row_by_name": (
+        "//table//tbody//tr",
+        By.XPATH,
+    ),
+    "lun_group_status_ok_by_name": (
+        "//table//tbody//tr//*[text()='OK']",
+        By.XPATH,
+    ),
+}
+
 acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
