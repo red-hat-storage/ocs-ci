@@ -2,7 +2,7 @@
 # Azure Performance Plus with Standard SSD (StandardSSD_LRS)
 # For disks 513 GiB or larger. Use when Standard SSD + Performance Plus is required.
 DEPLOYMENT:
-  openshift_install_timeout: 4800
+  openshift_install_timeout: 7200
   allow_lower_instance_requirements: false
 ENV_DATA:
   platform: 'azure'

@@ -1,6 +1,6 @@
 ---
 DEPLOYMENT:
-  openshift_install_timeout: 4800
+  openshift_install_timeout: 7200
   allow_lower_instance_requirements: false
   use_custom_ingress_ssl_cert: true
   use_custom_api_ssl_cert: true
