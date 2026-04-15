@@ -15,7 +15,11 @@ from ocs_ci.helpers.helpers import get_cephfs_subvolumegroup_names
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.managedservice import get_consumer_names
-from ocs_ci.ocs.rados_utils import fetch_rados_namespaces, fetch_pool_names
+from ocs_ci.ocs.rados_utils import (
+    fetch_rados_namespaces,
+    fetch_pool_names,
+    get_ec_pool_names,
+)
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.ocs.version import if_version
@@ -1038,6 +1042,8 @@ def check_consumers_rns():
         )
         consumer_names = get_ready_consumers_names()
         pool_names = fetch_pool_names()
+        ec_pool_names = set(get_ec_pool_names())
+        pool_names = [p for p in pool_names if p not in ec_pool_names]
         rados_namespaces = fetch_rados_namespaces(config.ENV_DATA["cluster_namespace"])
 
         for consumer_name in consumer_names:
