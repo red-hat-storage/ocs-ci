@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OCS-CI Log Analysis Report</title>
+<style>
+:root {
+  --bg: #f5f7fa;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text: #1a202c;
+  --text-secondary: #64748b;
+  --accent: #3b82f6;
+  --green: #22c55e;
+  --red: #ef4444;
+  --orange: #f59e0b;
+  --purple: #8b5cf6;
+  --cyan: #06b6d4;
+  --gray: #94a3b8;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  padding: 24px;
+}
+
+.container { max-width: 1280px; margin: 0 auto; }
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #1e293b, #334155);
+  color: white;
+  border-radius: 12px;
+  padding: 32px;
+  margin-bottom: 24px;
+}
+.header h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+.header .subtitle { color: #94a3b8; font-size: 14px; }
+
+/* Cards */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.card h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--bg);
+}
+
+/* Metadata grid */
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.meta-item {
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+}
+.meta-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  min-width: 110px;
+  flex-shrink: 0;
+}
+.meta-value {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+/* Stats bar */
+.stats-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.stat-box {
+  flex: 1;
+  min-width: 100px;
+  text-align: center;
+  padding: 16px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+.stat-box .num { font-size: 28px; font-weight: 700; }
+.stat-box .label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-box.passed .num { color: var(--green); }
+.stat-box.failed .num { color: var(--red); }
+.stat-box.error .num { color: var(--orange); }
+.stat-box.skipped .num { color: var(--gray); }
+.stat-box.total .num { color: var(--accent); }
+
+/* Progress bar */
+.progress-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #e2e8f0;
+  margin-bottom: 8px;
+}
+.progress-bar .seg-passed { background: var(--green); }
+.progress-bar .seg-failed { background: var(--red); }
+.progress-bar .seg-error { background: var(--orange); }
+.progress-bar .seg-skipped { background: #cbd5e1; }
+.pass-rate { font-size: 13px; color: var(--text-secondary); text-align: right; }
+
+/* Summary text */
+.summary-text {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 14px;
+  margin-top: 16px;
+  white-space: pre-wrap;
+}
+
+/* Failure cards */
+.failure-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.failure-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+}
+.failure-header:hover { background: #f8fafc; }
+.failure-num {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.failure-name {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.badge-product_bug { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.badge-test_bug { background: #fefce8; color: #ca8a04; border: 1px solid #fde68a; }
+.badge-infra_issue { background: #f0f9ff; color: #0284c7; border: 1px solid #bae6fd; }
+.badge-flaky_test { background: #faf5ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+.badge-known_issue { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+.badge-unknown { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
+.badge-cache { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; text-decoration: none; }
+.badge-cache:hover { opacity: 0.8; }
+.badge-new { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; text-decoration: none; }
+.badge-new:hover { opacity: 0.8; }
+.confidence {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.chevron {
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+.failure-card.open .chevron { transform: rotate(90deg); }
+
+.copy-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  line-height: 1;
+  transition: color 0.2s;
+}
+.copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+.failure-body {
+  display: none;
+  padding: 20px;
+}
+.failure-card.open .failure-body { display: block; }
+
+.failure-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+.failure-meta .meta-label { min-width: 90px; }
+
+.section-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin: 16px 0 8px;
+}
+
+.root-cause {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 14px;
+  margin-bottom: 12px;
+  border-left: 3px solid var(--accent);
+}
+
+.action-box {
+  background: #f0fdf4;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 14px;
+  margin-bottom: 12px;
+  border-left: 3px solid var(--green);
+}
+
+.evidence-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+.evidence-list li {
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.jira-list { list-style: none; padding: 0; margin: 0 0 12px; }
+.jira-list li {
+  padding: 8px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--bg);
+}
+.jira-list a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.jira-list a:hover { text-decoration: underline; }
+
+.known-issues-tag {
+  display: inline-block;
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.traceback-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+.traceback-toggle:hover { background: var(--bg); }
+.traceback-content {
+  display: none;
+  margin-top: 8px;
+}
+.traceback-content.show { display: block; }
+.traceback-content pre {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Feedback panel */
+.feedback-toggle {
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--accent);
+  margin-top: 8px;
+  margin-left: 8px;
+}
+.feedback-toggle:hover { background: #eff6ff; }
+.feedback-toggle.saved { background: #f0fdf4; border-color: var(--green); color: var(--green); }
+.feedback-panel {
+  display: none;
+  margin-top: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+}
+.feedback-panel.show { display: block; }
+.feedback-panel fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 16px;
+}
+.feedback-panel legend {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.feedback-panel label.radio-label {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  cursor: pointer;
+  margin-right: 6px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition: background 0.15s, border-color 0.15s;
+}
+.feedback-panel label.radio-label:has(input:checked) {
+  background: #eff6ff;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.feedback-panel label.radio-label.changed:has(input:checked) {
+  background: #fef2f2;
+  border-color: var(--red);
+  color: var(--red);
+}
+.feedback-panel label.radio-label input[type="radio"] {
+  display: none;
+}
+.feedback-panel .field-group {
+  margin-bottom: 12px;
+}
+.feedback-panel .field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.feedback-panel textarea,
+.feedback-panel input[type="text"],
+.feedback-panel input[type="email"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  background: var(--card);
+  resize: vertical;
+}
+.feedback-panel textarea:focus,
+.feedback-panel input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+}
+.feedback-panel .category-fields { display: none; }
+.feedback-panel .category-fields.active { display: block; }
+.feedback-panel .btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  align-items: center;
+}
+.feedback-panel .btn-save {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.feedback-panel .btn-save:hover { opacity: 0.9; }
+.fb-static-text {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+.fb-agree-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+}
+.feedback-panel .save-status {
+  font-size: 12px;
+  color: var(--green);
+  font-weight: 600;
+}
+
+/* Summary tables */
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.summary-table th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--bg);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-secondary);
+}
+.summary-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.summary-table tr:last-child td { border-bottom: none; }
+
+/* Category dots */
+.cat-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.cat-dot-product_bug { background: #dc2626; }
+.cat-dot-test_bug { background: #ca8a04; }
+.cat-dot-infra_issue { background: #0284c7; }
+.cat-dot-flaky_test { background: #7c3aed; }
+.cat-dot-known_issue { background: #16a34a; }
+.cat-dot-unknown { background: #94a3b8; }
+
+.float-controls {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+}
+.float-btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+.float-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  body { padding: 12px; }
+  .meta-grid { grid-template-columns: 1fr; }
+  .stats-row { gap: 8px; }
+  .stat-box { min-width: 80px; padding: 12px 8px; }
+  .stat-box .num { font-size: 22px; }
+  .failure-header { flex-wrap: wrap; }
+  .failure-meta { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="header">
+  <h1>OCS-CI Log Analysis Report</h1>
+  <div class="subtitle">{{ run.run_metadata.launch_name or run.run_url }}</div>
+</div>
+
+<!-- Run Metadata -->
+<div class="card">
+  <h2>Run Summary</h2>
+  <div class="meta-grid">
+    <div class="meta-item">
+      <span class="meta-label">Platform</span>
+      <span class="meta-value">{{ run.run_metadata.platform or 'N/A' }}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Deployment</span>
+      <span class="meta-value">{{ run.run_metadata.deployment_type or 'N/A' }}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">OCP Version</span>
+      <span class="meta-value">{{ run.run_metadata.ocp_version or 'N/A' }}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">OCS Version</span>
+      <span class="meta-value">{{ run.run_metadata.ocs_version or 'N/A' }}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">OCS Build</span>
+      <span class="meta-value">{{ run.run_metadata.ocs_build or 'N/A' }}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Run ID</span>
+      <span class="meta-value">{{ run.run_metadata.run_id or 'N/A' }}</span>
+    </div>
+    {% if run.run_metadata.logs_url %}
+    <div class="meta-item">
+      <span class="meta-label">Logs</span>
+      <span class="meta-value"><a href="{{ run.run_metadata.logs_url }}" target="_blank" style="color:var(--accent)">{{ run.run_metadata.logs_url }}</a></span>
+    </div>
+    {% endif %}
+    <div class="meta-item">
+      <span class="meta-label">Run Time</span>
+      <span class="meta-value">{{ run.run_metadata.run_timestamp or run.timestamp }}</span>
+    </div>
+    {% if run.run_metadata.jenkins_url %}
+    <div class="meta-item">
+      <span class="meta-label">Jenkins</span>
+      <span class="meta-value"><a href="{{ run.run_metadata.jenkins_url }}" target="_blank" style="color:var(--accent)">build</a></span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Results Overview -->
+<div class="card">
+  <h2>Results Overview</h2>
+  <div class="stats-row">
+    <div class="stat-box total">
+      <div class="num">{{ run.total_tests }}</div>
+      <div class="label">Total</div>
+    </div>
+    <div class="stat-box passed">
+      <div class="num">{{ run.passed }}</div>
+      <div class="label">Passed</div>
+    </div>
+    <div class="stat-box failed">
+      <div class="num">{{ run.failed }}</div>
+      <div class="label">Failed</div>
+    </div>
+    <div class="stat-box error">
+      <div class="num">{{ run.error }}</div>
+      <div class="label">Error</div>
+    </div>
+    <div class="stat-box skipped">
+      <div class="num">{{ run.skipped }}</div>
+      <div class="label">Skipped</div>
+    </div>
+  </div>
+  {% set executed = run.total_tests - run.skipped %}
+  {% if executed > 0 %}
+  <div class="progress-bar">
+    <div class="seg-passed" style="width:{{ (run.passed / executed * 100) | round(1) }}%"></div>
+    <div class="seg-failed" style="width:{{ (run.failed / executed * 100) | round(1) }}%"></div>
+    <div class="seg-error" style="width:{{ (run.error / executed * 100) | round(1) }}%"></div>
+  </div>
+  <div class="pass-rate">Pass rate: {{ (run.passed / executed * 100) | round(1) }}% ({{ run.passed }}/{{ executed }} executed)</div>
+  {% endif %}
+  {% if run.summary %}
+  <div class="summary-text">{{ run.summary }}</div>
+  {% endif %}
+</div>
+
+{% if run.failure_analyses %}
+<!-- Failure Analysis -->
+<div class="card">
+  <h2>Failure Analysis ({{ run.failure_analyses | length }})</h2>
+
+  {% for fa in run.failure_analyses %}
+  <div class="failure-card" id="failure-{{ loop.index }}" data-cache-file="{{ fa.cache_file | e }}" data-test-name="{{ fa.test_result.name | e }}">
+    <div class="failure-header" onclick="this.parentElement.classList.toggle('open')">
+      <div class="failure-num">{{ loop.index }}</div>
+      <div class="failure-name" title="{{ fa.test_result.name }}">{{ fa.test_result.name }}</div>
+      <button class="copy-btn" onclick="event.stopPropagation();navigator.clipboard.writeText('{{ fa.test_result.name | e }}');var b=this;b.textContent='\u2713';setTimeout(function(){b.textContent='\u{1F4CB}'},1500)" title="Copy test name">&#x1F4CB;</button>
+      <span class="badge badge-{{ fa.category.value }}">{{ fa.category.value | replace('_', ' ') }}</span>
+      {% if fa.cache_file %}<a href="{{ fa.cache_file }}" class="badge {% if fa.cache_hit %}badge-cache{% else %}badge-new{% endif %}" target="_blank" onclick="event.stopPropagation()">{% if fa.cache_hit %}cache{% else %}new{% endif %}</a>{% endif %}
+      <span class="confidence">{{ "%.0f" | format(fa.confidence * 100) }}%</span>
+      <span class="chevron">&#9654;</span>
+    </div>
+    <div class="failure-body">
+      <div class="failure-meta">
+        <div class="meta-item">
+          <span class="meta-label">Class</span>
+          <span class="meta-value" style="font-size:12px">{{ fa.test_result.classname }}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Status</span>
+          <span class="meta-value">{{ fa.test_result.status.value }}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Duration</span>
+          <span class="meta-value">{{ "%.1f" | format(fa.test_result.duration) }}s</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Squad</span>
+          <span class="meta-value">{{ fa.test_result.squad or 'N/A' }}</span>
+        </div>
+        {% if fa.test_result.polarion_id %}
+        <div class="meta-item">
+          <span class="meta-label">Polarion ID</span>
+          <span class="meta-value">{{ fa.test_result.polarion_id }}</span>
+        </div>
+        {% endif %}
+        {% if fa.session_id %}
+        <div class="meta-item">
+          <span class="meta-label">Session</span>
+          <span class="meta-value" style="font-size:12px">{% if fa.session_file %}<a href="{{ fa.session_file }}" target="_blank" style="color:var(--accent)">{{ fa.session_id }}</a>{% else %}{{ fa.session_id }}{% endif %}</span>
+        </div>
+        {% endif %}
+        <div class="meta-item">
+          <span class="meta-label">Must Gather</span>
+          <span class="meta-value" style="font-size:12px">{% if fa.must_gather_url %}<a href="{{ fa.must_gather_url }}" target="_blank" style="color:var(--accent)">logs</a>{% else %}N/A{% endif %}</span>
+        </div>
+        {% if fa.cache_file %}
+        <div class="meta-item">
+          <span class="meta-label">Cache</span>
+          <span class="meta-value" style="font-size:12px">{% if fa.cache_file.startswith('http') %}<a href="{{ fa.cache_file }}" target="_blank" style="color:var(--accent)">{% if fa.cache_hit %}hit{% else %}new{% endif %}</a>{% else %}<a href="file://{{ fa.cache_file }}" target="_blank" style="color:var(--accent)">{% if fa.cache_hit %}hit{% else %}new{% endif %}</a>{% endif %}</span>
+        </div>
+        {% if fa.cache_test %}
+        <div class="meta-item">
+          <span class="meta-label">Cache Test</span>
+          <span class="meta-value" style="font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis" title="{{ fa.cache_test }}">{{ fa.cache_test }}</span>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+
+      {% if fa.matched_known_issues %}
+      <div class="section-label">Known Issues</div>
+      <div style="margin-bottom:12px">
+        {% for ki in fa.matched_known_issues %}
+        <span class="known-issues-tag">{{ ki }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if fa.suggested_jira_issues %}
+      <div class="section-label">Linked Jira Issues</div>
+      <ul class="jira-list">
+        {% for issue in fa.suggested_jira_issues %}
+        <li>
+          {% if issue is mapping %}
+          <a href="{{ issue.url }}">{{ issue.key }}</a> &mdash; {{ issue.summary }} ({{ issue.status }})
+          {% else %}
+          {{ issue }}
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      {% if fa.root_cause_summary %}
+      <div class="section-label">Root Cause</div>
+      <div class="root-cause">{{ fa.root_cause_summary | e }}</div>
+      {% endif %}
+
+      {% if fa.recommended_action %}
+      <div class="section-label">Recommended Action</div>
+      <div class="action-box">{{ fa.recommended_action | e }}</div>
+      {% endif %}
+
+      {% if fa.evidence %}
+      <div class="section-label">Evidence</div>
+      <ul class="evidence-list">
+        {% for e in fa.evidence %}
+        <li>{{ e | e }}{% if fa.mg_data_url %}{% set parts = e.split(' — ') %}{% if parts | length > 1 %}{% set source_part = parts[-1].split(':')[0].strip() %}{% if source_part and ' ' not in source_part and ('/' in source_part or source_part.startswith('ceph_') or source_part.endswith('.log') or source_part.endswith('.yaml')) and not source_part.endswith('.py') and not source_part.startswith('ocs_ci/') and not source_part.startswith('tests/') %} <a href="{{ fa.mg_data_url.rstrip('/') }}/{{ source_part }}" target="_blank" style="color:var(--accent);font-size:11px;margin-left:6px" title="{{ source_part }}">{{ source_part.split('/')[-1] }}</a>{% endif %}{% endif %}{% endif %}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      {% if fa.test_result.traceback %}
+      <button class="traceback-toggle" onclick="var el=this.nextElementSibling;el.classList.toggle('show');this.textContent=el.classList.contains('show')?'Hide Traceback':'Show Traceback'">Show Traceback</button>
+      <div class="traceback-content">
+        <pre>{{ fa.test_result.traceback | e }}</pre>
+      </div>
+      {% endif %}
+
+      {% if fa.bug_details %}
+      <button class="traceback-toggle" style="margin-left:8px;border-color:#fecaca;color:#dc2626" onclick="var el=this.nextElementSibling;el.classList.toggle('show');this.textContent=el.classList.contains('show')?'Hide Bug Details':'Show Bug Details'">Show Bug Details</button>
+      <div class="traceback-content">
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;font-size:13px">
+          {% if fa.bug_details.bug_subject %}
+          <div style="font-size:16px;font-weight:700;color:#dc2626;margin-bottom:12px">{{ fa.bug_details.bug_subject }}</div>
+          {% endif %}
+          <dl style="display:grid;grid-template-columns:160px 1fr;gap:6px 12px;margin:0">
+            {% if fa.bug_details.description %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Description</dt>
+            <dd style="margin:0;white-space:pre-wrap">{{ fa.bug_details.description }}</dd>
+            {% endif %}
+            {% if fa.bug_details.platform %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Platform</dt>
+            <dd style="margin:0">{{ fa.bug_details.platform }}</dd>
+            {% endif %}
+            {% if fa.bug_details.deployment_type_ocp %}
+            <dt style="font-weight:600;color:var(--text-secondary)">OCP Deployment</dt>
+            <dd style="margin:0">{{ fa.bug_details.deployment_type_ocp }}</dd>
+            {% endif %}
+            {% if fa.bug_details.deployment_type_odf %}
+            <dt style="font-weight:600;color:var(--text-secondary)">ODF Deployment</dt>
+            <dd style="margin:0">{{ fa.bug_details.deployment_type_odf }}</dd>
+            {% endif %}
+            {% if fa.bug_details.component_versions %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Versions</dt>
+            <dd style="margin:0">
+              {% for k, v in fa.bug_details.component_versions.items() %}{% if v %}{{ k | upper }}: {{ v }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}
+            </dd>
+            {% endif %}
+            {% if fa.bug_details.impacts_ability_to_work %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Impacts Work</dt>
+            <dd style="margin:0">{{ fa.bug_details.impacts_ability_to_work }}</dd>
+            {% endif %}
+            {% if fa.bug_details.workaround %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Workaround</dt>
+            <dd style="margin:0">{{ fa.bug_details.workaround }}</dd>
+            {% endif %}
+            {% if fa.bug_details.reproducible %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Reproducible</dt>
+            <dd style="margin:0">{{ fa.bug_details.reproducible }}</dd>
+            {% endif %}
+            {% if fa.bug_details.reproducible_from_ui %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Reproducible (UI)</dt>
+            <dd style="margin:0">{{ fa.bug_details.reproducible_from_ui }}</dd>
+            {% endif %}
+            {% if fa.bug_details.regression_info %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Regression</dt>
+            <dd style="margin:0">{{ fa.bug_details.regression_info }}</dd>
+            {% endif %}
+            {% if fa.bug_details.steps_to_reproduce %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Steps to Reproduce</dt>
+            <dd style="margin:0">
+              <ol style="margin:0;padding-left:18px">
+                {% for step in fa.bug_details.steps_to_reproduce %}
+                <li>{{ step }}</li>
+                {% endfor %}
+              </ol>
+            </dd>
+            {% endif %}
+            {% if fa.bug_details.actual_results %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Actual Results</dt>
+            <dd style="margin:0">{{ fa.bug_details.actual_results }}</dd>
+            {% endif %}
+            {% if fa.bug_details.expected_results %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Expected Results</dt>
+            <dd style="margin:0">{{ fa.bug_details.expected_results }}</dd>
+            {% endif %}
+            {% if fa.bug_details.additional_info %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Additional Info</dt>
+            <dd style="margin:0;white-space:pre-wrap">{{ fa.bug_details.additional_info }}</dd>
+            {% endif %}
+          </dl>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if fa.suggested_fix %}
+      <button class="traceback-toggle" style="margin-left:8px;border-color:#fde68a;color:#ca8a04" onclick="var el=this.nextElementSibling;el.classList.toggle('show');this.textContent=el.classList.contains('show')?'Hide Suggested Fix':'Show Suggested Fix'">Show Suggested Fix</button>
+      <div class="traceback-content">
+        <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;font-size:13px">
+          <div style="font-size:15px;font-weight:700;color:#ca8a04;margin-bottom:12px">Suggested Fix</div>
+          <dl style="display:grid;grid-template-columns:130px 1fr;gap:6px 12px;margin:0">
+            {% if fa.suggested_fix.file %}
+            <dt style="font-weight:600;color:var(--text-secondary)">File</dt>
+            <dd style="margin:0;font-family:monospace;font-size:12px">{{ fa.suggested_fix.file }}{% if fa.suggested_fix.line %}:{{ fa.suggested_fix.line }}{% endif %}</dd>
+            {% endif %}
+            {% if fa.suggested_fix.function %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Function</dt>
+            <dd style="margin:0;font-family:monospace;font-size:12px">{{ fa.suggested_fix.function }}</dd>
+            {% endif %}
+            {% if fa.suggested_fix.description %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Description</dt>
+            <dd style="margin:0;white-space:pre-wrap">{{ fa.suggested_fix.description }}</dd>
+            {% endif %}
+            {% if fa.suggested_fix.code_snippet %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Code</dt>
+            <dd style="margin:0"><pre style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-word">{{ fa.suggested_fix.code_snippet }}</pre></dd>
+            {% endif %}
+            {% if fa.suggested_fix.diff %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Diff</dt>
+            <dd style="margin:0"><pre style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-word">{% for line in fa.suggested_fix.diff.split('\n') %}{% if line.startswith('+') %}<span style="color:#4ade80">{{ line }}</span>
+{% elif line.startswith('-') %}<span style="color:#f87171">{{ line }}</span>
+{% else %}{{ line }}
+{% endif %}{% endfor %}</pre></dd>
+            {% endif %}
+            {% if fa.suggested_fix.fixed_on_master is defined %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Fixed on master</dt>
+            <dd style="margin:0">{{ 'Yes' if fa.suggested_fix.fixed_on_master else 'No' }}</dd>
+            {% endif %}
+            {% if fa.suggested_fix.needs_cherry_pick %}
+            <dt style="font-weight:600;color:var(--text-secondary)">Cherry-pick</dt>
+            <dd style="margin:0;color:#dc2626;font-weight:600">Needs cherry-pick from master to release branch</dd>
+            {% endif %}
+          </dl>
+        </div>
+      </div>
+      {% endif %}
+
+      {# Feedback Form (per D-01, D-02, D-03) #}
+      <button class="traceback-toggle feedback-toggle" id="fb-btn-{{ loop.index }}" style="margin-left:8px" onclick="event.stopPropagation();var el=document.getElementById('fb-panel-{{ loop.index }}');el.classList.toggle('show');this.textContent=el.classList.contains('show')?'Hide Feedback':'Provide Feedback'">Provide Feedback</button>
+      <div class="feedback-panel" id="fb-panel-{{ loop.index }}">
+        <form class="feedback-form" id="fb-form-{{ loop.index }}" onsubmit="event.preventDefault();submitFeedback({{ loop.index }})">
+          {# Email / Name - required per D-04 #}
+          <div class="field-group">
+            <div class="field-label">Your Red Hat Email (required)</div>
+            <input type="email" name="user_email" required
+                   pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$"
+                   placeholder="username@redhat.com"
+                   id="fb-email-{{ loop.index }}">
+          </div>
+
+          {# Category selection - per D-05 #}
+          {% set card_idx = loop.index %}
+          <fieldset>
+            <legend>Classification</legend>
+            {% for cat in ['product_bug', 'test_bug', 'infra_issue', 'flaky_test', 'known_issue'] %}
+            <label class="radio-label{% if fa.category.value != cat %} {% else %} {% endif %}"
+                   id="fb-cat-label-{{ card_idx }}-{{ cat }}">
+              <input type="radio" name="category" value="{{ cat }}"
+                     {% if fa.category.value == cat %}checked{% endif %}
+                     data-original="{{ fa.category.value }}"
+                     onclick="showFieldsForCategory({{ card_idx }}, '{{ cat }}', '{{ fa.category.value }}')">
+              {{ cat | replace('_', ' ') | title }}
+            </label>
+            {% endfor %}
+          </fieldset>
+
+          {# Hidden field for original category per D-15 #}
+          <input type="hidden" name="original_category" value="{{ fa.category.value }}">
+          <input type="hidden" name="original_confidence" value="{{ fa.confidence }}">
+          <input type="hidden" name="run_id" value="{{ run.run_metadata.run_id | default('', true) | e }}">
+          <input type="hidden" name="logs_url" value="{{ run.run_metadata.logs_url | default('', true) | e }}">
+          <input type="hidden" name="jenkins_url" value="{{ run.run_metadata.jenkins_url | default('', true) | e }}">
+
+          {# Context-dependent fields per D-06, D-07 #}
+
+          {# Common fields: root_cause, recommended_action, evidence — static text + agree/disagree #}
+          <div class="field-group">
+            <div class="field-label">Root Cause</div>
+            <div class="fb-static-text">{{ fa.root_cause_summary | e }}</div>
+            <div class="fb-agree-row">
+              <label class="radio-label"><input type="radio" name="root_cause_agree" value="true" checked> Agree</label>
+              <label class="radio-label"><input type="radio" name="root_cause_agree" value="false"> Disagree</label>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Recommended Action</div>
+            <div class="fb-static-text">{{ fa.recommended_action | e }}</div>
+            <div class="fb-agree-row">
+              <label class="radio-label"><input type="radio" name="recommended_action_agree" value="true" checked> Agree</label>
+              <label class="radio-label"><input type="radio" name="recommended_action_agree" value="false"> Disagree</label>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Evidence</div>
+            <div class="fb-static-text">{{ fa.evidence | join('\n') | e }}</div>
+            <div class="fb-agree-row">
+              <label class="radio-label"><input type="radio" name="evidence_agree" value="true" checked> Agree</label>
+              <label class="radio-label"><input type="radio" name="evidence_agree" value="false"> Disagree</label>
+            </div>
+          </div>
+
+          {# product_bug fields: bug info + suggested fix as static text with agree/disagree #}
+          <div class="category-fields{% if fa.category.value == 'product_bug' %} active{% endif %}" id="fields-{{ loop.index }}-product_bug">
+            {% if fa.bug_details %}
+            <div class="field-group">
+              <div class="field-label">Bug Info</div>
+              <div class="fb-static-text">
+                {% if fa.bug_details.bug_subject %}<strong>{{ fa.bug_details.bug_subject | e }}</strong><br>{% endif %}
+                {% if fa.bug_details.description %}{{ fa.bug_details.description | e }}{% endif %}
+              </div>
+              <div class="fb-agree-row">
+                <label class="radio-label"><input type="radio" name="bug_info_agree" value="true" checked> Agree</label>
+                <label class="radio-label"><input type="radio" name="bug_info_agree" value="false"> Disagree</label>
+              </div>
+            </div>
+            {% endif %}
+            {% if fa.suggested_fix %}
+            <div class="field-group">
+              <div class="field-label">Suggested Fix</div>
+              <div class="fb-static-text">
+                {% if fa.suggested_fix.file %}<strong>File:</strong> <code>{{ fa.suggested_fix.file | e }}{% if fa.suggested_fix.line %}:{{ fa.suggested_fix.line }}{% endif %}</code><br>{% endif %}
+                {% if fa.suggested_fix.function %}<strong>Function:</strong> <code>{{ fa.suggested_fix.function | e }}</code><br>{% endif %}
+                {% if fa.suggested_fix.description %}{{ fa.suggested_fix.description | e }}{% endif %}
+              </div>
+              <div class="fb-agree-row">
+                <label class="radio-label"><input type="radio" name="suggested_fix_agree" value="true" checked> Agree</label>
+                <label class="radio-label"><input type="radio" name="suggested_fix_agree" value="false"> Disagree</label>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+
+          {# Comment per D-08 #}
+          <div class="field-group">
+            <div class="field-label">Comment</div>
+            <textarea name="comment" rows="4" placeholder="Additional notes about this classification..."></textarea>
+          </div>
+
+          {# Submit — downloads feedback JSON for this card #}
+          <div class="btn-row">
+            <button type="submit" class="btn-save">Submit &amp; Download</button>
+            <span class="save-status" id="fb-status-{{ loop.index }}"></span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if categories %}
+<!-- Categories Summary -->
+<div class="card">
+  <h2>Failure Categories</h2>
+  <table class="summary-table">
+    <thead>
+      <tr><th>Category</th><th>Count</th><th>Tests</th></tr>
+    </thead>
+    <tbody>
+      {% for cat, tests in categories.items() %}
+      <tr>
+        <td><span class="cat-dot cat-dot-{{ cat }}"></span>{{ cat | replace('_', ' ') | title }}</td>
+        <td><strong>{{ tests | length }}</strong></td>
+        <td style="font-size:12px">{% for t in tests %}{% if not loop.first %}, {% endif %}<a href="#failure-{{ failure_index.get(t, '') }}" style="color:var(--accent);text-decoration:none" onclick="var c=document.getElementById('failure-{{ failure_index.get(t, '') }}');if(c)c.classList.add('open')">{{ t }}</a>{% endfor %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if squads %}
+<!-- Squads Summary -->
+<div class="card">
+  <h2>Failures by Squad</h2>
+  <table class="summary-table">
+    <thead>
+      <tr><th>Squad</th><th>Count</th><th>Tests</th></tr>
+    </thead>
+    <tbody>
+      {% for squad, tests in squads.items() %}
+      <tr>
+        <td><strong>{{ squad }}</strong></td>
+        <td>{{ tests | length }}</td>
+        <td style="font-size:12px">{% for t in tests %}{% if not loop.first %}, {% endif %}<a href="#failure-{{ failure_index.get(t, '') }}" style="color:var(--accent);text-decoration:none" onclick="var c=document.getElementById('failure-{{ failure_index.get(t, '') }}');if(c)c.classList.add('open')">{{ t }}</a>{% endfor %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if run.failure_analyses %}
+<div class="float-controls">
+  <button class="float-btn" id="toggle-all-btn" onclick="var cards=document.querySelectorAll('.failure-card');var anyOpen=document.querySelector('.failure-card.open');if(anyOpen){cards.forEach(function(c){c.classList.remove('open')});this.innerHTML='&#x25BC; Expand All'}else{cards.forEach(function(c){c.classList.add('open')});this.innerHTML='&#x25B2; Collapse All'}" title="Expand all">&#x25BC; Expand All</button>
+</div>
+{% endif %}
+
+<script>
+function showFieldsForCategory(idx, cat, originalCat) {
+  var panel = document.getElementById('fb-panel-' + idx);
+  panel.querySelectorAll('.category-fields').forEach(function(g) { g.classList.remove('active'); });
+  var target = document.getElementById('fields-' + idx + '-' + cat);
+  if (target) target.classList.add('active');
+  // Per D-10: highlight green if confirmed (same as original), red if changed
+  panel.querySelectorAll('label.radio-label').forEach(function(lbl) {
+    lbl.classList.remove('changed');
+  });
+  if (cat !== originalCat) {
+    var selected = document.getElementById('fb-cat-label-' + idx + '-' + cat);
+    if (selected) selected.classList.add('changed');
+  }
+}
+
+function submitFeedback(idx) {
+  var form = document.getElementById('fb-form-' + idx);
+  var card = form.closest('.failure-card');
+  var testName = card.dataset.testName;
+  var emailInput = document.getElementById('fb-email-' + idx);
+
+  // Validate email per D-04
+  if (!emailInput.value || !emailInput.checkValidity()) {
+    emailInput.reportValidity();
+    return;
+  }
+
+  var originalCat = form.querySelector('input[name="original_category"]').value;
+  var selectedCat = form.querySelector('input[name="category"]:checked').value;
+
+  // Agree/disagree for common analysis fields
+  var getAgree = function(name) {
+    var el = form.querySelector('input[name="' + name + '"]:checked');
+    return el ? el.value === 'true' : true;
+  };
+
+  var comment = form.querySelector('textarea[name="comment"]').value;
+
+  // Require comment if any disagree or category changed
+  var hasDisagree = !getAgree('root_cause_agree') || !getAgree('recommended_action_agree') || !getAgree('evidence_agree') || !getAgree('bug_info_agree') || !getAgree('suggested_fix_agree');
+  var catChanged = originalCat !== selectedCat;
+  if ((hasDisagree || catChanged) && !comment.trim()) {
+    var commentEl = form.querySelector('textarea[name="comment"]');
+    commentEl.focus();
+    commentEl.style.borderColor = '#ef4444';
+    commentEl.placeholder = 'Comment is required when you disagree or change the category';
+    return;
+  }
+
+
+  var feedback = {
+    version: 1,
+    timestamp: new Date().toISOString(),
+    test_name: testName,
+    user_email: emailInput.value,
+    original_category: originalCat,
+    new_category: selectedCat,
+    category_changed: originalCat !== selectedCat,
+    original_confidence: parseFloat(form.querySelector('input[name="original_confidence"]').value),
+    run_id: form.querySelector('input[name="run_id"]').value || null,
+    logs_url: form.querySelector('input[name="logs_url"]').value || null,
+    jenkins_url: form.querySelector('input[name="jenkins_url"]').value || null,
+    root_cause_agree: getAgree('root_cause_agree'),
+    recommended_action_agree: getAgree('recommended_action_agree'),
+    evidence_agree: getAgree('evidence_agree'),
+    bug_info_agree: getAgree('bug_info_agree'),
+    suggested_fix_agree: getAgree('suggested_fix_agree'),
+    comment: comment || null,
+    cache_file: card.dataset.cacheFile || null
+  };
+
+  // Download as JSON file
+  var blob = new Blob([JSON.stringify(feedback, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url;
+  // Sanitize test name for filename
+  var safeName = testName.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 80);
+  link.download = 'feedback-' + safeName + '.json';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  // Show confirmation state per D-14
+  var btn = document.getElementById('fb-btn-' + idx);
+  btn.classList.add('saved');
+  var status = document.getElementById('fb-status-' + idx);
+  status.textContent = '\u2713 Downloaded';
+}
+</script>
+
+</div><!-- /container -->
+</body>
+</html>

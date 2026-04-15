@@ -1,0 +1,116 @@
+# OCS-CI Log Analysis Report
+
+## Run Summary
+
+| Field | Value |
+|-------|-------|
+| **Source** | {{ run.run_url }} |
+| **Platform** | {{ run.run_metadata.platform or 'N/A' }} |
+| **Deployment** | {{ run.run_metadata.deployment_type or 'N/A' }} |
+| **OCP Version** | {{ run.run_metadata.ocp_version or 'N/A' }} |
+| **OCS Version** | {{ run.run_metadata.ocs_version or 'N/A' }} |
+| **OCS Build** | {{ run.run_metadata.ocs_build or 'N/A' }} |
+| **Run ID** | {{ run.run_metadata.run_id or 'N/A' }} |
+| **Launch Name** | {{ run.run_metadata.launch_name or 'N/A' }} |
+| **Analyzed** | {{ run.timestamp }} |
+
+## Results Overview
+
+| Status | Count |
+|--------|-------|
+| **Total** | {{ run.total_tests }} |
+| **Passed** | {{ run.passed }} |
+| **Failed** | {{ run.failed }} |
+| **Error** | {{ run.error }} |
+| **Skipped** | {{ run.skipped }} |
+
+{{ run.summary }}
+
+{% if run.failure_analyses %}
+## Failure Analysis
+
+{% for fa in run.failure_analyses %}
+### {{ loop.index }}. {{ fa.test_result.name }}
+
+| Field | Value |
+|-------|-------|
+| **Class** | `{{ fa.test_result.classname }}` |
+| **Status** | {{ fa.test_result.status.value }} |
+| **Duration** | {{ "%.1f"|format(fa.test_result.duration) }}s |
+| **Squad** | {{ fa.test_result.squad or 'N/A' }} |
+| **Polarion ID** | {{ fa.test_result.polarion_id or 'N/A' }} |
+| **Category** | **{{ fa.category.value | upper }}** |
+| **Confidence** | {{ "%.0f"|format(fa.confidence * 100) }}% |
+{% if fa.session_id %}| **Session ID** | {{ fa.session_id }} |
+{% endif %}{% if fa.session_file %}| **Session Record** | [{{ fa.session_file | basename }}]({{ fa.session_file }}) |
+{% endif %}{% if fa.must_gather_url %}| **Must Gather** | [logs]({{ fa.must_gather_url }}) |
+{% endif %}
+
+{% if fa.matched_known_issues %}
+**Known Issues**: {{ fa.matched_known_issues | join(', ') }}
+{% endif %}
+
+{% if fa.suggested_jira_issues %}
+**Linked Jira Issues**:
+
+{% for issue in fa.suggested_jira_issues %}
+{% if issue is mapping -%}
+- [{{ issue.key }}]({{ issue.url }}) — {{ issue.summary }} ({{ issue.status }})
+{% else -%}
+- {{ issue }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if fa.root_cause_summary %}
+**Root Cause**: {{ fa.root_cause_summary }}
+{% endif %}
+
+{% if fa.recommended_action %}
+**Action**: {{ fa.recommended_action }}
+{% endif %}
+
+{% if fa.evidence %}
+**Evidence**:
+
+{% for e in fa.evidence %}
+- {{ e }}
+
+{% endfor %}
+{% endif %}
+
+{% if fa.test_result.traceback %}
+<details>
+<summary>Traceback (click to expand)</summary>
+
+```
+{{ fa.test_result.traceback }}
+```
+
+</details>
+{% endif %}
+
+---
+
+{% endfor %}
+{% endif %}
+
+{% if categories %}
+## Failure Categories Summary
+
+| Category | Count | Tests |
+|----------|-------|-------|
+{% for cat, tests in categories.items() %}
+| {{ cat }} | {{ tests | length }} | {{ tests | join(', ') }} |
+{% endfor %}
+{% endif %}
+
+{% if squads %}
+## Failures by Squad
+
+| Squad | Count | Tests |
+|-------|-------|-------|
+{% for squad, tests in squads.items() %}
+| {{ squad }} | {{ tests | length }} | {{ tests | join(', ') }} |
+{% endfor %}
+{% endif %}

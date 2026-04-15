@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OCS-CI Cross-Run Trend Analysis</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f5f7fa;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text: #1a202c;
+  --text-secondary: #64748b;
+  --accent: #3b82f6;
+  --green: #22c55e;
+  --red: #ef4444;
+  --orange: #f59e0b;
+  --purple: #8b5cf6;
+  --cyan: #06b6d4;
+  --gray: #94a3b8;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6; padding: 24px;
+}
+.container { max-width: 1280px; margin: 0 auto; }
+
+.header {
+  background: linear-gradient(135deg, #1e293b, #334155);
+  color: white; border-radius: 12px; padding: 32px; margin-bottom: 24px;
+}
+.header h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+.header .subtitle { color: #94a3b8; font-size: 14px; }
+
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 24px; margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.card h2 {
+  font-size: 18px; font-weight: 600; margin-bottom: 16px;
+  padding-bottom: 10px; border-bottom: 2px solid var(--bg);
+}
+
+/* Summary stats */
+.stats-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.stat-box {
+  flex: 1; min-width: 120px; text-align: center;
+  padding: 16px 12px; border-radius: 8px; background: var(--bg);
+}
+.stat-box .num { font-size: 28px; font-weight: 700; }
+.stat-box .label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* Charts */
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.chart-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.chart-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary); }
+.chart-container { position: relative; width: 100%; }
+.chart-container canvas { width: 100% !important; }
+
+/* Tables */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th {
+  text-align: left; padding: 10px 12px; background: var(--bg);
+  font-weight: 600; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.3px; color: var(--text-secondary);
+  position: sticky; top: 0;
+}
+.data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: #f8fafc; }
+.data-table .test-name {
+  font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 12px; word-break: break-all;
+}
+
+/* Result dots */
+.result-dots { display: flex; gap: 3px; }
+.dot {
+  width: 16px; height: 16px; border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: white;
+}
+.dot-P { background: var(--green); }
+.dot-F, .dot-f { background: var(--red); }
+.dot-E, .dot-e { background: var(--orange); }
+.dot-S, .dot-s { background: var(--gray); }
+
+/* Badges */
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+}
+.badge-regression { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.badge-flaky { background: #faf5ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+.badge-yes { background: #fef2f2; color: #dc2626; }
+.badge-no { background: #f0fdf4; color: #16a34a; }
+
+/* Squad health bars */
+.health-bar-bg {
+  width: 100%; height: 8px; background: #e2e8f0;
+  border-radius: 4px; overflow: hidden;
+}
+.health-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+
+/* Count badge */
+.count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 22px; padding: 0 6px;
+  border-radius: 11px; font-size: 12px; font-weight: 700;
+}
+.count-red { background: #fef2f2; color: #dc2626; }
+.count-orange { background: #fffbeb; color: #d97706; }
+.count-blue { background: #eff6ff; color: #2563eb; }
+
+/* Table wrapper for scroll */
+.table-scroll { max-height: 500px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+
+@media (max-width: 768px) {
+  body { padding: 12px; }
+  .chart-row { grid-template-columns: 1fr; }
+  .stats-row { gap: 8px; }
+  .stat-box { min-width: 80px; padding: 12px 8px; }
+  .stat-box .num { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="header">
+  <h1>Cross-Run Trend Analysis</h1>
+  <div class="subtitle">{{ report.period }} &mdash; {{ report.runs_analyzed }} runs analyzed</div>
+</div>
+
+<!-- Summary Stats -->
+<div class="card">
+  <h2>Overview</h2>
+  <div class="stats-row">
+    <div class="stat-box">
+      <div class="num" style="color:var(--accent)">{{ report.runs_analyzed }}</div>
+      <div class="label">Runs</div>
+    </div>
+    <div class="stat-box">
+      <div class="num" style="color:var(--red)">{{ report.regressions | length }}</div>
+      <div class="label">Regressions</div>
+    </div>
+    <div class="stat-box">
+      <div class="num" style="color:var(--purple)">{{ report.top_flaky_tests | length }}</div>
+      <div class="label">Flaky Tests</div>
+    </div>
+    <div class="stat-box">
+      <div class="num" style="color:var(--orange)">{{ report.most_failing_tests | length }}</div>
+      <div class="label">Failing Tests</div>
+    </div>
+    <div class="stat-box">
+      <div class="num" style="color:var(--cyan)">{{ report.squad_health | length }}</div>
+      <div class="label">Squads</div>
+    </div>
+  </div>
+</div>
+
+{% if report.run_details %}
+<!-- Runs Table -->
+<div class="card">
+  <h2>Analyzed Runs <span class="count-badge" style="background:#e0f2fe;color:#0284c7">{{ report.run_details | length }}</span></h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Date</th>
+          <th>Flavour</th>
+          <th>Platform</th>
+          <th>OCS Version</th>
+          <th>Pass Rate</th>
+          <th>P</th>
+          <th>F</th>
+          <th>S</th>
+          <th>Links</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rd in report.run_details | reverse %}
+        <tr>
+          <td style="color:var(--text-secondary)">{{ loop.index }}</td>
+          <td style="white-space:nowrap">{{ rd.timestamp }}</td>
+          <td class="test-name" style="max-width:320px" title="{{ rd.launch_name }}">{{ rd.launch_name or 'N/A' }}</td>
+          <td>{{ rd.platform or 'N/A' }}</td>
+          <td style="font-size:12px">{{ rd.ocs_version or 'N/A' }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="health-bar-bg" style="width:50px">
+                <div class="health-bar-fill" style="width:{{ (rd.pass_rate * 100) | round }}%;background:{% if rd.pass_rate >= 0.9 %}var(--green){% elif rd.pass_rate >= 0.7 %}var(--orange){% else %}var(--red){% endif %}"></div>
+              </div>
+              <span style="font-weight:600;font-size:12px">{{ "%.0f" | format(rd.pass_rate * 100) }}%</span>
+            </div>
+          </td>
+          <td style="color:var(--green);font-weight:600">{{ rd.passed }}</td>
+          <td style="color:var(--red);font-weight:600">{{ rd.failed }}</td>
+          <td style="color:var(--gray)">{{ rd.skipped }}</td>
+          <td style="white-space:nowrap;font-size:12px">
+            {% if rd.jenkins_url %}<a href="{{ rd.jenkins_url }}" style="color:var(--accent);text-decoration:none" title="Jenkins">Jenkins</a>{% endif %}
+            {% if rd.jenkins_url and rd.run_url %} &middot; {% endif %}
+            {% if rd.run_url %}<a href="{{ rd.run_url }}" style="color:var(--accent);text-decoration:none" title="Logs">Logs</a>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Charts Row -->
+<div class="chart-row">
+  <div class="chart-card">
+    <h3>Pass Rate Trend</h3>
+    <div class="chart-container">
+      <canvas id="passRateChart" height="220"></canvas>
+    </div>
+  </div>
+  <div class="chart-card">
+    <h3>Squad Health</h3>
+    <div class="chart-container">
+      <canvas id="squadChart" height="220"></canvas>
+    </div>
+  </div>
+</div>
+
+{% if report.category_trend %}
+<div class="chart-row">
+  <div class="chart-card">
+    <h3>Failure Categories Over Time</h3>
+    <div class="chart-container">
+      <canvas id="categoryChart" height="220"></canvas>
+    </div>
+  </div>
+  <div class="chart-card">
+    <h3>Category Distribution (Latest)</h3>
+    <div class="chart-container">
+      <canvas id="categoryDonut" height="220"></canvas>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if report.regressions %}
+<!-- Regressions -->
+<div class="card">
+  <h2>Regressions <span class="count-badge count-red">{{ report.regressions | length }}</span></h2>
+  <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">Tests that recently started failing after previously passing.</p>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Test</th>
+          <th>Squad</th>
+          <th>Consecutive Failures</th>
+          <th>Since</th>
+          <th>Previous Passes</th>
+          <th>Category</th>
+          <th>Version Changed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in report.regressions %}
+        <tr>
+          <td class="test-name">{{ r.test_name }}</td>
+          <td>{{ r.squad or 'N/A' }}</td>
+          <td><span class="count-badge count-red">{{ r.consecutive_failures }}</span></td>
+          <td>{{ r.first_failure_timestamp[:10] }}</td>
+          <td>{{ r.previous_pass_count }}</td>
+          <td>{{ r.category or 'N/A' }}</td>
+          <td><span class="badge badge-{{ 'yes' if r.ocs_version_changed else 'no' }}">{{ "Yes" if r.ocs_version_changed else "No" }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if report.top_flaky_tests %}
+<!-- Flaky Tests -->
+<div class="card">
+  <h2>Flaky Tests <span class="count-badge count-orange">{{ report.top_flaky_tests | length }}</span></h2>
+  <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">Tests with intermittent pass/fail behavior across runs.</p>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Test</th>
+          <th>Squad</th>
+          <th>Flakiness</th>
+          <th>Pass</th>
+          <th>Fail</th>
+          <th>Error</th>
+          <th>Runs</th>
+          <th>Recent Results</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in report.top_flaky_tests %}
+        <tr>
+          <td class="test-name">{{ t.test_name }}</td>
+          <td>{{ t.squad or 'N/A' }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="health-bar-bg" style="width:60px">
+                <div class="health-bar-fill" style="width:{{ (t.flakiness_rate * 100) | round }}%;background:var(--orange)"></div>
+              </div>
+              <span style="font-weight:600;font-size:12px">{{ "%.0f" | format(t.flakiness_rate * 100) }}%</span>
+            </div>
+          </td>
+          <td style="color:var(--green);font-weight:600">{{ t.pass_count }}</td>
+          <td style="color:var(--red);font-weight:600">{{ t.fail_count }}</td>
+          <td style="color:var(--orange);font-weight:600">{{ t.error_count }}</td>
+          <td>{{ t.total_runs }}</td>
+          <td>
+            <div class="result-dots">
+              {% for r in t.recent_results[-8:] %}
+              <div class="dot dot-{{ r[0] | upper }}" title="{{ r }}">{{ r[0] | upper }}</div>
+              {% endfor %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if report.most_failing_tests %}
+<!-- Most Failing Tests -->
+<div class="card">
+  <h2>Most Failing Tests <span class="count-badge count-blue">{{ report.most_failing_tests | length }}</span></h2>
+  <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">Top tests by total failure count across all analyzed runs.</p>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Test</th>
+          <th>Squad</th>
+          <th>Failures</th>
+          <th>Total Runs</th>
+          <th>Failure Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in report.most_failing_tests %}
+        <tr>
+          <td class="test-name">{{ t.test_name }}</td>
+          <td>{{ t.squad or 'N/A' }}</td>
+          <td><span class="count-badge count-red">{{ t.fail_count + t.error_count }}</span></td>
+          <td>{{ t.total_runs }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="health-bar-bg" style="width:60px">
+                <div class="health-bar-fill" style="width:{{ (t.flakiness_rate * 100) | round }}%;background:var(--red)"></div>
+              </div>
+              <span style="font-weight:600;font-size:12px">{{ "%.0f" | format(t.flakiness_rate * 100) }}%</span>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if report.squad_health %}
+<!-- Squad Health Detail -->
+<div class="card">
+  <h2>Squad Health</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Squad</th>
+        <th>Tests</th>
+        <th>Pass Rate</th>
+        <th></th>
+        <th>Failures</th>
+        <th>Flaky</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for squad, stats in report.squad_health.items() | sort %}
+      <tr>
+        <td><strong>{{ squad }}</strong></td>
+        <td>{{ stats.total_tests }}</td>
+        <td style="font-weight:600">{{ "%.1f" | format(stats.pass_rate * 100) }}%</td>
+        <td style="width:120px">
+          <div class="health-bar-bg">
+            <div class="health-bar-fill" style="width:{{ (stats.pass_rate * 100) | round }}%;background:{% if stats.pass_rate >= 0.9 %}var(--green){% elif stats.pass_rate >= 0.7 %}var(--orange){% else %}var(--red){% endif %}"></div>
+          </div>
+        </td>
+        <td>{% if stats.fail_count > 0 %}<span class="count-badge count-red">{{ stats.fail_count }}</span>{% else %}0{% endif %}</td>
+        <td>{% if stats.flaky_count > 0 %}<span class="count-badge count-orange">{{ stats.flaky_count }}</span>{% else %}0{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- Pass Rate Table -->
+<div class="card">
+  <h2>Pass Rate History</h2>
+  <table class="data-table">
+    <thead>
+      <tr><th>Date</th><th>Pass Rate</th><th></th><th>Total</th><th>Failed</th></tr>
+    </thead>
+    <tbody>
+      {% for entry in report.pass_rate_trend %}
+      <tr>
+        <td>{{ entry.timestamp }}</td>
+        <td style="font-weight:600">{{ "%.1f" | format(entry.pass_rate * 100) }}%</td>
+        <td style="width:150px">
+          <div class="health-bar-bg">
+            <div class="health-bar-fill" style="width:{{ (entry.pass_rate * 100) | round }}%;background:{% if entry.pass_rate >= 0.9 %}var(--green){% elif entry.pass_rate >= 0.7 %}var(--orange){% else %}var(--red){% endif %}"></div>
+          </div>
+        </td>
+        <td>{{ entry.total }}</td>
+        <td>{% if entry.failed > 0 %}<span class="count-badge count-red">{{ entry.failed }}</span>{% else %}0{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+</div><!-- /container -->
+
+<script>
+// Color palette
+const colors = {
+  blue: '#3b82f6', green: '#22c55e', red: '#ef4444',
+  orange: '#f59e0b', purple: '#8b5cf6', cyan: '#06b6d4',
+  gray: '#94a3b8', pink: '#ec4899', teal: '#14b8a6',
+};
+const categoryColors = {
+  product_bug: colors.red, test_bug: colors.orange,
+  infra_issue: colors.blue, flaky_test: colors.purple,
+  known_issue: colors.green, unknown: colors.gray,
+};
+
+// Chart defaults
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif";
+Chart.defaults.font.size = 12;
+Chart.defaults.color = '#64748b';
+
+// Pass Rate Trend
+{% if report.pass_rate_trend %}
+new Chart(document.getElementById('passRateChart'), {
+  type: 'line',
+  data: {
+    labels: {{ report.pass_rate_trend | map(attribute='timestamp') | list | tojson }},
+    datasets: [{
+      label: 'Pass Rate',
+      data: {{ report.pass_rate_trend | map(attribute='pass_rate') | list | tojson }}.map(v => (v * 100).toFixed(1)),
+      borderColor: colors.blue,
+      backgroundColor: 'rgba(59,130,246,0.1)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 4,
+      pointBackgroundColor: colors.blue,
+      borderWidth: 2,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ctx.parsed.y + '%' } }
+    },
+    scales: {
+      y: {
+        min: 0, max: 100,
+        ticks: { callback: v => v + '%' },
+        grid: { color: '#f1f5f9' }
+      },
+      x: { grid: { display: false } }
+    }
+  }
+});
+{% endif %}
+
+// Squad Health Chart
+{% if report.squad_health %}
+(function() {
+  const squads = {{ report.squad_health.keys() | list | sort | tojson }};
+  const passRates = squads.map(s => {
+    const stats = {{ report.squad_health | tojson }}[s];
+    return (stats.pass_rate * 100).toFixed(1);
+  });
+  const barColors = passRates.map(r => r >= 90 ? colors.green : r >= 70 ? colors.orange : colors.red);
+
+  new Chart(document.getElementById('squadChart'), {
+    type: 'bar',
+    data: {
+      labels: squads,
+      datasets: [{
+        label: 'Pass Rate',
+        data: passRates,
+        backgroundColor: barColors,
+        borderRadius: 4,
+        barThickness: 24,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.parsed.x + '%' } }
+      },
+      scales: {
+        x: {
+          min: 0, max: 100,
+          ticks: { callback: v => v + '%' },
+          grid: { color: '#f1f5f9' }
+        },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+})();
+{% endif %}
+
+// Category Trend (stacked area)
+{% if report.category_trend %}
+(function() {
+  const catData = {{ report.category_trend | tojson }};
+  const allDates = [...new Set(Object.values(catData).flat().map(e => e.timestamp))].sort();
+  const datasets = Object.entries(catData).map(([cat, entries]) => {
+    const dateMap = {};
+    entries.forEach(e => { dateMap[e.timestamp] = e.count; });
+    return {
+      label: cat.replace('_', ' '),
+      data: allDates.map(d => dateMap[d] || 0),
+      backgroundColor: (categoryColors[cat] || colors.gray) + '33',
+      borderColor: categoryColors[cat] || colors.gray,
+      fill: true,
+      tension: 0.3,
+      borderWidth: 2,
+      pointRadius: 3,
+    };
+  });
+
+  new Chart(document.getElementById('categoryChart'), {
+    type: 'line',
+    data: { labels: allDates, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, font: { size: 11 } } }
+      },
+      scales: {
+        y: { stacked: true, beginAtZero: true, grid: { color: '#f1f5f9' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // Donut — latest values
+  const latestDate = allDates[allDates.length - 1];
+  const labels = [];
+  const values = [];
+  const bgColors = [];
+  Object.entries(catData).forEach(([cat, entries]) => {
+    const latest = entries.find(e => e.timestamp === latestDate);
+    if (latest && latest.count > 0) {
+      labels.push(cat.replace('_', ' '));
+      values.push(latest.count);
+      bgColors.push(categoryColors[cat] || colors.gray);
+    }
+  });
+
+  new Chart(document.getElementById('categoryDonut'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: bgColors, borderWidth: 2, borderColor: '#fff' }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, font: { size: 11 } } }
+      }
+    }
+  });
+})();
+{% endif %}
+</script>
+</body>
+</html>
