@@ -821,7 +821,19 @@ class HyperShiftBase:
             create_hcp_cluster_cmd += " --olm-disable-default-sources"
 
         logger.info("Creating HyperShift hosted cluster")
-        exec_cmd(create_hcp_cluster_cmd)
+        try:
+            exec_cmd(create_hcp_cluster_cmd)
+        except CommandFailed as e:
+            if "x509: certificate signed by unknown authority" in str(
+                e
+            ) and "hostedclusters.hypershift.openshift.io" in str(e):
+                logger.warning(
+                    "HyperShift webhook TLS error detected — applying CA bundle fix and retrying"
+                )
+                fix_hypershift_webhook_ca_bundle()
+                exec_cmd(create_hcp_cluster_cmd)
+            else:
+                raise
 
         return name
 
@@ -918,7 +930,19 @@ class HyperShiftBase:
             create_hcp_cluster_cmd += " --olm-disable-default-sources"
 
         logger.info("Creating HyperShift hosted cluster")
-        exec_cmd(create_hcp_cluster_cmd)
+        try:
+            exec_cmd(create_hcp_cluster_cmd)
+        except CommandFailed as e:
+            if "x509: certificate signed by unknown authority" in str(
+                e
+            ) and "hostedclusters.hypershift.openshift.io" in str(e):
+                logger.warning(
+                    "HyperShift webhook TLS error detected — applying CA bundle fix and retrying"
+                )
+                fix_hypershift_webhook_ca_bundle()
+                exec_cmd(create_hcp_cluster_cmd)
+            else:
+                raise
 
         return name
 
@@ -1291,6 +1315,60 @@ class HyperShiftBase:
             return False
         logger.info(cmd_res.stdout.decode("utf-8").splitlines())
         return True
+
+
+def fix_hypershift_webhook_ca_bundle():
+    """
+    Fix HyperShift webhook configurations when the CA bundle is missing or mismatched,
+    causing 'x509: certificate signed by unknown authority' errors during hosted cluster
+    creation.
+
+    Patches both MutatingWebhookConfiguration and ValidatingWebhookConfiguration named
+    'hypershift.openshift.io' with the CA bundle from the 'webhook-serving-ca' secret
+    in the 'hypershift' namespace.
+
+    This workaround addresses a known race condition where the HyperShift operator
+    creates or rotates its webhook-serving-ca after the webhook configurations are
+    registered, leaving the caBundle field stale or empty.
+    """
+    logger.info(
+        "Fixing HyperShift webhook CA bundle mismatch — patching MutatingWebhookConfiguration "
+        "and ValidatingWebhookConfiguration with CA from 'webhook-serving-ca' secret"
+    )
+    secret_obj = OCP(kind="Secret", namespace=constants.HYPERSHIFT_NAMESPACE)
+    secret_data = secret_obj.get(resource_name="webhook-serving-ca")
+    ca_bundle = secret_data["data"]["ca.crt"]
+
+    for webhook_kind in (
+        "mutatingwebhookconfiguration",
+        "validatingwebhookconfiguration",
+    ):
+        webhook_obj = OCP(kind=webhook_kind)
+        try:
+            wh_data = webhook_obj.get(resource_name="hypershift.openshift.io")
+        except Exception:
+            logger.warning(
+                f"No {webhook_kind} named 'hypershift.openshift.io' found, skipping"
+            )
+            continue
+        num_webhooks = len(wh_data.get("webhooks", []))
+        patch = [
+            {
+                "op": "replace",
+                "path": f"/webhooks/{i}/clientConfig/caBundle",
+                "value": ca_bundle,
+            }
+            for i in range(num_webhooks)
+        ]
+        webhook_obj.patch(
+            resource_name="hypershift.openshift.io",
+            params=patch,
+            format_type="json",
+        )
+        logger.info(
+            f"Patched {num_webhooks} webhook(s) in {webhook_kind}/hypershift.openshift.io"
+        )
+    logger.info("HyperShift webhook CA bundle fix applied successfully")
 
 
 def create_cluster_dir(cluster_name):
