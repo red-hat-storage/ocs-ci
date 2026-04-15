@@ -573,3 +573,26 @@ def get_semantic_running_odf_version():
     odf_full_version = get_running_odf_version()
     odf_version = get_semantic_version(version=odf_full_version)
     return odf_version
+
+
+def extract_version_from_csv_name(csv_name):
+    """
+    Extract version string from CSV name.
+
+    Args:
+        csv_name (str): CSV name in the format 'ocs-operator.v<version>-<suffix>'
+                       or 'odf-operator.v<version>-<suffix>'
+                       Example: 'ocs-operator.v4.21.2-rhodf' or 'odf-operator.v4.22.0-rhodf'
+
+    Returns:
+        str: Version string (e.g., '4.21.2')
+
+    Raises:
+        IndexError: If CSV name format doesn't match expected pattern
+        ValueError: If version cannot be extracted from CSV name
+
+    """
+    # CSV format: ocs-operator.v<version>-<suffix> or odf-operator.v<version>-<suffix>
+    # Extract the version part between 'v' and the last '-'
+    version_part = csv_name.split(".v")[1].rsplit("-", 1)[0]
+    return version_part

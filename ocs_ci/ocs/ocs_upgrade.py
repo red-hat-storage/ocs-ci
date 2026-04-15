@@ -917,19 +917,37 @@ def run_ocs_upgrade(
                     channel=current_channel
                 )
                 if csv_name_pre_upgrade != csv_after_catalog_update:
-                    error_msg = (
-                        "UPGRADE BLOCKED: Detected unexpected build in catalog. "
-                        f"Current channel '{current_channel}' had CSV '{csv_name_pre_upgrade}' "
-                        f"before catalog update, but now shows '{csv_after_catalog_update}'. "
-                        f"This would cause OLM to upgrade to '{csv_after_catalog_update}' before "
-                        "the channel change, creating conflicting upgrade paths."
+                    version_pre = version.get_semantic_version(
+                        version.extract_version_from_csv_name(csv_name_pre_upgrade)
                     )
-                    log.error(error_msg)
-                    raise UnexpectedCatalogBuildException(error_msg)
-                log.info(
-                    f"Catalog build check passed. CSV in channel '{current_channel}' "
-                    f"remains '{csv_name_pre_upgrade}'."
-                )
+                    version_after = version.get_semantic_version(
+                        version.extract_version_from_csv_name(csv_after_catalog_update)
+                    )
+
+                    # Only block if the new version is HIGHER (which would cause unwanted upgrade)
+                    # Allow if version is lower or same (downgrade scenario is OK)
+                    if version_after > version_pre:
+                        error_msg = (
+                            "UPGRADE BLOCKED: Detected unexpected build in catalog. "
+                            f"Current channel '{current_channel}' had CSV '{csv_name_pre_upgrade}' "
+                            f"before catalog update, but now shows '{csv_after_catalog_update}'. "
+                            f"This would cause OLM to upgrade to '{csv_after_catalog_update}' before "
+                            "the channel change, creating conflicting upgrade paths."
+                        )
+                        log.error(error_msg)
+                        raise UnexpectedCatalogBuildException(error_msg)
+                    else:
+                        log.info(
+                            f"CSV changed in channel '{current_channel}' from "
+                            f"'{csv_name_pre_upgrade}' to '{csv_after_catalog_update}', "
+                            f"but version decreased ({version_pre} -> {version_after}). "
+                            "This is acceptable and won't cause conflicting upgrade paths."
+                        )
+                else:
+                    log.info(
+                        f"Catalog build check passed. CSV in channel '{current_channel}' "
+                        f"remains '{csv_name_pre_upgrade}'."
+                    )
             except ChannelNotFound:
                 log.info(
                     f"Channel '{current_channel}' not found in updated catalog. "
