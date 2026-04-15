@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from subprocess import TimeoutExpired
 
+from ocs_ci.ocs.cluster import change_ceph_full_ratio
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.helpers.helpers import (
@@ -27,7 +28,6 @@ from ocs_ci.helpers.e2e_helpers import (
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
 from ocs_ci.utility import templating
-from ocs_ci.utility.kms import is_kms_enabled
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
@@ -2977,6 +2977,7 @@ def vdbench_mixed_workload_config():
 def create_multiple_storage_pvcs_pods(
     pvc_factory,
     deployment_pod_factory,
+    request,
 ):
     """
     Fixture factory to create multiple PVCs and deployment pods across different storage types.
@@ -2984,40 +2985,43 @@ def create_multiple_storage_pvcs_pods(
         function: Factory function that accepts parameters and returns created resources
     """
 
-    def factory(proj_obj, sc_obj, skip_storage_types=None, total_pvcs=10):
+    def teardown():
+
+        change_ceph_full_ratio(85)
+
+    request.addfinalizer(teardown)
+
+    def factory(
+        proj_obj, sc_obj, skip_storage_types=None, total_pvcs=10, pvc_name_prefix=""
+    ):
         """
         Args:
             proj_obj: Project object for namespace
             sc_obj: Encrypted storage class object (for encrypted RBD)
             skip_storage_types (list): List of storage types to skip.
             total_pvcs (int): Total number of encrypted PVCs to create (default: 10)
+            pvc_name_prefix (str): Prefix to add to PVC names to avoid conflicts (default: "")
         """
 
-        # Initialize skip_storage_types if None
         if skip_storage_types is None:
             skip_storage_types = []
 
-        # Validate skip_storage_types
         valid_storage_types = ["encrypted_rbd", "non_encrypted_rbd", "cephfs", "nfs"]
         if not isinstance(skip_storage_types, list):
             raise ValueError(
                 f"skip_storage_types must be a list. Valid values: {valid_storage_types}"
             )
 
-        # Initialize all resource lists
         pvc_objs, pod_objs = [], []
         non_enc_pvc_objs, non_enc_pod_objs, non_enc_combinations = [], [], []
         cephfs_pvc_objs, cephfs_pod_objs = [], []
         nfs_pvc_objs, nfs_pod_objs = [], []
 
-        # Step 1: Create encrypted RBD PVCs and pods
-
+        # Create encrypted RBD PVCs and pods
         if "encrypted_rbd" not in skip_storage_types:
             logger.info(
                 f"Step 1: Creating {total_pvcs} encrypted RBD PVCs and deployment pods"
             )
-
-            # Prepare PVC combinations for encrypted RBD
             enc_base_combinations = [
                 (constants.VOLUME_MODE_FILESYSTEM, constants.ACCESS_MODE_RWO),
                 (constants.VOLUME_MODE_BLOCK, constants.ACCESS_MODE_RWO),
@@ -3031,7 +3035,6 @@ def create_multiple_storage_pvcs_pods(
             ]
 
             for idx, pvc_config in enumerate(pvc_combinations, start=1):
-                logger.info(f"\nCreating encrypted PVC {idx}/{total_pvcs}:")
                 pvc_obj = pvc_factory(
                     interface=constants.CEPHBLOCKPOOL,
                     project=proj_obj,
@@ -3047,15 +3050,10 @@ def create_multiple_storage_pvcs_pods(
                 is_block_volume = (
                     pvc_config["volume_mode"] == constants.VOLUME_MODE_BLOCK
                 )
-                sa_obj = helpers.create_serviceaccount(pvc_obj.project.namespace)
-                helpers.add_scc_policy(
-                    sa_name=sa_obj.name, namespace=pvc_obj.project.namespace
-                )
                 pod_obj = deployment_pod_factory(
                     interface=constants.CEPHBLOCKPOOL,
                     pvc=pvc_obj,
                     raw_block_pv=is_block_volume,
-                    sa_obj=sa_obj,
                 )
                 pod_objs.append(pod_obj)
 
@@ -3063,14 +3061,13 @@ def create_multiple_storage_pvcs_pods(
                 f" All {len(pod_objs)} encrypted RBD deployments created and running"
             )
 
-        # Step 2: Create non-encrypted RBD PVCs and pods
+        # Create non encrypted RBD PVCs and pods
         if "non_encrypted_rbd" not in skip_storage_types:
-            logger.info("Step 2: Creating non-encrypted RBD PVCs and deployment pods")
+            logger.info(" Creating non-encrypted RBD PVCs and deployment pods")
 
             non_enc_sc_obj = helpers.default_storage_class(
                 interface_type=constants.CEPHBLOCKPOOL
             )
-            # Non-encrypted combinations: Filesystem(RWO, RWOP) + Block(RWO, RWX, RWOP) = 5 base
             non_enc_volume_modes = [
                 constants.VOLUME_MODE_FILESYSTEM,
                 constants.VOLUME_MODE_FILESYSTEM,
@@ -3085,16 +3082,14 @@ def create_multiple_storage_pvcs_pods(
                 constants.ACCESS_MODE_RWX,
                 constants.ACCESS_MODE_RWOP,
             ]
-            total_non_enc_pvcs = 10
             non_enc_combinations = [
                 {"volume_mode": vm, "access_mode": am, "size": 1}
                 for vm, am in itertools.islice(
                     itertools.cycle(zip(non_enc_volume_modes, non_enc_access_modes)),
-                    total_non_enc_pvcs,
+                    total_pvcs,
                 )
             ]
             for idx, pvc_config in enumerate(non_enc_combinations, start=1):
-                logger.info(f"Creating non-encrypted PVC {idx}/{total_non_enc_pvcs}: ")
                 non_enc_pvc_obj = pvc_factory(
                     interface=constants.CEPHBLOCKPOOL,
                     project=proj_obj,
@@ -3107,40 +3102,30 @@ def create_multiple_storage_pvcs_pods(
                 non_enc_pvc_objs.append(non_enc_pvc_obj)
 
                 is_block = pvc_config["volume_mode"] == constants.VOLUME_MODE_BLOCK
-                sa_obj = helpers.create_serviceaccount(
-                    non_enc_pvc_obj.project.namespace
-                )
-                helpers.add_scc_policy(
-                    sa_name=sa_obj.name, namespace=non_enc_pvc_obj.project.namespace
-                )
                 non_enc_pod_obj = deployment_pod_factory(
                     interface=constants.CEPHBLOCKPOOL,
                     pvc=non_enc_pvc_obj,
                     raw_block_pv=is_block,
-                    sa_obj=sa_obj,
                 )
                 non_enc_pod_objs.append(non_enc_pod_obj)
             logger.info(
                 f" All {len(non_enc_pod_objs)} non-encrypted deployments created and running"
             )
 
-        # Step 3: Create CephFS PVCs and pods
+        # Create cephfs PVCs and pods
         if "cephfs" not in skip_storage_types:
-            logger.info("Step 3: Creating CephFS PVCs and deployment pods")
+            logger.info("Creating CephFS PVCs and deployment pods")
 
             cephfs_access_modes = [
                 constants.ACCESS_MODE_RWO,
                 constants.ACCESS_MODE_RWX,
                 constants.ACCESS_MODE_RWOP,
             ]
-            total_cephfs_pvcs = 10
-
             cephfs_sc_obj = helpers.default_storage_class(
                 interface_type=constants.CEPHFILESYSTEM
             )
-            for idx in range(1, total_cephfs_pvcs + 1):
+            for idx in range(1, total_pvcs + 1):
                 access_mode = cephfs_access_modes[(idx - 1) % len(cephfs_access_modes)]
-                logger.info(f"Creating CephFS PVC {idx}/{total_cephfs_pvcs}: ")
                 cephfs_pvc_obj = pvc_factory(
                     interface=constants.CEPHFILESYSTEM,
                     project=proj_obj,
@@ -3152,15 +3137,10 @@ def create_multiple_storage_pvcs_pods(
                 )
                 cephfs_pvc_objs.append(cephfs_pvc_obj)
 
-                sa_obj = helpers.create_serviceaccount(cephfs_pvc_obj.project.namespace)
-                helpers.add_scc_policy(
-                    sa_name=sa_obj.name, namespace=cephfs_pvc_obj.project.namespace
-                )
                 cephfs_pod_obj = deployment_pod_factory(
                     interface=constants.CEPHFILESYSTEM,
                     pvc=cephfs_pvc_obj,
                     raw_block_pv=False,
-                    sa_obj=sa_obj,
                 )
                 cephfs_pod_objs.append(cephfs_pod_obj)
 
@@ -3168,21 +3148,20 @@ def create_multiple_storage_pvcs_pods(
                 f" All {len(cephfs_pod_objs)} CephFS deployments created and running"
             )
 
-        # Step 4: Create NFS PVCs and pods
+        # Create nfs PVCs and pods
         if "nfs" not in skip_storage_types:
-            logger.info("Step 4: Creating NFS in-cluster PVCs and deployment pods")
+            logger.info(" Creating NFS in-cluster PVCs and deployment pods")
 
             nfs_access_modes = [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
-            total_nfs_pvcs = 10
             nfs_sc_name = constants.NFS_STORAGECLASS_NAME
             nfs_pvc_objs, nfs_pod_objs = [], []
 
-            for idx in range(1, total_nfs_pvcs + 1):
+            for idx in range(1, total_pvcs + 1):
                 access_mode = nfs_access_modes[(idx - 1) % len(nfs_access_modes)]
                 nfs_pvc_obj = helpers.create_pvc(
                     sc_name=nfs_sc_name,
                     namespace=proj_obj.namespace,
-                    pvc_name=f"nfs-pvc-{idx}",
+                    pvc_name=f"{pvc_name_prefix}nfs-pvc-{idx}",
                     size="1Gi",
                     do_reload=True,
                     access_mode=access_mode,
@@ -3190,8 +3169,7 @@ def create_multiple_storage_pvcs_pods(
                 )
                 nfs_pvc_objs.append(nfs_pvc_obj)
 
-                # Create deployment for NFS pod
-                deployment_name = f"nfs-test-pod-{idx}"
+                deployment_name = f"{pvc_name_prefix}nfs-test-pod-{idx}"
                 deployment_template = templating.load_yaml(constants.NFS_APP_POD_YAML)
                 deployment_data = copy.deepcopy(deployment_template)
 
@@ -3231,18 +3209,28 @@ def create_multiple_storage_pvcs_pods(
                 f" All {len(nfs_pod_objs)} NFS deployment pods created and running"
             )
 
-        # Return all created resources
+        # Return resources in a nested structure for better organization
         resources = {
-            "pvc_objs": pvc_objs,
-            "pod_objs": pod_objs,
-            "pvc_combinations": pvc_combinations,
-            "non_enc_pvc_objs": non_enc_pvc_objs,
-            "non_enc_pod_objs": non_enc_pod_objs,
-            "non_enc_combinations": non_enc_combinations,
-            "cephfs_pvc_objs": cephfs_pvc_objs,
-            "cephfs_pod_objs": cephfs_pod_objs,
-            "nfs_pvc_objs": nfs_pvc_objs,
-            "nfs_pod_objs": nfs_pod_objs,
+            "encrypted_rbd": {
+                "pvcs": pvc_objs,
+                "pods": pod_objs,
+                "combinations": pvc_combinations,
+            },
+            "non_encrypted_rbd": {
+                "pvcs": non_enc_pvc_objs,
+                "pods": non_enc_pod_objs,
+                "combinations": non_enc_combinations,
+            },
+            "cephfs": {
+                "pvcs": cephfs_pvc_objs,
+                "pods": cephfs_pod_objs,
+            },
+            "nfs": {
+                "pvcs": nfs_pvc_objs,
+                "pods": nfs_pod_objs,
+            },
+            "all_pvcs": pvc_objs + non_enc_pvc_objs + cephfs_pvc_objs + nfs_pvc_objs,
+            "all_pods": pod_objs + non_enc_pod_objs + cephfs_pod_objs + nfs_pod_objs,
         }
 
         return resources
