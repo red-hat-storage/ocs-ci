@@ -220,6 +220,10 @@ class TestNfsEnable(ManageTest):
                 )
                 self.nfs_sc = constants.COPY_NFS_STORAGECLASS_NAME
             yield
+            # Remove NFS SC from distributed storage classes on the provider
+            nfs_utils.remove_nfs_storage_class_from_all_consumers(
+                constants.NFS_STORAGECLASS_NAME
+            )
             # Disable nfs feature
             nfs_utils.disable_nfs_service_from_provider(self.sc, nfs_ganesha_pod)
 
@@ -1651,9 +1655,10 @@ class TestNfsEnable(ManageTest):
         """
         # remove nfs external endpoint details from storagecluster
         nfs_utils.remove_nfs_endpoint_details()
-        time.sleep(40)
 
-        server = nfs_utils.fetch_nfs_server_details_on_client_cluster()
+        server = nfs_utils.fetch_nfs_server_details_on_client_cluster(
+            default_server=True
+        )
         # validate default nfs server details is displayed
         assert (
             server == "ocs-storagecluster-cephnfs-service"

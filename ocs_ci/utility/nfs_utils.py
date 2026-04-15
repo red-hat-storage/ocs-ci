@@ -3,6 +3,7 @@ Module that contains all operations related to nfs feature in a cluster
 
 """
 
+import json
 import logging
 import yaml
 import pytest
@@ -176,7 +177,14 @@ def create_nfs_load_balancer_service(
             """
 
     nfs_service_data = yaml.safe_load(service)
-    helpers.create_resource(**nfs_service_data)
+    svc_ocp = ocp.OCP(
+        kind=constants.SERVICE,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    if svc_ocp.is_exist(resource_name="rook-ceph-nfs-my-nfs-load-balancer"):
+        log.info("NFS LoadBalancer service already exists, skipping creation")
+    else:
+        helpers.create_resource(**nfs_service_data)
 
     log.info("Waiting for NFS LoadBalancer ingress to be assigned...")
     for ingress_add in TimeoutSampler(
@@ -463,6 +471,103 @@ def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
     return check_storage_classes_on_clients(ready_consumer_names)
 
 
+def remove_nfs_storage_class_from_all_consumers(nfs_sc):
+    """
+    Remove the NFS storage class from all ready StorageConsumer resources on
+    the provider. This undoes the distribution done by
+    distribute_nfs_storage_class_to_all_consumers().
+
+    Args:
+        nfs_sc (str): NFS storage class name to remove
+
+    """
+    from ocs_ci.ocs.resources.storageconsumer import get_ready_storage_consumers
+
+    consumers = get_ready_storage_consumers()
+    consumers = [
+        consumer
+        for consumer in consumers
+        if consumer.name != constants.INTERNAL_STORAGE_CONSUMER_NAME
+    ]
+
+    if not consumers:
+        log.warning("No ready storage consumers found")
+        return
+
+    for consumer in consumers:
+        log.info(
+            "Removing NFS storage class '%s' from consumer '%s'",
+            nfs_sc,
+            consumer.name,
+        )
+        consumer.remove_custom_storage_class(nfs_sc)
+
+
+def wait_for_nfs_csi_config_on_client_cluster(timeout=300):
+    """
+    Wait until the NFS CSI configuration is populated in the ``ceph-csi-config``
+    ConfigMap on the client (consumer) cluster.
+
+    After distributing the NFS StorageClass via StorageConsumer.spec.storageClasses,
+    the ``ocs-client-operator`` reconciles the ``ceph-csi-config`` ConfigMap
+    asynchronously. Until the ``nfs`` section for a cluster entry is present,
+    the NFS CSI provisioner cannot create PVCs.
+
+    Args:
+        timeout (int): Maximum seconds to wait (default: 300).
+
+    Raises:
+        TimeoutExpiredError: If the NFS CSI config is not populated within timeout.
+
+    """
+    config.switch_to_consumer()
+    cluster_name = config.ENV_DATA["cluster_name"]
+    log.info(
+        "Waiting for NFS CSI config to be populated in 'ceph-csi-config' "
+        "on client cluster '%s'",
+        cluster_name,
+    )
+
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    def _nfs_csi_config_populated():
+        cm = configmap_obj.get(resource_name="ceph-csi-config", dont_raise=True)
+        if not cm:
+            return False
+        config_json = cm.get("data", {}).get("config.json", "")
+        if not config_json:
+            return False
+        try:
+            entries = json.loads(config_json)
+        except (ValueError, TypeError):
+            return False
+        for entry in entries:
+            # Check if 'nfs' key exists (even if empty dict)
+            # NFS section can be empty {} and still work
+            if "nfs" in entry:
+                nfs_section = entry.get("nfs", {})
+                log.info(
+                    "NFS CSI config key found on client cluster '%s': %s",
+                    cluster_name,
+                    nfs_section if nfs_section else "{} (empty, but present)",
+                )
+                return True
+        return False
+
+    for populated in TimeoutSampler(
+        timeout=timeout, sleep=15, func=_nfs_csi_config_populated
+    ):
+        if populated:
+            break
+        log.info(
+            "NFS CSI config not yet populated on client cluster '%s', retrying...",
+            cluster_name,
+        )
+
+
 def nfs_access_for_clients(nfs_sc):
     """
     This method is for client clusters to be able to access nfs
@@ -506,6 +611,10 @@ def nfs_access_for_clients(nfs_sc):
 
     # Distribute the scs to consumers
     distribute_nfs_storage_class_to_all_consumers(nfs_sc)
+
+    # Wait for ocs-client-operator to populate NFS section in ceph-csi-configs
+    # on the client cluster before attempting PVC creation
+    wait_for_nfs_csi_config_on_client_cluster()
 
     # verify nfs server details shared
     server = fetch_nfs_server_details_on_client_cluster()
@@ -671,13 +780,27 @@ def remove_nfs_endpoint_details():
     config.switch_to_consumer()
 
 
-def fetch_nfs_server_details_on_client_cluster():
+def fetch_nfs_server_details_on_client_cluster(default_server=False):
     """
     Fetch the NFS server endpoint configured on the client (consumer) cluster.
+
+    The NFS StorageClass is propagated asynchronously after the StorageConsumer
+    spec is patched on the provider. This function retries until the StorageClass
+    appears on the client cluster and its server parameter is populated.
+
+    Args:
+        default_server (bool): If True, wait until the server parameter equals
+            the default NFS service name ("ocs-storagecluster-cephnfs-service").
+            Use this when the external endpoint has been removed and the
+            operator is expected to revert to the default. Default is False.
 
     Returns:
         str: NFS server endpoint (IP address or hostname) configured
              in the NFS StorageClass.
+
+    Raises:
+        TimeoutExpiredError: If the NFS StorageClass does not appear or the
+            expected server value is not reached within the timeout.
 
     """
     # switch to consumer
@@ -687,4 +810,26 @@ def fetch_nfs_server_details_on_client_cluster():
         kind=constants.STORAGECLASS, resource_name=constants.NFS_STORAGECLASS_NAME
     )
 
-    return nfs_sc.data["parameters"]["server"]
+    log.info(
+        "Waiting for NFS StorageClass '%s' to appear on client cluster '%s'",
+        constants.NFS_STORAGECLASS_NAME,
+        config.ENV_DATA["cluster_name"],
+    )
+
+    def _get_nfs_server():
+        sc_data = nfs_sc.get(dont_raise=True)
+        if sc_data:
+            return sc_data.get("parameters", {}).get("server")
+        return None
+
+    sample = TimeoutSampler(timeout=120, sleep=10, func=_get_nfs_server)
+    for server in sample:
+        if server:
+            if default_server and server != "ocs-storagecluster-cephnfs-service":
+                continue
+            log.info(
+                "NFS StorageClass '%s' found on client cluster with server: %s",
+                constants.NFS_STORAGECLASS_NAME,
+                server,
+            )
+            return server
