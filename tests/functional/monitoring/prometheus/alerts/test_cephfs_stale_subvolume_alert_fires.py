@@ -15,6 +15,7 @@ from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.ceph_helpers import cleanup_stale_cephfs_subvolumes
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO, get_file_size
+from ocs_ci.helpers.ceph_helpers import restart_metrics_exporter
 
 log = logging.getLogger(__name__)
 
@@ -98,30 +99,6 @@ def wait_and_validate_stale_subvolume_alert(api, timeout=600):
 
     log.info("CephFSStaleSubvolume alert validated successfully")
     return alerts
-
-
-def restart_metrics_exporter():
-    """
-    Restart the ocs-metrics-exporter pod and wait for it to recover.
-    """
-    pod_ocp = ocp.OCP(
-        kind=constants.POD,
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-    )
-    exporter_pods = pod_ocp.get(selector=constants.OCS_METRICS_EXPORTER)["items"]
-
-    assert exporter_pods, "No ocs-metrics-exporter pod found"
-
-    exporter_pod = OCS(**exporter_pods[0])
-    log.info(f"Restarting metrics exporter pod {exporter_pod.name}")
-    exporter_pod.delete()
-
-    assert pod_ocp.wait_for_resource(
-        condition="Running",
-        selector=constants.OCS_METRICS_EXPORTER,
-        resource_count=1,
-        timeout=600,
-    ), "ocs-metrics-exporter did not recover in time"
 
 
 def restart_mds():

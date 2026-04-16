@@ -5,6 +5,8 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.pod import restart_pods_having_label
+from ocs_ci import config
 
 logger = logging.getLogger(__name__)
 
@@ -278,3 +280,15 @@ def cleanup_stale_cephfs_subvolumes(odf_cli_runner, log):
 
     except Exception as e:
         log.error(f"Failed to cleanup stale subvolumes: {e}")
+
+
+def restart_metrics_exporter():
+    """
+    Restart the ocs-metrics-exporter pod and wait for it to recover.
+    """
+    logger.info("Restarting metrics exporter pod")
+
+    restart_pods_having_label(
+        label=constants.OCS_METRICS_EXPORTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
