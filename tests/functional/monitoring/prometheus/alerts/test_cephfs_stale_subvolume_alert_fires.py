@@ -13,13 +13,14 @@ from ocs_ci.utility import prometheus
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.helpers import helpers
 from ocs_ci.helpers.ceph_helpers import cleanup_stale_cephfs_subvolumes
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO, get_file_size
 
 log = logging.getLogger(__name__)
 
+
 # Helper functions
+
 
 def create_stale_cephfs_subvolumes(
     storageclass_factory,
@@ -107,9 +108,7 @@ def restart_metrics_exporter():
         kind=constants.POD,
         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
     )
-    exporter_pods = pod_ocp.get(
-        selector=constants.OCS_METRICS_EXPORTER
-    )["items"]
+    exporter_pods = pod_ocp.get(selector=constants.OCS_METRICS_EXPORTER)["items"]
 
     assert exporter_pods, "No ocs-metrics-exporter pod found"
 
@@ -186,14 +185,12 @@ class TestCephFSStaleSubvolumeAlert:
         1. Create a CephFSStorageClass  with reclaimPolicy: Retain
         2. Create a PVC with the CephFSStorageClass
         3. Verify the PVC and PV are created and store the names of the PVC and PV
-        4. Delete the PVC 
+        4. Delete the PVC
         5. Delete the PV
         6. Alert should fire
         7. Verify the alert details
         """
-        create_stale_cephfs_subvolumes(
-            storageclass_factory, pvc_factory, count=1
-        )
+        create_stale_cephfs_subvolumes(storageclass_factory, pvc_factory, count=1)
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api, timeout=900)
 
@@ -208,9 +205,7 @@ class TestCephFSStaleSubvolumeAlert:
         Create multiple CephFS PVCs with reclaimPolicy: Retain, delete PVCs and PVs
         to produce multiple stale subvolumes, then verify CephFSStaleSubvolume alert fires.
         """
-        create_stale_cephfs_subvolumes(
-            storageclass_factory, pvc_factory, count=2
-        )
+        create_stale_cephfs_subvolumes(storageclass_factory, pvc_factory, count=2)
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api)
 
@@ -231,9 +226,7 @@ class TestCephFSStaleSubvolumeAlert:
         3. Respin `ocs-metrics-exporter` pod and wait for it to return.
         4. Verify the alert is still present after exporter restart.
         """
-        create_stale_cephfs_subvolumes(
-            storageclass_factory, pvc_factory, count=2
-        )
+        create_stale_cephfs_subvolumes(storageclass_factory, pvc_factory, count=2)
 
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api)
@@ -257,9 +250,7 @@ class TestCephFSStaleSubvolumeAlert:
         Validate that the CephFSStaleSubvolume alert remains FIRING
         during and after a CephFS MDS pod restart.
         """
-        create_stale_cephfs_subvolumes(
-            storageclass_factory, pvc_factory, count=1
-        )
+        create_stale_cephfs_subvolumes(storageclass_factory, pvc_factory, count=1)
 
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api)
@@ -279,9 +270,7 @@ class TestCephFSStaleSubvolumeAlert:
         Verify CephFSStaleSubvolume alert remains FIRING
         during MDS scale-down to 1 and scale-up back.
         """
-        create_stale_cephfs_subvolumes(
-            storageclass_factory, pvc_factory, count=1
-        )
+        create_stale_cephfs_subvolumes(storageclass_factory, pvc_factory, count=1)
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api, timeout=900)
 
@@ -334,7 +323,7 @@ class TestCephFSStaleSubvolumeAlert:
                     format_type="merge",
                 )
                 time.sleep(120)
-    
+
     @pytest.mark.polarion_id("OCS-7480")
     def test_stale_subvolume_alert_behavior_under_high_cluster_utilization(
         self,
@@ -356,9 +345,7 @@ class TestCephFSStaleSubvolumeAlert:
         benchmark_obj = None
 
         # Step 1: Create stale CephFS subvolumes (reuse helper)
-        create_stale_cephfs_subvolumes(
-            storageclass_factory, pvc_factory, count=3
-        )
+        create_stale_cephfs_subvolumes(storageclass_factory, pvc_factory, count=3)
 
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api, timeout=900)
@@ -373,8 +360,12 @@ class TestCephFSStaleSubvolumeAlert:
             benchmark_obj.run_fio_benchmark_operator(is_completed=False)
             time.sleep(300)
 
-            log.info("Benchmark-operator workload started; cluster under sustained load")
-            log.info("Cluster utilization increased; validating stale alert stability under load")
+            log.info(
+                "Benchmark-operator workload started; cluster under sustained load"
+            )
+            log.info(
+                "Cluster utilization increased; validating stale alert stability under load"
+            )
 
             # Step 3: Validate alert remains FIRING under load
             wait_and_validate_stale_subvolume_alert(api)
@@ -422,13 +413,9 @@ class TestCephFSStaleSubvolumeAlert:
         - No false alert disappearance
         """
 
-        alert_name = constants.ALERT_CEPHFS_STALE_SUBVOLUME
-
         # Step 1: Create stale CephFS subvolumes
         log.info("Creating stale CephFS subvolumes")
-        create_stale_cephfs_subvolumes(
-            storageclass_factory, pvc_factory, count=2
-        )
+        create_stale_cephfs_subvolumes(storageclass_factory, pvc_factory, count=2)
 
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api, timeout=900)
