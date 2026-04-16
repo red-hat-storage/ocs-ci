@@ -3,9 +3,11 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     orange_squad,
+    tier1,
     fdf_required,
     runs_on_provider,
     skipif_scale_not_connected,
+    skipif_ocs_version
 )
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants
@@ -16,8 +18,10 @@ log = logging.getLogger(__name__)
 
 
 @orange_squad
+@tier1
 @fdf_required
 @runs_on_provider
+@skipif_ocs_version("<4.21")
 @skipif_scale_not_connected
 class TestMultiStorageCoexistence(ManageTest):
     """
