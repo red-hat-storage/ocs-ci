@@ -6,7 +6,7 @@ from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import restart_pods_having_label
-from ocs_ci import config
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
