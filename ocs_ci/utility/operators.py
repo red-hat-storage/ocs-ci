@@ -614,7 +614,9 @@ class OADPOperator(Operator):
         self.unreleased_images = [
             "registry.redhat.io/oadp/oadp-cli-binaries-rhel9",
             "registry.redhat.io/oadp/oadp-hypershift-velero-plugin-rhel9",
-            "registry.redhat.io/oadp/oadp-kubevirt-datamover-rhel9",
+            "registry.redhat.io/oadp/oadp-kubevirt-datamover-controller-rhel9",
+            "registry.redhat.io/oadp/oadp-kubevirt-datamover-plugin-rhel9",
+            "registry.redhat.io/oadp/oadp-kubevirt-velero-plugin-rhel9",
             "registry.redhat.io/oadp/oadp-mustgather-rhel9",
             "registry.redhat.io/oadp/oadp-non-admin-rhel9",
             "registry.redhat.io/oadp/oadp-operator-bundle",
