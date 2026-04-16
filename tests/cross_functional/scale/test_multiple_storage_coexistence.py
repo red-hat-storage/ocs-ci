@@ -19,7 +19,6 @@ log = logging.getLogger(__name__)
 @fdf_required
 @runs_on_provider
 @skipif_scale_not_connected
-@pytest.mark.ignore_leftovers
 class TestMultiStorageCoexistence(ManageTest):
     """
     Test suite to verify the coexistence of multiple storage providers
@@ -62,7 +61,7 @@ class TestMultiStorageCoexistence(ManageTest):
             5. Deploy a Pod mounting all three volumes.
             6. Execute write and read operations on all mount points.
         """
-        # 1. Elena's feedback: Check if Scale is connected first
+        # Check if Scale is connected first
         log.info("Verifying IBM Spectrum Scale RemoteCluster status...")
         remote_cluster = OCP(
             kind=constants.REMOTE_CLUSTER,
@@ -83,7 +82,7 @@ class TestMultiStorageCoexistence(ManageTest):
         except Exception as e:
             pytest.skip(f"Could not verify Scale status: {str(e)}. Skipping test.")
 
-        # 2. Elena's feedback: Get filesystem name dynamically
+        # Get filesystem name dynamically
         log.info("Fetching Scale Filesystem name dynamically...")
         fs_ocp = OCP(
             kind=constants.SCALE_FILESYSTEM,
