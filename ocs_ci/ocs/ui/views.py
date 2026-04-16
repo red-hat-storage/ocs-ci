@@ -3191,6 +3191,127 @@ external_systems = {
         By.CSS_SELECTOR,
     ),
 }
+
+# Virtual Machine Snapshot locators
+virtualmachine_snapshot = {
+    "virtualization_menu": (
+        "a[data-test-id='virtualization-nav-item']",
+        By.CSS_SELECTOR,
+    ),
+    "virtualmachines_tab": (
+        "a[data-test-id='horizontal-link-VirtualMachines']",
+        By.CSS_SELECTOR,
+    ),
+    "vm_row": (
+        "tr[data-test-id='virtual-machine-row']",
+        By.CSS_SELECTOR,
+    ),
+    "vm_name_link": (
+        "a[data-test-id='vm-name-link']",
+        By.CSS_SELECTOR,
+    ),
+    "snapshots_tab": (
+        "button[data-test-id='horizontal-link-Snapshots']",
+        By.CSS_SELECTOR,
+    ),
+    "take_snapshot_button": (
+        "button[data-test-id='take-snapshot']",
+        By.CSS_SELECTOR,
+    ),
+    "snapshot_name_input": (
+        "input[data-test-id='snapshot-name-input']",
+        By.CSS_SELECTOR,
+    ),
+    "expand_disks_section": (
+        "button[data-test-id='expand-disks-section']",
+        By.CSS_SELECTOR,
+    ),
+    "disks_list": (
+        "div[data-test-id='snapshot-disks-list']",
+        By.CSS_SELECTOR,
+    ),
+    "disk_warning_checkbox": (
+        "input[data-test-id='disk-warning-checkbox']",
+        By.CSS_SELECTOR,
+    ),
+    "save_snapshot_button": (
+        "button[data-test-id='confirm-action']",
+        By.CSS_SELECTOR,
+    ),
+    "snapshot_row": (
+        "tr[data-test-id='snapshot-row']",
+        By.CSS_SELECTOR,
+    ),
+    "snapshot_status": (
+        "span[data-test-id='snapshot-status']",
+        By.CSS_SELECTOR,
+    ),
+    "snapshot_kebab_menu": (
+        "button[data-test-id='kebab-button']",
+        By.CSS_SELECTOR,
+    ),
+    "restore_vm_option": (
+        "button[data-test-id='restore-vm-from-snapshot']",
+        By.CSS_SELECTOR,
+    ),
+    "create_vm_option": (
+        "button[data-test-id='create-vm-from-snapshot']",
+        By.CSS_SELECTOR,
+    ),
+    "restore_confirm_button": (
+        "button[data-test-id='confirm-restore']",
+        By.CSS_SELECTOR,
+    ),
+    "new_vm_name_input": (
+        "input[data-test-id='new-vm-name-input']",
+        By.CSS_SELECTOR,
+    ),
+    "create_vm_button": (
+        "button[data-test-id='create-vm-button']",
+        By.CSS_SELECTOR,
+    ),
+    "vm_status": (
+        "span[data-test-id='vm-status']",
+        By.CSS_SELECTOR,
+    ),
+    "vm_actions_menu": (
+        "button[data-test-id='actions-dropdown']",
+        By.CSS_SELECTOR,
+    ),
+    "stop_vm_option": (
+        "button[data-test-id='stop-vm']",
+        By.CSS_SELECTOR,
+    ),
+    "start_vm_option": (
+        "button[data-test-id='start-vm']",
+        By.CSS_SELECTOR,
+    ),
+    "vm_details_tab": (
+        "button[data-test-id='horizontal-link-Details']",
+        By.CSS_SELECTOR,
+    ),
+    "snapshot_details_page": (
+        "div[data-test-id='snapshot-details']",
+        By.CSS_SELECTOR,
+    ),
+    "snapshot_name_text": (
+        "span[data-test-id='snapshot-name']",
+        By.CSS_SELECTOR,
+    ),
+    "snapshot_ready_status": (
+        "span[data-test-id='status-ready']",
+        By.CSS_SELECTOR,
+    ),
+    "delete_snapshot_option": (
+        "button[data-test-id='delete-snapshot']",
+        By.CSS_SELECTOR,
+    ),
+    "confirm_delete_button": (
+        "button[data-test-id='confirm-delete']",
+        By.CSS_SELECTOR,
+    ),
+}
+
 locators = {
     "4.22": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -3260,6 +3381,7 @@ locators = {
         "external_systems": external_systems,
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
+        "virtualmachine_snapshot": virtualmachine_snapshot,
     },
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
