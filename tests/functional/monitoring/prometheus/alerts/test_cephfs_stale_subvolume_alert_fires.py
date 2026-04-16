@@ -16,6 +16,8 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.ceph_helpers import cleanup_stale_cephfs_subvolumes
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO, get_file_size
 from ocs_ci.helpers.ceph_helpers import restart_metrics_exporter
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)
 
@@ -127,6 +129,31 @@ def restart_mds():
     ), "CephFS MDS pods did not recover"
 
 
+def wait_for_mds_active_count(cephfs_obj, expected_count, timeout=300):
+    """
+    Wait until CephFilesystem MDS activeCount reaches expected value.
+
+    Args:
+        cephfs_obj: OCP object for CephFilesystem
+        expected_count (int): Expected active MDS count
+        timeout (int): Maximum wait time in seconds
+    """
+    for count in TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=lambda: cephfs_obj.get()["items"][0]["spec"]["metadataServer"][
+            "activeCount"
+        ],
+    ):
+        if count == expected_count:
+            log.info(f"MDS activeCount reached {expected_count}")
+            return
+
+    raise TimeoutExpiredError(
+        f"MDS activeCount did not reach expected value {expected_count}"
+    )
+
+
 # Test class
 # Leftovers are expected as stale subvolumes are intentionally created to trigger the alert
 @ignore_leftovers
@@ -211,10 +238,7 @@ class TestCephFSStaleSubvolumeAlert:
         log.info("Restarting metrics exporter")
         restart_metrics_exporter()
 
-        # exporter uses 10 min PV reflector resync
-        time.sleep(660)
-
-        wait_and_validate_stale_subvolume_alert(api)
+        wait_and_validate_stale_subvolume_alert(api, timeout=900)
 
     @pytest.mark.polarion_id("OCS-7473")
     def test_stale_subvolume_alert_persists_across_mds_restart(
@@ -231,9 +255,7 @@ class TestCephFSStaleSubvolumeAlert:
 
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api)
-
         restart_mds()
-
         wait_and_validate_stale_subvolume_alert(api)
 
     @pytest.mark.polarion_id("OCS-7479")
@@ -269,7 +291,7 @@ class TestCephFSStaleSubvolumeAlert:
                 params='{"spec":{"metadataServer":{"activeCount":2}}}',
                 format_type="merge",
             )
-            time.sleep(180)
+            wait_for_mds_active_count(cephfs_obj, 2)
             original_count = 2
 
         try:
@@ -279,7 +301,7 @@ class TestCephFSStaleSubvolumeAlert:
                 params='{"spec":{"metadataServer":{"activeCount":1}}}',
                 format_type="merge",
             )
-            time.sleep(120)
+            wait_for_mds_active_count(cephfs_obj, 1)
             wait_and_validate_stale_subvolume_alert(api)
 
             log.info(f"Scaling CephFS MDS back to {original_count}")
@@ -288,7 +310,7 @@ class TestCephFSStaleSubvolumeAlert:
                 params=f'{{"spec":{{"metadataServer":{{"activeCount":{original_count}}}}}}}',
                 format_type="merge",
             )
-            time.sleep(120)
+            wait_for_mds_active_count(cephfs_obj, original_count)
             wait_and_validate_stale_subvolume_alert(api)
 
         finally:
@@ -299,7 +321,7 @@ class TestCephFSStaleSubvolumeAlert:
                     params=f'{{"spec":{{"metadataServer":{{"activeCount":{initial_count}}}}}}}',
                     format_type="merge",
                 )
-                time.sleep(120)
+                wait_for_mds_active_count(cephfs_obj, initial_count)
 
     @pytest.mark.polarion_id("OCS-7480")
     def test_stale_subvolume_alert_behavior_under_high_cluster_utilization(
@@ -335,7 +357,6 @@ class TestCephFSStaleSubvolumeAlert:
             benchmark_obj = BenchmarkOperatorFIO()
             benchmark_obj.setup_benchmark_fio(total_size=size)
             benchmark_obj.run_fio_benchmark_operator(is_completed=False)
-            time.sleep(300)
 
             log.info(
                 "Benchmark-operator workload started; cluster under sustained load"
