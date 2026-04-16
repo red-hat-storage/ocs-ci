@@ -303,7 +303,17 @@ class OSDKeyrotation(KeyRotation):
         """
         Listing deviceset for OSD.
         """
-        return [pvc.name for pvc in get_deviceset_pvcs()]
+        self.deviceset = [pvc.name for pvc in get_deviceset_pvcs()]
+        return self.deviceset
+
+    def refresh_deviceset(self):
+        """
+        Refresh and return the current OSD deviceset list.
+
+        This keeps key rotation verification aligned with the current OSD PVC
+        inventory if OSDs were recreated, replaced, or resized during the test.
+        """
+        return self._get_deviceset()
 
     def enable_osd_keyrotatio(self):
         """Enable OSD keyrotation in storagecluster Spec.
@@ -926,7 +936,7 @@ def verify_new_key_after_rotation(tries, delays):
 
     log.info("Record existing OSD keys before rotation is happened.")
     osd_keys_before_rotation = {}
-    for device in osd_keyrotation.deviceset:
+    for device in osd_keyrotation.refresh_deviceset():
         osd_keys_before_rotation[device] = osd_keyrotation.get_osd_dm_crypt(device)
 
     log.info("Record Noobaa volume and backend keys before rotation.")
