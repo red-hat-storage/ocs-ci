@@ -1,7 +1,12 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import orange_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    orange_squad,
+    fdf_required,
+    runs_on_provider,
+    skipif_scale_not_connected,
+)
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
@@ -11,6 +16,9 @@ log = logging.getLogger(__name__)
 
 
 @orange_squad
+@fdf_required
+@runs_on_provider
+@skipif_scale_not_connected
 @pytest.mark.ignore_leftovers
 class TestMultiStorageCoexistence(ManageTest):
     """

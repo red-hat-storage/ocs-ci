@@ -7454,3 +7454,23 @@ def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) 
         )
 
     log.info(f"All OSDs {osd_ids} are now marked as 'down'")
+
+
+def is_scale_connected():
+    """
+    Check if IBM Spectrum Scale RemoteCluster is present and Ready.
+    """
+    rc_ocp = OCP(
+        kind=constants.REMOTE_CLUSTER, namespace=constants.IBM_STORAGE_SCALE_NAMESPACE
+    )
+    try:
+        rc_list = rc_ocp.get().get("items", [])
+        if not rc_list:
+            return False
+        # Return True only if the 'Ready' condition is 'True'
+        return any(
+            c.get("type") == "Ready" and c.get("status") == "True"
+            for c in rc_list[0].get("status", {}).get("conditions", [])
+        )
+    except Exception:
+        return False
