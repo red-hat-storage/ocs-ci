@@ -607,7 +607,7 @@ def install_logging(skip_resource_exists=False):
 
     # Creating secret
     sample = TimeoutSampler(
-        timeout=180,
+        timeout=500,
         sleep=20,
         func=run_cmd_verify_cli_output,
         cmd=(

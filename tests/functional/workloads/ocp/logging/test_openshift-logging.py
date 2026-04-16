@@ -98,7 +98,10 @@ class Testopenshiftloggingonocs(E2ETest):
         exec_cmd(sa_cmd)
 
         # grants permission to service account
-        permission_cmd = f"oc adm policy add-cluster-role-to-user cluster-admin -z {sa_name} -n {project}"
+        permission_cmd = (
+            "oc adm policy add-cluster-role-to-user cluster-admin "
+            f"system:serviceaccount:{project}:{sa_name}"
+        )
         exec_cmd(permission_cmd)
 
         # generate a valid JWT token from the ServiceAccount
@@ -178,7 +181,7 @@ class Testopenshiftloggingonocs(E2ETest):
         pod_obj, pvc_obj = create_pvc_and_deployment_pod
 
         logger.info("Waiting for logs to be collected...")
-        time.sleep(60)  # Wait 60 seconds for log collection
+        time.sleep(300)  # Wait 60 seconds for log collection
 
         # Validating if the project exists in lokistack
         project = pvc_obj.project.namespace
