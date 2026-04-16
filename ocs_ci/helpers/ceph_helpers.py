@@ -7,7 +7,6 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
-import time
 
 
 def wait_for_percent_used_capacity_reached(
@@ -48,7 +47,6 @@ def wait_for_percent_used_capacity_reached(
             f"Failed to reach the expected percent used capacity {expected_used_capacity}% "
             f"in the given timeout {timeout}"
         ) from ex
-<<<<<<< HEAD
 
 
 def wait_for_ceph_used_capacity_reached(expected_used_capacity, timeout=1800, sleep=20):
@@ -210,8 +208,8 @@ def wait_for_mons_in_quorum(expected_mon_count, timeout=300, sleep=20) -> None:
             f"Failed to reach the expected number of monitors {expected_mon_count} "
             f"in quorum within the given timeout {timeout}."
         ) from ex
-=======
-    
+
+
 def cleanup_stale_cephfs_subvolumes(odf_cli_runner, log):
     """
     Runbook-aligned mitigation to clean up stale CephFS subvolumes using ODF CLI.
@@ -274,14 +272,9 @@ def cleanup_stale_cephfs_subvolumes(odf_cli_runner, log):
         log.info(f"Post-cleanup stale list: {remaining}")
 
         if remaining and "stale" in remaining.lower():
-            log.warning(
-                f"Stale subvolumes still present after cleanup: {remaining}"
-            )
+            log.warning(f"Stale subvolumes still present after cleanup: {remaining}")
         else:
             log.info("All stale subvolumes successfully cleaned up")
 
     except Exception as e:
         log.error(f"Failed to cleanup stale subvolumes: {e}")
-
-
->>>>>>> 413e3bc66 (critical and high severity tests)
