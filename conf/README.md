@@ -191,6 +191,10 @@ version.
 * `partitioned_disk_primary_affinity` - Configure primaryAffinity for OSDs on partitioned disks, https://access.redhat.com/solutions/5807201 (default: "0.0")
 * `vsphere_vm_start_timeout` - Number of seconds to wait for vsphere vms to start up (default: 240)
 * `deploy_multiple_device_classes` - Deploy a second storageDeviceSet with a separate device class on LSO-backed vSphere clusters. When enabled, additional disks are attached to each worker node and a second device class (e.g. `localblock-1`) is added to the StorageCluster (Default: false)
+* `ec_default_pools` - Deploy ODF with Erasure Coding as the default pool type instead of replication. When true, the StorageCluster CR is patched with EC spec for block, file, and object pools. No user-facing replicated pools are created (Default: false)
+* `ec_data_chunks` - The k value for erasure coding — number of data chunks. Data is split into this many pieces. Requires `ec_default_pools: true` (Default: 2)
+* `ec_coding_chunks` - The m value for erasure coding — number of parity (coding) chunks. Determines how many simultaneous host failures the pool can tolerate. Requires `ec_default_pools: true` (Default: 1)
+* `ec_failure_domain` - CRUSH failure domain for EC pools. Each chunk is placed on a different unit of this domain. Use `host` for vSphere/bare metal. Requires k+m failure domain units. (Default: "host")
 
 #### REPORTING
 

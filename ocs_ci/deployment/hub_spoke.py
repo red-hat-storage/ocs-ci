@@ -50,6 +50,7 @@ from ocs_ci.ocs.rados_utils import (
     fetch_pool_names,
     fetch_rados_namespaces,
     fetch_filesystem_names,
+    get_ec_pool_names,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -636,6 +637,8 @@ def check_ceph_resources(cluster_names):
         f"from all consumers: {consumer_names}"
     )
     pool_names = fetch_pool_names()
+    ec_pool_names = set(get_ec_pool_names())
+    pool_names = [p for p in pool_names if p not in ec_pool_names]
     rados_namespaces = fetch_rados_namespaces()
     svg_names = get_cephfs_subvolumegroup_names()
     filesystems = fetch_filesystem_names()

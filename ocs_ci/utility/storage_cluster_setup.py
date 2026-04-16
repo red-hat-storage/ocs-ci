@@ -437,6 +437,56 @@ class StorageClusterSetup(object):
         # Enable data replication separation
         cluster_data = add_data_replication_separation_to_cluster_data(cluster_data)
 
+        # Erasure Coding: configure EC as default pool type
+        if config.DEPLOYMENT.get("ec_default_pools"):
+            k = config.DEPLOYMENT.get("ec_data_chunks", 2)
+            m = config.DEPLOYMENT.get("ec_coding_chunks", 1)
+            fd = config.DEPLOYMENT.get("ec_failure_domain", "host")
+            logger.info(
+                f"Configuring EC default pools: k={k}, m={m}, " f"failureDomain={fd}"
+            )
+
+            # Re-capture managed_resources from the current cluster_data — the two
+            # calls above (add_in_transit_encryption_to_cluster_data,
+            # add_data_replication_separation_to_cluster_data) may have returned a
+            # new dict, making the managed_resources reference captured at line 381
+            # point to the old one.
+            ec_managed_resources = cluster_data["spec"].setdefault(
+                "managedResources", {}
+            )
+
+            ec_managed_resources.setdefault("cephBlockPools", {}).update(
+                {
+                    "poolSpec": {
+                        "failureDomain": fd,
+                        "erasureCoded": {"dataChunks": k, "codingChunks": m},
+                    },
+                    "erasureCodedMetadataPool": "replicated-metadata-pool",
+                }
+            )
+
+            ec_fs_pool_name = "fserasurecoded"
+            ec_managed_resources.setdefault("cephFilesystems", {}).update(
+                {
+                    "additionalDataPools": [
+                        {
+                            "name": ec_fs_pool_name,
+                            "erasureCoded": {"dataChunks": k, "codingChunks": m},
+                        }
+                    ],
+                    "defaultStorageClassDataPoolName": ec_fs_pool_name,
+                }
+            )
+
+            ec_managed_resources.setdefault("cephObjectStores", {}).update(
+                {
+                    "dataPoolSpec": {
+                        "failureDomain": fd,
+                        "erasureCoded": {"dataChunks": k, "codingChunks": m},
+                    },
+                }
+            )
+
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
             storageclassnames = config.ENV_DATA.get("storageclassnames")

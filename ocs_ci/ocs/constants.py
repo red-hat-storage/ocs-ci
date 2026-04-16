@@ -891,6 +891,8 @@ MCG_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml")
 RGW_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim-RGW.yaml")
 
 CEPHOBJECTSTORE_USER_YAML = os.path.join(TEMPLATE_RGW_DIR, "cephobjectstoreuser.yaml")
+EC_CEPHOBJECTSTORE_YAML = os.path.join(TEMPLATE_RGW_DIR, "ec_cephobjectstore.yaml")
+EC_STORAGECLASS_RGW_YAML = os.path.join(TEMPLATE_RGW_DIR, "ec_storageclass_rgw.yaml")
 
 MCG_AWS_CREDS_YAML = os.path.join(TEMPLATE_MCG_DIR, "AwsCreds.yaml")
 
@@ -3842,6 +3844,8 @@ KEDA_SCALED_OBJECT_YAML = os.path.join(TEMPLATE_DIR, "keda", "scaled_object.yaml
 THANOS_QUERIER_INTERNAL_ADDRESS = "https://thanos-querier.openshift-monitoring.svc:9091"
 CLUSTER_MONITORING_VIEW_ROLE = "cluster-monitoring-view"
 CEPHOBJECTSTORE_NAME = f"{DEFAULT_STORAGE_CLUSTER}-{CEPHOBJECTSTORE}"
+CEPHOBJECTSTORE_NAME_EC = f"{DEFAULT_STORAGE_CLUSTER}-{CEPHOBJECTSTORE}-ec"
+DEFAULT_STORAGECLASS_RGW_EC = f"{DEFAULT_CLUSTERNAME}-ceph-rgw-ec"
 ENABLE_RGW_HPA_ANNOTATION_KEY = "ocs.openshift.io/enable-rgw-autoscale"
 
 # Monitoring status
