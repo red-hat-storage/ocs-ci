@@ -34,6 +34,15 @@ class LLMClient(ABC):
         self.total_requests = 0
         self.last_request_cost_usd = 0.0
 
+    def _update_session_cost(self, cost_usd):
+        """Accumulates this request's cost into session-level totals in config."""
+        ocsci_config.UI_SELENIUM["llm_session_cost"] = (
+            ocsci_config.UI_SELENIUM.get("llm_session_cost", 0.0) + cost_usd
+        )
+        ocsci_config.UI_SELENIUM["llm_session_requests"] = (
+            ocsci_config.UI_SELENIUM.get("llm_session_requests", 0) + 1
+        )
+
     @abstractmethod
     def is_available(self):
         """
@@ -524,6 +533,7 @@ class ClaudeClient(LLMClient):
         self.last_request_cost_usd = cost_usd
         self.total_cost_usd += cost_usd
         self.total_requests += 1
+        self._update_session_cost(cost_usd)
         logger.info(
             f"Claude CLI completed: model={self.model_name}, "
             f"cost=${cost_usd:.4f}, turns={num_turns}, duration={duration:.1f}s, "
