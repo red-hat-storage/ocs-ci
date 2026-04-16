@@ -163,7 +163,7 @@ class IBMCloudIPI(CloudDeploymentBase):
 
         # Increase timeout for IBM Cloud IPI deployments a it takes more time to complete,
         # so we need more buffer than the default 80 minutes (4800 seconds)
-        current_timeout = config.DEPLOYMENT.get("openshift_install_timeout", 4800)
+        current_timeout = config.DEPLOYMENT.get("openshift_install_timeout", 7200)
         if current_timeout < 5400:
             logger.info(
                 f"Increasing openshift_install_timeout from {current_timeout} to 5400 seconds "
