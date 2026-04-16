@@ -201,7 +201,7 @@ CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 CEPHOBJECTSTORE = "CephObjectStore"
 LVM_SC = "lvms-vg1"
 NOOBAA_SC = "openshift-storage.noobaa.io"
-ROSA_SC = "odf-storage.noobaa.io"
+ROSA_NOOBAA_SC = "odf-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
 STORAGECLASS = "StorageClass"
@@ -3227,8 +3227,6 @@ MCE_OPERATOR_GROUP_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_operatorgroup.yaml"
 )
 MULTICLUSTER_ENGINE_CRD = "multiclusterengines.multicluster.openshift.io"
-LOKISTACK_CRD = "lokistacks.loki.grafana.com"
-CLUSTERLOG_FORWADER_CRD = "clusterlogforwarders.observability.openshift.io"
 HYPERSHIFT_NAMESPACE = "hypershift"
 SUPPORTED_VERSIONS_CONFIGMAP = "supported-versions"
 IMAGE_OVERRIDE_JSON = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "image-override.json")

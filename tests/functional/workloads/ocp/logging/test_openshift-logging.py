@@ -53,7 +53,6 @@ class Testopenshiftloggingonocs(E2ETest):
 
         request.addfinalizer(finalizer)
 
-        # Create pvc of 10GB
         pvc_obj = pvc_factory(size=10)
 
         # Create service_account to get privilege for deployment pods
