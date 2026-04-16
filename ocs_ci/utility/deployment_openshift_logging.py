@@ -583,8 +583,8 @@ def install_logging(skip_resource_exists=False):
     ):
         if csv:
             break
-        else:
-            raise Exception("Loki Operator CSV not found after timeout")
+    if not csv:
+        raise Exception("Loki Operator CSV not found after timeout")
 
     csv_name = csv[0]["metadata"]["name"]
     csv_obj = CSV(
@@ -669,8 +669,8 @@ def install_logging(skip_resource_exists=False):
     ):
         if csv:
             break
-        else:
-            raise Exception("ClusterLogging Operator CSV not found after timeout")
+    if not csv:
+        raise Exception("ClusterLogging Operator CSV not found after timeout")
 
     csv_name = csv[0]["metadata"]["name"]
     csv_obj = CSV(
