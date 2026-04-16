@@ -1453,28 +1453,29 @@ def clean_disks(worker, namespace=constants.DEFAULT_NAMESPACE):
 
     """
     ocp_obj = ocp.OCP()
-    disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(worker)
-
-    # Get the name and size in bytes of the disks
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=worker.name,
-        cmd_list=["lsblk -nd -e252,7 --output NAME,SIZE -b --json"],
-        namespace=namespace,
+    disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
+        worker, namespace
     )
-    lsblk_output = json.loads(str(out))
-    lsblk_devices = lsblk_output["blockdevices"]
 
-    for lsblk_device in lsblk_devices:
-        if lsblk_device["name"] not in disks_available_on_worker_nodes_for_cleanup:
-            logger.info(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
-            pass
-        else:
-            clean_disk(
-                worker.name,
-                f"/dev/{lsblk_device['name']}",
-                int(lsblk_device["size"]),
-                ocp_obj=ocp_obj,
-            )
+    # Clean each eligible disk directly using the validated list from
+    # disks_available_to_cleanup. Avoids a global lsblk scan with major-number
+    # exclusions (e.g. -e252) that inadvertently skips virtio-blk devices on
+    # KVM/Fyre platforms where major 252 is assigned to virtio-blk instead of
+    # device-mapper.
+    for disk_name in disks_available_on_worker_nodes_for_cleanup:
+        out = ocp_obj.exec_oc_debug_cmd(
+            node=worker.name,
+            cmd_list=[f"lsblk -n --output SIZE -b --json /dev/{disk_name}"],
+            namespace=namespace,
+        )
+        size = int(json.loads(str(out))["blockdevices"][0]["size"])
+        clean_disk(
+            worker.name,
+            f"/dev/{disk_name}",
+            size,
+            ocp_obj=ocp_obj,
+            namespace=namespace,
+        )
 
     if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
         root_disk_common_path = config.ENV_DATA["baremetal"]["root_disk_common_path"]
