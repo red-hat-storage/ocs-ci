@@ -2470,7 +2470,9 @@ class Deployment(object):
         Returns:
              bool: True if ACM HUB operator is installed, False otherwise
         """
-        ocp_obj = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
+        ocp_obj = OCP(
+            kind=constants.ROOK_OPERATOR, namespace=constants.ACM_HUB_NAMESPACE
+        )
         return ocp_obj.check_resource_existence(
             timeout=6,
             should_exist=True,
