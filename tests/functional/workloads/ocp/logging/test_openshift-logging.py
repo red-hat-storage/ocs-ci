@@ -129,6 +129,7 @@ class Testopenshiftloggingonocs(E2ETest):
 
         """
         route, TOKEN = self.setup_prerequisites(project)
+        time.sleep(40)
         curl_command = (
             f"curl -k "
             f'-H  "Authorization: Bearer {TOKEN}" '
