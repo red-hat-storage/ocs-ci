@@ -1,6 +1,5 @@
 ---
 DEPLOYMENT:
-  openshift_install_timeout: 7200
   allow_lower_instance_requirements: false
 ENV_DATA:
   platform: 'azure'
