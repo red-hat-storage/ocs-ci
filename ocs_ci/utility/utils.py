@@ -6725,3 +6725,252 @@ def create_kubeconfig(kubeconfig_path):
                 "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
                 "environment variables were not provided."
             )
+
+
+def genereate_cred_file_rack():
+    """
+    Generate credentials file for rack based on cluster name
+
+    This function retrieves the cluster name from config, fetches all kickstart configmaps
+    from the ibm-spectrum-fusion-ns namespace, parses the compute node data, fetches
+    credentials from node secrets, and generates a dictionary mapping rack serial numbers
+    to node details (OCPRole, ipv4, manufacturer, role, username, password) along with
+    rack information. The file is saved as <cluster_name>.json.
+
+    Returns:
+        dict: Dictionary with rack serial numbers as keys, each containing:
+              - nodes: dict of nodes with their OCPRole, ipv4, manufacturer, role, username,
+                       and password information (credentials fetched from node secrets)
+              - rackInfo: dict containing rack information including ibmSerialNumber
+              Example:
+              {
+                  "l001": {
+                      "nodes": {
+                          "control-2-ru2": {
+                              "ipv4": "0.0.0.0",
+                              "manufacturer": "Lenovo",
+                              "role": "master",
+                              "username": "USERNAME",
+                              "password": "PASSWORD"
+                          },
+                          "compute-2-ru3": {
+                              "ipv4": "0.0.0.0",
+                              "manufacturer": "Lenovo",
+                              "role": "worker",
+                              "username": "USERNAME",
+                              "password": "PASSWORD"
+                          }
+                      },
+                      "rackInfo": {
+                          "SerialNumber": "RACK_NUMBER",
+                          "ibmMTM": "R42",
+                          "rackGen": 2,
+                          "storageType": "fdf"
+                      }
+                  }
+              }
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.ocp import OCP
+
+    # Get cluster name from config
+    cluster_name = config.ENV_DATA.get("cluster_name")
+    log.info(f"Using cluster name: {cluster_name}")
+
+    rack_dict = {}
+
+    # Fetch rack IP mapping from GitHub
+    rack_ip_mapping = {}
+    try:
+        # Get GitHub configuration from auth.yaml
+        github_config = config.AUTH.get("ibm_hci", {})
+        rack_config_url = github_config.get(
+            "rack_config_url",
+        )
+        github_token = github_config.get("github_token")
+
+        # Prepare headers with authentication token if available
+        headers = {}
+        if github_token:
+            headers["Authorization"] = f"token {github_token}"
+            log.info("Using GitHub personal access token for authentication")
+        else:
+            log.warning(
+                "No GitHub token found in auth.yaml, attempting unauthenticated request"
+            )
+
+        response = requests.get(rack_config_url, headers=headers, timeout=30)
+        response.raise_for_status()
+        rack_config_data = response.json()
+
+        # Build a mapping of rack_name to IP
+        for key, value in rack_config_data.items():
+            # Key format is "IP_RACKNAME", e.g., "10.0.0.0_L001"
+            if "_" in key:
+                ip_address = key.split("_")[0]
+                rack_name = value.get("rack_name", "").upper()
+                if rack_name:
+                    rack_ip_mapping[rack_name] = ip_address
+    except Exception as e:
+        log.warning(f"Failed to fetch rack IP mapping from GitHub: {e}")
+
+    # Get all configmaps in the fusion namespace
+    cm_obj = OCP(kind=constants.CONFIGMAP, namespace=constants.FUSION_NAMESPACE)
+    configmaps = cm_obj.get()
+
+    # Filter configmaps that start with "kickstart-"
+    for cm in configmaps.get("items", []):
+        cm_name = cm.get("metadata", {}).get("name", "")
+
+        if not cm_name.startswith("kickstart-"):
+            continue
+
+        # Extract rack serial number from configmap name (e.g., "kickstart-l001" -> "l001")
+        rack_serial = cm_name.replace("kickstart-", "")
+
+        # Get the data from the configmap
+        cm_data = cm.get("data", {})
+
+        # The configmap data is stored as a JSON string in a key
+        # Find the key that contains the JSON data (usually the rack serial or similar)
+        json_data = None
+        for key, value in cm_data.items():
+            try:
+                json_data = json.loads(value)
+                break
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+        if not json_data:
+            log.warning(f"No valid JSON data found in configmap {cm_name}")
+            continue
+
+        # Initialize rack entry if not exists
+        if rack_serial not in rack_dict:
+            rack_dict[rack_serial] = {"nodes": {}, "rackInfo": {}}
+
+        # Extract rack information
+        rack_info = json_data.get("rackInfo", {})
+        if rack_info:
+            rack_dict[rack_serial]["rackInfo"] = {
+                "ibmSerialNumber": rack_info.get("ibmSerialNumber"),
+                "ibmMTM": rack_info.get("ibmMTM"),
+                "serial": rack_info.get("serial"),
+                "rackGen": rack_info.get("rackGen"),
+                "storageType": rack_info.get("storageType"),
+                "isfModel": rack_info.get("isfModel"),
+                "ipStack": rack_info.get("ipStack"),
+            }
+
+            # Add rack IP from the mapping if available
+            rack_serial_upper = rack_serial.upper()
+            if rack_serial_upper in rack_ip_mapping:
+                rack_dict[rack_serial]["rackInfo"]["rackIP"] = rack_ip_mapping[
+                    rack_serial_upper
+                ]
+
+        # Extract compute node information
+        compute_nodes = json_data.get("computeNodeIntegratedManagementModules", [])
+
+        # Get all nodes from the cluster to determine roles
+        node_obj = OCP(kind=constants.NODE)
+        all_nodes = node_obj.get()
+
+        for node in compute_nodes:
+            ocp_role = node.get("OCPRole")
+            ipv4 = node.get("ipv4")
+            manufacturer = node.get("manufacturer")
+            secret_name = node.get("secretName")
+
+            if ocp_role and ipv4 and manufacturer:
+                # Find the actual node in the cluster by matching the OCPRole name
+                role = "unknown"
+                for k8s_node in all_nodes.get("items", []):
+                    node_name = k8s_node.get("metadata", {}).get("name", "")
+                    # Check if the OCPRole matches the beginning of the node name
+                    if node_name.startswith(ocp_role):
+                        # Get the role from node labels
+                        labels = k8s_node.get("metadata", {}).get("labels", {})
+                        # Check for master/control-plane role
+                        if (
+                            labels.get("node-role.kubernetes.io/master") == ""
+                            or labels.get("node-role.kubernetes.io/control-plane") == ""
+                        ):
+                            role = "master"
+                        # Check for worker role
+                        elif labels.get("node-role.kubernetes.io/worker") == "":
+                            role = "worker"
+                        else:
+                            # If no standard role found, try to get any role from labels
+                            for label_key in labels:
+                                if label_key.startswith("node-role.kubernetes.io/"):
+                                    role = label_key.replace(
+                                        "node-role.kubernetes.io/", ""
+                                    )
+                                    break
+                        break
+
+                # Initialize node entry
+                node_entry = {"ipv4": ipv4, "manufacturer": manufacturer, "role": role}
+
+                # Fetch credentials from the node secret if secret_name is available
+                if secret_name:
+                    try:
+                        secret_obj = OCP(
+                            kind=constants.SECRET,
+                            namespace=constants.FUSION_NAMESPACE,
+                            resource_name=secret_name,
+                        )
+                        secret_data = secret_obj.get()
+
+                        if secret_data:
+                            data = secret_data.get("data", {})
+                            # Decode base64 encoded username and password
+                            if (
+                                "isfmgmtUserName" in data
+                                and "isfmgmtUserPasswrd" in data
+                            ):
+                                username_encoded = data.get("isfmgmtUserName")
+                                password_encoded = data.get("isfmgmtUserPasswrd")
+
+                                # Decode from base64
+                                username = base64.b64decode(username_encoded).decode(
+                                    "utf-8"
+                                )
+                                password = base64.b64decode(password_encoded).decode(
+                                    "utf-8"
+                                )
+
+                                node_entry["username"] = username
+                                node_entry["password"] = password
+                    except Exception as e:
+                        log.warning(
+                            f"Failed to fetch secret {secret_name} for node {ocp_role}: {e}"
+                        )
+
+                rack_dict[rack_serial]["nodes"][ocp_role] = node_entry
+
+    # Save rack_dict to JSON file with cluster name
+    from pathlib import Path
+    from datetime import datetime
+
+    # Create directory if it doesn't exist
+    rack_dir = Path(constants.IBM_HCI_RACK_DIR)
+    rack_dir.mkdir(parents=True, exist_ok=True)
+
+    # Define file path using cluster name
+    file_path = rack_dir / f"{cluster_name}.json"
+
+    # Create backup if file already exists
+    if file_path.exists():
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = rack_dir / f"{cluster_name}_backup_{timestamp}.json"
+        shutil.copy2(file_path, backup_path)
+        log.info(f"Created backup of existing file: {backup_path}")
+
+    # Write to JSON file
+    with open(file_path, "w") as f:
+        json.dump(rack_dict, f, indent=2)
+    log.info(f"Rack details saved to {file_path}")
+
+    return rack_dict
