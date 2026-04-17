@@ -3888,11 +3888,9 @@ class IBMHCINode(object):
     """
 
     def __init__(self):
-        self.cluster_path = config.ENV_DATA["cluster_path"]
-        self.platform = config.ENV_DATA["platform"]
-        self.deployment_type = config.ENV_DATA["deployment_type"]
-        self.nodes_map = {"AWSUPINode": AWSUPINode, "VSPHEREUPINode": VSPHEREUPINode}
-        self.wait_time = 120
+        from ocs_ci.utility.ibm_hci import IBMHCI
+
+        self.ibm_hci = IBMHCI()
 
     def get_data_volumes(self):
         raise NotImplementedError("Get data volume functionality is not implemented")
@@ -3902,18 +3900,84 @@ class IBMHCINode(object):
             "Get node by attached volume functionality is not implemented"
         )
 
-    def stop_nodes(self, nodes):
-        raise NotImplementedError("Stop nodes functionality is not implemented")
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop IBM HCI nodes using power management
+
+        Args:
+            nodes (list): The OCS objects of the nodes to stop
+            force (bool): True for force Node stop, False otherwise
+
+        """
+        logger.info(f"Stopping IBM HCI nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self.ibm_hci.power_off(node.name, force=force)
+            logger.info(f"Successfully stopped node: {node.name}")
 
     def start_nodes(self, nodes):
-        raise NotImplementedError("Start nodes functionality is not implemented")
+        """
+        Start IBM HCI nodes using power management
+
+        Args:
+            nodes (list): The OCS objects of the nodes to start
+
+        """
+        logger.info(f"Starting IBM HCI nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self.ibm_hci.power_on(node.name)
+            logger.info(f"Successfully started node: {node.name}")
 
     def restart_nodes(self, nodes, wait=True):
-        raise NotImplementedError("Restart nodes functionality is not implemented")
+        """
+        Restart IBM HCI nodes using power reset
+
+        Args:
+            nodes (list): The OCS objects of the nodes to restart
+            wait (bool): Wait for nodes to be ready after restart
+
+        """
+        logger.info(f"Restarting IBM HCI nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self.ibm_hci.power_reset(node.name)
+            logger.info(f"Successfully restarted node: {node.name}")
+
+        if wait:
+            wait_for_nodes_status(
+                node_names=[n.name for n in nodes], status=constants.NODE_READY
+            )
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
-        raise NotImplementedError(
-            "Restart nodes by stop and start functionality is not implemented"
+        """
+        Restart IBM HCI nodes by stopping and then starting them
+
+        Args:
+            nodes (list): The OCS objects of the nodes to restart
+            force (bool): Force the restart operation
+
+        """
+        logger.info(
+            f"Restarting IBM HCI nodes by stop and start: {[n.name for n in nodes]}"
+        )
+
+        # Stop nodes
+        for node in nodes:
+            self.ibm_hci.power_off(node.name, force=force)
+            logger.info(f"Successfully stopped node: {node.name}")
+
+        # Wait a bit before starting
+        time.sleep(10)
+
+        # Start nodes
+        for node in nodes:
+            self.ibm_hci.power_on(node.name)
+            logger.info(f"Successfully started node: {node.name}")
+
+        # Wait for nodes to be ready
+        wait_for_nodes_status(
+            node_names=[n.name for n in nodes], status=constants.NODE_READY
         )
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):

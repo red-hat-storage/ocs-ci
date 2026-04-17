@@ -3740,6 +3740,7 @@ FDF_ODFCLUSTER_CR = os.path.join(FDF_TEMPLATE_DIR, "odfcluster.yaml")
 FDF_CATSRC_CR = os.path.join(FDF_TEMPLATE_DIR, "isf_datafoundation_catsrc.yaml")
 FDF_CATSRC_IMAGE_PATH = "icr.io/cpopen/isf-data-foundation-catalog"
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
+FUSION_NAMESPACE = "ibm-spectrum-fusion-ns"
 ISF_CATALOG_SOURCE_NAME = "isf-catalog"
 ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"
 ISF_OPERATOR_IDMS_YAML = "image-digest-mirror-set.yaml.j2"
@@ -3945,3 +3946,6 @@ CEPH_MON_LEGACY_PORT = 6789  # Ceph Monitor (legacy protocol)
 CEPH_EXPORTER_PORT = 9283  # Ceph Exporter (metrics)
 CEPH_OSD_PORT_MIN = 6800  # Ceph OSD port range start
 CEPH_OSD_PORT_MAX = 7300  # Ceph OSD port range end
+
+# IBM HCI
+IBM_HCI_RACK_DIR = os.path.join(DATA_DIR, "rack_details")
