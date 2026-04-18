@@ -6739,11 +6739,12 @@ def genereate_cred_file_rack():
 
     Returns:
         dict: Dictionary with rack serial numbers as keys, each containing nodes and rackInfo.
-            nodes: dict of nodes with their OCPRole, ipv4, manufacturer, role, username,
-                and password information (credentials fetched from node secrets)
-            rackInfo: dict containing rack information including ibmSerialNumber
 
-        Example::
+              - nodes: dict of nodes with their OCPRole, ipv4, manufacturer, role, username,
+                and password information (credentials fetched from node secrets)
+              - rackInfo: dict containing rack information including ibmSerialNumber
+
+    Example::
 
             {
                 "l001": {
