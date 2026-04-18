@@ -6738,37 +6738,41 @@ def genereate_cred_file_rack():
     rack information. The file is saved as <cluster_name>.json.
 
     Returns:
-        dict: Dictionary with rack serial numbers as keys, each containing:
-              - nodes: dict of nodes with their OCPRole, ipv4, manufacturer, role, username,
-                       and password information (credentials fetched from node secrets)
-              - rackInfo: dict containing rack information including ibmSerialNumber
-              Example:
-              {
-                "l001": {
-                    "nodes": {
-                        "control-2-ru2": {
-                            "ipv4": "0.0.0.0",
-                            "manufacturer": "Lenovo",
-                            "role": "master",
-                            "username": "USERNAME",
-                            "password": "PASSWORD"
+        dict: Dictionary with rack serial numbers as keys, each containing nodes and rackInfo.
+
+            - nodes: dict of nodes with their OCPRole, ipv4, manufacturer, role, username,
+              and password information (credentials fetched from node secrets)
+            - rackInfo: dict containing rack information including ibmSerialNumber
+
+            Example:
+
+                {
+                    "l001": {
+                        "nodes": {
+                            "control-2-ru2": {
+                                "ipv4": "0.0.0.0",
+                                "manufacturer": "Lenovo",
+                                "role": "master",
+                                "username": "USERNAME",
+                                "password": "PASSWORD"
+                            },
+                            "compute-2-ru3": {
+                                "ipv4": "0.0.0.0",
+                                "manufacturer": "Lenovo",
+                                "role": "worker",
+                                "username": "USERNAME",
+                                "password": "PASSWORD"
+                            }
                         },
-                        "compute-2-ru3": {
-                            "ipv4": "0.0.0.0",
-                            "manufacturer": "Lenovo",
-                            "role": "worker",
-                            "username": "USERNAME",
-                            "password": "PASSWORD"
+                        "rackInfo": {
+                            "SerialNumber": "RACK_NUMBER",
+                            "ibmMTM": "R42",
+                            "rackGen": 2,
+                            "storageType": "fdf"
                         }
-                    },
-                    "rackInfo": {
-                        "SerialNumber": "RACK_NUMBER",
-                        "ibmMTM": "R42",
-                        "rackGen": 2,
-                        "storageType": "fdf"
                     }
                 }
-              }
+
     """
     # importing here to avoid circular imports
     from ocs_ci.ocs.ocp import OCP
