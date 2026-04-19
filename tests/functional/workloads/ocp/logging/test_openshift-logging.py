@@ -11,7 +11,6 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import delete_deployment_pods
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3, magenta_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
@@ -140,7 +139,7 @@ class Testopenshiftloggingonocs(E2ETest):
         try:
             curl_output_str = exec_cmd(curl_command).stdout.decode("utf-8")
             logger.info(f"Curl command output: {curl_output_str}")
-        except CommandFailed as e:
+        except Exception as e:
             logger.error(f"Failed to fetch logs: {e}")
             raise AssertionError(f"Curl command failed to fetch logs: {e}")
 
@@ -181,8 +180,8 @@ class Testopenshiftloggingonocs(E2ETest):
 
         pod_obj, pvc_obj = create_pvc_and_deployment_pod
 
-        logger.info("Waiting for logs to be collected...")
-        time.sleep(300)  # Wait 60 seconds for log collection
+        logger.info("Waiting 60 seconds for logs to be collected...")
+        time.sleep(300)
 
         # Validating if the project exists in lokistack
         project = pvc_obj.project.namespace
