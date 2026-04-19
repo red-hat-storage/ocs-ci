@@ -341,6 +341,24 @@ deployment_4_19 = {
     "0.5 TiB": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
 }
 deployment_4_21 = {
+    # In OCP 4.21 the OperatorHub tile changed from <a data-test="pkg-catalog-ns">
+    # to <div data-test="operator-{displayName}"> containing a button.
+    "choose_local_storage_version": (
+        "//div[@data-test='operator-Local Storage']//button | "
+        "//a[@data-test='local-storage-operator-redhat-operators-openshift-marketplace']",
+        By.XPATH,
+    ),
+    "choose_local_storage_version_non_ga": (
+        "//div[@data-test='operator-Local Storage']//button | "
+        "//a[@data-test='local-storage-operator-optional-operators-openshift-marketplace']",
+        By.XPATH,
+    ),
+    # In ODF 4.21 (PF5/PF6), the radio input is not element_to_be_clickable; target
+    # the visible label instead so the LLM fallback is never triggered.
+    "choose_lso_deployment": (
+        "//label[@for='bs-local-devices'] | //input[@id='bs-local-devices']",
+        By.XPATH,
+    ),
     "osd_size_dropdown": (
         "//button[contains(@aria-label, 'select') and contains(@class, 'dropdown--full-width')]",
         By.XPATH,

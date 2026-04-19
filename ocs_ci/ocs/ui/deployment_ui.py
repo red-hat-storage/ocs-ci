@@ -314,6 +314,8 @@ class DeploymentUI(PageNavigator):
                 "Next button on LSO is not clickable after 700 seconds"
             )
 
+        self.configure_in_transit_encryption()
+
         self.configure_encryption()
 
         self.configure_data_protection()

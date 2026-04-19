@@ -457,22 +457,54 @@ def add_disk_for_vsphere_platform():
             provision_type = config.DEPLOYMENT.get(
                 "provision_type", constants.VM_DISK_TYPE
             )
-
-            vsphere_base.attach_disk(
-                device_size,
-                provision_type,
-                ssd=ssd_disk,
+            multiple_device_classes = config.DEPLOYMENT.get(
+                "deploy_multiple_device_classes"
             )
-            if config.DEPLOYMENT.get("deploy_multiple_device_classes"):
-                logger.info("Attaching additional disks for the second device class")
-                second_device_size = config.ENV_DATA.get(
-                    "second_device_size", device_size
-                )
+
+            # Importing here to avoid circular dependency (baremetal imports lso_helpers)
+            from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+
+            workers = get_nodes(node_type="worker")
+            total_available_disks = sum(
+                len(disks_available_to_cleanup(w)) for w in workers
+            )
+            logger.info(
+                "Total available (non-boot) disks across worker nodes: " "%s",
+                total_available_disks,
+            )
+
+            if total_available_disks < 3:
                 vsphere_base.attach_disk(
-                    second_device_size,
+                    device_size,
                     provision_type,
                     ssd=ssd_disk,
                 )
+            else:
+                logger.info(
+                    "Workers already have %s available disks, skipping first "
+                    "disk attachment",
+                    total_available_disks,
+                )
+
+            if multiple_device_classes:
+                if total_available_disks < 6:
+                    logger.info(
+                        "Attaching additional disks for the second device class"
+                    )
+                    second_device_size = config.ENV_DATA.get(
+                        "second_device_size", device_size
+                    )
+                    vsphere_base.attach_disk(
+                        second_device_size,
+                        provision_type,
+                        ssd=ssd_disk,
+                    )
+                else:
+                    logger.info(
+                        "Workers already have %s available disks, skipping "
+                        "second device class disk attachment",
+                        total_available_disks,
+                    )
 
         if lso_type == constants.DIRECTPATH:
             logger.info(f"LSO Deployment type: {constants.DIRECTPATH}")
