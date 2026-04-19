@@ -49,6 +49,7 @@ from ocs_ci.ocs.node import (
     get_typed_worker_nodes,
     remove_nodes,
     wait_for_nodes_status,
+    get_nodes,
 )
 from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
@@ -364,6 +365,68 @@ class VSPHEREBASE(Deployment):
 
         """
         self.vsphere.add_rdm_disk(vm, device_name)
+
+    def add_vmdk_disks(self):
+        """
+        Attach VMDK disks to all worker nodes, skipping if sufficient disks
+        already exist (idempotent).
+
+        Reads device_size, provision_type, extra_disks, hdd_disks, and
+        deploy_multiple_device_classes from config. Checks existing non-boot
+        disks via disks_available_to_cleanup before attaching to avoid
+        duplicates on re-runs.
+        """
+        ssd_disk = True
+        if config.ENV_DATA.get("hdd_disks"):
+            ssd_disk = False
+        device_size = config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
+        provision_type = config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE)
+        multiple_device_classes = config.DEPLOYMENT.get(
+            "deploy_multiple_device_classes"
+        )
+
+        # Importing here to avoid circular dependency (baremetal imports lso_helpers)
+        from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+
+        workers = get_nodes(node_type="worker")
+        extra_disks = config.ENV_DATA.get("extra_disks", 1)
+        total_available_disks = sum(len(disks_available_to_cleanup(w)) for w in workers)
+        logger.info(
+            "Total available (non-boot) disks across worker nodes: %s",
+            total_available_disks,
+        )
+
+        expected_disks = len(workers) * extra_disks
+        if total_available_disks < expected_disks:
+            self.attach_disk(
+                device_size,
+                provision_type,
+                ssd=ssd_disk,
+            )
+        else:
+            logger.info(
+                "Workers already have %s available disks, skipping first "
+                "disk attachment",
+                total_available_disks,
+            )
+
+        if multiple_device_classes:
+            if total_available_disks < expected_disks * 2:
+                logger.info("Attaching additional disks for the second device class")
+                second_device_size = config.ENV_DATA.get(
+                    "second_device_size", device_size
+                )
+                self.attach_disk(
+                    second_device_size,
+                    provision_type,
+                    ssd=ssd_disk,
+                )
+            else:
+                logger.info(
+                    "Workers already have %s available disks, skipping "
+                    "second device class disk attachment",
+                    total_available_disks,
+                )
 
     def add_pci_devices(self):
         """
