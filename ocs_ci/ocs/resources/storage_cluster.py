@@ -1947,6 +1947,29 @@ def set_deviceset_count(count):
     )
 
 
+def set_deviceset_count_by_index(index, count):
+    """
+    Set the count for the StorageDeviceSet at the given index.
+
+    Args:
+        index (int): Index of the StorageDeviceSet in the
+            storageDeviceSets list.
+        count (int): New count value to set.
+
+    """
+    sc = get_storage_cluster()
+    params = (
+        f'[{{"op": "replace",'
+        f' "path": "/spec/storageDeviceSets/{index}/count",'
+        f' "value": {count}}}]'
+    )
+    sc.patch(
+        resource_name=sc.get()["items"][0]["metadata"]["name"],
+        params=params,
+        format_type="json",
+    )
+
+
 def get_storage_cluster(namespace=None):
     """
     Get storage cluster object
