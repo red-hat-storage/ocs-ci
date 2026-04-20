@@ -8,8 +8,10 @@ from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.framework.testlib import acceptance, tier1, tier4
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_nodes_having_label
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
@@ -392,7 +394,13 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
             config.switch_to_cluster_by_name(first_workload["primary_cluster_name"])
             zone_label = f"{constants.ZONE_LABEL}={power_off_zone}"
-            zone_nodes_info = get_nodes_having_label(zone_label)
+
+            # Retry get_nodes_having_label as it may fail with CommandFailed
+            @retry(CommandFailed, tries=5, delay=10, backoff=1)
+            def get_zone_nodes_with_retry():
+                return get_nodes_having_label(zone_label)
+
+            zone_nodes_info = get_zone_nodes_with_retry()
             zone_nodes = [
                 node_obj
                 for node_obj in first_workload["primary_cluster_nodes"]
