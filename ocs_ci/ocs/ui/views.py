@@ -360,6 +360,54 @@ deployment_4_21 = {
     ),
 }
 
+deployment_4_22 = {
+    # MCO operator locators for rebranding validation
+    "mco_operator_row": (
+        "//a[@data-test-operator-row='DF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "mco_operator_row_old_name": (
+        "//a[@data-test-operator-row='ODF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "operator_display_name": (
+        "//h1[contains(@class, 'co-clusterserviceversion-details__name')]",
+        By.XPATH,
+    ),
+    "operator_provider": (
+        "//span[contains(text(), 'Provided by')]/following-sibling::span",
+        By.XPATH,
+    ),
+    "operator_description": (
+        "//p[contains(@class, 'co-clusterserviceversion-details__description')]",
+        By.XPATH,
+    ),
+    "operator_installed_status": (
+        "//span[contains(@class, 'co-icon-and-text')][contains(text(), 'Installed')]",
+        By.XPATH,
+    ),
+    "operator_capability_basic_install": (
+        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
+        "//dt[text()='Capability Level']/following-sibling::dd"
+        "//span[contains(text(), 'Basic Install')]",
+        By.XPATH,
+    ),
+    "operator_capability_seamless_upgrades": (
+        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
+        "//dt[text()='Capability Level']/following-sibling::dd"
+        "//span[contains(text(), 'Seamless Upgrades')]",
+        By.XPATH,
+    ),
+    "operator_channel": (
+        "//dt[text()='Channel']/following-sibling::dd",
+        By.XPATH,
+    ),
+    "operator_installed_version": (
+        "//dt[text()='Installed Version']/following-sibling::dd",
+        By.XPATH,
+    ),
+}
+
 generic_locators = {
     "project_selector": (
         "//span[contains(@class, 'c-menu-toggle__text') and contains(text(), 'Project:')]",
@@ -3215,6 +3263,76 @@ external_systems = {
     ),
 }
 locators = {
+    "4.22": {
+        "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
+        "generic": {**generic_locators, **generic_locators_4_19},
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+            **deployment_4_15,
+            **deployment_4_16,
+            **deployment_4_17,
+            **deployment_4_19,
+            **deployment_4_21,
+            **deployment_4_22,
+        },
+        "obc": {**obc, **obc_4_21},
+        "pvc": {
+            **pvc,
+            **pvc_4_7,
+            **pvc_4_8,
+            **pvc_4_9,
+            **pvc_4_12,
+            **pvc_4_14,
+            **pvc_4_19,
+            **pvc_4_21,
+        },
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+            **acm_configuration_4_14,
+            **acm_configuration_4_16,
+            **acm_configuration_4_18,
+            **acm_page_nav_419,
+            **acm_configuration_4_19,
+            **acm_page_nav_420,
+            **acm_configuration_4_20,
+            **acm_configuration_4_21,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
+            **validation_4_13,
+            **validation_4_14,
+            **validation_4_17,
+            **validation_4_18,
+            **validation_4_20,
+            **validation_4_21,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+        "topology": topology,
+        "mcg_stores": mcg_stores,
+        "alerting": alerting,
+        "bucket_tab": bucket_tab,
+        "external_systems": external_systems,
+        "data_foundation_overview": data_foundation_overview,
+        "attach_storage": attach_storage,
+    },
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},

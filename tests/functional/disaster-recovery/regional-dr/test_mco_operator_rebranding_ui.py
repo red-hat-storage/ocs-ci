@@ -19,7 +19,6 @@ from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs.acm.acm import AcmPageNavigator
 from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
 
@@ -107,12 +106,8 @@ class TestMCOOperatorRebrandingUI:
 
             # Step 4: Click on the operator row to view details
             logger.info("Clicking on MCO operator to view details")
-            mco_operator_locator = (
-                "//a[@data-test-operator-row='DF Multicluster Orchestrator']",
-                By.XPATH,
-            )
             try:
-                acm_obj.do_click(mco_operator_locator, timeout=30)
+                acm_obj.do_click(deployment_loc["mco_operator_row"], timeout=30)
             except TimeoutException:
                 logger.error(
                     "MCO operator with expected name "
@@ -121,11 +116,9 @@ class TestMCOOperatorRebrandingUI:
                 )
                 acm_obj.take_screenshot()
                 # Check if old name still exists
-                old_operator_locator = (
-                    "//a[@data-test-operator-row=" "'ODF Multicluster Orchestrator']",
-                    By.XPATH,
-                )
-                if acm_obj.check_element_presence(old_operator_locator, timeout=10):
+                if acm_obj.check_element_presence(
+                    deployment_loc["mco_operator_row_old_name"], timeout=10
+                ):
                     pytest.fail(
                         "Operator still displays old name "
                         "'ODF Multicluster Orchestrator' "
@@ -140,12 +133,8 @@ class TestMCOOperatorRebrandingUI:
 
             # Step 5: Validate operator display name
             logger.info("Validating operator display name")
-            operator_name_locator = (
-                "//h1[contains(@class, " "'co-clusterserviceversion-details__name')]",
-                By.XPATH,
-            )
             operator_name_element = acm_obj.wait_for_element_to_be_visible(
-                operator_name_locator, timeout=30
+                deployment_loc["operator_display_name"], timeout=30
             )
             actual_operator_name = operator_name_element.text
             logger.info(f"Found operator name: {actual_operator_name}")
@@ -167,13 +156,9 @@ class TestMCOOperatorRebrandingUI:
 
             # Step 6: Validate provider name
             logger.info("Validating provider name")
-            provider_locator = (
-                "//span[contains(text(), 'Provided by')]" "/following-sibling::span",
-                By.XPATH,
-            )
             try:
                 provider_element = acm_obj.wait_for_element_to_be_visible(
-                    provider_locator, timeout=30
+                    deployment_loc["operator_provider"], timeout=30
                 )
                 actual_provider = provider_element.text
                 logger.info(f"Found provider: {actual_provider}")
@@ -190,14 +175,9 @@ class TestMCOOperatorRebrandingUI:
 
             # Step 7: Validate description is vendor-neutral
             logger.info("Validating operator description")
-            description_locator = (
-                "//p[contains(@class, "
-                "'co-clusterserviceversion-details__description')]",
-                By.XPATH,
-            )
             try:
                 description_element = acm_obj.wait_for_element_to_be_visible(
-                    description_locator, timeout=30
+                    deployment_loc["operator_description"], timeout=30
                 )
                 actual_description = description_element.text
                 logger.info(f"Found description: {actual_description}")
@@ -226,14 +206,9 @@ class TestMCOOperatorRebrandingUI:
 
             # Step 8: Verify operator status (Installed)
             logger.info("Verifying operator installation status")
-            installed_status_locator = (
-                "//span[contains(@class, 'co-icon-and-text')]"
-                "[contains(text(), 'Installed')]",
-                By.XPATH,
-            )
             try:
                 installed_element = acm_obj.wait_for_element_to_be_visible(
-                    installed_status_locator, timeout=30
+                    deployment_loc["operator_installed_status"], timeout=30
                 )
                 assert (
                     installed_element.is_displayed()
@@ -247,30 +222,16 @@ class TestMCOOperatorRebrandingUI:
 
             # Step 9: Verify capability levels
             logger.info("Verifying operator capability levels")
-            # Look for capability level indicators
-            basic_install_locator = (
-                "//div[contains(@class, "
-                "'co-clusterserviceversion-details__section')]"
-                "//dt[text()='Capability Level']/following-sibling::dd"
-                "//span[contains(text(), 'Basic Install')]",
-                By.XPATH,
-            )
-            seamless_upgrades_locator = (
-                "//div[contains(@class, "
-                "'co-clusterserviceversion-details__section')]"
-                "//dt[text()='Capability Level']/following-sibling::dd"
-                "//span[contains(text(), 'Seamless Upgrades')]",
-                By.XPATH,
-            )
-
             try:
                 # Check for Basic Install capability
-                if acm_obj.check_element_presence(basic_install_locator, timeout=10):
+                if acm_obj.check_element_presence(
+                    deployment_loc["operator_capability_basic_install"], timeout=10
+                ):
                     logger.info("✓ Basic Install capability found")
 
                 # Check for Seamless Upgrades capability
                 if acm_obj.check_element_presence(
-                    seamless_upgrades_locator, timeout=10
+                    deployment_loc["operator_capability_seamless_upgrades"], timeout=10
                 ):
                     logger.info("✓ Seamless Upgrades capability found")
 
@@ -281,24 +242,15 @@ class TestMCOOperatorRebrandingUI:
 
             # Step 10: Verify channel and version information
             logger.info("Verifying channel and version information")
-            channel_locator = (
-                "//dt[text()='Channel']/following-sibling::dd",
-                By.XPATH,
-            )
-            version_locator = (
-                "//dt[text()='Installed Version']/following-sibling::dd",
-                By.XPATH,
-            )
-
             try:
                 channel_element = acm_obj.wait_for_element_to_be_visible(
-                    channel_locator, timeout=30
+                    deployment_loc["operator_channel"], timeout=30
                 )
                 channel = channel_element.text
                 logger.info(f"Channel: {channel}")
 
                 version_element = acm_obj.wait_for_element_to_be_visible(
-                    version_locator, timeout=30
+                    deployment_loc["operator_installed_version"], timeout=30
                 )
                 version = version_element.text
                 logger.info(f"Installed Version: {version}")
@@ -323,6 +275,3 @@ class TestMCOOperatorRebrandingUI:
             logger.error(f"Test failed with exception: {str(e)}")
             acm_obj.take_screenshot()
             raise
-
-        finally:
-            logger.info("Test cleanup (if any)")
