@@ -15,6 +15,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from ocs_ci.ocs.exceptions import ClusterNotFoundException
 
+# Import custom logger early to set logging.setLoggerClass() before any getLogger() calls
+from ocs_ci.framework import custom_logger  # noqa: F401
+
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/default_config.yaml")
 
