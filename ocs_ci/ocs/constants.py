@@ -1197,12 +1197,6 @@ EXTERNAL_PGSQL_NOOBAA_SECRET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-pgsql-noobaa-secret.yaml"
 )
 
-OPERATOR_SOURCE_SECRET_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "operator-source-secret.yaml"
-)
-
-OPERATOR_SOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "operator-source.yaml")
-
 HTPASSWD_IDP_YAML = os.path.join(TEMPLATE_AUTHENTICATION_DIR, "htpasswd_provider.yaml")
 NOOBAA_ODF_UI_CLUSTERROLE_YAML = os.path.join(
     TEMPLATE_AUTHENTICATION_DIR, "noobaa_odf_ui_clusterrole.yaml"
@@ -1327,11 +1321,6 @@ MULTUS_CLUSTER_NET_VLAN_YAML = os.path.join(
 
 NETWORK_ATTACHEMENT_DEFINITION = "network-attachment-definitions.k8s.cni.cncf.io"
 VSPHERE_MULTUS_INTERFACE = "ens224"
-
-OPERATOR_SOURCE_NAME = "ocs-operatorsource"
-
-OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
-
 
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml")

@@ -383,7 +383,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
     logger.info(
         f"Prepare for disconnected OCS {'upgrade' if upgrade else 'installation'}"
     )
-    # Disable the default OperatorSources
+    # Disable the default sources
     disable_default_sources()
 
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
