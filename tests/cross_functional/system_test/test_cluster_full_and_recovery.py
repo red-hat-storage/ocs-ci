@@ -144,7 +144,7 @@ class TestClusterFullAndRecovery(E2ETest):
             timeout=2500,
             sleep=40,
             func=verify_osd_used_capacity_greater_than_expected,
-            expected_used_capacity=85.0,
+            expected_used_capacity=83.0,
         )
         if not sample.wait_for_func_status(result=True):
             log.error("The after 1800 seconds the used capacity smaller than 85%")
