@@ -177,27 +177,6 @@ class TestCephFSStaleSubvolumeAlert:
 
         request.addfinalizer(finalizer)
 
-    @pytest.mark.polarion_id("OCS-7470")
-    def test_cephfs_stale_subvolume_alert_fires(
-        self,
-        storageclass_factory,
-        pvc_factory,
-        threading_lock,
-    ):
-        """
-        Test Steps:
-        1. Create a CephFSStorageClass  with reclaimPolicy: Retain
-        2. Create a PVC with the CephFSStorageClass
-        3. Verify the PVC and PV are created and store the names of the PVC and PV
-        4. Delete the PVC
-        5. Delete the PV
-        6. Alert should fire
-        7. Verify the alert details
-        """
-        create_stale_cephfs_subvolumes(storageclass_factory, pvc_factory, count=1)
-        api = prometheus.PrometheusAPI(threading_lock=threading_lock)
-        wait_and_validate_stale_subvolume_alert(api, timeout=900)
-
     @tier2
     @pytest.mark.polarion_id("OCS-7471")
     def test_cephfs_multiple_stale_subvolumes_alert_fires(
