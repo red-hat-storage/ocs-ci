@@ -405,6 +405,12 @@ def pytest_configure(config):
     set_log_level(config)
     # Set the new factory for the logging of pytest
     set_log_record_factory()
+    # Ensure custom log levels are registered
+    from ocs_ci.framework.custom_logger import TEST_STEP, ASSERTION, AI_DATA
+
+    logging.addLevelName(TEST_STEP, "TEST_STEP")
+    logging.addLevelName(ASSERTION, "ASSERTION")
+    logging.addLevelName(AI_DATA, "AI_DATA")
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = "ocs_ci.framework.pytest_customization.ocscilib"
@@ -1120,6 +1126,11 @@ def pytest_runtest_setup(item):
 
         # Capture test start time in UTC for must-gather --since-time option
         test_start_time = datetime.datetime.utcnow()
+
+        # Reset step counters for numbering per test
+        from ocs_ci.framework.custom_logger import reset_step_counts
+
+        reset_step_counts()
 
         log.debug(
             f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_ram_start_test)}"
