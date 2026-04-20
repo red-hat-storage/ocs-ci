@@ -4,6 +4,7 @@ import logging
 import os
 import gc
 import time
+import traceback
 import zipfile
 from functools import reduce
 
@@ -243,7 +244,9 @@ class BaseUI:
                 self.take_screenshot(f"{type(self).__name__}-{date_time}")
                 self.copy_dom(f"{type(self).__name__}-{date_time}")
                 logger.error(e)
-                new_locator = self.locator_fallback.attempt_fallback(locator, "click")
+                new_locator = self.locator_fallback.attempt_fallback(
+                    locator, "click", stack_trace=traceback.format_exc()
+                )
                 if new_locator:
                     element = WebDriverWait(self.driver, timeout).until(
                         ec.element_to_be_clickable((new_locator[1], new_locator[0]))
@@ -333,7 +336,9 @@ class BaseUI:
             self.take_screenshot()
             self.copy_dom()
             logger.error(e)
-            new_locator = self.locator_fallback.attempt_fallback(locator, "send_keys")
+            new_locator = self.locator_fallback.attempt_fallback(
+                locator, "send_keys", stack_trace=traceback.format_exc()
+            )
             if new_locator:
                 element = WebDriverWait(self.driver, timeout).until(
                     ec.visibility_of_element_located((new_locator[1], new_locator[0]))
@@ -477,7 +482,9 @@ class BaseUI:
             return self.driver.find_element(by=locator[1], value=locator[0]).text
         except NoSuchElementException as e:
             logger.error(e)
-            new_locator = self.locator_fallback.attempt_fallback(locator, "get_text")
+            new_locator = self.locator_fallback.attempt_fallback(
+                locator, "get_text", stack_trace=traceback.format_exc()
+            )
             if new_locator:
                 return self.driver.find_element(
                     by=new_locator[1], value=new_locator[0]
@@ -519,7 +526,7 @@ class BaseUI:
         except TimeoutException as e:
             logger.error(e)
             new_locator = self.locator_fallback.attempt_fallback(
-                locator, "wait_visible"
+                locator, "wait_visible", stack_trace=traceback.format_exc()
             )
             if new_locator:
                 return WebDriverWait(self.driver, min(timeout, 10)).until(
@@ -549,7 +556,7 @@ class BaseUI:
         except TimeoutException as e:
             logger.error(e)
             new_locator = self.locator_fallback.attempt_fallback(
-                locator, "wait_present"
+                locator, "wait_present", stack_trace=traceback.format_exc()
             )
             if new_locator:
                 return WebDriverWait(self.driver, min(timeout, 10)).until(
@@ -674,6 +681,51 @@ class BaseUI:
             screenshots_folder=self.screenshots_folder, name_suffix=name_suffix
         )
 
+    def take_screenshot_for_llm(self, name_suffix="", region=None):
+        """
+        Takes a screenshot for LLM-based UI analysis and returns the file path.
+
+        This base implementation captures a single viewport screenshot. Subclasses
+        that operate on scrollable panels (e.g. TopologySidebar) should override
+        this method to capture additional screenshots after scrolling, so the LLM
+        receives the full content of the panel.
+
+        The window is temporarily resized to the resolution configured in
+        ``UI_SELENIUM.llm_screenshot_resolution`` (default ``"1920,1400"``)
+        before the screenshot and restored afterwards so that the LLM always
+        receives a consistent, high-resolution image regardless of the current
+        browser window size.
+
+        Args:
+            name_suffix (str): Optional suffix for the screenshot filename.
+            region (str): Optional region to crop. ``"right_side"`` keeps the
+                right half, ``"left_side"`` keeps the left half. ``None`` keeps
+                the full viewport.
+
+        Returns:
+            list: List of absolute paths to the saved screenshot files.
+        """
+        driver = SeleniumDriver()
+        original_size = driver.get_window_size()
+        llm_res = ocsci_config.UI_SELENIUM.get("llm_screenshot_resolution", "1920,1400")
+        llm_w, llm_h = (int(v) for v in llm_res.split(","))
+        driver.set_window_size(llm_w, llm_h)
+        time.sleep(0.5)
+
+        try:
+            suffix = f"{name_suffix}_llm" if name_suffix else "llm"
+            take_screenshot(
+                screenshots_folder=self.screenshots_folder, name_suffix=suffix
+            )
+            screenshots = sorted(Path(self.screenshots_folder).glob("*.png"))
+            path = str(screenshots[-1])
+            if region:
+                _crop_screenshot(path, region)
+            return [path]
+        finally:
+            driver.set_window_size(original_size["width"], original_size["height"])
+            time.sleep(0.3)
+
     def copy_dom(self, name_suffix: str = ""):
         """
         Get page source of the webpage
@@ -696,7 +748,9 @@ class BaseUI:
             element.clear()
         except TimeoutException as e:
             logger.error(e)
-            new_locator = self.locator_fallback.attempt_fallback(locator, "clear")
+            new_locator = self.locator_fallback.attempt_fallback(
+                locator, "clear", stack_trace=traceback.format_exc()
+            )
             if new_locator:
                 element = WebDriverWait(self.driver, timeout).until(
                     ec.element_to_be_clickable((new_locator[1], new_locator[0]))
@@ -748,7 +802,9 @@ class BaseUI:
             logger.warning(
                 f"Locator {locator[1]} {locator[0]} did not find text {expected_text}"
             )
-            new_locator = self.locator_fallback.attempt_fallback(locator, "wait_text")
+            new_locator = self.locator_fallback.attempt_fallback(
+                locator, "wait_text", stack_trace=traceback.format_exc()
+            )
             if new_locator:
                 try:
                     WebDriverWait(self.driver, min(timeout, 10)).until(
@@ -791,7 +847,9 @@ class BaseUI:
             self.take_screenshot()
             # locator here is (By, value) — reverse for fallback which expects (value, By)
             new_locator = self.locator_fallback.attempt_fallback(
-                (locator[1], locator[0]), "check_presence"
+                (locator[1], locator[0]),
+                "check_presence",
+                stack_trace=traceback.format_exc(),
             )
             if new_locator:
                 try:
@@ -807,7 +865,9 @@ class BaseUI:
             self.take_screenshot()
             # locator here is (By, value) — reverse for fallback which expects (value, By)
             new_locator = self.locator_fallback.attempt_fallback(
-                (locator[1], locator[0]), "check_presence"
+                (locator[1], locator[0]),
+                "check_presence",
+                stack_trace=traceback.format_exc(),
             )
             if new_locator:
                 try:
@@ -936,6 +996,48 @@ def take_screenshot(name_suffix: str = "", screenshots_folder=None):
     logger.debug(f"Creating screenshot: {filename}")
     SeleniumDriver().save_screenshot(filename)
     time.sleep(0.5)
+
+
+def _crop_screenshot(path, region):
+    """
+    Crops a screenshot in-place to the specified region using the browser
+    Canvas API so no external image library is required.
+
+    Args:
+        path (str): Absolute path to the PNG file.
+        region (str): ``"right_side"`` or ``"left_side"``.
+    """
+    import base64
+
+    if region not in ("right_side", "left_side"):
+        logger.warning(f"Unknown region '{region}', keeping full screenshot")
+        return
+
+    with open(path, "rb") as fh:
+        img_b64 = base64.b64encode(fh.read()).decode()
+
+    js = """
+    var region = arguments[0];
+    var imgData = arguments[1];
+    var callback = arguments[arguments.length - 1];
+    var img = new Image();
+    img.onload = function() {
+        var canvas = document.createElement('canvas');
+        var w = img.width, h = img.height;
+        var sx = 0, sw = w;
+        if (region === 'right_side') { sx = Math.floor(w / 2); sw = w - sx; }
+        else if (region === 'left_side') { sw = Math.floor(w / 2); }
+        canvas.width = sw;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, sx, 0, sw, h, 0, 0, sw, h);
+        callback(canvas.toDataURL('image/png').split(',')[1]);
+    };
+    img.src = 'data:image/png;base64,' + imgData;
+    """
+    cropped_b64 = SeleniumDriver().execute_async_script(js, region, img_b64)
+    with open(path, "wb") as fh:
+        fh.write(base64.b64decode(cropped_b64))
+    logger.info(f"Cropped screenshot to '{region}': {path}")
 
 
 def garbage_collector_webdriver():
@@ -1304,16 +1406,21 @@ def close_browser():
 
     """
     logger.info("Close browser")
-    session_cost = ocsci_config.UI_SELENIUM.get("ai_fallback_session_cost", 0.0)
-    session_requests = ocsci_config.UI_SELENIUM.get("ai_fallback_session_requests", 0)
-    if session_requests > 0:
+    total_cost = ocsci_config.UI_SELENIUM.get("llm_session_cost", 0.0)
+    total_requests = ocsci_config.UI_SELENIUM.get("llm_session_requests", 0)
+    fallback_cost = ocsci_config.UI_SELENIUM.get("ai_fallback_session_cost", 0.0)
+    fallback_requests = ocsci_config.UI_SELENIUM.get("ai_fallback_session_requests", 0)
+    other_cost = total_cost - fallback_cost
+    other_requests = total_requests - fallback_requests
+    if total_requests > 0:
         logger.info(
             "\n"
             "╔══════════════════════════════════════════════════════════════╗\n"
-            "║           AI FALLBACK: SESSION COST SUMMARY                  ║\n"
+            "║                 LLM SESSION COST SUMMARY                     ║\n"
             "╚══════════════════════════════════════════════════════════════╝\n"
-            f"  Total cost    : ${session_cost:.4f}\n"
-            f"  Total requests: {session_requests}"
+            f"  Total           : ${total_cost:.4f}  ({total_requests} requests)\n"
+            f"  ├─ AI fallback  : ${fallback_cost:.4f}  ({fallback_requests} requests)\n"
+            f"  └─ Other LLM    : ${other_cost:.4f}  ({other_requests} requests)"
         )
     try:
         take_screenshot("close_browser")

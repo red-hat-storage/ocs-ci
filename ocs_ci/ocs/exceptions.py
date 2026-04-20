@@ -824,3 +824,21 @@ class PodStabilityError(Exception):
     """Raised when pods show signs of instability (Restarts or OOMKills)"""
 
     pass
+
+
+class TemporaryPodsDuringDeployment(Exception):
+    """
+    Raised when temporary pods (like canary pods) are detected during deployment.
+    This triggers a retry to allow the deployment to stabilize.
+    """
+
+    pass
+
+
+class UnexpectedCatalogBuildException(Exception):
+    """
+    Raised when catalog source contains an unexpected build version that
+    would cause OLM to initiate an upgrade to a different version than intended.
+    """
+
+    pass

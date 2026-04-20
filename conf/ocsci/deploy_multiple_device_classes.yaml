@@ -1,0 +1,7 @@
+---
+# This configuration file enables deployment of the StorageCluster
+# with multiple device classes. When enabled on a vSphere LSO cluster,
+# additional disks are attached and a second storageDeviceSet with
+# device class 'localblock-1' is added to the StorageCluster.
+DEPLOYMENT:
+  deploy_multiple_device_classes: true

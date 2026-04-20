@@ -208,7 +208,7 @@ class DRUpgrade(OCSUpgrade):
                         resource_name=p.get()["metadata"]["name"]
                     )
 
-        # get pre-upgrade csv
+        # get csv data
         csv_objs = CSV(namespace=self.namespace)
         for csv in csv_objs.get()["items"]:
             if self.operator_name in csv["metadata"]["name"]:
@@ -216,23 +216,28 @@ class DRUpgrade(OCSUpgrade):
                     namespace=self.namespace, resource_name=csv["metadata"]["name"]
                 )
                 if self.upgrade_phase == "pre_upgrade":
-                    self.pre_upgrade_data["version"] = csv_obj.get_resource(
+                    version = csv_obj.get_resource(
                         resource_name=csv_obj.resource_name, column="VERSION"
                     )
-                    try:
-                        self.pre_upgrade_data["version"]
-                    except KeyError:
+                    if version:
+                        self.pre_upgrade_data["version"] = version
+                        log.info(
+                            f"Pre-upgrade CSV version for {self.operator_name}: {version}"
+                        )
+                    else:
                         log.error(
                             f"Couldn't capture Pre-upgrade CSV version for {self.operator_name}"
                         )
                 if self.upgrade_phase == "post_upgrade":
-                    if self.upgrade_version in csv["metadata"]["name"]:
-                        self.post_upgrade_data["version"] = csv_obj.get_resource(
-                            resource_name=csv_obj.resource_name, column="VERSION"
+                    version = csv_obj.get_resource(
+                        resource_name=csv_obj.resource_name, column="VERSION"
+                    )
+                    if version:
+                        self.post_upgrade_data["version"] = version
+                        log.info(
+                            f"Post-upgrade CSV version for {self.operator_name}: {version}"
                         )
-                    try:
-                        self.post_upgrade_data["version"]
-                    except KeyError:
+                    else:
                         log.error(
                             f"Couldn't capture Post upgrade CSV version for {self.operator_name}"
                         )
@@ -329,9 +334,30 @@ class DRClusterOperatorUpgrade(DRUpgrade):
 
     def run_upgrade(self):
         self.collect_data()
+
+        # Ensure we captured pre-upgrade version
+        pre_version = self.pre_upgrade_data.get("version", "")
+        assert pre_version, (
+            f"Failed to capture pre-upgrade CSV version for {self.operator_name}. "
+            "Cannot proceed with upgrade or validation."
+        )
+
         assert (
             self.pre_upgrade_data.get("pod_status", "") == "Running"
         ), "ramen-dr-operator pod is not in Running status"
+
+        # Check if the current CSV version already matches the target upgrade version
+        if self.upgrade_version in pre_version:
+            log.info(
+                f"DR cluster operator is already at version {pre_version} "
+                f"which matches target upgrade version {self.upgrade_version}. "
+                f"Skipping upgrade execution and performing validation only."
+            )
+            self.upgrade_phase = "post_upgrade"
+            self.collect_data()
+            self.validate_upgrade()
+            return
+
         super().run_upgrade()
         self.upgrade_phase = "post_upgrade"
         self.collect_data()
@@ -340,4 +366,35 @@ class DRClusterOperatorUpgrade(DRUpgrade):
     def validate_upgrade(self):
         # validate csv odr-cluster-operator.v4.13.5-rhodf VERSION, PHASE
         # validate pod/ramen-dr-cluster-operator-
-        return super().validate_upgrade()
+
+        # Ensure we have both pre and post upgrade versions
+        pre_version = self.pre_upgrade_data.get("version", "")
+        post_version = self.post_upgrade_data.get("version", "")
+
+        assert pre_version, (
+            f"Pre-upgrade CSV version for {self.operator_name} was not captured. "
+            "Cannot validate upgrade."
+        )
+        assert post_version, (
+            f"Post-upgrade CSV version for {self.operator_name} was not captured. "
+            "Cannot validate upgrade."
+        )
+
+        # Check if pod is running
+        assert (
+            self.post_upgrade_data.get("pod_status", "") == "Running"
+        ), f"Pod {self.pod_name_pattern} not in Running state post upgrade"
+
+        # Check if post-upgrade version matches target upgrade version
+        assert self.upgrade_version in post_version, (
+            f"Post-upgrade CSV version {post_version} does not contain "
+            f"target upgrade version {self.upgrade_version}"
+        )
+
+        # Log version information
+        log.info(f"Pre-upgrade version: {pre_version}")
+        log.info(f"Post-upgrade version: {post_version}")
+        log.info(f"Target upgrade version: {self.upgrade_version}")
+
+        # Ensure all CSVs are in succeeded state
+        check_all_csvs_are_succeeded(namespace=self.namespace)

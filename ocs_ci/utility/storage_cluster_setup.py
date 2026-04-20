@@ -315,6 +315,32 @@ class StorageClusterSetup(object):
             )["hostNetwork"] = False
 
         cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
+        if (
+            config.DEPLOYMENT.get("deploy_multiple_device_classes")
+            and self.local_storage
+            and self.platform == constants.VSPHERE_PLATFORM
+        ):
+            second_device_class = constants.DEFAULT_STORAGECLASS_LSO + "-1"
+            logger.info(
+                "Adding second device set '%s' to the StorageCluster",
+                second_device_class,
+            )
+            second_device_type = config.ENV_DATA.get(
+                "second_device_type", defaults.DEVICE_TYPE
+            )
+            second_device_size = config.ENV_DATA.get("second_device_size")
+            # "1" is the minimum valid PVC request size; LSO ignores the actual
+            # value since local PVs are pre-provisioned with a fixed disk size.
+            storage = f"{second_device_size}Gi" if second_device_size else "1"
+            deviceset_data_2 = deepcopy(deviceset_data)
+            deviceset_data_2["name"] = second_device_class
+            deviceset_data_2["deviceClass"] = second_device_class
+            deviceset_data_2["deviceType"] = second_device_type
+            deviceset_data_2["dataPVCTemplate"]["spec"]["resources"]["requests"][
+                "storage"
+            ] = storage
+            cluster_data["spec"]["storageDeviceSets"].append(deviceset_data_2)
+
         if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
             pv_size_list = helpers.get_pv_size(
                 storageclass=constants.DEFAULT_STORAGECLASS_LSO + "-part"
@@ -410,6 +436,56 @@ class StorageClusterSetup(object):
 
         # Enable data replication separation
         cluster_data = add_data_replication_separation_to_cluster_data(cluster_data)
+
+        # Erasure Coding: configure EC as default pool type
+        if config.DEPLOYMENT.get("ec_default_pools"):
+            k = config.DEPLOYMENT.get("ec_data_chunks", 2)
+            m = config.DEPLOYMENT.get("ec_coding_chunks", 1)
+            fd = config.DEPLOYMENT.get("ec_failure_domain", "host")
+            logger.info(
+                f"Configuring EC default pools: k={k}, m={m}, " f"failureDomain={fd}"
+            )
+
+            # Re-capture managed_resources from the current cluster_data — the two
+            # calls above (add_in_transit_encryption_to_cluster_data,
+            # add_data_replication_separation_to_cluster_data) may have returned a
+            # new dict, making the managed_resources reference captured at line 381
+            # point to the old one.
+            ec_managed_resources = cluster_data["spec"].setdefault(
+                "managedResources", {}
+            )
+
+            ec_managed_resources.setdefault("cephBlockPools", {}).update(
+                {
+                    "poolSpec": {
+                        "failureDomain": fd,
+                        "erasureCoded": {"dataChunks": k, "codingChunks": m},
+                    },
+                    "erasureCodedMetadataPool": "replicated-metadata-pool",
+                }
+            )
+
+            ec_fs_pool_name = "fserasurecoded"
+            ec_managed_resources.setdefault("cephFilesystems", {}).update(
+                {
+                    "additionalDataPools": [
+                        {
+                            "name": ec_fs_pool_name,
+                            "erasureCoded": {"dataChunks": k, "codingChunks": m},
+                        }
+                    ],
+                    "defaultStorageClassDataPoolName": ec_fs_pool_name,
+                }
+            )
+
+            ec_managed_resources.setdefault("cephObjectStores", {}).update(
+                {
+                    "dataPoolSpec": {
+                        "failureDomain": fd,
+                        "erasureCoded": {"dataChunks": k, "codingChunks": m},
+                    },
+                }
+            )
 
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):

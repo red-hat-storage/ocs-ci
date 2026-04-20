@@ -50,6 +50,7 @@ from ocs_ci.ocs.rados_utils import (
     fetch_pool_names,
     fetch_rados_namespaces,
     fetch_filesystem_names,
+    get_ec_pool_names,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -421,6 +422,36 @@ def get_autodistributed_volume_snapshot_classes():
     return snapshot_class_names
 
 
+def get_autodistributed_volumegroup_snapshot_classes():
+    """
+    Get the list of VolumeGroupSnapshotClasses that were provisioned by ODF
+
+    Returns:
+        list: List of VolumeGroupSnapshotClass names that were created by ODF
+
+    """
+    groupsnapshot_class = OCP(
+        kind=constants.VOLUMEGROUPSNAPSHOTCLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    groupsnapshot_classes = groupsnapshot_class.get()
+
+    # Filter VolumeGroupSnapshotClass by ODF
+    groupsnapshot_classes["items"] = [
+        item
+        for item in groupsnapshot_classes["items"]
+        if item["driver"]
+        in [
+            constants.RBD_PROVISIONER,
+            constants.CEPHFS_PROVISIONER,
+        ]
+    ]
+    groupsnapshot_class_names = [
+        item["metadata"]["name"] for item in groupsnapshot_classes["items"]
+    ]
+    return groupsnapshot_class_names
+
+
 def get_provider_address():
     """
     Get the provider address
@@ -606,6 +637,8 @@ def check_ceph_resources(cluster_names):
         f"from all consumers: {consumer_names}"
     )
     pool_names = fetch_pool_names()
+    ec_pool_names = set(get_ec_pool_names())
+    pool_names = [p for p in pool_names if p not in ec_pool_names]
     rados_namespaces = fetch_rados_namespaces()
     svg_names = get_cephfs_subvolumegroup_names()
     filesystems = fetch_filesystem_names()
@@ -2061,6 +2094,10 @@ class HypershiftHostedOCP(
         data_replication_separation = config.DEPLOYMENT.get(
             "enable_data_replication_separation"
         )
+        auto_repair = config.ENV_DATA.get("auto_repair", True)
+        auto_repair = (
+            config.ENV_DATA["clusters"].get(self.name).get("auto_repair", auto_repair)
+        )
 
         hosted_cluster_platform = (
             config.ENV_DATA["clusters"]
@@ -2111,6 +2148,7 @@ class HypershiftHostedOCP(
                 cp_availability_policy=cp_availability_policy,
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
+                auto_repair=auto_repair,
             )
         else:
             return self.create_kubevirt_ocp_cluster(
@@ -2123,6 +2161,7 @@ class HypershiftHostedOCP(
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
                 data_replication_separation=data_replication_separation,
+                auto_repair=auto_repair,
             )
 
     def deploy_dependencies(
@@ -6740,12 +6779,16 @@ class SpokeODF(SpokeOCP, ABC):
 
         storage_class_names = get_autodistributed_storage_classes()
         volumesnapshot_class_names = get_autodistributed_volume_snapshot_classes()
+        volumegroup_snapshot_classes = (
+            get_autodistributed_volumegroup_snapshot_classes()
+        )
 
         start_time = time.time()
         storage_consumer_obj = create_storage_consumer_on_default_cluster(
             storage_consumer_name,
             storage_classes=storage_class_names,
             volume_snapshot_classes=volumesnapshot_class_names,
+            volume_group_snapshot_classes=volumegroup_snapshot_classes,
         )
         secret_name = storage_consumer_obj.get_onboarding_ticket_secret()
 
@@ -7004,6 +7047,7 @@ class SpokeODF(SpokeOCP, ABC):
         Returns:
             bool: True if the catalog source exists, False otherwise
         """
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
         ocp_obj = OCP(
             kind=constants.CATSRC,
             namespace=constants.MARKETPLACE_NAMESPACE,
@@ -7011,7 +7055,7 @@ class SpokeODF(SpokeOCP, ABC):
         )
         return ocp_obj.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
-            resource_name="ocs-catalogsource",
+            resource_name=catalog_source_data["metadata"]["name"],
             should_exist=True,
         )
 
@@ -7033,9 +7077,7 @@ class SpokeODF(SpokeOCP, ABC):
             if not reapply:
                 return True
 
-        catalog_source_data = templating.load_yaml(
-            constants.PROVIDER_MODE_CATALOGSOURCE
-        )
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
 
         if not config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"):
             if not reapply:

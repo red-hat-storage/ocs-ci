@@ -1732,6 +1732,34 @@ def get_non_acm_cluster_config():
     return non_acm_list
 
 
+def get_non_acm_cluster_and_non_provider_cluster_config():
+    """
+    Get a list of non-acm and non_provider cluster's config objects
+    Returns:
+        list: of cluster config objects
+    """
+    non_acm_list = []
+    for i in range(len(ocsci_config.clusters)):
+        if i in get_non_acm_cluster_and_non_provider_cluster_index():
+            non_acm_list.append(ocsci_config.clusters[i])
+
+    return non_acm_list
+
+
+def get_non_acm_cluster_and_non_provider_cluster_index():
+    """
+    Get config index of all non-acm and non_provider clusters
+    Returns:
+        list: Cluster indices of all non-acm and non-provider clusters
+    """
+    all_indices = list(range(len(ocsci_config.clusters)))
+    exclude_indices = config.get_provider_cluster_indexes() + get_all_acm_indexes()
+    required_indices = [
+        index_val for index_val in all_indices if index_val not in exclude_indices
+    ]
+    return required_indices
+
+
 def get_non_acm_and_non_recovery_cluster_config():
     """
     Get a list of non-acm and non-recovery cluster config objects

@@ -7,5 +7,5 @@ spec:
     channel: {}
     installPlanApproval: Automatic
     name: ocs-client-operator
-    source: ocs-catalogsource
+    source: redhat-operators
     sourceNamespace: openshift-marketplace

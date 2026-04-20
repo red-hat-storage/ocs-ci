@@ -194,3 +194,6 @@ INGRESS_SSL_CA_CERT = os.path.join(constants.DATA_DIR, "ca.crt")
 API_SSL_CERT = os.path.join(constants.DATA_DIR, "api-cert.crt")
 API_SSL_KEY = os.path.join(constants.DATA_DIR, "api-cert.key")
 API_SSL_CA_CERT = os.path.join(constants.DATA_DIR, "ca.crt")
+
+# Storage cluster related defaults
+DEVICE_TYPE = "SSD"

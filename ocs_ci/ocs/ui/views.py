@@ -229,7 +229,15 @@ deployment_4_9 = {
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
     "create_storage_system": ("//button[text()='Create storage system']", By.XPATH),
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
-    "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
+    "refresh_popup": (
+        "//button[text()='Refresh web console']|//button[contains(.,'Refresh web console')]",
+        By.XPATH,
+    ),
+    "odf_operator_row_succeeded": (
+        "//tr[.//a[contains(@data-test-operator-row,'{}')]]"
+        "//span[@data-test='status-text' and contains(text(),'Succeeded')]",
+        By.XPATH,
+    ),
     "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
     "expand_advanced_mode": (
         'button[class*="c-select__toggle"]',
@@ -482,7 +490,7 @@ generic_locators = {
     ),
     "searchbar-dropdown": (
         "//div[contains(@class, 'toolbar__item')]//span[contains(@class, 'dropdown__toggle-text')] | "
-        "//div[contains(@class, 'input-group') and contains(@class, 'co-filter-group')]//button/span",
+        "//div[contains(@class, 'input-group')]//button/span",
         By.XPATH,
     ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
@@ -2428,7 +2436,7 @@ validation_4_21 = {
         By.XPATH,
     ),
     "infra_health_checks": (
-        "//a[text()='View health checks']",
+        "//a[contains(normalize-space(.), 'View health checks')]",
         By.XPATH,
     ),
     # web element returns overall score with text like '66%'
@@ -2454,7 +2462,11 @@ validation_4_21 = {
 
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
-    "node_label": ("//*[contains(@class,'topology__node__label')]", By.XPATH),
+    "node_label": (
+        "//*[contains(@class,'topology__node__label')"
+        " and not(contains(@class,'topology__node__label__'))]",
+        By.XPATH,
+    ),
     # status is in class name of the node_status_axis one from pf-m-warning / pf-m-danger / pf-m-success
     "node_status_class_axis": (
         "//*[contains(@class,'topology__node__label')]//*[contains(text(), '{}')]"
@@ -2708,7 +2720,7 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
     "submit_button_folder": (
-        "//button[contains(@class, 'm-primary')]",
+        "//footer//button[@type='button'][contains(@class, 'm-primary')]",
         By.XPATH,
     ),
     "upload_button": (
@@ -2774,11 +2786,12 @@ bucket_tab = {
         By.XPATH,
     ),
     "versioning_enable_confirm_button": (
-        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'm-primary') and text()='Enable']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'm-primary') and text()='Enable'] | "
+        "//div[@role='dialog']//footer//button[normalize-space(.)='Enable']",
         By.XPATH,
     ),
     "versioning_cancel_confirm_button": (
-        "//div[contains(@class, 'c-modal-box')]//button[contains(@class,  'm-link') and text()='Cancel']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class,  'm-link') and normalize-space(.)='Cancel']",
         By.XPATH,
     ),
     "file_input_directory": (
@@ -2842,11 +2855,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "delete_version_confirm_button": (
-        "//button[contains(@class, 'm-danger') and contains(text(), 'Delete object')]",
+        "//button[contains(@class, 'm-danger') and contains(normalize-space(.), 'Delete object')]",
         By.XPATH,
     ),
     "delete_version_cancel_button": (
-        "//button[contains(@class, 'c-button') and contains(@class, 'm-link') and text()='Cancel']",
+        "//button[contains(@class, 'c-button') and contains(@class, 'm-link') and normalize-space(.)='Cancel']",
         By.XPATH,
     ),
     "version_row_checkboxes": (
@@ -2863,7 +2876,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "policy_editor_start_scratch": (
-        "//button[contains(normalize-space(), 'Start from scratch')]",
+        "//button[contains(normalize-space(), 'Start from scratch')] | "
+        "//button//span[contains(text(),'Start from scratch or use predefined policy config')]",
         By.XPATH,
     ),
     "edit_policy_button": (
@@ -2976,7 +2990,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "create_lifecycle_rule_button": (
-        "//button[text()='Create lifecycle rule']",
+        "//button[contains(normalize-space(),'Create lifecycle rule')]",
         By.XPATH,
     ),
     "lifecycle_rules_list": (
@@ -2988,7 +3002,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "rule_kebab_menu": (
-        "//tr[contains(., '{}')]//button[@data-ouia-component-type='PF5/MenuToggle']",
+        "//tr[contains(., '{}')]//button[contains(@data-ouia-component-type, 'MenuToggle')]",
         By.XPATH,
     ),
     "edit_rule_option": (
@@ -3050,15 +3064,15 @@ bucket_tab = {
         By.XPATH,
     ),
     "lifecycle_create_button": (
-        "//button[text()='Create' and contains(@class, 'pf-m-primary') and @aria-disabled='false']",
+        "//button[contains(normalize-space(),'Create') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_save_button": (
-        "//button[text()='Save' and contains(@class, 'pf-m-primary')]",
+        "//button[contains(normalize-space(),'Save') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_cancel_button": (
-        "//button[text()='Cancel']",
+        "//button[contains(normalize-space(),'Cancel')]",
         By.XPATH,
     ),
     # Current objects (Expiration) section
@@ -3141,8 +3155,8 @@ locate_aws_regions = {
 }
 locate_noobaa_regions = {"regions_list": '//*[@id="read-only-cursor-text-area"]'}
 data_foundation_overview = {
-    "view_storage_link": ("//a[contains(text(),'View storage')]", By.XPATH),
-    "view_buckets_link": ("//a[contains(text(),'View buckets')]", By.XPATH),
+    "view_storage_link": ("//a[contains(normalize-space(.),'View storage')]", By.XPATH),
+    "view_buckets_link": ("//a[contains(normalize-space(.),'View buckets')]", By.XPATH),
     "used_capacity_legend": (
         "//*[name()='text' and @id='legend-labels-0']//*[name()='tspan' and contains(text(), 'Used:')]",
         By.XPATH,

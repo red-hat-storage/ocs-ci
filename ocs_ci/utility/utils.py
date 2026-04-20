@@ -1246,7 +1246,23 @@ def get_rosa_cli(
     """
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     rosa_filename = "rosa"
-    rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
+
+    # Detect platform and architecture
+    system = platform.system()
+    machine = platform.machine()
+    if system == "Darwin":
+        if machine == "arm64":
+            rosa_tarball_name = "rosa_Darwin_arm64.tar.gz"
+        else:
+            rosa_tarball_name = "rosa_Darwin_x86_64.tar.gz"
+    elif system == "Linux":
+        if machine == "aarch64":
+            rosa_tarball_name = "rosa_Linux_arm64.tar.gz"
+        else:
+            rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
+    else:
+        raise NotImplementedError(f"Unsupported platform: {system} {machine}")
+
     rosa_binary_path = os.path.join(bin_dir, rosa_filename)
     if os.path.isfile(rosa_binary_path) and force_download:
         delete_file(rosa_binary_path)
@@ -5609,10 +5625,16 @@ def get_client_type_by_name(cluster_name):
         get_hosted_cluster_type,
     )
 
-    if not is_hosted_cluster(cluster_name):
-        return constants.NON_HOSTED_CLUSTER
+    # Store original context index to restore later
+    orig_index = config.cur_index
+    try:
+        config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
+        if not is_hosted_cluster(cluster_name):
+            return constants.NON_HOSTED_CLUSTER
 
-    return get_hosted_cluster_type(cluster_name)
+        return get_hosted_cluster_type(cluster_name)
+    finally:
+        config.switch_ctx(orig_index)
 
 
 def switch_to_correct_client_type(client_type):
@@ -5842,72 +5864,6 @@ def get_oadp_version(namespace=constants.OADP_NAMESPACE):
         if "oadp-operator" in csv["metadata"]["name"]:
             # extract version string
             return csv["spec"]["version"]
-
-
-def create_unreleased_oadp_catalog():
-    """
-    Creates catalog for unreleased OADP operator.
-
-    Raises:
-        TagNotFoundException: if no image tag for oadp oprator found in brew
-
-    """
-    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False, timeout=120)
-    json_data = resp.json()["raw_messages"]
-    image_tag = None
-    ocp_version = version_module.get_semantic_ocp_version_from_config()
-    nvr = None
-    image = None
-
-    for item in json_data:
-        pipeline = item.get("msg", {}).get("pipeline", {})
-        if pipeline.get("status") != "complete":
-            continue
-        index_image = pipeline.get("index_image", {})
-        index_image_str = index_image.get(f"v{ocp_version}")
-        if not index_image_str:
-            continue
-        try:
-            image_tag = index_image_str.split(":")[1]
-            nvr = item.get("msg", {}).get("artifact", {}).get("nvr")
-            break
-        except IndexError:
-            continue
-
-    if image_tag:
-        # Importing here to avoid circular dependency
-        from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
-        from ocs_ci.ocs.resources.catalog_source import CatalogSource
-
-        image = f"{constants.BREW_REPO}:{image_tag}"
-        log.info(
-            f"Creating catalog for OADP operator brew image NVR: {nvr} "
-            f"for OCP: v{ocp_version}. Image: {image}"
-        )
-        brew_catalog_data = load_yaml(constants.BREW_CATALOG_YAML)
-        brew_catalog_data["spec"]["image"] = image
-        brew_catalog_data["spec"]["displayName"] = constants.OADP_CATALOG_NAME
-        brew_catalog_data["metadata"]["name"] = constants.OADP_CATALOG_NAME
-        brew_catalog_data_yaml = NamedTemporaryFile(
-            mode="w+", prefix="brew-catalog", delete=False
-        )
-        dump_data_to_temp_yaml(brew_catalog_data, brew_catalog_data_yaml.name)
-        run_cmd(f"oc apply -f {constants.BREW_ICSP}", timeout=300)
-        wait_for_machineconfigpool_status("all")
-        run_cmd(f"oc apply -f {brew_catalog_data_yaml.name}", timeout=300)
-        catalog_source = CatalogSource(
-            resource_name=constants.OADP_CATALOG_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-        # Wait for catalog source is ready
-        catalog_source.wait_for_state("READY")
-        if config.MULTICLUSTER["acm_cluster"]:
-            run_cmd(
-                f"oc -n {constants.ACM_HUB_NAMESPACE} annotate mch multiclusterhub installer.open-cluster-management.io"
-                f'/oadp-subscription-spec=\'{{"source": "{constants.OADP_CATALOG_NAME}"}}\' --overwrite'
-            )
-    else:
-        raise TagNotFoundException("No brew image for oadp operator found!")
 
 
 def get_acm_version(namespace=constants.ACM_HUB_NAMESPACE):

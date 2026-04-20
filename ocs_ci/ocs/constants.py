@@ -891,6 +891,8 @@ MCG_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml")
 RGW_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim-RGW.yaml")
 
 CEPHOBJECTSTORE_USER_YAML = os.path.join(TEMPLATE_RGW_DIR, "cephobjectstoreuser.yaml")
+EC_CEPHOBJECTSTORE_YAML = os.path.join(TEMPLATE_RGW_DIR, "ec_cephobjectstore.yaml")
+EC_STORAGECLASS_RGW_YAML = os.path.join(TEMPLATE_RGW_DIR, "ec_storageclass_rgw.yaml")
 
 MCG_AWS_CREDS_YAML = os.path.join(TEMPLATE_MCG_DIR, "AwsCreds.yaml")
 
@@ -3199,7 +3201,7 @@ ACM_BREW_BUILD_URL = (
     "&rows_per_page=25&delta=1296000&contains=acm"
 )
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
-SUBCTL_BREW_DOWNSTREAM_URL = "brew.registry.redhat.io/rh-osbs/rhacm2-"
+SUBCTL_BREW_DOWNSTREAM_URL = "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-"
 
 # OADP
 OADP_BREW_BUILD_URL = (
@@ -3824,6 +3826,7 @@ CEPHFS_CSI_ADDONS_PLUGIN_DIR = (
     "/var/lib/kubelet/plugins/openshift-storage.cephfs.csi.ceph.com"
 )
 RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
+HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"
 CEPHFS_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
 
 HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"
@@ -3841,6 +3844,8 @@ KEDA_SCALED_OBJECT_YAML = os.path.join(TEMPLATE_DIR, "keda", "scaled_object.yaml
 THANOS_QUERIER_INTERNAL_ADDRESS = "https://thanos-querier.openshift-monitoring.svc:9091"
 CLUSTER_MONITORING_VIEW_ROLE = "cluster-monitoring-view"
 CEPHOBJECTSTORE_NAME = f"{DEFAULT_STORAGE_CLUSTER}-{CEPHOBJECTSTORE}"
+CEPHOBJECTSTORE_NAME_EC = f"{DEFAULT_STORAGE_CLUSTER}-{CEPHOBJECTSTORE}-ec"
+DEFAULT_STORAGECLASS_RGW_EC = f"{DEFAULT_CLUSTERNAME}-ceph-rgw-ec"
 ENABLE_RGW_HPA_ANNOTATION_KEY = "ocs.openshift.io/enable-rgw-autoscale"
 
 # Monitoring status

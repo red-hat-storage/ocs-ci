@@ -160,6 +160,17 @@ class IBMCloudIPI(CloudDeploymentBase):
             raise UnsupportedPlatformVersionError(
                 "IBM Cloud IPI deployments are only supported on OCP versions >= 4.10"
             )
+
+        # Increase timeout for IBM Cloud IPI deployments a it takes more time to complete,
+        # so we need more buffer than the default 80 minutes (4800 seconds)
+        current_timeout = config.DEPLOYMENT.get("openshift_install_timeout", 4800)
+        if current_timeout < 5400:
+            logger.info(
+                f"Increasing openshift_install_timeout from {current_timeout} to 5400 seconds "
+                "for IBM Cloud IPI deployment"
+            )
+            config.DEPLOYMENT["openshift_install_timeout"] = 5400
+
         # By default, IBM cloud has load balancer limit of 50 per region.
         # switch to us-south, if current load balancers are more than 45.
         # https://cloud.ibm.com/docs/vpc?topic=vpc-quotas

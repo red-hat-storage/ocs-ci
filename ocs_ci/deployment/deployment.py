@@ -77,6 +77,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     ACMClusterConfigurationException,
     ACMObservabilityNotEnabled,
+    WrongVersionExpression,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -160,7 +161,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
 from ocs_ci.utility.multicluster import create_mce_catsrc
-from ocs_ci.utility.operators import NMStateOperator
+from ocs_ci.utility.operators import NMStateOperator, OADPOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -168,11 +169,11 @@ from ocs_ci.utility.ssl_certs import (
     configure_custom_api_cert,
     get_root_ca_cert,
 )
+from ocs_ci.ocs.resources.rgw import create_ec_cephobjectstore
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
-    create_unreleased_oadp_catalog,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -452,14 +453,21 @@ class Deployment(object):
             # Find the DR clusters under test
             dr_cluster_names = []
             dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
-            for cluster_relation in dr_cluster_relations:
-                dr_cluster_names.extend(cluster_relation)
+            if dr_cluster_relations:
+                dr_cluster_names = dr_cluster_relations[0]
+                for index, dr_cluster in enumerate(dr_cluster_names):
+                    if is_hosted_cluster(dr_cluster):
+                        dr_cluster_names[index] = (
+                            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{dr_cluster}"
+                        )
+
             if dr_cluster_names:
                 managed_clusters = [
                     cluster
                     for cluster in managed_clusters
                     if cluster["metadata"]["name"] in dr_cluster_names
                 ]
+
             # TODO: Iterate over dr_cluster_names when dr_cluster_names becomes a mandatory config parameter
             for cluster in managed_clusters:
                 if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
@@ -638,25 +646,25 @@ class Deployment(object):
                             f"Found {constants.OADP_OPERATOR_NAME} skipping creation"
                         )
                         continue
-                    logger.info("Creating Namespace")
-                    # creating Namespace and operator group for cert-manager
-                    logger.info(
-                        "Creating namespace and operator group for Openshift-oadp"
-                    )
-                    run_cmd(f"oc apply -f {constants.OADP_NS_YAML}")
-                    logger.info("Creating OADP Operator Subscription")
-                    oadp_subscription_yaml_data = templating.load_yaml(
-                        constants.OADP_SUBSCRIPTION_YAML
-                    )
                     package_manifest = PackageManifest(
                         resource_name=constants.OADP_OPERATOR_NAME,
                         selector="catalog=redhat-operators",
                     )
                     try:
+
                         pm_data = package_manifest.get()
                         pm_list = pm_data if isinstance(pm_data, list) else [pm_data]
                         required_oadp_version = config.ENV_DATA["oadp_version"]
-
+                        logger.info("Creating Namespace")
+                        # creating Namespace and operator group for cert-manager
+                        logger.info(
+                            "Creating namespace and operator group for Openshift-oadp"
+                        )
+                        run_cmd(f"oc apply -f {constants.OADP_NS_YAML}")
+                        logger.info("Creating OADP Operator Subscription")
+                        oadp_subscription_yaml_data = templating.load_yaml(
+                            constants.OADP_SUBSCRIPTION_YAML
+                        )
                         if not any(
                             version_exist(pm, required_oadp_version)
                             and pm.get("status", {}).get("catalogSource")
@@ -666,52 +674,66 @@ class Deployment(object):
                             raise ResourceNotFoundError(
                                 f"Didn't find OADP {required_oadp_version}"
                             )
+                        oadp_default_channel = package_manifest.get_default_channel()
+                        if config.MULTICLUSTER["acm_cluster"]:
+                            logger.info("Skipping oadp subscription for ACM hub")
+                            continue
+
+                        oadp_subscription_yaml_data["spec"][
+                            "channel"
+                        ] = oadp_default_channel
+                        oadp_subscription_manifest = tempfile.NamedTemporaryFile(
+                            mode="w+", prefix="oadp_subscription_manifest", delete=False
+                        )
+                        templating.dump_data_to_temp_yaml(
+                            oadp_subscription_yaml_data, oadp_subscription_manifest.name
+                        )
+                        run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
+                        self.wait_for_subscription(
+                            constants.OADP_OPERATOR_NAME,
+                            namespace=constants.OADP_NAMESPACE,
+                        )
+                        logger.info(
+                            "Sleeping for 120 seconds after subscribing to OADP Operator"
+                        )
+                        time.sleep(120)
+                        oadp_subscriptions = ocp.OCP(
+                            kind=constants.SUBSCRIPTION_WITH_ACM,
+                            resource_name=constants.OADP_OPERATOR_NAME,
+                            namespace=constants.OADP_NAMESPACE,
+                        ).get()
+                        oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
+                        csv = CSV(
+                            resource_name=oadp_csv_name,
+                            namespace=constants.OADP_NAMESPACE,
+                        )
+                        csv.wait_for_phase("Succeeded", timeout=720)
+                        logger.info("OADP Operator Deployment Succeeded")
 
                     except ResourceNotFoundError as ex:
                         logger.warning(
-                            f"OADP operator not availabe - bringing up unreleased content {ex}!"
+                            f"OADP operator not available - bringing up unreleased content: {ex}"
                         )
-                        create_unreleased_oadp_catalog()
-                        package_manifest = PackageManifest(
-                            resource_name=constants.OADP_OPERATOR_NAME,
-                            selector=f"catalog={constants.OADP_CATALOG_NAME}",
-                        )
-                        oadp_subscription_yaml_data["spec"][
-                            "source"
-                        ] = constants.OADP_CATALOG_NAME
-                    oadp_default_channel = package_manifest.get_default_channel()
-                    if config.MULTICLUSTER["acm_cluster"]:
-                        logger.info("Skipping oadp subscription for ACM hub")
-                        continue
 
-                    oadp_subscription_yaml_data["spec"][
-                        "channel"
-                    ] = oadp_default_channel
-                    oadp_subscription_manifest = tempfile.NamedTemporaryFile(
-                        mode="w+", prefix="oadp_subscription_manifest", delete=False
-                    )
-                    templating.dump_data_to_temp_yaml(
-                        oadp_subscription_yaml_data, oadp_subscription_manifest.name
-                    )
-                    run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
-                    self.wait_for_subscription(
-                        constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
-                    )
-                    logger.info(
-                        "Sleeping for 120 seconds after subscribing to OADP Operator"
-                    )
-                    time.sleep(120)
-                    oadp_subscriptions = ocp.OCP(
-                        kind=constants.SUBSCRIPTION_WITH_ACM,
-                        resource_name=constants.OADP_OPERATOR_NAME,
-                        namespace=constants.OADP_NAMESPACE,
-                    ).get()
-                    oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
-                    csv = CSV(
-                        resource_name=oadp_csv_name, namespace=constants.OADP_NAMESPACE
-                    )
-                    csv.wait_for_phase("Succeeded", timeout=720)
-                    logger.info("OADP Operator Deployment Succeeded")
+                        if config.MULTICLUSTER["acm_cluster"]:
+                            # ACM hub: Only create catalog, ACM handles operator deployment
+                            logger.info("Creating OADP catalog for ACM hub")
+                            oadp_operator = OADPOperator(create_catalog=True)
+                            run_cmd(
+                                f"oc -n {constants.ACM_HUB_NAMESPACE} annotate mch multiclusterhub "
+                                f"installer.open-cluster-management.io"
+                                f'/oadp-subscription-spec=\'{{"source": "{oadp_operator.catalog_name}"}}\' --overwrite'
+                            )
+                            logger.info(
+                                f"OADP catalog '{oadp_operator.catalog_name}' created - ACM will deploy the operator"
+                            )
+                            continue
+                        else:
+                            # Non-ACM: Create catalog and deploy operator
+                            logger.info("Creating OADP catalog and deploying operator")
+                            oadp_operator = OADPOperator(create_catalog=True)
+                            oadp_operator.deploy()
+                            logger.info("OADP operator deployed successfully")
                     if cluster.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
                         apply_oadp_workaround(namespace=constants.OADP_NAMESPACE)
 
@@ -2192,6 +2214,13 @@ class Deployment(object):
         # Enable console plugin
         enable_console_plugin()
 
+        if (
+            config.DEPLOYMENT.get("ec_default_pools")
+            and not config.DEPLOYMENT.get("external_mode")
+            and not config.ENV_DATA.get("mcg_only_deployment")
+        ):
+            create_ec_cephobjectstore()
+
         # validate PDB creation of MON, MDS, OSD pods
         if not config.DEPLOYMENT["external_mode"]:
             validate_pdb_creation()
@@ -3218,10 +3247,47 @@ class RBDDRDeployOps(object):
         mirror_peer._has_phase = True
         mirror_peer.get()
         try:
-            mirror_peer.wait_for_phase(phase="ExchangedSecret", timeout=1200)
-            logger.info("Mirror peer is in expected phase 'ExchangedSecret'")
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                expected_phase = "Ready"
+            else:
+                expected_phase = "ExchangedSecret"
+            mirror_peer.wait_for_phase(phase=expected_phase, timeout=1200)
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                logger.info(
+                    "Waiting for MirrorPeer status message 'Setup is completed'"
+                )
+                try:
+                    for sample in TimeoutSampler(
+                        timeout=300,
+                        sleep=10,
+                        func=lambda: mirror_peer.get()
+                        .get("status", {})
+                        .get("message", ""),
+                    ):
+                        if sample == "Setup is completed":
+                            logger.info(f"MirrorPeer status message: {sample}")
+                            break
+                        logger.debug(
+                            f"Current MirrorPeer status message: '{sample}', waiting for 'Setup is completed'"
+                        )
+                except TimeoutExpiredError:
+                    current_message = (
+                        mirror_peer.get().get("status", {}).get("message", "")
+                    )
+                    raise ResourceWrongStatusException(
+                        f"Timeout waiting for MirrorPeer status message. "
+                        f"Current message: '{current_message}', expected: 'Setup is completed'"
+                    )
+            logger.info(f"Mirror peer is in expected phase {expected_phase}")
         except ResourceWrongStatusException:
             logger.exception("Mirror peer couldn't attain expected phase")
+            logger.error(
+                f"MirrorPeer Phase is {mirror_peer.get().get('status').get('phase')}"
+            )
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                logger.error(
+                    f"MirrorPeer Status Message is {mirror_peer.get().get('status').get('message')}"
+                )
             raise
 
         # Check for token-exchange-agent pod and its status has to be running
@@ -3400,8 +3466,8 @@ class MultiClusterDROperatorsDeploy(object):
         Validate mirror peer,
         Begins with CTX: ACM
 
-        1. Check phase: if RDR then state =  'ExchangedSecret'
-                        if MDR then state = 'S3ProfileSynced'
+        1. Check phase: if OCP >= 4.22: 'Ready' (both RDR and MDR)
+                        if OCP < 4.22:  RDR → 'ExchangedSecret', MDR → 'S3ProfileSynced'
         2. Check token-exchange-agent pod in 'Running' phase
 
         Raises:
@@ -3417,9 +3483,15 @@ class MultiClusterDROperatorsDeploy(object):
         mirror_peer._has_phase = True
         mirror_peer.get()
         if config.MULTICLUSTER["multicluster_mode"] == "regional-dr":
-            expected_phase = "ExchangedSecret"
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                expected_phase = "Ready"
+            else:
+                expected_phase = "ExchangedSecret"
         elif config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
-            expected_phase = "S3ProfileSynced"
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                expected_phase = "Ready"
+            else:
+                expected_phase = "S3ProfileSynced"
 
         try:
             # Need high timeout in case of MDR
@@ -3667,10 +3739,20 @@ class MultiClusterDROperatorsDeploy(object):
             bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
         return bucket_name
 
-    @retry((TimeoutExpiredError, ACMClusterConfigurationException), tries=20, delay=10)
+    @retry(
+        (TimeoutExpiredError, ACMClusterConfigurationException, WrongVersionExpression),
+        tries=20,
+        delay=10,
+    )
     def backup_pod_status_check(self):
         pods_list = get_all_pods(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
-        if len(pods_list) != 3:
+        oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
+
+        if version.compare_versions(f"{oadp_version} >= 1.6"):
+            oadp_pod_count = 4
+        else:
+            oadp_pod_count = 3
+        if len(pods_list) != oadp_pod_count:
             raise ACMClusterConfigurationException("backup pod count mismatch ")
         for pod in pods_list:
             # check pod status Running
@@ -3765,10 +3847,14 @@ class MultiClusterDROperatorsDeploy(object):
             # Remove 'restic' under 'configuration' if it exists
             oadp_data["spec"]["configuration"].pop("restic", None)
 
+            if version.compare_versions(f"{oadp_version} >= 1.6"):
+                uploader_type = "kopia"
+            else:
+                uploader_type = "restic"
             # Add 'nodeAgent' under 'configuration'
             oadp_data["spec"]["configuration"]["nodeAgent"] = {
                 "enable": True,
-                "uploaderType": "restic",
+                "uploaderType": uploader_type,
             }
         oadp_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="oadp", delete=False)
         templating.dump_data_to_temp_yaml(oadp_data, oadp_yaml.name)

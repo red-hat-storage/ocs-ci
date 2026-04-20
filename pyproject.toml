@@ -134,6 +134,7 @@ vsphere-cleanup = "ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup"
 ocs-build = "ocs_ci.utility.ocs_build:main"
 get-ssl-cert = "ocs_ci.utility.ssl_certs:main"
 rosa-ocp-version = "ocs_ci.utility.rosa:rosa_ocp_version_endpoint"
+get-rosa-version = "ocs_ci.utility.rosa:get_rosa_version"
 deploy-fusion = "ocs_ci.framework.fusion.main:main"
 deploy-fdf = "ocs_ci.framework.fusion_data_foundation.main:main"
 
@@ -145,4 +146,14 @@ build-backend = "setuptools.build_meta"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-exclude = ["ez_setup"]
+exclude = [
+    "ez_setup",
+    ".venv*",
+    ".tox*",
+    "docs/_build*",
+    "logs",
+    ".py2venv",
+    ".toxvenv",
+    ".vev-s3-logs",
+    "Docker_files",
+]
