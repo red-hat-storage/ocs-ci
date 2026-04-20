@@ -4,6 +4,7 @@ import pytest
 
 from ocs_ci.framework.testlib import (
     tier2,
+    tier4c,
     ignore_leftovers,
     blue_squad,
     skipif_ocs_version,
