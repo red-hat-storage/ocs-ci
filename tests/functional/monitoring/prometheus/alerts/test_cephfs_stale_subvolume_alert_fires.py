@@ -198,7 +198,7 @@ class TestCephFSStaleSubvolumeAlert:
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api, timeout=900)
 
-    @tier4c
+    @tier2
     @pytest.mark.polarion_id("OCS-7471")
     def test_cephfs_multiple_stale_subvolumes_alert_fires(
         self,
