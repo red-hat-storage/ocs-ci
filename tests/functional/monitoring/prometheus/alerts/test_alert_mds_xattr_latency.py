@@ -23,7 +23,6 @@ from ocs_ci.helpers.cephfs_stress_helpers import CephFSStressTestManager
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pv import delete_released_pvs_in_sc
 from ocs_ci.ocs.node import wait_for_nodes_status
-from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +65,7 @@ def set_xattr_with_high_cpu_usage(
         None: This fixture sets up the environment and cleans up resources in finalizer
 
     """
-    log.info("setting extented attributes value for multiple files in MDS server ")
+    log.info("setting extended attributes value for multiple files in MDS server ")
     active_mds_node_name = cluster.get_active_mds_info()["node_name"]
     file = constants.EXTENDED_ATTRIBUTES
     stress_mgr = CephFSStressTestManager(namespace=constants.DEFAULT_NAMESPACE)
@@ -82,16 +81,11 @@ def set_xattr_with_high_cpu_usage(
         status=constants.STATUS_BOUND,
         project=OCP(kind="Project", namespace=config.ENV_DATA["cluster_namespace"]),
     )
-    # Create service_account to get privilege for deployment pods
-    sa_obj = helpers.create_serviceaccount(pvc_obj.project.namespace)
-
-    helpers.add_scc_policy(sa_name=sa_obj.name, namespace=pvc_obj.project.namespace)
 
     pod_obj = deployment_pod_factory(
         interface=constants.CEPHFILESYSTEM,
         pvc=pvc_obj,
         node_name=active_mds_node_name,
-        sa_obj=sa_obj,
     )
 
     log.info("Copying check_xattr.py to fedora pod ")
@@ -108,28 +102,33 @@ def set_xattr_with_high_cpu_usage(
         "done'"
     )
     pod_obj.exec_sh_cmd_on_pod(cmd)
+    time.sleep(10)
+
+    ls_output = pod_obj.exec_sh_cmd_on_pod("ls /mnt")
+    for i in range(1, 7):
+        dir_name = f"my_test_dir{i}"
+        log_name = f"{dir_name}.log"
+        assert (
+            dir_name in ls_output
+        ), f"Expected directory {dir_name} was not created under /mnt"
+        assert (
+            log_name in ls_output
+        ), f"Expected log file {log_name} was not created under /mnt"
 
     log.info(
         "Setting up cephfs stress job for increasing CPU utilization in the cluster"
     )
 
     # Create storageclass with security context
-    sc_name = "ocs-storagecluster-cephfs-selinux-relabel"
-    try:
-        storage_class = storageclass_factory(
-            sc_name=sc_name,
-            interface=constants.CEPHFILESYSTEM,
-            kernelMountOptions='context="system_u:object_r:container_file_t:s0"',
-        )
-        log.info(f"Storage class {sc_name} created successfully !")
-
-    except CommandFailed as ecf:
-        assert "AlreadyExists" in str(ecf)
-        log.info(
-            f"Cannot create two StorageClasses with same name !"
-            f" Error message:  \n"
-            f"{ecf}"
-        )
+    sc_name = helpers.create_unique_resource_name(
+        "ocs-storagecluster-cephfs-selinux-relabel", "storageclass"
+    )
+    storage_class = storageclass_factory(
+        sc_name=sc_name,
+        interface=constants.CEPHFILESYSTEM,
+        kernelMountOptions='context="system_u:object_r:container_file_t:s0"',
+    )
+    log.info(f"Storage class {sc_name} created successfully !")
 
     pvc_obj1 = pvc_factory(
         access_mode=constants.ACCESS_MODE_RWX,
@@ -151,10 +150,8 @@ def set_xattr_with_high_cpu_usage(
 
     def finalizer():
 
-        # delete_deployment_pods(pod_obj)
-
         job_obj = OCP(
-            kind="Job",
+            kind=constants.JOB,
             namespace=constants.DEFAULT_NAMESPACE,
         )
         job_obj.delete(resource_name="cephfs-stress-job")
@@ -170,50 +167,23 @@ def set_xattr_with_high_cpu_usage(
 def MDSxattr_alert_values(threading_lock, timeout):
     """
     Validate MDS xattr latency alert using Prometheus API.
-
-    This function checks for the CephXattrSetLatency alert in Prometheus and validates
-    its properties including message, description, runbook URL, severity, and state.
-
-    Args:
-        threading_lock: Threading lock object for thread-safe Prometheus API operations
-        timeout (int): Timeout in seconds to wait for the alert to appear
-
-    Returns:
-        bool: True if alert is validated successfully with all expected properties,
-              False if validation fails or alert is not found
-
     """
-    MDSxattr_alert = constants.ALERT_MDSXATTR
-
-    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
-    alert = api.wait_for_alert(name=MDSxattr_alert, state="pending", timeout=timeout)
-    message = (
-        "There is a latency in setting the 'xattr' values for Ceph Metadata Servers."
+    return prometheus.validate_alert(
+        threading_lock=threading_lock,
+        alert_constant=constants.ALERT_MDSXATTR,
+        message="There is a latency in setting the 'xattr' values for Ceph Metadata Servers.",
+        description=(
+            "This latency can be caused by different factors like high CPU usage or network"
+            " related issues etc. Please see the runbook URL link to get further help on mitigating the issue."
+        ),
+        runbook=(
+            "https://github.com/openshift/runbooks/blob/master/alerts/"
+            "openshift-container-storage-operator/CephXattrSetLatency.md"
+        ),
+        severity="warning",
+        state="pending",
+        timeout=timeout,
     )
-    description = (
-        "This latency can be caused by different factors like high CPU usage or network"
-        " related issues etc. Please see the runbook URL link to get further help on mitigating the issue."
-    )
-    runbook = (
-        "https://github.com/openshift/runbooks/blob/master/alerts/"
-        "openshift-container-storage-operator/CephXattrSetLatency.md"
-    )
-    severity = "warning"
-    state = ["pending"]
-    try:
-        prometheus.check_alert_list(
-            label=MDSxattr_alert,
-            msg=message,
-            description=description,
-            runbook=runbook,
-            states=state,
-            severity=severity,
-            alerts=alert,
-        )
-        log.info("Alert verified successfully")
-        return True
-    except Exception:
-        return False
 
 
 def initiate_alert_clearance():
@@ -261,9 +231,6 @@ class TestMdsXattrAlerts(E2ETest):
 
         Args:
             request: pytest request object for finalizer registration
-
-        Returns:
-            None
 
         """
 
@@ -585,5 +552,11 @@ class TestMdsXattrAlerts(E2ETest):
         wait_for_nodes_status(
             [active_mds_node.name], constants.STATUS_READY, timeout=420
         )
+        OCP_POD_OBJ.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            timeout=600,
+            sleep=10,
+        )
+        cluster.ceph_health_check()
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
