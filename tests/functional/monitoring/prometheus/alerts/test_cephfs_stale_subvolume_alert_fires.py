@@ -198,6 +198,7 @@ class TestCephFSStaleSubvolumeAlert:
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api, timeout=900)
 
+    @tier4c
     @pytest.mark.polarion_id("OCS-7471")
     def test_cephfs_multiple_stale_subvolumes_alert_fires(
         self,
@@ -213,6 +214,7 @@ class TestCephFSStaleSubvolumeAlert:
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         wait_and_validate_stale_subvolume_alert(api)
 
+    @tier4c
     @pytest.mark.polarion_id("OCS-7472")
     def test_cephfs_stale_subvolume_alert_after_metrics_exporter_restart(
         self,
@@ -240,6 +242,7 @@ class TestCephFSStaleSubvolumeAlert:
 
         wait_and_validate_stale_subvolume_alert(api, timeout=900)
 
+    @tier4c
     @pytest.mark.polarion_id("OCS-7473")
     def test_stale_subvolume_alert_persists_across_mds_restart(
         self,
@@ -258,6 +261,7 @@ class TestCephFSStaleSubvolumeAlert:
         restart_mds()
         wait_and_validate_stale_subvolume_alert(api)
 
+    @tier4c
     @pytest.mark.polarion_id("OCS-7479")
     def test_stale_subvolume_alert_during_mds_scale_down_and_scale_up(
         self,
