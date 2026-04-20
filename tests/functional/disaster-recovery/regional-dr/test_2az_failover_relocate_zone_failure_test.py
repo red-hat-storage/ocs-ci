@@ -12,7 +12,11 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_nodes_having_label
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import (
+    ceph_health_check,
+    ceph_health_recover,
+    run_ceph_health_cmd,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -416,6 +420,14 @@ class Test2AZFailoverAndRelocateZoneFailure:
             )
             config.switch_to_cluster_by_name(first_workload["primary_cluster_name"])
             wait_for_nodes_status(timeout=900)
+            namespace = config.ENV_DATA["cluster_namespace"]
+            health = run_ceph_health_cmd(namespace, detail=True)
+            ceph_health_recover(
+                health,
+                namespace,
+                update_jira=False,
+                no_exception_if_jira_issue_updated=False,
+            )
             ceph_health_check()
             logger.info(f"Nodes in zone '{power_off_zone}' restarted and healthy")
 
