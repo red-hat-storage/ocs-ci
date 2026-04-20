@@ -3,6 +3,7 @@ import os
 import re
 import pytest
 from ocs_ci.ocs.constants import (
+    CEPH_HEALTH_ERROR,
     KRKN_CHAOS_DIR,
     OPENSHIFT_STORAGE_NAMESPACE,
     # Component label constants
@@ -39,8 +40,12 @@ from ocs_ci.ocs.constants import (
     KRKN_CLOUD_IBM,
     KRKN_CLOUD_VMWARE,
     KRKN_CLOUD_BAREMETAL,
+    FUSIONAAS_PLATFORM,
+    MANAGED_SERVICE_PLATFORMS,
 )
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.exceptions import NoobaaHealthException
 from ocs_ci.ocs.node import get_worker_nodes, get_master_nodes
 from ocs_ci.krkn_chaos.krkn_scenario_generator import (
     ApplicationOutageScenarios,
@@ -51,6 +56,7 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import (
 )
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 from ocs_ci.framework import config
+from ocs_ci.utility.utils import ceph_crash_info_display
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +94,7 @@ def get_krkn_cloud_type():
     Get the Krkn cloud type based on the current platform.
 
     Returns:
-        str: Krkn cloud type (aws, azure, ibm, vmware, bm)
+        str: Krkn cloud type (aws, azure, ibmcloud, vmware, bm)
 
     Raises:
         pytest.skip: If platform is not supported for node chaos testing
@@ -2095,6 +2101,17 @@ class CephHealthHelper(BaseScenarioHelper):
                 return True, ""
             else:
                 self.log.error("❌ Ceph crashes detected")
+                # Same as resiliency: log each crash ID and `ceph crash info <id>` output
+                try:
+                    self.log.error(
+                        "Ceph crash details (ceph crash info <crash_id>), "
+                        "same as resiliency ceph_crash_info_display:"
+                    )
+                    ceph_crash_info_display(ceph_status.toolbox)
+                except Exception as disp_ex:
+                    self.log.warning(
+                        "Could not run ceph_crash_info_display on toolbox: %s", disp_ex
+                    )
                 # Get detailed crash information for logging and error message
                 error_msg = (
                     f"Ceph crashes detected after {component_label} {chaos_type}. "
@@ -2120,7 +2137,10 @@ class CephHealthHelper(BaseScenarioHelper):
                             self.log.error(f"   ... and {remaining} more crashes")
                             error_msg += f"  ... and {remaining} more crash(es)\n"
 
-                        error_msg += "\nRun 'ceph crash ls' and 'ceph crash info <crash_id>' for more details."
+                        error_msg += (
+                            "\nFull `ceph crash info <crash_id>` output was logged above "
+                            "(same as resiliency ceph_crash_info_display)."
+                        )
                     else:
                         error_msg += "Unable to retrieve crash details."
                 except Exception as detail_ex:
@@ -2133,6 +2153,99 @@ class CephHealthHelper(BaseScenarioHelper):
             self.log.error(f"Failed to check Ceph crashes: {e}")
             # In case of check failure, assume no crashes (conservative approach)
             return True, ""
+
+
+def _krkn_should_run_noobaa_health_check():
+    """
+    Whether to assert Noobaa health, aligned with
+    :meth:`ocs_ci.ocs.cluster.CephCluster.cluster_health_check` (Noobaa block).
+
+    Krkn chaos jobs run on OCP > 4.10 only, so the BZ 2075422 live-deployment
+    Noobaa skip from ``cluster_health_check`` is not replicated here.
+
+    Skips when ``CephCluster`` is not fully applicable (mcg-only / Fusion
+    consumer), on managed-service platforms, or when Noobaa is disabled in
+    config.
+    """
+    if config.ENV_DATA.get("mcg_only_deployment"):
+        return False
+    if (
+        config.ENV_DATA.get("platform") == FUSIONAAS_PLATFORM
+        and str(config.ENV_DATA.get("cluster_type", "")).lower() == "consumer"
+    ):
+        return False
+    if config.ENV_DATA["platform"] in MANAGED_SERVICE_PLATFORMS:
+        return False
+    if config.COMPONENTS["disable_noobaa"]:
+        return False
+    return True
+
+
+def krkn_exit_criteria(chaos_context="krkn chaos", namespace=None):
+    """
+    Generic exit criteria: assert no Ceph crash, cluster not in HEALTH_ERR, and
+    Noobaa healthy when applicable.
+
+    Call at the end of any krkn/krknctl chaos test to fail if the cluster has
+    crashes or is in HEALTH_ERR state after chaos. Noobaa health uses
+    :meth:`ocs_ci.ocs.cluster.CephCluster.wait_for_noobaa_health_ok` when
+    :func:`_krkn_should_run_noobaa_health_check` returns true (same gating as
+    ``cluster_health_check`` except the BZ 2075422 skip, omitted for OCP > 4.10
+    Krkn jobs).
+
+    Args:
+        chaos_context (str): Short description for log/assert messages
+            (e.g. "krknctl random chaos", "krknctl service disruption").
+        namespace (str): OpenShift namespace for the cluster. Defaults to
+            OPENSHIFT_STORAGE_NAMESPACE.
+
+    Raises:
+        AssertionError: If Ceph crash(es) were generated, cluster is in
+            HEALTH_ERR, or Noobaa is not healthy (when checks run).
+    """
+    if namespace is None:
+        namespace = OPENSHIFT_STORAGE_NAMESPACE
+    health_helper = CephHealthHelper(namespace=namespace)
+    no_crashes, crash_details = health_helper.check_ceph_crashes(None, chaos_context)
+    assert no_crashes, f"Ceph crash(es) generated during test: {crash_details}"
+
+    ceph_status = CephStatusTool()
+    health_status = ceph_status.get_ceph_health()
+    assert health_status != CEPH_HEALTH_ERROR, (
+        f"Ceph cluster is in {CEPH_HEALTH_ERROR} state after test "
+        f"(status: {health_status})"
+    )
+
+    if _krkn_should_run_noobaa_health_check():
+        log.info("Checking Noobaa health after %s", chaos_context)
+        try:
+            CephCluster().wait_for_noobaa_health_ok()
+        except NoobaaHealthException as exc:
+            raise AssertionError(
+                f"Noobaa is not healthy after {chaos_context}: {exc}"
+            ) from exc
+
+
+def krknctl_random_test_exit_criteria(
+    chaos_context="krknctl random chaos", namespace=None
+):
+    """
+    Exit criteria for krknctl random chaos tests.
+
+    Calls krkn_exit_criteria() with the given context. Use at the end of
+    krknctl random / service disruption tests to assert no Ceph crash and
+    cluster not in HEALTH_ERR.
+
+    Args:
+        chaos_context (str): Short description for log/assert messages
+            (e.g. "krknctl random chaos", "krknctl service disruption").
+        namespace (str): OpenShift namespace for the cluster. Defaults to
+            OPENSHIFT_STORAGE_NAMESPACE.
+
+    Raises:
+        AssertionError: If Ceph crash(es) were generated or cluster is in HEALTH_ERR.
+    """
+    krkn_exit_criteria(chaos_context=chaos_context, namespace=namespace)
 
 
 # ============================================================================
