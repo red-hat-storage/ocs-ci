@@ -1469,6 +1469,7 @@ class Deployment(object):
 
         storage_cluster_setup = StorageClusterSetup(deployment=self)
         storage_cluster_setup.setup_storage_cluster()
+        self.set_noobaa_core_for_rgw_ssl()
 
         if config.DEPLOYMENT["infra_nodes"]:
             log_step("Labeling infra nodes")
@@ -1568,7 +1569,7 @@ class Deployment(object):
         # Wait for StatefulSet for noobaa-core exists before patching
         jsonpath: str = "'{.status.readyReplicas}'=1"
         if not sts_obj.wait(
-            timeout=300,
+            timeout=600,
             condition=None,
             jsonpath=jsonpath,
         ):
@@ -1714,8 +1715,7 @@ class Deployment(object):
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
         run_cmd(f"oc apply -f {cluster_data_yaml.name}", timeout=2400)
-        if config.EXTERNAL_MODE.get("rgw_secure"):
-            self.set_noobaa_core_for_rgw_ssl()
+        self.set_noobaa_core_for_rgw_ssl()
         self.external_post_deploy_validation()
 
         # enable secure connection mode for in-transit encryption
