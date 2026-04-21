@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster, constants
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import ocp
@@ -36,6 +37,7 @@ storagecluster_obj = OCP(
     namespace=config.ENV_DATA["cluster_namespace"],
     resource_name=constants.DEFAULT_STORAGE_CLUSTER,
 )
+ceph_cluster = CephCluster()
 
 
 @pytest.fixture(scope="function")
@@ -190,11 +192,8 @@ def ceph_not_health_error():
     """
     Check if Ceph is not in HEALTH_ERR state.
 
-    Returns:
-        bool: True if Ceph state is not HEALTH_ERR
     """
-    ceph_status = cluster.get_ceph_health()
-    log.info(f"Ceph status is: {ceph_status}")
+    ceph_status = ceph_cluster.get_ceph_health()
     return ceph_status != "HEALTH_ERR"
 
 
