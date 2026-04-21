@@ -714,6 +714,17 @@ class BAREMETALUPI(BAREMETALBASE):
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
             install_config_obj["metadata"]["name"] = config.ENV_DATA.get("cluster_name")
+
+            # Configure RHCOS 10 specific settings
+            rhcos_version = config.ENV_DATA.get("rhcos_version")
+            if rhcos_version and str(rhcos_version) == "10":
+                install_config_obj["featureSet"] = "TechPreviewNoUpgrade"
+                install_config_obj["osImageStream"] = "rhel-10"
+                logger.info(
+                    "Configured install-config for RHEL 10 deployment with "
+                    "TechPreviewNoUpgrade feature set"
+                )
+
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             install_config_backup = os.path.join(

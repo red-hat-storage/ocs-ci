@@ -258,8 +258,9 @@ higher priority).
 * `ocs_version` - Version of OCS that is being deployed
 * `acm_version` - Version of acm to be used for this run (applicable mostly to DR scenarios)
 * `vm_template` - VMWare template to use for RHCOS images (legacy single template, used as fallback)
+* `vm_template_overwrite` - VM template to overwirthe for early testing deployment e.g. rhcos-47.84.202103151537-0-vmware.x86_64
 * `vm_templates` - Dictionary of available RHCOS templates by major version for VMWare deployments (e.g., `{"9": "rhcos-9.6...", "10": "rhcos-10.2..."}`)
-* `rhcos_version` - Select which RHCOS major version to use from vm_templates dictionary (e.g., "9" or "10"). Defaults to "9" if not specified.
+* `rhcos_version` - Select which RHCOS major version to use from vm_templates dictionary (e.g., "9" or "10"). Defaults to "9" if not specified. When set to "10", automatically configures `featureSet: "TechPreviewNoUpgrade"` and `osImageStream: "rhel-10"` in install-config.yaml.
 * `fio_storageutilization_min_mbps` - Minimal write speed of FIO used in workload_fio_storageutilization
 * `TF_LOG_LEVEL` - Terraform log level
 * `TF_LOG_FILE` - Terraform log file
@@ -432,7 +433,6 @@ higher priority).
 * `early_testing` - set to True if it's early testing of RHCOS and provide  release_img
     e.g. registry.ci.openshift.org/rhcos-devel/rhel4784:4.7.2
 * `release_img` - release image for early testing of RHCOS or multi arch setup
-* `vm_template_overwrite` - VM template to overwirthe for early testing deployment e.g. rhcos-47.84.202103151537-0-vmware.x86_64
 * `multi_arch` - Set to True if it's multi arch setup/deployment - it will use
     proper OCP release image for OCP deployment or you can set custom via
     release_img e.g. quay.io/openshift-release-dev/ocp-release:4.21.0-rc.1-multi.

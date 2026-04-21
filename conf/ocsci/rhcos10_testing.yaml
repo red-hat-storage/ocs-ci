@@ -2,5 +2,10 @@
 # Config for testing with RHCOS 10 template
 # Usage: Include this config file to use RHCOS 10 instead of RHCOS 9
 # Example: --ocsci-conf conf/ocsci/rhcos10_testing.yaml
+#
+# This automatically configures:
+# - VM template from vm_templates["10"] in OCP version config
+# - featureSet: "TechPreviewNoUpgrade" in install-config.yaml
+# - osImageStream: "rhel-10" in install-config.yaml
 ENV_DATA:
   rhcos_version: "10"
