@@ -1,7 +1,8 @@
 """Analysis functions for noobaa"""
 
-from ..utils import Colors, print_header, print_status
 from collections import defaultdict
+
+from ..utils import Colors, UNKNOWN, print_header, print_status
 from ..utils import read_yaml_file, read_file
 
 
@@ -18,7 +19,7 @@ def analyze_noobaa(mg_dir):
         noobaa = read_yaml_file(noobaa_file)
         if noobaa:
             status = noobaa.get("status", {})
-            phase = status.get("phase", "Unknown")
+            phase = status.get("phase", UNKNOWN)
             print_status("Phase", phase)
 
             # Check if NooBaa is unhealthy
@@ -29,21 +30,19 @@ def analyze_noobaa(mg_dir):
             db_status = status.get("dbStatus", {})
             if db_status:
                 print(f"\n{Colors.CYAN}Database Status:{Colors.END}")
+                print(f"  Cluster Status: {db_status.get('dbClusterStatus', UNKNOWN)}")
                 print(
-                    f"  Cluster Status: {db_status.get('dbClusterStatus', 'Unknown')}"
+                    f"  PostgreSQL Version: {db_status.get('currentPgMajorVersion', UNKNOWN)}"
                 )
-                print(
-                    f"  PostgreSQL Version: {db_status.get('currentPgMajorVersion', 'Unknown')}"
-                )
-                print(f"  Image: {db_status.get('dbCurrentImage', 'Unknown')}")
+                print(f"  Image: {db_status.get('dbCurrentImage', UNKNOWN)}")
 
             # Conditions
             conditions = status.get("conditions", [])
             if conditions:
                 print(f"\n{Colors.CYAN}Conditions:{Colors.END}")
                 for cond in conditions:
-                    cond_type = cond.get("type", "Unknown")
-                    cond_status = cond.get("status", "Unknown")
+                    cond_type = cond.get("type", UNKNOWN)
+                    cond_status = cond.get("status", UNKNOWN)
                     message = cond.get("message", "")
                     print_status(f"  {cond_type}", cond_status, message)
                     # Also check conditions for unhealthy state
@@ -74,13 +73,13 @@ def analyze_backingstores(mg_dir):
             for bs_file in bs_files:
                 bs_data = read_yaml_file(bs_file)
                 if bs_data:
-                    name = bs_data.get("metadata", {}).get("name", "unknown")
+                    name = bs_data.get("metadata", {}).get("name", UNKNOWN)
                     spec = bs_data.get("spec", {})
                     status = bs_data.get("status", {})
 
-                    bs_type = spec.get("type", "Unknown")
-                    phase = status.get("phase", "Unknown")
-                    mode = status.get("mode", {}).get("modeCode", "Unknown")
+                    bs_type = spec.get("type", UNKNOWN)
+                    phase = status.get("phase", UNKNOWN)
+                    mode = status.get("mode", {}).get("modeCode", UNKNOWN)
 
                     phase_counts[phase] += 1
 

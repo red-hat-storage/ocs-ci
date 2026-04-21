@@ -1,38 +1,38 @@
 #!/usr/bin/env python3
 """
 ODF Must-Gather Report Generator - Main Entry Point
-Run as: python main.py <must-gather-dir> [options]
+
+Run as installed console script ``must-gather-report``, or:
+``python -m must_gather_report_generator <must-gather-dir> [options]``.
 """
 
 import argparse
 import logging
+import shutil
 import sys
 import tarfile
 import tempfile
 from pathlib import Path
 
-# Add parent directory to path so imports work
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from must_gather_report_generator.utils import Colors, find_must_gather_dir, read_file
-from must_gather_report_generator.analyzers import (
-    generate_summary,
-    analyze_nodes,
-    analyze_pods,
-    analyze_csv,
-    analyze_subscriptions,
-    analyze_storagecluster,
-    analyze_ceph_status,
-    analyze_noobaa,
+from .analyzers import (
     analyze_backingstores,
     analyze_ceph_pools,
-    analyze_osd_tree,
-    analyze_storageclient,
-    analyze_pvcs,
+    analyze_ceph_status,
+    analyze_csv,
     analyze_csi_drivers,
     analyze_events,
+    analyze_noobaa,
+    analyze_nodes,
+    analyze_osd_tree,
+    analyze_pods,
+    analyze_pvcs,
+    analyze_storageclient,
+    analyze_storagecluster,
+    analyze_subscriptions,
+    generate_summary,
 )
-from must_gather_report_generator.outputs import generate_xml_output
+from .outputs import generate_xml_output
+from .utils import Colors, find_must_gather_dir, read_file
 
 
 def _safe_extract_tar(tar: tarfile.TarFile, dest_dir: Path) -> None:
@@ -71,14 +71,18 @@ def prepare_must_gather_base(must_gather_path: Path) -> tuple[Path, Path | None]
 
     if must_gather_path.is_file() and tarfile.is_tarfile(must_gather_path):
         tmp_dir = Path(tempfile.mkdtemp(prefix="ocs-ci-must-gather-"))
-        with tarfile.open(must_gather_path, mode="r:*") as tar:
-            _safe_extract_tar(tar, tmp_dir)
+        try:
+            with tarfile.open(must_gather_path, mode="r:*") as tar:
+                _safe_extract_tar(tar, tmp_dir)
 
-        # If archive has a single top-level directory, use it as base.
-        children = [p for p in tmp_dir.iterdir() if p.name not in {".DS_Store"}]
-        if len(children) == 1 and children[0].is_dir():
-            return children[0], tmp_dir
-        return tmp_dir, tmp_dir
+            # If archive has a single top-level directory, use it as base.
+            children = [p for p in tmp_dir.iterdir() if p.name not in {".DS_Store"}]
+            if len(children) == 1 and children[0].is_dir():
+                return children[0], tmp_dir
+            return tmp_dir, tmp_dir
+        except (tarfile.TarError, OSError, ValueError):
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            raise
 
     return must_gather_path, None
 
@@ -130,8 +134,9 @@ Examples:
         print(f"{Colors.RED}Error: Path not found: {mg_input}{Colors.END}")
         return 1
 
+    tmp_extract_dir: Path | None = None
     try:
-        mg_base, _tmp_extract_dir = prepare_must_gather_base(mg_input)
+        mg_base, tmp_extract_dir = prepare_must_gather_base(mg_input)
     except (tarfile.TarError, OSError, ValueError) as exc:
         print(
             f"{Colors.RED}Error: failed to extract archive {mg_input}: {exc}{Colors.END}",
@@ -139,89 +144,95 @@ Examples:
         )
         return 1
 
-    # Find actual must-gather data directory
-    mg_dir = find_must_gather_dir(mg_base)
+    try:
+        # Find actual must-gather data directory
+        mg_dir = find_must_gather_dir(mg_base)
 
-    print(f"\n{Colors.BOLD}ODF Must-Gather Health Analyzer{Colors.END}")
-    print(f"{Colors.CYAN}Input Path: {mg_input}{Colors.END}")
-    print(f"{Colors.CYAN}Base Directory: {mg_base}{Colors.END}")
-    print(f"{Colors.CYAN}Data Directory: {mg_dir}{Colors.END}")
+        print(f"\n{Colors.BOLD}ODF Must-Gather Health Analyzer{Colors.END}")
+        print(f"{Colors.CYAN}Input Path: {mg_input}{Colors.END}")
+        print(f"{Colors.CYAN}Base Directory: {mg_base}{Colors.END}")
+        print(f"{Colors.CYAN}Data Directory: {mg_dir}{Colors.END}")
 
-    # Verify key paths exist
-    print(f"{Colors.CYAN}Checking for key files...{Colors.END}")
-    ceph_dir = mg_dir / "ceph"
-    ns_dir = mg_dir / "namespaces"
-    print(f"  Ceph directory exists: {ceph_dir.exists()}")
-    print(f"  Namespaces directory exists: {ns_dir.exists()}")
+        # Verify key paths exist
+        print(f"{Colors.CYAN}Checking for key files...{Colors.END}")
+        ceph_dir = mg_dir / "ceph"
+        ns_dir = mg_dir / "namespaces"
+        print(f"  Ceph directory exists: {ceph_dir.exists()}")
+        print(f"  Namespaces directory exists: {ns_dir.exists()}")
 
-    # Check timestamp
-    timestamp_file = mg_base / "timestamp"
-    if timestamp_file.exists():
-        timestamp = read_file(timestamp_file)
-        if timestamp:
-            parts = timestamp.split()
-            if len(parts) >= 2:
+        # Check timestamp
+        timestamp_file = mg_base / "timestamp"
+        if timestamp_file.exists():
+            timestamp = read_file(timestamp_file)
+            if timestamp:
+                parts = timestamp.split()
+                if len(parts) >= 2:
+                    print(
+                        f"{Colors.CYAN}Collection Time: {parts[0]} {parts[1]}{Colors.END}"
+                    )
+                elif len(parts) == 1:
+                    print(f"{Colors.CYAN}Collection Time: {parts[0]}{Colors.END}")
+
+        # Redirect output to file if requested
+        original_stdout = None
+        out_file_handle = None
+        if args.output_file:
+            try:
+                out_file_handle = open(args.output_file, "w", encoding="utf-8")
+            except OSError as exc:
                 print(
-                    f"{Colors.CYAN}Collection Time: {parts[0]} {parts[1]}{Colors.END}"
+                    f"{Colors.RED}Error: cannot open output file "
+                    f"{args.output_file}: {exc}{Colors.END}",
+                    file=sys.stderr,
                 )
-            elif len(parts) == 1:
-                print(f"{Colors.CYAN}Collection Time: {parts[0]}{Colors.END}")
-
-    # Redirect output to file if requested
-    original_stdout = None
-    out_file_handle = None
-    if args.output_file:
-        try:
-            out_file_handle = open(args.output_file, "w", encoding="utf-8")
-        except OSError as exc:
+                return 1
+            original_stdout = sys.stdout
+            sys.stdout = out_file_handle
+            # Print info to stderr so user sees it
             print(
-                f"{Colors.RED}Error: cannot open output file "
-                f"{args.output_file}: {exc}{Colors.END}",
+                f"\n{Colors.CYAN}Writing text analysis to: {args.output_file}{Colors.END}",
                 file=sys.stderr,
             )
-            return 1
-        original_stdout = sys.stdout
-        sys.stdout = out_file_handle
-        # Print info to stderr so user sees it
-        print(
-            f"\n{Colors.CYAN}Writing text analysis to: {args.output_file}{Colors.END}",
-            file=sys.stderr,
-        )
 
-    try:
-        # Run all analyses (console or file output)
-        generate_summary(mg_dir)
-        analyze_nodes(mg_dir)  # Node health & capacity
-        analyze_pods(mg_dir)  # Moved up per user request
-        analyze_csv(mg_dir)  # CSV analysis
-        analyze_subscriptions(mg_dir)  # Operator subscriptions
-        analyze_storagecluster(mg_dir)  # Will show rook-ceph-operator logs if not ready
-        analyze_ceph_status(mg_dir)
-        analyze_noobaa(mg_dir)  # Will show noobaa-core logs if unhealthy - MOVED UP
-        analyze_backingstores(mg_dir)  # NooBaa BackingStores - MOVED UP
-        analyze_ceph_pools(mg_dir)  # Ceph pool details
-        analyze_osd_tree(mg_dir)
-        analyze_storageclient(mg_dir)
-        analyze_pvcs(mg_dir)  # PVC analysis
-        analyze_csi_drivers(mg_dir)
-        analyze_events(mg_dir)
+        try:
+            # Run all analyses (console or file output)
+            generate_summary(mg_dir)
+            analyze_nodes(mg_dir)  # Node health & capacity
+            analyze_pods(mg_dir)  # Moved up per user request
+            analyze_csv(mg_dir)  # CSV analysis
+            analyze_subscriptions(mg_dir)  # Operator subscriptions
+            analyze_storagecluster(
+                mg_dir
+            )  # Will show rook-ceph-operator logs if not ready
+            analyze_ceph_status(mg_dir)
+            analyze_noobaa(mg_dir)  # Will show noobaa-core logs if unhealthy - MOVED UP
+            analyze_backingstores(mg_dir)  # NooBaa BackingStores - MOVED UP
+            analyze_ceph_pools(mg_dir)  # Ceph pool details
+            analyze_osd_tree(mg_dir)
+            analyze_storageclient(mg_dir)
+            analyze_pvcs(mg_dir)  # PVC analysis
+            analyze_csi_drivers(mg_dir)
+            analyze_events(mg_dir)
 
-        print(f"\n{Colors.BOLD}{Colors.GREEN}Analysis Complete!{Colors.END}\n")
+            print(f"\n{Colors.BOLD}{Colors.GREEN}Analysis Complete!{Colors.END}\n")
 
+        finally:
+            # Restore stdout if it was redirected
+            if original_stdout is not None and out_file_handle is not None:
+                out_file_handle.close()
+                sys.stdout = original_stdout
+                print(
+                    f"{Colors.GREEN}✓ Text analysis written to: {args.output_file}{Colors.END}"
+                )
+
+        # Generate XML output if requested (after text output)
+        if args.xml_output:
+            generate_xml_output(mg_dir, mg_base, args.xml_output)
+
+        return 0
     finally:
-        # Restore stdout if it was redirected
-        if original_stdout is not None and out_file_handle is not None:
-            out_file_handle.close()
-            sys.stdout = original_stdout
-            print(
-                f"{Colors.GREEN}✓ Text analysis written to: {args.output_file}{Colors.END}"
-            )
-
-    # Generate XML output if requested (after text output)
-    if args.xml_output:
-        generate_xml_output(mg_dir, mg_base, args.xml_output)
-
-    return 0
+        if tmp_extract_dir is not None:
+            shutil.rmtree(tmp_extract_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
