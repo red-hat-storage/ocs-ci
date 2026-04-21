@@ -1483,6 +1483,48 @@ logger.warning("Using default configuration")  # ✅
 logger.info("Cluster deployment completed")  # ✅
 ```
 
+### ❌ Don't: Framing Log Messages
+
+```python
+# Using decorative lines to frame log messages
+logger.info("=" * 80)  # ❌
+logger.info("Starting deployment")
+logger.info("=" * 80)  # ❌
+
+logger.info("#" * 50)  # ❌
+logger.info("### Important Section ###")  # ❌
+logger.info("#" * 50)  # ❌
+
+logger.info("-" * 60)  # ❌
+logger.test_step("Run validation")
+logger.info("-" * 60)  # ❌
+```
+
+**Why avoid framing?**
+- Creates visual noise in logs that makes scanning harder
+- Wastes log lines without adding information
+- Breaks grep/search patterns
+- Inconsistent with log aggregation tools
+- TEST_STEP already provides visual structure
+
+✅ **Do:** Use log levels and clear messages for structure
+
+```python
+# Let TEST_STEP provide structure
+logger.test_step("Starting deployment")  # ✅
+logger.info("Deploying control plane nodes")
+logger.info("Deploying worker nodes")
+
+# Use clear, informative messages
+logger.info("=== Beginning validation phase ===")  # ✅ If you must, include in message
+logger.test_step("Run validation")  # ✅ Better: use TEST_STEP
+
+# Group related operations with consistent prefixes
+logger.info("Validation: Checking cluster health")  # ✅
+logger.info("Validation: Verifying storage")  # ✅
+logger.info("Validation: Testing connectivity")  # ✅
+```
+
 ---
 
 ## Special Topics
