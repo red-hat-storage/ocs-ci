@@ -1,6 +1,7 @@
 import logging
-import pytest
 import math
+
+import pytest
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import tier2
@@ -11,8 +12,8 @@ from ocs_ci.helpers.helpers import (
     verify_reclaimspacecronjob_suspend_state_for_pvc,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
-from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources.pod import delete_pods
+from ocs_ci.utility.retry import retry
 
 log = logging.getLogger(__name__)
 
@@ -49,21 +50,71 @@ class TestDisableReclaimSpaceOperation:
             annotations=reset_reclaimspace_annotations,
         )
 
-    @retry(UnexpectedBehaviour, tries=3, delay=10)
-    def wait_till_expected_image_size(self, pvc_obj, expected_size, tolerance=0.3):
-        """Wait until the RBD image size matches the expected size."""
+    def _check_rbd_used_size_once(self, pvc_obj, expected_size, tolerance=0.3):
+        """
+        Single sample of RBD used size; raises UnexpectedBehaviour if not a match.
+
+        Args:
+            pvc_obj (ocs_ci.ocs.resources.pvc.PVC): PVC object bound to the RBD image
+            expected_size (float): Expected used size of the RBD image in GiB
+            tolerance (float): Absolute tolerance in GiB for size comparison
+
+        Returns:
+            bool: True when the used size is within tolerance of expected_size
+
+        Raises:
+            UnexpectedBehaviour: If the RBD image used size does not match expected_size
+
+        """
         rbd_image_name = pvc_obj.get_rbd_image_name
         image_info = get_rbd_image_info(constants.DEFAULT_CEPHBLOCKPOOL, rbd_image_name)
         image_size = image_info.get("used_size_gib")
-        if not math.isclose(image_size, expected_size, abs_tol=tolerance):
-            raise UnexpectedBehaviour(
-                f"RBD image {rbd_image_name} size mismatch: {image_size}GiB, "
-                f"expected {expected_size}GiB (tolerance: ±{tolerance}GiB)"
+        if math.isclose(image_size, expected_size, abs_tol=tolerance):
+            log.info(
+                f"RBD Image {rbd_image_name} is size of {image_size}GiB "
+                f"(within tolerance ±{tolerance}GiB)"
             )
-        log.info(
-            f"RBD Image {rbd_image_name} is size of {image_size}GiB (within tolerance ±{tolerance}GiB)"
+            return True
+        raise UnexpectedBehaviour(
+            f"RBD image {rbd_image_name} size mismatch: {image_size}GiB, "
+            f"expected {expected_size}GiB (tolerance: ±{tolerance}GiB)"
         )
-        return True
+
+    @retry(UnexpectedBehaviour, tries=8, delay=10, backoff=1)
+    def wait_till_expected_image_size_after_write(
+        self, pvc_obj, expected_size, tolerance=0.3
+    ):
+        """
+        After async ``dd`` to block PVC; brief poll until used size shows ~ written GiB.
+
+        Args:
+            pvc_obj (ocs_ci.ocs.resources.pvc.PVC): PVC object bound to the RBD image
+            expected_size (float): Expected used size of the RBD image in GiB after write
+            tolerance (float): Absolute tolerance in GiB for size comparison
+
+        Returns:
+            bool: True when the used size is within tolerance of expected_size
+
+        Raises:
+            UnexpectedBehaviour: If the RBD image used size does not match expected_size
+                within the retry window
+
+        """
+        return self._check_rbd_used_size_once(pvc_obj, expected_size, tolerance)
+
+    @retry(UnexpectedBehaviour, tries=3, delay=10, backoff=1)
+    def wait_till_expected_image_size_post_delete_reclaim_disabled(
+        self, pvc_obj, expected_size, tolerance=0.3
+    ):
+        """Reclaim suspended: used size should stay ~1 GiB; fail fast (short retry)."""
+        return self._check_rbd_used_size_once(pvc_obj, expected_size, tolerance)
+
+    @retry(UnexpectedBehaviour, tries=18, delay=15, backoff=1)
+    def wait_till_expected_image_size_post_delete_reclaim_enabled(
+        self, pvc_obj, expected_size, tolerance=0.3
+    ):
+        """Reclaim enabled: expect trim toward ~0 GiB; long retry for async reclaim."""
+        return self._check_rbd_used_size_once(pvc_obj, expected_size, tolerance)
 
     def execute_reclaimspace_test(self, pod_factory, suspend_state):
         """Test reclaim space operation for PVCs with pods."""
@@ -86,17 +137,23 @@ class TestDisableReclaimSpaceOperation:
                 shell=True,
             )
 
-        # Validate RBD image sizes after data writes
+        # Validate RBD image sizes after data writes (dd runs in background)
         for pvc_obj in self.pvc_objs:
-            self.wait_till_expected_image_size(pvc_obj, actual_data_written)
+            self.wait_till_expected_image_size_after_write(pvc_obj, actual_data_written)
 
         # Delete pods
         delete_pods(pod_objs, wait=True)
 
-        # Verify RBD image sizes after pods are deleted
         expected_volume_size = actual_data_written if suspend_state else 0.0
         for pvc_obj in self.pvc_objs:
-            self.wait_till_expected_image_size(pvc_obj, expected_volume_size)
+            if suspend_state:
+                self.wait_till_expected_image_size_post_delete_reclaim_disabled(
+                    pvc_obj, expected_volume_size
+                )
+            else:
+                self.wait_till_expected_image_size_post_delete_reclaim_enabled(
+                    pvc_obj, expected_volume_size
+                )
 
     @pytest.mark.polarion_id("OCS-6279")
     @tier2
