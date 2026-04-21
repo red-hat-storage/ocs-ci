@@ -1,23 +1,26 @@
+import importlib.util
 import os
 import re
 import subprocess
-from pathlib import Path
+import sys
 
 from ocs_ci.framework import config
 
 
-def _repo_root():
-    # ocs_ci/ocs/must_gather/report_generator_hook.py -> parents[4] is repo root
-    return Path(__file__).resolve().parents[4]
-
-
-def run_report_generator(mg_dir_path: str, report_dir: str, *, prefix: str) -> None:
+def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None:
     """
-    Run scripts/python/must_gather_report_generator/main.py after must-gather is complete.
-    The report generator script itself is responsible for handling tarballs,
-    symlinks, etc. This hook only triggers the script after log collection.
+    Run the ``must_gather_report_generator`` package after must-gather is complete
+    (``python -m must_gather_report_generator``, same as the ``must-gather-report``
+    console script). The generator handles tarballs, symlinks, etc.; this hook only
+    triggers it after log collection.
+
+    Requires the ocs-ci environment where ``must_gather_report_generator`` is
+    installed (editable or otherwise).
     """
     if not config.REPORTING.get("generate_must_gather_report", False):
+        return
+
+    if importlib.util.find_spec("must_gather_report_generator") is None:
         return
 
     mg_dir_path = os.path.abspath(mg_dir_path)
@@ -27,17 +30,14 @@ def run_report_generator(mg_dir_path: str, report_dir: str, *, prefix: str) -> N
 
     os.makedirs(report_dir, exist_ok=True)
 
-    script_path = _repo_root() / "scripts/python/must_gather_report_generator/main.py"
-    if not script_path.is_file():
-        return
-
-    safe_prefix = re.sub(r"[^A-Za-z0-9_.-]+", "_", prefix)
+    safe_prefix = re.sub(r"[^A-Za-z0-9_.-]+", "_", prefix).strip("_")
     text_out = os.path.join(report_dir, f"{safe_prefix}_mg_analysis.txt")
     xml_out = os.path.join(report_dir, f"{safe_prefix}_mg_analysis.xml")
 
     cmd = [
-        "python",
-        str(script_path),
+        sys.executable,
+        "-m",
+        "must_gather_report_generator",
         mg_dir_path,
         "--output-file",
         text_out,
@@ -48,7 +48,6 @@ def run_report_generator(mg_dir_path: str, report_dir: str, *, prefix: str) -> N
 
 
 def trigger_reports_after_collect_ocs_logs(
-    *,
     dir_name: str,
     status_failure: bool,
     cluster_configs,

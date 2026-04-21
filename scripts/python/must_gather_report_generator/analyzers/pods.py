@@ -1,6 +1,6 @@
 """Analysis functions for pods"""
 
-from ..utils import Colors, print_header
+from ..utils import Colors, UNKNOWN, items_or_empty, print_header
 from ..utils import read_yaml_file
 from collections import defaultdict
 
@@ -12,13 +12,12 @@ def analyze_pods(mg_dir):
     pods_file = mg_dir / "namespaces/openshift-storage/core/pods.yaml"
     if pods_file.exists():
         pods_data = read_yaml_file(pods_file)
-        if pods_data and "items" in pods_data:
-            pods = pods_data["items"]
-
+        pods = items_or_empty(pods_data)
+        if pods:
             # Count by phase
             phase_counts = defaultdict(int)
             for pod in pods:
-                phase = pod.get("status", {}).get("phase", "Unknown")
+                phase = pod.get("status", {}).get("phase", UNKNOWN)
                 phase_counts[phase] += 1
 
             print(f"{Colors.CYAN}Total Pods:{Colors.END} {len(pods)}\n")
@@ -41,12 +40,12 @@ def analyze_pods(mg_dir):
             problem_pods = []
 
             for pod in pods:
-                pod_name = pod.get("metadata", {}).get("name", "unknown")
-                phase = pod.get("status", {}).get("phase", "Unknown")
+                pod_name = pod.get("metadata", {}).get("name", UNKNOWN)
+                phase = pod.get("status", {}).get("phase", UNKNOWN)
 
                 if phase in ["Pending", "Failed"]:
                     conditions = pod.get("status", {}).get("conditions", [])
-                    reason = "Unknown"
+                    reason = UNKNOWN
                     message = ""
 
                     for cond in conditions:
@@ -79,28 +78,29 @@ def analyze_pods(mg_dir):
                     for container in container_statuses:
                         if not container.get("ready", True):
                             state = container.get("state", {})
-                            if "waiting" in state:
-                                reason = state["waiting"].get("reason", "Unknown")
+                            waiting = state.get("waiting")
+                            if isinstance(waiting, dict):
+                                reason = waiting.get("reason", UNKNOWN)
                                 problem_pods.append(
                                     {
                                         "name": pod_name,
-                                        "phase": f"Running (Container: {container.get('name', 'unknown')})",
+                                        "phase": f"Running (Container: {container.get('name', UNKNOWN)})",
                                         "reason": reason,
-                                        "message": state["waiting"].get("message", ""),
+                                        "message": waiting.get("message", ""),
                                     }
                                 )
-                            elif "terminated" in state:
-                                reason = state["terminated"].get("reason", "Terminated")
-                                problem_pods.append(
-                                    {
-                                        "name": pod_name,
-                                        "phase": f"Running (Container: {container.get('name', 'unknown')})",
-                                        "reason": reason,
-                                        "message": state["terminated"].get(
-                                            "message", ""
-                                        ),
-                                    }
-                                )
+                            else:
+                                terminated = state.get("terminated")
+                                if isinstance(terminated, dict):
+                                    reason = terminated.get("reason", "Terminated")
+                                    problem_pods.append(
+                                        {
+                                            "name": pod_name,
+                                            "phase": f"Running (Container: {container.get('name', UNKNOWN)})",
+                                            "reason": reason,
+                                            "message": terminated.get("message", ""),
+                                        }
+                                    )
 
             if problem_pods:
                 for pod in problem_pods[:20]:  # Show first 20

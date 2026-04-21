@@ -6,7 +6,16 @@ from collections import defaultdict
 from datetime import datetime
 from xml.dom import minidom
 
-from ..utils import Colors
+from ..utils import (
+    Colors,
+    HEALTH_STATUS_UNKNOWN,
+    NOT_AVAILABLE,
+    UNKNOWN,
+    ZERO,
+    first_item,
+    items_or_empty,
+    list_from,
+)
 from ..utils import read_file, read_json_file, read_yaml_file
 
 
@@ -49,7 +58,7 @@ def generate_xml_output(mg_dir, mg_base, output_file):
 
     # Get component statuses
     health_file = mg_dir / "ceph/must_gather_commands/ceph_health_detail"
-    ceph_health = "UNKNOWN"
+    ceph_health = HEALTH_STATUS_UNKNOWN
     if health_file.exists():
         raw = read_file(health_file)
         if raw is not None:
@@ -57,21 +66,22 @@ def generate_xml_output(mg_dir, mg_base, output_file):
     ET.SubElement(summary, "ceph-health").text = ceph_health
 
     sc_file = mg_dir / "namespaces/openshift-storage/oc_output/storagecluster.yaml"
-    sc_phase = "UNKNOWN"
+    sc_phase = HEALTH_STATUS_UNKNOWN
     if sc_file.exists():
         sc_data = read_yaml_file(sc_file)
-        if sc_data and "items" in sc_data and len(sc_data["items"]) > 0:
-            sc_phase = sc_data["items"][0].get("status", {}).get("phase", "Unknown")
+        sc_item = first_item(sc_data)
+        if sc_item:
+            sc_phase = sc_item.get("status", {}).get("phase", UNKNOWN)
     ET.SubElement(summary, "storagecluster-phase").text = sc_phase
 
     noobaa_file = (
         mg_dir / "noobaa/namespaces/openshift-storage/noobaa.io/noobaas/noobaa.yaml"
     )
-    noobaa_phase = "UNKNOWN"
+    noobaa_phase = HEALTH_STATUS_UNKNOWN
     if noobaa_file.exists():
         noobaa = read_yaml_file(noobaa_file)
         if noobaa:
-            noobaa_phase = noobaa.get("status", {}).get("phase", "Unknown")
+            noobaa_phase = noobaa.get("status", {}).get("phase", UNKNOWN)
     ET.SubElement(summary, "noobaa-phase").text = noobaa_phase
 
     # Determine overall status
@@ -93,7 +103,7 @@ def generate_xml_output(mg_dir, mg_base, output_file):
             node_data = read_yaml_file(node_file)
             if node_data:
                 node_elem = ET.SubElement(nodes_section, "node")
-                node_name = node_data.get("metadata", {}).get("name", "unknown")
+                node_name = node_data.get("metadata", {}).get("name", UNKNOWN)
                 ET.SubElement(node_elem, "name").text = node_name
 
                 labels = node_data.get("metadata", {}).get("labels", {})
@@ -105,7 +115,7 @@ def generate_xml_output(mg_dir, mg_base, output_file):
                 for cond in conditions:
                     if cond.get("type") == "Ready":
                         ET.SubElement(node_elem, "ready").text = cond.get(
-                            "status", "Unknown"
+                            "status", UNKNOWN
                         )
                         break
 
@@ -114,15 +124,16 @@ def generate_xml_output(mg_dir, mg_base, output_file):
     pods_file = mg_dir / "namespaces/openshift-storage/core/pods.yaml"
     if pods_file.exists():
         pods_data = read_yaml_file(pods_file)
-        if pods_data and "items" in pods_data:
+        pod_items = items_or_empty(pods_data)
+        if pod_items:
             phase_counts = defaultdict(int)
             problematic_pods = []
 
-            for pod in pods_data["items"]:
-                phase = pod.get("status", {}).get("phase", "Unknown")
+            for pod in pod_items:
+                phase = pod.get("status", {}).get("phase", UNKNOWN)
                 phase_counts[phase] += 1
 
-                pod_name = pod.get("metadata", {}).get("name", "unknown")
+                pod_name = pod.get("metadata", {}).get("name", UNKNOWN)
 
                 if phase in ["Pending", "Failed"]:
                     problematic_pods.append({"name": pod_name, "phase": phase})
@@ -133,13 +144,14 @@ def generate_xml_output(mg_dir, mg_base, output_file):
                     for container in container_statuses:
                         if not container.get("ready", True):
                             state = container.get("state", {})
-                            if "waiting" in state:
-                                reason = state["waiting"].get("reason", "Unknown")
+                            waiting = state.get("waiting")
+                            if isinstance(waiting, dict):
+                                reason = waiting.get("reason", UNKNOWN)
                                 problematic_pods.append(
                                     {"name": pod_name, "phase": f"Running-{reason}"}
                                 )
 
-            ET.SubElement(pods_section, "total").text = str(len(pods_data["items"]))
+            ET.SubElement(pods_section, "total").text = str(len(pod_items))
 
             phases = ET.SubElement(pods_section, "phases")
             for phase, count in phase_counts.items():
@@ -197,20 +209,20 @@ def generate_xml_output(mg_dir, mg_base, output_file):
         if status:
             mon_map = status.get("monmap", {})
             monitors = ET.SubElement(ceph_section, "monitors")
-            ET.SubElement(monitors, "total").text = str(mon_map.get("num_mons", 0))
+            ET.SubElement(monitors, "total").text = str(mon_map.get("num_mons", ZERO))
             ET.SubElement(monitors, "quorum-size").text = str(
                 len(status.get("quorum", []))
             )
 
             osd_map = status.get("osdmap", {})
             osds = ET.SubElement(ceph_section, "osds")
-            ET.SubElement(osds, "total").text = str(osd_map.get("num_osds", 0))
-            ET.SubElement(osds, "up").text = str(osd_map.get("num_up_osds", 0))
-            ET.SubElement(osds, "in").text = str(osd_map.get("num_in_osds", 0))
+            ET.SubElement(osds, "total").text = str(osd_map.get("num_osds", ZERO))
+            ET.SubElement(osds, "up").text = str(osd_map.get("num_up_osds", ZERO))
+            ET.SubElement(osds, "in").text = str(osd_map.get("num_in_osds", ZERO))
 
             pg_map = status.get("pgmap", {})
             pgs = ET.SubElement(ceph_section, "placement-groups")
-            ET.SubElement(pgs, "total").text = str(pg_map.get("num_pgs", 0))
+            ET.SubElement(pgs, "total").text = str(pg_map.get("num_pgs", ZERO))
 
     # Operator Subscriptions
     subscriptions_section = ET.SubElement(root, "operator-subscriptions")
@@ -226,42 +238,42 @@ def generate_xml_output(mg_dir, mg_base, output_file):
             if sub:
                 sub_elem = ET.SubElement(subscriptions_section, "subscription")
                 ET.SubElement(sub_elem, "name").text = sub.get("metadata", {}).get(
-                    "name", "Unknown"
+                    "name", UNKNOWN
                 )
                 ET.SubElement(sub_elem, "package").text = sub.get("spec", {}).get(
-                    "name", "Unknown"
+                    "name", UNKNOWN
                 )
                 ET.SubElement(sub_elem, "channel").text = sub.get("spec", {}).get(
-                    "channel", "Unknown"
+                    "channel", UNKNOWN
                 )
                 ET.SubElement(sub_elem, "source").text = sub.get("spec", {}).get(
-                    "source", "Unknown"
+                    "source", UNKNOWN
                 )
                 ET.SubElement(sub_elem, "state").text = sub.get("status", {}).get(
-                    "state", "Unknown"
+                    "state", UNKNOWN
                 )
                 ET.SubElement(sub_elem, "current-csv").text = sub.get("status", {}).get(
-                    "currentCSV", "Unknown"
+                    "currentCSV", UNKNOWN
                 )
 
     # StorageCluster
     storagecluster_section = ET.SubElement(root, "storagecluster")
     if sc_file.exists():
         sc_data = read_yaml_file(sc_file)
-        if sc_data and "items" in sc_data and len(sc_data["items"]) > 0:
-            sc = sc_data["items"][0]
+        sc = first_item(sc_data)
+        if sc:
             ET.SubElement(storagecluster_section, "name").text = sc.get(
                 "metadata", {}
-            ).get("name", "N/A")
+            ).get("name", NOT_AVAILABLE)
             ET.SubElement(storagecluster_section, "phase").text = sc.get(
                 "status", {}
-            ).get("phase", "Unknown")
+            ).get("phase", UNKNOWN)
             ET.SubElement(storagecluster_section, "version").text = sc.get(
                 "status", {}
-            ).get("version", "Unknown")
+            ).get("version", UNKNOWN)
             ET.SubElement(storagecluster_section, "failure-domain").text = sc.get(
                 "status", {}
-            ).get("failureDomain", "N/A")
+            ).get("failureDomain", NOT_AVAILABLE)
 
             # Conditions
             conditions = sc.get("status", {}).get("conditions", [])
@@ -269,9 +281,9 @@ def generate_xml_output(mg_dir, mg_base, output_file):
                 conds_elem = ET.SubElement(storagecluster_section, "conditions")
                 for cond in conditions:
                     cond_elem = ET.SubElement(conds_elem, "condition")
-                    ET.SubElement(cond_elem, "type").text = cond.get("type", "Unknown")
+                    ET.SubElement(cond_elem, "type").text = cond.get("type", UNKNOWN)
                     ET.SubElement(cond_elem, "status").text = cond.get(
-                        "status", "Unknown"
+                        "status", UNKNOWN
                     )
                     ET.SubElement(cond_elem, "reason").text = cond.get("reason", "")
                     ET.SubElement(cond_elem, "message").text = cond.get("message", "")
@@ -282,17 +294,17 @@ def generate_xml_output(mg_dir, mg_base, output_file):
         noobaa = read_yaml_file(noobaa_file)
         if noobaa:
             status = noobaa.get("status", {})
-            ET.SubElement(noobaa_section, "phase").text = status.get("phase", "Unknown")
+            ET.SubElement(noobaa_section, "phase").text = status.get("phase", UNKNOWN)
 
             # DB Status
             db_status = status.get("dbStatus", {})
             if db_status:
                 db_elem = ET.SubElement(noobaa_section, "database")
                 ET.SubElement(db_elem, "cluster-status").text = db_status.get(
-                    "dbClusterStatus", "Unknown"
+                    "dbClusterStatus", UNKNOWN
                 )
                 ET.SubElement(db_elem, "postgresql-version").text = str(
-                    db_status.get("currentPgMajorVersion", "Unknown")
+                    db_status.get("currentPgMajorVersion", UNKNOWN)
                 )
 
             # Conditions
@@ -301,9 +313,9 @@ def generate_xml_output(mg_dir, mg_base, output_file):
                 conds_elem = ET.SubElement(noobaa_section, "conditions")
                 for cond in conditions:
                     cond_elem = ET.SubElement(conds_elem, "condition")
-                    ET.SubElement(cond_elem, "type").text = cond.get("type", "Unknown")
+                    ET.SubElement(cond_elem, "type").text = cond.get("type", UNKNOWN)
                     ET.SubElement(cond_elem, "status").text = cond.get(
-                        "status", "Unknown"
+                        "status", UNKNOWN
                     )
                     ET.SubElement(cond_elem, "message").text = cond.get("message", "")
 
@@ -319,16 +331,16 @@ def generate_xml_output(mg_dir, mg_base, output_file):
             if bs_data:
                 bs_elem = ET.SubElement(backingstores_section, "backingstore")
                 ET.SubElement(bs_elem, "name").text = bs_data.get("metadata", {}).get(
-                    "name", "unknown"
+                    "name", UNKNOWN
                 )
                 ET.SubElement(bs_elem, "type").text = bs_data.get("spec", {}).get(
-                    "type", "Unknown"
+                    "type", UNKNOWN
                 )
                 ET.SubElement(bs_elem, "phase").text = bs_data.get("status", {}).get(
-                    "phase", "Unknown"
+                    "phase", UNKNOWN
                 )
                 mode = (
-                    bs_data.get("status", {}).get("mode", {}).get("modeCode", "Unknown")
+                    bs_data.get("status", {}).get("mode", {}).get("modeCode", UNKNOWN)
                 )
                 ET.SubElement(bs_elem, "mode").text = mode
 
@@ -340,20 +352,24 @@ def generate_xml_output(mg_dir, mg_base, output_file):
     )
     if pool_file.exists():
         pool_data = read_json_file(pool_file)
-        if pool_data and "pools" in pool_data:
-            pools = pool_data["pools"]
+        pools = list_from(pool_data, "pools") if pool_data else []
+        if pools:
             ET.SubElement(ceph_pools_section, "total").text = str(len(pools))
 
             for pool in pools:
                 pool_elem = ET.SubElement(ceph_pools_section, "pool")
-                ET.SubElement(pool_elem, "name").text = pool.get("pool_name", "unknown")
-                ET.SubElement(pool_elem, "id").text = str(pool.get("pool", "N/A"))
+                ET.SubElement(pool_elem, "name").text = pool.get("pool_name", UNKNOWN)
+                ET.SubElement(pool_elem, "id").text = str(
+                    pool.get("pool", NOT_AVAILABLE)
+                )
                 ET.SubElement(pool_elem, "type").text = (
                     "replicated" if pool.get("type", 1) == 1 else "erasure"
                 )
-                ET.SubElement(pool_elem, "size").text = str(pool.get("size", 0))
-                ET.SubElement(pool_elem, "min-size").text = str(pool.get("min_size", 0))
-                ET.SubElement(pool_elem, "pg-num").text = str(pool.get("pg_num", 0))
+                ET.SubElement(pool_elem, "size").text = str(pool.get("size", ZERO))
+                ET.SubElement(pool_elem, "min-size").text = str(
+                    pool.get("min_size", ZERO)
+                )
+                ET.SubElement(pool_elem, "pg-num").text = str(pool.get("pg_num", ZERO))
 
     # Storage Client
     storageclient_section = ET.SubElement(root, "storageclient")
@@ -366,10 +382,10 @@ def generate_xml_output(mg_dir, mg_base, output_file):
         if sc_data:
             status = sc_data.get("status", {})
             ET.SubElement(storageclient_section, "phase").text = status.get(
-                "phase", "Unknown"
+                "phase", UNKNOWN
             )
             ET.SubElement(storageclient_section, "client-id").text = status.get(
-                "id", "N/A"
+                "id", NOT_AVAILABLE
             )
             ET.SubElement(storageclient_section, "maintenance-mode").text = str(
                 status.get("inMaintenanceMode", False)
@@ -380,16 +396,17 @@ def generate_xml_output(mg_dir, mg_base, output_file):
     pvc_file = mg_dir / "namespaces/openshift-storage/core/persistentvolumeclaims.yaml"
     if pvc_file.exists():
         pvc_data = read_yaml_file(pvc_file)
-        if pvc_data and "items" in pvc_data:
+        pvc_items = items_or_empty(pvc_data)
+        if pvc_items:
             phase_counts = defaultdict(int)
             pending_pvcs = []
 
-            for pvc in pvc_data["items"]:
-                phase = pvc.get("status", {}).get("phase", "Unknown")
+            for pvc in pvc_items:
+                phase = pvc.get("status", {}).get("phase", UNKNOWN)
                 phase_counts[phase] += 1
 
                 if phase == "Pending":
-                    pvc_name = pvc.get("metadata", {}).get("name", "unknown")
+                    pvc_name = pvc.get("metadata", {}).get("name", UNKNOWN)
                     storage_class = pvc.get("spec", {}).get(
                         "storageClassName", "default"
                     )
@@ -397,7 +414,7 @@ def generate_xml_output(mg_dir, mg_base, output_file):
                         {"name": pvc_name, "storage_class": storage_class}
                     )
 
-            ET.SubElement(pvcs_section, "total").text = str(len(pvc_data["items"]))
+            ET.SubElement(pvcs_section, "total").text = str(len(pvc_items))
 
             phases = ET.SubElement(pvcs_section, "phases")
             for phase, count in phase_counts.items():
@@ -452,9 +469,8 @@ def generate_xml_output(mg_dir, mg_base, output_file):
     events_file = mg_dir / "namespaces/openshift-storage/core/events.yaml"
     if events_file.exists():
         events_data = read_yaml_file(events_file)
-        if events_data and "items" in events_data:
-            events = events_data["items"]
-
+        events = items_or_empty(events_data)
+        if events:
             warning_events = [e for e in events if e.get("type", "") == "Warning"]
             ET.SubElement(events_section, "total-warnings").text = str(
                 len(warning_events)
@@ -463,7 +479,7 @@ def generate_xml_output(mg_dir, mg_base, output_file):
             # Count by reason
             reason_counts = defaultdict(int)
             for event in warning_events:
-                reason = event.get("reason", "Unknown")
+                reason = event.get("reason", UNKNOWN)
                 reason_counts[reason] += 1
 
             reasons_elem = ET.SubElement(events_section, "warning-summary")

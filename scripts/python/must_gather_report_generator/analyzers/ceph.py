@@ -1,6 +1,15 @@
 """Analysis functions for ceph"""
 
-from ..utils import Colors, print_header, print_status
+from ..utils import (
+    Colors,
+    HEALTH_STATUS_UNKNOWN,
+    NOT_AVAILABLE,
+    UNKNOWN,
+    ZERO,
+    list_from,
+    print_header,
+    print_status,
+)
 from ..utils import read_json_file, read_file
 
 
@@ -28,7 +37,9 @@ def analyze_ceph_status(mg_dir):
     if status_file.exists():
         status = read_json_file(status_file)
         if status:
-            health_status = status.get("health", {}).get("status", "UNKNOWN")
+            health_status = status.get("health", {}).get(
+                "status", HEALTH_STATUS_UNKNOWN
+            )
             print_status("Overall Status", health_status)
 
             # Print health checks/warnings
@@ -45,19 +56,19 @@ def analyze_ceph_status(mg_dir):
             # Monitor status
             mon_map = status.get("monmap", {})
             print(f"\n{Colors.CYAN}Monitors:{Colors.END}")
-            print(f"  Total: {mon_map.get('num_mons', 0)}")
+            print(f"  Total: {mon_map.get('num_mons', ZERO)}")
             print(f"  Quorum: {len(status.get('quorum', []))}")
             print(f"  Quorum names: {', '.join(status.get('quorum_names', []))}")
 
             # OSD status
             osd_map = status.get("osdmap", {})
             print(f"\n{Colors.CYAN}OSDs:{Colors.END}")
-            print(f"  Total: {osd_map.get('num_osds', 0)}")
-            print(f"  Up: {osd_map.get('num_up_osds', 0)}")
-            print(f"  In: {osd_map.get('num_in_osds', 0)}")
+            print(f"  Total: {osd_map.get('num_osds', ZERO)}")
+            print(f"  Up: {osd_map.get('num_up_osds', ZERO)}")
+            print(f"  In: {osd_map.get('num_in_osds', ZERO)}")
 
-            num_osds = osd_map.get("num_osds", 0)
-            num_up = osd_map.get("num_up_osds", 0)
+            num_osds = osd_map.get("num_osds", ZERO)
+            num_up = osd_map.get("num_up_osds", ZERO)
             if num_up < num_osds:
                 print_status(
                     "  OSD Health",
@@ -70,11 +81,11 @@ def analyze_ceph_status(mg_dir):
             # PG status
             pg_map = status.get("pgmap", {})
             print(f"\n{Colors.CYAN}Placement Groups:{Colors.END}")
-            print(f"  Total PGs: {pg_map.get('num_pgs', 0)}")
+            print(f"  Total PGs: {pg_map.get('num_pgs', ZERO)}")
             pgs_by_state = pg_map.get("pgs_by_state", [])
             for pg_state in pgs_by_state:
-                state_name = pg_state.get("state_name", "unknown")
-                count = pg_state.get("count", 0)
+                state_name = pg_state.get("state_name", UNKNOWN)
+                count = pg_state.get("count", ZERO)
                 if "active+clean" in state_name:
                     print(f"  {Colors.GREEN}✓{Colors.END} {state_name}: {count}")
                 elif "peering" in state_name or "inactive" in state_name:
@@ -84,9 +95,9 @@ def analyze_ceph_status(mg_dir):
 
             # Storage capacity
             ceph_data = status.get("pgmap", {})
-            bytes_total = ceph_data.get("bytes_total", 0)
-            bytes_avail = ceph_data.get("bytes_avail", 0)
-            bytes_used = ceph_data.get("bytes_used", 0)
+            bytes_total = ceph_data.get("bytes_total", ZERO)
+            bytes_avail = ceph_data.get("bytes_avail", ZERO)
+            bytes_used = ceph_data.get("bytes_used", ZERO)
 
             if bytes_total > 0:
                 total_tb = bytes_total / (1024**4)
@@ -135,17 +146,16 @@ def analyze_ceph_pools(mg_dir):
     )
     if pool_file.exists():
         pool_data = read_json_file(pool_file)
-        if pool_data and "pools" in pool_data:
-            pools = pool_data["pools"]
-
+        pools = list_from(pool_data, "pools") if pool_data else []
+        if pools:
             print(f"{Colors.CYAN}Total Pools:{Colors.END} {len(pools)}\n")
 
             for pool in pools:
-                pool_name = pool.get("pool_name", "unknown")
-                pool_id = pool.get("pool", "N/A")
-                size = pool.get("size", 0)
-                min_size = pool.get("min_size", 0)
-                pg_num = pool.get("pg_num", 0)
+                pool_name = pool.get("pool_name", UNKNOWN)
+                pool_id = pool.get("pool", NOT_AVAILABLE)
+                size = pool.get("size", ZERO)
+                min_size = pool.get("min_size", ZERO)
+                pg_num = pool.get("pg_num", ZERO)
                 pool_type = "replicated" if pool.get("type", 1) == 1 else "erasure"
 
                 print(f"{Colors.CYAN}Pool: {pool_name}{Colors.END} (ID: {pool_id})")

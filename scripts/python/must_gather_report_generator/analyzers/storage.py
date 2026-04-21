@@ -1,7 +1,16 @@
 """Analysis functions for storage"""
 
-from ..utils import Colors, print_header, print_status
 from collections import defaultdict
+
+from ..utils import (
+    Colors,
+    NOT_AVAILABLE,
+    UNKNOWN,
+    ZERO,
+    first_item,
+    items_or_empty,
+)
+from ..utils import print_header, print_status
 from ..utils import read_yaml_file, read_file
 
 
@@ -14,16 +23,15 @@ def analyze_storagecluster(mg_dir):
 
     if sc_file.exists():
         sc_data = read_yaml_file(sc_file)
-        if sc_data and "items" in sc_data and len(sc_data["items"]) > 0:
-            sc = sc_data["items"][0]
-
+        sc = first_item(sc_data)
+        if sc:
             # Basic info
-            name = sc.get("metadata", {}).get("name", "N/A")
+            name = sc.get("metadata", {}).get("name", NOT_AVAILABLE)
             print(f"{Colors.CYAN}Name:{Colors.END} {name}")
 
             # Phase and conditions
             status = sc.get("status", {})
-            phase = status.get("phase", "Unknown")
+            phase = status.get("phase", UNKNOWN)
             print_status("Phase", phase)
 
             # Check if StorageCluster is not ready
@@ -31,7 +39,7 @@ def analyze_storagecluster(mg_dir):
                 is_not_ready = True
 
             # Version
-            version = status.get("version", "Unknown")
+            version = status.get("version", UNKNOWN)
             print(f"{Colors.CYAN}Version:{Colors.END} {version}")
 
             # Conditions
@@ -39,8 +47,8 @@ def analyze_storagecluster(mg_dir):
             if conditions:
                 print(f"\n{Colors.CYAN}Conditions:{Colors.END}")
                 for cond in conditions:
-                    cond_type = cond.get("type", "Unknown")
-                    cond_status = cond.get("status", "Unknown")
+                    cond_type = cond.get("type", UNKNOWN)
+                    cond_status = cond.get("status", UNKNOWN)
                     message = cond.get("message", "")
                     reason = cond.get("reason", "")
 
@@ -50,7 +58,7 @@ def analyze_storagecluster(mg_dir):
                     print_status(f"  {cond_type}", cond_status, message)
 
             # Failure domain
-            failure_domain = status.get("failureDomain", "N/A")
+            failure_domain = status.get("failureDomain", NOT_AVAILABLE)
             print(f"\n{Colors.CYAN}Failure Domain:{Colors.END} {failure_domain}")
 
             # Node count
@@ -78,8 +86,8 @@ def analyze_storageclient(mg_dir):
         sc_data = read_yaml_file(sc_file)
         if sc_data:
             status = sc_data.get("status", {})
-            phase = status.get("phase", "Unknown")
-            client_id = status.get("id", "N/A")
+            phase = status.get("phase", UNKNOWN)
+            client_id = status.get("id", NOT_AVAILABLE)
             maintenance_mode = status.get("inMaintenanceMode", False)
 
             print_status("Phase", phase)
@@ -113,18 +121,17 @@ def analyze_pvcs(mg_dir):
     pvc_file = mg_dir / "namespaces/openshift-storage/core/persistentvolumeclaims.yaml"
     if pvc_file.exists():
         pvc_data = read_yaml_file(pvc_file)
-        if pvc_data and "items" in pvc_data:
-            pvcs = pvc_data["items"]
-
+        pvcs = items_or_empty(pvc_data)
+        if pvcs:
             # Count by phase
             phase_counts = defaultdict(int)
             storage_class_counts = defaultdict(int)
-            total_capacity = 0
+            total_capacity = ZERO
 
             pending_pvcs = []
 
             for pvc in pvcs:
-                phase = pvc.get("status", {}).get("phase", "Unknown")
+                phase = pvc.get("status", {}).get("phase", UNKNOWN)
                 phase_counts[phase] += 1
 
                 storage_class = pvc.get("spec", {}).get("storageClassName", "default")
@@ -136,23 +143,23 @@ def analyze_pvcs(mg_dir):
                         pvc.get("status", {}).get("capacity", {}).get("storage", "0")
                     )
                     # Parse capacity (e.g., "10Gi" -> GB)
-                    if capacity.endswith("Gi"):
+                    if isinstance(capacity, str) and capacity.endswith("Gi"):
                         total_capacity += int(capacity[:-2])
-                    elif capacity.endswith("Ti"):
+                    elif isinstance(capacity, str) and capacity.endswith("Ti"):
                         total_capacity += int(capacity[:-2]) * 1024
 
                 # Track pending PVCs
                 if phase == "Pending":
-                    pvc_name = pvc.get("metadata", {}).get("name", "unknown")
+                    pvc_name = pvc.get("metadata", {}).get("name", UNKNOWN)
                     conditions = pvc.get("status", {}).get("conditions", [])
-                    reason = "Unknown"
+                    reason = UNKNOWN
                     message = ""
                     for cond in conditions:
                         if (
                             cond.get("type") == "Provisioning"
                             and cond.get("status") == "False"
                         ):
-                            reason = cond.get("reason", "Unknown")
+                            reason = cond.get("reason", UNKNOWN)
                             message = cond.get("message", "")
 
                     pending_pvcs.append(
