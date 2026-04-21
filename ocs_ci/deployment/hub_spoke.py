@@ -25,6 +25,7 @@ from ocs_ci.deployment.helpers.hypershift_base import (
     get_current_nodepool_size,
     get_available_hosted_clusters_to_ocp_ver_dict,
     create_cluster_dir,
+    fix_hypershift_webhook_ca_bundle,
 )
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework.logger_helper import log_step, reset_current_module_log_steps
@@ -3732,6 +3733,18 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             return ""
 
         except CommandFailed as e:
+            if "x509: certificate signed by unknown authority" in str(
+                e
+            ) and "hostedclusters.hypershift.openshift.io" in str(e):
+                logger.warning(
+                    "HyperShift webhook TLS error detected — applying CA bundle fix and retrying"
+                )
+                fix_hypershift_webhook_ca_bundle()
+                exec_cmd(cmd, timeout=2700)
+            else:
+                logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
+                self._log_cmd_output(e)
+                raise
             logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
             self._log_cmd_output(e)
             raise
