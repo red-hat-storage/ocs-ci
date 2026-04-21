@@ -1,6 +1,6 @@
 """Analysis functions for events"""
 
-from ..utils import Colors, print_header
+from ..utils import Colors, UNKNOWN, items_or_empty, print_header
 from ..utils import read_yaml_file
 from collections import defaultdict
 
@@ -12,18 +12,17 @@ def analyze_events(mg_dir):
     events_file = mg_dir / "namespaces/openshift-storage/core/events.yaml"
     if events_file.exists():
         events_data = read_yaml_file(events_file)
-        if events_data and "items" in events_data:
-            events = events_data["items"]
-
+        events = items_or_empty(events_data)
+        if events:
             # Filter warning and error events
             problem_events = []
             for event in events:
                 event_type = event.get("type", "")
                 if event_type in ["Warning"]:
-                    reason = event.get("reason", "Unknown")
+                    reason = event.get("reason", UNKNOWN)
                     message = event.get("message", "")
                     involved_obj = event.get("involvedObject", {})
-                    obj_name = involved_obj.get("name", "unknown")
+                    obj_name = involved_obj.get("name", UNKNOWN)
                     last_timestamp = event.get("lastTimestamp", "")
 
                     problem_events.append(

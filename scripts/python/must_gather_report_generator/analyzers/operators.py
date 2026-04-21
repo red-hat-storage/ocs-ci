@@ -1,6 +1,6 @@
 """Analysis functions for operators"""
 
-from ..utils import Colors, print_header, print_status
+from ..utils import Colors, UNKNOWN, print_header, print_status
 from ..utils import read_yaml_file, read_file
 import re
 
@@ -40,7 +40,7 @@ def analyze_csv(mg_dir):
                             phase = parts[-1]
                         else:
                             display_name = parts[1] if len(parts) > 1 else name
-                            version = parts[2] if len(parts) > 2 else "Unknown"
+                            version = parts[2] if len(parts) > 2 else UNKNOWN
                             phase = parts[-1]
 
                         # Count by phase
@@ -119,18 +119,18 @@ def analyze_subscriptions(mg_dir):
             for sub_file in sorted(sub_files):
                 sub = read_yaml_file(sub_file)
                 if sub:
-                    name = sub.get("metadata", {}).get("name", "Unknown")
+                    name = sub.get("metadata", {}).get("name", UNKNOWN)
                     spec = sub.get("spec", {})
                     status = sub.get("status", {})
 
-                    package = spec.get("name", "Unknown")
-                    channel = spec.get("channel", "Unknown")
-                    source = spec.get("source", "Unknown")
+                    package = spec.get("name", UNKNOWN)
+                    channel = spec.get("channel", UNKNOWN)
+                    source = spec.get("source", UNKNOWN)
                     install_plan_approval = spec.get("installPlanApproval", "Automatic")
 
-                    current_csv = status.get("currentCSV", "Unknown")
-                    installed_csv = status.get("installedCSV", "Unknown")
-                    state = status.get("state", "Unknown")
+                    current_csv = status.get("currentCSV", UNKNOWN)
+                    installed_csv = status.get("installedCSV", UNKNOWN)
+                    state = status.get("state", UNKNOWN)
 
                     print(f"{Colors.CYAN}{package}{Colors.END}")
                     print(f"  Name: {name}")
@@ -139,7 +139,7 @@ def analyze_subscriptions(mg_dir):
                     print_status("  State", state)
                     print(f"  Current CSV: {current_csv}")
 
-                    if current_csv != installed_csv and installed_csv != "Unknown":
+                    if current_csv != installed_csv and installed_csv != UNKNOWN:
                         print(
                             f"  {Colors.YELLOW}⚠ Installed CSV:{Colors.END} {installed_csv}"
                         )

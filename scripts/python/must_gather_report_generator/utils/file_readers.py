@@ -1,12 +1,45 @@
-"""File reading utilities"""
+"""File reading utilities and safe access for parsed must-gather documents."""
+
+from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 logger = logging.getLogger(__name__)
+
+# Defaults when YAML/JSON omits fields:
+# UNKNOWN — generic missing string; NOT_AVAILABLE — optional IDs / N/A slots;
+# ZERO — numeric counts; HEALTH_STATUS_UNKNOWN — Ceph/summary uppercase placeholder.
+UNKNOWN = "Unknown"
+NOT_AVAILABLE = "N/A"
+ZERO = 0
+HEALTH_STATUS_UNKNOWN = "UNKNOWN"
+
+
+def items_or_empty(doc: Any) -> list:
+    """Kubernetes-style ``items`` list, or empty if missing or wrong type."""
+    if not isinstance(doc, dict):
+        return []
+    raw = doc.get("items")
+    return raw if isinstance(raw, list) else []
+
+
+def list_from(doc: Any, key: str) -> list:
+    """Return ``doc[key]`` if it is a list; otherwise ``[]``."""
+    if not isinstance(doc, dict):
+        return []
+    raw = doc.get(key)
+    return raw if isinstance(raw, list) else []
+
+
+def first_item(doc: Any) -> Any | None:
+    """First element of ``items_or_empty(doc)``, or ``None``."""
+    items = items_or_empty(doc)
+    return items[0] if items else None
 
 
 def read_yaml_file(filepath):
