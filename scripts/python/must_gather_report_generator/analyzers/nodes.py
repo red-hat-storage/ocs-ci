@@ -1,6 +1,6 @@
 """Analysis functions for nodes"""
 
-from ..utils import Colors, print_header
+from ..utils import Colors, UNKNOWN, first_item, print_header
 from ..utils import read_yaml_file
 
 
@@ -19,16 +19,15 @@ def analyze_nodes(mg_dir):
     sc_file = mg_dir / "namespaces/openshift-storage/oc_output/storagecluster.yaml"
     if sc_file.exists():
         sc_data = read_yaml_file(sc_file)
-        if sc_data and "items" in sc_data and len(sc_data["items"]) > 0:
-            raw_vals = (
-                sc_data["items"][0].get("status", {}).get("failureDomainValues", [])
-            )
+        sc_item = first_item(sc_data)
+        if sc_item:
+            raw_vals = sc_item.get("status", {}).get("failureDomainValues", [])
             sc_failure_domain_names = {str(v) for v in raw_vals if v is not None}
 
     for node_file in nodes_dir.glob("*.yaml"):
         node_data = read_yaml_file(node_file)
         if node_data:
-            node_name = node_data.get("metadata", {}).get("name", "unknown")
+            node_name = node_data.get("metadata", {}).get("name", UNKNOWN)
             status = node_data.get("status", {})
 
             labels = node_data.get("metadata", {}).get("labels", {})
@@ -127,8 +126,8 @@ def analyze_nodes(mg_dir):
                 print(f"    Taints: {len(node['taints'])}")
                 for taint in node["taints"][:3]:
                     print(
-                        f"      - {taint.get('key', 'unknown')}: "
-                        f"{taint.get('effect', 'unknown')}"
+                        f"      - {taint.get('key', UNKNOWN)}: "
+                        f"{taint.get('effect', UNKNOWN)}"
                     )
 
             storage_capacity = node["capacity"].get("ephemeral-storage", "0")

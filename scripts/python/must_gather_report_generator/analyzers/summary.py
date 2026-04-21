@@ -1,6 +1,6 @@
 """Analysis functions for summary"""
 
-from ..utils import Colors, print_header
+from ..utils import Colors, HEALTH_STATUS_UNKNOWN, UNKNOWN, first_item, print_header
 from ..utils import read_yaml_file, read_file
 
 
@@ -10,27 +10,28 @@ def generate_summary(mg_dir):
 
     # Determine overall status
     health_file = mg_dir / "ceph/must_gather_commands/ceph_health_detail"
-    ceph_health = "UNKNOWN"
+    ceph_health = HEALTH_STATUS_UNKNOWN
     if health_file.exists():
         raw = read_file(health_file)
         if raw is not None:
             ceph_health = raw.strip()
 
     sc_file = mg_dir / "namespaces/openshift-storage/oc_output/storagecluster.yaml"
-    sc_phase = "UNKNOWN"
+    sc_phase = HEALTH_STATUS_UNKNOWN
     if sc_file.exists():
         sc_data = read_yaml_file(sc_file)
-        if sc_data and "items" in sc_data and len(sc_data["items"]) > 0:
-            sc_phase = sc_data["items"][0].get("status", {}).get("phase", "Unknown")
+        sc_item = first_item(sc_data)
+        if sc_item:
+            sc_phase = sc_item.get("status", {}).get("phase", UNKNOWN)
 
     noobaa_file = (
         mg_dir / "noobaa/namespaces/openshift-storage/noobaa.io/noobaas/noobaa.yaml"
     )
-    noobaa_phase = "UNKNOWN"
+    noobaa_phase = HEALTH_STATUS_UNKNOWN
     if noobaa_file.exists():
         noobaa = read_yaml_file(noobaa_file)
         if noobaa:
-            noobaa_phase = noobaa.get("status", {}).get("phase", "Unknown")
+            noobaa_phase = noobaa.get("status", {}).get("phase", UNKNOWN)
 
     # Overall status determination
     if ceph_health == "HEALTH_OK" and sc_phase == "Ready" and noobaa_phase == "Ready":
