@@ -267,11 +267,11 @@ class TestSubvolumesCommand(ManageTest):
         2.Back up the PV yaml for the above created PVC. Delete the PV and remove its finalizer.
         3.Edit the PV backup file by removing all the volumeAttributes and apply this yaml file.
         4.Verify that the PV is bound.
-        5.Now run the odf-cli command to list the stale subvolumes.
+        5.Run the odf-cli command to list the stale subvolumes.
         6.The volume attached to the above PVC would be labelled as in-use by the cli tool.
         """
 
-        logger.info("Creating PVC with CephFS storageclass and retain policy")
+        logger.info("Creating PVC with CephFS storageclass and retain deletionPolicy")
         cephfs_sc_obj = storageclass_factory(
             interface=constants.CEPHFILESYSTEM,
             reclaim_policy=constants.RECLAIM_POLICY_RETAIN,
@@ -315,28 +315,20 @@ class TestSubvolumesCommand(ManageTest):
         with open(backup_file_path, "r") as backup:
             backup_data = yaml.safe_load(backup)
 
-        # Remove volumeAttributes from the backup
-        if "spec" in backup_data and "csi" in backup_data["spec"]:
-            if "volumeAttributes" in backup_data["spec"]["csi"]:
-                logger.info("Removing volumeAttributes from PV backup")
-                del backup_data["spec"]["csi"]["volumeAttributes"]
-
-        # Remove resourceVersion and uid for re-creation
-        if "metadata" in backup_data:
-            backup_data["metadata"].pop("resourceVersion", None)
-            backup_data["metadata"].pop("uid", None)
-            backup_data["metadata"].pop("creationTimestamp", None)
+        # Remove volumeAttributes and metadata fields for re-creation
+        backup_data.get("spec", {}).get("csi", {}).pop("volumeAttributes", None)
+        metadata = backup_data.get("metadata", {})
+        for field in ["resourceVersion", "uid", "creationTimestamp"]:
+            metadata.pop(field, None)
 
         # Write modified backup
         with open(backup_file_path, "w") as backup:
             yaml.dump(backup_data, backup)
-            logger.info(f"PV backup file updated: {backup_file_path}")
+        logger.info(f"PV backup file updated: {backup_file_path}")
 
-        # Apply the modified PV yaml
+        # Apply the modified PV yaml and Verify PV is bound
         logger.info("Applying modified PV yaml")
         run_cmd(f"oc apply -f {backup_file_path}")
-
-        # Verify PV is bound
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=120)
         logger.info(f"PV {pv_name} recreated and bound successfully")
 
