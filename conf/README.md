@@ -257,7 +257,9 @@ higher priority).
 * `skip_ocs_deployment` - Skip the OCS deployment step or not (Default: false)
 * `ocs_version` - Version of OCS that is being deployed
 * `acm_version` - Version of acm to be used for this run (applicable mostly to DR scenarios)
-* `vm_template` - VMWare template to use for RHCOS images
+* `vm_template` - VMWare template to use for RHCOS images (legacy single template, used as fallback)
+* `vm_templates` - Dictionary of available RHCOS templates by major version for VMWare deployments (e.g., `{"9": "rhcos-9.6...", "10": "rhcos-10.2..."}`)
+* `rhcos_version` - Select which RHCOS major version to use from vm_templates dictionary (e.g., "9" or "10"). Defaults to "9" if not specified.
 * `fio_storageutilization_min_mbps` - Minimal write speed of FIO used in workload_fio_storageutilization
 * `TF_LOG_LEVEL` - Terraform log level
 * `TF_LOG_FILE` - Terraform log file

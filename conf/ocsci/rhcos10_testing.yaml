@@ -1,0 +1,6 @@
+---
+# Config for testing with RHCOS 10 template
+# Usage: Include this config file to use RHCOS 10 instead of RHCOS 9
+# Example: --ocsci-conf conf/ocsci/rhcos10_testing.yaml
+ENV_DATA:
+  rhcos_version: "10"

@@ -2788,6 +2788,53 @@ def generate_terraform_vars_and_update_machine_conf():
         update_machine_conf(folder_structure)
 
 
+def resolve_vm_template():
+    """
+    Resolve the VM template to use based on configuration.
+
+    Priority:
+    1. vm_template_overwrite (for early testing)
+    2. vm_templates[rhcos_version] (new multi-version support)
+    3. vm_template (legacy fallback)
+
+    Returns:
+        str: The VM template name to use
+    """
+    # Check for override first (early testing)
+    if config.ENV_DATA.get("vm_template_overwrite"):
+        template = config.ENV_DATA["vm_template_overwrite"]
+        logger.info(f"Using overridden VM template: {template}")
+        return template
+
+    # Check for multi-version templates
+    vm_templates = config.ENV_DATA.get("vm_templates")
+    rhcos_version = config.ENV_DATA.get("rhcos_version")
+
+    if vm_templates:
+        # Default to RHCOS 9 if no version specified
+        if not rhcos_version:
+            rhcos_version = "9"
+            logger.info("No rhcos_version specified, defaulting to RHCOS 9")
+
+        # Ensure rhcos_version is a string for dictionary lookup
+        rhcos_version = str(rhcos_version)
+
+        template = vm_templates.get(rhcos_version)
+        if template:
+            logger.info(f"Using RHCOS {rhcos_version} template: {template}")
+            return template
+        else:
+            logger.warning(
+                f"RHCOS version {rhcos_version} not found in vm_templates, "
+                "falling back to vm_template"
+            )
+
+    # Fallback to legacy single template
+    template = config.ENV_DATA.get("vm_template")
+    logger.info(f"Using legacy vm_template: {template}")
+    return template
+
+
 def generate_terraform_vars_with_folder():
     """
     Generates the terraform.tfvars file which includes folder structure
@@ -2830,16 +2877,14 @@ def generate_terraform_vars_with_folder():
     ssh_public_key_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
     config.ENV_DATA["ssh_public_key_path"] = ssh_public_key_path
 
-    # overwrite RHCOS template
-    # This use-case is mainly used for early RHCOS testing
-    if config.ENV_DATA.get("vm_template_overwrite"):
-        config.ENV_DATA["vm_template"] = config.ENV_DATA["vm_template_overwrite"]
+    # Resolve RHCOS template to use
+    # Supports: vm_template_overwrite (early testing), vm_templates (multi-version), vm_template (legacy)
     if config.ENV_DATA["sno"]:
         config.ENV_DATA["iso_file"] = f"ISO/{config.ENV_DATA['cluster_name']}.iso"
         config.ENV_DATA["vm_template"] = "sno_template1"
-
         create_terraform_var_file("terraform_4_5_sno.tfvars.j2")
     else:
+        config.ENV_DATA["vm_template"] = resolve_vm_template()
         create_terraform_var_file("terraform_4_5.tfvars.j2")
 
 
