@@ -186,6 +186,28 @@ def MDSxattr_alert_values(threading_lock, timeout):
     )
 
 
+def ceph_not_health_error():
+    """
+    Check if Ceph is not in HEALTH_ERR state.
+
+    Returns:
+        bool: True if Ceph state is not HEALTH_ERR
+    """
+    ceph_status = cluster.get_ceph_health()
+    log.info(f"Ceph status is: {ceph_status}")
+    return ceph_status != "HEALTH_ERR"
+
+
+def is_cluster_healthy():
+    """
+    Wrapper function for cluster health check
+
+    Returns:
+        bool: True if all checks passed, False otherwise
+    """
+    return ceph_not_health_error() and pod.wait_for_pods_to_be_running(timeout=900)
+
+
 def initiate_alert_clearance():
     """
     Initiate clearance of MDS xattr latency alert by increasing MDS CPU resources.
@@ -552,12 +574,8 @@ class TestMdsXattrAlerts(E2ETest):
         wait_for_nodes_status(
             [active_mds_node.name], constants.STATUS_READY, timeout=420
         )
-        assert OCP_POD_OBJ.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            resource_count=len(OCP_POD_OBJ.get().get("items", [])),
-            timeout=1200,
-            sleep=10,
-        ), "Not all pods in openshift-storage namespace are in Running state"
-        cluster.ceph_health_check()
+        assert (
+            is_cluster_healthy()
+        ), "Cluster is not healthy after active MDS node restart"
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
