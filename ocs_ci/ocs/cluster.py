@@ -1277,13 +1277,19 @@ def _collect_bound_ocs_pvcs(namespace, timeout=300, sleep=10):
 
     def _get_matching_bound_pvcs():
         ocs_pvc_obj = get_all_pvc_objs(namespace=namespace)
-        matching_pvcs = [
-            pvc_obj
-            for pvc_obj in ocs_pvc_obj
-            if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME)
-            or pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME)
-            or any(pvc_obj.name.startswith(name) for name in storage_device_set_names)
-        ]
+        matching_pvcs = []
+        for pvc_obj in ocs_pvc_obj:
+            if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+                matching_pvcs.append(pvc_obj)
+            elif pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME):
+                matching_pvcs.append(pvc_obj)
+            elif pvc_obj.name.startswith(constants.NB_DB_CNPG_CLUSTER_NAME):
+                matching_pvcs.append(pvc_obj)
+            else:
+                for name in storage_device_set_names:
+                    if pvc_obj.name.startswith(name):
+                        matching_pvcs.append(pvc_obj)
+                        break
         not_bound = [
             pvc_obj.name
             for pvc_obj in matching_pvcs
