@@ -83,19 +83,24 @@ class TestMCOOperatorRebrandingUI:
         disallowed_keywords = ["ODF MCO", "ODF Multicluster Orchestrator"]
 
         try:
-            # Step 1: Navigate to Operators page
-            logger.info("Navigating to Operators -> Installed Operators")
+            # Step 1: Navigate directly to the Installed Operators
+            # page in the openshift-operators namespace. The ACM
+            # console opens in "Fleet Management" perspective, so
+            # we bypass the perspective switcher by loading the
+            # Installed Operators URL directly.
+            logger.info("Navigating directly to Installed Operators page")
             deployment_loc = ocp_loc["deployment"]
-            acm_obj.do_click(deployment_loc["operators_tab"], timeout=30)
-            acm_obj.do_click(deployment_loc["installed_operators_tab"], timeout=30)
-
-            # Step 2: Select openshift-operators namespace
-            logger.info("Selecting openshift-operators namespace")
-            acm_obj.do_click(
-                deployment_loc["openshift_operators_namespace"], timeout=30
+            current_url = acm_obj.driver.current_url
+            base_url = current_url.split("/multicloud")[0]
+            installed_operators_url = (
+                f"{base_url}/k8s/ns/openshift-operators"
+                "/operators.coreos.com~v1alpha1~ClusterServiceVersion"
             )
+            acm_obj.driver.get(installed_operators_url)
+            acm_obj.page_has_loaded()
+            acm_obj.take_screenshot()
 
-            # Step 3: Search for MCO operator
+            # Step 4: Search for MCO operator
             logger.info("Searching for Multicluster Orchestrator operator")
             search_box = acm_obj.wait_for_element_to_be_visible(
                 deployment_loc["search_operators"], timeout=30
@@ -104,7 +109,7 @@ class TestMCOOperatorRebrandingUI:
             search_box.send_keys("Multicluster Orchestrator")
             acm_obj.take_screenshot()
 
-            # Step 4: Click on the operator row to view details
+            # Step 5: Click on the operator row to view details
             logger.info("Clicking on MCO operator to view details")
             try:
                 acm_obj.do_click(deployment_loc["mco_operator_row"], timeout=30)
@@ -131,7 +136,7 @@ class TestMCOOperatorRebrandingUI:
                         "with either old or new name"
                     )
 
-            # Step 5: Validate operator display name
+            # Step 6: Validate operator display name
             logger.info("Validating operator display name")
             operator_name_element = acm_obj.wait_for_element_to_be_visible(
                 deployment_loc["operator_display_name"], timeout=30
@@ -154,7 +159,7 @@ class TestMCOOperatorRebrandingUI:
             logger.info(f"✓ Operator name validated: {actual_operator_name}")
             acm_obj.take_screenshot()
 
-            # Step 6: Validate provider name
+            # Step 7: Validate provider name
             logger.info("Validating provider name")
             try:
                 provider_element = acm_obj.wait_for_element_to_be_visible(
@@ -173,38 +178,27 @@ class TestMCOOperatorRebrandingUI:
                 logger.warning("Provider information not found on the page")
                 acm_obj.take_screenshot()
 
-            # Step 7: Validate description is vendor-neutral
+            # Step 8: Validate description is vendor-neutral
+            # Use page source since the description element structure
+            # varies across OCP versions.
             logger.info("Validating operator description")
-            try:
-                description_element = acm_obj.wait_for_element_to_be_visible(
-                    deployment_loc["operator_description"], timeout=30
+            page_source = acm_obj.driver.page_source
+            for keyword in expected_description_keywords:
+                assert keyword in page_source, (
+                    f"Expected keyword '{keyword}' "
+                    f"not found on operator details page"
                 )
-                actual_description = description_element.text
-                logger.info(f"Found description: {actual_description}")
 
-                # Check for expected keywords in description
-                for keyword in expected_description_keywords:
-                    assert keyword in actual_description, (
-                        f"Expected keyword '{keyword}' "
-                        f"not found in description. "
-                        f"Description: {actual_description}"
-                    )
+            for keyword in disallowed_keywords:
+                assert keyword not in page_source, (
+                    f"Disallowed ODF-specific keyword "
+                    f"'{keyword}' found on operator details page"
+                )
 
-                # Ensure ODF-specific branding is not in description
-                for keyword in disallowed_keywords:
-                    assert keyword not in actual_description, (
-                        f"Description contains disallowed ODF-specific "
-                        f"keyword '{keyword}'. "
-                        f"Description: {actual_description}"
-                    )
+            logger.info("✓ Description validated (vendor-neutral)")
+            acm_obj.take_screenshot()
 
-                logger.info("✓ Description validated (vendor-neutral)")
-                acm_obj.take_screenshot()
-            except TimeoutException:
-                logger.warning("Description not found on the page")
-                acm_obj.take_screenshot()
-
-            # Step 8: Verify operator status (Installed)
+            # Step 9: Verify operator status (Installed)
             logger.info("Verifying operator installation status")
             try:
                 installed_element = acm_obj.wait_for_element_to_be_visible(
@@ -220,7 +214,7 @@ class TestMCOOperatorRebrandingUI:
                 acm_obj.take_screenshot()
                 pytest.fail("Operator does not show 'Installed' status")
 
-            # Step 9: Verify capability levels
+            # Step 10: Verify capability levels
             logger.info("Verifying operator capability levels")
             try:
                 # Check for Basic Install capability
@@ -240,7 +234,7 @@ class TestMCOOperatorRebrandingUI:
                 logger.warning(f"Could not fully validate capability levels: {str(e)}")
                 acm_obj.take_screenshot()
 
-            # Step 10: Verify channel and version information
+            # Step 11: Verify channel and version information
             logger.info("Verifying channel and version information")
             try:
                 channel_element = acm_obj.wait_for_element_to_be_visible(

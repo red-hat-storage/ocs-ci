@@ -369,6 +369,26 @@ deployment_4_21 = {
 }
 
 deployment_4_22 = {
+    # Perspective switcher for ACM hub cluster (PF v6)
+    "perspective_switcher_toggle": (
+        'button[data-test-id="perspective-switcher-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_core_platform": (
+        "//h2[normalize-space()='Core platform']"
+        "/ancestor::button[contains(@class, 'pf-v6-c-menu__item')]",
+        By.XPATH,
+    ),
+    # PF v6 sidebar navigation locators
+    "operators_tab": (
+        "//*[contains(@class, 'nav__link') and " "normalize-space()='Operators']",
+        By.XPATH,
+    ),
+    "installed_operators_tab": (
+        "//*[contains(@class, 'nav__link') and "
+        "normalize-space()='Installed Operators']",
+        By.XPATH,
+    ),
     # MCO operator locators for rebranding validation
     "mco_operator_row": (
         "//a[@data-test-operator-row='DF Multicluster Orchestrator']",
@@ -387,7 +407,7 @@ deployment_4_22 = {
         By.XPATH,
     ),
     "operator_description": (
-        "//p[contains(@class, 'co-clusterserviceversion-details__description')]",
+        "//h5[normalize-space()='Description']/following-sibling::p",
         By.XPATH,
     ),
     "operator_installed_status": (
