@@ -144,7 +144,7 @@ class StorageClusterSetup(object):
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
-            cluster_data["spec"]["storageDeviceSets"][0]["count"] = 5
+            cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
         elif self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
             from ocs_ci.deployment.baremetal import disks_available_to_cleanup
