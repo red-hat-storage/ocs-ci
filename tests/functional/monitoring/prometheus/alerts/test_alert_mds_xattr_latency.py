@@ -552,11 +552,12 @@ class TestMdsXattrAlerts(E2ETest):
         wait_for_nodes_status(
             [active_mds_node.name], constants.STATUS_READY, timeout=420
         )
-        OCP_POD_OBJ.wait_for_resource(
+        assert OCP_POD_OBJ.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            timeout=600,
+            resource_count=len(OCP_POD_OBJ.get().get("items", [])),
+            timeout=1200,
             sleep=10,
-        )
+        ), "Not all pods in openshift-storage namespace are in Running state"
         cluster.ceph_health_check()
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
