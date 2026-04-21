@@ -141,12 +141,16 @@ class StorageClusterSetup(object):
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
             and self.platform not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and self.platform != constants.FYRE_PLATFORM
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
             cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
-        elif self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+        elif (
+            self.platform != constants.FYRE_PLATFORM
+            or self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
             from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 
             nodes_obj = OCP(
