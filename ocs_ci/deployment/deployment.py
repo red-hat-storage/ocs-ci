@@ -1212,8 +1212,6 @@ class Deployment(object):
         else:
             logger.info(f"Default channel will be used: {default_channel}")
             subscription_yaml_data["spec"]["channel"] = default_channel
-        if config.DEPLOYMENT.get("stage"):
-            subscription_yaml_data["spec"]["source"] = constants.OPERATOR_SOURCE_NAME
         if config.DEPLOYMENT.get("live_deployment"):
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
