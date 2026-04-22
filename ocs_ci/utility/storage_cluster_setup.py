@@ -148,7 +148,7 @@ class StorageClusterSetup(object):
             cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
         elif (
-            self.platform != constants.FYRE_PLATFORM
+            self.platform == constants.FYRE_PLATFORM
             or self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
             from ocs_ci.deployment.baremetal import disks_available_to_cleanup
