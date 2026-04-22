@@ -381,7 +381,10 @@ RDRMultiClusterDROperatorsDeploy (RDR-specific)
 
 ### Key Deployment Methods
 
-#### [`Deployment.do_deploy_rdr()`](ocs_ci/deployment/deployment.py:689)
+#### `Deployment.do_deploy_rdr()`
+
+**Location:** `ocs_ci/deployment/deployment.py:739`
+
 ```python
 def do_deploy_rdr(self):
     """Call Regional DR deploy"""
@@ -393,13 +396,22 @@ def do_deploy_rdr(self):
         deploy_dr.deploy()
 ```
 
-#### [`RDRMultiClusterDROperatorsDeploy.deploy()`](ocs_ci/deployment/deployment.py:3896)
+#### `RDRMultiClusterDROperatorsDeploy.deploy()`
+
+**Location:** `ocs_ci/deployment/deployment.py:4115`
+
 Main deployment orchestration for RDR setup.
 
-#### [`MultiClusterDROperatorsDeploy.configure_mirror_peer()`](ocs_ci/deployment/deployment.py:3230)
+#### `MultiClusterDROperatorsDeploy.configure_mirror_peer()`
+
+**Location:** `ocs_ci/deployment/deployment.py:3401`
+
 Creates and validates MirrorPeer resource.
 
-#### [`MultiClusterDROperatorsDeploy.deploy_dr_policy()`](ocs_ci/deployment/deployment.py:3400)
+#### `MultiClusterDROperatorsDeploy.deploy_dr_policy()`
+
+**Location:** `ocs_ci/deployment/deployment.py:3583`
+
 Creates DRPolicy with cluster relationships.
 
 ---
@@ -522,7 +534,7 @@ metadata:
 - Policy: `backup-restore-enabled`
 
 **Recovery Process**:
-```python
+```
 configure_rdr_hub_recovery()
     ├── Create backup schedule
     ├── Validate DPA (Data Protection Application)
@@ -725,29 +737,29 @@ run-ci \
 
 ### Test Categories
 
-1. **Failover Tests** ([`test_failover.py`](tests/functional/disaster-recovery/regional-dr/test_failover.py))
+1. **Failover Tests** - `test_failover.py`
    - Primary cluster down scenarios
    - Primary cluster up scenarios
    - RBD and CephFS interfaces
 
-2. **Relocate Tests** ([`test_relocate.py`](tests/functional/disaster-recovery/regional-dr/test_relocate.py))
+2. **Relocate Tests** - `test_relocate.py`
    - Planned migration
    - Application continuity
 
-3. **Failover and Relocate** ([`test_failover_and_relocate.py`](tests/functional/disaster-recovery/regional-dr/test_failover_and_relocate.py))
+3. **Failover and Relocate** - `test_failover_and_relocate.py`
    - Combined scenarios
    - CLI and UI testing
 
-4. **Discovered Apps** ([`test_failover_and_relocate_discovered_apps.py`](tests/functional/disaster-recovery/regional-dr/test_failover_and_relocate_discovered_apps.py))
+4. **Discovered Apps** - `test_failover_and_relocate_discovered_apps.py`
    - Non-GitOps applications
    - KubeObject protection
    - Recipe-based backup
 
-5. **Hub Recovery** ([`test_neutral_hub_failure_and_recovery.py`](tests/functional/disaster-recovery/regional-dr/test_neutral_hub_failure_and_recovery.py))
+5. **Hub Recovery** - `test_neutral_hub_failure_and_recovery.py`
    - Hub cluster failure
    - Backup and restore
 
-6. **Node Operations** ([`test_node_operations_during_failover_relocate.py`](tests/functional/disaster-recovery/regional-dr/test_node_operations_during_failover_relocate.py))
+6. **Node Operations** - `test_node_operations_during_failover_relocate.py`
    - Node failures during DR operations
    - Resilience testing
 
@@ -762,7 +774,7 @@ run-ci \
 
 ### Validation Helpers
 
-Key validation functions in [`dr_helpers.py`](ocs_ci/helpers/dr_helpers.py):
+Key validation functions in `ocs_ci/helpers/dr_helpers.py`:
 
 - `get_current_primary_cluster_name()`: Identify active cluster
 - `get_current_secondary_cluster_name()`: Identify standby cluster
@@ -826,13 +838,13 @@ ceph rbd mirror pool status <pool-name>
 
 ### Key Files
 
-- **Deployment**: [`ocs_ci/deployment/deployment.py`](ocs_ci/deployment/deployment.py)
-- **Multicluster Deployment**: [`ocs_ci/deployment/multicluster_deployment.py`](ocs_ci/deployment/multicluster_deployment.py)
-- **DR Helpers**: [`ocs_ci/helpers/dr_helpers.py`](ocs_ci/helpers/dr_helpers.py)
-- **Constants**: [`ocs_ci/ocs/constants.py`](ocs_ci/ocs/constants.py)
-- **DRPC Resource**: [`ocs_ci/ocs/resources/drpc.py`](ocs_ci/ocs/resources/drpc.py)
-- **ACM Integration**: [`ocs_ci/ocs/acm/acm.py`](ocs_ci/ocs/acm/acm.py)
-- **Submariner**: [`ocs_ci/deployment/acm.py`](ocs_ci/deployment/acm.py)
+- **Deployment**: `ocs_ci/deployment/deployment.py`
+- **Multicluster Deployment**: `ocs_ci/deployment/multicluster_deployment.py`
+- **DR Helpers**: `ocs_ci/helpers/dr_helpers.py`
+- **Constants**: `ocs_ci/ocs/constants.py`
+- **DRPC Resource**: `ocs_ci/ocs/resources/drpc.py`
+- **ACM Integration**: `ocs_ci/ocs/acm/acm.py`
+- **Submariner**: `ocs_ci/deployment/acm.py`
 
 ### Documentation
 

@@ -49,7 +49,11 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_rtd_theme",
     "myst_parser",
+    "sphinxcontrib.mermaid",
 ]
+
+# MyST parser configuration
+myst_fence_as_directive = ["mermaid"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
