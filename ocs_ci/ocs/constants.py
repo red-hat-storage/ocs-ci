@@ -1619,6 +1619,7 @@ ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES = "ODFNodeLatencyHighOnOSDNodes"
 ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES = "ODFNodeLatencyHighOnNonOSDNodes"
 ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION = "ODFNodeNICBandwidthSaturation"
 ALERT_ODF_NODE_MTU_LESS_THAN_9000 = "ODFNodeMTULessThan9000"
+ALERT_HIGHRBDCLONESNAPSHOTCOUNT = "HighRBDCloneSnapshotCount"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
