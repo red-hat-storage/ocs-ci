@@ -549,30 +549,65 @@ class AzureAroUtil(AZURE):
         sp_name = f"aro-sp-{cluster_name}"
         logger.info(f"Creating service principal: {sp_name}")
 
-        try:
-            # Create service principal
-            create_sp_cmd = (
-                f"az ad sp create-for-rbac --name {sp_name} --role Contributor "
-                f"--scopes /subscriptions/{self._subscription_id}"
-            )
-            result = exec_cmd(create_sp_cmd, timeout=120)
-            sp_data = json.loads(result.stdout)
+        create_sp_cmd = (
+            f"az ad sp create-for-rbac --name {sp_name} --role Contributor "
+            f"--scopes /subscriptions/{self._subscription_id}"
+        )
 
-            client_id = sp_data["appId"]
-            client_secret = sp_data["password"]
+        # Retry logic to handle Azure AD propagation delays
+        # First attempt creates the app, second attempt (after propagation) adds credentials
+        max_attempts = 3
+        retry_delay = 10
 
-            logger.info(f"Service principal created successfully: {sp_name}")
-            logger.info(f"Client ID: {client_id}")
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.info(
+                    f"Attempting to create service principal (attempt {attempt}/{max_attempts})"
+                )
+                result = exec_cmd(create_sp_cmd, timeout=120)
+                sp_data = json.loads(result.stdout)
 
-            # Wait for service principal to propagate
-            logger.info("Waiting for service principal to propagate in Azure AD...")
-            time.sleep(30)
+                client_id = sp_data["appId"]
+                client_secret = sp_data["password"]
 
-            return client_id, client_secret
+                logger.info(f"Service principal created successfully: {sp_name}")
+                logger.info(f"Client ID: {client_id}")
 
-        except CommandFailed as e:
-            logger.error(f"Failed to create service principal: {e}")
-            raise
+                # Wait for service principal to propagate
+                logger.info("Waiting for service principal to propagate in Azure AD...")
+                time.sleep(15)
+
+                return client_id, client_secret
+
+            except CommandFailed as e:
+                error_msg = str(e)
+                # Check if it's an Azure AD propagation error
+                if (
+                    "does not exist or one of its queried reference-property objects are not present"
+                    in error_msg
+                ):
+                    if attempt < max_attempts:
+                        logger.warning(
+                            f"Azure AD propagation delay detected. "
+                            f"Retrying in {retry_delay} seconds... (attempt {attempt}/{max_attempts})"
+                        )
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        logger.error(
+                            f"Failed to create service principal after {max_attempts} attempts "
+                            f"due to Azure AD propagation delays"
+                        )
+                        raise
+                else:
+                    # Different error, raise immediately
+                    logger.error(f"Failed to create service principal: {e}")
+                    raise
+
+        # Should not reach here, but just in case
+        raise CommandFailed(
+            f"Failed to create service principal '{sp_name}' after {max_attempts} attempts"
+        )
 
     def delete_aro_service_principal(self, cluster_name):
         """
