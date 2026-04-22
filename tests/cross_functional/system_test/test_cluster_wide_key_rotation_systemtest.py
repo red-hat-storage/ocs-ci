@@ -5,6 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     magenta_squad,
     ignore_leftovers,
+    encryption_at_rest_required,
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.keyrotation_helper import (
@@ -47,6 +48,7 @@ class TestKeyRotationWithClusterFull(E2ETest):
     def teardown(self):
         OSDKeyrotation().set_keyrotation_schedule("@weekly")
 
+    @encryption_at_rest_required
     def test_cluster_wide_encryption_key_rotation(
         self,
         bucket_factory_session,

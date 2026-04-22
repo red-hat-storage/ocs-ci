@@ -303,17 +303,7 @@ class OSDKeyrotation(KeyRotation):
         """
         Listing deviceset for OSD.
         """
-        self.deviceset = [pvc.name for pvc in get_deviceset_pvcs()]
-        return self.deviceset
-
-    def refresh_deviceset(self):
-        """
-        Refresh and return the current OSD deviceset list.
-
-        This keeps key rotation verification aligned with the current OSD PVC
-        inventory if OSDs were recreated, replaced, or resized during the test.
-        """
-        return self._get_deviceset()
+        return [pvc.name for pvc in get_deviceset_pvcs()]
 
     def enable_osd_keyrotatio(self):
         """Enable OSD keyrotation in storagecluster Spec.
