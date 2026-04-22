@@ -26,10 +26,11 @@ def prettify_xml(elem):
     return reparsed.toprettyxml(indent="  ")
 
 
-def generate_xml_output(mg_dir, mg_base, output_file):
+def generate_xml_output(mg_dir, mg_base, output_file, deployment_type="internal"):
     """Generate XML format of the analysis"""
     root = ET.Element("odf-must-gather-analysis")
     root.set("generated", datetime.now().isoformat())
+    root.set("deployment-type", deployment_type)
 
     # Collection info
     info = ET.SubElement(root, "collection-info")
@@ -57,12 +58,15 @@ def generate_xml_output(mg_dir, mg_base, output_file):
     summary = ET.SubElement(root, "deployment-summary")
 
     # Get component statuses
-    health_file = mg_dir / "ceph/must_gather_commands/ceph_health_detail"
     ceph_health = HEALTH_STATUS_UNKNOWN
-    if health_file.exists():
-        raw = read_file(health_file)
-        if raw is not None:
-            ceph_health = raw.strip()
+    if deployment_type == "internal":
+        health_file = mg_dir / "ceph/must_gather_commands/ceph_health_detail"
+        if health_file.exists():
+            raw = read_file(health_file)
+            if raw is not None:
+                ceph_health = raw.strip()
+    elif deployment_type == "external":
+        ceph_health = "EXTERNAL_CEPH"
     ET.SubElement(summary, "ceph-health").text = ceph_health
 
     sc_file = mg_dir / "namespaces/openshift-storage/oc_output/storagecluster.yaml"
@@ -85,14 +89,28 @@ def generate_xml_output(mg_dir, mg_base, output_file):
     ET.SubElement(summary, "noobaa-phase").text = noobaa_phase
 
     # Determine overall status
-    if ceph_health == "HEALTH_OK" and sc_phase == "Ready" and noobaa_phase == "Ready":
-        overall_status = "HEALTHY"
-    elif "Progressing" in sc_phase or "Creating" in noobaa_phase:
-        overall_status = "DEPLOYING"
-    elif "HEALTH_WARN" in ceph_health:
-        overall_status = "DEGRADED"
+    if deployment_type == "external":
+        # Adjusted logic for external - don't require NooBaa or internal Ceph health
+        if sc_phase == "Ready":
+            overall_status = "HEALTHY"
+        elif "Progressing" in sc_phase:
+            overall_status = "DEPLOYING"
+        else:
+            overall_status = "DEGRADED"
     else:
-        overall_status = "UNHEALTHY"
+        # Original internal logic
+        if (
+            ceph_health == "HEALTH_OK"
+            and sc_phase == "Ready"
+            and noobaa_phase == "Ready"
+        ):
+            overall_status = "HEALTHY"
+        elif "Progressing" in sc_phase or "Creating" in noobaa_phase:
+            overall_status = "DEPLOYING"
+        elif "HEALTH_WARN" in ceph_health:
+            overall_status = "DEGRADED"
+        else:
+            overall_status = "UNHEALTHY"
     ET.SubElement(summary, "overall-status").text = overall_status
 
     # Nodes
@@ -200,29 +218,37 @@ def generate_xml_output(mg_dir, mg_base, output_file):
     ceph_section = ET.SubElement(root, "ceph-cluster")
     ET.SubElement(ceph_section, "health").text = ceph_health
 
-    status_file = (
-        mg_dir
-        / "ceph/must_gather_commands_json_output/ceph_status_--format_json-pretty"
-    )
-    if status_file.exists():
-        status = read_json_file(status_file)
-        if status:
-            mon_map = status.get("monmap", {})
-            monitors = ET.SubElement(ceph_section, "monitors")
-            ET.SubElement(monitors, "total").text = str(mon_map.get("num_mons", ZERO))
-            ET.SubElement(monitors, "quorum-size").text = str(
-                len(status.get("quorum", []))
-            )
+    if deployment_type == "internal":
+        status_file = (
+            mg_dir
+            / "ceph/must_gather_commands_json_output/ceph_status_--format_json-pretty"
+        )
+        if status_file.exists():
+            status = read_json_file(status_file)
+            if status:
+                mon_map = status.get("monmap", {})
+                monitors = ET.SubElement(ceph_section, "monitors")
+                ET.SubElement(monitors, "total").text = str(
+                    mon_map.get("num_mons", ZERO)
+                )
+                ET.SubElement(monitors, "quorum-size").text = str(
+                    len(status.get("quorum", []))
+                )
 
-            osd_map = status.get("osdmap", {})
-            osds = ET.SubElement(ceph_section, "osds")
-            ET.SubElement(osds, "total").text = str(osd_map.get("num_osds", ZERO))
-            ET.SubElement(osds, "up").text = str(osd_map.get("num_up_osds", ZERO))
-            ET.SubElement(osds, "in").text = str(osd_map.get("num_in_osds", ZERO))
+                osd_map = status.get("osdmap", {})
+                osds = ET.SubElement(ceph_section, "osds")
+                ET.SubElement(osds, "total").text = str(osd_map.get("num_osds", ZERO))
+                ET.SubElement(osds, "up").text = str(osd_map.get("num_up_osds", ZERO))
+                ET.SubElement(osds, "in").text = str(osd_map.get("num_in_osds", ZERO))
 
-            pg_map = status.get("pgmap", {})
-            pgs = ET.SubElement(ceph_section, "placement-groups")
-            ET.SubElement(pgs, "total").text = str(pg_map.get("num_pgs", ZERO))
+                pg_map = status.get("pgmap", {})
+                pgs = ET.SubElement(ceph_section, "placement-groups")
+                ET.SubElement(pgs, "total").text = str(pg_map.get("num_pgs", ZERO))
+    else:
+        # External mode - add note that data not available
+        ET.SubElement(ceph_section, "note").text = (
+            "External Ceph - data not in must-gather"
+        )
 
     # Operator Subscriptions
     subscriptions_section = ET.SubElement(root, "operator-subscriptions")
@@ -346,30 +372,40 @@ def generate_xml_output(mg_dir, mg_base, output_file):
 
     # Ceph Pools
     ceph_pools_section = ET.SubElement(root, "ceph-pools")
-    pool_file = (
-        mg_dir
-        / "ceph/must_gather_commands_json_output/ceph_osd_dump_--format_json-pretty"
-    )
-    if pool_file.exists():
-        pool_data = read_json_file(pool_file)
-        pools = list_from(pool_data, "pools") if pool_data else []
-        if pools:
-            ET.SubElement(ceph_pools_section, "total").text = str(len(pools))
+    if deployment_type == "internal":
+        pool_file = (
+            mg_dir
+            / "ceph/must_gather_commands_json_output/ceph_osd_dump_--format_json-pretty"
+        )
+        if pool_file.exists():
+            pool_data = read_json_file(pool_file)
+            pools = list_from(pool_data, "pools") if pool_data else []
+            if pools:
+                ET.SubElement(ceph_pools_section, "total").text = str(len(pools))
 
-            for pool in pools:
-                pool_elem = ET.SubElement(ceph_pools_section, "pool")
-                ET.SubElement(pool_elem, "name").text = pool.get("pool_name", UNKNOWN)
-                ET.SubElement(pool_elem, "id").text = str(
-                    pool.get("pool", NOT_AVAILABLE)
-                )
-                ET.SubElement(pool_elem, "type").text = (
-                    "replicated" if pool.get("type", 1) == 1 else "erasure"
-                )
-                ET.SubElement(pool_elem, "size").text = str(pool.get("size", ZERO))
-                ET.SubElement(pool_elem, "min-size").text = str(
-                    pool.get("min_size", ZERO)
-                )
-                ET.SubElement(pool_elem, "pg-num").text = str(pool.get("pg_num", ZERO))
+                for pool in pools:
+                    pool_elem = ET.SubElement(ceph_pools_section, "pool")
+                    ET.SubElement(pool_elem, "name").text = pool.get(
+                        "pool_name", UNKNOWN
+                    )
+                    ET.SubElement(pool_elem, "id").text = str(
+                        pool.get("pool", NOT_AVAILABLE)
+                    )
+                    ET.SubElement(pool_elem, "type").text = (
+                        "replicated" if pool.get("type", 1) == 1 else "erasure"
+                    )
+                    ET.SubElement(pool_elem, "size").text = str(pool.get("size", ZERO))
+                    ET.SubElement(pool_elem, "min-size").text = str(
+                        pool.get("min_size", ZERO)
+                    )
+                    ET.SubElement(pool_elem, "pg-num").text = str(
+                        pool.get("pg_num", ZERO)
+                    )
+    else:
+        # External mode - add note
+        ET.SubElement(ceph_pools_section, "note").text = (
+            "External Ceph - data not in must-gather"
+        )
 
     # Storage Client
     storageclient_section = ET.SubElement(root, "storageclient")

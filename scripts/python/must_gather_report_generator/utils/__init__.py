@@ -6,14 +6,17 @@ from .file_readers import (
     NOT_AVAILABLE,
     UNKNOWN,
     ZERO,
+    detect_deployment_type,
     find_must_gather_dir,
     first_item,
     items_or_empty,
     list_from,
     read_file,
+    read_file_tail,
     read_json_file,
     read_yaml_file,
 )
+from .pod_logs import show_pod_logs_tail
 
 __all__ = [
     "Colors",
@@ -22,7 +25,10 @@ __all__ = [
     "read_yaml_file",
     "read_json_file",
     "read_file",
+    "read_file_tail",
+    "show_pod_logs_tail",
     "find_must_gather_dir",
+    "detect_deployment_type",
     "HEALTH_STATUS_UNKNOWN",
     "NOT_AVAILABLE",
     "UNKNOWN",

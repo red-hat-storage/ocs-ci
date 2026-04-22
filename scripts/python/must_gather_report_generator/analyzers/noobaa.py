@@ -2,13 +2,32 @@
 
 from collections import defaultdict
 
-from ..utils import Colors, UNKNOWN, print_header, print_status
-from ..utils import read_yaml_file, read_file
+from ..utils import Colors, UNKNOWN, print_header, print_status, show_pod_logs_tail
+from ..utils import read_yaml_file
 
 
-def analyze_noobaa(mg_dir):
+def analyze_noobaa(mg_dir, deployment_type="internal"):
     """Analyze NooBaa status"""
     print_header("NOOBAA STATUS")
+
+    if deployment_type == "external":
+        print(f"{Colors.YELLOW}⚠ External Ceph deployment{Colors.END}")
+        print(
+            f"{Colors.CYAN}NooBaa is typically not used with external Ceph deployments.{Colors.END}"
+        )
+
+        # Check if NooBaa exists anyway (hybrid setup)
+        noobaa_file = (
+            mg_dir / "noobaa/namespaces/openshift-storage/noobaa.io/noobaas/noobaa.yaml"
+        )
+        if noobaa_file.exists():
+            print(f"{Colors.CYAN}NooBaa CR found - analyzing...{Colors.END}\n")
+            # Fall through to analysis
+        else:
+            print(
+                f"{Colors.CYAN}NooBaa CR not found (expected for external mode).{Colors.END}\n"
+            )
+            return
 
     noobaa_file = (
         mg_dir / "noobaa/namespaces/openshift-storage/noobaa.io/noobaas/noobaa.yaml"
@@ -57,9 +76,26 @@ def analyze_noobaa(mg_dir):
         show_noobaa_logs(mg_dir)
 
 
-def analyze_backingstores(mg_dir):
+def analyze_backingstores(mg_dir, deployment_type="internal"):
     """Analyze NooBaa BackingStores"""
     print_header("NOOBAA BACKINGSTORES")
+
+    if deployment_type == "external":
+        print(f"{Colors.YELLOW}⚠ External Ceph deployment{Colors.END}")
+        print(
+            f"{Colors.CYAN}BackingStores typically not used with external Ceph.{Colors.END}"
+        )
+
+        # Check if any exist (hybrid setup)
+        bs_dir = mg_dir / "noobaa/namespaces/openshift-storage/noobaa.io/backingstores"
+        if bs_dir.exists() and list(bs_dir.glob("*.yaml")):
+            print(f"{Colors.CYAN}BackingStores found - analyzing...{Colors.END}\n")
+            # Fall through to analysis
+        else:
+            print(
+                f"{Colors.CYAN}No BackingStores found (expected for external mode).{Colors.END}\n"
+            )
+            return
 
     bs_dir = mg_dir / "noobaa/namespaces/openshift-storage/noobaa.io/backingstores"
     if bs_dir.exists():
@@ -120,44 +156,9 @@ def analyze_backingstores(mg_dir):
 
 def show_noobaa_logs(mg_dir):
     """Show last 50 lines of noobaa-core pod logs"""
-    print(f"\n{Colors.YELLOW}NooBaa is unhealthy - showing recent logs:{Colors.END}\n")
-
-    # Find noobaa-core pod logs
-    pods_dir = mg_dir / "namespaces/openshift-storage/pods"
-    if pods_dir.exists():
-        for pod_dir in pods_dir.iterdir():
-            if pod_dir.is_dir() and "noobaa-core" in pod_dir.name:
-                # Look for container logs
-                # Note: The structure is pods/<pod>/<container>/<container>/logs/current.log
-                # The container name is repeated twice
-                for container_dir in pod_dir.iterdir():
-                    if container_dir.is_dir() and container_dir.name != pod_dir.name:
-                        # Look for the repeated container directory
-                        inner_container_dir = container_dir / container_dir.name
-                        if (
-                            inner_container_dir.exists()
-                            and inner_container_dir.is_dir()
-                        ):
-                            log_file = inner_container_dir / "logs/current.log"
-                            if log_file.exists():
-                                print(f"{Colors.CYAN}Pod: {pod_dir.name}{Colors.END}")
-                                print(
-                                    f"{Colors.CYAN}Container: {container_dir.name}{Colors.END}\n"
-                                )
-
-                                logs = read_file(log_file)
-                                if logs:
-                                    lines = logs.strip().split("\n")
-                                    last_50 = lines[-50:] if len(lines) > 50 else lines
-                                    for line in last_50:
-                                        print(f"  {line}")
-                                    print(
-                                        f"\n{Colors.CYAN}[Showing last {len(last_50)} lines]{Colors.END}\n"
-                                    )
-                                else:
-                                    print(
-                                        f"{Colors.YELLOW}  No logs found{Colors.END}\n"
-                                    )
-                                return
-
-    print(f"{Colors.YELLOW}Could not find noobaa-core pod logs{Colors.END}\n")
+    show_pod_logs_tail(
+        mg_dir,
+        pod_name_substring="noobaa-core",
+        banner="NooBaa is unhealthy - showing recent logs:",
+        not_found_message="Could not find noobaa-core pod logs",
+    )

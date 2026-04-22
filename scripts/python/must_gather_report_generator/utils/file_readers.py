@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +91,36 @@ def read_file(filepath):
         return None
 
 
+def read_file_tail(filepath, max_lines: int = 50) -> str | None:
+    """
+    Last ``max_lines`` of a text file via ``tail -n`` (POSIX must-gather hosts).
+
+    Returns None if ``tail`` fails; ``""`` if there is no output.
+    """
+    path = Path(filepath).resolve()
+    try:
+        proc = subprocess.run(
+            ["tail", "-n", str(max_lines), str(path)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        logger.warning("tail failed for %s: %s", path, e)
+        return None
+    if proc.returncode != 0:
+        logger.warning(
+            "tail exited %s for %s: %s",
+            proc.returncode,
+            path,
+            (proc.stderr or "").strip(),
+        )
+        return None
+    return proc.stdout or ""
+
+
 def find_must_gather_dir(base_path):
     """Find the actual must-gather data directory"""
     base = Path(base_path)
@@ -113,3 +144,41 @@ def find_must_gather_dir(base_path):
 
     print("Warning: Could not find must-gather data structure")
     return base
+
+
+def detect_deployment_type(mg_dir):
+    """
+    Detect if this is internal (converged) or external Ceph deployment.
+
+    Args:
+        mg_dir: Path to must-gather data directory
+
+    Returns:
+        str: "internal", "external", or "unknown"
+    """
+    mg_dir = Path(mg_dir)
+
+    # Check for internal Ceph indicators
+    internal_ceph_commands = mg_dir / "ceph" / "must_gather_commands"
+    internal_ceph_json = mg_dir / "ceph" / "must_gather_commands_json_output"
+
+    # Check for external Ceph indicators
+    external_ceph_logs = mg_dir / "ceph_logs"
+
+    # Check StorageCluster for external storage config
+    sc_file = mg_dir / "namespaces/openshift-storage/oc_output/storagecluster.yaml"
+    has_external_in_sc = False
+    if sc_file.exists():
+        sc_data = read_yaml_file(sc_file)
+        sc_item = first_item(sc_data)
+        if sc_item:
+            external_storage = sc_item.get("spec", {}).get("externalStorage", {})
+            has_external_in_sc = external_storage.get("enable", False)
+
+    # Detection logic
+    if internal_ceph_commands.exists() or internal_ceph_json.exists():
+        return "internal"
+    elif external_ceph_logs.exists() or has_external_in_sc:
+        return "external"
+    else:
+        return "unknown"
