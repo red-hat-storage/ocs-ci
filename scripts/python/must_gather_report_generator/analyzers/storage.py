@@ -9,12 +9,13 @@ from ..utils import (
     ZERO,
     first_item,
     items_or_empty,
+    show_pod_logs_tail,
 )
 from ..utils import print_header, print_status
 from ..utils import read_yaml_file, read_file
 
 
-def analyze_storagecluster(mg_dir):
+def analyze_storagecluster(mg_dir, deployment_type="internal"):
     """Analyze StorageCluster status"""
     print_header("STORAGECLUSTER STATUS")
 
@@ -74,7 +75,7 @@ def analyze_storagecluster(mg_dir):
         show_rook_operator_logs(mg_dir)
 
 
-def analyze_storageclient(mg_dir):
+def analyze_storageclient(mg_dir, deployment_type="internal"):
     """Analyze StorageClient status"""
     print_header("STORAGE CLIENT STATUS")
 
@@ -82,39 +83,50 @@ def analyze_storageclient(mg_dir):
         mg_dir
         / "cluster-scoped-resources/ocs.openshift.io/storageclients/ocs-storagecluster.yaml"
     )
-    if sc_file.exists():
-        sc_data = read_yaml_file(sc_file)
-        if sc_data:
-            status = sc_data.get("status", {})
-            phase = status.get("phase", UNKNOWN)
-            client_id = status.get("id", NOT_AVAILABLE)
-            maintenance_mode = status.get("inMaintenanceMode", False)
 
-            print_status("Phase", phase)
-            print(f"{Colors.CYAN}Client ID:{Colors.END} {client_id}")
+    if not sc_file.exists():
+        if deployment_type == "external":
+            print(f"{Colors.YELLOW}StorageClient CR not found{Colors.END}")
+            print(
+                f"{Colors.CYAN}Note: Some external deployments use StorageClient CR{Colors.END}\n"
+            )
+        else:
+            print(f"{Colors.YELLOW}StorageClient file not found{Colors.END}")
+            print(
+                f"{Colors.CYAN}(StorageClient is typically used in external mode){Colors.END}\n"
+            )
+        return
 
-            if maintenance_mode:
-                print(f"{Colors.YELLOW}⚠ Maintenance Mode:{Colors.END} Enabled")
-            else:
-                print(f"{Colors.CYAN}Maintenance Mode:{Colors.END} Disabled")
+    sc_data = read_yaml_file(sc_file)
+    if sc_data:
+        status = sc_data.get("status", {})
+        phase = status.get("phase", UNKNOWN)
+        client_id = status.get("id", NOT_AVAILABLE)
+        maintenance_mode = status.get("inMaintenanceMode", False)
 
-            # Show driver requirements
-            cephfs_reqs = status.get("cephFsDriverRequirements", {})
-            rbd_reqs = status.get("rbdDriverRequirements", {})
+        print_status("Phase", phase)
+        print(f"{Colors.CYAN}Client ID:{Colors.END} {client_id}")
 
-            if cephfs_reqs or rbd_reqs:
-                print(f"\n{Colors.CYAN}Driver Requirements:{Colors.END}")
-                if cephfs_reqs:
-                    host_network = cephfs_reqs.get("ctrlPluginHostNetwork", False)
-                    print(f"  CephFS Ctrl Plugin Host Network: {host_network}")
-                if rbd_reqs:
-                    host_network = rbd_reqs.get("ctrlPluginHostNetwork", False)
-                    print(f"  RBD Ctrl Plugin Host Network: {host_network}")
-    else:
-        print(f"{Colors.YELLOW}StorageClient file not found{Colors.END}")
+        if maintenance_mode:
+            print(f"{Colors.YELLOW}⚠ Maintenance Mode:{Colors.END} Enabled")
+        else:
+            print(f"{Colors.CYAN}Maintenance Mode:{Colors.END} Disabled")
+
+        # Show driver requirements
+        cephfs_reqs = status.get("cephFsDriverRequirements", {})
+        rbd_reqs = status.get("rbdDriverRequirements", {})
+
+        if cephfs_reqs or rbd_reqs:
+            print(f"\n{Colors.CYAN}Driver Requirements:{Colors.END}")
+            if cephfs_reqs:
+                host_network = cephfs_reqs.get("ctrlPluginHostNetwork", False)
+                print(f"  CephFS Ctrl Plugin Host Network: {host_network}")
+            if rbd_reqs:
+                host_network = rbd_reqs.get("ctrlPluginHostNetwork", False)
+                print(f"  RBD Ctrl Plugin Host Network: {host_network}")
 
 
-def analyze_pvcs(mg_dir):
+def analyze_pvcs(mg_dir, deployment_type="internal"):
     """Analyze PersistentVolumeClaims"""
     print_header("PERSISTENT VOLUME CLAIMS")
 
@@ -214,7 +226,7 @@ def analyze_pvcs(mg_dir):
         print(f"{Colors.YELLOW}PVC file not found{Colors.END}")
 
 
-def analyze_csi_drivers(mg_dir):
+def analyze_csi_drivers(mg_dir, deployment_type="internal"):
     """Analyze CSI driver status"""
     print_header("CSI DRIVER STATUS")
 
@@ -283,46 +295,9 @@ def analyze_csi_drivers(mg_dir):
 
 def show_rook_operator_logs(mg_dir):
     """Show last 50 lines of rook-ceph-operator pod logs"""
-    print(
-        f"\n{Colors.YELLOW}StorageCluster is not ready - showing rook-ceph-operator logs:{Colors.END}\n"
+    show_pod_logs_tail(
+        mg_dir,
+        pod_name_substring="rook-ceph-operator",
+        banner="StorageCluster is not ready - showing rook-ceph-operator logs:",
+        not_found_message="Could not find rook-ceph-operator pod logs",
     )
-
-    # Find rook-ceph-operator pod logs
-    pods_dir = mg_dir / "namespaces/openshift-storage/pods"
-    if pods_dir.exists():
-        for pod_dir in pods_dir.iterdir():
-            if pod_dir.is_dir() and "rook-ceph-operator" in pod_dir.name:
-                # Look for container logs
-                # Note: The structure is pods/<pod>/<container>/<container>/logs/current.log
-                # The container name is repeated twice
-                for container_dir in pod_dir.iterdir():
-                    if container_dir.is_dir() and container_dir.name != pod_dir.name:
-                        # Look for the repeated container directory
-                        inner_container_dir = container_dir / container_dir.name
-                        if (
-                            inner_container_dir.exists()
-                            and inner_container_dir.is_dir()
-                        ):
-                            log_file = inner_container_dir / "logs/current.log"
-                            if log_file.exists():
-                                print(f"{Colors.CYAN}Pod: {pod_dir.name}{Colors.END}")
-                                print(
-                                    f"{Colors.CYAN}Container: {container_dir.name}{Colors.END}\n"
-                                )
-
-                                logs = read_file(log_file)
-                                if logs:
-                                    lines = logs.strip().split("\n")
-                                    last_50 = lines[-50:] if len(lines) > 50 else lines
-                                    for line in last_50:
-                                        print(f"  {line}")
-                                    print(
-                                        f"\n{Colors.CYAN}[Showing last {len(last_50)} lines]{Colors.END}\n"
-                                    )
-                                else:
-                                    print(
-                                        f"{Colors.YELLOW}  No logs found{Colors.END}\n"
-                                    )
-                                return
-
-    print(f"{Colors.YELLOW}Could not find rook-ceph-operator pod logs{Colors.END}\n")

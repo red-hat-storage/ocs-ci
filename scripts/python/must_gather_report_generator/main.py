@@ -32,7 +32,7 @@ from .analyzers import (
     generate_summary,
 )
 from .outputs import generate_xml_output
-from .utils import Colors, find_must_gather_dir, read_file
+from .utils import Colors, detect_deployment_type, find_must_gather_dir, read_file
 
 
 def _safe_extract_tar(tar: tarfile.TarFile, dest_dir: Path) -> None:
@@ -148,10 +148,14 @@ Examples:
         # Find actual must-gather data directory
         mg_dir = find_must_gather_dir(mg_base)
 
+        # Detect deployment type
+        deployment_type = detect_deployment_type(mg_dir)
+
         print(f"\n{Colors.BOLD}ODF Must-Gather Health Analyzer{Colors.END}")
         print(f"{Colors.CYAN}Input Path: {mg_input}{Colors.END}")
         print(f"{Colors.CYAN}Base Directory: {mg_base}{Colors.END}")
         print(f"{Colors.CYAN}Data Directory: {mg_dir}{Colors.END}")
+        print(f"{Colors.CYAN}Deployment Type: {deployment_type.upper()}{Colors.END}")
 
         # Verify key paths exist
         print(f"{Colors.CYAN}Checking for key files...{Colors.END}")
@@ -173,9 +177,10 @@ Examples:
                 elif len(parts) == 1:
                     print(f"{Colors.CYAN}Collection Time: {parts[0]}{Colors.END}")
 
-        # Redirect output to file if requested
+        # Redirect output to file if requested; suppress ANSI when not a TTY
         original_stdout = None
         out_file_handle = None
+        suppress_colors_restore_for_file = False
         if args.output_file:
             try:
                 out_file_handle = open(args.output_file, "w", encoding="utf-8")
@@ -187,32 +192,40 @@ Examples:
                 )
                 return 1
             original_stdout = sys.stdout
+            Colors.disable()
+            suppress_colors_restore_for_file = True
             sys.stdout = out_file_handle
             # Print info to stderr so user sees it
             print(
                 f"\n{Colors.CYAN}Writing text analysis to: {args.output_file}{Colors.END}",
                 file=sys.stderr,
             )
+        elif not sys.stdout.isatty():
+            Colors.disable()
 
         try:
             # Run all analyses (console or file output)
-            generate_summary(mg_dir)
-            analyze_nodes(mg_dir)  # Node health & capacity
-            analyze_pods(mg_dir)  # Moved up per user request
-            analyze_csv(mg_dir)  # CSV analysis
-            analyze_subscriptions(mg_dir)  # Operator subscriptions
+            generate_summary(mg_dir, deployment_type)
+            analyze_nodes(mg_dir, deployment_type)  # Node health & capacity
+            analyze_pods(mg_dir, deployment_type)  # Moved up per user request
+            analyze_csv(mg_dir, deployment_type)  # CSV analysis
+            analyze_subscriptions(mg_dir, deployment_type)  # Operator subscriptions
             analyze_storagecluster(
-                mg_dir
+                mg_dir, deployment_type
             )  # Will show rook-ceph-operator logs if not ready
-            analyze_ceph_status(mg_dir)
-            analyze_noobaa(mg_dir)  # Will show noobaa-core logs if unhealthy - MOVED UP
-            analyze_backingstores(mg_dir)  # NooBaa BackingStores - MOVED UP
-            analyze_ceph_pools(mg_dir)  # Ceph pool details
-            analyze_osd_tree(mg_dir)
-            analyze_storageclient(mg_dir)
-            analyze_pvcs(mg_dir)  # PVC analysis
-            analyze_csi_drivers(mg_dir)
-            analyze_events(mg_dir)
+            analyze_ceph_status(mg_dir, deployment_type)
+            analyze_noobaa(
+                mg_dir, deployment_type
+            )  # Will show noobaa-core logs if unhealthy - MOVED UP
+            analyze_backingstores(
+                mg_dir, deployment_type
+            )  # NooBaa BackingStores - MOVED UP
+            analyze_ceph_pools(mg_dir, deployment_type)  # Ceph pool details
+            analyze_osd_tree(mg_dir, deployment_type)
+            analyze_storageclient(mg_dir, deployment_type)
+            analyze_pvcs(mg_dir, deployment_type)  # PVC analysis
+            analyze_csi_drivers(mg_dir, deployment_type)
+            analyze_events(mg_dir, deployment_type)
 
             print(f"\n{Colors.BOLD}{Colors.GREEN}Analysis Complete!{Colors.END}\n")
 
@@ -221,13 +234,20 @@ Examples:
             if original_stdout is not None and out_file_handle is not None:
                 out_file_handle.close()
                 sys.stdout = original_stdout
+            if suppress_colors_restore_for_file:
+                Colors.enable()
+            if (
+                args.output_file
+                and original_stdout is not None
+                and out_file_handle is not None
+            ):
                 print(
                     f"{Colors.GREEN}✓ Text analysis written to: {args.output_file}{Colors.END}"
                 )
 
         # Generate XML output if requested (after text output)
         if args.xml_output:
-            generate_xml_output(mg_dir, mg_base, args.xml_output)
+            generate_xml_output(mg_dir, mg_base, args.xml_output, deployment_type)
 
         return 0
     finally:

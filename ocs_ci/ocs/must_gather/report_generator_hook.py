@@ -1,10 +1,13 @@
 import importlib.util
+import logging
 import os
 import re
 import subprocess
 import sys
 
 from ocs_ci.framework import config
+
+logger = logging.getLogger(__name__)
 
 
 def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None:
@@ -44,7 +47,42 @@ def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None
         "--xml-output",
         xml_out,
     ]
-    subprocess.run(cmd, check=False)
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            timeout=300,
+            capture_output=True,
+            text=True,
+        )
+        logger.info(
+            "Must-gather report generated for %s (text=%s xml=%s)",
+            mg_dir_path,
+            text_out,
+            xml_out,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "Must-gather report generation timed out after 300s for %s",
+            mg_dir_path,
+        )
+    except subprocess.CalledProcessError as e:
+        stderr = (e.stderr or "").strip()
+        stdout = (e.stdout or "").strip()
+        logger.error(
+            "Must-gather report generation failed for %s (exit %s): stderr=%s stdout=%s",
+            mg_dir_path,
+            e.returncode,
+            stderr,
+            stdout[:500] if len(stdout) > 500 else stdout,
+        )
+    except Exception as e:
+        logger.error(
+            "Unexpected error running must-gather report for %s: %s",
+            mg_dir_path,
+            e,
+            exc_info=True,
+        )
 
 
 def trigger_reports_after_collect_ocs_logs(

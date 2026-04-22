@@ -5,7 +5,7 @@ from ..utils import read_yaml_file
 from collections import defaultdict
 
 
-def analyze_events(mg_dir):
+def analyze_events(mg_dir, deployment_type="internal"):
     """Analyze recent events for errors/warnings"""
     print_header("RECENT WARNINGS & ERRORS")
 

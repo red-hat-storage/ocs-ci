@@ -6,16 +6,48 @@ from ..utils import (
     NOT_AVAILABLE,
     UNKNOWN,
     ZERO,
+    first_item,
     list_from,
     print_header,
     print_status,
+    read_file,
+    read_json_file,
+    read_yaml_file,
 )
-from ..utils import read_json_file, read_file
 
 
-def analyze_ceph_status(mg_dir):
+def analyze_ceph_status(mg_dir, deployment_type="internal"):
     """Analyze Ceph cluster status"""
     print_header("CEPH CLUSTER STATUS")
+
+    if deployment_type == "external":
+        print(f"{Colors.YELLOW}⚠ External Ceph deployment detected{Colors.END}")
+        print(
+            f"{Colors.CYAN}Ceph health data not available in must-gather.{Colors.END}"
+        )
+        print(
+            f"{Colors.CYAN}Health status must be queried from external Ceph cluster.{Colors.END}\n"
+        )
+
+        # Try to extract external cluster info from StorageCluster
+        sc_file = mg_dir / "namespaces/openshift-storage/oc_output/storagecluster.yaml"
+        if sc_file.exists():
+            sc_data = read_yaml_file(sc_file)
+            sc = first_item(sc_data)
+            if sc:
+                external_spec = sc.get("spec", {}).get("externalStorage", {})
+                if external_spec:
+                    print(f"{Colors.CYAN}External Storage Configuration:{Colors.END}")
+                    print(f"  Enabled: {external_spec.get('enable', False)}")
+
+                    # Show any status information available
+                    status = sc.get("status", {})
+                    external_status = status.get("externalStorage", {})
+                    if external_status:
+                        print(f"\n{Colors.CYAN}External Storage Status:{Colors.END}")
+                        for key, value in external_status.items():
+                            print(f"  {key}: {value}")
+        return
 
     # Check ceph health
     health_file = mg_dir / "ceph/must_gather_commands/ceph_health_detail"
@@ -111,9 +143,15 @@ def analyze_ceph_status(mg_dir):
                 print(f"  Available: {avail_tb:.2f} TiB")
 
 
-def analyze_osd_tree(mg_dir):
+def analyze_osd_tree(mg_dir, deployment_type="internal"):
     """Analyze OSD tree"""
     print_header("OSD TOPOLOGY")
+
+    if deployment_type == "external":
+        print(f"{Colors.YELLOW}⚠ External Ceph deployment{Colors.END}")
+        print(f"{Colors.CYAN}OSD topology not available in must-gather.{Colors.END}")
+        print(f"{Colors.CYAN}Query external Ceph cluster: ceph osd tree{Colors.END}\n")
+        return
 
     osd_tree_file = mg_dir / "ceph/must_gather_commands/ceph_osd_tree"
     if osd_tree_file.exists():
@@ -135,9 +173,17 @@ def analyze_osd_tree(mg_dir):
                         pass  # Simple display, detailed in the tree above
 
 
-def analyze_ceph_pools(mg_dir):
+def analyze_ceph_pools(mg_dir, deployment_type="internal"):
     """Analyze Ceph pools"""
     print_header("CEPH POOLS")
+
+    if deployment_type == "external":
+        print(f"{Colors.YELLOW}⚠ External Ceph deployment{Colors.END}")
+        print(
+            f"{Colors.CYAN}Pool information not available in must-gather.{Colors.END}"
+        )
+        print(f"{Colors.CYAN}Query external Ceph cluster: ceph osd dump{Colors.END}\n")
+        return
 
     # Check ceph osd dump for pool info
     pool_file = (
