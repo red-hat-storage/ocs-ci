@@ -9,6 +9,9 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
+from ocs_ci.templates.workloads.helper_scripts.meta_data_io import (
+    perform_xattr_only_operations,
+)
 from ocs_ci.ocs import cluster, constants
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility import prometheus
@@ -90,32 +93,7 @@ def set_xattr_with_high_cpu_usage(
         node_name=active_mds_node_name,
     )
 
-    log.info("Copying check_xattr.py to fedora pod ")
-    cmd = f"oc cp {file} {pod_obj.namespace}/{pod_obj.name}:/mnt/"
-    helpers.run_cmd(cmd=cmd)
-    log.info("check_xattr.py copied successfully ")
-    log.info("Setting extended attributed from fedora pod ")
-    cmd = (
-        "bash -c 'cd /mnt; "
-        "for i in {1..6}; do "
-        'dir="my_test_dir${i}"; '
-        'python3 check_xattr.py "$dir" 10000 100 > "${dir}.log" 2>&1 & '
-        "sleep 5; "
-        "done'"
-    )
-    pod_obj.exec_sh_cmd_on_pod(cmd)
-    time.sleep(10)
-
-    ls_output = pod_obj.exec_sh_cmd_on_pod("ls /mnt")
-    for i in range(1, 7):
-        dir_name = f"my_test_dir{i}"
-        log_name = f"{dir_name}.log"
-        assert (
-            dir_name in ls_output
-        ), f"Expected directory {dir_name} was not created under /mnt"
-        assert (
-            log_name in ls_output
-        ), f"Expected log file {log_name} was not created under /mnt"
+    perform_xattr_only_operations(file=file, pod_obj=pod_obj)
 
     log.info(
         "Setting up cephfs stress job for increasing CPU utilization in the cluster"
