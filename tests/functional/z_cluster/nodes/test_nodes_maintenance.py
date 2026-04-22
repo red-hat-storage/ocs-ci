@@ -131,22 +131,6 @@ class TestNodesMaintenance(ManageTest):
             # skip because ceph is not in good health
             pytest.skip(str(e))
 
-    @pytest.fixture()
-    def skip_on_hci_provider_client(self):
-        """
-        Skip the test at runtime when running on Fusion HCI provider+client
-        setup. Uses a fixture instead of pytest.mark.skipif to avoid the
-        eager-evaluation issue where config.clusters is not yet populated at
-        module import time.
-        """
-        if (
-            config.ENV_DATA["platform"].lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-            and config.hci_provider_exist()
-            and config.hci_client_exist()
-        ):
-            pytest.skip("Test will not run on Fusion HCI provider and Client clusters")
-
     @tier1
     @skipif_managed_service
     @skipif_hci_provider
