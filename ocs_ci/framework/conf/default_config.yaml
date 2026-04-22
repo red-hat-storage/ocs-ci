@@ -157,7 +157,7 @@ REPORTING:
   tarball_mg_logs: true
   delete_packed_mg_logs: true
   # If True, run scripts/python/must_gather_report_generator/main.py after OCS must-gather is collected
-  generate_must_gather_report: false
+  generate_must_gather_report: true
 
 # This is the default information about environment.
 ENV_DATA:
