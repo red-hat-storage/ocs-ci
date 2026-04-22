@@ -1525,6 +1525,58 @@ logger.info("Validation: Verifying storage")  # ✅
 logger.info("Validation: Testing connectivity")  # ✅
 ```
 
+### ❌ Don't: Start Log Messages with Newlines
+
+```python
+# Starting log messages with newlines
+logger.info("\nStarting deployment")  # ❌
+logger.error("\n\nFailed to create PVC")  # ❌
+logger.test_step("\nCreate resources")  # ❌
+
+# Multiple newlines for spacing
+logger.info("\n\n\n=== Important Section ===")  # ❌
+```
+
+**Why avoid leading newlines?**
+- Breaks log formatting and timestamp alignment
+- Creates empty lines in log files that waste space
+- Disrupts log aggregation and parsing tools
+- Makes automated log analysis difficult
+- Inconsistent with standard logging practices
+- Hard to grep/search for messages
+
+✅ **Do:** Let the logging framework handle formatting
+
+```python
+# Clean, properly formatted messages
+logger.info("Starting deployment")  # ✅
+logger.error("Failed to create PVC")  # ✅
+logger.test_step("Create resources")  # ✅
+
+# Use TEST_STEP for visual separation
+logger.test_step("Important Section")  # ✅
+
+# Or use clear section markers within messages
+logger.info("=== Important Section ===")  # ✅ If you must
+```
+
+**What happens with leading newlines:**
+
+```
+2026-04-22 10:30:15 INFO - Processing resources
+2026-04-22 10:30:16 INFO -
+Starting deployment  # ❌ Timestamp and message separated
+2026-04-22 10:30:17 INFO - Deployment in progress
+```
+
+**Clean formatting without newlines:**
+
+```
+2026-04-22 10:30:15 INFO - Processing resources
+2026-04-22 10:30:16 INFO - Starting deployment  # ✅ Clean alignment
+2026-04-22 10:30:17 INFO - Deployment in progress
+```
+
 ---
 
 ## Special Topics
