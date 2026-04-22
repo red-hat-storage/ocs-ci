@@ -11,6 +11,7 @@
 
 ---
 
+(overview)=
 ## Overview
 
 Regional Disaster Recovery (RDR) is a disaster recovery solution for OpenShift Data Foundation (ODF) that enables asynchronous replication of persistent volumes across geographically distributed OpenShift clusters. RDR provides application failover and relocate capabilities between a primary and secondary cluster.
@@ -24,6 +25,7 @@ Regional Disaster Recovery (RDR) is a disaster recovery solution for OpenShift D
 
 ---
 
+(rdr-architecture)=
 ## RDR Architecture
 
 ### High-Level Architecture
@@ -79,6 +81,7 @@ RDR requires network connectivity between clusters:
 
 ---
 
+(key-components)=
 ## Key Components
 
 ### 1. ACM Hub Cluster Components
@@ -172,6 +175,7 @@ RDR requires network connectivity between clusters:
 
 ---
 
+(multicluster-access-patterns)=
 ## Multicluster Access Patterns
 
 ### Context Switching in ocs-ci
@@ -255,6 +259,7 @@ dr_helpers.wait_for_replication_destinations_creation(
 
 ---
 
+(ocs-ci-deployment-flow)=
 ## OCS-CI Deployment Flow
 
 ### Phase 1: Infrastructure Setup
@@ -399,6 +404,7 @@ Creates DRPolicy with cluster relationships.
 
 ---
 
+(important-design-pieces)=
 ## Important Design Pieces
 
 ### 1. Asynchronous Replication
@@ -525,6 +531,7 @@ configure_rdr_hub_recovery()
 
 ---
 
+(configuration-and-constants)=
 ## Configuration and Constants
 
 ### Key Constants
