@@ -11,9 +11,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     libtest,
-    yellow_squad,
     hci_provider_and_client_required,
-    tier1,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -25,10 +23,8 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
-@yellow_squad
 @libtest
 @hci_provider_and_client_required
-@tier1
 class TestRemoteOBCOnClient(ManageTest):
     """
     Libtest to verify remote OBC creation and functionality on client clusters.
