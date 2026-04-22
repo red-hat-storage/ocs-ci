@@ -134,6 +134,7 @@ class StorageClusterSetup(object):
         logger.debug(
             "Flexible scaling is available from version 4.7 on LSO cluster with less than 3 zones"
         )
+        logger.info("THIS is a fyre environment", self.platform)
         zone_num = get_az_count()
         if (
             self.local_storage
@@ -148,10 +149,12 @@ class StorageClusterSetup(object):
             cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
         elif (
-            self.platform == constants.FYRE_PLATFORM
+            self.platform.lower() == constants.FYRE_PLATFORM
             or self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
             from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+
+            logger.info("!!!!!!!Environment is fyre!!!!!!!")
 
             nodes_obj = OCP(
                 kind=constants.NODE,
@@ -172,7 +175,7 @@ class StorageClusterSetup(object):
             number_of_disks_available = int(
                 number_of_disks_available_total / no_of_worker_nodes
             )
-
+            logger.info(no_of_worker_nodes, number_of_disks_available)
             # with this approach of datermining the number of nodes we assume worker nodes number of disks is equal
             # to master nodes number of disks, in case when config.ENV_DATA.get("mark_masters_schedulable") == True,
             # and we labeled master nodes to serve as a storage nodes
