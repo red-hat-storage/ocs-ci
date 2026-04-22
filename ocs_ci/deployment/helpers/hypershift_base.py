@@ -1323,51 +1323,58 @@ def fix_hypershift_webhook_ca_bundle():
     causing 'x509: certificate signed by unknown authority' errors during hosted cluster
     creation.
 
-    Patches both MutatingWebhookConfiguration and ValidatingWebhookConfiguration named
-    'hypershift.openshift.io' with the CA bundle from the 'webhook-serving-ca' secret
-    in the 'hypershift' namespace.
+    Patches all HyperShift-related MutatingWebhookConfiguration and ValidatingWebhookConfiguration
+    resources (including 'hypershift.openshift.io' and 'nodepools.hypershift.openshift.io')
+    with the CA bundle from the 'webhook-serving-ca' secret in the 'hypershift' namespace.
 
     This workaround addresses a known race condition where the HyperShift operator
     creates or rotates its webhook-serving-ca after the webhook configurations are
     registered, leaving the caBundle field stale or empty.
     """
     logger.info(
-        "Fixing HyperShift webhook CA bundle mismatch — patching MutatingWebhookConfiguration "
-        "and ValidatingWebhookConfiguration with CA from 'webhook-serving-ca' secret"
+        "Fixing HyperShift webhook CA bundle mismatch — patching all HyperShift "
+        "MutatingWebhookConfiguration and ValidatingWebhookConfiguration resources"
     )
     secret_obj = OCP(kind="Secret", namespace=constants.HYPERSHIFT_NAMESPACE)
     secret_data = secret_obj.get(resource_name="webhook-serving-ca")
     ca_bundle = secret_data["data"]["ca.crt"]
+
+    # List of HyperShift webhook configurations to patch
+    webhook_names = [
+        "hypershift.openshift.io",
+        "nodepools.hypershift.openshift.io",
+    ]
 
     for webhook_kind in (
         "mutatingwebhookconfiguration",
         "validatingwebhookconfiguration",
     ):
         webhook_obj = OCP(kind=webhook_kind)
-        try:
-            wh_data = webhook_obj.get(resource_name="hypershift.openshift.io")
-        except Exception:
-            logger.warning(
-                f"No {webhook_kind} named 'hypershift.openshift.io' found, skipping"
+        for webhook_name in webhook_names:
+            try:
+                wh_data = webhook_obj.get(resource_name=webhook_name)
+            except Exception as e:
+                logger.warning(
+                    f"No {webhook_kind} named '{webhook_name}' found, skipping. Error: {e}"
+                )
+                continue
+            num_webhooks = len(wh_data.get("webhooks", []))
+            patch = [
+                {
+                    "op": "replace",
+                    "path": f"/webhooks/{i}/clientConfig/caBundle",
+                    "value": ca_bundle,
+                }
+                for i in range(num_webhooks)
+            ]
+            webhook_obj.patch(
+                resource_name=webhook_name,
+                params=patch,
+                format_type="json",
             )
-            continue
-        num_webhooks = len(wh_data.get("webhooks", []))
-        patch = [
-            {
-                "op": "replace",
-                "path": f"/webhooks/{i}/clientConfig/caBundle",
-                "value": ca_bundle,
-            }
-            for i in range(num_webhooks)
-        ]
-        webhook_obj.patch(
-            resource_name="hypershift.openshift.io",
-            params=patch,
-            format_type="json",
-        )
-        logger.info(
-            f"Patched {num_webhooks} webhook(s) in {webhook_kind}/hypershift.openshift.io"
-        )
+            logger.info(
+                f"Patched {num_webhooks} webhook(s) in {webhook_kind}/{webhook_name}"
+            )
     logger.info("HyperShift webhook CA bundle fix applied successfully")
 
 
