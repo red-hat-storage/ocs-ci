@@ -880,14 +880,44 @@ class AzureAroUtil(AZURE):
             f"az aro show -n {cluster_name} -g {resource_group} --query "
             f"'{{api:apiserverProfile.ip, ingress:ingressProfiles[0].ip}}' --only-show-errors"
         )
-        data = json.loads(exec_cmd(cmd).stdout)
-        dns_data = {
-            "api": data["api"],
-            "*.apps": data["ingress"],
-        }
+
+        def get_cluster_ips():
+            """Get cluster IPs and return them if both are available."""
+            data = json.loads(exec_cmd(cmd).stdout)
+            api_ip = data.get("api")
+            ingress_ip = data.get("ingress")
+
+            if api_ip and ingress_ip:
+                return {"api": api_ip, "*.apps": ingress_ip}
+
+            missing = []
+            if not api_ip:
+                missing.append("API")
+            if not ingress_ip:
+                missing.append("Ingress")
+            logger.info(f"Waiting for cluster IPs. Missing: {', '.join(missing)}")
+            return None
+
+        logger.info(f"Waiting for cluster IPs to be available for {cluster_name}")
+        dns_data = None
+        try:
+            for sample in TimeoutSampler(timeout=600, sleep=20, func=get_cluster_ips):
+                if sample:
+                    dns_data = sample
+                    logger.info(
+                        f"Cluster IPs available - API: {dns_data['api']}, "
+                        f"Ingress: {dns_data['*.apps']}"
+                    )
+                    break
+        except TimeoutExpiredError:
+            logger.error(
+                f"Timeout waiting for cluster IPs for {cluster_name} after 600 seconds"
+            )
+            raise
+
         self.delete_dns_records(cluster_name, resource_group, base_domain)
         for entry, ip in dns_data.items():
-            logger.debug("Creating DNS records")
+            logger.info(f"Creating DNS record for {entry}.{cluster_name} -> {ip}")
             create_dns_record_cmd = (
                 f"az network dns record-set a add-record -g {resource_group} "
                 f"-z {base_domain} -n {entry}.{cluster_name} -a {ip}"
