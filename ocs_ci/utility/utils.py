@@ -1519,18 +1519,6 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
             download_client = False
 
     if download_client:
-        # Move existing client binaries to backup location
-        client_binary_backup = f"{client_binary_path}.bak"
-        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
-
-        backup_created = False
-        try:
-            os.rename(client_binary_path, client_binary_backup)
-            os.rename(kubectl_binary_path, kubectl_binary_backup)
-            backup_created = True
-        except FileNotFoundError:
-            pass
-
         # Download the client
         log.info(f"Downloading openshift client ({version}).")
         # record current working directory and switch to BIN_DIR
@@ -1539,6 +1527,9 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
 
         tarball = "openshift-client.tar.gz"
         download_successful = False
+        backup_created = False
+        client_binary_backup = f"{client_binary_path}.bak"
+        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
 
         # For nightly builds, try pullSpec extraction first (more reliable than downloadURL)
         if "nightly" in version and not custom_ocp_image:
@@ -1553,7 +1544,7 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
                 log.info(f"Using pullSpec: {pullspec}")
 
                 # Check if oc client exists to perform extraction
-                if not client_exist and not backup_created:
+                if not client_exist:
                     log.info(
                         "No existing oc client found. Downloading GA version as bootstrap "
                         "to enable extraction from pullSpec."
@@ -1567,18 +1558,11 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
                         )
 
                 # Now try to extract from pullSpec using the available oc (existing or bootstrap)
+                # Note: extract_ocp_binary_from_image() handles its own backup internally
                 if os.path.isfile(client_binary_path):
                     try:
                         log.info(f"Extracting oc client from pullSpec: {pullspec}")
                         extract_ocp_binary_from_image("oc", pullspec, bin_dir)
-                        # Also extract kubectl
-                        try:
-                            extract_ocp_binary_from_image("kubectl", pullspec, bin_dir)
-                        except Exception as kubectl_ex:
-                            log.warning(
-                                f"Failed to extract kubectl from pullSpec, "
-                                f"will create symlink later: {kubectl_ex}"
-                            )
                         download_successful = True
                         log.info(
                             "Successfully extracted oc client from pullSpec "
@@ -1596,7 +1580,17 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
                 )
 
         # If pullSpec extraction wasn't attempted or failed, try traditional downloadURL method
+        # Create backup before attempting methods that don't handle their own backup
         if not download_successful:
+            # Move existing client binaries to backup location before trying other download methods
+            try:
+                os.rename(client_binary_path, client_binary_backup)
+                os.rename(kubectl_binary_path, kubectl_binary_backup)
+                backup_created = True
+                log.debug("Created backup of existing client binaries.")
+            except FileNotFoundError:
+                pass
+
             try:
                 url = get_openshift_mirror_url("openshift-client", version)
                 download_file(url, tarball)
