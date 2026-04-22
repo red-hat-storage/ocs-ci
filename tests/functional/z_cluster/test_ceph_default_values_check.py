@@ -244,7 +244,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             f"The expected values are:\n{stored_values}\n"
             f"The cluster's existing values are:{config_data}"
         )
-        
+
     @post_ocs_upgrade
     def test_check_number_of_pgs(self, project_factory, pvc_factory, pod_factory):
         """
