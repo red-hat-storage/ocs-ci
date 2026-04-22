@@ -5,7 +5,7 @@ from ..utils import read_yaml_file, read_file
 import re
 
 
-def analyze_csv(mg_dir):
+def analyze_csv(mg_dir, deployment_type="internal"):
     """Analyze ClusterServiceVersion (CSV) status"""
     print_header("OPERATOR STATUS (CSV)")
 
@@ -103,7 +103,7 @@ def analyze_csv(mg_dir):
         print(f"{Colors.YELLOW}CSV file not found{Colors.END}")
 
 
-def analyze_subscriptions(mg_dir):
+def analyze_subscriptions(mg_dir, deployment_type="internal"):
     """Analyze Operator Subscription status"""
     print_header("OPERATOR SUBSCRIPTIONS")
 

@@ -5,7 +5,7 @@ from ..utils import read_yaml_file
 from collections import defaultdict
 
 
-def analyze_pods(mg_dir):
+def analyze_pods(mg_dir, deployment_type="internal"):
     """Analyze pod status"""
     print_header("POD STATUS SUMMARY")
 

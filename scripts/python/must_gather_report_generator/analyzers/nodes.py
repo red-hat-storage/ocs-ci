@@ -4,7 +4,7 @@ from ..utils import Colors, UNKNOWN, first_item, print_header
 from ..utils import read_yaml_file
 
 
-def analyze_nodes(mg_dir):
+def analyze_nodes(mg_dir, deployment_type="internal"):
     """Analyze Node health and capacity"""
     print_header("NODE HEALTH & CAPACITY")
 
