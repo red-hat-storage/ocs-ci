@@ -535,6 +535,72 @@ class AzureAroUtil(AZURE):
             f"OCP version {ocp_config_version.major}.{ocp_config_version.minor} is not supported on Azure ARO platform!"
         )
 
+    def create_aro_service_principal(self, cluster_name):
+        """
+        Create a service principal for ARO cluster.
+
+        Args:
+            cluster_name (str): Cluster name.
+
+        Returns:
+            tuple: (client_id, client_secret) of the created service principal
+
+        """
+        sp_name = f"aro-sp-{cluster_name}"
+        logger.info(f"Creating service principal: {sp_name}")
+
+        try:
+            # Create service principal
+            create_sp_cmd = (
+                f"az ad sp create-for-rbac --name {sp_name} --role Contributor "
+                f"--scopes /subscriptions/{self._subscription_id}"
+            )
+            result = exec_cmd(create_sp_cmd, timeout=120)
+            sp_data = json.loads(result.stdout)
+
+            client_id = sp_data["appId"]
+            client_secret = sp_data["password"]
+
+            logger.info(f"Service principal created successfully: {sp_name}")
+            logger.info(f"Client ID: {client_id}")
+
+            # Wait for service principal to propagate
+            logger.info("Waiting for service principal to propagate in Azure AD...")
+            time.sleep(30)
+
+            return client_id, client_secret
+
+        except CommandFailed as e:
+            logger.error(f"Failed to create service principal: {e}")
+            raise
+
+    def delete_aro_service_principal(self, cluster_name):
+        """
+        Delete the service principal created for ARO cluster.
+
+        Args:
+            cluster_name (str): Cluster name.
+
+        """
+        sp_name = f"aro-sp-{cluster_name}"
+        logger.info(f"Deleting service principal: {sp_name}")
+
+        try:
+            # Get the app ID first
+            list_cmd = f"az ad sp list --display-name {sp_name}"
+            result = exec_cmd(list_cmd, timeout=60, ignore_error=True)
+            if result.stdout:
+                sp_list = json.loads(result.stdout)
+                if sp_list:
+                    app_id = sp_list[0]["appId"]
+                    delete_cmd = f"az ad sp delete --id {app_id}"
+                    exec_cmd(delete_cmd, timeout=60, ignore_error=True)
+                    logger.info(f"Service principal deleted: {sp_name}")
+                else:
+                    logger.info(f"Service principal not found: {sp_name}")
+        except CommandFailed as e:
+            logger.warning(f"Failed to delete service principal, continuing: {e}")
+
     def create_cluster(self, cluster_name):
         """
         Create OCP cluster.
@@ -558,6 +624,11 @@ class AzureAroUtil(AZURE):
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         base_domain = config.ENV_DATA["base_domain"]
 
+        # Create service principal for ARO cluster
+        aro_client_id, aro_client_secret = self.create_aro_service_principal(
+            cluster_name
+        )
+
         # Create network resources with cluster-specific VNET name
         self.create_network(cluster_name)
 
@@ -575,10 +646,11 @@ class AzureAroUtil(AZURE):
             f"--name {cluster_name} --version {ocp_version} --vnet {vnet} --master-subnet {master_subnet} "
             f"--worker-subnet {worker_subnet} --pull-secret @{pull_secret_path} "
             f"--worker-vm-size {worker_flavor} --master-vm-size {master_flavor}  "
-            f"--worker-count {worker_replicas} --domain {cluster_name}.{base_domain}"
+            f"--worker-count {worker_replicas} --domain {cluster_name}.{base_domain} "
+            f"--client-id {aro_client_id} --client-secret {aro_client_secret}"
         )
         logger.info("Creating Azure ARO cluster.")
-        out = exec_cmd(cmd, timeout=5400).stdout
+        out = exec_cmd(cmd, timeout=5400, secrets=[aro_client_secret]).stdout
         self.set_dns_records(cluster_name, resource_group, base_domain)
         logger.info(f"Cluster deployed: {out}")
         cluster_info = self.get_cluster_details(cluster_name)
@@ -879,6 +951,9 @@ class AzureAroUtil(AZURE):
 
         # Delete the VNET after cluster deletion
         self.delete_network(cluster_name, resource_group)
+
+        # Delete the service principal created for ARO cluster
+        self.delete_aro_service_principal(cluster_name)
 
 
 def azure_storageaccount_check():
