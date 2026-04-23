@@ -13,7 +13,6 @@ from ocs_ci.templates.workloads.helper_scripts.meta_data_io import (
     perform_xattr_only_operations,
 )
 from ocs_ci.ocs import cluster, constants
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import ocp
@@ -27,6 +26,7 @@ from ocs_ci.helpers.cephfs_stress_helpers import CephFSStressTestManager
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pv import delete_released_pvs_in_sc
 from ocs_ci.ocs.node import wait_for_nodes_status
+from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +40,6 @@ storagecluster_obj = OCP(
     namespace=config.ENV_DATA["cluster_namespace"],
     resource_name=constants.DEFAULT_STORAGE_CLUSTER,
 )
-ceph_cluster = CephCluster()
 
 
 @pytest.fixture(scope="function")
@@ -168,11 +167,18 @@ def MDSxattr_alert_values(threading_lock, timeout):
 
 def ceph_not_health_error():
     """
-    Check if Ceph is not in HEALTH_ERR state.
+    Check if Ceph health is good.
 
     """
-    ceph_status = ceph_cluster.get_ceph_health()
-    return ceph_status != "HEALTH_ERR"
+    try:
+        ceph_health_check(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            tries=3,
+        )
+        return True
+    except Exception as ex:
+        log.warning(f"Ceph health check failed: {ex}")
+        return False
 
 
 def is_cluster_healthy():
