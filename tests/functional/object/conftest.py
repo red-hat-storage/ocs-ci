@@ -13,6 +13,80 @@ log = logging.getLogger(__name__)
 DEFAULT_NOOBAA_SC = "openshift-storage.noobaa.io"
 
 
+def add_storageclasses_to_storageconsumer(consumer_name, storageclasses):
+    """
+    Add storageclass(es) to a specific StorageConsumer on the provider cluster.
+
+    This function runs on the provider cluster and adds the specified storageclasses
+    to the StorageConsumer's spec.storageClasses list if they are not already present.
+
+    Args:
+        consumer_name (str): Name of the StorageConsumer CR
+        storageclasses (str or list): Storageclass name(s) to add
+
+    Returns:
+        tuple: (success: bool, added_scs: list, current_scs: list)
+            - success: True if operation completed without errors
+            - added_scs: List of storageclasses that were added
+            - current_scs: Final list of storageclasses in the StorageConsumer
+
+    Example:
+        # Add single storageclass
+        success, added, current = add_storageclasses_to_storageconsumer(
+            "consumer-c21-c5", "openshift-storage.noobaa.io"
+        )
+
+        # Add multiple storageclasses
+        success, added, current = add_storageclasses_to_storageconsumer(
+            "consumer-c21-c5",
+            ["openshift-storage.noobaa.io", "my-custom-noobaa-sc"]
+        )
+
+    """
+    # Normalize to list
+    if isinstance(storageclasses, str):
+        storageclasses = [storageclasses]
+
+    if not isinstance(storageclasses, list):
+        log.error("storageclasses must be a string or list of strings")
+        return False, [], []
+
+    added_scs = []
+    current_scs = []
+
+    # Must run on provider cluster
+    with config.RunWithProviderConfigContextIfAvailable():
+        try:
+            consumer = StorageConsumer(consumer_name)
+            current_scs = consumer.get_storage_classes()
+            log.info(
+                f"StorageConsumer '{consumer_name}' current storage classes: {current_scs}"
+            )
+
+            # Check which SCs need to be added
+            scs_missing = [sc for sc in storageclasses if sc not in current_scs]
+
+            if scs_missing:
+                log.info(f"Adding {scs_missing} to StorageConsumer '{consumer_name}'")
+                updated_scs = current_scs + scs_missing
+                consumer.set_storage_classes(updated_scs)
+                added_scs = scs_missing
+                current_scs = updated_scs
+                log.info(
+                    f"Updated StorageConsumer '{consumer_name}' with storage classes: {updated_scs}"
+                )
+            else:
+                log.info(
+                    f"StorageConsumer '{consumer_name}' already has all specified storageclasses"
+                )
+
+            return True, added_scs, current_scs
+
+        except Exception as e:
+            log.error(f"Failed to update StorageConsumer '{consumer_name}': {e}")
+            return False, [], current_scs
+
+
 @pytest.fixture(scope="session")
 def remote_obc_setup_session(request):
     """
@@ -53,7 +127,7 @@ def remote_obc_setup_session(request):
 
     log.info(f"Will add these noobaa storageclasses: {scs_to_add}")
 
-    # Step 1: Add noobaa storageclasses to StorageConsumer CRs on provider
+    # Step 1: Add noobaa storageclasses to all StorageConsumer CRs on provider
     with config.RunWithProviderConfigContextIfAvailable():
         try:
             consumer_names = get_consumer_names()
@@ -63,35 +137,7 @@ def remote_obc_setup_session(request):
                 )
 
                 for consumer_name in consumer_names:
-                    try:
-                        consumer = StorageConsumer(consumer_name)
-                        current_scs = consumer.get_storage_classes()
-                        log.info(
-                            f"StorageConsumer '{consumer_name}' current storage classes: {current_scs}"
-                        )
-
-                        # Check which SCs need to be added
-                        scs_missing = [sc for sc in scs_to_add if sc not in current_scs]
-
-                        if scs_missing:
-                            log.info(
-                                f"Adding {scs_missing} to StorageConsumer '{consumer_name}'"
-                            )
-                            # Add missing noobaa SCs to the list
-                            updated_scs = current_scs + scs_missing
-                            consumer.set_storage_classes(updated_scs)
-                            log.info(
-                                f"Updated StorageConsumer '{consumer_name}' with storage classes: {updated_scs}"
-                            )
-                        else:
-                            log.info(
-                                f"StorageConsumer '{consumer_name}' already has all required OBC storageclasses"
-                            )
-
-                    except Exception as e:
-                        log.error(
-                            f"Failed to update StorageConsumer '{consumer_name}': {e}"
-                        )
+                    add_storageclasses_to_storageconsumer(consumer_name, scs_to_add)
 
         except Exception as e:
             log.error(f"Failed to process StorageConsumer CRs on provider: {e}")
