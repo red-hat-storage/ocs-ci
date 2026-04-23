@@ -927,10 +927,13 @@ class BaseUI:
         Args:
             locator (tuple): (By.XPATH, "//input[@placeholder='...']")
             retries (int): number of attempts
-            wait_between (int): pause between attempts
+            wait_between (float): pause between attempts
 
         Returns:
-            bool: True if the input element is successfully cleared, False otherwise.
+            bool: True if the input element is successfully cleared
+
+        Raises:
+            Exception: If the input field cannot be cleared after all retry attempts
         """
         VALID_BY = {By.ID, By.NAME, By.XPATH}
 
