@@ -603,10 +603,20 @@ class OADPOperator(Operator):
     def __init__(self, create_catalog: bool = False):
         self.name = constants.OADP_OPERATOR_NAME
         ocp_version = get_semantic_ocp_version_from_config()
-        self.unreleased_catalog_image_tag: str = (
-            f"oadp-{config.ENV_DATA.get('oadp_version')}__v{ocp_version}__oadp-rhel9-operator"
-        )
+        if not config.ENV_DATA.get("use_custom_unreleased_catalog_image_tag_oadp"):
+            self.unreleased_catalog_image_tag: str = (
+                f"oadp-{config.ENV_DATA.get('oadp_version')}__v{ocp_version}__oadp-rhel9-operator"
+            )
+        else:
+            self.unreleased_catalog_image_tag = config.ENV_DATA.get(
+                "use_custom_unreleased_catalog_image_tag_oadp"
+            )
         self.unreleased_images = [
+            "registry.redhat.io/oadp/oadp-cli-binaries-rhel9",
+            "registry.redhat.io/oadp/oadp-hypershift-velero-plugin-rhel9",
+            "registry.redhat.io/oadp/oadp-kubevirt-datamover-controller-rhel9",
+            "registry.redhat.io/oadp/oadp-kubevirt-datamover-plugin-rhel9",
+            "registry.redhat.io/oadp/oadp-kubevirt-velero-plugin-rhel9",
             "registry.redhat.io/oadp/oadp-mustgather-rhel9",
             "registry.redhat.io/oadp/oadp-non-admin-rhel9",
             "registry.redhat.io/oadp/oadp-operator-bundle",
@@ -617,6 +627,11 @@ class OADPOperator(Operator):
             "registry.redhat.io/oadp/oadp-velero-plugin-for-microsoft-azure-rhel9",
             "registry.redhat.io/oadp/oadp-velero-plugin-rhel9",
             "registry.redhat.io/oadp/oadp-velero-rhel9",
+            "registry.redhat.io/oadp/oadp-vm-file-restore-rhel9",
+            "registry.redhat.io/oadp/oadp-vmdp-binaries-rhel9",
+            "registry.redhat.io/oadp/oadp-vmfr-access-filebrowser-rhel9",
+            "registry.redhat.io/oadp/oadp-vmfr-access-rhel9",
+            "registry.redhat.io/oadp/oadp-vmfr-access-sshd-rhel9",
         ]
         self.disconnected_required_packages = [
             "redhat-oadp-operator",

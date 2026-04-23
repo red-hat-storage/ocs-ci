@@ -3747,7 +3747,7 @@ class MultiClusterDROperatorsDeploy(object):
         oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
 
         if version.compare_versions(f"{oadp_version} >= 1.6"):
-            oadp_pod_count = 4
+            oadp_pod_count = 5
         else:
             oadp_pod_count = 3
         if len(pods_list) != oadp_pod_count:
