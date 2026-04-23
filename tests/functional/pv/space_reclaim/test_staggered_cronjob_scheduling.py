@@ -83,7 +83,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         request.addfinalizer(finalizer)
 
     @tier2
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-7800")
     def test_staggered_cronjob_scheduling_happy_path(
         self,
         storageclass_factory,
