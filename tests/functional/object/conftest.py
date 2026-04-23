@@ -9,9 +9,6 @@ from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 
 log = logging.getLogger(__name__)
 
-# Default noobaa storageclass name
-DEFAULT_NOOBAA_SC = "openshift-storage.noobaa.io"
-
 
 @pytest.fixture(scope="session")
 def remote_obc_setup_session(request):
@@ -19,18 +16,9 @@ def remote_obc_setup_session(request):
     Session-scoped fixture to enable remote OBC on all client clusters.
 
     This fixture:
-    1. Adds noobaa storageclass(es) to all StorageConsumer CRs on provider cluster
+    1. Adds noobaa storageclass to all StorageConsumer CRs on provider cluster
     2. Enables remote OBC on all client clusters
     3. At teardown, disables remote OBC
-
-    The fixture adds the default noobaa storageclass and any custom storageclasses
-    specified in ENV_DATA['obc_storageclasses'].
-
-    Configuration:
-        ENV_DATA:
-          obc_storageclasses:
-            - openshift-storage.noobaa.io  # Added by default
-            - my-custom-noobaa-sc          # Optional custom SC
 
     Only runs when client clusters are present in the deployment.
 
@@ -43,17 +31,9 @@ def remote_obc_setup_session(request):
     log.info(f"Setting up remote OBC for {len(client_indices)} client cluster(s)")
     enabled_clients = {}
 
-    # Get storageclasses to add (default + any custom ones from config)
-    scs_to_add = config.ENV_DATA.get("obc_storageclasses", [DEFAULT_NOOBAA_SC])
-    if isinstance(scs_to_add, str):
-        scs_to_add = [scs_to_add]
-    # Ensure default is always included
-    if DEFAULT_NOOBAA_SC not in scs_to_add:
-        scs_to_add.append(DEFAULT_NOOBAA_SC)
+    log.info(f"Will add noobaa storageclass: {constants.NOOBAA_SC}")
 
-    log.info(f"Will add these noobaa storageclasses: {scs_to_add}")
-
-    # Step 1: Add noobaa storageclasses to all StorageConsumer CRs on provider
+    # Step 1: Add noobaa storageclass to all StorageConsumer CRs on provider
     with config.RunWithProviderConfigContextIfAvailable():
         try:
             consumer_names = get_consumer_names()
@@ -63,7 +43,9 @@ def remote_obc_setup_session(request):
                 )
 
                 for consumer_name in consumer_names:
-                    add_storageclasses_to_storageconsumer(consumer_name, scs_to_add)
+                    add_storageclasses_to_storageconsumer(
+                        consumer_name, constants.NOOBAA_SC
+                    )
 
         except Exception as e:
             log.error(f"Failed to process StorageConsumer CRs on provider: {e}")
