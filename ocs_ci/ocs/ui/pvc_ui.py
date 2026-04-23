@@ -1,5 +1,6 @@
 import logging
-import time
+
+from selenium.common.exceptions import StaleElementReferenceException
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.helpers_ui import format_locator
@@ -8,6 +9,7 @@ from ocs_ci.utility.utils import get_running_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
 from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +58,12 @@ class PvcUI(PageNavigator):
 
         logger.info(f"Search test project {project_name}")
         self.select_namespace(project_name=project_name)
+        self.page_has_loaded()
 
         logger.info("Click on 'Create Persistent Volume Claim'")
-        self.do_click(self.pvc_loc["pvc_create_button"])
+        retry(StaleElementReferenceException, tries=3, delay=2, backoff=1)(
+            self.do_click
+        )(self.pvc_loc["pvc_create_button"])
 
         logger.info("Click on Storage Class selection")
         self.do_click(self.pvc_loc["pvc_storage_class_selector"])
@@ -128,12 +133,10 @@ class PvcUI(PageNavigator):
         self.select_name_filter_if_needed()
         self.do_send_keys(self.pvc_loc["search_pvc"], text=pvc_name)
 
-        time.sleep(2)
-        # Using sleep to avoid StaleElementReferenceException. Use of explict wait or refreshing the page didn't help.
-        if pvc_name == f"{pvc_name}-clone":
-            time.sleep(2)
         logger.info(f"Click on PVC {pvc_name} and go to PVC {pvc_name} Page")
-        self.do_click(get_element_type(pvc_name), enable_screenshot=True)
+        retry(StaleElementReferenceException, tries=3, delay=2, backoff=1)(
+            self.do_click
+        )(get_element_type(pvc_name), enable_screenshot=True)
 
         logger.info("Checking status of Pvc")
         assert self.wait_until_expected_text_is_found(
