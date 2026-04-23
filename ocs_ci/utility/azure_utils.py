@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import time
+import yaml
 from datetime import datetime
 
 
@@ -724,7 +725,85 @@ class AzureAroUtil(AZURE):
         self.write_kubeadmin_password(cluster_name, resource_group)
         self.check_cluster_response_ok(insecure=True)
         configure_ingress_and_api_certificates(skip_tls_verify=True)
+
+        # Update kubeconfig with OCS QE CA cert from ocs-ca-bundle configmap
+        self.update_kubeconfig_with_ocs_ca()
+
         self.check_cluster_response_ok()
+
+    def update_kubeconfig_with_ocs_ca(self):
+        """
+        Update kubeconfig with OCS QE CA certificate from ocs-ca-bundle configmap.
+
+        This extracts the CA certificate from the cluster's ocs-ca-bundle
+        configmap (created by configure_ingress_and_api_certificates) and
+        embeds it in the kubeconfig to enable TLS verification.
+
+        """
+        kubeconfig_path = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+        )
+
+        if not os.path.exists(kubeconfig_path):
+            logger.warning(
+                f"Kubeconfig file '{kubeconfig_path}' does not exist. "
+                "Skipping kubeconfig CA update."
+            )
+            return
+
+        logger.info(
+            f"Updating kubeconfig '{kubeconfig_path}' with OCS QE CA certificate"
+        )
+
+        try:
+            # Get OCS QE CA from ocs-ca-bundle configmap
+            cmd = (
+                "oc get configmap -n openshift-config ocs-ca-bundle "
+                "--insecure-skip-tls-verify -o jsonpath='{.data.ca-bundle\\.crt}'"
+            )
+            result = exec_cmd(cmd)
+            ocs_ca_cert = result.stdout.decode("utf-8").strip()
+
+            if not ocs_ca_cert or "BEGIN CERTIFICATE" not in ocs_ca_cert:
+                logger.warning(
+                    "Failed to extract OCS QE CA certificate from ocs-ca-bundle configmap. "
+                    "TLS verification may not work."
+                )
+                return
+
+            # Encode CA certificate in base64
+            ca_cert_base64 = base64.b64encode(ocs_ca_cert.encode("utf-8")).decode(
+                "utf-8"
+            )
+
+            # Update kubeconfig
+            with open(kubeconfig_path, "r") as f:
+                kubeconfig = yaml.safe_load(f)
+
+            for cluster in kubeconfig.get("clusters", []):
+                cluster_data = cluster.get("cluster", {})
+                if "certificate-authority" in cluster_data:
+                    del cluster_data["certificate-authority"]
+                if "insecure-skip-tls-verify" in cluster_data:
+                    del cluster_data["insecure-skip-tls-verify"]
+                cluster_data["certificate-authority-data"] = ca_cert_base64
+                logger.info(
+                    f"Updated certificate-authority-data for cluster "
+                    f"'{cluster.get('name', 'unknown')}' with OCS QE CA"
+                )
+
+            with open(kubeconfig_path, "w") as f:
+                yaml.dump(kubeconfig, f, default_flow_style=False)
+
+            logger.info(
+                "Kubeconfig updated successfully with OCS QE CA certificate for TLS verification"
+            )
+
+        except CommandFailed as e:
+            logger.warning(
+                f"Failed to update kubeconfig with OCS QE CA certificate: {e}. "
+                "Users will need to use --insecure-skip-tls-verify when using this kubeconfig."
+            )
 
     def check_cluster_response_ok(
         self, maximum_attempts=150, successful_connections_in_row=20, insecure=False
