@@ -91,7 +91,7 @@ DEPLOYMENT:
   # Following options are defaults for deployment with infra worker nodes
   infra_nodes: False
   # How long should ocs-ci wait for `openshift-install create cluster` run?
-  openshift_install_timeout: 3600
+  openshift_install_timeout: 7200
   # redhat-operators CatalogSource image (used for disconnected installation)
   cs_redhat_operators_image: "registry.redhat.io/redhat/redhat-operator-index"
   # Deployment with KMS (vault etc)
