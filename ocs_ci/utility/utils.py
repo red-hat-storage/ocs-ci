@@ -1257,11 +1257,46 @@ def get_openshift_installer(
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+
+        # For nightly builds, try to use pullSpec (handles OCP 5.0 release-5 path correctly)
+        pullspec = None
+        if "nightly" in version:
+            release_info = get_nightly_release_info(version)
+            if release_info and release_info.get("pullSpec"):
+                pullspec = release_info["pullSpec"]
+                log.info(
+                    f"Nightly build detected. Using pullSpec: {pullspec} "
+                    "(handles version-specific registry paths like release-5 for OCP 5.0)"
+                )
+
+        # Use pullSpec if available, otherwise fall back to default path
+        if pullspec:
+            image_ref = pullspec
+        else:
+            image_ref = f"registry.ci.openshift.org/ocp/release:{version}"
+            log.info(f"Using default registry path: {image_ref}")
+
         cmd = (
             f"oc adm release extract --registry-config {pull_secret_path} --command={installer_filename} "
-            f"--to ./ registry.ci.openshift.org/ocp/release:{version}"
+            f"--to ./ {image_ref}"
         )
-        exec_cmd(cmd)
+        try:
+            exec_cmd(cmd)
+        except Exception as e:
+            log.error(f"Failed to extract installer from {image_ref}. Error: {e}")
+            # If pullSpec extraction failed and we haven't tried the default path yet, try it
+            if pullspec:
+                log.warning(
+                    "PullSpec extraction failed. Attempting fallback to default registry path."
+                )
+                image_ref = f"registry.ci.openshift.org/ocp/release:{version}"
+                cmd = (
+                    f"oc adm release extract --registry-config {pull_secret_path} --command={installer_filename} "
+                    f"--to ./ {image_ref}"
+                )
+                exec_cmd(cmd)
+            else:
+                raise
         # return to the previous working directory
         os.chdir(previous_dir)
 
@@ -1774,10 +1809,23 @@ def get_nightly_oc_via_ga(version, tarball="openshift-client.tar.gz"):
             else:
                 oc_type = "oc"
 
+            # For nightly builds, try to use pullSpec (handles OCP 5.0 release-5 path correctly)
+            pullspec = None
+            release_info = get_nightly_release_info(version)
+            if release_info and release_info.get("pullSpec"):
+                pullspec = release_info["pullSpec"]
+                log.info(f"Using pullSpec for nightly oc extraction: {pullspec}")
+
+            # Use pullSpec if available, otherwise fall back to default path
+            if pullspec:
+                image_ref = pullspec
+            else:
+                image_ref = f"registry.ci.openshift.org/ocp/release:{version}"
+
             # extract oc
             cmd = (
                 f"{tmp_oc_path}/oc adm release extract -a {pull_secret_path} --command={oc_type} "
-                f"registry.ci.openshift.org/ocp/release:{version} --to ."
+                f"{image_ref} --to ."
             )
             exec_cmd(cmd)
             delete_file(tarball)
