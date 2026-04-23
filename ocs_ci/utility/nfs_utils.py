@@ -5,16 +5,15 @@ Module that contains all operations related to nfs feature in a cluster
 
 import logging
 import yaml
-import time
 import pytest
 from ocs_ci.ocs import constants, resources, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
-from ocs_ci.utility.utils import convert_device_size
+from ocs_ci.utility.utils import convert_device_size, exec_cmd, TimeoutSampler
 from ocs_ci.deployment.hub_spoke import get_autodistributed_storage_classes
 
 log = logging.getLogger(__name__)
@@ -176,38 +175,131 @@ def create_nfs_load_balancer_service(
 
     nfs_service_data = yaml.safe_load(service)
     helpers.create_resource(**nfs_service_data)
-    time.sleep(30)
-    ingress_add = storage_cluster_obj.exec_oc_cmd(
-        "get service rook-ceph-nfs-my-nfs-load-balancer"
-        + " --output jsonpath='{.status.loadBalancer.ingress}'"
-    )
+
+    log.info("Waiting for NFS LoadBalancer ingress to be assigned...")
+    for ingress_add in TimeoutSampler(
+        timeout=300,
+        sleep=15,
+        func=storage_cluster_obj.exec_oc_cmd,
+        command=(
+            "get service rook-ceph-nfs-my-nfs-load-balancer"
+            " --output jsonpath='{.status.loadBalancer.ingress}'"
+        ),
+    ):
+        if ingress_add:
+            break
+        log.info("NFS LoadBalancer ingress not yet assigned, retrying...")
 
     host_details = ingress_add[0]
     if "hostname" in host_details:
         hostname_add = host_details["hostname"]
-        log.info(f"ingress hostname, {hostname_add}")
+        log.info("ingress hostname, %s", hostname_add)
         return hostname_add
     elif "ip" in host_details:
         host_ip = host_details["ip"]
-        log.info(f"ingress host ip, {host_ip}")
+        log.info("ingress host ip, %s", host_ip)
         return host_ip
     else:
         log.error("host details unavailable")
+
+
+def update_etc_hosts_on_nfs_client(con, hostname):
+    """
+    Resolve an NFS LB hostname from within the cluster and update /etc/hosts
+    on the NFS client VM.
+
+    IBM Cloud VPC Load Balancer hostnames (``*.lb.appdomain.cloud``) are only
+    resolvable from within the same VPC. When the NFS client VM is in a
+    different VPC, DNS resolution fails and mounts hang. This function resolves
+    the hostname by exec-ing on the node where the NFS pod runs, then writes
+    the result into /etc/hosts on the client VM so mounts succeed.
+
+    This must be called after the LB service is created and after establishing
+    the SSH connection to the NFS client VM. It is safe to call on every
+    reconnect since it removes stale entries before writing new ones.
+
+    Args:
+        con (Connection): SSH connection to the NFS client VM
+        hostname (str): NFS LB hostname to resolve and add to /etc/hosts
+
+    """
+    nfs_pods = pod.get_all_pods(
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        selector=["rook-ceph-nfs"],
+    )
+    if not nfs_pods:
+        log.warning("No NFS pods found, skipping /etc/hosts update on NFS client VM")
+        return
+
+    nfs_node = nfs_pods[0].get()["spec"]["nodeName"]
+    log.info("Resolving %s from cluster node %s", hostname, nfs_node)
+
+    lb_ips = []
+    try:
+        for sample in TimeoutSampler(
+            timeout=300,
+            sleep=15,
+            func=exec_cmd,
+            cmd=(
+                f"oc debug node/{nfs_node} --to-namespace=default "
+                f"-- chroot /host getent hosts {hostname}"
+            ),
+            ignore_error=True,
+        ):
+            if sample and sample.stdout:
+                try:
+                    lb_ips = [
+                        line.split()[0]
+                        for line in sample.stdout.decode().strip().splitlines()
+                        if line.strip()
+                    ]
+                except (UnicodeDecodeError, AttributeError) as e:
+                    log.warning("Failed to decode getent output: %s", e)
+            if lb_ips:
+                break
+            log.info("Could not resolve %s yet, retrying in 15s...", hostname)
+    except TimeoutExpiredError:
+        log.warning(
+            "Could not resolve %s from within the cluster after waiting, "
+            "skipping /etc/hosts update",
+            hostname,
+        )
+        return
+
+    log.info("Resolved %s to %s", hostname, lb_ips)
+
+    # Escape dots so sed treats them as literals, not regex wildcards
+    escaped_hostname = hostname.replace(".", r"\.")
+    con.exec_cmd(f"sed -i '/{escaped_hostname}/d' /etc/hosts")
+    con.exec_cmd(f"echo '{lb_ips[0]} {hostname}' >> /etc/hosts")
+    log.info("Updated /etc/hosts on NFS client VM: %s %s", lb_ips[0], hostname)
 
 
 def delete_nfs_load_balancer_service(
     storage_cluster_obj,
 ):
     """
-    Delete the nfs loadbalancer service
+    Delete the nfs loadbalancer service and wait for it to be removed.
 
     Args:
         storage_cluster_obj (obj): storage cluster object
 
     """
-    # Delete ocs nfs Service
-    cmd_delete_nfs_service = "delete service rook-ceph-nfs-my-nfs-load-balancer"
-    storage_cluster_obj.exec_oc_cmd(cmd_delete_nfs_service)
+    svc_name = "rook-ceph-nfs-my-nfs-load-balancer"
+    namespace = storage_cluster_obj.namespace
+
+    svc_obj = ocp.OCP(kind=constants.SERVICE, namespace=namespace)
+    if not svc_obj.is_exist(resource_name=svc_name):
+        log.info(
+            "NFS LoadBalancer service %s does not exist, skipping delete", svc_name
+        )
+        return
+
+    log.info("Deleting NFS LoadBalancer service %s", svc_name)
+    storage_cluster_obj.exec_oc_cmd(f"delete service {svc_name}")
+
+    log.info("Waiting for NFS LoadBalancer service %s to be deleted...", svc_name)
+    svc_obj.wait_for_delete(resource_name=svc_name, timeout=300)
 
 
 def skip_test_if_nfs_client_unavailable(nfs_client_ip):
