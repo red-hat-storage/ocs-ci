@@ -18,6 +18,7 @@ from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_deletion,
     wait_for_managed_cluster_unreachable,
+    wait_for_replication_resources_creation,
     wait_for_resource_existence,
 )
 from ocs_ci.ocs import constants
@@ -651,11 +652,7 @@ class TestACMKubevirtDRIntergration:
 
         config.switch_to_cluster_by_name(primary_cluster_name)
 
-        # Wait for all resources to be created (4 VMs total)
-        total_pvc_count = sum(wl.workload_pvc_count for wl in all_cnv_workloads)
-        total_pod_count = sum(wl.workload_pod_count for wl in all_cnv_workloads)
-
-        # Per-DRPC counts used during post-failover / post-relocate waits.
+        # Per-DRPC counts used during initial setup, post-failover, and post-relocate waits.
         # DRPC1 covers VM 1 (index 0) and VM 3 (index 2);
         # DRPC2 covers VM 2 (index 1) and VM 4 (index 3).
         # Using namespace-wide totals (4) for each DRPC times out when one
@@ -681,14 +678,28 @@ class TestACMKubevirtDRIntergration:
             (resource_name_2, drpc2_pvc_count, drpc2_pod_count),
         ]
 
-        for resource_name in drpc_resources:
+        # Wait for PVCs/pods per-DRPC but skip replication checks here
+        # because VolumeReplication count/state checks are namespace-wide
+        # and would fail when the other DRPC's VRs aren't ready yet.
+        for resource_name, pvc_count, pod_count in drpc_resource_counts:
             dr_helpers.wait_for_all_resources_creation(
-                total_pvc_count,
-                total_pod_count,
+                pvc_count,
+                pod_count,
                 workload_namespace,
                 discovered_apps=True,
                 vrg_name=resource_name,
+                skip_replication_resources=True,
             )
+
+        # Single namespace-wide replication check using total PVC count
+        total_pvc_count = sum(wl.workload_pvc_count for wl in all_cnv_workloads)
+        wait_for_replication_resources_creation(
+            total_pvc_count,
+            workload_namespace,
+            timeout=900,
+            discovered_apps=True,
+            vrg_name=resource_name_1,
+        )
 
         # Wait for all VMs to be running concurrently to avoid sequential
         # timeouts when DRPC failovers are staggered
@@ -763,9 +774,8 @@ class TestACMKubevirtDRIntergration:
             )
 
         # Verify resources creation on secondary cluster (failoverCluster).
-        # Use per-DRPC counts to avoid a 900 s timeout: DRPC1's VMs may become
-        # healthy before DRPC2's VMs have started, so waiting for the full
-        # namespace count (4) on the first DRPC would time out.
+        # Use per-DRPC counts for PVC/pod waits, skip replication checks
+        # per-DRPC since they are namespace-wide.
         config.switch_to_cluster_by_name(secondary_cluster_name)
         for resource_name, pvc_count, pod_count in drpc_resource_counts:
             dr_helpers.wait_for_all_resources_creation(
@@ -774,7 +784,17 @@ class TestACMKubevirtDRIntergration:
                 workload_namespace,
                 discovered_apps=True,
                 vrg_name=resource_name,
+                skip_replication_resources=True,
             )
+
+        # Single namespace-wide replication check after both DRPCs
+        wait_for_replication_resources_creation(
+            total_pvc_count,
+            workload_namespace,
+            timeout=900,
+            discovered_apps=True,
+            vrg_name=resource_name_1,
+        )
 
         # Wait for all VMs to be running on secondary cluster concurrently
         logger.info("Waiting for all VMs to reach Running state on secondary cluster")
@@ -916,8 +936,8 @@ class TestACMKubevirtDRIntergration:
             )
             drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
-        # Verify resources creation on primary managed cluster (per-DRPC counts
-        # for the same reason as post-failover — avoids 900 s timeout).
+        # Verify resources creation on primary managed cluster.
+        # Skip replication checks per-DRPC since they are namespace-wide.
         config.switch_to_cluster_by_name(primary_cluster_name)
         for resource_name, pvc_count, pod_count in drpc_resource_counts:
             dr_helpers.wait_for_all_resources_creation(
@@ -926,7 +946,17 @@ class TestACMKubevirtDRIntergration:
                 workload_namespace,
                 discovered_apps=True,
                 vrg_name=resource_name,
+                skip_replication_resources=True,
             )
+
+        # Single namespace-wide replication check after both DRPCs
+        wait_for_replication_resources_creation(
+            total_pvc_count,
+            workload_namespace,
+            timeout=900,
+            discovered_apps=True,
+            vrg_name=resource_name_1,
+        )
 
         # Wait for all VMs to be running on primary cluster concurrently
         logger.info("Waiting for all VMs to reach Running state on primary cluster")
