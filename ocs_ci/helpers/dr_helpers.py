@@ -1697,12 +1697,71 @@ def get_all_drclusters():
     return drclusters
 
 
-def get_managed_cluster_node_ips():
+def ordered_unique_cidrs(cidrs):
     """
-    Gets node ips of individual managed clusters for enabling fencing on MDR DRCluster configuration
+    Preserve order while removing duplicates
+    """
+    seen = set()
+    ordered = []
+    for cidr in cidrs:
+        if not cidr or cidr in seen:
+            continue
+        seen.add(cidr)
+        ordered.append(cidr)
+    return ordered
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
+def get_fencing_cidrs_from_drclusterconfig(cluster_name):
+    """
+    Read fencing CIDRs from DRClusterConfig.status.storageAccessDetails on the
+    current (managed) cluster context (ODF 4.21+ / Ramen).
+
+    Prefers the DRClusterConfig named like the managed cluster, then RBD CSI
+    provisioner entries, with sensible fallbacks.
+
+    Args:
+        cluster_name (str): Managed cluster name (matches DRCluster / DRClusterConfig name on hub)
 
     Returns:
-        cluster (list): Returns list of managed cluster, indexes and their node IPs
+        list: CIDR strings for hub DRCluster.spec.cidrs
+
+    Raises:
+        UnexpectedBehaviour: If CIDRs are not yet published or cannot be determined
+    """
+    drc_ocp = ocp.OCP(kind=constants.DRCLUSTERCONFIG)
+    items = (drc_ocp.get(silent=True) or {}).get("items") or []
+    if not items:
+        raise UnexpectedBehaviour(
+            "No DRClusterConfig resources found on managed cluster"
+        )
+    configs = [i for i in items if i.get("metadata", {}).get("name") == cluster_name]
+
+    cidrs = []
+    for item in configs:
+        details = (item.get("status") or {}).get("storageAccessDetails") or []
+        for detail in details:
+            detail_cidrs = detail.get("cidrs") or []
+            cidrs.extend(detail_cidrs)
+
+    cidrs = ordered_unique_cidrs(cidrs)
+    if not cidrs:
+        raise UnexpectedBehaviour(
+            f"DRClusterConfig on cluster {cluster_name} has no status.storageAccessDetails.cidrs yet"
+        )
+    logger.info(
+        f"Collected {len(cidrs)} fencing CIDR(s) from DRClusterConfig for {cluster_name}"
+    )
+
+    return cidrs
+
+
+def get_managed_cluster_node_ips():
+    """
+    Gets node ips of individual managed clusters for enabling fencing from each managed cluster's DRClusterConfig
+
+    Returns:
+        list: [[managed_cluster_name, multicluster_index, [cidr, ...]], ...]
 
     """
     primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
@@ -1719,16 +1778,10 @@ def get_managed_cluster_node_ips():
     ]
     for cluster in cluster_data:
         config.switch_ctx(cluster[1])
-        logger.info(f"Getting node IPs on managed cluster: {cluster[0]}")
-        node_obj = ocp.OCP(kind=constants.NODE).get()
-        external_ips = []
-        for node in node_obj.get("items"):
-            addresses = node.get("status").get("addresses")
-            for address in addresses:
-                if address.get("type") == "ExternalIP":
-                    external_ips.append(address.get("address"))
-        external_ips_with_cidr = [f"{ip}/32" for ip in external_ips]
-        cluster.append(external_ips_with_cidr)
+        logger.info(
+            f"Reading fencing CIDRs from DRClusterConfig on managed cluster {cluster[0]}"
+        )
+        cluster.append(get_fencing_cidrs_from_drclusterconfig(cluster[0]))
     return cluster_data
 
 
@@ -1756,32 +1809,60 @@ def enable_fence(drcluster_name, switch_ctx=None):
     config.switch_ctx(restore_index)
 
 
+@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
+def verify_drcluster_validated_on_hub(drcluster_name, switch_ctx=None):
+    """
+    Wait until hub DRCluster reports a successful validation condition.
+
+    Ramen surfaces hub reconciliation via status.conditions (reason/type
+    Validated or legacy Succeeded).
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    dr_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    data = dr_obj.get()
+    conditions = (data.get("status") or {}).get("conditions") or []
+    for cond in conditions:
+        if cond.get("status") != "True":
+            continue
+        reason = cond.get("reason") or ""
+        ctype = cond.get("type") or ""
+        if reason in constants.DRPOLICY_SUCCESS_REASONS:
+            logger.info(f"DRCluster {drcluster_name} validation OK ({reason or ctype})")
+            config.switch_ctx(restore_index)
+            return True
+        if ctype.lower() == "validated":
+            logger.info(f"DRCluster {drcluster_name} validation OK (type={ctype})")
+            config.switch_ctx(restore_index)
+            return True
+    config.switch_ctx(restore_index)
+    raise UnexpectedBehaviour(
+        f"DRCluster {drcluster_name} not validated yet; conditions={conditions}"
+    )
+
+
 def configure_drcluster_for_fencing():
     """
     Configures DRClusters for enabling fencing
 
     """
     old_ctx = config.cur_index
-    cluster_ip_list = get_managed_cluster_node_ips()
+    cluster_rows = get_managed_cluster_node_ips()
     config.switch_acm_ctx()
-    for cluster in cluster_ip_list:
+    for cluster in cluster_rows:
+        drcluster_name = cluster[0]
         fence_ip_data = json.dumps({"spec": {"cidrs": cluster[2]}})
         fence_ip_cmd = (
-            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_ip_data}'"
+            f"oc patch drcluster {drcluster_name} --type merge -p '{fence_ip_data}'"
         )
-        logger.info(f"Patching DRCluster: {cluster[0]} to add node IP addresses")
+        logger.info(
+            f"Patching hub DRCluster {drcluster_name} with CIDRs from managed-cluster DRClusterConfig"
+        )
         run_cmd(fence_ip_cmd)
 
-        fence_annotation_data = """{"metadata": {"annotations": {
-        "drcluster.ramendr.openshift.io/storage-clusterid": "openshift-storage",
-        "drcluster.ramendr.openshift.io/storage-driver": "openshift-storage.rbd.csi.ceph.com",
-        "drcluster.ramendr.openshift.io/storage-secret-name": "rook-csi-rbd-provisioner",
-        "drcluster.ramendr.openshift.io/storage-secret-namespace": "openshift-storage" } } }"""
-        fencing_annotation_cmd = (
-            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_annotation_data}'"
-        )
-        logger.info(f"Patching DRCluster: {cluster[0]} to add fencing annotations")
-        run_cmd(fencing_annotation_cmd)
+    verify_drpolicy_cli()
+    for cluster in cluster_rows:
+        verify_drcluster_validated_on_hub(cluster[0])
 
     config.switch_ctx(old_ctx)
 
@@ -1968,17 +2049,27 @@ def verify_drpolicy_cli(switch_ctx=None):
     restore_index = config.cur_index
     config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
-    status = drpolicy_obj.get().get("items")[0].get("status").get("conditions")[0]
-    if status.get("reason") == "Succeeded":
-        logger.info("DRPolicy validation succeeded")
+    drpolicy_items = drpolicy_obj.get().get("items") or []
+    if not drpolicy_items:
         config.switch_ctx(restore_index)
-        return True
-    else:
-        logger.warning(f"DRPolicy is not in succeeded or validated state: {status}")
-        config.switch_ctx(restore_index)
-        raise UnexpectedBehaviour(
-            f"DRPolicy is not in succeeded or validated state: {status}"
-        )
+        raise UnexpectedBehaviour("No DRPolicy resources found on hub")
+    conditions = drpolicy_items[0].get("status", {}).get("conditions") or []
+    for cond in conditions:
+        if cond.get("status") != "True":
+            continue
+        reason = cond.get("reason") or ""
+        if reason in constants.DRPOLICY_SUCCESS_REASONS:
+            logger.info(f"DRPolicy validation succeeded (reason={reason})")
+            config.switch_ctx(restore_index)
+            return True
+    logger.warning(
+        f"DRPolicy is not in succeeded or validated state; conditions={conditions}"
+    )
+    config.switch_ctx(restore_index)
+    raise UnexpectedBehaviour(
+        "DRPolicy is not in succeeded or validated state "
+        f"(expected reason in {sorted(constants.DRPOLICY_SUCCESS_REASONS)})"
+    )
 
 
 @retry(UnexpectedBehaviour, tries=25, delay=5, backoff=5)
