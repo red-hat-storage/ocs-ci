@@ -6,7 +6,8 @@ size is returned to backend pool
 import logging
 import pytest
 
-from ocs_ci.ocs import constants
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
@@ -69,10 +70,29 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
 
         cbp_name = helpers.default_ceph_block_pool()
 
-        tools_pod = pod.get_ceph_tools_pod()
-        cmd = f"ceph osd pool get {cbp_name} size"
-        size_info = tools_pod.exec_ceph_cmd(ceph_cmd=cmd)
-        replica_size = int(size_info["size"])
+        sc_obj = helpers.default_storage_class(constants.CEPHBLOCKPOOL)
+        data_pool_name = sc_obj.get().get("parameters", {}).get("dataPool")
+
+        pool_for_size = cbp_name
+        size_factor = None
+
+        if data_pool_name:
+            pool_cr = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            ).get(resource_name=data_pool_name)
+            ec_spec = pool_cr.get("spec", {}).get("erasureCoded", {})
+            k = ec_spec.get("dataChunks", 0)
+            m = ec_spec.get("codingChunks", 0)
+            if k > 0:
+                pool_for_size = data_pool_name
+                size_factor = (k + m) / k
+
+        if size_factor is None:
+            tools_pod = pod.get_ceph_tools_pod()
+            cmd = f"ceph osd pool get {cbp_name} size"
+            size_info = tools_pod.exec_ceph_cmd(ceph_cmd=cmd)
+            size_factor = int(size_info["size"])
 
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL, size=10, status=constants.STATUS_BOUND
@@ -84,13 +104,13 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         )
         pvc_obj.reload()
 
-        used_before_io = helpers.fetch_used_size(cbp_name)
+        used_before_io = helpers.fetch_used_size(pool_for_size)
         logger.info(f"Used before IO {used_before_io}")
 
         # Write 6Gb
         pod.run_io_and_verify_mount_point(pod_obj, bs="10M", count="600")
-        exp_size = used_before_io + (6 * replica_size)
-        used_after_io = helpers.fetch_used_size(cbp_name, exp_size)
+        exp_size = used_before_io + (6 * size_factor)
+        used_after_io = helpers.fetch_used_size(pool_for_size, exp_size)
         logger.info(f"Used space after IO {used_after_io}")
 
         rbd_image_id = pvc_obj.image_uuid
@@ -100,5 +120,5 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
 
         verify_pv_not_exists(pvc_obj, cbp_name, rbd_image_id)
-        used_after_deleting_pvc = helpers.fetch_used_size(cbp_name, used_before_io)
+        used_after_deleting_pvc = helpers.fetch_used_size(pool_for_size, used_before_io)
         logger.info(f"Used after deleting PVC {used_after_deleting_pvc}")
