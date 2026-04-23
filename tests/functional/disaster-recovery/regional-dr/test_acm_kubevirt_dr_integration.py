@@ -1,5 +1,6 @@
 import logging
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import sleep
 
 import pytest
@@ -689,13 +690,23 @@ class TestACMKubevirtDRIntergration:
                 vrg_name=resource_name,
             )
 
-        # Wait for all VMs to be running
-        for cnv_wl in all_cnv_workloads:
-            dr_helpers.wait_for_cnv_workload(
-                vm_name=cnv_wl.vm_name,
-                namespace=workload_namespace,
-                phase=constants.STATUS_RUNNING,
-            )
+        # Wait for all VMs to be running concurrently to avoid sequential
+        # timeouts when DRPC failovers are staggered
+        logger.info("Waiting for all VMs to reach Running state concurrently")
+        with ThreadPoolExecutor(max_workers=len(all_cnv_workloads)) as executor:
+            futures = {
+                executor.submit(
+                    dr_helpers.wait_for_cnv_workload,
+                    vm_name=cnv_wl.vm_name,
+                    namespace=workload_namespace,
+                    phase=constants.STATUS_RUNNING,
+                ): cnv_wl
+                for cnv_wl in all_cnv_workloads
+            }
+            for future in as_completed(futures):
+                cnv_wl = futures[future]
+                future.result()
+                logger.info(f"VM {cnv_wl.vm_name} is Running")
 
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             workload_namespace,
@@ -765,13 +776,22 @@ class TestACMKubevirtDRIntergration:
                 vrg_name=resource_name,
             )
 
-        # Wait for all VMs to be running on secondary cluster
-        for cnv_wl in all_cnv_workloads:
-            dr_helpers.wait_for_cnv_workload(
-                vm_name=cnv_wl.vm_name,
-                namespace=workload_namespace,
-                phase=constants.STATUS_RUNNING,
-            )
+        # Wait for all VMs to be running on secondary cluster concurrently
+        logger.info("Waiting for all VMs to reach Running state on secondary cluster")
+        with ThreadPoolExecutor(max_workers=len(all_cnv_workloads)) as executor:
+            futures = {
+                executor.submit(
+                    dr_helpers.wait_for_cnv_workload,
+                    vm_name=cnv_wl.vm_name,
+                    namespace=workload_namespace,
+                    phase=constants.STATUS_RUNNING,
+                ): cnv_wl
+                for cnv_wl in all_cnv_workloads
+            }
+            for future in as_completed(futures):
+                cnv_wl = futures[future]
+                future.result()
+                logger.info(f"VM {cnv_wl.vm_name} is Running")
 
         # Validating data integrity (file1) after failing-over VMs to secondary managed cluster
         logger.info("Validating data integrity after failover")
@@ -908,13 +928,22 @@ class TestACMKubevirtDRIntergration:
                 vrg_name=resource_name,
             )
 
-        # Wait for all VMs to be running on primary cluster
-        for cnv_wl in all_cnv_workloads:
-            dr_helpers.wait_for_cnv_workload(
-                vm_name=cnv_wl.vm_name,
-                namespace=workload_namespace,
-                phase=constants.STATUS_RUNNING,
-            )
+        # Wait for all VMs to be running on primary cluster concurrently
+        logger.info("Waiting for all VMs to reach Running state on primary cluster")
+        with ThreadPoolExecutor(max_workers=len(all_cnv_workloads)) as executor:
+            futures = {
+                executor.submit(
+                    dr_helpers.wait_for_cnv_workload,
+                    vm_name=cnv_wl.vm_name,
+                    namespace=workload_namespace,
+                    phase=constants.STATUS_RUNNING,
+                ): cnv_wl
+                for cnv_wl in all_cnv_workloads
+            }
+            for future in as_completed(futures):
+                cnv_wl = futures[future]
+                future.result()
+                logger.info(f"VM {cnv_wl.vm_name} is Running")
 
         config.switch_acm_ctx()
         logger.info("On UI, check if all VMs are running after relocate")
