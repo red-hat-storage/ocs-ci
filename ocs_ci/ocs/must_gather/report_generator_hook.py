@@ -31,6 +31,9 @@ def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None
     if not (os.path.isdir(mg_dir_path) or os.path.isfile(tarball_path)):
         return
 
+    # Use tarball path if directory doesn't exist (happens when tarball_mg_logs + delete_packed_mg_logs are enabled)
+    path_to_analyze = mg_dir_path if os.path.isdir(mg_dir_path) else tarball_path
+
     os.makedirs(report_dir, exist_ok=True)
 
     safe_prefix = re.sub(r"[^A-Za-z0-9_.-]+", "_", prefix).strip("_")
@@ -41,7 +44,7 @@ def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None
         sys.executable,
         "-m",
         "must_gather_report_generator",
-        mg_dir_path,
+        path_to_analyze,
         "--output-file",
         text_out,
         "--xml-output",
@@ -57,21 +60,21 @@ def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None
         )
         logger.info(
             "Must-gather report generated for %s (text=%s xml=%s)",
-            mg_dir_path,
+            path_to_analyze,
             text_out,
             xml_out,
         )
     except subprocess.TimeoutExpired:
         logger.error(
             "Must-gather report generation timed out after 300s for %s",
-            mg_dir_path,
+            path_to_analyze,
         )
     except subprocess.CalledProcessError as e:
         stderr = (e.stderr or "").strip()
         stdout = (e.stdout or "").strip()
         logger.error(
             "Must-gather report generation failed for %s (exit %s): stderr=%s stdout=%s",
-            mg_dir_path,
+            path_to_analyze,
             e.returncode,
             stderr,
             stdout[:500] if len(stdout) > 500 else stdout,
@@ -79,7 +82,7 @@ def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None
     except Exception as e:
         logger.error(
             "Unexpected error running must-gather report for %s: %s",
-            mg_dir_path,
+            path_to_analyze,
             e,
             exc_info=True,
         )
