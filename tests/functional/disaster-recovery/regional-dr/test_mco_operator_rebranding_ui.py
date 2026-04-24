@@ -10,6 +10,8 @@ Test ID: MCO-UI-001 (from RHSTOR-8246 test plan)
 
 import logging
 
+import pytest
+
 from ocs_ci.framework.pytest_customization.marks import (
     rdr,
     turquoise_squad,
@@ -33,7 +35,7 @@ class TestMCOOperatorRebrandingUI:
     "ODF MCO".
     """
 
-    # To Do:  @pytest.mark.polarion_id("polarian_id")
+    @pytest.mark.polarion_id("OCS-7805")
     def test_mco_operator_rebranding_hub_cluster(self, setup_acm_ui):
         """
         Test to verify MCO operator displays correct rebranded name
