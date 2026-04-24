@@ -2568,6 +2568,11 @@ def get_cluster_set_name(switch_ctx=None):
             for item in dr_cluster_relations[0]
         ]
 
+    # The list current_managed_clusters_list is required for RDR, not mandatory for MDR
+    current_managed_clusters_list = current_managed_clusters_list or [
+        mng_cluster["metadata"]["name"] for mng_cluster in managed_clusters
+    ]
+
     # ignore local-cluster here
     for i in managed_clusters:
         if (
