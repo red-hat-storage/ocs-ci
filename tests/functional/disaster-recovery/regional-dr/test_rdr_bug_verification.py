@@ -76,8 +76,7 @@ class TestRDRBugVerification:
     """
 
     # --- DFBUGS-4801 ---
-    # TODO: add polarion id
-    # @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-7802")
     def test_mco_updates_peer_secret_on_mon_failover(
         self, dr_workload, mon_restore_teardown
     ):
