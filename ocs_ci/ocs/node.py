@@ -1602,16 +1602,24 @@ def taint_nodes(nodes, taint_label=None):
         taint_label (str): Taint label to be used,
             If None the constants.OPERATOR_NODE_TAINT will be used.
 
+    Returns:
+        bool: True if all nodes are tainted successfully, False otherwise.
+
     """
     ocp_obj = ocp.OCP()
     taint_label = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
+    if not nodes:
+        return True
+    all_succeeded = True
     for node in nodes:
         command = f"adm taint node {node} {taint_label}"
         try:
             ocp_obj.exec_oc_cmd(command)
             log.info(f"Successfully tainted {node} with taint {taint_label}")
         except Exception as e:
-            log.info(f"{node} was not tainted - {e}")
+            log.warning(f"{node} was not tainted - {e}")
+            all_succeeded = False
+    return all_succeeded
 
 
 def has_taint(node_obj, taint):
