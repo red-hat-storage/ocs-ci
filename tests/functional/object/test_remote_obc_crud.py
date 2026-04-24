@@ -5,12 +5,19 @@ This test validates OBC functionality on HCI client clusters connected to a prov
 including bucket creation, S3 CRUD operations, and data integrity verification.
 """
 
+import base64
+import boto3
+import botocore
 import hashlib
 import logging
 import pytest
 import tempfile
+import urllib3
 
 from ocs_ci.framework import config
+
+# Suppress SSL warnings for S3 client
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     hci_provider_and_client_required,
@@ -21,9 +28,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import s3_delete_object
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -142,25 +147,43 @@ class TestRemoteOBCCRUD(ManageTest):
 
             # Step 5: Verify ConfigMap and Secret are created on Client
             logger.info("Verifying ConfigMap and Secret creation")
-            obc_resource = OBC(obc_name)
-            self.bucket_name = obc_resource.bucket_name
+
+            # Get OBC status to retrieve bucket name
+            obc_ocp = OCP(
+                kind="ObjectBucketClaim", namespace=namespace, resource_name=obc_name
+            )
+            obc_data = obc_ocp.get()
+            self.bucket_name = obc_data.get("spec", {}).get("bucketName")
             assert self.bucket_name, f"Bucket name not found for OBC {obc_name}"
 
+            # Verify ConfigMap exists
             configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace)
             assert configmap_obj.is_exist(
                 resource_name=obc_name
             ), f"ConfigMap {obc_name} not found"
 
+            # Verify Secret exists
             secret_obj = OCP(kind=constants.SECRET, namespace=namespace)
             assert secret_obj.is_exist(
                 resource_name=obc_name
             ), f"Secret {obc_name} not found"
 
-            # Step 6: Extract S3 credentials
-            logger.info("Extracting S3 credentials from Secret")
-            access_key_id = obc_resource.access_key_id
-            access_key = obc_resource.access_key
-            s3_endpoint = obc_resource.endpoint
+            # Step 6: Extract S3 credentials from ConfigMap and Secret
+            logger.info("Extracting S3 credentials from Secret and ConfigMap")
+
+            # Get credentials from Secret
+            secret_data = secret_obj.get(resource_name=obc_name)
+
+            access_key_id = base64.b64decode(
+                secret_data["data"]["AWS_ACCESS_KEY_ID"]
+            ).decode("utf-8")
+            access_key = base64.b64decode(
+                secret_data["data"]["AWS_SECRET_ACCESS_KEY"]
+            ).decode("utf-8")
+
+            # Get endpoint from ConfigMap
+            configmap_data = configmap_obj.get(resource_name=obc_name)
+            s3_endpoint = configmap_data["data"]["BUCKET_HOST"]
 
             assert access_key_id, f"Access key ID not found for OBC {obc_name}"
             assert access_key, f"Secret key not found for OBC {obc_name}"
@@ -169,6 +192,15 @@ class TestRemoteOBCCRUD(ManageTest):
             logger.info("S3 credentials extracted successfully")
             logger.info(f"Bucket name: {self.bucket_name}")
             logger.info(f"S3 endpoint: {s3_endpoint}")
+
+            # Create S3 client for CRUD operations
+            s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=access_key_id,
+                aws_secret_access_key=access_key,
+                endpoint_url=f"https://{s3_endpoint}",
+                verify=False,
+            )
 
         # Step 7: Check bucket name on provider
         logger.info("Verifying bucket on provider cluster")
@@ -221,7 +253,7 @@ class TestRemoteOBCCRUD(ManageTest):
             logger.info("Testing CREATE operations")
             for obj_name, obj_data in test_objects.items():
                 logger.info(f"Uploading object '{obj_name}' ({obj_data['size']} bytes)")
-                obc_resource.s3_client.upload_file(
+                s3_client.upload_file(
                     Filename=obj_data["file_path"],
                     Bucket=self.bucket_name,
                     Key=obj_name,
@@ -234,7 +266,7 @@ class TestRemoteOBCCRUD(ManageTest):
                 logger.info(f"Downloading object '{obj_name}'")
                 download_path = f"/tmp/downloaded_{obj_name}"
 
-                obc_resource.s3_client.download_file(
+                s3_client.download_file(
                     Bucket=self.bucket_name,
                     Key=obj_name,
                     Filename=download_path,
@@ -259,7 +291,7 @@ class TestRemoteOBCCRUD(ManageTest):
             self.test_files.append(new_content_file)
 
             logger.info(f"Overwriting object '{update_obj_name}'")
-            obc_resource.s3_client.upload_file(
+            s3_client.upload_file(
                 Filename=new_content_file.name,
                 Bucket=self.bucket_name,
                 Key=update_obj_name,
@@ -267,7 +299,7 @@ class TestRemoteOBCCRUD(ManageTest):
 
             # Verify updated content
             updated_download_path = f"/tmp/updated_{update_obj_name}"
-            obc_resource.s3_client.download_file(
+            s3_client.download_file(
                 Bucket=self.bucket_name,
                 Key=update_obj_name,
                 Filename=updated_download_path,
@@ -282,15 +314,14 @@ class TestRemoteOBCCRUD(ManageTest):
             logger.info("Testing DELETE operations")
             for obj_name in test_objects.keys():
                 logger.info(f"Deleting object '{obj_name}'")
-                s3_delete_object(
-                    s3_obj=obc_resource,
-                    bucketname=self.bucket_name,
-                    object_key=obj_name,
+                s3_client.delete_object(
+                    Bucket=self.bucket_name,
+                    Key=obj_name,
                 )
 
                 # Verify object is deleted (should raise exception)
                 try:
-                    obc_resource.s3_client.head_object(
+                    s3_client.head_object(
                         Bucket=self.bucket_name,
                         Key=obj_name,
                     )
