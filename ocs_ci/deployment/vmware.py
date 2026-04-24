@@ -1028,6 +1028,13 @@ class VSPHEREUPI(VSPHEREBASE):
             Generates manifest files
             """
             logger.info("creating manifest files for the cluster")
+            # Backup install-config.yaml before it gets consumed by openshift-install
+            install_config_src = os.path.join(self.cluster_path, "install-config.yaml")
+            install_config_backup = os.path.join(
+                self.cluster_path, "install-config.yaml.backup"
+            )
+            copyfile(install_config_src, install_config_backup)
+            logger.info(f"Backed up install-config.yaml to {install_config_backup}")
             run_cmd(f"{self.installer} create manifests --dir {self.cluster_path}")
 
             # remove machines and machinesets
