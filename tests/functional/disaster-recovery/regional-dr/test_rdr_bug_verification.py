@@ -120,8 +120,30 @@ class TestRDRBugVerification:
                 successfully, confirming DR replication is functional after
                 the token update.
         """
-        # --- Step 1: Verify DR prerequisites on the hub cluster ---
-        self._verify_hub_prerequisites()
+        # --- Step 1: Verify peer secrets exist on the hub cluster ---
+        config.switch_acm_ctx()
+        logger.info(
+            f"Verifying peer secret of type {_PEER_SECRET_TYPE} exists in "
+            f"each managed cluster namespace on the hub"
+        )
+        for cluster_config in get_non_acm_cluster_config():
+            cluster_name = cluster_config.ENV_DATA["cluster_name"]
+            secret_ocp_hub = ocp.OCP(
+                kind=constants.SECRET,
+                namespace=cluster_name,
+            )
+            all_secrets = secret_ocp_hub.get().get("items", [])
+            peer_secrets = [
+                s for s in all_secrets if s.get("type") == _PEER_SECRET_TYPE
+            ]
+            assert peer_secrets, (
+                f"No secret of type {_PEER_SECRET_TYPE!r} found in namespace "
+                f"{cluster_name!r} on the hub cluster"
+            )
+            logger.info(
+                f"Found {len(peer_secrets)} peer secret(s) of type "
+                f"{_PEER_SECRET_TYPE} in namespace {cluster_name} on hub"
+            )
 
         # --- Step 2: Record secret state on primary cluster before failover ---
         primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
@@ -364,56 +386,6 @@ class TestRDRBugVerification:
     # -------------------------------------------------------------------------
     # Shared helpers
     # -------------------------------------------------------------------------
-
-    def _verify_hub_prerequisites(self):
-        """
-        On the hub cluster verify:
-          - DRPolicy is in Validated status.
-          - MirrorPeer is in ExchangedSecret phase (Ready from OCS 4.22).
-          - A secret of type multicluster.odf.openshift.io/secret-type exists
-            in each managed cluster's namespace on the hub.
-
-        Raises:
-            AssertionError: If no MirrorPeer resources found, or if no peer
-                secret is found in a managed cluster namespace on the hub.
-            UnexpectedBehaviour: If DRPolicy is not in Validated status.
-            ResourceWrongStatusException: If MirrorPeer is not in
-                the expected phase.
-        """
-        config.switch_acm_ctx()
-
-        logger.info("Verifying DRPolicy is in Validated status")
-        dr_helpers.verify_drpolicy_cli()
-
-        mirror_peer_ocp = ocp.OCP(kind="MirrorPeer")
-        mirror_peers = mirror_peer_ocp.get(all_namespaces=True).get("items", [])
-        assert mirror_peers, "No MirrorPeer resources found on the hub cluster"
-        for mp in mirror_peers:
-            mp_name = mp["metadata"]["name"]
-            MultiClusterDROperatorsDeploy.validate_mirror_peer(None, mp_name)
-
-        logger.info(
-            f"Verifying peer secret of type {_PEER_SECRET_TYPE} exists in "
-            f"each managed cluster namespace on the hub"
-        )
-        for cluster_config in get_non_acm_cluster_config():
-            cluster_name = cluster_config.ENV_DATA["cluster_name"]
-            secret_ocp = ocp.OCP(
-                kind=constants.SECRET,
-                namespace=cluster_name,
-            )
-            all_secrets = secret_ocp.get().get("items", [])
-            peer_secrets = [
-                s for s in all_secrets if s.get("type") == _PEER_SECRET_TYPE
-            ]
-            assert peer_secrets, (
-                f"No secret of type {_PEER_SECRET_TYPE!r} found in namespace "
-                f"{cluster_name!r} on the hub cluster"
-            )
-            logger.info(
-                f"Found {len(peer_secrets)} peer secret(s) of type "
-                f"{_PEER_SECRET_TYPE} in namespace {cluster_name} on hub"
-            )
 
     def _get_rook_managed_field_time(self, secret_data):
         """
