@@ -123,7 +123,7 @@ class TestRemoteOBCCRUD(ManageTest):
                 },
             }
 
-            obc_obj = create_resource(**obc_data)
+            create_resource(**obc_data)
             self.obcs_to_cleanup.append((client_index, obc_name, namespace))
             logger.info(f"OBC '{obc_name}' created")
 
@@ -166,7 +166,7 @@ class TestRemoteOBCCRUD(ManageTest):
             assert access_key, f"Secret key not found for OBC {obc_name}"
             assert s3_endpoint, f"S3 endpoint not found for OBC {obc_name}"
 
-            logger.info(f"S3 credentials extracted successfully")
+            logger.info("S3 credentials extracted successfully")
             logger.info(f"Bucket name: {self.bucket_name}")
             logger.info(f"S3 endpoint: {s3_endpoint}")
 
