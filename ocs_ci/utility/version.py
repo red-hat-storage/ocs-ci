@@ -72,6 +72,7 @@ VERSION_4_18 = get_semantic_version("4.18", True)
 VERSION_4_19 = get_semantic_version("4.19", True)
 VERSION_4_20 = get_semantic_version("4.20", True)
 VERSION_4_21 = get_semantic_version("4.21", True)
+VERSION_4_22 = get_semantic_version("4.22", True)
 
 # Fusion version constants
 VERSION_2_11 = get_semantic_version("2.11", True)
