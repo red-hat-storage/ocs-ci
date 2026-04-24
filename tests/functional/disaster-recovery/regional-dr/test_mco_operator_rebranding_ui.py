@@ -74,7 +74,7 @@ class TestMCOOperatorRebrandingUI:
         # Validate operator display name
         logger.info("Validating operator display name")
         actual_name = mco_page.get_operator_display_name()
-        logger.info("Found operator name: %s", actual_name)
+        logger.info(f"Found operator name: {actual_name}")
         assert expected_operator_name in actual_name, (
             f"Expected operator name '{expected_operator_name}', "
             f"but found '{actual_name}'"
@@ -84,19 +84,19 @@ class TestMCOOperatorRebrandingUI:
                 f"Operator name contains disallowed keyword "
                 f"'{keyword}'. Full name: {actual_name}"
             )
-        logger.info("Operator name validated: %s", actual_name)
+        logger.info(f"Operator name validated: {actual_name}")
         mco_page.take_screenshot()
 
         # Validate provider name
         logger.info("Validating provider name")
         actual_provider = mco_page.get_operator_provider()
         if actual_provider:
-            logger.info("Found provider: %s", actual_provider)
+            logger.info(f"Found provider: {actual_provider}")
             assert expected_provider in actual_provider, (
                 f"Expected provider '{expected_provider}', "
                 f"but found '{actual_provider}'"
             )
-            logger.info("Provider validated: %s", actual_provider)
+            logger.info(f"Provider validated: {actual_provider}")
 
         # Validate description is vendor-neutral
         logger.info("Validating operator description")
@@ -127,8 +127,8 @@ class TestMCOOperatorRebrandingUI:
             assert (
                 "stable" in channel.lower()
             ), f"Expected stable channel, but found: {channel}"
-            logger.info("Channel validated: %s", channel)
+            logger.info(f"Channel validated: {channel}")
         if version:
-            logger.info("Version: %s", version)
+            logger.info(f"Version: {version}")
 
-        logger.info("MCO operator rebranding validation test " "completed successfully")
+        logger.info("MCO operator rebranding validation test completed successfully")

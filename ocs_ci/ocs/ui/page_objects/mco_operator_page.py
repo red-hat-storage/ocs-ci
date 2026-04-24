@@ -47,7 +47,7 @@ class MCOOperatorPage(AcmPageNavigator):
         Args:
             operator_name (str): Name of the operator to search for
         """
-        logger.info("Searching for operator: %s", operator_name)
+        logger.info(f"Searching for operator: {operator_name}")
         search_box = self.wait_for_element_to_be_visible(
             self.dep_loc["search_operators"], timeout=30
         )
@@ -180,13 +180,13 @@ class MCOOperatorPage(AcmPageNavigator):
                 self.dep_loc["operator_channel"], timeout=30
             )
             channel = channel_element.text
-            logger.info("Channel: %s", channel)
+            logger.info(f"Channel: {channel}")
 
             version_element = self.wait_for_element_to_be_visible(
                 self.dep_loc["operator_installed_version"], timeout=30
             )
             ver = version_element.text
-            logger.info("Installed Version: %s", ver)
+            logger.info(f"Installed Version: {ver}")
             self.take_screenshot()
         except TimeoutException:
             logger.warning("Channel or version information not found")
