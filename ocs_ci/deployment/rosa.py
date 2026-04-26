@@ -21,7 +21,10 @@ from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles, delete_subnet_tags
-from ocs_ci.utility.deployment import create_openshift_install_log_file
+from ocs_ci.utility.deployment import (
+    create_openshift_install_log_file,
+    deploy_roks_icsp_daemonset,
+)
 from ocs_ci.utility.rosa import (
     get_associated_oidc_config_id,
     delete_account_roles,
@@ -308,6 +311,12 @@ class ROSA(CloudDeploymentBase):
 
         # rosa hcp is self-managed and doesn't support ODF addon
         if rosa_hcp:
+            if config.DEPLOYMENT.get("konflux_build"):
+                log_step(
+                    "ROSA HCP + Konflux: deploying roks-icsp DaemonSet "
+                    "for worker filesystem-based mirror configuration"
+                )
+                deploy_roks_icsp_daemonset()
             super(ROSA, self).deploy_ocs()
         else:
             rosa.install_odf_addon(self.cluster_name)
