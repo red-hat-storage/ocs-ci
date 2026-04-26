@@ -2,6 +2,8 @@
 Utility functions that are used as a part of OCP or OCS deployments
 """
 
+import base64
+import json
 import logging
 import os
 import re
@@ -219,8 +221,17 @@ def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
     stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
     konflux_build = config.DEPLOYMENT.get("konflux_build")
     if stage_testing and konflux_build:
-        logger.info("Skipping applying IDMS rules from image for konflux stage testing")
-        return ""
+        if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+            logger.info(
+                "ROSA HCP + Konflux: extracting IDMS from catalog image for "
+                "filesystem-based mirror configuration on worker nodes"
+            )
+            apply = False
+        else:
+            logger.info(
+                "Skipping applying IDMS rules from image for konflux stage testing"
+            )
+            return ""
     idms_file_location = "/idms.yaml"
     idms_file_dest_dir = os.path.join(
         config.ENV_DATA["cluster_path"], f"idms-{config.RUN['run_id']}"
@@ -247,21 +258,222 @@ def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
         yaml.dump(idms_content, f)
 
     if apply and not config.DEPLOYMENT.get("disconnected"):
-        exec_cmd(f"oc apply -f {idms_file_dest_location}")
-        managed_ibmcloud = (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and config.ENV_DATA["deployment_type"] == "managed"
-        )
-        if not managed_ibmcloud:
-            num_nodes = (
-                config.ENV_DATA["worker_replicas"]
-                + config.ENV_DATA["master_replicas"]
-                + config.ENV_DATA.get("infra_replicas", 0)
+        if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+            with open(idms_file_dest_location) as f:
+                _idms = yaml.safe_load(f)
+            apply_idms_via_worker_filesystem(
+                _idms.get("spec", {}).get("imageDigestMirrors", [])
             )
-            timeout = 2800 if num_nodes > 6 else 1900
-            wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
+        else:
+            exec_cmd(f"oc apply -f {idms_file_dest_location}")
+            managed_ibmcloud = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            )
+            if not managed_ibmcloud:
+                num_nodes = (
+                    config.ENV_DATA["worker_replicas"]
+                    + config.ENV_DATA["master_replicas"]
+                    + config.ENV_DATA.get("infra_replicas", 0)
+                )
+                timeout = 2800 if num_nodes > 6 else 1900
+                wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
+
+    if (
+        stage_testing
+        and konflux_build
+        and config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+        and os.path.exists(idms_file_dest_location)
+    ):
+        with open(idms_file_dest_location) as f:
+            idms_content = yaml.safe_load(f)
+        image_digest_mirrors = idms_content.get("spec", {}).get(
+            "imageDigestMirrors", []
+        )
+        apply_idms_via_worker_filesystem(image_digest_mirrors)
 
     return idms_file_dest_location
+
+
+def deploy_roks_icsp_daemonset():
+    """
+    Deploy the roks-icsp privileged DaemonSet on ROSA HCP worker nodes.
+
+    The DaemonSet (quay.io/cicdtest/roks-enabler:rosa) mounts the host
+    filesystem at /host and is used to write CRI-O mirror configuration
+    directly to /host/etc/containers/registries.conf.d/ on each worker,
+    bypassing the ImageDigestMirrorSet API which is blocked on ROSA HCP
+    by ValidatingAdmissionPolicy.
+
+    Also creates a fake machineconfigs.machineconfiguration.openshift.io CRD
+    which is absent on ROSA HCP hosted clusters.
+
+    Source: https://github.com/xcliu-ca/rosa-icsp-gps/blob/main/enabler.sh
+    """
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    # Idempotent: skip if DaemonSet pods are already running
+    existing = get_pods_having_label(
+        label=constants.ROSA_HCP_DS_LABEL,
+        namespace=constants.ROSA_HCP_DS_NAMESPACE,
+    )
+    if existing:
+        logger.info(
+            f"roks-icsp DaemonSet already running "
+            f"({len(existing)} pod(s)) — skipping deployment"
+        )
+        return
+
+    logger.info("Deploying roks-icsp DaemonSet on ROSA HCP worker nodes")
+
+    sa_manifest = templating.load_yaml(constants.ROSA_HCP_ROKS_ICSP_SA_YAML)
+
+    exec_cmd(f"oc apply -f {constants.ROSA_HCP_ROKS_ICSP_SA_YAML}")
+    exec_cmd(
+        f"oc adm policy add-cluster-role-to-user cluster-admin "
+        f"system:serviceaccount:{constants.ROSA_HCP_DS_NAMESPACE}:"
+        f"{sa_manifest['metadata']['name']}"
+    )
+    exec_cmd(f"oc apply -f {constants.ROSA_HCP_ROKS_ICSP_DS_YAML}")
+    exec_cmd(f"oc apply -f {constants.ROSA_HCP_ROKS_ICSP_SVC_YAML}")
+
+    # Create fake MachineConfig CRD if absent (not present on ROSA HCP)
+    existing_crd = exec_cmd(
+        "oc get crd machineconfigs.machineconfiguration.openshift.io "
+        "--ignore-not-found -o name",
+        ignore_error=True,
+    )
+    if not existing_crd.stdout.strip():
+        logger.info("Creating fake MachineConfig CRD for ROSA HCP compatibility")
+        exec_cmd(f"oc apply -f {constants.ROSA_HCP_ROKS_ICSP_MC_CRD_YAML}")
+
+    # Wait for DaemonSet to roll out on all worker nodes
+    num_workers = config.ENV_DATA["worker_replicas"]
+    from ocs_ci.utility.utils import TimeoutSampler
+
+    for sample in TimeoutSampler(
+        timeout=180,
+        sleep=10,
+        func=get_pods_having_label,
+        label=constants.ROSA_HCP_DS_LABEL,
+        namespace=constants.ROSA_HCP_DS_NAMESPACE,
+    ):
+        running = [p for p in sample if p.get("status", {}).get("phase") == "Running"]
+        if len(running) >= num_workers:
+            logger.info(
+                f"roks-icsp DaemonSet ready: {len(running)}/{num_workers} pods running"
+            )
+            return
+
+
+def apply_idms_via_worker_filesystem(image_digest_mirrors, conf_filename=None):
+    """
+    Write CRI-O registry mirror configuration to worker nodes via a privileged
+    DaemonSet that mounts the host filesystem at /host.
+
+    Used on ROSA HCP where ImageDigestMirrorSet cannot be applied via oc apply
+    (blocked by ValidatingAdmissionPolicy).
+
+    Args:
+        image_digest_mirrors (list): list of dicts with 'source' and 'mirrors' keys,
+            matching the imageDigestMirrors schema from an ImageDigestMirrorSet.
+        conf_filename (str): filename to write inside registries.conf.d.
+            Defaults to ROSA_HCP_KONFLUX_MIRROR_CONF constant.
+    """
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+    from ocs_ci.ocs import ocp as ocp_module
+
+    if conf_filename is None:
+        conf_filename = constants.ROSA_HCP_KONFLUX_MIRROR_CONF
+
+    ds_pods = get_pods_having_label(
+        label=constants.ROSA_HCP_DS_LABEL,
+        namespace=constants.ROSA_HCP_DS_NAMESPACE,
+    )
+    if not ds_pods:
+        logger.warning(
+            f"No DaemonSet pods found with label '{constants.ROSA_HCP_DS_LABEL}' "
+            f"in namespace '{constants.ROSA_HCP_DS_NAMESPACE}'. "
+            "Cannot apply IDMS via worker filesystem."
+        )
+        return
+
+    # Build CRI-O TOML content from IDMS entries
+    toml_lines = []
+    for entry in image_digest_mirrors:
+        source = entry["source"]
+        mirrors = entry.get("mirrors", [])
+        toml_lines += [
+            "[[registry]]",
+            f'prefix = "{source}"',
+            f'location = "{source}"',
+            "blocked = false",
+            "",
+        ]
+        for mirror in mirrors:
+            toml_lines += [
+                "[[registry.mirror]]",
+                f'location = "{mirror}"',
+                "insecure = false",
+                "",
+            ]
+    toml_content = "\n".join(toml_lines)
+    encoded = base64.b64encode(toml_content.encode()).decode()
+    dest_path = f"{constants.ROSA_HCP_HOST_REGISTRIES_CONF_D}/{conf_filename}"
+
+    for pod in ds_pods:
+        pod_name = pod["metadata"]["name"]
+        exec_cmd(
+            f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+            f"-- bash -c \"echo '{encoded}' | base64 -d > {dest_path}\""
+        )
+    logger.info(
+        f"Written mirror config ({len(image_digest_mirrors)} entries) "
+        f"to {dest_path} on {len(ds_pods)} worker node(s)"
+    )
+
+    # Merge mirror registry credentials into /host/etc/containers/auth.json
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+    with open(pull_secret_path) as f:
+        pull_secret = json.load(f)
+    mirror_registries = {
+        mirror.split("/")[0]
+        for entry in image_digest_mirrors
+        for mirror in entry.get("mirrors", [])
+    }
+    extra_auths = {
+        reg: creds
+        for reg, creds in pull_secret["auths"].items()
+        if reg in mirror_registries
+    }
+    if extra_auths:
+        for pod in ds_pods:
+            pod_name = pod["metadata"]["name"]
+            existing_raw = exec_cmd(
+                f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                f"-- bash -c \"cat {constants.ROSA_HCP_HOST_AUTH_JSON} 2>/dev/null || echo '{{}}'\"",
+                ignore_error=True,
+            )
+            existing = json.loads(existing_raw.stdout.decode().strip() or "{}")
+            existing.setdefault("auths", {}).update(extra_auths)
+            merged_b64 = base64.b64encode(json.dumps(existing).encode()).decode()
+            exec_cmd(
+                f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                f"-- bash -c \"echo '{merged_b64}' | base64 -d > {constants.ROSA_HCP_HOST_AUTH_JSON}\""
+            )
+        logger.info(
+            f"Merged credentials for {list(extra_auths.keys())} into "
+            f"{constants.ROSA_HCP_HOST_AUTH_JSON} on worker nodes"
+        )
+
+    # Reload CRI-O on each worker so it picks up the new registries.conf.d entry
+    worker_nodes = ocp_module.get_node_objs(node_type="worker")
+    for node in worker_nodes:
+        ocp_module.OCP().exec_oc_debug_cmd(
+            node=node.name,
+            cmd_list=["systemctl reload crio"],
+        )
+    logger.info("CRI-O reloaded on all worker nodes")
 
 
 def add_mc_partitioned_disk_on_workers_to_ocp_deployment(disk):
