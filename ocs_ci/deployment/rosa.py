@@ -167,6 +167,20 @@ class ROSAOCP(BaseOCPDeployment):
                     return
                 raise
             subnet_ids = aws.get_cluster_subnet_ids(cluster_name=self.cluster_name)
+            oidc_endpoint_url = None
+            if rosa_hcp:
+                try:
+                    auth = ocp.OCP().exec_oc_cmd(
+                        "get authentication cluster "
+                        "-o jsonpath='{.spec.serviceAccountIssuer}'"
+                    )
+                    oidc_endpoint_url = str(auth).strip()
+                    logger.info(f"Pre-fetched OIDC endpoint URL: {oidc_endpoint_url}")
+                except Exception as e:
+                    logger.warning(
+                        f"Could not pre-fetch OIDC endpoint URL, will retry during "
+                        f"cleanup if cluster is still reachable: {e}"
+                    )
             log_step(f"Destroying ROSA cluster. Hosted CP: {rosa_hcp}")
             delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
             if not delete_status:
@@ -193,8 +207,11 @@ class ROSAOCP(BaseOCPDeployment):
                 if oidc_config_id:
                     rosa.delete_oidc_config(oidc_config_id)
                 # use sts IAM roles for ROSA HCP is mandatory
-                delete_sts_iam_roles()
-                delete_subnet_tags(f"kubernetes.io/cluster/{cluster_id}", subnet_ids)
+                delete_sts_iam_roles(oidc_endpoint_url=oidc_endpoint_url)
+                if subnet_ids:
+                    delete_subnet_tags(
+                        f"kubernetes.io/cluster/{cluster_id}", *subnet_ids
+                    )
             rosa.delete_oidc_provider(self.cluster_name)
             account_roles_prefix = (
                 f"{constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
@@ -306,22 +323,28 @@ class ROSA(CloudDeploymentBase):
 
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
 
+        # ROSA HCP ODF deployment is slower due to worker filesystem mirror
+        # configuration and image pull via registries.conf.d mirrors — double timeouts
+        timeout_multiplier = 2 if rosa_hcp else 1
+
         if config.ENV_DATA.get("cluster_type") != "consumer":
             # Check for Ceph pods
             assert pod.wait_for_resource(
                 condition="Running",
                 selector=constants.MON_APP_LABEL,
                 resource_count=3,
-                timeout=600,
+                timeout=600 * timeout_multiplier,
             )
             assert pod.wait_for_resource(
-                condition="Running", selector=constants.MGR_APP_LABEL, timeout=600
+                condition="Running",
+                selector=constants.MGR_APP_LABEL,
+                timeout=600 * timeout_multiplier,
             )
             assert pod.wait_for_resource(
                 condition="Running",
                 selector=constants.OSD_APP_LABEL,
                 resource_count=3,
-                timeout=600,
+                timeout=600 * timeout_multiplier,
             )
 
         if config.DEPLOYMENT.get("pullsecret_workaround") or config.DEPLOYMENT.get(
@@ -336,7 +359,9 @@ class ROSA(CloudDeploymentBase):
             )()
 
         # Verify health of ceph cluster
-        ceph_health_check(namespace=self.namespace, tries=60, delay=10)
+        ceph_health_check(
+            namespace=self.namespace, tries=60 * timeout_multiplier, delay=10
+        )
 
         # Workaround for the bug 2166900
         if config.ENV_DATA.get("cluster_type") == "consumer":
