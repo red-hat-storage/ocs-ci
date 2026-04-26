@@ -323,22 +323,28 @@ class ROSA(CloudDeploymentBase):
 
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
 
+        # ROSA HCP ODF deployment is slower due to worker filesystem mirror
+        # configuration and image pull via registries.conf.d mirrors — double timeouts
+        timeout_multiplier = 2 if rosa_hcp else 1
+
         if config.ENV_DATA.get("cluster_type") != "consumer":
             # Check for Ceph pods
             assert pod.wait_for_resource(
                 condition="Running",
                 selector=constants.MON_APP_LABEL,
                 resource_count=3,
-                timeout=600,
+                timeout=600 * timeout_multiplier,
             )
             assert pod.wait_for_resource(
-                condition="Running", selector=constants.MGR_APP_LABEL, timeout=600
+                condition="Running",
+                selector=constants.MGR_APP_LABEL,
+                timeout=600 * timeout_multiplier,
             )
             assert pod.wait_for_resource(
                 condition="Running",
                 selector=constants.OSD_APP_LABEL,
                 resource_count=3,
-                timeout=600,
+                timeout=600 * timeout_multiplier,
             )
 
         if config.DEPLOYMENT.get("pullsecret_workaround") or config.DEPLOYMENT.get(
@@ -353,7 +359,9 @@ class ROSA(CloudDeploymentBase):
             )()
 
         # Verify health of ceph cluster
-        ceph_health_check(namespace=self.namespace, tries=60, delay=10)
+        ceph_health_check(
+            namespace=self.namespace, tries=60 * timeout_multiplier, delay=10
+        )
 
         # Workaround for the bug 2166900
         if config.ENV_DATA.get("cluster_type") == "consumer":
