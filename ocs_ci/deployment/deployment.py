@@ -1339,25 +1339,36 @@ class Deployment(object):
         stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
         konflux_build = config.DEPLOYMENT.get("konflux_build")
         upgrade = config.UPGRADE.get("upgrade", False)
-        if not live_deployment and not (stage_testing and konflux_build):
+        rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+        if not live_deployment and not (
+            stage_testing and konflux_build and not rosa_hcp
+        ):
             log_step("Create catalog source and wait it to be READY")
             create_catalog_source(image)
         if konflux_build and stage_testing:
-            log_step("Creating stage ImageDigestMirrorSet")
-            exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
-            if not upgrade:
-                log_step("Creating stage TagMirrorSet")
-                exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
-                log_step("Sleeping 60 seconds after applying tag mirror set.")
-            time.sleep(60)
-            log_step("Waiting max 30 mins for master MCP to get updated")
-            exec_cmd(
-                "oc wait --for=condition=Updated --timeout=30m mcp/master", timeout=2100
-            )
-            log_step("Waiting max 30 mins for worker MCP to get updated")
-            exec_cmd(
-                "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
-            )
+            if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+                log_step(
+                    "ROSA HCP: mirrors applied via worker filesystem "
+                    "inside get_and_apply_idms_from_catalog — skipping IDMS apply and MCP wait"
+                )
+            else:
+                log_step("Creating stage ImageDigestMirrorSet")
+                exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+                if not upgrade:
+                    log_step("Creating stage TagMirrorSet")
+                    exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
+                    log_step("Sleeping 60 seconds after applying tag mirror set.")
+                time.sleep(60)
+                log_step("Waiting max 30 mins for master MCP to get updated")
+                exec_cmd(
+                    "oc wait --for=condition=Updated --timeout=30m mcp/master",
+                    timeout=2100,
+                )
+                log_step("Waiting max 30 mins for worker MCP to get updated")
+                exec_cmd(
+                    "oc wait --for=condition=Updated --timeout=30m mcp/worker",
+                    timeout=2100,
+                )
 
         # with Hub/Spoke deployments LSO on IBM BareMetal is a mandatory requirement, it is installed on Dependency
         # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
@@ -3006,14 +3017,15 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             "stage_index_image_tag", f"v{ocp_version}"
         )
         image += f":{osbs_image_tag}"
-        run_cmd(
-            "oc patch image.config.openshift.io/cluster --type merge -p '"
-            '{"spec": {"registrySources": {"insecureRegistries": '
-            '["registry-proxy.engineering.redhat.com", "registry.stage.redhat.io"]'
-            "}}}'"
-        )
-        run_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
-        wait_for_machineconfigpool_status("all", timeout=1800)
+        if config.ENV_DATA.get("platform") != constants.ROSA_HCP_PLATFORM:
+            run_cmd(
+                "oc patch image.config.openshift.io/cluster --type merge -p '"
+                '{"spec": {"registrySources": {"insecureRegistries": '
+                '["registry-proxy.engineering.redhat.com", "registry.stage.redhat.io"]'
+                "}}}'"
+            )
+            run_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+            wait_for_machineconfigpool_status("all", timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get("upgrade", False)
     else:
