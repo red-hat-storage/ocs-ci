@@ -366,9 +366,7 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Use custom Submariner subscription ")
         self.do_click(self.page_nav["submariner-custom-subscription"])
         log.info("Clear existing Source")
-        self.clear_input_with_retry(
-            self.page_nav["submariner-custom-source"], retries=3
-        )
+        self.clear_input_gradually(self.page_nav["submariner-custom-source"])
         source = self.driver.find_element(
             By.XPATH, "//input[@placeholder='Enter the catalog source']"
         )
