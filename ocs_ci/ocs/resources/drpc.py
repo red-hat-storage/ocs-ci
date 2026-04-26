@@ -6,6 +6,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -142,6 +143,83 @@ class DRPC(OCP):
             f"Current lastKubeObjectProtectionTime is {last_kubeobject_protection_time}."
         )
         return last_kubeobject_protection_time
+
+    def get_drpc_protected_pvcs(self):
+        """
+        Fetch the list of protected PVC names from DRPC status.
+
+        Returns:
+            list: List of PVC names in status.resourceConditions.resourceMeta.protectedpvcs
+
+        """
+        protected_pvcs = (
+            self.get()
+            .get("status")
+            .get("resourceConditions")
+            .get("resourceMeta")
+            .get("protectedpvcs", [])
+        )
+        logger.info(f"DRPC protectedpvcs: {protected_pvcs}")
+        return protected_pvcs
+
+    def get_drpc_pvcgroups(self):
+        """
+        Fetch the flattened list of PVC names from DRPC status pvcgroups.
+
+        Returns:
+            list: Flat list of all PVC names across all groups in
+                status.resourceConditions.resourceMeta.pvcgroups
+
+        """
+        pvcgroups = (
+            self.get()
+            .get("status")
+            .get("resourceConditions")
+            .get("resourceMeta")
+            .get("pvcgroups", [])
+        )
+        pvcs = []
+        for group in pvcgroups:
+            pvcs.extend(group.get("grouped", []))
+        logger.info(
+            f"DRPC pvcgroups: {len(pvcs)} PVC(s) across {len(pvcgroups)} group(s): {pvcs}"
+        )
+        return pvcs
+
+    def wait_for_drpc_pvcs_count(self, expected_count, timeout=900):
+        """
+        Wait until DRPC protectedPVCs and pvcgroups both reflect the expected PVC count.
+
+        Args:
+            expected_count (int): Expected number of protected PVCs
+            timeout (int): Time in seconds to wait
+
+        Raises:
+            TimeoutExpiredError: If the counts do not match within the timeout
+
+        """
+        logger.info(
+            f"Waiting for DRPC protectedpvcs and pvcgroups to reach count {expected_count}"
+        )
+
+        def _check_counts():
+            protected = self.get_drpc_protected_pvcs()
+            grouped = self.get_drpc_pvcgroups()
+            if len(protected) == expected_count and len(grouped) == expected_count:
+                return True
+            logger.info(
+                f"protectedpvcs={len(protected)}, pvcgroups={len(grouped)}, "
+                f"expected={expected_count}. Retrying..."
+            )
+            return False
+
+        sampler = TimeoutSampler(timeout=timeout, sleep=15, func=_check_counts)
+        if not sampler.wait_for_func_status(result=True):
+            raise TimeoutExpiredError(
+                f"DRPC did not reflect expected PVC count {expected_count} within {timeout}s. "
+                f"protectedpvcs={self.get_drpc_protected_pvcs()}, "
+                f"pvcgroups={self.get_drpc_pvcgroups()}"
+            )
 
 
 def get_drpc_name(namespace, switch_ctx=None):
