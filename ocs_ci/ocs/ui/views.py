@@ -1256,6 +1256,7 @@ acm_configuration_4_12 = {
     "failover-preferred-cluster-name": ("//button[text()='{}']", By.XPATH),
     "operation-readiness": ("//*[contains(text(), 'Ready')]", By.XPATH),
     "peer-ready": ("//i[normalize-space()='Peer ready']", By.XPATH),
+    # Note: "intiate" is intentional - matches typo in UI source code (bug reported)
     "initiate-action": ("#modal-intiate-action", By.CSS_SELECTOR),
     "close-action-modal": ("//button[normalize-space()='Close']", By.XPATH),
     "close-action-modal-page": ("//*[text()='Close']", By.XPATH),
@@ -1503,6 +1504,7 @@ acm_configuration_4_20 = {
 }
 
 acm_configuration_4_21 = {
+    # VM-related locators
     "vm-actions": ('//button[@data-test="actions-dropdown"]', By.XPATH),
     "dr-policy": (
         "//button[@aria-label='Typeahead single select']",
@@ -1519,6 +1521,127 @@ acm_configuration_4_21 = {
     "assign": (
         "//button[contains(@class, 'c-button pf-m-primary pf-m-progress') and contains(text(), 'Assign')]",
         By.XPATH,
+    ),
+    # Protected Applications list view locators
+    "protected-applications-tab": (
+        "//a[normalize-space()='Protected applications'] | "
+        "//a[@data-test-id='horizontal-link-Protected applications']",
+        By.XPATH,
+    ),
+    "protected-app-search-bar": (
+        "//input[contains(@placeholder, 'Search') or contains(@aria-label, 'Search')]",
+        By.XPATH,
+    ),
+    "protected-app-list-table": (
+        "//table",
+        By.XPATH,
+    ),
+    "protected-app-name-in-list": (
+        "//a[@data-test='resource-link-{}']",
+        By.XPATH,
+    ),
+    "protected-app-kebab-menu": (
+        "//tr[.//a[@data-test='resource-link-{}']]//button[@aria-label='Kebab toggle' or contains(@class, 'pf-v5-c-menu-toggle')]",
+        By.XPATH,
+    ),
+    "protected-app-action-menu-item": (
+        "//button[@role='menuitem'][contains(., '{}')]",
+        By.XPATH,
+    ),
+    "protected-app-dr-status": (
+        "//tr[.//a[@data-test='resource-link-{}']]//span[@data-test='status-text']",
+        By.XPATH,
+    ),
+    "manage-dr-modal": (
+        "//div[@role='dialog'][contains(@aria-label, 'Manage')]",
+        By.XPATH,
+    ),
+    "manage-dr-modal-close": (
+        "//div[@role='dialog']//button[@aria-label='Close']",
+        By.XPATH,
+    ),
+    "manage-dr-policy-name": (
+        "//*[contains(text(), 'Name:')][contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "manage-dr-vrg-status": (
+        "//*[contains(text(), 'Volume group replication:')]//following-sibling::*[contains(text(), 'Enabled')] | "
+        "//*[contains(text(), 'Volume group replication:')]/parent::*//*[contains(text(), 'Enabled')]",
+        By.XPATH,
+    ),
+    "manage-dr-last-sync-time": (
+        "//*[contains(., 'Last synced on')]",
+        By.XPATH,
+    ),
+    "remove-dr-btn": (
+        "#disable-dr-action",
+        By.CSS_SELECTOR,
+    ),
+    "confirm-remove-dr-btn": (
+        "#confirm-disable-dr-action",
+        By.CSS_SELECTOR,
+    ),
+    "cancel-remove-dr-btn": (
+        "#cancel-disable-dr-action",
+        By.CSS_SELECTOR,
+    ),
+    "failover-modal": (
+        "//div[@role='dialog'][contains(., 'Failover application')]",
+        By.XPATH,
+    ),
+    "failover-target-cluster-container": (
+        "//div[contains(@class, 'mco-dr-action-body__target-cluster')]",
+        By.XPATH,
+    ),
+    "failover-readiness-label": (
+        "//strong[contains(text(), 'Failover readiness:')]",
+        By.XPATH,
+    ),
+    "failover-last-synced": (
+        "//*[contains(text(), 'Volume last synced on:')]/following-sibling::*",
+        By.XPATH,
+    ),
+    "failover-target-cluster-text": (
+        "//div[contains(@class, 'mco-dr-action-body__target-cluster')]//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "failover-ready-status": (
+        "//strong[contains(text(), 'Failover readiness:')]/../..//*[text()='Ready']",
+        By.XPATH,
+    ),
+    # Note: "intiate" is intentional - matches typo in UI source code (bug reported)
+    "failover-initiate-btn": (
+        "#modal-intiate-action, #modal-initiate-action",
+        By.CSS_SELECTOR,
+    ),
+    "failover-cancel-btn": (
+        "#modal-cancel-action",
+        By.CSS_SELECTOR,
+    ),
+    "relocate-modal": (
+        "//div[@role='dialog'][contains(., 'Relocate application')]",
+        By.XPATH,
+    ),
+    "relocate-target-cluster-container": (
+        "//div[contains(@class, 'mco-dr-action-body__target-cluster')]",
+        By.XPATH,
+    ),
+    "relocate-target-cluster-text": (
+        "//div[contains(@class, 'mco-dr-action-body__target-cluster')]//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "relocate-ready-status": (
+        "//strong[contains(text(), 'Relocate readiness:')]/../..//*[text()='Ready']",
+        By.XPATH,
+    ),
+    "relocate-last-synced-label": (
+        "//strong[contains(text(), 'Volume last synced on:')]",
+        By.XPATH,
+    ),
+    # Note: "intiate" is intentional - matches typo in UI source code (bug reported)
+    "relocate-initiate-btn": (
+        "#modal-intiate-action, #modal-initiate-action",
+        By.CSS_SELECTOR,
     ),
 }
 
