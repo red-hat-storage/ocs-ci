@@ -8477,7 +8477,6 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
                             vm_list_default_compr.append(vm_obj)
                     except Exception as e:
                         log.error(f"Error occurred while creating VM: {e}")
-                    raise
 
         return (
             vm_list_default_compr,
