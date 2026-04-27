@@ -6945,7 +6945,7 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
         f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
     )
 
-    cephbpradosns = ""
+    cephbpradosns = storageconsumer
 
     # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clusters have it,
     # but StorageRequest is not reconciled. StorageConsumer exists in storage hub cluster and in consumer clusters
@@ -6965,9 +6965,6 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
                         break
             if cephbpradosns:
                 break
-    else:
-        storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
-        cephbpradosns = storage_consumer.get_rbd_rados_ns()
     return cephbpradosns
 
 
@@ -7031,8 +7028,9 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
                 break
     else:
         storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
-        cephbfssubvolumegroup = storage_consumer.get_cephfs_subvolumegroup()
-
+        cephbfssubvolumegroup = storage_consumer.get("data").get(
+            "cephfs-subvolumegroup"
+        )
     return cephbfssubvolumegroup
 
 
