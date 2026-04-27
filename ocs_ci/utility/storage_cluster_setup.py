@@ -141,12 +141,16 @@ class StorageClusterSetup(object):
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
             and self.platform not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and self.platform != constants.FYRE_PLATFORM
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
             cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
-        elif self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+        elif (
+            self.platform.lower() == constants.FYRE_PLATFORM
+            or self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
             from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 
             nodes_obj = OCP(
@@ -168,7 +172,6 @@ class StorageClusterSetup(object):
             number_of_disks_available = int(
                 number_of_disks_available_total / no_of_worker_nodes
             )
-
             # with this approach of datermining the number of nodes we assume worker nodes number of disks is equal
             # to master nodes number of disks, in case when config.ENV_DATA.get("mark_masters_schedulable") == True,
             # and we labeled master nodes to serve as a storage nodes
