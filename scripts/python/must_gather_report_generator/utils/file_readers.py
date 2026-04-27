@@ -146,12 +146,43 @@ def find_must_gather_dir(base_path):
     return base
 
 
-def detect_deployment_type(mg_dir):
+def find_external_ceph_dir(base_path):
+    """
+    Find the external ceph logs directory in the must-gather base path.
+
+    Looks for directories matching pattern: external_ceph_logs_TIMESTAMP/ceph_external/ceph/
+
+    Args:
+        base_path: Path to must-gather base directory (parent of must-gather data dir)
+
+    Returns:
+        Path or None: Path to external ceph data directory (external_ceph_logs_*/ceph_external/ceph/)
+                      or None if not found
+    """
+    base = Path(base_path)
+
+    try:
+        # Look for external_ceph_logs_* directories
+        for item in base.iterdir():
+            if item.is_dir() and item.name.startswith("external_ceph_logs_"):
+                # Check for expected structure
+                ceph_data_dir = item / "ceph_external" / "ceph"
+                if ceph_data_dir.exists():
+                    print(f"Found external ceph logs dir: {item.name}")
+                    return ceph_data_dir
+    except OSError as e:
+        logger.warning("Could not search for external ceph logs in %s: %s", base, e)
+
+    return None
+
+
+def detect_deployment_type(mg_dir, external_ceph_dir=None):
     """
     Detect if this is internal (converged) or external Ceph deployment.
 
     Args:
         mg_dir: Path to must-gather data directory
+        external_ceph_dir: Optional Path to external ceph directory (if already found)
 
     Returns:
         str: "internal", "external", or "unknown"
@@ -163,7 +194,10 @@ def detect_deployment_type(mg_dir):
     internal_ceph_json = mg_dir / "ceph" / "must_gather_commands_json_output"
 
     # Check for external Ceph indicators
-    external_ceph_logs = mg_dir / "ceph_logs"
+    # If external_ceph_dir was passed and exists, that's a strong indicator
+    has_external_ceph_dir = (
+        external_ceph_dir is not None and Path(external_ceph_dir).exists()
+    )
 
     # Check StorageCluster for external storage config
     sc_file = mg_dir / "namespaces/openshift-storage/oc_output/storagecluster.yaml"
@@ -178,7 +212,7 @@ def detect_deployment_type(mg_dir):
     # Detection logic
     if internal_ceph_commands.exists() or internal_ceph_json.exists():
         return "internal"
-    elif external_ceph_logs.exists() or has_external_in_sc:
+    elif has_external_ceph_dir or has_external_in_sc:
         return "external"
     else:
         return "unknown"
