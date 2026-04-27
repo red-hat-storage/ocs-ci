@@ -663,3 +663,66 @@ class OADPOperator(Operator):
             selector=constants.MANAGED_CONTROLLER_LABEL,
             timeout=600,
         ), "OADP operator did not reach running phase"
+
+
+class IngressNodeFirewallOperator(Operator):
+    def __init__(self, create_catalog: bool = False):
+        self.name = constants.INGRESS_NODE_FIREWALL_OPERATOR_NAME
+        ocp_version = get_semantic_ocp_version_from_config()
+        self.unreleased_catalog_image_tag: str = (
+            f"ocp__{ocp_version}__ingress-node-firewall-rhel9-operator"
+        )
+        self.unreleased_images = [
+            "registry.redhat.io/openshift4/ingress-node-firewall-operator-bundle",
+            "registry.redhat.io/openshift4/ingress-node-firewall-rhel9-operator",
+            "registry.redhat.io/openshift4/ingress-node-firewall-rhel9",
+            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
+        ]
+        self.disconnected_required_packages = [
+            "ingress-node-firewall",
+        ]
+        self.namespace = constants.INGRESS_NODE_FIREWALL_NAMESPACE
+        super().__init__(create_catalog)
+
+    def _customize_operatorgroup(self, operatorgroup_data: dict):
+        """
+        Hook for Ingress Node Firewall to customize OperatorGroup YAML
+
+        Args:
+            operatorgroup_data (dict): the OperatorGroup YAML data
+        """
+        operatorgroup_data["spec"]["targetNamespaces"] = []
+
+    def verify_csv_status(self):
+        """
+        Verify the CSV status for the IngressNodeFirewall Operator deployment equals Succeeded
+        """
+        for csv in TimeoutSampler(
+            timeout=900,
+            sleep=15,
+            func=get_csvs_start_with_prefix,
+            csv_prefix=constants.INGRESS_NODE_FIREWALL_CSV_NAME,
+            namespace=self.namespace,
+        ):
+            if csv:
+                break
+        csv_name = csv[0]["metadata"]["name"]
+        csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
+        csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
+
+    def _customize_post_deployment_steps(self):
+        """
+        Customize post deployment steps for IngressNodeFirewallOperator
+        """
+        self.verify_csv_status()
+
+    def _deployment_verification(self):
+        """
+        Verify the deployment of the Ingress Node Firewall operator
+        """
+        inf_operator = OCP(kind=constants.POD, namespace=self.namespace)
+        assert inf_operator.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.MANAGED_CONTROLLER_LABEL,
+            timeout=600,
+        ), "Ingress Node Operator operator did not reach running phase"
