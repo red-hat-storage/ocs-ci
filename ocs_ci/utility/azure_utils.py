@@ -631,13 +631,21 @@ class AzureAroUtil(AZURE):
         logger.info(f"Deleting service principal: {sp_name}")
 
         try:
-            # Get the app ID first
+            # Get the service principal by display name
+            # NOTE: --display-name does substring matching, so we need to filter for exact match
             list_cmd = f"az ad sp list --display-name {sp_name}"
             result = exec_cmd(list_cmd, timeout=60, ignore_error=True)
             if result.stdout:
                 sp_list = json.loads(result.stdout)
-                if sp_list:
-                    app_id = sp_list[0]["appId"]
+
+                # Filter for exact display name match to avoid deleting SPs from clusters
+                # where one cluster name is a substring of another (e.g., "aro-sp-j-002" vs "aro-sp-j-002zm3c33")
+                matching_sps = [
+                    sp for sp in sp_list if sp.get("displayName") == sp_name
+                ]
+
+                if matching_sps:
+                    app_id = matching_sps[0]["appId"]
                     delete_cmd = f"az ad sp delete --id {app_id}"
                     exec_cmd(delete_cmd, timeout=60, ignore_error=True)
                     logger.info(f"Service principal deleted: {sp_name}")
@@ -1065,85 +1073,166 @@ class AzureAroUtil(AZURE):
         )
         config.RUN["kubeconfig"] = kubeconfig_path
 
-    def delete_network(self, cluster_name, resource_group):
+    def delete_azure_ad_app(self, cluster_name):
         """
-        Delete the VNET and associated resources for the cluster.
+        Delete the Azure AD application created by ARO deployment.
+
+        When 'az aro create' is executed, it automatically creates an Azure AD
+        application named 'aro-{cluster_name}'. This method cleans up that application.
 
         Args:
             cluster_name (str): Cluster name
-            resource_group (str): Azure resource group name
 
         """
-        # Get VNET name - either from ENV_DATA or construct it
-        vnet = config.ENV_DATA.get("aro_vnet")
-        if not vnet:
-            vnet = f"{constants.ARO_VNET}-{cluster_name}"
-
-        logger.info(f"Deleting VNET '{vnet}' for cluster '{cluster_name}'")
+        app_name = f"aro-{cluster_name}"
+        logger.info(
+            f"Deleting Azure AD application '{app_name}' for cluster '{cluster_name}'"
+        )
         try:
-            cmd = f"az network vnet delete --resource-group {resource_group} --name {vnet}"
-            out = exec_cmd(cmd, timeout=600).stdout
-            logger.info(f"VNET deletion output: {out}")
+            # First, try to find the app by display name
+            # NOTE: --display-name does substring matching, so we need to filter for exact match
+            list_cmd = f"az ad app list --display-name {app_name}"
+            result = exec_cmd(list_cmd, timeout=60)
+            apps = json.loads(result.stdout.strip())
+
+            # Filter for exact display name match to avoid deleting apps from clusters
+            # where one cluster name is a substring of another (e.g., "aro-j-002" vs "aro-j-002zm3c33")
+            matching_apps = [app for app in apps if app.get("displayName") == app_name]
+
+            if not matching_apps:
+                logger.info(
+                    f"Azure AD application '{app_name}' not found, may have been already deleted"
+                )
+                return
+
+            # Delete all exactly matching applications (there should typically be only one)
+            for app in matching_apps:
+                app_id = app.get("appId")
+                if app_id:
+                    logger.info(
+                        f"Deleting Azure AD application '{app_name}' with ID '{app_id}'"
+                    )
+                    delete_cmd = f"az ad app delete --id {app_id}"
+                    exec_cmd(delete_cmd, timeout=60)
+                    logger.info(f"Successfully deleted Azure AD application '{app_id}'")
+
         except CommandFailed as e:
-            logger.warning(f"Failed to delete VNET '{vnet}': {e}")
-            logger.info("VNET may have already been deleted or does not exist")
+            if any(
+                pattern in str(e).lower()
+                for pattern in [
+                    "was not found",
+                    "resourcenotfound",
+                    "does not exist",
+                    "could not be found",
+                    "no applications found",
+                ]
+            ):
+                logger.info(
+                    f"Azure AD application '{app_name}' not found, may have been already deleted"
+                )
+            else:
+                logger.warning(
+                    f"Failed to delete Azure AD application '{app_name}': {e}"
+                )
+                logger.info("Continuing with remaining cleanup operations")
 
     def destroy_cluster(self, cluster_name, resource_group):
         """
         Destroy the cluster in Azure ARO.
 
+        Performs cleanup in the following order:
+        1. Delete DNS records
+        2. Delete ARO cluster
+        3. Delete cluster resource group (automatically done by az aro delete)
+        4. Delete VNET
+        5. Delete Azure AD application
+
+        All operations are idempotent and will not fail if resources don't exist.
+
         Args:
-            cluster_name (str): Cluster name .
+            cluster_name (str): Cluster name
+            resource_group (str): Azure resource group
 
         """
         base_domain = config.ENV_DATA["base_domain"]
+        cleanup_failed = False
 
-        # Delete DNS records - continue even if they don't exist
-        try:
-            self.delete_dns_records(cluster_name, resource_group, base_domain)
-        except CommandFailed as e:
+        # Delete DNS records
+        logger.info(f"Deleting DNS records for cluster '{cluster_name}'")
+        for dns_record in ["api", "*.apps"]:
+            cmd = (
+                f"az network dns record-set a delete -g {resource_group} -z "
+                f"{base_domain} --name {dns_record}.{cluster_name} -y"
+            )
+            result = exec_cmd(cmd, ignore_error=True)
+            if result.returncode != 0:
+                if any(
+                    pattern in result.stderr.decode().lower()
+                    for pattern in [
+                        "was not found",
+                        "resourcenotfound",
+                        "does not exist",
+                    ]
+                ):
+                    logger.info(
+                        f"DNS record '{dns_record}.{cluster_name}' not found, may have been already deleted"
+                    )
+                else:
+                    logger.warning(
+                        f"Failed to delete DNS record '{dns_record}.{cluster_name}': {result.stderr.decode()}"
+                    )
+                    cleanup_failed = True
+
+        # Delete ARO cluster
+        # Note: This also deletes the cluster resource group automatically
+        logger.info(f"Deleting ARO cluster '{cluster_name}'")
+        cmd = f"az aro delete --resource-group {resource_group} --name {cluster_name} --yes"
+        result = exec_cmd(cmd, timeout=3600, ignore_error=True)
+        if result.returncode != 0:
             if any(
-                pattern in str(e).lower()
-                for pattern in [
-                    "was not found",
-                    "resourcenotfound",
-                    "does not exist",
-                    "could not be found",
-                ]
+                pattern in result.stderr.decode().lower()
+                for pattern in ["was not found", "resourcenotfound", "does not exist"]
             ):
                 logger.info(
-                    f"DNS records for cluster '{cluster_name}' do not exist or were already deleted"
+                    f"ARO cluster '{cluster_name}' not found, may have been already deleted"
                 )
             else:
                 logger.warning(
-                    f"Failed to delete DNS records for cluster '{cluster_name}': {e}"
+                    f"Failed to delete ARO cluster '{cluster_name}': {result.stderr.decode()}"
                 )
-                logger.info("Continuing with remaining cleanup operations")
+                cleanup_failed = True
+        else:
+            logger.info(f"Successfully deleted ARO cluster: {cluster_name}")
 
-        # Delete ARO cluster - continue even if it doesn't exist
-        try:
-            cmd = f"az aro delete --resource-group {resource_group} --name {cluster_name} --yes"
-            out = exec_cmd(cmd, timeout=3600).stdout
-            logger.info(f"Destroy command output: {out}")
-        except CommandFailed as e:
+        # Delete the VNET
+        vnet = config.ENV_DATA.get("aro_vnet")
+        if not vnet:
+            vnet = f"{constants.ARO_VNET}-{cluster_name}"
+
+        logger.info(f"Deleting VNET '{vnet}'")
+        cmd = f"az network vnet delete --resource-group {resource_group} --name {vnet}"
+        result = exec_cmd(cmd, timeout=600, ignore_error=True)
+        if result.returncode != 0:
             if any(
-                pattern in str(e).lower()
-                for pattern in [
-                    "was not found",
-                    "resourcenotfound",
-                    "does not exist",
-                    "could not be found",
-                ]
+                pattern in result.stderr.decode().lower()
+                for pattern in ["was not found", "resourcenotfound", "does not exist"]
             ):
-                logger.info(
-                    f"ARO cluster '{cluster_name}' was not found and is considered deleted"
-                )
+                logger.info(f"VNET '{vnet}' not found, may have been already deleted")
             else:
-                logger.warning(f"Failed to delete ARO cluster '{cluster_name}': {e}")
-                logger.info("Continuing with remaining cleanup operations")
+                logger.warning(
+                    f"Failed to delete VNET '{vnet}': {result.stderr.decode()}"
+                )
+                cleanup_failed = True
+        else:
+            logger.info(f"Successfully deleted VNET: {vnet}")
 
-        # Delete the VNET after cluster deletion
-        self.delete_network(cluster_name, resource_group)
+        # Delete the Azure AD application created by ARO deployment
+        self.delete_azure_ad_app(cluster_name)
+
+        if not cleanup_failed:
+            logger.info(
+                f"Successfully cleaned up all resources for cluster '{cluster_name}'"
+            )
 
         # Delete the service principal created for ARO cluster
         self.delete_aro_service_principal(cluster_name)
