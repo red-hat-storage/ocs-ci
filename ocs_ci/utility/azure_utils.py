@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import time
+import yaml
 from datetime import datetime
 
 
@@ -544,6 +545,107 @@ class AzureAroUtil(AZURE):
             f"OCP version {ocp_config_version.major}.{ocp_config_version.minor} is not supported on Azure ARO platform!"
         )
 
+    def create_aro_service_principal(self, cluster_name):
+        """
+        Create a service principal for ARO cluster.
+
+        Args:
+            cluster_name (str): Cluster name.
+
+        Returns:
+            tuple: (client_id, client_secret) of the created service principal
+
+        """
+        sp_name = f"aro-sp-{cluster_name}"
+        logger.info(f"Creating service principal: {sp_name}")
+
+        create_sp_cmd = (
+            f"az ad sp create-for-rbac --name {sp_name} --role Contributor "
+            f"--scopes /subscriptions/{self._subscription_id}"
+        )
+
+        # Retry logic to handle Azure AD propagation delays
+        # First attempt creates the app, second attempt (after propagation) adds credentials
+        max_attempts = 3
+        retry_delay = 10
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.info(
+                    f"Attempting to create service principal (attempt {attempt}/{max_attempts})"
+                )
+                result = exec_cmd(create_sp_cmd, timeout=120)
+                sp_data = json.loads(result.stdout)
+
+                client_id = sp_data["appId"]
+                client_secret = sp_data["password"]
+
+                logger.info(f"Service principal created successfully: {sp_name}")
+                logger.info(f"Client ID: {client_id}")
+
+                # Wait for service principal to propagate
+                logger.info("Waiting for service principal to propagate in Azure AD...")
+                time.sleep(15)
+
+                return client_id, client_secret
+
+            except CommandFailed as e:
+                error_msg = str(e)
+                # Check if it's an Azure AD propagation error
+                if (
+                    "does not exist or one of its queried reference-property objects are not present"
+                    in error_msg
+                ):
+                    if attempt < max_attempts:
+                        logger.warning(
+                            f"Azure AD propagation delay detected. "
+                            f"Retrying in {retry_delay} seconds... (attempt {attempt}/{max_attempts})"
+                        )
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        logger.error(
+                            f"Failed to create service principal after {max_attempts} attempts "
+                            f"due to Azure AD propagation delays"
+                        )
+                        raise
+                else:
+                    # Different error, raise immediately
+                    logger.error(f"Failed to create service principal: {e}")
+                    raise
+
+        # Should not reach here, but just in case
+        raise CommandFailed(
+            f"Failed to create service principal '{sp_name}' after {max_attempts} attempts"
+        )
+
+    def delete_aro_service_principal(self, cluster_name):
+        """
+        Delete the service principal created for ARO cluster.
+
+        Args:
+            cluster_name (str): Cluster name.
+
+        """
+        sp_name = f"aro-sp-{cluster_name}"
+        logger.info(f"Deleting service principal: {sp_name}")
+
+        try:
+            # Get the app ID first
+            list_cmd = f"az ad sp list --display-name {sp_name}"
+            result = exec_cmd(list_cmd, timeout=60, ignore_error=True)
+            if result.stdout:
+                sp_list = json.loads(result.stdout)
+                if sp_list:
+                    app_id = sp_list[0]["appId"]
+                    delete_cmd = f"az ad sp delete --id {app_id}"
+                    exec_cmd(delete_cmd, timeout=60, ignore_error=True)
+                    logger.info(f"Service principal deleted: {sp_name}")
+                else:
+                    logger.info(f"Service principal not found: {sp_name}")
+        except CommandFailed as e:
+            logger.warning(f"Failed to delete service principal, continuing: {e}")
+
     def create_cluster(self, cluster_name):
         """
         Create OCP cluster.
@@ -567,6 +669,11 @@ class AzureAroUtil(AZURE):
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         base_domain = config.ENV_DATA["base_domain"]
 
+        # Create service principal for ARO cluster
+        aro_client_id, aro_client_secret = self.create_aro_service_principal(
+            cluster_name
+        )
+
         # Create network resources with cluster-specific VNET name
         self.create_network(cluster_name)
 
@@ -584,10 +691,11 @@ class AzureAroUtil(AZURE):
             f"--name {cluster_name} --version {ocp_version} --vnet {vnet} --master-subnet {master_subnet} "
             f"--worker-subnet {worker_subnet} --pull-secret @{pull_secret_path} "
             f"--worker-vm-size {worker_flavor} --master-vm-size {master_flavor}  "
-            f"--worker-count {worker_replicas} --domain {cluster_name}.{base_domain}"
+            f"--worker-count {worker_replicas} --domain {cluster_name}.{base_domain} "
+            f"--client-id {aro_client_id} --client-secret {aro_client_secret}"
         )
         logger.info("Creating Azure ARO cluster.")
-        out = exec_cmd(cmd, timeout=5400).stdout
+        out = exec_cmd(cmd, timeout=5400, secrets=[aro_client_secret]).stdout
         self.set_dns_records(cluster_name, resource_group, base_domain)
         logger.info(f"Cluster deployed: {out}")
         cluster_info = self.get_cluster_details(cluster_name)
@@ -617,7 +725,85 @@ class AzureAroUtil(AZURE):
         self.write_kubeadmin_password(cluster_name, resource_group)
         self.check_cluster_response_ok(insecure=True)
         configure_ingress_and_api_certificates(skip_tls_verify=True)
+
+        # Update kubeconfig with OCS QE CA cert from ocs-ca-bundle configmap
+        self.update_kubeconfig_with_ocs_ca()
+
         self.check_cluster_response_ok()
+
+    def update_kubeconfig_with_ocs_ca(self):
+        """
+        Update kubeconfig with OCS QE CA certificate from ocs-ca-bundle configmap.
+
+        This extracts the CA certificate from the cluster's ocs-ca-bundle
+        configmap (created by configure_ingress_and_api_certificates) and
+        embeds it in the kubeconfig to enable TLS verification.
+
+        """
+        kubeconfig_path = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+        )
+
+        if not os.path.exists(kubeconfig_path):
+            logger.warning(
+                f"Kubeconfig file '{kubeconfig_path}' does not exist. "
+                "Skipping kubeconfig CA update."
+            )
+            return
+
+        logger.info(
+            f"Updating kubeconfig '{kubeconfig_path}' with OCS QE CA certificate"
+        )
+
+        try:
+            # Get OCS QE CA from ocs-ca-bundle configmap
+            cmd = (
+                "oc get configmap -n openshift-config ocs-ca-bundle "
+                "--insecure-skip-tls-verify -o jsonpath='{.data.ca-bundle\\.crt}'"
+            )
+            result = exec_cmd(cmd)
+            ocs_ca_cert = result.stdout.decode("utf-8").strip()
+
+            if not ocs_ca_cert or "BEGIN CERTIFICATE" not in ocs_ca_cert:
+                logger.warning(
+                    "Failed to extract OCS QE CA certificate from ocs-ca-bundle configmap. "
+                    "TLS verification may not work."
+                )
+                return
+
+            # Encode CA certificate in base64
+            ca_cert_base64 = base64.b64encode(ocs_ca_cert.encode("utf-8")).decode(
+                "utf-8"
+            )
+
+            # Update kubeconfig
+            with open(kubeconfig_path, "r") as f:
+                kubeconfig = yaml.safe_load(f)
+
+            for cluster in kubeconfig.get("clusters", []):
+                cluster_data = cluster.get("cluster", {})
+                if "certificate-authority" in cluster_data:
+                    del cluster_data["certificate-authority"]
+                if "insecure-skip-tls-verify" in cluster_data:
+                    del cluster_data["insecure-skip-tls-verify"]
+                cluster_data["certificate-authority-data"] = ca_cert_base64
+                logger.info(
+                    f"Updated certificate-authority-data for cluster "
+                    f"'{cluster.get('name', 'unknown')}' with OCS QE CA"
+                )
+
+            with open(kubeconfig_path, "w") as f:
+                yaml.dump(kubeconfig, f, default_flow_style=False)
+
+            logger.info(
+                "Kubeconfig updated successfully with OCS QE CA certificate for TLS verification"
+            )
+
+        except CommandFailed as e:
+            logger.warning(
+                f"Failed to update kubeconfig with OCS QE CA certificate: {e}. "
+                "Users will need to use --insecure-skip-tls-verify when using this kubeconfig."
+            )
 
     def check_cluster_response_ok(
         self, maximum_attempts=150, successful_connections_in_row=20, insecure=False
@@ -782,14 +968,44 @@ class AzureAroUtil(AZURE):
             f"az aro show -n {cluster_name} -g {resource_group} --query "
             f"'{{api:apiserverProfile.ip, ingress:ingressProfiles[0].ip}}' --only-show-errors"
         )
-        data = json.loads(exec_cmd(cmd).stdout)
-        dns_data = {
-            "api": data["api"],
-            "*.apps": data["ingress"],
-        }
+
+        def get_cluster_ips():
+            """Get cluster IPs and return them if both are available."""
+            data = json.loads(exec_cmd(cmd).stdout)
+            api_ip = data.get("api")
+            ingress_ip = data.get("ingress")
+
+            if api_ip and ingress_ip:
+                return {"api": api_ip, "*.apps": ingress_ip}
+
+            missing = []
+            if not api_ip:
+                missing.append("API")
+            if not ingress_ip:
+                missing.append("Ingress")
+            logger.info(f"Waiting for cluster IPs. Missing: {', '.join(missing)}")
+            return None
+
+        logger.info(f"Waiting for cluster IPs to be available for {cluster_name}")
+        dns_data = None
+        try:
+            for sample in TimeoutSampler(timeout=600, sleep=20, func=get_cluster_ips):
+                if sample:
+                    dns_data = sample
+                    logger.info(
+                        f"Cluster IPs available - API: {dns_data['api']}, "
+                        f"Ingress: {dns_data['*.apps']}"
+                    )
+                    break
+        except TimeoutExpiredError:
+            logger.error(
+                f"Timeout waiting for cluster IPs for {cluster_name} after 600 seconds"
+            )
+            raise
+
         self.delete_dns_records(cluster_name, resource_group, base_domain)
         for entry, ip in dns_data.items():
-            logger.debug("Creating DNS records")
+            logger.info(f"Creating DNS record for {entry}.{cluster_name} -> {ip}")
             create_dns_record_cmd = (
                 f"az network dns record-set a add-record -g {resource_group} "
                 f"-z {base_domain} -n {entry}.{cluster_name} -a {ip}"
@@ -888,6 +1104,9 @@ class AzureAroUtil(AZURE):
 
         # Delete the VNET after cluster deletion
         self.delete_network(cluster_name, resource_group)
+
+        # Delete the service principal created for ARO cluster
+        self.delete_aro_service_principal(cluster_name)
 
 
 def azure_storageaccount_check():
