@@ -146,7 +146,11 @@ def scale_deployments(request):
         },
     ]
 
+    cluster_name = []
+
     def _scale(status="down"):
+        if status == "down":
+            cluster_name.append(config.current_cluster_name())
         replica_count = 0 if status == "down" else 1
         for dep in deployments_to_scale:
             try:
@@ -162,6 +166,9 @@ def scale_deployments(request):
 
     def teardown():
         log.info("Finalizer: scaling up deployments")
+        if cluster_name:
+            log.info(f"Switching to cluster '{cluster_name[0]}' before scaling up")
+            config.switch_to_cluster_by_name(cluster_name[0])
         _scale("up")
 
     request.addfinalizer(teardown)
