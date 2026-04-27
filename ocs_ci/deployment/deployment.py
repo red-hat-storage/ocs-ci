@@ -3586,6 +3586,99 @@ class MultiClusterDROperatorsDeploy(object):
         )
         dr_hub_csv.wait_for_phase("Succeeded")
 
+    def apply_custom_ramen_image(self):
+        """
+        Replace the downstream Ramen operator image on hub and managed
+        clusters when UPGRADE.custom_ramen_image config is set.
+
+        Activated by passing conf/ocsci/custom_ramen_image.yaml via
+        --ocsci-conf. The YAML value can be true (uses the default
+        upstream image) or a specific image URL string.
+
+        Must be called after configure_mirror_peer() (so managed cluster
+        CSVs exist) and before deploy_dr_policy().
+
+        """
+        custom_ramen_image = config.UPGRADE.get("custom_ramen_image")
+        if not custom_ramen_image:
+            return
+
+        upstream_image = (
+            custom_ramen_image
+            if isinstance(custom_ramen_image, str)
+            else constants.RAMEN_UPSTREAM_IMAGE
+        )
+        logger.info(
+            f"[custom_ramen_image] Patching Ramen operator with "
+            f"upstream image: {upstream_image}"
+        )
+
+        logger.info("[custom_ramen_image] Patching hub CSV on ACM cluster")
+        config.switch_acm_ctx()
+        self._patch_ramen_csv(
+            constants.ACM_ODR_HUB_OPERATOR_RESOURCE,
+            constants.OPENSHIFT_OPERATORS,
+            upstream_image,
+        )
+
+        managed_clusters = get_non_acm_cluster_config()
+        for cluster in managed_clusters:
+            cluster_name = cluster.ENV_DATA.get(
+                "cluster_name", f"index-{cluster.MULTICLUSTER['multicluster_index']}"
+            )
+            logger.info(
+                f"[custom_ramen_image] Patching CSV on "
+                f"managed cluster: {cluster_name}"
+            )
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            self._patch_ramen_csv(
+                "odr-cluster-operator",
+                constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+                upstream_image,
+            )
+
+        config.switch_acm_ctx()
+        logger.info(
+            "[custom_ramen_image] Successfully patched Ramen image "
+            f"on hub + {len(managed_clusters)} managed cluster(s)"
+        )
+
+    def _patch_ramen_csv(self, csv_prefix, namespace, new_image):
+        """
+        Patch the manager container image in a Ramen operator CSV.
+
+        Args:
+            csv_prefix (str): CSV name prefix (e.g. "odr-hub-operator")
+            namespace (str): Namespace of the CSV
+            new_image (str): Replacement image URL
+
+        """
+        from ocs_ci.ocs.resources.csv import get_csv_name_start_with_prefix
+
+        csv_name = get_csv_name_start_with_prefix(csv_prefix, namespace)
+        if not csv_name:
+            logger.error(
+                f"CSV with prefix '{csv_prefix}' not found in {namespace}, "
+                f"skipping image patch"
+            )
+            return
+
+        patch = json.dumps(
+            [
+                {
+                    "op": "replace",
+                    "path": "/spec/install/spec/deployments/0"
+                    "/spec/template/spec/containers/0/image",
+                    "value": new_image,
+                }
+            ]
+        )
+        run_cmd(
+            f"oc patch csv {csv_name} -n {namespace} "
+            f"--type='json' -p='{patch}'"
+        )
+        logger.info(f"Patched CSV {csv_name} with {new_image}")
+
     def deploy_dr_policy(self):
         # Create DR policy on ACM hub cluster
         dr_policy_hub_data = templating.load_yaml(constants.DR_POLICY_ACM_HUB)
@@ -4158,6 +4251,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.configure_mirror_peer()
             rbddops.deploy()
 
+        self.apply_custom_ramen_image()
+
         multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
         if not multicluster_observability.get()["items"]:
             # TODO: Check whether this need to be enabled for each pair of RDR clusters
@@ -4370,6 +4465,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             enable_mco_console_plugin()
         # Configure mirror peer
         self.configure_mirror_peer()
+        self.apply_custom_ramen_image()
         # Deploy dr policy
         self.deploy_dr_policy()
         update_volsync_channel()
