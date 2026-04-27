@@ -532,6 +532,8 @@ class VSPHEREUPI(VSPHEREBASE):
         self.token = config.ENV_DATA.get("ipam_token")
         self.cidr = config.ENV_DATA.get("machine_cidr")
         self.vm_network = config.ENV_DATA.get("vm_network")
+        if is_dual_stack() and not is_ipv4_primary():
+            self.cidr = config.ENV_DATA.get("machine_cidr_ipv6", self.cidr)
 
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
@@ -2844,8 +2846,12 @@ def update_machine_conf(folder_structure=True):
             Currently True for OCP release greater than 4.4 versions
 
     """
+    cidr_var = "var.machine_cidr"
+    if is_dual_stack() and not is_ipv4_primary():
+        cidr_var = "var.machine_cidr_ipv6"
+
     if not folder_structure:
-        gw_string = "${cidrhost(var.machine_cidr,1)}"
+        gw_string = "${cidrhost(%s,1)}" % cidr_var
         gw_conf_file = constants.INSTALLER_IGNITION
         disk_size_conf_file = constants.INSTALLER_MACHINE_CONF
         # update dns
@@ -2859,10 +2865,11 @@ def update_machine_conf(folder_structure=True):
 
     else:
         if Version.coerce(get_ocp_version()) >= Version.coerce("4.6"):
-            gw_string = "${cidrhost(var.machine_cidr, 1)}"
+            gw_string = "${cidrhost(%s, 1)}" % cidr_var
             gw_conf_file = constants.VM_MAIN
         else:
-            gw_string = "${cidrhost(machine_cidr, 1)}"
+            cidr_ref = cidr_var.replace("var.", "")
+            gw_string = "${cidrhost(%s, 1)}" % cidr_ref
             gw_conf_file = constants.VM_IFCFG
 
         disk_size_conf_file = constants.VM_MAIN
@@ -2988,7 +2995,12 @@ def generate_terraform_vars_with_folder():
         config.ENV_DATA["compute_ignition_path"] = compute_ignition_path
 
     # Copy DNS address to vm_dns_addresses
-    config.ENV_DATA["vm_dns_addresses"] = config.ENV_DATA["dns"]
+    if is_dual_stack() and not is_ipv4_primary():
+        config.ENV_DATA["vm_dns_addresses"] = config.ENV_DATA.get(
+            "dns_ipv6", config.ENV_DATA["dns"]
+        )
+    else:
+        config.ENV_DATA["vm_dns_addresses"] = config.ENV_DATA["dns"]
 
     # Get the infra ID from metadata.json and update in ENV_DATA
     metadata_path = os.path.join(config.ENV_DATA["cluster_path"], "metadata.json")
