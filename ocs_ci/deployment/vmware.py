@@ -119,6 +119,14 @@ logger = logging.getLogger(__name__)
 __all__ = ["VSPHEREUPI", "VSPHEREIPI", "VSPHEREAI", "VSPHEREAgentAI"]
 
 
+def is_dual_stack():
+    return config.DEPLOYMENT.get("dual_stack", False)
+
+
+def is_ipv4_primary():
+    return config.DEPLOYMENT.get("primary_stack", "ipv4") == "ipv4"
+
+
 class VSPHEREBASE(Deployment):
 
     def __init__(self):
@@ -944,6 +952,23 @@ class VSPHEREUPI(VSPHEREBASE):
             ocp_install_template_path = os.path.join(
                 "ocp-deployment", ocp_install_template
             )
+
+            # Inject dual-stack flag into ENV_DATA so Jinja2 template can use it
+            config.ENV_DATA["dual_stack"] = config.DEPLOYMENT.get("dual_stack", False)
+
+            if is_dual_stack():
+                if config.DEPLOYMENT.get("ipv6"):
+                    raise UnexpectedDeploymentConfiguration(
+                        "Cannot set both 'dual_stack' and 'ipv6'. "
+                        "Use 'dual_stack: true' with 'primary_stack: ipv6' "
+                        "for IPv6-primary dual-stack."
+                    )
+                for var in ("machine_cidr_ipv6", "ipam_ipv6", "ipam_token_ipv6"):
+                    if not config.ENV_DATA.get(var):
+                        raise UnexpectedDeploymentConfiguration(
+                            f"Dual-stack deployment requires ENV_DATA.{var}"
+                        )
+
             install_config_str = _templating.render_template(
                 ocp_install_template_path, config.ENV_DATA
             )
@@ -957,6 +982,14 @@ class VSPHEREUPI(VSPHEREBASE):
                 install_config_obj["platform"]["vsphere"]["network"] = config.ENV_DATA[
                     "vm_network"
                 ]
+
+            # Reorder network lists for IPv6-primary dual-stack
+            if is_dual_stack() and not is_ipv4_primary():
+                networking = install_config_obj["networking"]
+                networking["clusterNetwork"].reverse()
+                networking["machineNetwork"].reverse()
+                networking["serviceNetwork"].reverse()
+
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
 
@@ -1076,9 +1109,9 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{self.installer} create ignition-configs "
                     f"--dir {self.cluster_path} "
                 )
-                # Because ignition file for bootstrap in ipv6 is too big to be passed by terraform changing
-                # encoding to gzip+base64 instead of pain text.
-                if config.DEPLOYMENT.get("ipv6"):
+                # Because ignition file for bootstrap in ipv6/dual-stack is too big to be passed by terraform
+                # changing encoding to gzip+base64 instead of plain text.
+                if config.DEPLOYMENT.get("ipv6") or is_dual_stack():
                     bootstrap_ignition_path = os.path.join(
                         config.ENV_DATA["cluster_path"], constants.BOOTSTRAP_IGN
                     )
@@ -2659,7 +2692,12 @@ def clone_openshift_installer():
                     branch="release-4.12",
                 )
             else:
-                if config.DEPLOYMENT.get("ipv6"):
+                if config.DEPLOYMENT.get("dual_stack"):
+                    constants.VSPHERE_INSTALLER_REPO = (
+                        "https://gitlab.cee.redhat.com/srozen/installer_ipv6.git"
+                    )
+                    branch = "dual-stack"
+                elif config.DEPLOYMENT.get("ipv6"):
                     constants.VSPHERE_INSTALLER_REPO = (
                         "https://gitlab.cee.redhat.com/srozen/installer_ipv6.git"
                     )
@@ -3159,6 +3197,57 @@ def release_ips(hosts):
         return
     ipam = IPAM(appiapp="address")
     ipam.release_ips(hosts)
+
+
+def assign_ipv6_ips(num_of_vips=None, hosts=None):
+    """
+    Assign IPv6 IPs from the IPv6 IPAM server for dual-stack deployments.
+
+    Args:
+        num_of_vips (int): Number of IPs to assign
+        hosts (list): List of hosts to assign IPs
+
+    Returns:
+        list: List of assigned IPv6 IPs
+    """
+    ipam_ipv6 = IPAM(
+        appiapp="address",
+        ipam=config.ENV_DATA["ipam_ipv6"],
+        token=config.ENV_DATA["ipam_token_ipv6"],
+    )
+    subnet_ipv6 = config.ENV_DATA["machine_cidr_ipv6"].split("/")[0]
+
+    if num_of_vips:
+        hosts = [
+            f"{config.ENV_DATA.get('cluster_name')}-{i}" for i in range(num_of_vips)
+        ]
+        ipv6_ips = ipam_ipv6.assign_ips(hosts, subnet_ipv6)
+    elif hosts:
+        hosts = [f"{host}" for host in hosts]
+        ipv6_ips = ipam_ipv6.assign_ips(hosts, subnet_ipv6)
+    else:
+        raise ValueError("Either hosts or num_of_vips should be passed")
+
+    logger.debug(f"IPv6 IPs reserved for hosts {hosts} are {ipv6_ips}")
+    return ipv6_ips
+
+
+def release_ipv6_ips(hosts):
+    """
+    Release IPv6 IPs from the IPv6 IPAM server.
+
+    Args:
+        hosts (list): List of hosts to release IPs
+    """
+    if not hosts:
+        logger.info("No hosts to release IPv6 IPs")
+        return
+    ipam_ipv6 = IPAM(
+        appiapp="address",
+        ipam=config.ENV_DATA["ipam_ipv6"],
+        token=config.ENV_DATA["ipam_token_ipv6"],
+    )
+    ipam_ipv6.release_ips(hosts)
 
 
 def create_dns_records(ips):
