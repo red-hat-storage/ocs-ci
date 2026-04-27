@@ -32,7 +32,13 @@ from .analyzers import (
     generate_summary,
 )
 from .outputs import generate_xml_output
-from .utils import Colors, detect_deployment_type, find_must_gather_dir, read_file
+from .utils import (
+    Colors,
+    detect_deployment_type,
+    find_external_ceph_dir,
+    find_must_gather_dir,
+    read_file,
+)
 
 
 def _safe_extract_tar(tar: tarfile.TarFile, dest_dir: Path) -> None:
@@ -148,14 +154,21 @@ Examples:
         # Find actual must-gather data directory
         mg_dir = find_must_gather_dir(mg_base)
 
+        # Find external ceph logs directory (if exists)
+        external_ceph_dir = find_external_ceph_dir(mg_base)
+
         # Detect deployment type
-        deployment_type = detect_deployment_type(mg_dir)
+        deployment_type = detect_deployment_type(mg_dir, external_ceph_dir)
 
         print(f"\n{Colors.BOLD}ODF Must-Gather Health Analyzer{Colors.END}")
         print(f"{Colors.CYAN}Input Path: {mg_input}{Colors.END}")
         print(f"{Colors.CYAN}Base Directory: {mg_base}{Colors.END}")
         print(f"{Colors.CYAN}Data Directory: {mg_dir}{Colors.END}")
         print(f"{Colors.CYAN}Deployment Type: {deployment_type.upper()}{Colors.END}")
+        if external_ceph_dir:
+            print(
+                f"{Colors.CYAN}External Ceph Directory: {external_ceph_dir}{Colors.END}"
+            )
 
         # Verify key paths exist
         print(f"{Colors.CYAN}Checking for key files...{Colors.END}")
@@ -163,6 +176,8 @@ Examples:
         ns_dir = mg_dir / "namespaces"
         print(f"  Ceph directory exists: {ceph_dir.exists()}")
         print(f"  Namespaces directory exists: {ns_dir.exists()}")
+        if external_ceph_dir:
+            print(f"  External ceph directory exists: {external_ceph_dir.exists()}")
 
         # Check timestamp
         timestamp_file = mg_base / "timestamp"
@@ -213,15 +228,17 @@ Examples:
             analyze_storagecluster(
                 mg_dir, deployment_type
             )  # Will show rook-ceph-operator logs if not ready
-            analyze_ceph_status(mg_dir, deployment_type)
+            analyze_ceph_status(mg_dir, deployment_type, external_ceph_dir)
             analyze_noobaa(
                 mg_dir, deployment_type
             )  # Will show noobaa-core logs if unhealthy - MOVED UP
             analyze_backingstores(
                 mg_dir, deployment_type
             )  # NooBaa BackingStores - MOVED UP
-            analyze_ceph_pools(mg_dir, deployment_type)  # Ceph pool details
-            analyze_osd_tree(mg_dir, deployment_type)
+            analyze_ceph_pools(
+                mg_dir, deployment_type, external_ceph_dir
+            )  # Ceph pool details
+            analyze_osd_tree(mg_dir, deployment_type, external_ceph_dir)
             analyze_storageclient(mg_dir, deployment_type)
             analyze_pvcs(mg_dir, deployment_type)  # PVC analysis
             analyze_csi_drivers(mg_dir, deployment_type)
