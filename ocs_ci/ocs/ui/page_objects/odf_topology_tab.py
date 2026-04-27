@@ -144,9 +144,9 @@ class TopologySidebar(BaseUI):
 
             for i in range(1, 4):
                 try:
-                    self.do_click(loc)
+                    self.do_click(loc, use_fallback=False)
                     break
-                except NoSuchElementException:
+                except (NoSuchElementException, TimeoutException):
                     logger.info("zooming out topology view")
                     self.do_click(self.topology_loc["zoom_out"])
                     self.page_has_loaded(module_loc=self.topology_loc["topology_graph"])

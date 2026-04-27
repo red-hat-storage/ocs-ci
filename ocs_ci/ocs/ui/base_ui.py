@@ -206,6 +206,7 @@ class BaseUI:
         enable_screenshot=False,
         copy_dom=False,
         avoid_stale=False,
+        use_fallback=True,
     ):
         """
         Click on Button/link on OpenShift Console
@@ -217,6 +218,7 @@ class BaseUI:
         avoid_stale (bool): if got StaleElementReferenceException, caused by reference to stale, cached element,
         refresh the page once and try click again
         * don't use when refreshed page expected to be different from initial page, or loose input values
+        use_fallback (bool): if True, attempt AI locator fallback on TimeoutException
         """
 
         def _do_click(_locator, _timeout=30, _enable_screenshot=False, _copy_dom=False):
@@ -244,15 +246,16 @@ class BaseUI:
                 self.take_screenshot(f"{type(self).__name__}-{date_time}")
                 self.copy_dom(f"{type(self).__name__}-{date_time}")
                 logger.error(e)
-                new_locator = self.locator_fallback.attempt_fallback(
-                    locator, "click", stack_trace=traceback.format_exc()
-                )
-                if new_locator:
-                    element = WebDriverWait(self.driver, timeout).until(
-                        ec.element_to_be_clickable((new_locator[1], new_locator[0]))
+                if use_fallback:
+                    new_locator = self.locator_fallback.attempt_fallback(
+                        locator, "click", stack_trace=traceback.format_exc()
                     )
-                    element.click()
-                    return
+                    if new_locator:
+                        element = WebDriverWait(self.driver, timeout).until(
+                            ec.element_to_be_clickable((new_locator[1], new_locator[0]))
+                        )
+                        element.click()
+                        return
                 raise TimeoutException(
                     f"Failed to find the element ({locator[1]},{locator[0]})"
                 )
