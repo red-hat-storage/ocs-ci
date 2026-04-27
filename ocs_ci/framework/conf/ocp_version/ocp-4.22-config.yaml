@@ -16,12 +16,13 @@ ENV_DATA:
     "10": "rhcos-10.2.20260405-0-vmware.x86_64"
   # Legacy single template (fallback if vm_templates not defined)
   vm_template: "rhcos-9.6.20251023-0-vmware.x86_64"
-  acm_hub_channel: "release-2.16"
-  acm_version: "2.16"
-  mce_version: "2.11"
+  acm_hub_channel: "release-2.17"
+  acm_version: "2.17"
+  mce_version: "2.17"
   submariner_version: "0.23.1"
   submariner_image: "quay.io/redhat-user-workloads/submariner-tenant/submariner-fbc-4-21@sha256:1585a2a6c372f8a66b7644e742d95356b577072dfc83492c14759f6b2372b609"
   # Below values needs to be changed when acm and submariner are GAed
   submariner_source: "downstream"
   submariner_release_type: "released"
+  acm_hub_unreleased: true
   oadp_version: "1.6"
