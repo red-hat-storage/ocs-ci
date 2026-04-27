@@ -11,9 +11,16 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    TimeoutSampler,
+)
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+from ocs_ci.helpers.helpers import (
+    run_cmd_verify_cli_output,
+    storagecluster_independent_check,
+)
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.node import get_all_nodes
 from ocs_ci.framework import config as config
@@ -501,14 +508,42 @@ def create_UI_Plugin(yaml_file, resource_name):
     return True
 
 
-def install_logging():
+def get_storage_class_for_logging():
+    """
+    Determine the appropriate storage class for logging based on platform type.
 
-    csv = ocp.OCP(
-        kind=constants.CLUSTER_SERVICE_VERSION,
+    Returns:
+        str: Storage class name to use for logging OBC
+    """
+    if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
+        return constants.DEFAULT_STORAGECLASS_RGW
+
+    elif config.ENV_DATA["platform"].lower() in constants.ROSA_PLATFORMS:
+        return constants.ROSA_NOOBAA_SC
+
+    elif storagecluster_independent_check():
+        return constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
+
+    else:
+        return constants.NOOBAA_SC
+
+
+def install_logging(skip_resource_exists=False):
+    """
+    Install openshift-logging with LokiStack
+
+    Args:
+        skip_resource_exists (bool): Skip resource creation if it already exists
+                                    (useful for ROSA HCP deployments)
+    """
+    rosa_hcp_depl = skip_resource_exists
+
+    sub = ocp.OCP(
+        kind=constants.SUBSCRIPTION,
         namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
     )
-    logging_csv = csv.get().get("items")
-    if logging_csv:
+    logging_sub = sub.get().get("items")
+    if logging_sub:
         logger.info("Logging is already configured, Skipping Installation")
         return
 
@@ -522,12 +557,15 @@ def install_logging():
     logging_channel = package_manifest.get_default_channel()
 
     # Creates namespace openshift-operators-redhat
-    ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.EO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
+    )
 
     # Creates an operator-group for lokistack
     assert ocp_logging_obj.create_lokistack_operator_group(
         yaml_file=constants.EO_OG_YAML,
         resource_name=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
+        skip_resource_exists=rosa_hcp_depl,
     )
     # Creates subscription for lokistack operator
     subscription_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SUB_YAML)
@@ -535,24 +573,41 @@ def install_logging():
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_lokistack_subscription()
 
+    # Wait for Loki Operator CSV to be ready
+    for csv in TimeoutSampler(
+        timeout=900,
+        sleep=15,
+        func=get_csvs_start_with_prefix,
+        csv_prefix=constants.LOKISTACK_SUBSCRIPTION,
+        namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
+    ):
+        if csv:
+            break
+    if not csv:
+        raise Exception("Loki Operator CSV not found after timeout")
+
+    csv_name = csv[0]["metadata"]["name"]
+    csv_obj = CSV(
+        resource_name=csv_name, namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
+    )
+    csv_obj.wait_for_phase(phase=constants.STATUS_SUCCEED, timeout=900)
+    logger.info("Loki Operator CSV is ready")
+
     # Creates a namespace openshift-logging
-    ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
+    )
 
     # Create RGW obc
     obc_yaml = templating.load_yaml(constants.LOKI_OPERATOR_OBC_YAML)
-
-    if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
-        obc_yaml["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
-    else:
-        obc_yaml["spec"]["storageClassName"] = constants.NOOBAA_SC
-
+    obc_yaml["spec"]["storageClassName"] = get_storage_class_for_logging()
     helpers.create_resource(**obc_yaml)
 
     ocp_logging_obj.get_obc()
 
     # Creating secret
     sample = TimeoutSampler(
-        timeout=180,
+        timeout=500,
         sleep=20,
         func=run_cmd_verify_cli_output,
         cmd=(
@@ -587,7 +642,7 @@ def install_logging():
     secret_yaml["stringData"]["access_key_secret"] = decoded2
     secret_yaml["stringData"]["bucketnames"] = cm_dict["data"]["BUCKET_NAME"]
     endpoint = cm_dict["data"]["BUCKET_HOST"]
-    secret_yaml["stringData"]["endoint"] = f"https://{endpoint}:80"
+    secret_yaml["stringData"]["endpoint"] = f"http://{endpoint}:80"
     helpers.create_resource(**secret_yaml)
     assert ocp_logging_obj.get_secret_to_lokistack()
 
@@ -604,20 +659,45 @@ def install_logging():
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 
+    # Wait for ClusterLogging Operator CSV to be ready
+    for csv in TimeoutSampler(
+        timeout=900,
+        sleep=15,
+        func=get_csvs_start_with_prefix,
+        csv_prefix="cluster-logging",
+        namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
+    ):
+        if csv:
+            break
+    if not csv:
+        raise Exception("ClusterLogging Operator CSV not found after timeout")
+
+    csv_name = csv[0]["metadata"]["name"]
+    csv_obj = CSV(
+        resource_name=csv_name, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    csv_obj.wait_for_phase(phase=constants.STATUS_SUCCEED, timeout=900)
+    logger.info(" ClusterLogging Operator CSV is ready")
+
     # creates a service account to be used by the log collector
     ocp_logging_obj.setup_sa_permissions()
 
     # Creates ClusterLogForwarder
-    ocp_logging_obj.create_clusterlogforwarder(yaml_file=constants.CLF_YAML)
+    ocp_logging_obj.create_clusterlogforwarder(
+        yaml_file=constants.CLF_YAML, skip_resource_exists=rosa_hcp_depl
+    )
     logger.info("Openshift Logging operator is installed successfully")
 
     # Creates namespace for openshift-cluster-observability-operator
-    ocp_logging_obj.create_namespace(yaml_file=constants.CO_NAMESPACE_YAML)
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.CO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
+    )
 
     # Creates OperatorGroup for openshift-cluster-observability-operator
     ocp_logging_obj.create_clusterobservability_operator_group(
         yaml_file=constants.CO_OG_YAML,
         resource_name=constants.CLUSTER_OBSERVABILITY_OPERATOR,
+        skip_resource_exists=rosa_hcp_depl,
     )
     # Creates subscription for openshift-cluster-observability-operator
     co_subscription_yaml = templating.load_yaml(constants.CO_SUB_YAML)
@@ -627,4 +707,7 @@ def install_logging():
     # Creates UI Plugin for openshift-cluster-observability-operator
     ocp_logging_obj.create_UI_Plugin(
         yaml_file=constants.CO_UI_PLUGIN_YAML, resource_name="logging"
+    )
+    logger.info(
+        "Cluster Observability operator is installed successfully with UIPlugin"
     )
