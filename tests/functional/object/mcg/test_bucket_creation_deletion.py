@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     red_squad,
     mcg,
+    ignore_leftover_label,
 )
 from ocs_ci.ocs.bucket_utils import sync_object_directory
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD, AWSCLI_TEST_OBJ_DIR
@@ -26,6 +27,8 @@ from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
 logger = logging.getLogger(__name__)
 
 
+# Ignore NFS plugin leftovers from a previous test
+@ignore_leftover_label("app=csi-nfsplugin", "app=csi-nfsplugin-provisioner")
 @mcg
 @red_squad
 @runs_on_provider
