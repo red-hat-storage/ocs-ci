@@ -30,7 +30,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     get_all_device_sets,
     get_storage_cluster,
     osd_encryption_verification,
-    set_deviceset_count_by_index,
+    set_deviceset_count,
 )
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -136,6 +136,7 @@ class TestAddCapacityLSOMultipleDeviceClasses(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.polarion_id("OCS-7795")
     def test_add_capacity_lso_multiple_device_classes_cli(
         self,
         reduce_and_resume_cluster_load,
@@ -174,7 +175,7 @@ class TestAddCapacityLSOMultipleDeviceClasses(ManageTest):
             target_ds["name"],
             new_count,
         )
-        set_deviceset_count_by_index(1, new_count)
+        set_deviceset_count(new_count, index=1)
 
         logger.info("Wait for the new deviceset PVCs to reach Bound status")
         wait_for_pvcs_in_deviceset_to_reach_status(
