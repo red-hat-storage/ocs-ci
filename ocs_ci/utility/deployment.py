@@ -484,7 +484,8 @@ def apply_idms_via_worker_filesystem(image_digest_mirrors, conf_filename=None):
         pod_name = pod["metadata"]["name"]
         exec_cmd(
             f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
-            f"-- bash -c \"echo '{encoded}' | base64 -d > {dest_path}\""
+            f"-- bash -c \"echo '{encoded}' | base64 -d > {dest_path}\"",
+            silent=True,
         )
     logger.info(
         f"Written mirror config ({len(image_digest_mirrors)} entries) "
@@ -512,13 +513,15 @@ def apply_idms_via_worker_filesystem(image_digest_mirrors, conf_filename=None):
                 f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
                 f"-- bash -c \"cat {constants.ROSA_HCP_HOST_AUTH_JSON} 2>/dev/null || echo '{{}}'\"",
                 ignore_error=True,
+                silent=True,
             )
             existing = json.loads(existing_raw.stdout.decode().strip() or "{}")
             existing.setdefault("auths", {}).update(extra_auths)
             merged_b64 = base64.b64encode(json.dumps(existing).encode()).decode()
             exec_cmd(
                 f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
-                f"-- bash -c \"echo '{merged_b64}' | base64 -d > {constants.ROSA_HCP_HOST_AUTH_JSON}\""
+                f"-- bash -c \"echo '{merged_b64}' | base64 -d > {constants.ROSA_HCP_HOST_AUTH_JSON}\"",
+                silent=True,
             )
         logger.info(
             f"Merged credentials for {list(extra_auths.keys())} into "
@@ -526,7 +529,9 @@ def apply_idms_via_worker_filesystem(image_digest_mirrors, conf_filename=None):
         )
 
     # Reload CRI-O on each worker so it picks up the new registries.conf.d entry
-    worker_nodes = ocp_module.get_node_objs(node_type="worker")
+    from ocs_ci.ocs.node import get_nodes
+
+    worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
     for node in worker_nodes:
         ocp_module.OCP().exec_oc_debug_cmd(
             node=node.name,

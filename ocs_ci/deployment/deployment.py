@@ -949,10 +949,17 @@ class Deployment(object):
             subscription_yaml_data["spec"]["channel"] = default_channel
         if config.DEPLOYMENT.get("stage"):
             subscription_yaml_data["spec"]["source"] = constants.OPERATOR_SOURCE_NAME
-        if config.DEPLOYMENT.get("live_deployment"):
+        rosa_hcp_non_ga = platform == constants.ROSA_HCP_PLATFORM and bool(
+            config.DEPLOYMENT.get("ocs_registry_image")
+        )
+        if config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
             )
+        elif platform == constants.ROSA_HCP_PLATFORM and (
+            not live_deployment or rosa_hcp_non_ga
+        ):
+            subscription_yaml_data["spec"]["source"] = constants.OCS_CATALOG_SOURCE_NAME
         if aws_sts_deployment:
             if "config" not in subscription_yaml_data["spec"]:
                 subscription_yaml_data["spec"]["config"] = {}
@@ -1107,7 +1114,8 @@ class Deployment(object):
         konflux_build = config.DEPLOYMENT.get("konflux_build")
         upgrade = config.UPGRADE.get("upgrade", False)
         rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
-        if not live_deployment and not (
+        rosa_hcp_non_ga = rosa_hcp and bool(config.DEPLOYMENT.get("ocs_registry_image"))
+        if (not live_deployment or rosa_hcp_non_ga) and not (
             stage_testing and konflux_build and not rosa_hcp
         ):
             log_step("Create catalog source and wait it to be READY")
@@ -2429,10 +2437,12 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         ignore_upgrade (bool): Ignore upgrade parameter.
 
     """
-    # Because custom catalog source will be called: redhat-operators, we need to disable
-    # default sources. This should not be an issue as OCS internal registry images
-    # are now based on OCP registry image
-    disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
+    rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+    if not rosa_hcp:
+        # Because custom catalog source will be called: redhat-operators, we need to disable
+        # default sources. This should not be an issue as OCS internal registry images
+        # are now based on OCP registry image
+        disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
@@ -2443,7 +2453,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             "stage_index_image_tag", f"v{ocp_version}"
         )
         image += f":{osbs_image_tag}"
-        if config.ENV_DATA.get("platform") != constants.ROSA_HCP_PLATFORM:
+        if not rosa_hcp:
             run_cmd(
                 "oc patch image.config.openshift.io/cluster --type merge -p '"
                 '{"spec": {"registrySources": {"insecureRegistries": '
@@ -2463,7 +2473,14 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         image_tag = get_latest_ds_olm_tag(
             upgrade, latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest")
         )
-    catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+    if rosa_hcp:
+        catalog_source_data = templating.load_yaml(
+            constants.PROVIDER_MODE_CATALOGSOURCE
+        )
+        cs_name = constants.OCS_CATALOG_SOURCE_NAME
+    else:
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+        cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
     managed_ibmcloud = (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
         and config.ENV_DATA["deployment_type"] == "managed"
@@ -2471,7 +2488,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     if managed_ibmcloud:
         create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         catalog_source_data["spec"]["secrets"] = [constants.OCS_SECRET]
-    cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
     change_cs_condition = (
         (image or image_tag)
         and catalog_source_data["kind"] == "CatalogSource"
@@ -2495,7 +2511,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_manifest.name)
     run_cmd(f"oc apply -f {catalog_source_manifest.name}", timeout=2400)
     catalog_source = CatalogSource(
-        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+        resource_name=cs_name,
         namespace=constants.MARKETPLACE_NAMESPACE,
     )
     # Wait for catalog source is ready
