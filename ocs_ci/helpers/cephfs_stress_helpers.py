@@ -711,7 +711,9 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
         pod_restarts = []
         oomkilled_pods = []
         for pod_obj in pod_objs:
-            pod_name = pod_obj.get().get("metadata").get("name")
+            # Fetch pod data once and reuse to avoid redundant API calls
+            pod_data = pod_obj.get()
+            pod_name = pod_data.get("metadata").get("name")
             if not validate_pods_are_running_and_not_restarted(
                 pod_name=pod_name,
                 pod_restart_count=0,
@@ -719,7 +721,7 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
             ):
                 pod_restarts.append(pod_name)
 
-            for item in pod_obj.get().get("status").get("containerStatuses"):
+            for item in pod_data.get("status").get("containerStatuses"):
                 container_name = item.get("name")
                 if not validate_pod_oomkilled(
                     pod_name=pod_name, container=container_name
