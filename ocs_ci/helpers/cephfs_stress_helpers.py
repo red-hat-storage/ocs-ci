@@ -81,7 +81,8 @@ class CephFSStressTestManager:
         self.created_resources = []
         self.background_checks_thread = None
         self.checks_paused = False
-        check_prometheus_alerts
+        # Reuse PrometheusAPI instance to prevent memory leaks from creating new instances
+        self.prometheus_api = PrometheusAPI(threading_lock=self.verification_lock)
 
     def setup_stress_test_environment(self, pvc_size):
         """
@@ -505,7 +506,7 @@ class CephFSStressTestManager:
         )
 
         checks_to_run = [
-            (check_prometheus_alerts, {"threading_lock": self.verification_lock}),
+            (check_prometheus_alerts, {"stress_manager": self}),
             (check_mds_pods_resource_utilization, {}),
             (get_mon_db_usage, {}),
             (get_nodes_resource_utilization, {}),
@@ -760,17 +761,16 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
 
 
 @retry(CommandFailed, tries=3, delay=60, backoff=1)
-def check_prometheus_alerts(threading_lock):
+def check_prometheus_alerts(stress_manager):
     """
     Fetches alerts from the PrometheusAPI and logs alerts in a tabulated format
 
     Args:
-        threading_lock ([threading.Lock]): A threading lock for synchronization
+        stress_manager: CephFSStressTestManager instance with prometheus_api
 
     """
     prometheus_alert_list = list()
-    prometheus_api = PrometheusAPI(threading_lock=threading_lock)
-    prometheus_api.prometheus_log(prometheus_alert_list)
+    stress_manager.prometheus_api.prometheus_log(prometheus_alert_list)
     table = PrettyTable()
     table.field_names = ["Alert Name", "Description", "State"]
     table.align = "l"
@@ -790,6 +790,11 @@ def check_prometheus_alerts(threading_lock):
         f"\n{table}"
         "\n"
     )
+
+    # Clean up to prevent memory accumulation
+    del prometheus_alert_list
+    del alert_names_seen
+    del table
 
 
 @retry(CommandFailed, tries=3, delay=60, backoff=1)
