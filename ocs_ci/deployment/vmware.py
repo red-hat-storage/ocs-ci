@@ -119,14 +119,6 @@ logger = logging.getLogger(__name__)
 __all__ = ["VSPHEREUPI", "VSPHEREIPI", "VSPHEREAI", "VSPHEREAgentAI"]
 
 
-def is_dual_stack():
-    return config.DEPLOYMENT.get("dual_stack", False)
-
-
-def is_ipv4_primary():
-    return config.DEPLOYMENT.get("primary_stack", "ipv4") == "ipv4"
-
-
 class VSPHEREBASE(Deployment):
 
     def __init__(self):
@@ -532,7 +524,10 @@ class VSPHEREUPI(VSPHEREBASE):
         self.token = config.ENV_DATA.get("ipam_token")
         self.cidr = config.ENV_DATA.get("machine_cidr")
         self.vm_network = config.ENV_DATA.get("vm_network")
-        if is_dual_stack() and not is_ipv4_primary():
+        if (
+            config.DEPLOYMENT.get("dual_stack")
+            and config.DEPLOYMENT.get("primary_stack") == "ipv6"
+        ):
             self.cidr = config.ENV_DATA.get("machine_cidr_ipv6", self.cidr)
 
     class OCPDeployment(BaseOCPDeployment):
@@ -958,7 +953,7 @@ class VSPHEREUPI(VSPHEREBASE):
             # Inject dual-stack flag into ENV_DATA so Jinja2 template can use it
             config.ENV_DATA["dual_stack"] = config.DEPLOYMENT.get("dual_stack", False)
 
-            if is_dual_stack():
+            if config.DEPLOYMENT.get("dual_stack"):
                 if config.DEPLOYMENT.get("ipv6"):
                     raise UnexpectedDeploymentConfiguration(
                         "Cannot set both 'dual_stack' and 'ipv6'. "
@@ -985,7 +980,10 @@ class VSPHEREUPI(VSPHEREBASE):
                 ]
 
             # Reorder network lists for IPv6-primary dual-stack
-            if is_dual_stack() and not is_ipv4_primary():
+            if (
+                config.DEPLOYMENT.get("dual_stack")
+                and config.DEPLOYMENT.get("primary_stack") == "ipv6"
+            ):
                 networking = install_config_obj["networking"]
                 networking["clusterNetwork"].reverse()
                 networking["machineNetwork"].reverse()
@@ -1112,7 +1110,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 )
                 # Because ignition file for bootstrap in ipv6/dual-stack is too big to be passed by terraform
                 # changing encoding to gzip+base64 instead of plain text.
-                if config.DEPLOYMENT.get("ipv6") or is_dual_stack():
+                if config.DEPLOYMENT.get("ipv6") or config.DEPLOYMENT.get("dual_stack"):
                     bootstrap_ignition_path = os.path.join(
                         config.ENV_DATA["cluster_path"], constants.BOOTSTRAP_IGN
                     )
@@ -2693,16 +2691,14 @@ def clone_openshift_installer():
                     branch="release-4.12",
                 )
             else:
-                if config.DEPLOYMENT.get("dual_stack"):
+                if config.DEPLOYMENT.get("dual_stack") or config.DEPLOYMENT.get("ipv6"):
                     constants.VSPHERE_INSTALLER_REPO = (
                         "https://gitlab.cee.redhat.com/srozen/installer_ipv6.git"
                     )
-                    branch = "dual-stack"
-                elif config.DEPLOYMENT.get("ipv6"):
-                    constants.VSPHERE_INSTALLER_REPO = (
-                        "https://gitlab.cee.redhat.com/srozen/installer_ipv6.git"
-                    )
-                    branch = "master"
+                    if config.DEPLOYMENT.get("dual_stack"):
+                        branch = "dual-stack"
+                    else:
+                        branch = "master"
                 else:
                     branch = f"release-{ocp_version}"
                 clone_repo(
@@ -2846,7 +2842,10 @@ def update_machine_conf(folder_structure=True):
 
     """
     cidr_var = "var.machine_cidr"
-    if is_dual_stack() and not is_ipv4_primary():
+    if (
+        config.DEPLOYMENT.get("dual_stack")
+        and config.DEPLOYMENT.get("primary_stack") == "ipv6"
+    ):
         cidr_var = "var.machine_cidr_ipv6"
 
     if not folder_structure:
@@ -2994,12 +2993,7 @@ def generate_terraform_vars_with_folder():
         config.ENV_DATA["compute_ignition_path"] = compute_ignition_path
 
     # Copy DNS address to vm_dns_addresses
-    if is_dual_stack() and not is_ipv4_primary():
-        config.ENV_DATA["vm_dns_addresses"] = config.ENV_DATA.get(
-            "dns_ipv6", config.ENV_DATA["dns"]
-        )
-    else:
-        config.ENV_DATA["vm_dns_addresses"] = config.ENV_DATA["dns"]
+    config.ENV_DATA["vm_dns_addresses"] = config.ENV_DATA["dns"]
 
     # Get the infra ID from metadata.json and update in ENV_DATA
     metadata_path = os.path.join(config.ENV_DATA["cluster_path"], "metadata.json")
