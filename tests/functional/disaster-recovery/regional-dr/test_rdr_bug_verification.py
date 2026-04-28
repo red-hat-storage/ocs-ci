@@ -55,11 +55,21 @@ def mon_restore_teardown(request):
     def finalizer():
         mon_name = teardown_data["mon_name"]
         namespace = teardown_data["namespace"]
-        if mon_name and namespace:
+        if not mon_name or not namespace:
+            return
+
+        dep_ocp = ocp.OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+        if dep_ocp.is_exist(resource_name=mon_name):
+            logger.info(f"Restoring mon deployment {mon_name} to 1 replica")
             modify_deployment_replica_count(
                 deployment_name=mon_name,
                 replica_count=1,
                 namespace=namespace,
+            )
+        else:
+            logger.info(
+                f"Mon deployment {mon_name} no longer exists, "
+                f"rook already replaced it"
             )
 
     request.addfinalizer(finalizer)
@@ -299,53 +309,58 @@ class TestRDRBugVerification:
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_19:
-            logger.info(
-                f"OCS {ocs_version}: fetching {_RBD_MIRRORING_TOKEN_SECRET}-<hash> "
-                f"secret on secondary cluster {secondary_cluster_name}"
-            )
-            all_secrets = peer_secret_ocp.get().get("items", [])
-            rbd_mirror_secrets = [
-                s
-                for s in all_secrets
-                if s["metadata"]["name"].startswith(f"{_RBD_MIRRORING_TOKEN_SECRET}-")
-            ]
-            assert rbd_mirror_secrets, (
-                f"No secret with name prefix {_RBD_MIRRORING_TOKEN_SECRET!r} "
-                f"found in openshift-storage on secondary cluster "
-                f"{secondary_cluster_name!r}"
-            )
-            peer_secret_data = rbd_mirror_secrets[0]
-            peer_secret_name = peer_secret_data["metadata"]["name"]
-            peer_token = self._decode_peer_token(peer_secret_data)
-        else:
-            logger.info(
-                f"OCS {ocs_version}: fetching token-exchange secret by label "
-                f"on secondary cluster {secondary_cluster_name}"
-            )
-            token_exchange_secrets = peer_secret_ocp.get(
-                selector="multicluster.odf.openshift.io/created-by=tokenexchange"
-            ).get("items", [])
-            assert token_exchange_secrets, (
-                "No secret with label "
-                "multicluster.odf.openshift.io/created-by=tokenexchange found "
-                f"in openshift-storage on secondary cluster "
-                f"{secondary_cluster_name!r}"
-            )
-            peer_secret_data = token_exchange_secrets[0]
-            peer_secret_name = peer_secret_data["metadata"]["name"]
-            peer_token = self._decode_peer_token(peer_secret_data)
 
-        peer_mon_ips = self._extract_mon_ips_from_token(peer_token)
-        logger.info(
-            f"Mon IPs from secret {peer_secret_name} on secondary cluster "
-            f"{secondary_cluster_name}: {peer_mon_ips}"
-        )
-        assert peer_mon_ips == updated_mon_ips, (
-            f"Mon IPs {peer_mon_ips} in secret {peer_secret_name!r} on "
-            f"secondary cluster {secondary_cluster_name!r} do not match the "
-            f"updated mon IPs {updated_mon_ips} from the primary cluster"
-        )
+        # Poll for the peer secret to be updated with the new mon IPs.
+        # MCO propagates the token asynchronously, so it may take a few
+        # minutes after the primary cluster's secret is updated.
+        peer_secret_name = None
+        peer_mon_ips = None
+        try:
+            for _ in TimeoutSampler(
+                timeout=600,
+                sleep=30,
+                func=lambda: None,
+            ):
+                if ocs_version >= version.VERSION_4_19:
+                    all_secrets = peer_secret_ocp.get().get("items", [])
+                    rbd_mirror_secrets = [
+                        s
+                        for s in all_secrets
+                        if s["metadata"]["name"].startswith(
+                            f"{_RBD_MIRRORING_TOKEN_SECRET}-"
+                        )
+                    ]
+                    if not rbd_mirror_secrets:
+                        logger.info(
+                            f"No {_RBD_MIRRORING_TOKEN_SECRET}-* secret found yet"
+                        )
+                        continue
+                    peer_secret_data = rbd_mirror_secrets[0]
+                else:
+                    token_exchange_secrets = peer_secret_ocp.get(
+                        selector="multicluster.odf.openshift.io/created-by=tokenexchange"
+                    ).get("items", [])
+                    if not token_exchange_secrets:
+                        logger.info("No token-exchange secret found yet")
+                        continue
+                    peer_secret_data = token_exchange_secrets[0]
+
+                peer_secret_name = peer_secret_data["metadata"]["name"]
+                peer_token = self._decode_peer_token(peer_secret_data)
+                peer_mon_ips = self._extract_mon_ips_from_token(peer_token)
+                logger.info(
+                    f"Polling {peer_secret_name} on secondary cluster "
+                    f"{secondary_cluster_name}: mon IPs {peer_mon_ips}"
+                )
+                if peer_mon_ips == updated_mon_ips:
+                    break
+        except TimeoutExpiredError:
+            raise AssertionError(
+                f"Mon IPs {peer_mon_ips} in secret {peer_secret_name!r} on "
+                f"secondary cluster {secondary_cluster_name!r} did not match "
+                f"the updated mon IPs {updated_mon_ips} from the primary "
+                f"cluster within 600s"
+            )
         logger.info(
             f"token-exchange-agent propagated updated mon IPs {peer_mon_ips} "
             f"to {peer_secret_name} on secondary cluster {secondary_cluster_name}"
