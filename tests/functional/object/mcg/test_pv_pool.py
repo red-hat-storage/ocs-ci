@@ -77,9 +77,9 @@ class TestPvPool:
                         MIN_PV_BACKINGSTORE_SIZE_IN_GB,
                         "ocs-storagecluster-ceph-rbd",
                         "100m",
-                        "500Mi",
+                        "800Mi",
                         "100m",
-                        "500Mi",
+                        "800Mi",
                     )
                 ]
             },
