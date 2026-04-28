@@ -9,6 +9,7 @@ and resource cleanup.
 
 import os
 from pathlib import Path
+import gc
 import logging
 import threading
 
@@ -660,6 +661,8 @@ def get_filtered_pods():
         for pod_obj in list_of_all_pods
         if not any(pod_name in pod_obj.name for pod_name in ignore_pods)
     ]
+    # Clean up the full list to prevent memory accumulation
+    del list_of_all_pods
     return filtered_list_objs
 
 
@@ -741,6 +744,13 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
         logger.info(
             "All pods in the openshift-storage namespace are healthy (no restarts or OOMs)"
         )
+
+        # Explicitly clean up pod objects to prevent memory leaks
+        del pod_objs
+        del pod_restarts
+        del oomkilled_pods
+        gc.collect()
+
         return True
 
     try:
