@@ -810,7 +810,7 @@ def fetch_nfs_server_details_on_client_cluster(default_server=False):
         kind=constants.STORAGECLASS, resource_name=constants.NFS_STORAGECLASS_NAME
     )
 
-<<<<<<< HEAD
+
     log.info(
         "Waiting for NFS StorageClass '%s' to appear on client cluster '%s'",
         constants.NFS_STORAGECLASS_NAME,
@@ -834,6 +834,4 @@ def fetch_nfs_server_details_on_client_cluster(default_server=False):
                 server,
             )
             return server
-=======
     return nfs_sc.data["parameters"]["server"]
->>>>>>> 7a8b5e2f4 (update)
