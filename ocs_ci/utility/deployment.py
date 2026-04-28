@@ -429,59 +429,199 @@ def apply_idms_via_worker_filesystem(image_digest_mirrors, conf_filename=None):
         exec_cmd(
             f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
             f"-- bash -c \"echo '{encoded}' | base64 -d > {dest_path}\"",
-            silent=True,
+            secrets=[encoded],
         )
     logger.info(
         f"Written mirror config ({len(image_digest_mirrors)} entries) "
         f"to {dest_path} on {len(ds_pods)} worker node(s)"
     )
 
-    # Merge mirror registry credentials into /host/etc/containers/auth.json
+    # Build merged auth.json on OCS-CI side (DaemonSet container has no python3).
+    # CRI-O on ROSA HCP workers uses global_auth_file = kubelet/config.json
+    # (set in /etc/crio/crio.conf.d/00-default), NOT /etc/containers/auth.json.
+    # kubelet/config.json contains the OCM cluster pull-secret which lacks access
+    # to quay.io/rhceph-dev nightly images. We redirect CRI-O to use auth.json
+    # (which we control) by merging kubelet creds + mirror creds + a path-specific
+    # quay.io/rhceph-dev entry so it beats the generic quay.io:OCM from kubelet.
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
     with open(pull_secret_path) as f:
         pull_secret = json.load(f)
+    # Use .get() defensively in case pull-secret is missing the "auths" key
+    ps_auths = pull_secret.get("auths", {})
     mirror_registries = {
         mirror.split("/")[0]
         for entry in image_digest_mirrors
         for mirror in entry.get("mirrors", [])
     }
     extra_auths = {
-        reg: creds
-        for reg, creds in pull_secret["auths"].items()
-        if reg in mirror_registries
+        reg: creds for reg, creds in ps_auths.items() if reg in mirror_registries
     }
-    if extra_auths:
-        for pod in ds_pods:
-            pod_name = pod["metadata"]["name"]
-            existing_raw = exec_cmd(
-                f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
-                f"-- bash -c \"cat {constants.ROSA_HCP_HOST_AUTH_JSON} 2>/dev/null || echo '{{}}'\"",
-                ignore_error=True,
-                silent=True,
-            )
-            existing = json.loads(existing_raw.stdout.decode().strip() or "{}")
-            existing.setdefault("auths", {}).update(extra_auths)
-            merged_b64 = base64.b64encode(json.dumps(existing).encode()).decode()
-            exec_cmd(
-                f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
-                f"-- bash -c \"echo '{merged_b64}' | base64 -d > {constants.ROSA_HCP_HOST_AUTH_JSON}\"",
-                silent=True,
-            )
-        logger.info(
-            f"Merged credentials for {list(extra_auths.keys())} into "
-            f"{constants.ROSA_HCP_HOST_AUTH_JSON} on worker nodes"
-        )
+    # Path-specific entry: containers/image picks the most specific registry path
+    # match, so quay.io/rhceph-dev:ocsqe beats the generic quay.io:OCM token
+    # that kubelet provides when CRI-O pulls quay.io/rhceph-dev/* images.
+    quay_auth = ps_auths.get("quay.io")
+    if quay_auth:
+        extra_auths["quay.io/rhceph-dev"] = quay_auth
 
-    # Reload CRI-O on each worker so it picks up the new registries.conf.d entry
+    # Always write auth.json — even if extra_auths is empty, auth.json must
+    # contain at least the kubelet cluster credentials so that CRI-O (which we
+    # will redirect to this file) can still pull all other cluster images.
+    # Writing unconditionally also avoids the race where the redirect proceeds
+    # but auth.json is stale/empty from a previous failed run.
+    for pod in ds_pods:
+        pod_name = pod["metadata"]["name"]
+
+        # Read kubelet/config.json (what CRI-O currently uses as global_auth_file)
+        # so we preserve all cluster-level credentials in our merged auth.json.
+        # The stdout is pull-secret JSON; exec_cmd logs it at DEBUG only and
+        # truncate_large_base64() shortens the actual token values automatically.
+        kubelet_auths = {}
+        for attempt in range(1, 4):
+            try:
+                kubelet_raw = exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f'-- bash -c "cat {constants.ROSA_HCP_HOST_KUBELET_CONFIG}'
+                    f" 2>/dev/null || echo '{{}}'\"",
+                    ignore_error=True,
+                    silent=True,
+                )
+                kubelet_auths = json.loads(
+                    kubelet_raw.stdout.decode().strip() or "{}"
+                ).get("auths", {})
+                break
+            except ValueError as e:
+                # Malformed JSON from kubelet config — proceed with empty base
+                logger.warning(
+                    f"Could not parse kubelet config on {pod_name} (attempt {attempt}/3): {e}"
+                )
+                if attempt == 3:
+                    logger.warning(
+                        "Proceeding without cluster creds base for this worker"
+                    )
+                break
+            except Exception as e:
+                logger.warning(
+                    f"Attempt {attempt}/3 reading kubelet config on {pod_name}: {e}"
+                )
+                if attempt == 3:
+                    logger.warning(
+                        "Could not read kubelet config; proceeding without cluster creds base"
+                    )
+
+        # Merge: kubelet auths as base, overridden by mirror pull-secret creds.
+        # This preserves OCP infra image pull access while adding rhceph-dev.
+        merged = {"auths": {**kubelet_auths, **extra_auths}}
+        merged_b64 = base64.b64encode(json.dumps(merged).encode()).decode()
+
+        # Write via temp file + cp to avoid truncated-write if connection drops.
+        # merged_b64 is passed as a secret so it is masked in all log output.
+        for attempt in range(1, 4):
+            try:
+                exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f"-- bash -c \"echo '{merged_b64}' | base64 -d"
+                    f" > /tmp/auth-merged.json"
+                    f' && cp /tmp/auth-merged.json {constants.ROSA_HCP_HOST_AUTH_JSON}"',
+                    secrets=[merged_b64],
+                )
+                # Verify file is non-empty (byte count only — no credentials logged)
+                verify = exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f'-- bash -c "wc -c < {constants.ROSA_HCP_HOST_AUTH_JSON}"',
+                    ignore_error=True,
+                )
+                written = int(verify.stdout.decode().strip() or "0")
+                if written > 0:
+                    break
+                logger.warning(
+                    f"Attempt {attempt}/3: auth.json appears empty on {pod_name}, retrying"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Attempt {attempt}/3 writing auth.json on {pod_name}: {e}"
+                )
+                if attempt == 3:
+                    raise
+
+    logger.info(
+        f"Written merged auth.json (registries: {list(extra_auths.keys())}) "
+        f"to {constants.ROSA_HCP_HOST_AUTH_JSON} on {len(ds_pods)} worker node(s)"
+    )
+
+    # Redirect CRI-O global_auth_file from kubelet/config.json to auth.json.
+    # Check first (idempotent), apply sed, then verify. Retry on exec failure.
+    crio_old = "/var/lib/kubelet/config.json"
+    crio_new = "/etc/containers/auth.json"
+    for pod in ds_pods:
+        pod_name = pod["metadata"]["name"]
+        for attempt in range(1, 4):
+            try:
+                check = exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f"-- bash -c \"grep -q 'global_auth_file.*kubelet'"
+                    f" {constants.ROSA_HCP_CRIO_CONF_DROP_IN} 2>/dev/null"
+                    f' && echo yes || echo no"',
+                    ignore_error=True,
+                )
+                if check.stdout.decode().strip() != "yes":
+                    logger.info(
+                        f"CRI-O drop-in on {pod_name} already redirected or not found — skipping"
+                    )
+                    break
+                exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f'-- bash -c "sed -i'
+                    f' \'s|global_auth_file = \\"{crio_old}\\"'
+                    f'|global_auth_file = \\"{crio_new}\\"|g\''
+                    f' {constants.ROSA_HCP_CRIO_CONF_DROP_IN}"',
+                )
+                verify = exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f"-- bash -c \"grep 'global_auth_file'"
+                    f' {constants.ROSA_HCP_CRIO_CONF_DROP_IN} 2>/dev/null"',
+                    ignore_error=True,
+                )
+                result = verify.stdout.decode().strip()
+                if crio_new not in result:
+                    raise Exception(
+                        f"CRI-O drop-in still shows old path after sed: {result}"
+                    )
+                break
+            except Exception as e:
+                logger.warning(
+                    f"Attempt {attempt}/3 redirecting CRI-O drop-in on {pod_name}: {e}"
+                )
+                if attempt == 3:
+                    raise
+    logger.info(
+        f"Redirected CRI-O global_auth_file to {constants.ROSA_HCP_HOST_AUTH_JSON} "
+        f"on all worker nodes"
+    )
+
+    # Restart CRI-O on each worker (full restart required — reload does not
+    # re-read crio.conf.d drop-in files containing global_auth_file).
     from ocs_ci.ocs.node import get_nodes
 
     worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
     for node in worker_nodes:
-        ocp_module.OCP().exec_oc_debug_cmd(
-            node=node.name,
-            cmd_list=["systemctl reload crio"],
-        )
-    logger.info("CRI-O reloaded on all worker nodes")
+        for attempt in range(1, 4):
+            try:
+                ocp_module.OCP().exec_oc_debug_cmd(
+                    node=node.name,
+                    cmd_list=["systemctl restart crio"],
+                )
+                logger.info(f"CRI-O restarted on {node.name}")
+                break
+            except Exception as e:
+                logger.warning(
+                    f"Attempt {attempt}/3 restarting CRI-O on {node.name}: {e}"
+                )
+                if attempt == 3:
+                    logger.error(
+                        f"Failed to restart CRI-O on {node.name} after 3 attempts. "
+                        "Image pulls from mirror registries may fail."
+                    )
+    logger.info("CRI-O restart complete on all worker nodes")
 
 
 def add_mc_partitioned_disk_on_workers_to_ocp_deployment(disk):
