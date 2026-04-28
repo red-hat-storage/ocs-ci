@@ -965,11 +965,10 @@ class VSPHEREUPI(VSPHEREBASE):
                         "Use 'dual_stack: true' with 'primary_stack: ipv6' "
                         "for IPv6-primary dual-stack."
                     )
-                for var in ("machine_cidr_ipv6", "ipam_ipv6", "ipam_token_ipv6"):
-                    if not config.ENV_DATA.get(var):
-                        raise UnexpectedDeploymentConfiguration(
-                            f"Dual-stack deployment requires ENV_DATA.{var}"
-                        )
+                if not config.ENV_DATA.get("machine_cidr_ipv6"):
+                    raise UnexpectedDeploymentConfiguration(
+                        "Dual-stack deployment requires ENV_DATA.machine_cidr_ipv6"
+                    )
 
             install_config_str = _templating.render_template(
                 ocp_install_template_path, config.ENV_DATA
@@ -3209,57 +3208,6 @@ def release_ips(hosts):
         return
     ipam = IPAM(appiapp="address")
     ipam.release_ips(hosts)
-
-
-def assign_ipv6_ips(num_of_vips=None, hosts=None):
-    """
-    Assign IPv6 IPs from the IPv6 IPAM server for dual-stack deployments.
-
-    Args:
-        num_of_vips (int): Number of IPs to assign
-        hosts (list): List of hosts to assign IPs
-
-    Returns:
-        list: List of assigned IPv6 IPs
-    """
-    ipam_ipv6 = IPAM(
-        appiapp="address",
-        ipam=config.ENV_DATA["ipam_ipv6"],
-        token=config.ENV_DATA["ipam_token_ipv6"],
-    )
-    subnet_ipv6 = config.ENV_DATA["machine_cidr_ipv6"].split("/")[0]
-
-    if num_of_vips:
-        hosts = [
-            f"{config.ENV_DATA.get('cluster_name')}-{i}" for i in range(num_of_vips)
-        ]
-        ipv6_ips = ipam_ipv6.assign_ips(hosts, subnet_ipv6)
-    elif hosts:
-        hosts = [f"{host}" for host in hosts]
-        ipv6_ips = ipam_ipv6.assign_ips(hosts, subnet_ipv6)
-    else:
-        raise ValueError("Either hosts or num_of_vips should be passed")
-
-    logger.debug(f"IPv6 IPs reserved for hosts {hosts} are {ipv6_ips}")
-    return ipv6_ips
-
-
-def release_ipv6_ips(hosts):
-    """
-    Release IPv6 IPs from the IPv6 IPAM server.
-
-    Args:
-        hosts (list): List of hosts to release IPs
-    """
-    if not hosts:
-        logger.info("No hosts to release IPv6 IPs")
-        return
-    ipam_ipv6 = IPAM(
-        appiapp="address",
-        ipam=config.ENV_DATA["ipam_ipv6"],
-        token=config.ENV_DATA["ipam_token_ipv6"],
-    )
-    ipam_ipv6.release_ips(hosts)
 
 
 def create_dns_records(ips):
