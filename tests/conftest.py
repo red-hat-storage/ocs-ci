@@ -8003,6 +8003,10 @@ def create_workload_factory():
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
+            dr_helpers.validate_application_odf_cli(
+                drpc_name=f"{workload.sub_placement_name}-drpc",
+                namespace=workload.workload_namespace,
+            )
 
         for index in range(num_of_appset):
             workload_key = "dr_workload_appset"
@@ -8026,6 +8030,10 @@ def create_workload_factory():
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
+            dr_helpers.validate_application_odf_cli(
+                drpc_name=f"{workload.appset_placement_name}-drpc",
+                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+            )
         if (
             ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
             and pvc_interface == constants.CEPHBLOCKPOOL
@@ -8302,6 +8310,15 @@ def cnv_dr_workload(request):
                 instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]
                 workload.deploy_workload()
+                drpc_namespace = (
+                    workload.workload_namespace
+                    if workload_type == constants.SUBSCRIPTION
+                    else constants.GITOPS_CLUSTER_NAMESPACE
+                )
+                dr_helpers.validate_application_odf_cli(
+                    drpc_name=f"{workload.cnv_workload_placement_name}-drpc",
+                    namespace=drpc_namespace,
+                )
 
         if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
@@ -8414,6 +8431,11 @@ def discovered_apps_dr_workload(request):
                 instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]
                 workload.deploy_workload(recipe=False)
+                if not multi_ns:
+                    dr_helpers.validate_application_odf_cli(
+                        drpc_name=workload.discovered_apps_placement_name,
+                        namespace=constants.DR_OPS_NAMESPACE,
+                    )
 
         if multi_ns:
             if pvc_interface == constants.CEPHBLOCKPOOL:
@@ -8441,6 +8463,10 @@ def discovered_apps_dr_workload(request):
             )
             for index in range(kubeobject):
                 instances[index].verify_workload_deployment(vrg_name=drpc_name)
+            dr_helpers.validate_application_odf_cli(
+                drpc_name=drpc_name,
+                namespace=constants.DR_OPS_NAMESPACE,
+            )
 
         if bool(recipe):
             for index in range(recipe):
@@ -8491,6 +8517,10 @@ def discovered_apps_dr_workload(request):
                 instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]
                 workload.deploy_workload(recipe=True)
+                dr_helpers.validate_application_odf_cli(
+                    drpc_name=workload.discovered_apps_placement_name,
+                    namespace=constants.DR_OPS_NAMESPACE,
+                )
 
         return instances
 
@@ -8602,6 +8632,11 @@ def discovered_apps_dr_workload_cnv(request):
             workload.deploy_workload(
                 dr_protect=dr_protect, shared_drpc_protection=shared_drpc_protection
             )
+            if dr_protect:
+                dr_helpers.validate_application_odf_cli(
+                    drpc_name=workload.discovered_apps_placement_name,
+                    namespace=constants.DR_OPS_NAMESPACE,
+                )
 
         return instances
 

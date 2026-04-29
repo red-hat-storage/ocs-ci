@@ -74,6 +74,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     is_cluster_y_version_upgraded,
     wait_for_machineconfigpool_status,
+    create_directory_path,
 )
 from ocs_ci.helpers.helpers import (
     create_resource,
@@ -4243,7 +4244,6 @@ def extract_images_from_yaml(obj, images=None):
 
     return images
 
-
 def get_cdi_registry_credentials():
     """
     Extract the username and password for the internal mirror registry from
@@ -4453,3 +4453,55 @@ def create_cdi_cert_configmap(namespace, configmap_name="user-ca-bundle"):
     logger.info(
         f"CDI cert ConfigMap '{configmap_name}' created in namespace '{namespace}'"
     )
+def validate_application_odf_cli(drpc_name, namespace):
+    """
+    Validate DR application using the ODF CLI tool.
+
+    Runs 'odf dr validate application' for the given DRPC resource
+    and stores the output files to the test log directory.
+
+    Args:
+        drpc_name (str): Name of the DRPC resource to validate
+        namespace (str): Namespace of the application
+
+    Returns:
+        str: The stdout output from the validation command
+
+    Raises:
+        CommandFailed: If the ODF CLI command fails
+
+    """
+    from ocs_ci.helpers.odf_cli import ODFCliRunner
+
+    output_dir = os.path.join(
+        os.path.expanduser(config.RUN["log_dir"]),
+        f"odf_dr_validate_app_{config.RUN['run_id']}",
+        f"validate_app_{drpc_name}",
+    )
+    create_directory_path(output_dir)
+    logger.info(f"ODF DR validate application output will be stored in: {output_dir}")
+
+    odf_cli_runner = ODFCliRunner()
+    cmd_args = (
+        f"dr validate application "
+        f"--name {drpc_name} "
+        f"--namespace {namespace} "
+        f"-o {output_dir}"
+    )
+    logger.info(
+        f"Running ODF DR validate application for DRPC '{drpc_name}' "
+        f"in namespace '{namespace}'"
+    )
+    result = odf_cli_runner.run_command(cmd_args)
+    stdout = result.stdout.decode()
+    logger.info(f"ODF DR validate application output:\n{stdout}")
+
+    assert "validation successful" in stdout.lower(), (
+        f"ODF DR validate application did not report success for DRPC '{drpc_name}' "
+        f"in namespace '{namespace}'. Output:\n{stdout}"
+    )
+
+    return stdout
+
+
+
