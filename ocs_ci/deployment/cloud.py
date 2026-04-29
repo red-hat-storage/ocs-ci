@@ -123,9 +123,11 @@ class IPIOCPDeployment(BaseOCPDeployment):
                     logger.error(ex)
             # W/A for bug: https://issues.redhat.com/browse/OCPBUGS-63723
             # Issue to track W/A: https://github.com/red-hat-storage/ocs-ci/issues/13519
-            if (
-                "failed retrieving cos instance for destroy bootstrap: COS Resource Not Found"
-                in str(e)
+            # NOTE: This is now handled in IBMCloudIPI.cleanup_bootstrap_leftovers() for successful deployments
+            if config.ENV_DATA.get(
+                "platform"
+            ) == "ibmcloud" and "failed retrieving cos instance for destroy bootstrap: COS Resource Not Found" in str(
+                e
             ):
                 logger.warning(
                     "COS instance not found for destroy bootstrap, related to bug: "
