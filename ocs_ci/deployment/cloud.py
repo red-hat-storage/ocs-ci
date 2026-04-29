@@ -15,6 +15,7 @@ from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.deployment import get_cluster_prefix
 from ocs_ci.utility.utils import get_cluster_name, run_cmd
+from ocs_ci.utility.ibmcloud import configure_ingress_load_balancer_security_group
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,11 @@ class IPIOCPDeployment(BaseOCPDeployment):
                 except Exception as ex:
                     logger.error(ex)
             if "Waiting up to" in str(e):
+                if (
+                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                    and config.ENV_DATA["deployment_type"] == constants.IPI_DEPL_TYPE
+                ):
+                    configure_ingress_load_balancer_security_group()
                 run_cmd(
                     f"{self.installer} wait-for install-complete "
                     f"--dir {self.cluster_path} "

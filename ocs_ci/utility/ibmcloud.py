@@ -849,6 +849,133 @@ def get_used_subnets():
     return [subnet["ipv4_cidr_block"] for subnet in subnets_data]
 
 
+def add_security_group_rule(
+    security_group, direction, protocol, port_min, port_max, **kwargs
+):
+    """
+    Add security group rule
+
+    Args:
+        security_group (str): security group ID or Name
+        direction (str): inbound or outbound
+        protocol (str): protocol, e.g. tcp, udp, icmp, all
+        port_min (int): minimum port number
+        port_max (int): maximum port number
+        **kwargs: other arguments to be passed to command, e.g.
+            --vpc ID or name of the VPC. It is required to specify only the unique resource by name inside this VPC.
+
+    """
+    cmd = (
+        f"ibmcloud is security-group-rule-add {security_group} {direction} {protocol} "
+        f"--port-min {port_min} --port-max {port_max}"
+    )
+    for key, value in kwargs.items():
+        cmd += f" {key} '{value}'"
+    run_ibmcloud_cmd(cmd)
+
+
+def configure_ingress_load_balancer_security_group():
+    """
+    Add inbound rules for ports 80 and 443 to the default ingress load balancer security group.
+    This is required for IBM Cloud IPI deployments to ensure ingress availability.
+
+    The function:
+    1. Gets the router-default service from openshift-ingress namespace
+    2. Extracts the load balancer hostname
+    3. Finds the IBM Cloud load balancer by hostname (filtered by resource group)
+    4. Gets the security group(s) attached to that load balancer
+    5. Adds inbound TCP rules for HTTP (80) and HTTPS (443) ports
+    """
+    try:
+        logger.info("Configuring ingress load balancer security group")
+
+        # Get resource group name for the cluster
+        rg_name = get_resource_group_name(config.ENV_DATA["cluster_path"])
+        logger.debug(f"Using resource group: {rg_name}")
+
+        # Get the router-default service to find the load balancer hostname
+        ocp_obj = OCP(
+            kind="Service",
+            namespace="openshift-ingress",
+            resource_name="router-default",
+        )
+        service_data = ocp_obj.get()
+
+        # Extract load balancer hostname
+        lb_ingress = (
+            service_data.get("status", {}).get("loadBalancer", {}).get("ingress", [])
+        )
+        if not lb_ingress:
+            logger.warning(
+                "No load balancer found in router-default service status. Ingress may not be ready yet."
+            )
+            return
+
+        lb_hostname = lb_ingress[0].get("hostname")
+        if not lb_hostname:
+            logger.warning(
+                "No hostname found in load balancer ingress. Ingress may not be ready yet."
+            )
+            return
+
+        logger.debug(f"Found ingress load balancer hostname: {lb_hostname}")
+
+        # Get load balancers filtered by resource group
+        cmd = f"ibmcloud is lbs --resource-group-name {rg_name} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        load_balancers = json.loads(out)
+
+        # Find the load balancer matching the hostname
+        matching_lb = None
+        for lb in load_balancers:
+            if lb.get("hostname") == lb_hostname:
+                matching_lb = lb
+                break
+
+        if not matching_lb:
+            logger.error(
+                f"Could not find IBM Cloud load balancer with hostname: {lb_hostname}"
+            )
+            return
+
+        lb_name = matching_lb.get("name")
+        logger.debug(f"Found matching load balancer: {lb_name}")
+
+        # Get security groups attached to the load balancer
+        security_groups = matching_lb.get("security_groups", [])
+        if not security_groups:
+            logger.warning(f"No security groups attached to load balancer {lb_name}")
+            return
+
+        logger.debug(
+            f"Found {len(security_groups)} security group(s) attached to the load balancer"
+        )
+
+        # Add inbound rules for ports 80 and 443 to each security group
+        for sg in security_groups:
+            sg_id = sg.get("id")
+            sg_name = sg.get("name")
+            logger.debug(f"Configuring security group: {sg_name} ({sg_id})")
+
+            for port in (80, 443):
+                try:
+                    logger.info(f"Adding inbound rule for port {port} to {sg_name}")
+                    add_security_group_rule(sg_name, "inbound", "tcp", port, port)
+                    logger.debug(f"Successfully added inbound rule for port {port}")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to add inbound rule for port 80 (may already exist): {e}"
+                    )
+
+        logger.info(
+            "Ingress load balancer security group configuration completed successfully"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to configure ingress load balancer security group: {e}")
+        raise
+
+
 def create_address_prefix(prefix_name, vpc, zone, cidr):
     """
     Create address prefix in VPC.
