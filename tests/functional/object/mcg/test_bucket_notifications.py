@@ -360,7 +360,9 @@ class TestBucketNotifications(MCGTest):
             should_wait = True if i == SETUP_NUM - 1 else False
 
             topic, conn_config_path = (
-                notif_manager.create_and_register_kafka_topic_with_noobaa(should_wait)
+                notif_manager.create_and_register_kafka_topic_with_noobaa(
+                    wait=should_wait
+                )
             )
             kafka_conn_resources.append((topic, conn_config_path))
 
