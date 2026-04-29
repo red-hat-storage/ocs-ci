@@ -22,9 +22,7 @@ from ocs_ci.ocs.resources.pod import (
     get_prometheus_pods,
     get_pods_having_label,
 )
-from ocs_ci.helpers.cephfs_stress_helpers import CephFSStressTestManager
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.pv import delete_released_pvs_in_sc
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -72,10 +70,6 @@ def set_xattr_with_high_cpu_usage(
     log.info("setting extended attributes value for multiple files in MDS server ")
     active_mds_node_name = cluster.get_active_mds_info()["node_name"]
     file = constants.EXTENDED_ATTRIBUTES
-    stress_mgr = CephFSStressTestManager(namespace=constants.DEFAULT_NAMESPACE)
-    m_factor = "1,2,3,4"
-    parallelism = 5
-    completions = 5
 
     # Creating PVC to attach POD to it
     pvc_obj = pvc_factory(
@@ -94,53 +88,18 @@ def set_xattr_with_high_cpu_usage(
 
     perform_xattr_only_operations(file=file, pod_obj=pod_obj)
 
-    log.info(
-        "Setting up cephfs stress job for increasing CPU utilization in the cluster"
+    time.sleep(120)
+
+    log.info("Reducing MDS CPU resources to trigger MDS xattr latency alert")
+    storagecluster_obj.patch(
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+        params=(
+            '{"spec": {"resources": {"mds": {"limits": {"cpu": "250m", '
+            '"memory": "512Mi"}, "requests": {"cpu": "250m", "memory": '
+            '"512Mi"}}}}}'
+        ),
+        format_type="merge",
     )
-
-    # Create storageclass with security context
-    sc_name = helpers.create_unique_resource_name(
-        "ocs-storagecluster-cephfs-selinux-relabel", "storageclass"
-    )
-    storage_class = storageclass_factory(
-        sc_name=sc_name,
-        interface=constants.CEPHFILESYSTEM,
-        kernelMountOptions='context="system_u:object_r:container_file_t:s0"',
-    )
-    log.info(f"Storage class {sc_name} created successfully !")
-
-    pvc_obj1 = pvc_factory(
-        access_mode=constants.ACCESS_MODE_RWX,
-        status=constants.STATUS_BOUND,
-        project=OCP(kind="Project", namespace=constants.DEFAULT_NAMESPACE),
-        storageclass=storage_class,
-        size="200",
-    )
-    cephfs_stress_job_obj = stress_mgr.create_cephfs_stress_job(
-        pvc_name=pvc_obj1.name,
-        multiplication_factors=m_factor,
-        parallelism=parallelism,
-        completions=completions,
-        base_file_count=7000,
-        files_size=6,
-        threads=16,
-    )
-    log.info(f"The CephFS-stress Job {cephfs_stress_job_obj.name} has been submitted")
-
-    def finalizer():
-
-        job_obj = OCP(
-            kind=constants.JOB,
-            namespace=constants.DEFAULT_NAMESPACE,
-        )
-        job_obj.delete(resource_name="cephfs-stress-job")
-
-        pvc_obj1.delete()
-        pvc_obj1.ocp.wait_for_delete(resource_name=pvc_obj1.name)
-        delete_released_pvs_in_sc(sc_name)
-        log.info("All resources cleaned up successully")
-
-    request.addfinalizer(finalizer)
 
 
 def MDSxattr_alert_values(threading_lock, timeout):
@@ -203,11 +162,15 @@ def initiate_alert_clearance():
         None
 
     """
-    log.info("Increase MDS CPU Resources")
+    log.info("Increasing MDS CPU and memory resources to clear MDS xattr latency alert")
 
     storagecluster_obj.patch(
         resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-        params='{"spec": {"resources": {"mds": {"limits": {"cpu": "16"}, "requests": {"cpu": "16"}}}}}',
+        params=(
+            '{"spec": {"resources": {"mds": {"limits": {"cpu": "2", '
+            '"memory": "6Gi"}, "requests": {"cpu": "2", "memory": '
+            '"6Gi"}}}}}'
+        ),
         format_type="merge",
     )
 
@@ -249,15 +212,6 @@ class TestMdsXattrAlerts(E2ETest):
             3. Calls cluster function to gradually bring down MDS memory usage
 
             """
-            # skipping this step as alert clearance is skipped for sometime
-            # log.info("Setting MDS CPU Resources back to original values")
-
-            # storagecluster_obj.patch(
-            #     resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-            #     params='{"spec": {"resources": {"mds": {"limits": {"cpu": "2"}, "requests": {"cpu": "2"}}}}}',
-            #     format_type="merge",
-            # )
-
             log.info(
                 "Waiting for toolbox pod to be in running state (timeout: 900 seconds)"
             )
@@ -292,7 +246,7 @@ class TestMdsXattrAlerts(E2ETest):
             6. Verify alert is cleared within 300 seconds
 
         """
-        # api = prometheus.PrometheusAPI(threading_lock=threading_lock)
+        api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
         log.info(
             "Setting extended attributes and file creation IO started in the background."
@@ -300,15 +254,14 @@ class TestMdsXattrAlerts(E2ETest):
         )
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
-        # TODO - work on fixing alert clearance part
-        # log.info("Checking for clearance of alert")
-        # initiate_alert_clearance()
-        # # waiting for sometime for load distribution
-        # time.sleep(600)
-        # test_end_time = int(time.time())
-        # api.check_alert_cleared(
-        #     label=constants.ALERT_MDSXATTR, measure_end_time=test_end_time, time_min=600
-        # )
+        log.info("Checking for clearance of alert")
+        initiate_alert_clearance()
+        # waiting for sometime for load distribution
+        time.sleep(600)
+        test_end_time = int(time.time())
+        api.check_alert_cleared(
+            label=constants.ALERT_MDSXATTR, measure_end_time=test_end_time, time_min=600
+        )
 
     @pytest.mark.polarion_id("OCS-7734")
     def test_alert_triggered_by_restarting_operator_and_metrics_pods(
