@@ -750,6 +750,23 @@ MULTUS_PUBLIC_NET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multus-public-ne
 MULTUS_CLUSTER_NET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "multus-cluster-net.yaml"
 )
+NODE_NETWORK_CONFIGURATION_POLICY = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy.yaml"
+)
+
+# VLAN-based Multus Networks (without shim interfaces)
+NODE_NETWORK_CONFIGURATION_POLICY_VLAN = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy_vlan.yaml"
+)
+NODE_NETWORK_CONFIGURATION_POLICY_VLAN_DUAL = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy_vlan_dual.yaml"
+)
+MULTUS_PUBLIC_NET_VLAN_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "multus-public-net-vlan.yaml"
+)
+MULTUS_CLUSTER_NET_VLAN_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "multus-cluster-net-vlan.yaml"
+)
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
