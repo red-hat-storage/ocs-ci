@@ -836,7 +836,13 @@ class SeleniumDriver(WebDriver):
             headless = ocsci_config.UI_SELENIUM.get("headless")
             if headless:
                 chrome_options.add_argument("--headless=new")
-                chrome_options.add_argument("window-size=1920,1400")
+                chrome_options.add_argument("--window-size=1920,1400")
+                chrome_options.add_argument("--force-device-scale-factor=1")
+                # Required for Chrome 137+ stability in CI/containerized environments
+                chrome_options.add_argument("--disable-dev-shm-usage")
+                chrome_options.add_argument("--no-sandbox")
+                chrome_options.add_argument("--disable-gpu")
+                chrome_options.add_argument("--disable-software-rasterizer")
 
             # use proxy server, if required
             if (
@@ -900,6 +906,21 @@ class SeleniumDriver(WebDriver):
                 service=chrome_service,
                 options=chrome_options,
             )
+
+            # Chrome 137+ workaround: --window-size argument is ignored in headless mode
+            # Set window size explicitly via Selenium API after driver creation
+            if headless:
+                initial_size = driver.get_window_size()
+                logger.info(
+                    f"Initial window size: {initial_size['width']}x{initial_size['height']}"
+                )
+                driver.set_window_size(1920, 1400)
+                time.sleep(0.5)  # Give Chrome time to resize
+                actual_size = driver.get_window_size()
+                logger.info(
+                    f"Window size after set_window_size: {actual_size['width']}x{actual_size['height']}"
+                )
+
         else:
             raise ValueError(f"No Support on {browser}")
         return driver
@@ -944,7 +965,9 @@ def login_ui(console_url=None, username=None, password=None):
     login_loc = locators[ocp_version]["login"]
     page_nav_loc = locators[ocp_version]["page"]
     driver = SeleniumDriver()
-    driver.maximize_window()
+    # Skip maximize_window in headless mode - it resets window size and doesn't work properly
+    if not ocsci_config.UI_SELENIUM.get("headless"):
+        driver.maximize_window()
     driver.implicitly_wait(10)
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
