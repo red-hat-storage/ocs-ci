@@ -131,8 +131,7 @@ def ceph_not_health_error():
     """
     try:
         ceph_health_check(
-            namespace=config.ENV_DATA["cluster_namespace"],
-            tries=3,
+            namespace=config.ENV_DATA["cluster_namespace"], tries=45, delay=60
         )
         return True
     except Exception as ex:
@@ -152,11 +151,7 @@ def is_cluster_healthy():
 
 def initiate_alert_clearance():
     """
-    Initiate clearance of MDS xattr latency alert by increasing MDS CPU resources.
-
-    This function patches the storage cluster to increase MDS CPU limits and requests
-    from default values to 16 CPUs, which helps clear the CephXattrSetLatency alert
-    by providing more resources to handle the xattr operations.
+    Initiate clearance of MDS xattr latency alert by increasing MDS resources.
 
     Returns:
         None
@@ -172,6 +167,18 @@ def initiate_alert_clearance():
             '"6Gi"}}}}}'
         ),
         format_type="merge",
+    )
+
+
+def verify_alert_cleared(threading_lock):
+
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
+    initiate_alert_clearance()
+    # waiting for sometime for load distribution
+    time.sleep(400)
+    test_end_time = int(time.time())
+    api.check_alert_cleared(
+        label=constants.ALERT_MDSXATTR, measure_end_time=test_end_time, time_min=600
     )
 
 
@@ -246,8 +253,6 @@ class TestMdsXattrAlerts(E2ETest):
             6. Verify alert is cleared within 300 seconds
 
         """
-        api = prometheus.PrometheusAPI(threading_lock=threading_lock)
-
         log.info(
             "Setting extended attributes and file creation IO started in the background."
             " Script will look for CephXattrSetLatency  alert"
@@ -255,13 +260,7 @@ class TestMdsXattrAlerts(E2ETest):
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
         log.info("Checking for clearance of alert")
-        initiate_alert_clearance()
-        # waiting for sometime for load distribution
-        time.sleep(600)
-        test_end_time = int(time.time())
-        api.check_alert_cleared(
-            label=constants.ALERT_MDSXATTR, measure_end_time=test_end_time, time_min=600
-        )
+        verify_alert_cleared(threading_lock)
 
     @pytest.mark.polarion_id("OCS-7734")
     def test_alert_triggered_by_restarting_operator_and_metrics_pods(
@@ -325,6 +324,8 @@ class TestMdsXattrAlerts(E2ETest):
         log.info("Validating the alert after ocs-metrics-exporter pod restart")
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
+        verify_alert_cleared(threading_lock)
+
     @pytest.mark.polarion_id("OCS-7735")
     def test_alert_after_recovering_prometheus_from_failures(
         self, set_xattr_with_high_cpu_usage, threading_lock
@@ -354,6 +355,8 @@ class TestMdsXattrAlerts(E2ETest):
         delete_pods(list_of_prometheus_pod_obj)
 
         assert MDSxattr_alert_values(threading_lock, timeout=300)
+
+        verify_alert_cleared(threading_lock)
 
     @pytest.mark.polarion_id("OCS-7736")
     def test_alert_after_active_mds_scaledown(
@@ -406,6 +409,8 @@ class TestMdsXattrAlerts(E2ETest):
             helpers.wait_for_resource_state(resource=pd, state=constants.STATUS_RUNNING)
 
         assert MDSxattr_alert_values(threading_lock, timeout=60)
+
+        verify_alert_cleared(threading_lock)
 
     @pytest.mark.polarion_id("OCS-7737")
     def test_alert_with_both_mds_scaledown(
@@ -474,6 +479,8 @@ class TestMdsXattrAlerts(E2ETest):
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
+        verify_alert_cleared(threading_lock)
+
     @pytest.mark.polarion_id("OCS-7738")
     def test_alert_with_mds_running_node_restart(
         self, set_xattr_with_high_cpu_usage, threading_lock, nodes
@@ -515,3 +522,5 @@ class TestMdsXattrAlerts(E2ETest):
         ), "Cluster is not healthy after active MDS node restart"
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
+
+        verify_alert_cleared(threading_lock)
