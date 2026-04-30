@@ -162,9 +162,7 @@ class TestRDRBugVerification:
             f"Adding test annotations to PVCs in {workload.workload_namespace} "
             f"on primary cluster {primary_cluster_name}"
         )
-        ocp_pvc = ocp.OCP(
-            kind=constants.PVC, namespace=workload.workload_namespace
-        )
+        ocp_pvc = ocp.OCP(kind=constants.PVC, namespace=workload.workload_namespace)
         pvc_objs = get_all_pvc_objs(namespace=workload.workload_namespace)
         assert pvc_objs, (
             f"No PVCs found in namespace {workload.workload_namespace} "
@@ -175,9 +173,7 @@ class TestRDRBugVerification:
 
         for pvc_name in pvc_names:
             for key, value in self._DFBUGS_5285_ANNOTATIONS.items():
-                ocp_pvc.annotate(
-                    annotation=f"{key}={value}", resource_name=pvc_name
-                )
+                ocp_pvc.annotate(annotation=f"{key}={value}", resource_name=pvc_name)
         logger.info(
             f"Added annotations {list(self._DFBUGS_5285_ANNOTATIONS.keys())} "
             f"to PVCs: {pvc_names}"
@@ -617,8 +613,7 @@ class TestRDRBugVerification:
         if resource_type == constants.PVC:
             pvc_objs = get_all_pvc_objs(namespace=namespace)
             logger.info(
-                f"PVCs on {cluster_name} {context}: "
-                f"{[p.name for p in pvc_objs]}"
+                f"PVCs on {cluster_name} {context}: " f"{[p.name for p in pvc_objs]}"
             )
             annotations_by_pvc = {
                 pvc.name: pvc.get().get("metadata", {}).get("annotations", {})
@@ -628,8 +623,7 @@ class TestRDRBugVerification:
             resource_label = "PVC annotations"
         else:
             assert vrg_name, (
-                "vrg_name is required when resource_type is "
-                "VOLUME_REPLICATION_GROUP"
+                "vrg_name is required when resource_type is " "VOLUME_REPLICATION_GROUP"
             )
             vrg_obj = ocp.OCP(
                 kind=constants.VOLUME_REPLICATION_GROUP,
@@ -640,9 +634,7 @@ class TestRDRBugVerification:
                 f"VRG {vrg_name!r} not found in namespace {namespace!r} "
                 f"on cluster {cluster_name}"
             )
-            rd_specs = (
-                vrg_data.get("spec", {}).get("volSync", {}).get("rdSpec", [])
-            )
+            rd_specs = vrg_data.get("spec", {}).get("volSync", {}).get("rdSpec", [])
             assert rd_specs, (
                 f"VRG {vrg_name!r} has no spec.volSync.rdSpec entries "
                 f"on cluster {cluster_name} {context}"
@@ -653,12 +645,8 @@ class TestRDRBugVerification:
                 .get("annotations", {})
                 for rd in rd_specs
             }
-            logger.info(
-                f"VRG rdSpec PVCs found: {list(annotations_by_pvc.keys())}"
-            )
-            resource_label = (
-                "VRG spec.volSync.rdSpec[*].protectedPVC.annotations"
-            )
+            logger.info(f"VRG rdSpec PVCs found: {list(annotations_by_pvc.keys())}")
+            resource_label = "VRG spec.volSync.rdSpec[*].protectedPVC.annotations"
 
         missing = {}
         for pvc_name in expected_pvc_names:
@@ -672,13 +660,11 @@ class TestRDRBugVerification:
         assert not missing, (
             f"{resource_label} missing on cluster {cluster_name!r} {context}:\n"
             + "\n".join(
-                f"  PVC {name}: {', '.join(msgs)}"
-                for name, msgs in missing.items()
+                f"  PVC {name}: {', '.join(msgs)}" for name, msgs in missing.items()
             )
         )
         logger.info(
-            f"All expected {resource_label} verified on "
-            f"{cluster_name} {context}"
+            f"All expected {resource_label} verified on " f"{cluster_name} {context}"
         )
 
     def _get_rook_managed_field_time(self, secret_data):
