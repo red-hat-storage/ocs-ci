@@ -282,22 +282,19 @@ def get_current_nodepool_size(name):
         name (str): name of the cluster
 
     Returns:
-         str: number of nodes in the nodepool
+         str: total number of current nodes across all nodepools for the cluster
 
     """
 
     logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
-    cmd = f"get --namespace {constants.CLUSTERS_NAMESPACE} nodepools | awk '$1==\"{name}\" {{print $4}}'"
     with config.RunWithProviderConfigContextIfAvailable():
-        out = OCP().exec_oc_cmd(
-            command=cmd,
-            cluster_config=config,
-            shell=True,
-            out_yaml_format=False,
-            silent=True,
-        )
-
-    return out.strip() if out else ""
+        nodepools = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE).get()
+    total = sum(
+        item.get("status", {}).get("replicas", 0)
+        for item in nodepools.get("items", [])
+        if item.get("spec", {}).get("clusterName") == name
+    )
+    return str(total)
 
 
 def get_desired_nodepool_size(name: str):
@@ -308,23 +305,19 @@ def get_desired_nodepool_size(name: str):
         name (str): of the cluster
 
     Returns:
-        int: number of nodes in the nodepool
+        str: total number of desired nodes across all nodepools for the cluster
 
     """
 
     logger.info(f"Getting desired nodepool of HyperShift hosted cluster {name}")
     with config.RunWithProviderConfigContextIfAvailable():
-        out = OCP().exec_oc_cmd(
-            command=f"get --namespace {constants.CLUSTERS_NAMESPACE} nodepools | awk '$1==\"{name}\" {{print $3}}'",
-            cluster_config=config,
-            shell=True,
-            out_yaml_format=False,
-            silent=True,
-        )
-    if not out:
-        return ""
-
-    return out.strip() if out else ""
+        nodepools = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE).get()
+    total = sum(
+        item.get("spec", {}).get("replicas", 0)
+        for item in nodepools.get("items", [])
+        if item.get("spec", {}).get("clusterName") == name
+    )
+    return str(total)
 
 
 def worker_nodes_deployed(name: str):
@@ -383,17 +376,13 @@ def get_hosted_cluster_kubeconfig_name(name: str):
     """
 
     logger.info(f"Getting kubeconfig for HyperShift hosted cluster {name}")
-    cmd = f"get --namespace {constants.CLUSTERS_NAMESPACE} hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
-
     with config.RunWithProviderConfigContextIfAvailable():
-        out = OCP().exec_oc_cmd(
-            command=cmd,
-            cluster_config=config,
-            shell=True,
-            out_yaml_format=False,
-            silent=True,
-        )
-    return out.strip() if out else ""
+        data = OCP(
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=constants.CLUSTERS_NAMESPACE,
+            resource_name=name,
+        ).get()
+    return data.get("status", {}).get("kubeconfig", {}).get("name", "")
 
 
 def delete_hcp_podman_container():
@@ -1100,12 +1089,21 @@ class HyperShiftBase:
             name (str): name of the cluster
 
         Returns:
-            str: progress status; 'Completed' is expected in most cases
+            str: progress status; 'Completed' is expected in most cases, '' if cluster not found
 
         """
 
-        cmd = f"oc get --namespace {constants.CLUSTERS_NAMESPACE} hostedclusters | awk '$1==\"{name}\" {{print $4}}'"
-        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                data = OCP(
+                    kind=constants.HOSTED_CLUSTERS,
+                    namespace=constants.CLUSTERS_NAMESPACE,
+                    resource_name=name,
+                ).get()
+            history = data.get("status", {}).get("version", {}).get("history", [])
+            return history[0].get("state", "") if history else ""
+        except CommandFailed:
+            return ""
 
     def save_mirrors_list_to_file(self):
         """
