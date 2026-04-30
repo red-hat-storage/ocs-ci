@@ -3,7 +3,7 @@ import pytest
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.deployment import acm
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
@@ -53,6 +53,7 @@ def cnv_custom_storage_class(request, storageclass_factory):
     Raises Exception if the custom SC creation fails on any of the managed clusters
 
     """
+    created = {"sc": False}
 
     def factory(replica, compression):
         """
@@ -67,7 +68,42 @@ def cnv_custom_storage_class(request, storageclass_factory):
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            # Create or verify existing SC in all clusters
+
+            # Wait for leftover pool from a previous run to finish deleting
+            pool_ocp = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            if pool_ocp.is_exist(resource_name=pool_name):
+                log.info(
+                    f"Pool {pool_name} exists (possibly terminating), "
+                    f"waiting for deletion to complete"
+                )
+                try:
+                    pool_ocp.wait_for_delete(resource_name=pool_name, timeout=300)
+                except Exception:
+                    log.warning(
+                        f"Pool {pool_name} still exists after waiting, "
+                        f"attempting to remove finalizers"
+                    )
+                    try:
+                        pool_ocp.patch(
+                            resource_name=pool_name,
+                            params='{"metadata":{"finalizers":null}}',
+                            format_type="merge",
+                        )
+                        pool_ocp.wait_for_delete(resource_name=pool_name, timeout=120)
+                    except Exception:
+                        log.error(f"Failed to clean up leftover pool {pool_name}")
+
+            # Delete leftover SC if pool was cleaned up
+            sc_ocp = ocp.OCP(kind=constants.STORAGECLASS)
+            if sc_ocp.is_exist(resource_name=sc_name):
+                if not pool_ocp.is_exist(resource_name=pool_name):
+                    log.info(f"Deleting leftover StorageClass {sc_name}")
+                    sc_ocp.delete(resource_name=sc_name)
+
+            # Create or verify existing SC
             existing_sc_list = get_all_storageclass()
             if sc_name in existing_sc_list:
                 log.info(f"Storage class {sc_name} already exists")
@@ -88,12 +124,51 @@ def cnv_custom_storage_class(request, storageclass_factory):
                         )
                     else:
                         log.info(f"Successfully created custom RBD SC: {sc_name}")
+                        created["sc"] = True
                         time.sleep(60)
                 except Exception as e:
                     log.error(f"Error creating SC '{sc_name}': {e}")
                     raise
         config.reset_ctx()
 
+    def finalizer():
+        pool_name = constants.RDR_CUSTOM_RBD_POOL
+        sc_name = constants.RDR_CUSTOM_RBD_STORAGECLASS
+
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            try:
+                sc_ocp = ocp.OCP(kind=constants.STORAGECLASS)
+                if sc_ocp.is_exist(resource_name=sc_name):
+                    log.info(f"Teardown: deleting StorageClass {sc_name}")
+                    sc_ocp.delete(resource_name=sc_name)
+
+                pool_ocp = ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOL,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                )
+                if pool_ocp.is_exist(resource_name=pool_name):
+                    log.info(f"Teardown: deleting CephBlockPool {pool_name}")
+                    pool_ocp.delete(resource_name=pool_name)
+                    try:
+                        pool_ocp.wait_for_delete(resource_name=pool_name, timeout=300)
+                    except Exception:
+                        log.warning(
+                            f"Teardown: pool {pool_name} stuck, " f"removing finalizers"
+                        )
+                        pool_ocp.patch(
+                            resource_name=pool_name,
+                            params='{"metadata":{"finalizers":null}}',
+                            format_type="merge",
+                        )
+            except Exception as e:
+                log.error(
+                    f"Teardown: failed to clean up custom SC/pool "
+                    f"on cluster {cluster.ENV_DATA.get('cluster_name')}: {e}"
+                )
+        config.reset_ctx()
+
+    request.addfinalizer(finalizer)
     return factory
 
 
