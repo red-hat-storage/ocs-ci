@@ -368,6 +368,74 @@ deployment_4_21 = {
     ),
 }
 
+deployment_4_22 = {
+    # Perspective switcher for ACM hub cluster (PF v6)
+    "perspective_switcher_toggle": (
+        'button[data-test-id="perspective-switcher-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_core_platform": (
+        "//h2[normalize-space()='Core platform']"
+        "/ancestor::button[contains(@class, 'pf-v6-c-menu__item')]",
+        By.XPATH,
+    ),
+    # PF v6 sidebar navigation locators
+    "operators_tab": (
+        "//*[contains(@class, 'nav__link') and " "normalize-space()='Operators']",
+        By.XPATH,
+    ),
+    "installed_operators_tab": (
+        "//*[contains(@class, 'nav__link') and "
+        "normalize-space()='Installed Operators']",
+        By.XPATH,
+    ),
+    # MCO operator locators for rebranding validation
+    "mco_operator_row": (
+        "//a[@data-test-operator-row='DF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "mco_operator_row_old_name": (
+        "//a[@data-test-operator-row='ODF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "operator_display_name": (
+        "//h1[contains(@class, 'co-clusterserviceversion-details__name')]",
+        By.XPATH,
+    ),
+    "operator_provider": (
+        "//span[contains(text(), 'Provided by')]/following-sibling::span",
+        By.XPATH,
+    ),
+    "operator_description": (
+        "//h5[normalize-space()='Description']/following-sibling::p",
+        By.XPATH,
+    ),
+    "operator_installed_status": (
+        "//span[contains(@class, 'co-icon-and-text')][contains(text(), 'Installed')]",
+        By.XPATH,
+    ),
+    "operator_capability_basic_install": (
+        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
+        "//dt[text()='Capability Level']/following-sibling::dd"
+        "//span[contains(text(), 'Basic Install')]",
+        By.XPATH,
+    ),
+    "operator_capability_seamless_upgrades": (
+        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
+        "//dt[text()='Capability Level']/following-sibling::dd"
+        "//span[contains(text(), 'Seamless Upgrades')]",
+        By.XPATH,
+    ),
+    "operator_channel": (
+        "//dt[text()='Channel']/following-sibling::dd",
+        By.XPATH,
+    ),
+    "operator_installed_version": (
+        "//dt[text()='Installed Version']/following-sibling::dd",
+        By.XPATH,
+    ),
+}
+
 generic_locators = {
     "project_selector": (
         "//span[contains(@class, 'c-menu-toggle__text') and contains(text(), 'Project:')]",
@@ -3213,6 +3281,7 @@ locators = {
             **deployment_4_17,
             **deployment_4_19,
             **deployment_4_21,
+            **deployment_4_22,
         },
         "obc": {**obc, **obc_4_21},
         "pvc": {
