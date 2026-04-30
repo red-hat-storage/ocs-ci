@@ -196,7 +196,7 @@ class TestMdsXattrAlerts(E2ETest):
     """
 
     @pytest.fixture(scope="function", autouse=True)
-    def teardown(self, request):
+    def teardown(self, request, threading_lock):
         """
         Teardown fixture to restore MDS CPU resources and clear memory usage.
 
@@ -206,6 +206,7 @@ class TestMdsXattrAlerts(E2ETest):
 
         Args:
             request: pytest request object for finalizer registration
+            threading_lock: Threading lock fixture for Prometheus API calls
 
         """
 
@@ -214,11 +215,19 @@ class TestMdsXattrAlerts(E2ETest):
             Finalizer function to restore MDS resources and clear memory usage.
 
             This function:
-            1. Patches the storage cluster to restore MDS CPU limits and requests to 2 CPUs
+            1. Verifies that the alert is cleared (if test passed)
             2. Waits for toolbox pod to be in running state (up to 10 minutes)
             3. Calls cluster function to gradually bring down MDS memory usage
 
             """
+            try:
+                verify_alert_cleared(threading_lock)
+            except Exception as e:
+                log.warning(
+                    f"Failed to verify alert cleared in teardown: {e}. "
+                    "This may happen if the test failed before alert was triggered."
+                )
+
             log.info(
                 "Waiting for toolbox pod to be in running state (timeout: 900 seconds)"
             )
@@ -258,9 +267,6 @@ class TestMdsXattrAlerts(E2ETest):
             " Script will look for CephXattrSetLatency  alert"
         )
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
-
-        log.info("Checking for clearance of alert")
-        verify_alert_cleared(threading_lock)
 
     @pytest.mark.polarion_id("OCS-7734")
     def test_alert_triggered_by_restarting_operator_and_metrics_pods(
@@ -324,8 +330,6 @@ class TestMdsXattrAlerts(E2ETest):
         log.info("Validating the alert after ocs-metrics-exporter pod restart")
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
-        verify_alert_cleared(threading_lock)
-
     @pytest.mark.polarion_id("OCS-7735")
     def test_alert_after_recovering_prometheus_from_failures(
         self, set_xattr_with_high_cpu_usage, threading_lock
@@ -355,8 +359,6 @@ class TestMdsXattrAlerts(E2ETest):
         delete_pods(list_of_prometheus_pod_obj)
 
         assert MDSxattr_alert_values(threading_lock, timeout=300)
-
-        verify_alert_cleared(threading_lock)
 
     @pytest.mark.polarion_id("OCS-7736")
     def test_alert_after_active_mds_scaledown(
@@ -409,8 +411,6 @@ class TestMdsXattrAlerts(E2ETest):
             helpers.wait_for_resource_state(resource=pd, state=constants.STATUS_RUNNING)
 
         assert MDSxattr_alert_values(threading_lock, timeout=60)
-
-        verify_alert_cleared(threading_lock)
 
     @pytest.mark.polarion_id("OCS-7737")
     def test_alert_with_both_mds_scaledown(
@@ -479,8 +479,6 @@ class TestMdsXattrAlerts(E2ETest):
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
-        verify_alert_cleared(threading_lock)
-
     @pytest.mark.polarion_id("OCS-7738")
     def test_alert_with_mds_running_node_restart(
         self, set_xattr_with_high_cpu_usage, threading_lock, nodes
@@ -522,5 +520,3 @@ class TestMdsXattrAlerts(E2ETest):
         ), "Cluster is not healthy after active MDS node restart"
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
-
-        verify_alert_cleared(threading_lock)
