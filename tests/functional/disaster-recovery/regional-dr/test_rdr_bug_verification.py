@@ -163,7 +163,7 @@ class TestRDRBugVerification:
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
         secret_data = secret_ocp.exec_oc_cmd(
-            f"get secret {_PEER_TOKEN_SECRET} -o json" " --show-managed-fields=true"
+            f"get secret {_PEER_TOKEN_SECRET} -o json --show-managed-fields=true"
         )
 
         initial_rook_time = self._get_rook_managed_field_time(secret_data)
@@ -230,10 +230,7 @@ class TestRDRBugVerification:
                 timeout=300,
                 sleep=20,
                 func=secret_ocp.exec_oc_cmd,
-                command=(
-                    f"get secret {_PEER_TOKEN_SECRET} -o json"
-                    " --show-managed-fields=true"
-                ),
+                command=f"get secret {_PEER_TOKEN_SECRET} -o json --show-managed-fields=true",
             ):
                 updated_rook_time = self._get_rook_managed_field_time(
                     secret_data_sample
