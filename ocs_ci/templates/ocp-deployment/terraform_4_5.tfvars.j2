@@ -26,6 +26,7 @@ ssh_public_key_path: {{ ssh_public_key_path | default('~/.ssh/openshift-dev.pub'
 folder: {{ folder }}
 {% if dual_stack %}
 machine_cidr_ipv6: {{ machine_cidr_ipv6 }}
+gateway_v4: {{ gateway }}
 gateway_ipv6: {{ gateway_ipv6 }}
 vm_dns_ipv6_addresses: {{ dns_ipv6 }}
 ipam_ipv6: {{ ipam_ipv6 }}

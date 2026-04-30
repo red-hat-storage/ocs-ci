@@ -1125,6 +1125,7 @@ class VSPHEREUPI(VSPHEREBASE):
                         control_plane_ignition_path,
                         compute_ignition_path,
                     ]
+
                     for ignition_path in ignition_paths:
                         # Read the file and compress it + base64
                         with open(ignition_path, "rb") as f_in:
@@ -1223,11 +1224,14 @@ class VSPHEREUPI(VSPHEREBASE):
                 time.sleep(600)
                 logger.info("waiting for bootstrap to complete")
                 try:
+                    bootstrap_timeout = (
+                        7200 if config.DEPLOYMENT.get("dual_stack") else 3600
+                    )
                     run_cmd(
                         f"{self.installer} wait-for bootstrap-complete "
                         f"--dir {self.cluster_path} "
                         f"--log-level {log_cli_level}",
-                        timeout=3600,
+                        timeout=bootstrap_timeout,
                     )
                 except (CommandFailed, TimeoutExpired) as e:
                     err = str(e)
@@ -1301,11 +1305,12 @@ class VSPHEREUPI(VSPHEREBASE):
 
                 # wait for install to complete
                 logger.info("waiting for install to complete")
+                install_timeout = 7200 if config.DEPLOYMENT.get("dual_stack") else 3600
                 run_cmd(
                     f"{self.installer} wait-for install-complete "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=3600,
+                    timeout=install_timeout,
                 )
 
                 # Approving CSRs here in-case if any exists
@@ -2756,9 +2761,11 @@ def update_gw(str_to_replace, config_file):
     """
     # update gateway
     if config.ENV_DATA.get("gateway"):
-        replace_content_in_file(
-            config_file, str_to_replace, f"{config.ENV_DATA.get('gateway')}"
-        )
+        if config.DEPLOYMENT.get("dual_stack"):
+            gw = config.ENV_DATA.get("gateway_ipv6", config.ENV_DATA.get("gateway"))
+        else:
+            gw = config.ENV_DATA.get("gateway")
+        replace_content_in_file(config_file, str_to_replace, f"{gw}")
 
 
 def add_shutdown_wait_timeout():
@@ -2770,13 +2777,23 @@ def add_shutdown_wait_timeout():
     force powered-off after this timeout, otherwise an error is returned. Default: 3 minutes.
 
     """
-    with open(constants.VM_MAIN, "r") as fd:
-        obj = hcl2.load(fd)
-        obj["resource"][0]["vsphere_virtual_machine"]["vm"][
-            "shutdown_wait_timeout"
-        ] = 10
-    dump_data_to_json(obj, f"{constants.VM_MAIN}.json")
-    os.rename(constants.VM_MAIN, f"{constants.VM_MAIN}.backup")
+    if config.DEPLOYMENT.get("dual_stack"):
+        with open(constants.VM_MAIN, "r") as fd:
+            content = fd.read()
+        content = content.replace(
+            '"stealclock.enable"',
+            '"shutdown_wait_timeout" = 10\n' '    "stealclock.enable"',
+        )
+        with open(constants.VM_MAIN, "w") as fd:
+            fd.write(content)
+    else:
+        with open(constants.VM_MAIN, "r") as fd:
+            obj = hcl2.load(fd)
+            obj["resource"][0]["vsphere_virtual_machine"]["vm"][
+                "shutdown_wait_timeout"
+            ] = 10
+        dump_data_to_json(obj, f"{constants.VM_MAIN}.json")
+        os.rename(constants.VM_MAIN, f"{constants.VM_MAIN}.backup")
 
 
 def update_dns():

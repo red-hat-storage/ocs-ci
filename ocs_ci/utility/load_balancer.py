@@ -41,6 +41,7 @@ class LoadBalancer(object):
                 config.DEPLOYMENT.get("disconnected")
                 or config.DEPLOYMENT.get("proxy")
                 or config.DEPLOYMENT.get("ipv6")
+                or config.DEPLOYMENT.get("dual_stack")
             )
             else None
         )
@@ -64,9 +65,12 @@ class LoadBalancer(object):
             raise FileNotFoundError(
                 errno.ENOENT, os.strerror(errno.ENOENT), self.terraform_state_file
             )
-        ip_address = get_module_ip(
-            self.terraform_state_file, constants.LOAD_BALANCER_MODULE
-        )
+        if config.DEPLOYMENT.get("dual_stack"):
+            ip_address = get_module_ip(self.terraform_state_file, "module.ipam_lb_v4")
+        else:
+            ip_address = get_module_ip(
+                self.terraform_state_file, constants.LOAD_BALANCER_MODULE
+            )
         return ip_address[0]
 
     def restart_service(self, service_name):
