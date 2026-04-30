@@ -121,12 +121,13 @@ class ExternalCluster(object):
                 "Either password or SSH key is missing in EXTERNAL_MODE['login'] section!"
             )
         # adding jump host configuration to connect to external RHCS cluster on ibmcloud via jump host
-        self.jump_host = config.DEPLOYMENT.get("ssh_jump_host", None)
-
-        if self.jump_host and not self.jump_host.get("private_key"):
-            self.jump_host["private_key"] = os.path.expanduser(
-                config.DEPLOYMENT["ssh_key_private"]
-            )
+        self.jump_host = None
+        if config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM:
+            self.jump_host = config.DEPLOYMENT.get("ssh_jump_host", None)
+            if self.jump_host and not self.jump_host.get("private_key"):
+                self.jump_host["private_key"] = os.path.expanduser(
+                    config.DEPLOYMENT["ssh_key_private"]
+                )
 
         self.rhcs_conn = Connection(
             host=self.host,
@@ -296,7 +297,7 @@ class ExternalCluster(object):
             self.user,
             self.password,
             self.ssh_key,
-            ssh_connection=self.rhcs_conn if self.jump_host else self.ssh_key,
+            ssh_connection=self.rhcs_conn if self.jump_host else None,
         )
         return remote_rgw_cert_ca_path
 
