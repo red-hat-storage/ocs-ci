@@ -1085,7 +1085,7 @@ def check_for_filesystem_hangs(
                                     f"  Details: {hang_info.get('details')}"
                                 )
 
-                                logging.info(
+                                logger.info(
                                     "PRESERVING DIAGNOSTICS LOCALLY before test fails"
                                 )
                                 if preserve_diagnostics:
