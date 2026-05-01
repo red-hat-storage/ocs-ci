@@ -2859,11 +2859,6 @@ def update_machine_conf(folder_structure=True):
 
     """
     cidr_var = "var.machine_cidr"
-    if (
-        config.DEPLOYMENT.get("dual_stack")
-        and config.DEPLOYMENT.get("primary_stack") == "ipv6"
-    ):
-        cidr_var = "var.machine_cidr_ipv6"
 
     if not folder_structure:
         gw_string = "${cidrhost(%s,1)}" % cidr_var
