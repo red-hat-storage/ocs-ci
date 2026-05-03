@@ -373,10 +373,131 @@ class ODFCliRunner:
         return self.run_command(f" maintenance stop {deployment_name}")
 
 
-def odf_cli_setup_helper():
+class ODFCLICephfsSnapRunner(ODFCliRunner):
     """
-    Initializes and returns an instance of ODFCliRunner.
+    ODFCliRunner subclass for `odf cephfs-snap` subcommands.
+
+    Holds instance-level defaults for the global optional flags shared by all
+    cephfs-snap subcommands (--storage-client, --rados-namespace, --svg,
+    --filesystem).  None means "omit the flag and let the CLI use its own
+    default".  The namespace flag is intentionally excluded here because
+    ODFCliRunner.run_command already prepends -n {cluster_namespace}.
+
+    Args:
+        storage_client (str): StorageClient CR name. Defaults to
+            config.ENV_DATA["storage_client_name"] when None.
+        rados_namespace (str): Rados namespace for omap operations.
+        svg (str): Subvolume group name.
+        filesystem (str): CephFS filesystem name.
+    """
+
+    def __init__(
+        self,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+    ):
+        super().__init__()
+        from ocs_ci.ocs.constants import STORAGE_CLIENT_NAME
+
+        self.storage_client = storage_client or config.ENV_DATA.get(
+            "storage_client_name", STORAGE_CLIENT_NAME
+        )
+        self.rados_namespace = rados_namespace
+        self.svg = svg
+        self.filesystem = filesystem
+
+    def run_command(
+        self,
+        command,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+        orphaned=False,
+    ):
+        storage_client = storage_client or self.storage_client
+        rados_namespace = rados_namespace or self.rados_namespace
+        svg = svg or self.svg
+        filesystem = filesystem or self.filesystem
+
+        if storage_client:
+            command += f" --storage-client {self.storage_client}"
+        if rados_namespace:
+            command += f" --rados-namespace {self.rados_namespace}"
+        if svg:
+            command += f" --svg {self.svg}"
+        if filesystem:
+            command += f" --filesystem {self.filesystem}"
+        if orphaned:
+            command += " --orphaned"
+
+        return super().run_command(command)
+
+    def ls(
+        self,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+        orphaned=False,
+    ):
+        """
+        Run `odf cephfs-snap ls` and return the raw command result.
+
+        Args:
+            orphaned (bool): If True, pass --orphaned to list only orphaned
+                snapshots.
+
+        Returns:
+            CompletedProcess: result from exec_cmd.
+        """
+        return self.run_command(
+            command="cephfs-snap ls",
+            storage_client=storage_client,
+            rados_namespace=rados_namespace,
+            svg=svg,
+            filesystem=filesystem,
+            orphaned=orphaned,
+        )
+
+    def delete(
+        self,
+        subvolume,
+        snapshot,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+    ):
+        """
+        Run `odf cephfs-snap delete <subvolume> <snapshot>`.
+
+        Args:
+            subvolume (str): Subvolume name.
+            snapshot (str): Snapshot name.
+
+        Returns:
+            CompletedProcess: result from exec_cmd.
+        """
+        return self.run_command(
+            command=f"cephfs-snap delete {subvolume} {snapshot}",
+            storage_client=storage_client,
+            rados_namespace=rados_namespace,
+            svg=svg,
+            filesystem=filesystem,
+        )
+
+
+def odf_cli_setup_helper(odf_cli_class=ODFCliRunner, **kwargs):
+    """
+    Initializes and returns an instance of ODFCliRunner (or a subclass).
     Downloads the ODF CLI binary if it does not exist.
+
+    Args:
+        odf_cli_class: Runner class to instantiate (default: ODFCliRunner).
+        **kwargs: Extra keyword arguments forwarded to the runner constructor.
 
     Returns:
         ODFCliRunner: The initialized runner.
@@ -396,12 +517,26 @@ def odf_cli_setup_helper():
             raise RuntimeError("Failed to download ODF CLI binary")
 
     # Check and initialize ODFCliRunner
-    odf_cli_runner = ODFCliRunner()
+    odf_cli_runner = odf_cli_class(**kwargs)
     if not odf_cli_runner:
         log.warning("ODFCliRunner not initialized. Attempting to initialize again...")
-        odf_cli_runner = ODFCliRunner()
+        odf_cli_runner = odf_cli_class(**kwargs)
         if not odf_cli_runner:
             raise RuntimeError("Failed to initialize ODFCliRunner after retry")
 
     log.info("ODF CLI binary downloaded and ODFCliRunner initialized successfully")
     return odf_cli_runner
+
+
+def odf_cli_cephfs_snap_setup_helper(**kwargs):
+    """
+    Initialize and return an ODFCLICephfsSnapRunner with the ODF CLI binary set up.
+
+    Args:
+        **kwargs: Optional constructor arguments forwarded to ODFCLICephfsSnapRunner
+            (storage_client, rados_namespace, svg, filesystem).
+
+    Returns:
+        ODFCLICephfsSnapRunner: The initialized runner.
+    """
+    return odf_cli_setup_helper(odf_cli_class=ODFCLICephfsSnapRunner, **kwargs)

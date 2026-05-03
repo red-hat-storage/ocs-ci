@@ -799,6 +799,71 @@ class PrometheusAPI(object):
         return True
 
 
+def wait_and_validate_alert_firing(
+    api,
+    alert_name,
+    timeout=600,
+    expected_severity=None,
+    message_contains=None,
+):
+    """
+    Wait for a Prometheus alert to enter the firing state and validate its
+    labels and annotations.
+
+    Args:
+        api (PrometheusAPI): Initialized PrometheusAPI instance.
+        alert_name (str): Prometheus alertname to wait for.
+        timeout (int): Seconds to wait for the alert to fire.
+        expected_severity (str): If set, assert alert severity matches.
+        message_contains (str): If set, assert this substring appears
+            (case-insensitive) in the alert's 'message' annotation.
+
+    Returns:
+        dict: The first matching alert object.
+
+    Raises:
+        AssertionError: If the alert does not fire or validation fails.
+    """
+    alerts = api.wait_for_alert(name=alert_name, state="firing", timeout=timeout)
+    assert alerts, f"{alert_name} alert did not fire within {timeout}s"
+    alert = alerts[0]
+    if expected_severity:
+        assert alert["labels"].get("severity") == expected_severity, (
+            f"Expected severity '{expected_severity}', "
+            f"got '{alert['labels'].get('severity')}'"
+        )
+    if message_contains:
+        msg = alert["annotations"].get("message", "").lower()
+        assert (
+            message_contains.lower() in msg
+        ), f"Expected '{message_contains}' in alert message, got: {msg}"
+    assert alert["annotations"].get("runbook_url") or alert["annotations"].get(
+        "description"
+    ), f"Alert {alert_name} is missing both runbook_url and description"
+    logger.info(
+        f"Alert {alert_name} is firing — labels: {alert['labels']}, "
+        f"annotations: {alert['annotations']}"
+    )
+    return alert
+
+
+def wait_for_alert_cleared(api, alert_name, timeout=600):
+    """
+    Wait for a Prometheus alert to leave the firing state (i.e. clear).
+
+    Args:
+        api (PrometheusAPI): Initialized PrometheusAPI instance.
+        alert_name (str): Prometheus alertname to wait for clearance.
+        timeout (int): Seconds to wait for the alert to clear.
+
+    Raises:
+        AssertionError: If the alert is still firing after timeout.
+    """
+    still_firing = api.wait_for_alert(name=alert_name, timeout=timeout)
+    assert not still_firing, f"{alert_name} alert did not clear within {timeout}s"
+    logger.info(f"Alert {alert_name} has cleared")
+
+
 class PrometheusAlertSubscriber(Timer):
 
     prometheus_alert_list = []

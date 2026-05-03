@@ -643,6 +643,27 @@ class DataFoundationTabBar(PageNavigator):
 
         return TopologyTab()
 
+    def nav_cephfs_subvolume_metrics(self):
+        """
+        Navigate to the Block and File tab and scroll to the CephFS Subvolume
+        Metrics section (RHSTOR-7679, new in ODF 4.22).
+
+        Returns:
+            CephFSSubvolumeMetricsPage: Page object for the metrics section.
+        """
+        # Ensure we are on the Block and File tab first
+        self.nav_block_and_file_tab()
+
+        logger.info("Scrolling to CephFS Subvolume Metrics card")
+        self.scroll_into_view(self.validation_loc["cephfs_subvolume_metrics_card"])
+        self.page_has_loaded()
+
+        from ocs_ci.ocs.ui.page_objects.cephfs_subvolume_metrics import (
+            CephFSSubvolumeMetricsPage,
+        )
+
+        return CephFSSubvolumeMetricsPage()
+
 
 class DataFoundationDefaultTab(DataFoundationTabBar):
     """

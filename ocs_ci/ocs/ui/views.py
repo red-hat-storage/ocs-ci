@@ -3195,6 +3195,87 @@ external_systems = {
         By.CSS_SELECTOR,
     ),
 }
+# ---------------------------------------------------------------------------
+# RHSTOR-7679: CephFS Subvolume Metrics page locators (new in 4.22)
+# These XPaths follow the ODF console data-test attribute convention.
+# TODO: verify each XPath against the final 4.22 UI implementation.
+# ---------------------------------------------------------------------------
+validation_4_22 = {
+    # Top-level card heading on the Block and File tab
+    "cephfs_subvolume_metrics_card": (
+        "//h2[contains(normalize-space(),'subvolume')]"
+        " | //div[@data-test='cephfs-subvolume-metrics-card']",
+        By.XPATH,
+    ),
+    # Tab buttons for IOPS / Latency / Throughput ranking
+    "cephfs_subvolume_iops_tab": (
+        "//button[@data-test='cephfs-subvolume-tab-iops']"
+        " | //button[normalize-space()='IOPS']",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_latency_tab": (
+        "//button[@data-test='cephfs-subvolume-tab-latency']"
+        " | //button[normalize-space()='Latency']",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_throughput_tab": (
+        "//button[@data-test='cephfs-subvolume-tab-throughput']"
+        " | //button[normalize-space()='Throughput']",
+        By.XPATH,
+    ),
+    # Ranking table rows (top-10 list)
+    "cephfs_subvolume_table_rows": (
+        "//tr[@data-test='cephfs-subvolume-row']"
+        " | //table[contains(@class,'cephfs-subvolume')]//tbody/tr",
+        By.XPATH,
+    ),
+    # First column (PVC name) within a ranking row
+    "cephfs_subvolume_row_name": (
+        ".//td[@data-test='cephfs-subvolume-row-name']" " | .//td[1]",
+        By.XPATH,
+    ),
+    # Second column (namespace) within a ranking row
+    "cephfs_subvolume_row_namespace": (
+        ".//td[@data-test='cephfs-subvolume-row-namespace']" " | .//td[2]",
+        By.XPATH,
+    ),
+    # Metric value column within a ranking row
+    "cephfs_subvolume_row_value": (
+        ".//td[@data-test='cephfs-subvolume-row-value']" " | .//td[3]",
+        By.XPATH,
+    ),
+    # Detail drawer that opens when a row is clicked
+    "cephfs_subvolume_detail_drawer": (
+        "//div[@data-test='cephfs-subvolume-detail-drawer']"
+        " | //div[contains(@class,'cephfs-subvolume-details')]",
+        By.XPATH,
+    ),
+    # Close button inside the detail drawer
+    "cephfs_subvolume_detail_drawer_close": (
+        "//button[@aria-label='Close']"
+        " | //button[@data-test='cephfs-detail-drawer-close']",
+        By.XPATH,
+    ),
+    # Pod list inside the detail drawer
+    "cephfs_subvolume_detail_pods": (
+        "//div[@data-test='cephfs-subvolume-detail-pods']//tr"
+        " | //div[contains(@class,'cephfs-subvolume-details')]//tbody/tr",
+        By.XPATH,
+    ),
+    # Empty-state message when no CephFS PVCs exist
+    "cephfs_subvolume_empty_state": (
+        "//div[@data-test='cephfs-subvolume-empty-state']"
+        " | //*[contains(normalize-space(),'No subvolumes')]",
+        By.XPATH,
+    ),
+    # Search bar on the metrics page
+    "cephfs_subvolume_search": (
+        "//input[@data-test='cephfs-subvolume-search']"
+        " | //input[@placeholder='Search by name']",
+        By.XPATH,
+    ),
+}
+
 locators = {
     "4.22": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -3253,6 +3334,7 @@ locators = {
             **validation_4_18,
             **validation_4_20,
             **validation_4_21,
+            **validation_4_22,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
