@@ -384,6 +384,46 @@ def relocate(
     config.switch_ctx(restore_index)
 
 
+def check_rbd_mirror_running(namespace=None):
+    """
+    Check if the rbd-mirror daemon deployment is running with at least one ready replica.
+    Ceph HEALTH_OK does not reflect rbd-mirror daemon absence, so this explicit
+    check is needed to catch silent failures before tests run.
+
+    Args:
+        namespace (str): Namespace to check in.
+            Defaults to config.ENV_DATA['cluster_namespace'].
+
+    Returns:
+        bool: True if rbd-mirror deployment has ready replicas
+
+    Raises:
+        UnexpectedDeploymentConfiguration: If the rbd-mirror deployment is
+            not found or not running
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    dep_ocp = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    try:
+        dep_data = dep_ocp.get(resource_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT)
+    except CommandFailed:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} deployment not found in {namespace}"
+        )
+    spec_replicas = dep_data.get("spec", {}).get("replicas") or 0
+    ready_replicas = dep_data.get("status", {}).get("readyReplicas") or 0
+    if spec_replicas < 1 or ready_replicas < 1:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is not running: "
+            f"spec.replicas={spec_replicas}, status.readyReplicas={ready_replicas}"
+        )
+    logger.info(
+        f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is running: "
+        f"replicas={spec_replicas}, readyReplicas={ready_replicas}"
+    )
+    return True
+
+
 def check_mirroring_status_ok(
     replaying_images=None,
     replaying_groups=None,
