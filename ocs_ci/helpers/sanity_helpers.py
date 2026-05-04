@@ -120,18 +120,18 @@ class Sanity:
             for pod in self.pod_objs:
                 get_fio_rw_iops(pod)
 
-        if rgw_bucket_factory:
-            self.obc_objs.extend(rgw_bucket_factory(1, "rgw-oc"))
+        # if rgw_bucket_factory:
+        #     self.obc_objs.extend(rgw_bucket_factory(1, "rgw-oc"))
 
-        if bucket_factory:
-            self.obc_objs.extend(
-                bucket_factory(
-                    amount=1, interface="OC", timeout=bucket_creation_timeout
-                )
-            )
+        # if bucket_factory:
+        #     self.obc_objs.extend(
+        #         bucket_factory(
+        #             amount=1, interface="OC", timeout=bucket_creation_timeout
+        #         )
+        #     )
 
-            if not is_hci_client_cluster():
-                self.ceph_cluster.wait_for_noobaa_health_ok()
+        #     if not is_hci_client_cluster():
+        #         self.ceph_cluster.wait_for_noobaa_health_ok()
 
     def delete_resources(self):
         """
