@@ -9,7 +9,7 @@ import pytest
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import delete_deployment_pods
+from ocs_ci.ocs.resources.pod import delete_deploymentconfig_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3, magenta_squad
@@ -49,7 +49,7 @@ class Testopenshiftloggingonocs(E2ETest):
         """"""
 
         def finalizer():
-            delete_deployment_pods(pod_obj)
+            delete_deploymentconfig_pods(pod_obj)
 
         request.addfinalizer(finalizer)
 
