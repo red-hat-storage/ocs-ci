@@ -6976,5 +6976,7 @@ def genereate_cred_file_rack():
     with open(file_path, "w") as f:
         json.dump(rack_dict, f, indent=2)
     log.info(f"Rack details saved to {file_path}")
+    with open(file_path) as f:
+        log.info(f"Content of {file_path}:\n{f.read()}")
 
     return rack_dict
