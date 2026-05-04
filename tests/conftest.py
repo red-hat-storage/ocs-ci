@@ -5938,6 +5938,86 @@ def pv_encryption_kmip_setup_factory(request):
     return factory
 
 
+@pytest.fixture(scope="function")
+def pv_encryption_kmip_no_crypto_rpc_setup_factory(request):
+    """
+    Create KMIP resources and setup csi-kms-connection-details configMap
+    with USE_CRYPTO_RPC set to false
+
+    """
+    kmip = KMS.KMIP()
+
+    def factory():
+        """
+        Returns:
+            object: KMIP (KMS) object
+        """
+        kmip.update_kmip_env_vars()
+        get_ksctl_cli()
+        kmip.kmsid = create_unique_resource_name("test", "kmip")
+        kmip.kmip_secret_name = kmip.create_kmip_secret(type="csi")
+
+        conn_data = {
+            "KMS_PROVIDER": "kmip",
+            "KMS_SERVICE_NAME": kmip.kmsid,
+            "KMIP_ENDPOINT": f"{kmip.kmip_endpoint}:{kmip.kmip_port}",
+            "KMIP_SECRET_NAME": kmip.kmip_secret_name,
+            "TLS_SERVER_NAME": kmip.kmip_tls_server_name,
+            "USE_CRYPTO_RPC": "false",
+            "UNIQUE_IDENTIFIER": kmip.kmip_key_identifier,
+        }
+
+        ocp_obj = OCP(
+            kind="configmap", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+        )
+
+        try:
+            ocp_obj.get_resource(
+                resource_name="csi-kms-connection-details", column="NAME"
+            )
+            vdict = {kmip.kmsid: conn_data}
+            KMS.update_csi_kms_vault_connection_details(vdict)
+
+        except CommandFailed as cfe:
+            if "not found" not in str(cfe):
+                raise
+            else:
+                kmip.kmsid = "1-kmip"
+                conn_data["KMS_SERVICE_NAME"] = kmip.kmsid
+                csi_kms_conn_details = {
+                    "apiVersion": "v1",
+                    "kind": "ConfigMap",
+                    "metadata": {
+                        "name": "csi-kms-connection-details",
+                        "namespace": ocsci_config.ENV_DATA["cluster_namespace"],
+                    },
+                    "data": {
+                        kmip.kmsid: json.dumps(conn_data),
+                    },
+                }
+                kmip.create_resource(csi_kms_conn_details, prefix="csikmsconn")
+
+        return kmip
+
+    def finalizer():
+        """
+        Remove the kmip config from csi-kms-connection-details configMap
+
+        """
+        if len(KMS.get_encryption_kmsid()) > 1:
+            KMS.remove_kmsid(kmip.kmsid)
+        if kmip.kmip_secret_name:
+            run_cmd(
+                f"oc delete secret {kmip.kmip_secret_name} -n"
+                f" {ocsci_config.ENV_DATA['cluster_namespace']}"
+            )
+        if kmip.kmip_key_identifier:
+            kmip.delete_ciphertrust_key(key_id=kmip.kmip_key_identifier)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
 def pv_encryption_hpcs_setup_factory(request):
     """
     Create hpcs resources and setup csi-kms-connection-details configMap
