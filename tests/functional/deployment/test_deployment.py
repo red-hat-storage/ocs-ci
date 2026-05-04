@@ -32,7 +32,9 @@ def test_deployment(pvc_factory, pod_factory):
     if not teardown or deploy:
         log.info("Verifying OCP cluster is running")
         assert is_cluster_running(config.ENV_DATA["cluster_path"])
-        if not config.ENV_DATA["skip_ocs_deployment"]:
+        if not config.ENV_DATA["skip_ocs_deployment"] and config.ENV_DATA.get(
+            "setup_storage", True
+        ):
             if config.multicluster:
                 restore_ctx_index = config.cur_index
                 for cluster in get_non_acm_cluster_config():

@@ -182,6 +182,7 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
+  setup_storage: true
   ocs_version: "4.22"
   prometheus_version: "4.10.0"
   # uncomment to use custom directory for storing measurement data related to
