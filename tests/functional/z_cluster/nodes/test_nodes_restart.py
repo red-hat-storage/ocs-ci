@@ -7,12 +7,12 @@ from ocs_ci.framework.testlib import (
     tier4b,
     ignore_leftovers,
     ManageTest,
-    # cloud_platform_required,
+    cloud_platform_required,
     skipif_no_lso,
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
     skipif_managed_service,
-    # skipif_hci_provider_and_client,
+    skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, get_nodes, wait_for_nodes_status
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 @brown_squad
 @ignore_leftovers
 @skipif_managed_service
-# @skipif_hci_provider_and_client
+@skipif_hci_provider_and_client
 class TestNodesRestart(ManageTest):
     """
     Test ungraceful cluster shutdown
@@ -73,7 +73,7 @@ class TestNodesRestart(ManageTest):
             pytest.param(*[True], marks=pytest.mark.polarion_id("OCS-894")),
             pytest.param(
                 *[False],
-                marks=[pytest.mark.polarion_id("OCS-895")],
+                marks=[pytest.mark.polarion_id("OCS-895"), cloud_platform_required],
             ),
         ],
     )
