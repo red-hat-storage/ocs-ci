@@ -366,6 +366,32 @@ def get_node_ips(node_type="worker"):
         raise NotImplementedError
 
 
+def get_node_internal_ips(node_type="worker"):
+    """
+    Gets the node InternalIP addresses. Useful on platforms like vSphere
+    where ExternalIP is not set by the cloud provider.
+
+    Args:
+        node_type (str): The node type (e.g. worker, master)
+
+    Returns:
+        list: Node InternalIP addresses
+
+    """
+    ocp = OCP(kind=constants.NODE)
+    if node_type == "worker":
+        nodes = ocp.get(selector=constants.WORKER_LABEL).get("items")
+    if node_type == "master":
+        nodes = ocp.get(selector=constants.MASTER_LABEL).get("items")
+
+    return [
+        each["address"]
+        for node in nodes
+        for each in node["status"]["addresses"]
+        if each["type"] == "InternalIP"
+    ]
+
+
 def get_node_ip_addresses(ipkind):
     """
     Gets a dictionary of required IP addresses for all nodes
