@@ -59,6 +59,7 @@ class TestNeutralHubFailureAndRecovery:
         """
         Test to verify failover and relocate of all workloads after switching to passive hub post hub recovery
         """
+        dr_helpers.validate_cluster_odf_cli()
 
         # Deploy Subscription and Appset based application of both RBD and CephFS SC
         rdr_workload = dr_workload(

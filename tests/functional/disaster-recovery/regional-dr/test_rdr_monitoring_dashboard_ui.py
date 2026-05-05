@@ -52,6 +52,7 @@ class TestRDRMonitoringDashboardUI:
         and their count, Cluster and Operator health status on it
 
         """
+        dr_helpers.validate_cluster_odf_cli()
 
         # Enable MCO console plugin needed for DR dashboard
         enable_mco_console_plugin()
