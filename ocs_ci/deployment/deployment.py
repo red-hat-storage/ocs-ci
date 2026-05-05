@@ -2487,7 +2487,9 @@ class Deployment(object):
         Returns:
              bool: True if ACM HUB operator is installed, False otherwise
         """
-        ocp_obj = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
+        ocp_obj = OCP(
+            kind=constants.ROOK_OPERATOR, namespace=constants.ACM_HUB_NAMESPACE
+        )
         return ocp_obj.check_resource_existence(
             timeout=6,
             should_exist=True,
@@ -2501,6 +2503,8 @@ class Deployment(object):
         if self.acm_operator_installed():
             logger.info("ACM Operator is already installed")
             self.deploy_multicluster_hub()
+            if config.ENV_DATA.get("configure_acm_to_import_mce"):
+                self.configure_acm_to_import_mce_clusters()
             return
 
         if config.ENV_DATA.get("acm_hub_unreleased"):
