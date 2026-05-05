@@ -625,7 +625,7 @@ def nfs_access_for_clients(nfs_sc):
     ):
         server == hostname_add
     else:
-        server == "ocs-storagecluster-cephnfs-service"
+        server == constants.NFS_DEFAULT_SERVICE_NAME
 
     # switch to consumer
     config.switch_to_consumer()
@@ -790,7 +790,7 @@ def fetch_nfs_server_details_on_client_cluster(default_server=False):
 
     Args:
         default_server (bool): If True, wait until the server parameter equals
-            the default NFS service name ("ocs-storagecluster-cephnfs-service").
+            the default NFS service name (constants.NFS_DEFAULT_SERVICE_NAME).
             Use this when the external endpoint has been removed and the
             operator is expected to revert to the default. Default is False.
 
@@ -825,7 +825,7 @@ def fetch_nfs_server_details_on_client_cluster(default_server=False):
     sample = TimeoutSampler(timeout=120, sleep=10, func=_get_nfs_server)
     for server in sample:
         if server:
-            if default_server and server != "ocs-storagecluster-cephnfs-service":
+            if default_server and server != constants.NFS_DEFAULT_SERVICE_NAME:
                 continue
             log.info(
                 "NFS StorageClass '%s' found on client cluster with server: %s",

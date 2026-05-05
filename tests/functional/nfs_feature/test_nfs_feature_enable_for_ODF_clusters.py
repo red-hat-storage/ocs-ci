@@ -1661,7 +1661,7 @@ class TestNfsEnable(ManageTest):
         )
         # validate default nfs server details is displayed
         assert (
-            server == "ocs-storagecluster-cephnfs-service"
+            server == constants.NFS_DEFAULT_SERVICE_NAME
         ), f"Expected default NFS server service, got: {server}"
 
         # Update nfs external endpoint details in storagecluster
