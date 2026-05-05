@@ -209,11 +209,13 @@ class TestCephDefaultValuesCheck(ManageTest):
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
     @skipif_managed_service
-    @skipif_ocs_version("<4.9")
+    @skipif_ocs_version(["<4.9", ">=4.19"])
     @tier2
     def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
         Validate noobaa postgres configmap post OCS upgrade
+        Important: Postgres configmap is replaced with CNPG in 4.19.
+        Skip the test for ocs >= 4.19.
 
         """
         cm_obj = OCP(
