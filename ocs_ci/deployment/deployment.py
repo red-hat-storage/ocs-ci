@@ -1217,7 +1217,11 @@ class Deployment(object):
         rosa_hcp_non_ga = platform == constants.ROSA_HCP_PLATFORM and bool(
             config.DEPLOYMENT.get("ocs_registry_image")
         )
-        if config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
+        if config.DEPLOYMENT.get("ocs_catalog_source_name"):
+            subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT[
+                "ocs_catalog_source_name"
+            ]
+        elif config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
             )
@@ -1736,56 +1740,57 @@ class Deployment(object):
                             replace_to=csv_change_to,
                         )
 
-        # Create custom storage class early for Azure Performance Plus feature
-        # This needs to be done before StorageSystem/StorageCluster creation
-        if self.custom_storage_class_path is not None:
-            log_step("Creating custom storage class for deployment")
-            self.storage_class = storage_class.create_custom_storageclass(
-                self.custom_storage_class_path
-            )
+        if not config.DEPLOYMENT.get("skip_storagecluster_install"):
+            # Create custom storage class early for Azure Performance Plus feature
+            # This needs to be done before StorageSystem/StorageCluster creation
+            if self.custom_storage_class_path is not None:
+                log_step("Creating custom storage class for deployment")
+                self.storage_class = storage_class.create_custom_storageclass(
+                    self.custom_storage_class_path
+                )
 
-        if is_storage_system_needed():
-            logger.info("Creating StorageSystem")
-            # change namespace of storage system if needed
-            storage_system_data = templating.load_yaml(
-                constants.STORAGE_SYSTEM_ODF_YAML
-            )
-            storage_system_data["metadata"]["namespace"] = self.namespace
-            storage_system_data["spec"]["namespace"] = self.namespace
+            if is_storage_system_needed():
+                logger.info("Creating StorageSystem")
+                # change namespace of storage system if needed
+                storage_system_data = templating.load_yaml(
+                    constants.STORAGE_SYSTEM_ODF_YAML
+                )
+                storage_system_data["metadata"]["namespace"] = self.namespace
+                storage_system_data["spec"]["namespace"] = self.namespace
 
-            # create storage system
-            templating.dump_data_to_temp_yaml(
-                storage_system_data, constants.STORAGE_SYSTEM_ODF_YAML
-            )
-            log_step("Apply StorageSystem CR")
-            exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
+                # create storage system
+                templating.dump_data_to_temp_yaml(
+                    storage_system_data, constants.STORAGE_SYSTEM_ODF_YAML
+                )
+                log_step("Apply StorageSystem CR")
+                exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
 
-        if managed_ibmcloud:
-            log_step("Patching config map to change KUBLET DIR PATH")
-            config_map = ocp.OCP(
-                kind="configmap",
-                namespace=self.namespace,
-                resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-            )
-            config_map.get(retry=10, wait=5)
-            config_map_patch = (
-                '\'{"data": {"ROOK_CSI_KUBELET_DIR_PATH": "/var/data/kubelet"}}\''
-            )
-            exec_cmd(
-                f"oc patch configmap -n {self.namespace} "
-                f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
-            )
+            if managed_ibmcloud:
+                log_step("Patching config map to change KUBLET DIR PATH")
+                config_map = ocp.OCP(
+                    kind="configmap",
+                    namespace=self.namespace,
+                    resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+                )
+                config_map.get(retry=10, wait=5)
+                config_map_patch = (
+                    '\'{"data": {"ROOK_CSI_KUBELET_DIR_PATH": "/var/data/kubelet"}}\''
+                )
+                exec_cmd(
+                    f"oc patch configmap -n {self.namespace} "
+                    f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
+                )
 
-        storage_cluster_setup = StorageClusterSetup()
-        storage_cluster_setup.setup_storage_cluster()
+            storage_cluster_setup = StorageClusterSetup()
+            storage_cluster_setup.setup_storage_cluster()
 
-        if config.DEPLOYMENT["infra_nodes"]:
-            log_step("Labeling infra nodes")
-            _ocp = ocp.OCP(kind="node")
-            _ocp.exec_oc_cmd(
-                command=f"annotate namespace {config.ENV_DATA['cluster_namespace']} "
-                f"{constants.NODE_SELECTOR_ANNOTATION}"
-            )
+            if config.DEPLOYMENT["infra_nodes"]:
+                log_step("Labeling infra nodes")
+                _ocp = ocp.OCP(kind="node")
+                _ocp.exec_oc_cmd(
+                    command=f"annotate namespace {config.ENV_DATA['cluster_namespace']} "
+                    f"{constants.NODE_SELECTOR_ANNOTATION}"
+                )
 
     def cleanup_pgsql_db(self):
         """
@@ -2159,203 +2164,225 @@ class Deployment(object):
             self.deploy_with_external_mode()
         else:
             self.deploy_ocs_via_operator(image)
-            if config.ENV_DATA["mcg_only_deployment"]:
-                mcg_only_post_deployment_checks()
-                return
+            if not config.DEPLOYMENT.get("skip_storagecluster_install"):
+                if config.ENV_DATA["mcg_only_deployment"]:
+                    mcg_only_post_deployment_checks()
+                    return
 
-            # get ODF version and set MGR count based on ODF version
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            mgr_count = constants.MGR_COUNT_415
-            if ocs_version < version.VERSION_4_15:
-                mgr_count = constants.MGR_COUNT
+                # get ODF version and set MGR count based on ODF version
+                ocs_version = version.get_semantic_ocs_version_from_config()
+                mgr_count = constants.MGR_COUNT_415
+                if ocs_version < version.VERSION_4_15:
+                    mgr_count = constants.MGR_COUNT
 
-            pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
-            cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
-            # Check for Ceph pods
-            managed_ibmcloud = (
-                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                and config.ENV_DATA["deployment_type"] == "managed"
-            )
-            if managed_ibmcloud:
-                mon_pod_timeout = 1800
-            else:
-                mon_pod_timeout = 900
-            assert pod.wait_for_resource(
-                condition="Running",
-                selector="app=rook-ceph-mon",
-                resource_count=3,
-                timeout=mon_pod_timeout,
-            )
-            assert pod.wait_for_resource(
-                condition="Running",
-                selector="app=rook-ceph-mgr",
-                resource_count=mgr_count,
-                timeout=600,
-            )
-            assert pod.wait_for_resource(
-                condition="Running",
-                selector="app=rook-ceph-osd",
-                resource_count=3,
-                timeout=600,
-            )
-
-            # validate ceph mon/osd volumes are backed by pvc
-            validate_cluster_on_pvc()
-
-            # check for odf-console
-            if ocs_version >= version.VERSION_4_9:
+                pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+                cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
+                # Check for Ceph pods
+                managed_ibmcloud = (
+                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                    and config.ENV_DATA["deployment_type"] == "managed"
+                )
+                if managed_ibmcloud:
+                    mon_pod_timeout = 1800
+                else:
+                    mon_pod_timeout = 900
                 assert pod.wait_for_resource(
-                    condition="Running", selector="app=odf-console", timeout=600
+                    condition="Running",
+                    selector="app=rook-ceph-mon",
+                    resource_count=3,
+                    timeout=mon_pod_timeout,
+                )
+                assert pod.wait_for_resource(
+                    condition="Running",
+                    selector="app=rook-ceph-mgr",
+                    resource_count=mgr_count,
+                    timeout=600,
+                )
+                assert pod.wait_for_resource(
+                    condition="Running",
+                    selector="app=rook-ceph-osd",
+                    resource_count=3,
+                    timeout=600,
                 )
 
-            # Creating toolbox pod
-            setup_ceph_toolbox()
+                # validate ceph mon/osd volumes are backed by pvc
+                validate_cluster_on_pvc()
 
-            assert pod.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector="app=rook-ceph-tools",
-                resource_count=1,
-                timeout=600,
-            )
+                # check for odf-console
+                if ocs_version >= version.VERSION_4_9:
+                    assert pod.wait_for_resource(
+                        condition="Running",
+                        selector="app=odf-console",
+                        timeout=600,
+                    )
+
+                # Creating toolbox pod
+                setup_ceph_toolbox()
+
+                assert pod.wait_for_resource(
+                    condition=constants.STATUS_RUNNING,
+                    selector="app=rook-ceph-tools",
+                    resource_count=1,
+                    timeout=600,
+                )
+
+                if not config.COMPONENTS["disable_cephfs"]:
+                    # Check for CephFilesystem creation in ocp
+                    cfs_data = cfs.get()
+                    cfs_name = cfs_data["items"][0]["metadata"]["name"]
+
+                    if helpers.validate_cephfilesystem(cfs_name):
+                        logger.info("MDS deployment is successful!")
+                        defaults.CEPHFILESYSTEM_NAME = cfs_name
+                    else:
+                        logger.error("MDS deployment Failed! Please check logs!")
+                if config.DEPLOYMENT.get("multi_storagecluster"):
+                    self.deploy_with_external_mode()
+                    # Checking external cephcluster health
+                    retry(
+                        (CephHealthException, CommandFailed),
+                        tries=5,
+                        delay=20,
+                    )(
+                        check_cephcluster_status(
+                            desired_phase="Connected",
+                            desired_health="HEALTH_OK",
+                            name=constants.EXTERNAL_CEPHCLUSTER_NAME,
+                            namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
+                        )
+                    )
+
+        if not config.DEPLOYMENT.get("skip_storagecluster_install"):
+            self.odf_deployments_check()
+
+            # Change monitoring backend to OCS
+            if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
+                "persistent-monitoring"
+            ):
+                setup_persistent_monitoring()
+            elif config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
+                "telemeter_server_url"
+            ):
+                # Create configmap cluster-monitoring-config to reconfigure
+                # telemeter server url when 'persistent-monitoring' is False
+                create_configmap_cluster_monitoring_pod(
+                    telemeter_server_url=config.ENV_DATA["telemeter_server_url"]
+                )
 
             if not config.COMPONENTS["disable_cephfs"]:
-                # Check for CephFilesystem creation in ocp
-                cfs_data = cfs.get()
-                cfs_name = cfs_data["items"][0]["metadata"]["name"]
+                # Change registry backend to OCS CEPHFS RWX PVC
+                registry.change_registry_backend_to_ocs()
 
-                if helpers.validate_cephfilesystem(cfs_name):
-                    logger.info("MDS deployment is successful!")
-                    defaults.CEPHFILESYSTEM_NAME = cfs_name
-                else:
-                    logger.error("MDS deployment Failed! Please check logs!")
-            if config.DEPLOYMENT.get("multi_storagecluster"):
-                self.deploy_with_external_mode()
-                # Checking external cephcluster health
-                retry(
-                    (CephHealthException, CommandFailed),
-                    tries=5,
-                    delay=20,
-                )(
-                    check_cephcluster_status(
-                        desired_phase="Connected",
-                        desired_health="HEALTH_OK",
-                        name=constants.EXTERNAL_CEPHCLUSTER_NAME,
-                        namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
+            # Enable console plugin
+            enable_console_plugin()
+
+            if (
+                config.DEPLOYMENT.get("ec_default_pools")
+                and not config.DEPLOYMENT.get("external_mode")
+                and not config.ENV_DATA.get("mcg_only_deployment")
+            ):
+                create_ec_cephobjectstore()
+
+            # validate PDB creation of MON, MDS, OSD pods
+            if not config.DEPLOYMENT["external_mode"]:
+                validate_pdb_creation()
+
+            # Increase bluestore_slow_ops_warn_threshold and
+            # bluestore_slow_ops_warn_lifetime till
+            # https://issues.redhat.com/browse/DFBUGS-1913 is resolved
+            if (
+                self.platform == constants.VSPHERE_PLATFORM
+                and version.get_semantic_ocs_version_from_config()
+                >= version.VERSION_4_18
+            ):
+                # using try/except to not fail deployments since these values
+                # are good to have for vsphere platform
+                try:
+                    set_ceph_config(
+                        entity="global",
+                        config_name="bluestore_slow_ops_warn_threshold",
+                        value="7",
                     )
-                )
-        self.odf_deployments_check()
+                    set_ceph_config(
+                        entity="global",
+                        config_name="bluestore_slow_ops_warn_lifetime",
+                        value="10",
+                    )
+                except Exception as ex:
+                    logger.error(
+                        f"Failed to set values for bluestore_slow_ops. "
+                        f"Exception is: {ex}"
+                    )
 
-        # Change monitoring backend to OCS
-        if config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
-            "persistent-monitoring"
-        ):
-            setup_persistent_monitoring()
-        elif config.ENV_DATA.get("monitoring_enabled") and config.ENV_DATA.get(
-            "telemeter_server_url"
-        ):
-            # Create configmap cluster-monitoring-config to reconfigure
-            # telemeter server url when 'persistent-monitoring' is False
-            create_configmap_cluster_monitoring_pod(
-                telemeter_server_url=config.ENV_DATA["telemeter_server_url"]
-            )
-
-        if not config.COMPONENTS["disable_cephfs"]:
-            # Change registry backend to OCS CEPHFS RWX PVC
-            registry.change_registry_backend_to_ocs()
-
-        # Enable console plugin
-        enable_console_plugin()
-
-        if (
-            config.DEPLOYMENT.get("ec_default_pools")
-            and not config.DEPLOYMENT.get("external_mode")
-            and not config.ENV_DATA.get("mcg_only_deployment")
-        ):
-            create_ec_cephobjectstore()
-
-        # validate PDB creation of MON, MDS, OSD pods
-        if not config.DEPLOYMENT["external_mode"]:
-            validate_pdb_creation()
-
-        # Increase bluestore_slow_ops_warn_threshold and bluestore_slow_ops_warn_lifetime
-        # till https://issues.redhat.com/browse/DFBUGS-1913 is resolved
-
-        if (
-            self.platform == constants.VSPHERE_PLATFORM
-            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_18
-        ):
-            # using try/except to not fail deployments since these values are good to have
-            # for vsphere platform
+            # Mute MON_NETSPLIT for arbiter deployments to avoid:
+            # https://issues.redhat.com/browse/DFBUGS-4521
+            if config.DEPLOYMENT.get("arbiter_deployment"):
+                mute_mon_netsplit(namespace=self.namespace)
+            # Verify health of ceph cluster
+            logger.info("Done creating rook resources, waiting for HEALTH_OK")
             try:
-                set_ceph_config(
-                    entity="global",
-                    config_name="bluestore_slow_ops_warn_threshold",
-                    value="7",
-                )
-                set_ceph_config(
-                    entity="global",
-                    config_name="bluestore_slow_ops_warn_lifetime",
-                    value="10",
-                )
+                ceph_health_check(namespace=self.namespace, tries=30, delay=10)
+            except CephHealthException as ex:
+                err = str(ex)
+                logger.warning(f"Ceph health check failed with {err}")
+                if "clock skew detected" in err:
+                    logger.info("Changing NTP on cluster nodes")
+                    if self.platform == constants.VSPHERE_PLATFORM:
+                        update_ntp_compute_nodes()
+                    assert ceph_health_check(
+                        namespace=self.namespace, tries=60, delay=10
+                    )
+
+            # Workaround for DFBUGS-6749: devicehealth module fails when its
+            # pool cannot be created due to a missing default CRUSH rule.
+            try:
+                ceph_health_resolve_devicehealth()
             except Exception as ex:
-                logger.error(
-                    f"Failed to set values for bluestore_slow_ops. Exception is: {ex}"
+                logger.warning(
+                    f"devicehealth workaround failed (may not be needed): {ex}"
                 )
 
-        # Mute MON_NETSPLIT for arbiter deployments to avoid:
-        # https://issues.redhat.com/browse/DFBUGS-4521
-        if config.DEPLOYMENT.get("arbiter_deployment"):
-            mute_mon_netsplit(namespace=self.namespace)
-        # Verify health of ceph cluster
-        logger.info("Done creating rook resources, waiting for HEALTH_OK")
-        try:
-            ceph_health_check(namespace=self.namespace, tries=30, delay=10)
-        except CephHealthException as ex:
-            err = str(ex)
-            logger.warning(f"Ceph health check failed with {err}")
-            if "clock skew detected" in err:
-                logger.info("Changing NTP on cluster nodes")
-                if self.platform == constants.VSPHERE_PLATFORM:
-                    update_ntp_compute_nodes()
-                assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
-
-        # In case of RDR, check for bluestore-rdr on osds: 4.14 onwards until 4.17
-        if (
-            (
-                version.VERSION_4_14
-                <= version.get_semantic_ocs_version_from_config()
-                <= version.VERSION_4_17
-            )
-            and config.multicluster
-            and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
-            and config.ENV_DATA.get("rdr_osd_deployment_mode")
-            == constants.RDR_OSD_MODE_GREENFIELD
-        ):
-            if not ceph_cluster:
-                ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
-            store_type = ceph_cluster.get().get("items")[0]["status"]["storage"]["osd"][
-                "storeType"
-            ]
-            if "bluestore-rdr" in store_type.keys():
-                logger.info("OSDs with bluestore-rdr found ")
-            else:
-                raise UnexpectedDeploymentConfiguration(
-                    f"OSDs were not brought up with Regional DR bluestore! instead we have {store_type} "
+            # In case of RDR, check for bluestore-rdr on osds: 4.14 onwards
+            # until 4.17
+            if (
+                (
+                    version.VERSION_4_14
+                    <= version.get_semantic_ocs_version_from_config()
+                    <= version.VERSION_4_17
                 )
+                and config.multicluster
+                and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+                and config.ENV_DATA.get("rdr_osd_deployment_mode")
+                == constants.RDR_OSD_MODE_GREENFIELD
+            ):
+                if not ceph_cluster:
+                    ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
+                store_type = ceph_cluster.get().get("items")[0]["status"]["storage"][
+                    "osd"
+                ]["storeType"]
+                if "bluestore-rdr" in store_type.keys():
+                    logger.info("OSDs with bluestore-rdr found ")
+                else:
+                    raise UnexpectedDeploymentConfiguration(
+                        f"OSDs were not brought up with Regional DR bluestore!"
+                        f" instead we have {store_type} "
+                    )
 
-            if store_type["bluestore-rdr"] == get_osd_count():
-                logger.info(
-                    f"OSDs found matching with bluestore-rdr count {store_type['bluestore-rdr']}"
-                )
-            else:
-                raise UnexpectedDeploymentConfiguration(
-                    f"OSDs count mismatch! bluestore-rdr count = {store_type['bluestore-rdr']} "
-                    f"actual osd count = {get_osd_count()}"
-                )
+                if store_type["bluestore-rdr"] == get_osd_count():
+                    logger.info(
+                        f"OSDs found matching with bluestore-rdr count "
+                        f"{store_type['bluestore-rdr']}"
+                    )
+                else:
+                    raise UnexpectedDeploymentConfiguration(
+                        f"OSDs count mismatch! bluestore-rdr count = "
+                        f"{store_type['bluestore-rdr']} "
+                        f"actual osd count = {get_osd_count()}"
+                    )
 
-        # patch gp2/thin storage class as 'non-default'
-        self.patch_default_sc_to_non_default()
-        self.objectstore_user_check()
+            # patch gp2/thin storage class as 'non-default'
+            self.patch_default_sc_to_non_default()
+            self.objectstore_user_check()
 
     def deploy_lvmo(self):
         """
@@ -3047,12 +3074,13 @@ def create_catalog_source(image=None, ignore_upgrade=False):
 
     """
     rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
-    if not rosa_hcp:
-        # Because custom catalog source will be called: redhat-operators, we need to disable
-        # default sources. This should not be an issue as OCS internal registry images
-        # are now based on OCP registry image
-        disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
+    cs_name_override = config.DEPLOYMENT.get("ocs_catalog_source_name")
     logger.info("Adding CatalogSource")
+    if not cs_name_override and not rosa_hcp:
+        # Because custom catalog source will be called: redhat-operators, we need
+        # to disable default sources. This should not be an issue as OCS internal
+        # registry images are now based on OCP registry image
+        disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
     if config.DEPLOYMENT.get("stage_rh_osbs"):
@@ -3105,6 +3133,9 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     if managed_ibmcloud:
         create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         catalog_source_data["spec"]["secrets"] = [constants.OCS_SECRET]
+    if cs_name_override:
+        cs_name = cs_name_override
+        catalog_source_data["metadata"]["name"] = cs_name
     change_cs_condition = (
         (image or image_tag)
         and catalog_source_data["kind"] == "CatalogSource"
