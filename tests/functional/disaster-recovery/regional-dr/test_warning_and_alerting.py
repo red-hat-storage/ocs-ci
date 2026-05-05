@@ -123,6 +123,7 @@ class TestRDRWarningAndAlerting:
         and mds daemons on the primary cluster and scale them up back to their original count.
 
         """
+        dr_helpers.validate_cluster_odf_cli()
 
         config.switch_acm_ctx()
         # Enable MCO console plugin needed for DR dashboard
@@ -362,6 +363,7 @@ class TestRDRWarningAndAlerting:
         and mds daemons on the primary cluster and scale them up back to their original count.
 
         """
+        dr_helpers.validate_cluster_odf_cli()
 
         config.switch_acm_ctx()
         # Enable MCO console plugin needed for DR dashboard

@@ -84,6 +84,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         Test is parametrized to run with Custom RBD Storage Class and Pool of Replica-2.
 
         """
+        dr_helpers.validate_cluster_odf_cli()
 
         md5sum_original = []
         md5sum_failover = []
