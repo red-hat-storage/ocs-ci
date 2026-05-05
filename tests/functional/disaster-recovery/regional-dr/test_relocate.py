@@ -63,6 +63,8 @@ class TestRelocate:
         This test will run twice both via CLI and UI
 
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         if via_ui:
             acm_obj = AcmAddClusters()
 

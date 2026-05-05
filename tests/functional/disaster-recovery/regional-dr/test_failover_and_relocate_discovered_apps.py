@@ -129,6 +129,8 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         Covers primary cluster up or down, and single or multiple (3) iterations.
 
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         rdr_workloads = discovered_apps_dr_workload(
             pvc_interface=pvc_interface, kubeobject=kubeobject, recipe=recipe
         )

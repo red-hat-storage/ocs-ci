@@ -41,6 +41,8 @@ class TestDisableDR:
         Test to verify disable DR of application
 
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         discovered_apps = False
 
         rdr_workload = dr_workload(
