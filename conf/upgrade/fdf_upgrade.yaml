@@ -1,0 +1,7 @@
+---
+# Sets subscription approval to Manual (required for FDF upgrade).
+DEPLOYMENT:
+  subscription_plan_approval: "Manual"
+
+UPGRADE:
+  fdf_registry_image: cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.22.0-64   # set this to your full pull-spec

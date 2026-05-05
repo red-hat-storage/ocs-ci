@@ -1671,6 +1671,12 @@ OCS_DEPLOYMENTS_4_17 = OCS_DEPLOYMENTS_4_16 + [
     "ceph-csi-controller-manager",
 ]
 
+# IBM Fusion Data Foundation (FDF) upgrade
+FDF_CATALOG_SOURCE_NAME = "isf-data-foundation-catalog"
+FDF_CATALOG_DISPLAY_NAME = "ISF Data Foundation Catalog"
+FDF_CATALOG_PUBLISHER = "IBM"
+ODF_OPERATOR_NAME = "odf-operator"
+
 # OCP related constants
 OPENSHIFT_UPGRADE_INFO_API = (
     "https://api.openshift.com/api/upgrades_info/v1/graph?channel={channel}"
@@ -1987,6 +1993,10 @@ ORDER_OCP_ON_KUBEVIRT_UPGRADE = 48
 ORDER_BEFORE_OCS_UPGRADE = 50
 ORDER_OCS_UPGRADE = 60
 ORDER_AFTER_OCS_UPGRADE = 70
+# IBM Fusion Data Foundation (FDF) upgrade
+ORDER_BEFORE_FDF_UPGRADE = 72
+ORDER_FDF_UPGRADE = 75
+ORDER_AFTER_FDF_UPGRADE = 78
 ORDER_AFTER_UPGRADE = 80
 
 # Deployment constants
