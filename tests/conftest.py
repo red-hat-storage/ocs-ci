@@ -24,6 +24,7 @@ import boto3
 from botocore.exceptions import ClientError
 import pytest
 from collections import namedtuple
+from dataclasses import fields
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
@@ -203,7 +204,7 @@ from ocs_ci.utility.utils import (
     clone_repo,
     get_latest_ocp_multi_image,
 )
-from ocs_ci.helpers import helpers, dr_helpers
+from ocs_ci.helpers import dr_helpers, helpers, vm_ui_cli_verification
 from ocs_ci.helpers.helpers import (
     add_scc_policy,
     ceph_health_check_with_toolbox_recovery,
@@ -251,6 +252,10 @@ from ocs_ci.utility.iam_utils import (
     generate_random_iam_path,
     run_iam_command,
     get_user_access_keys,
+)
+from ocs_ci.ocs.ui.page_objects.ocp_virtualization_page import (
+    FedoraUITemplateDeployConfig,
+    OCPVirtualizationPage,
 )
 
 DEPLOYERS = {}
@@ -11817,3 +11822,102 @@ def iam_users_factory_fixture(request, mcg_obj, awscli_pod_session):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+def cnv_fedora_vm_ui_deployment_factory_fixture(request, project_factory, setup_ui):
+    """
+    Factory fixture for creating Fedora VM deployments via UI.
+
+    Args:
+        request: pytest request object
+        project_factory: factory fixture for creating projects
+        setup_ui: fixture for setting up the UI
+
+    Returns:
+        factory: factory function for creating Fedora VM deployments via UI
+    """
+
+    sessions = []
+
+    def factory(
+        storage_class: str,
+        project=None,
+        vm_name: str | None = None,
+        **deploy_kwargs,
+    ):
+        if not storage_class:
+            raise ValueError("storage_class is required")
+
+        proj = project if project is not None else project_factory()
+        resolved_vm_name = vm_name or create_unique_resource_name("fedora", "vm")
+        page = OCPVirtualizationPage()
+
+        allowed = {f.name for f in fields(FedoraUITemplateDeployConfig)}
+        cfg_data = {
+            "namespace": proj.namespace,
+            "storage_class": storage_class,
+            "vm_name": resolved_vm_name,
+        }
+        cfg_data.update({k: v for k, v in deploy_kwargs.items() if k in allowed})
+        cfg = FedoraUITemplateDeployConfig(**cfg_data)
+
+        log.info(
+            "cnv_fedora_vm_ui_deployment_factory: deploy VM %s in %s (SC=%s)",
+            resolved_vm_name,
+            proj.namespace,
+            storage_class,
+        )
+        page.deploy_fedora_vm_from_template(cfg)
+        vm_ui_cli_verification.verify_cli_post_ui_vm(proj.namespace, resolved_vm_name)
+
+        session = {
+            "namespace": proj.namespace,
+            "vm_name": resolved_vm_name,
+            "storage_class": storage_class,
+            "page": page,
+        }
+        sessions.append(session)
+        return session
+
+    def finalizer():
+        for session in reversed(sessions):
+            try:
+                vm = VirtualMachine(
+                    vm_name=session["vm_name"], namespace=session["namespace"]
+                )
+                if vm.vm_ocp_obj.is_exist(session["vm_name"]):
+                    log.info(
+                        "cnv_fedora_vm_ui_deployment_factory teardown: delete VM %s/%s",
+                        session["namespace"],
+                        session["vm_name"],
+                    )
+                    vm.delete()
+            except Exception:
+                log.exception(
+                    "cnv_fedora_vm_ui_deployment_factory teardown: VM delete failed "
+                    "for %s/%s",
+                    session["namespace"],
+                    session["vm_name"],
+                )
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def cnv_fedora_vm_ui_deployment_factory(request, project_factory, setup_ui):
+    """
+    Factory fixture for creating Fedora VM deployments via UI.
+
+    Args:
+        request: pytest request object
+        project_factory: factory fixture for creating projects
+        setup_ui: fixture for setting up the UI
+
+    Returns:
+        factory: factory function for creating Fedora VM deployments via UI
+
+    """
+    return cnv_fedora_vm_ui_deployment_factory_fixture(
+        request, project_factory, setup_ui
+    )
