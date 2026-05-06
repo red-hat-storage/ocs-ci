@@ -36,19 +36,14 @@ from ocs_ci.utility.templating import dump_data_to_temp_yaml
 
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # FDF-specific constants (extend ocs_ci.ocs.constants as needed)
-# ---------------------------------------------------------------------------
 FDF_CATALOG_SOURCE_NAME = "isf-data-foundation-catalog"
 ODF_OPERATOR_NAME = "odf-operator"
 FDF_CATALOG_DISPLAY_NAME = "ISF Data Foundation Catalog"
 FDF_CATALOG_PUBLISHER = "IBM"
 
 
-# ---------------------------------------------------------------------------
 # Health check helpers
-# ---------------------------------------------------------------------------
-
 def check_pod_health(namespace=None):
     """
     Verify that all pods in the ODF namespace are in a healthy state
@@ -78,10 +73,7 @@ def check_pod_health(namespace=None):
     log.info("All pods are healthy.")
 
 
-# ---------------------------------------------------------------------------
 # Subscription helpers
-# ---------------------------------------------------------------------------
-
 def get_subscription_names(namespace=None):
     """
     Return a list of subscription names present in *namespace*.
@@ -158,10 +150,7 @@ def set_subscription_approval_strategy(approval="Manual", namespace=None):
     )
 
 
-# ---------------------------------------------------------------------------
 # Core upgrade class
-# ---------------------------------------------------------------------------
-
 class FDFUpgrade:
     """
     IBM Fusion Data Foundation (FDF) upgrade helper.
@@ -188,10 +177,6 @@ class FDFUpgrade:
             "subscription_plan_approval", "Manual"
         )
 
-    # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
-
     @property
     def version_before_upgrade(self):
         return self._version_before_upgrade
@@ -203,10 +188,6 @@ class FDFUpgrade:
     @fdf_registry_image.setter
     def fdf_registry_image(self, value):
         self._fdf_registry_image = value
-
-    # ------------------------------------------------------------------
-    # Version helpers
-    # ------------------------------------------------------------------
 
     def get_upgrade_version(self):
         """
@@ -237,10 +218,8 @@ class FDFUpgrade:
             parse_version(self.get_upgrade_version()),
         )
 
-    # ------------------------------------------------------------------
-    # Pre-upgrade introspection
-    # ------------------------------------------------------------------
 
+    # Pre-upgrade introspection
     def get_odf_version_from_csv(self):
         """
         Read the currently installed ODF version directly from the CSV.
@@ -289,10 +268,7 @@ class FDFUpgrade:
             f"No pre-upgrade CSV found for operator '{ODF_OPERATOR_NAME}'"
         )
 
-    # ------------------------------------------------------------------
     # Catalog source management
-    # ------------------------------------------------------------------
-
     def create_fdf_catalog_source(self):
         """
         Create (or replace) the ISF FDF CatalogSource in the marketplace
@@ -358,10 +334,7 @@ class FDFUpgrade:
             namespace=self.namespace,
         )
 
-    # ------------------------------------------------------------------
     # Post-upgrade validation
-    # ------------------------------------------------------------------
-
     def check_if_upgrade_completed(self, csv_name_pre_upgrade):
         """
         Return ``True`` when all CSVs are Succeeded and the active CSV has
@@ -431,10 +404,7 @@ class FDFUpgrade:
         wait_for_install_plan_and_approve(self.namespace)
 
 
-# ---------------------------------------------------------------------------
 # Main upgrade entry point
-# ---------------------------------------------------------------------------
-
 def run_fdf_upgrade(operation=None, upgrade_stats=None, *operation_args, **operation_kwargs):
     """
     Orchestrate the full ODF → FDF upgrade sequence.
@@ -482,9 +452,8 @@ def run_fdf_upgrade(operation=None, upgrade_stats=None, *operation_args, **opera
         fdf_registry_image=fdf_registry_image,
     )
 
-    # ------------------------------------------------------------------
+
     # Version sanity check
-    # ------------------------------------------------------------------
     parsed_before, parsed_target = upgrade_fdf.get_parsed_versions()
     upgrade_version = upgrade_fdf.get_upgrade_version()
 
@@ -497,22 +466,16 @@ def run_fdf_upgrade(operation=None, upgrade_stats=None, *operation_args, **opera
         f"FDF upgrade: {upgrade_fdf.version_before_upgrade} → {upgrade_version}"
     )
 
-    # ------------------------------------------------------------------
     # Step 1: Pre-upgrade pod health check
-    # ------------------------------------------------------------------
     log_step("Pre-upgrade pod health check")
     check_pod_health(namespace=namespace)
 
-    # ------------------------------------------------------------------
     # Record pre-upgrade CSV name and start time
-    # ------------------------------------------------------------------
     csv_name_pre_upgrade = upgrade_fdf.get_csv_name_pre_upgrade()
     log.info(f"Pre-upgrade CSV: {csv_name_pre_upgrade}")
     start_time = time.time()
 
-    # ------------------------------------------------------------------
     # Main upgrade sequence guarded by Ceph health monitoring
-    # ------------------------------------------------------------------
     with CephHealthMonitor(ceph_cluster):
 
         # Step 2: Create FDF CatalogSource and set Manual approval
@@ -546,9 +509,7 @@ def run_fdf_upgrade(operation=None, upgrade_stats=None, *operation_args, **opera
         upgrade_stats.setdefault("fdf_upgrade", {})
         upgrade_stats["fdf_upgrade"]["upgrade_time"] = time_taken
 
-    # ------------------------------------------------------------------
     # Step 6: Post-upgrade verification
-    # ------------------------------------------------------------------
     log_step("Post-upgrade: verifying all CSVs are Succeeded")
     is_all_csvs_succeeded = check_all_csvs_are_succeeded(namespace=namespace)
     assert is_all_csvs_succeeded, (
