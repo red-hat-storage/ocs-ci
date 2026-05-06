@@ -23,6 +23,8 @@ from ocs_ci.utility.utils import run_cmd
 
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
+from ocs_ci.utility.operators import LocalStorageOperator
+
 import time
 from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
@@ -46,6 +48,8 @@ class FusionDataFoundationDeployment:
         """
         Installs IBM Fusion Data Foundation.
         """
+
+        self.ensure_lso_installed()
         logger.info("Installing IBM Fusion Data Foundation")
         if self.pre_release:
             self.create_image_tag_mirror_set()
@@ -55,6 +59,17 @@ class FusionDataFoundationDeployment:
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
         self.setup_storage()
+
+    def ensure_lso_installed(self):
+        """
+        In the case of LSO is not available - bring catalog for unreleased version and install it
+        """
+
+        logger.info("Ensuring Local Storage Operator (LSO) is installed")
+        lso_operator = LocalStorageOperator()
+        if not lso_operator.is_available():
+            lso_operator.create_catalog()
+            lso_operator.deploy()
 
     def create_image_tag_mirror_set(self):
         """
