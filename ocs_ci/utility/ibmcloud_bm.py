@@ -15,7 +15,6 @@ from ocs_ci.utility.retry import retry
 
 
 logger = logging.getLogger(name=__file__)
-ibm_config = config.AUTH.get("ibmcloud", {})
 
 
 class IBMCloudBM(object):
@@ -31,6 +30,11 @@ class IBMCloudBM(object):
             region (str): The region of the IBM Cloud Bare Metal machines
 
         """
+        ibm_config = config.AUTH.get("ibmcloud", {})
+        if not ibm_config:
+            raise ValueError(
+                "IBM Cloud Bare Metal is only supported on cluster which has IBM cloud details in AUTH section"
+            )
         self.api_key = ibm_config["api_key"]
         self.account_id = ibm_config.get("account_id")
         self.region = region or config.ENV_DATA.get("region")
