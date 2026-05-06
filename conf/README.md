@@ -255,6 +255,7 @@ higher priority).
 * `worker_availability_zones` - List of availability zones to create worker nodes in
 * `skip_ocp_deployment` - Skip the OCP deployment step or not (Default: false)
 * `skip_ocs_deployment` - Skip the OCS deployment step or not (Default: false)
+* `setup_storage` - Deploy ODF operator and create StorageCluster. When set to false, only the ODF operator is deployed and no StorageCluster is created (Default: true)
 * `ocs_version` - Version of OCS that is being deployed
 * `acm_version` - Version of acm to be used for this run (applicable mostly to DR scenarios)
 * `vm_template` - VMWare template to use for RHCOS images (legacy single template, used as fallback)

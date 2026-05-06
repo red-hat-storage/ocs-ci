@@ -492,7 +492,7 @@ class Deployment(object):
                 config.reset_ctx()
                 # Run ocs_install_verification here only in case of multicluster.
                 # For single cluster, test_deployment will take care.
-                if config.multicluster:
+                if config.multicluster and config.ENV_DATA.get("setup_storage", True):
                     for i in range(config.nclusters):
                         if i in get_all_acm_indexes():
                             continue
@@ -1741,8 +1741,14 @@ class Deployment(object):
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
             )
 
-        storage_cluster_setup = StorageClusterSetup()
-        storage_cluster_setup.setup_storage_cluster()
+        if config.ENV_DATA.get("setup_storage", True):
+            storage_cluster_setup = StorageClusterSetup()
+            storage_cluster_setup.setup_storage_cluster()
+        else:
+            logger.info(
+                "setup_storage is False — skipping StorageCluster creation. "
+                "ODF operator is deployed but no StorageCluster will be created."
+            )
 
         if config.DEPLOYMENT["infra_nodes"]:
             log_step("Labeling infra nodes")
