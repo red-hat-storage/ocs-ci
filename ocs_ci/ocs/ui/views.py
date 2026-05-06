@@ -229,7 +229,15 @@ deployment_4_9 = {
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
     "create_storage_system": ("//button[text()='Create storage system']", By.XPATH),
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
-    "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
+    "refresh_popup": (
+        "//button[text()='Refresh web console']|//button[contains(.,'Refresh web console')]",
+        By.XPATH,
+    ),
+    "odf_operator_row_succeeded": (
+        "//tr[.//a[contains(@data-test-operator-row,'{}')]]"
+        "//span[@data-test='status-text' and contains(text(),'Succeeded')]",
+        By.XPATH,
+    ),
     "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
     "expand_advanced_mode": (
         'button[class*="c-select__toggle"]',
@@ -360,6 +368,74 @@ deployment_4_21 = {
     ),
 }
 
+deployment_4_22 = {
+    # Perspective switcher for ACM hub cluster (PF v6)
+    "perspective_switcher_toggle": (
+        'button[data-test-id="perspective-switcher-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_core_platform": (
+        "//h2[normalize-space()='Core platform']"
+        "/ancestor::button[contains(@class, 'pf-v6-c-menu__item')]",
+        By.XPATH,
+    ),
+    # PF v6 sidebar navigation locators
+    "operators_tab": (
+        "//*[contains(@class, 'nav__link') and " "normalize-space()='Operators']",
+        By.XPATH,
+    ),
+    "installed_operators_tab": (
+        "//*[contains(@class, 'nav__link') and "
+        "normalize-space()='Installed Operators']",
+        By.XPATH,
+    ),
+    # MCO operator locators for rebranding validation
+    "mco_operator_row": (
+        "//a[@data-test-operator-row='DF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "mco_operator_row_old_name": (
+        "//a[@data-test-operator-row='ODF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "operator_display_name": (
+        "//h1[contains(@class, 'co-clusterserviceversion-details__name')]",
+        By.XPATH,
+    ),
+    "operator_provider": (
+        "//span[contains(text(), 'Provided by')]/following-sibling::span",
+        By.XPATH,
+    ),
+    "operator_description": (
+        "//h5[normalize-space()='Description']/following-sibling::p",
+        By.XPATH,
+    ),
+    "operator_installed_status": (
+        "//span[contains(@class, 'co-icon-and-text')][contains(text(), 'Installed')]",
+        By.XPATH,
+    ),
+    "operator_capability_basic_install": (
+        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
+        "//dt[text()='Capability Level']/following-sibling::dd"
+        "//span[contains(text(), 'Basic Install')]",
+        By.XPATH,
+    ),
+    "operator_capability_seamless_upgrades": (
+        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
+        "//dt[text()='Capability Level']/following-sibling::dd"
+        "//span[contains(text(), 'Seamless Upgrades')]",
+        By.XPATH,
+    ),
+    "operator_channel": (
+        "//dt[text()='Channel']/following-sibling::dd",
+        By.XPATH,
+    ),
+    "operator_installed_version": (
+        "//dt[text()='Installed Version']/following-sibling::dd",
+        By.XPATH,
+    ),
+}
+
 generic_locators = {
     "project_selector": (
         "//span[contains(@class, 'c-menu-toggle__text') and contains(text(), 'Project:')]",
@@ -434,7 +510,7 @@ generic_locators = {
     ),
     "searchbar-dropdown": (
         "//div[contains(@class, 'toolbar__item')]//span[contains(@class, 'dropdown__toggle-text')] | "
-        "//div[contains(@class, 'input-group') and contains(@class, 'co-filter-group')]//button/span",
+        "//div[contains(@class, 'input-group')]//button/span",
         By.XPATH,
     ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
@@ -1582,13 +1658,15 @@ add_capacity_4_12 = {
 
 block_pool_4_12 = {
     "actions_inside_pool": (
-        "//span[text()='Actions']/.. | //button[@data-test='kebab-button']",
+        "//button[@data-test='storage-pool-kebab-button'] | //button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
-        By.XPATH,
+        "li[data-test-action='Delete Pool'] button,"
+        " li[data-test-action='Delete BlockPool'] button",
+        By.CSS_SELECTOR,
     ),
+    "title_pool_details_page": ("//title[@data-telemetry='Details']", By.XPATH),
 }
 block_pool_4_13 = {
     "second_select_replica_2": ("//div[text()='2-way Replication']/..", By.XPATH),
@@ -1682,8 +1760,9 @@ block_pool = {
     ),
     "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
-        By.XPATH,
+        "li[data-test-action='Delete Pool'] button,"
+        " li[data-test-action='Delete BlockPool'] button",
+        By.CSS_SELECTOR,
     ),
     "status_text_in_pool": (
         "//div[contains(@class, '-c-card__body')]//span[@data-test='status-text']",
@@ -2344,7 +2423,7 @@ validation_4_21 = {
         By.XPATH,
     ),
     "infra_health_checks": (
-        "//a[text()='View health checks']",
+        "//a[contains(normalize-space(.), 'View health checks')]",
         By.XPATH,
     ),
     # web element returns overall score with text like '66%'
@@ -2370,7 +2449,11 @@ validation_4_21 = {
 
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
-    "node_label": ("//*[contains(@class,'topology__node__label')]", By.XPATH),
+    "node_label": (
+        "//*[contains(@class,'topology__node__label')"
+        " and not(contains(@class,'topology__node__label__'))]",
+        By.XPATH,
+    ),
     # status is in class name of the node_status_axis one from pf-m-warning / pf-m-danger / pf-m-success
     "node_status_class_axis": (
         "//*[contains(@class,'topology__node__label')]//*[contains(text(), '{}')]"
@@ -2624,7 +2707,7 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
     "submit_button_folder": (
-        "//button[contains(@class, 'm-primary')]",
+        "//footer//button[@type='button'][contains(@class, 'm-primary')]",
         By.XPATH,
     ),
     "upload_button": (
@@ -2690,11 +2773,12 @@ bucket_tab = {
         By.XPATH,
     ),
     "versioning_enable_confirm_button": (
-        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'm-primary') and text()='Enable']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'm-primary') and text()='Enable'] | "
+        "//div[@role='dialog']//footer//button[normalize-space(.)='Enable']",
         By.XPATH,
     ),
     "versioning_cancel_confirm_button": (
-        "//div[contains(@class, 'c-modal-box')]//button[contains(@class,  'm-link') and text()='Cancel']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class,  'm-link') and normalize-space(.)='Cancel']",
         By.XPATH,
     ),
     "file_input_directory": (
@@ -2758,11 +2842,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "delete_version_confirm_button": (
-        "//button[contains(@class, 'm-danger') and contains(text(), 'Delete object')]",
+        "//button[contains(@class, 'm-danger') and contains(normalize-space(.), 'Delete object')]",
         By.XPATH,
     ),
     "delete_version_cancel_button": (
-        "//button[contains(@class, 'c-button') and contains(@class, 'm-link') and text()='Cancel']",
+        "//button[contains(@class, 'c-button') and contains(@class, 'm-link') and normalize-space(.)='Cancel']",
         By.XPATH,
     ),
     "version_row_checkboxes": (
@@ -2779,7 +2863,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "policy_editor_start_scratch": (
-        "//button[contains(normalize-space(), 'Start from scratch')]",
+        "//button[contains(normalize-space(), 'Start from scratch')] | "
+        "//button//span[contains(text(),'Start from scratch or use predefined policy config')]",
         By.XPATH,
     ),
     "edit_policy_button": (
@@ -2892,7 +2977,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "create_lifecycle_rule_button": (
-        "//button[text()='Create lifecycle rule']",
+        "//button[contains(normalize-space(),'Create lifecycle rule')]",
         By.XPATH,
     ),
     "lifecycle_rules_list": (
@@ -2904,7 +2989,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "rule_kebab_menu": (
-        "//tr[contains(., '{}')]//button[@data-ouia-component-type='PF5/MenuToggle']",
+        "//tr[contains(., '{}')]//button[contains(@data-ouia-component-type, 'MenuToggle')]",
         By.XPATH,
     ),
     "edit_rule_option": (
@@ -2966,15 +3051,15 @@ bucket_tab = {
         By.XPATH,
     ),
     "lifecycle_create_button": (
-        "//button[text()='Create' and contains(@class, 'pf-m-primary') and @aria-disabled='false']",
+        "//button[contains(normalize-space(),'Create') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_save_button": (
-        "//button[text()='Save' and contains(@class, 'pf-m-primary')]",
+        "//button[contains(normalize-space(),'Save') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_cancel_button": (
-        "//button[text()='Cancel']",
+        "//button[contains(normalize-space(),'Cancel')]",
         By.XPATH,
     ),
     # Current objects (Expiration) section
@@ -3057,8 +3142,8 @@ locate_aws_regions = {
 }
 locate_noobaa_regions = {"regions_list": '//*[@id="read-only-cursor-text-area"]'}
 data_foundation_overview = {
-    "view_storage_link": ("//a[contains(text(),'View storage')]", By.XPATH),
-    "view_buckets_link": ("//a[contains(text(),'View buckets')]", By.XPATH),
+    "view_storage_link": ("//a[contains(normalize-space(.),'View storage')]", By.XPATH),
+    "view_buckets_link": ("//a[contains(normalize-space(.),'View buckets')]", By.XPATH),
     "used_capacity_legend": (
         "//*[name()='text' and @id='legend-labels-0']//*[name()='tspan' and contains(text(), 'Used:')]",
         By.XPATH,
@@ -3072,7 +3157,183 @@ data_foundation_overview = {
         By.XPATH,
     ),
 }
+external_systems = {
+    "connect_external_system": (
+        "//button[@data-test='configure-external-systems']",
+        By.XPATH,
+    ),
+    "connect_flash": (
+        "connect-flash-system",
+        By.ID,
+    ),
+    "connect_scale": (
+        "setup-scale-storage",
+        By.ID,
+    ),
+    "next_button": (
+        "//button[contains(text(), 'Next')]",
+        By.XPATH,
+    ),
+    "scale_name": (
+        "name",
+        By.ID,
+    ),
+    "selected_nodes": (
+        "use-selected-nodes",
+        By.ID,
+    ),
+    "mandatory_endpoit": (
+        "mandatory-endpoint-host",
+        By.ID,
+    ),
+    "mandatory_port": (
+        "mandatory-endpoint-port",
+        By.ID,
+    ),
+    "scale_username": (
+        "userName",
+        By.ID,
+    ),
+    "scale_password": (
+        "password",
+        By.ID,
+    ),
+    "filesystem_name": (
+        "fileSystemName",
+        By.ID,
+    ),
+    "connect_scale_final": (
+        "button[data-test='connect-scale-system']",
+        By.CSS_SELECTOR,
+    ),
+    "alert_description": (
+        "[class*='-c-alert__description']",
+        By.CSS_SELECTOR,
+    ),
+    "filter": (
+        "//input[@data-test='name-filter-input']",
+        By.XPATH,
+    ),
+    "actions_button": (
+        "//button[@data-test='kebab-button']",
+        By.XPATH,
+    ),
+    "add_filesystem": (
+        "ADD_REMOTE_FILE_SYSTEM",
+        By.ID,
+    ),
+    "filesystem_name_input": (
+        "input[name='remoteFileSystemName']",
+        By.CSS_SELECTOR,
+    ),
+    "add_button": (
+        "//footer//button[contains(text(), 'Add')]",
+        By.XPATH,
+    ),
+    "scale_link": (
+        "//a[contains(@href, '/odf/external-systems/scale')]",
+        By.XPATH,
+    ),
+    "filesystem_link": (
+        "//td/a[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "delete_filesystem": (
+        "Delete",
+        By.ID,
+    ),
+    "confirm_delete": (
+        "//button[@data-test='delete-action']",
+        By.XPATH,
+    ),
+    "scale_dashboard_link": (
+        "a[href*='scale.spectrum.ibm']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_operator_health": (
+        "div[data-item-id='Operator-health-item'] title",
+        By.CSS_SELECTOR,
+    ),
+    "scale_connection_health": (
+        "div[data-item-id='Connection-health-item'] title",
+        By.CSS_SELECTOR,
+    ),
+    "breadcrumb-link": (
+        "a[data-test-id='breadcrumb-link-0']",
+        By.CSS_SELECTOR,
+    ),
+}
 locators = {
+    "4.22": {
+        "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
+        "generic": {**generic_locators, **generic_locators_4_19},
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+            **deployment_4_15,
+            **deployment_4_16,
+            **deployment_4_17,
+            **deployment_4_19,
+            **deployment_4_21,
+            **deployment_4_22,
+        },
+        "obc": {**obc, **obc_4_21},
+        "pvc": {
+            **pvc,
+            **pvc_4_7,
+            **pvc_4_8,
+            **pvc_4_9,
+            **pvc_4_12,
+            **pvc_4_14,
+            **pvc_4_19,
+            **pvc_4_21,
+        },
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+            **acm_configuration_4_14,
+            **acm_configuration_4_16,
+            **acm_configuration_4_18,
+            **acm_page_nav_419,
+            **acm_configuration_4_19,
+            **acm_page_nav_420,
+            **acm_configuration_4_20,
+            **acm_configuration_4_21,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
+            **validation_4_13,
+            **validation_4_14,
+            **validation_4_17,
+            **validation_4_18,
+            **validation_4_20,
+            **validation_4_21,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+        "topology": topology,
+        "mcg_stores": mcg_stores,
+        "alerting": alerting,
+        "bucket_tab": bucket_tab,
+        "external_systems": external_systems,
+        "data_foundation_overview": data_foundation_overview,
+        "attach_storage": attach_storage,
+    },
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
@@ -3138,6 +3399,7 @@ locators = {
         "mcg_stores": mcg_stores,
         "alerting": alerting,
         "bucket_tab": bucket_tab,
+        "external_systems": external_systems,
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
     },
@@ -3203,6 +3465,7 @@ locators = {
         "alerting": alerting,
         "bucket_tab": bucket_tab,
         "data_foundation_overview": data_foundation_overview,
+        "external_systems": external_systems,
     },
     "4.19": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},

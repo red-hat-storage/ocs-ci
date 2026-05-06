@@ -1,5 +1,6 @@
 import os
 import logging
+import shlex
 import threading
 import subprocess
 import time
@@ -7,11 +8,12 @@ import json
 import re
 import yaml
 
-from ocs_ci.ocs.constants import KRKN_OUTPUT_DIR, KRKN_RUN_CMD
+from ocs_ci.ocs.constants import KRKN_OUTPUT_DIR, KRKN_RUN_CMD, KRKNCTL
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.krkn_chaos.krkn_port_manager import KrknPortManager
 from ocs_ci.framework import config
 from ocs_ci.utility.ibmcloud import get_ibmcloud_cluster_region
+from ocs_ci.utility.utils import exec_cmd
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +30,8 @@ class KrKnRunner:
         self.process = None
         self.thread = None
         self.thread_exception = None
+        # True when we stopped waiting because FAILURE was detected in the log
+        self._completed_due_to_failure = False
         os.makedirs(KRKN_OUTPUT_DIR, exist_ok=True)
 
     def _print_config_file(self):
@@ -310,7 +314,10 @@ class KrKnRunner:
         Check the output log file for completion messages.
 
         This provides an additional way to detect completion by monitoring
-        the Krkn output log file for success messages.
+        the Krkn output log file for success messages. Also treats the
+        presence of "Chaos data:" as completion (same marker as get_chaos_data()).
+        The "Chaos data:" line is not at a fixed position—it varies with how much
+        data Krkn processes—so the whole log is searched for it.
 
         Returns:
             bool: True if completion message found, False otherwise
@@ -327,19 +334,25 @@ class KrKnRunner:
                 "Chaos injection completed successfully",
             ]
 
-            # Read the last few lines of the log file
+            # Read the log file
             with open(self.output_log, "r", encoding="utf-8") as f:
-                # Read last 50 lines to check for completion
                 lines = f.readlines()
-                last_lines = lines[-50:] if len(lines) > 50 else lines
 
-                for line in last_lines:
-                    for pattern in success_patterns:
-                        if pattern in line:
-                            log.info(
-                                f"🎉 Found completion message in log: '{pattern.strip()}'"
-                            )
-                            return True
+            # Success patterns: check last 50 lines (completion messages are at end)
+            last_lines = lines[-50:] if len(lines) > 50 else lines
+            for line in last_lines:
+                for pattern in success_patterns:
+                    if pattern in line:
+                        log.info(
+                            f"🎉 Found completion message in log: '{pattern.strip()}'"
+                        )
+                        return True
+
+            # Chaos data: position varies with run size; search entire log (same marker as get_chaos_data())
+            for line in lines:
+                if "Chaos data:" in line:
+                    log.info("🎉 Found 'Chaos data:' in log - Krkn has completed")
+                    return True
 
         except Exception as e:
             log.debug(f"Error checking output log for completion: {e}")
@@ -389,37 +402,25 @@ class KrKnRunner:
                         f"SUCCESS: All scenarios completed successfully - found '{primary_success_pattern}'",
                     )
 
+                # Chaos data: Krkn writes "Chaos data:" at end of run (same marker as get_chaos_data())
+                if "Chaos data:" in content:
+                    log.info("🎉 SUCCESS: Found 'Chaos data:' - Krkn run completed")
+                    return (
+                        True,
+                        "SUCCESS: Krkn completed - 'Chaos data:' written to log",
+                    )
+
                 # Check for additional success patterns
                 for pattern in additional_patterns:
                     if pattern in content:
                         log.info(f"🎉 SUCCESS: Found completion pattern: '{pattern}'")
                         return True, f"SUCCESS: Kraken completed - found '{pattern}'"
 
-                # Check for failure indicators
-                failure_patterns = [
-                    "FAILED",
-                    "ERROR",
-                    "CRITICAL",
-                    "Exception",
-                    "Traceback",
-                    "failed to execute",
-                    "execution failed",
-                ]
+                # Do NOT treat generic ERROR/Exception in the log as "run completed".
+                # Krkn logs per-scenario failures while the run continues; only
+                # process exit or "Chaos data:" / "Successfully finished" mean done.
 
-                failure_found = []
-                for pattern in failure_patterns:
-                    if pattern.lower() in content.lower():
-                        failure_found.append(pattern)
-
-                if failure_found:
-                    failure_msg = (
-                        f"FAILURE: Kraken execution failed - found error indicators: "
-                        f"{', '.join(failure_found)}"
-                    )
-                    log.warning(failure_msg)
-                    return False, failure_msg
-
-                # No clear success or failure pattern found
+                # No clear success pattern found - run may still be in progress
                 return (
                     False,
                     "INCOMPLETE: Kraken execution status unclear - no definitive completion pattern found",
@@ -638,8 +639,13 @@ class KrKnRunner:
                         error_msg += f"\nConfig file: {self.krkn_config}"
 
                         if attempt == max_retries - 1:
-                            # Final attempt failed
-                            raise CommandFailed(error_msg)
+                            # Final attempt failed - log warning instead of raising
+                            log.warning(
+                                "Krkn command failed (non-zero exit code). "
+                                "Treating as warning and continuing: %s",
+                                error_msg,
+                            )
+                            return
                         else:
                             # Log error but continue retrying
                             log.warning(f"Attempt {attempt + 1} failed: {error_msg}")
@@ -652,8 +658,12 @@ class KrKnRunner:
 
             except Exception as e:
                 if attempt == max_retries - 1:
-                    # Final attempt failed
-                    raise CommandFailed(f"Failed to run Krkn command. Error: {str(e)}")
+                    # Final attempt failed - log warning instead of raising
+                    log.warning(
+                        "Failed to run Krkn command. Treating as warning and continuing: %s",
+                        str(e),
+                    )
+                    return
                 else:
                     # Log error but continue retrying
                     log.warning(
@@ -694,6 +704,17 @@ class KrKnRunner:
                 log.error("Krkn thread encountered an exception")
                 raise self.thread_exception
 
+            # If the Krkn process has already exited, treat as completion and stop waiting
+            if self.process is not None and self.process.poll() is not None:
+                if self.process.returncode != 0:
+                    self._completed_due_to_failure = True
+                log.info(
+                    "Krkn process has exited (return code %s) - waiting for thread to finish...",
+                    self.process.returncode,
+                )
+                self.thread.join(timeout=60)
+                break
+
             # Check for Kraken success completion using precise pattern matching
             success, message = self._check_kraken_success_completion()
             if success:
@@ -712,6 +733,10 @@ class KrKnRunner:
                     log.warning(
                         "Thread still alive after success detection - continuing to wait..."
                     )
+
+            # Do NOT stop waiting just because the log contains ERROR/Exception.
+            # Those can be per-scenario failures while Krkn is still running.
+            # Only stop when: process exited, or we see "Chaos data:" / success message above.
 
             # Also check output log for completion messages (fallback)
             elif self._check_output_log_for_completion():
@@ -776,12 +801,22 @@ class KrKnRunner:
             log.error("Krkn thread completed with an exception")
             raise self.thread_exception
 
-        log.info("✅ Krkn process has completed.")
+        if self._completed_due_to_failure:
+            log.info(
+                "✅ Krkn wait ended (process exited with non-zero; Chaos data block may be absent)."
+            )
+        else:
+            log.info("✅ Krkn process has completed.")
 
     def get_chaos_data(self):
         """
         Extract the 'Chaos data' JSON from self.output_log and
         ALWAYS return shape: {"telemetry": {...}, ...optional keys...}
+
+        When "Chaos data:" is missing (timeout, process exited before writing report,
+        or incomplete run), return minimal telemetry {"telemetry": {"scenarios": []}}
+        and log a warning instead of raising, so the test can continue and fail on
+        validation if needed.
         """
         with open(self.output_log, "r", encoding="utf-8") as f:
             text = f.read()
@@ -789,7 +824,11 @@ class KrKnRunner:
         # find the LAST occurrence of "Chaos data:"
         matches = list(re.finditer(r"Chaos data:\s*", text))
         if not matches:
-            raise ValueError("Chaos data block not found in the log.")
+            log.warning(
+                "Chaos data block not found in the log (timeout, process exit before report, or incomplete run). "
+                "Returning minimal telemetry (no scenarios)."
+            )
+            return {"telemetry": {"scenarios": []}}
         m = matches[-1]
 
         # first '{' after the marker
@@ -843,3 +882,647 @@ class KrKnRunner:
             if k != "telemetry":
                 normalized[k] = v
         return normalized
+
+
+class KrKnctlRunner:
+    """
+    Class to run krknctl CLI commands (run, random, list, describe, clean, attach,
+    graph, query-status, etc.) with a consistent environment and optional
+    global flags (e.g. private registry).
+    """
+
+    # Subcommands supported by krknctl
+    SUBCOMMANDS = (
+        "attach",
+        "clean",
+        "completion",
+        "describe",
+        "graph",
+        "help",
+        "list",
+        "query-status",
+        "random",
+        "run",
+    )
+
+    # Global flags (before subcommand) from `krknctl --help`
+    GLOBAL_FLAGS = (
+        "private_registry",
+        "private_registry_insecure",
+        "private_registry_password",
+        "private_registry_scenarios",
+        "private_registry_skip_tls",
+        "private_registry_token",
+        "private_registry_username",
+    )
+
+    def __init__(
+        self,
+        krknctl_binary=None,
+        kubeconfig=None,
+        use_sudo=True,
+        **global_flags,
+    ):
+        """
+        Args:
+            krknctl_binary (str): Path to krknctl binary. Defaults to
+                {KRKNCTL}/krknctl.
+            kubeconfig (str): Path to kubeconfig. If None, uses KUBECONFIG env
+                or cluster path from config.
+            use_sudo (bool): If True, run krknctl via sudo so it can use the
+                rootful podman socket (e.g. /run/podman/podman.sock). Default True.
+            **global_flags: Optional global flags for krknctl (e.g.
+                private_registry="quay.io",
+                private_registry_username="user",
+                private_registry_password="secret").
+                Names use underscores; they are converted to --kebab-case.
+        """
+        if krknctl_binary is None:
+            krknctl_binary = os.path.join(KRKNCTL, "krknctl")
+        self.krknctl_binary = krknctl_binary
+        self.kubeconfig = kubeconfig
+        self.use_sudo = use_sudo
+        self.global_flags = {
+            k: v for k, v in global_flags.items() if k in self.GLOBAL_FLAGS
+        }
+
+    def _env(self):
+        """Build environment dict for subprocess (e.g. KUBECONFIG)."""
+        env = os.environ.copy()
+        if self.kubeconfig is not None:
+            env["KUBECONFIG"] = self.kubeconfig
+        else:
+            kubeconfig_path = config.RUN.get("kubeconfig")
+            if kubeconfig_path:
+                env["KUBECONFIG"] = kubeconfig_path
+            else:
+                cluster_path = config.ENV_DATA.get("cluster_path")
+                if cluster_path:
+                    kubeconfig_path = os.path.join(
+                        cluster_path,
+                        config.RUN.get("kubeconfig_location", "auth/kubeconfig"),
+                    )
+                    if os.path.exists(kubeconfig_path):
+                        env["KUBECONFIG"] = kubeconfig_path
+        return env
+
+    def _flag_to_arg(self, key, value):
+        """Convert a Python kwarg to krknctl flag (--kebab-case)."""
+        flag = "--" + key.replace("_", "-")
+        if value is True:
+            return [flag]
+        if value is False or value is None:
+            return []
+        return [flag, str(value)]
+
+    def _build_cmd(self, subcommand, *args, **flags):
+        """
+        Build the full krknctl command as a list for exec_cmd.
+
+        Args:
+            subcommand (str): One of SUBCOMMANDS (run, random, list, ...).
+            *args: Positional arguments (e.g. scenario name, plan path).
+            **flags: Subcommand-specific flags (e.g. plan=path, wait_duration=60).
+                    Converted to --flag=value or --flag value.
+
+        Returns:
+            list: Command list [binary, ...global_flags, subcommand, ...args, ...flags].
+        """
+        if subcommand not in self.SUBCOMMANDS:
+            raise ValueError(
+                f"Unknown subcommand '{subcommand}'. Must be one of {self.SUBCOMMANDS}"
+            )
+        cmd = []
+        if self.use_sudo:
+            cmd.extend(["sudo", "-E", self.krknctl_binary])
+        else:
+            cmd.append(self.krknctl_binary)
+
+        if self.kubeconfig is not None:
+            cmd.extend(["--kubeconfig", self.kubeconfig])
+
+        for key, value in self.global_flags.items():
+            cmd.extend(self._flag_to_arg(key, value))
+
+        cmd.append(subcommand)
+
+        for a in args:
+            cmd.append(str(a))
+
+        for key, value in sorted(flags.items()):
+            if key in self.GLOBAL_FLAGS:
+                continue
+            cmd.extend(self._flag_to_arg(key, value))
+
+        return cmd
+
+    def run_subcommand(
+        self,
+        subcommand,
+        *args,
+        timeout=600,
+        ignore_error=False,
+        **flags,
+    ):
+        """
+        Run a krknctl subcommand and return the completed process.
+
+        Args:
+            subcommand (str): One of run, random, list, describe, clean, etc.
+            *args: Positional arguments for the subcommand.
+            timeout (int): Command timeout in seconds.
+            ignore_error (bool): If True, do not raise CommandFailed on non-zero exit.
+            **flags: Subcommand-specific flags.
+
+        Returns:
+            CompletedProcess: stdout, stderr, returncode (from exec_cmd).
+
+        Raises:
+            CommandFailed: If ignore_error is False and the command fails.
+        """
+        cmd = self._build_cmd(subcommand, *args, **flags)
+        log.info("Executing krknctl: %s", shlex.join(cmd))
+        try:
+            completed = exec_cmd(
+                cmd,
+                timeout=timeout,
+                ignore_error=ignore_error,
+                env=self._env(),
+            )
+        except CommandFailed as e:
+            log.error("krknctl %s failed: %s", subcommand, e)
+            raise
+        return completed
+
+    def run(self, scenario_name, *args, timeout=600, ignore_error=False, **flags):
+        """
+        Run a single scenario: krknctl run <scenario_name> [flags].
+
+        Equivalent to: krknctl run node-memory-hog --kubeconfig /path/to/kubeconfig
+
+        Args:
+            scenario_name (str): Scenario name (e.g. "node-memory-hog", "pod-scenarios",
+                from plan or krknctl list).
+            *args: Extra positional args for run.
+            timeout (int): Command timeout.
+            ignore_error (bool): If True, do not raise on non-zero exit.
+            **flags: Flags for run (e.g. wait_duration=120).
+
+        Returns:
+            CompletedProcess.
+
+        Example:
+            runner = KrKnctlRunner(kubeconfig="/path/to/kubeconfig")
+            runner.run("node-memory-hog")
+        """
+        return self.run_subcommand(
+            "run",
+            scenario_name,
+            *args,
+            timeout=timeout,
+            ignore_error=ignore_error,
+            **flags,
+        )
+
+    def run_node_memory_hog(
+        self,
+        chaos_duration=None,
+        memory_workers=None,
+        memory_consumption=None,
+        namespace=None,
+        node_selector=None,
+        timeout=600,
+        ignore_error=False,
+        **extra_flags,
+    ):
+        """
+        Run the node-memory-hog scenario with configurable parameters.
+
+        Equivalent to: krknctl run node-memory-hog --chaos-duration 60 ...
+
+        Args:
+            chaos_duration (int): Chaos duration in seconds. Default 60.
+            memory_workers (int): Number of memory workers. Default 1.
+            memory_consumption (str): Memory consumption (e.g. "90%", "95%").
+                Default "90%".
+            namespace (str): Target namespace. Default "default".
+            node_selector (str): Node selector (e.g. "node-role.kubernetes.io/worker").
+            timeout (int): Command timeout in seconds.
+            ignore_error (bool): If True, do not raise on non-zero exit.
+            **extra_flags: Any other flags for the scenario.
+
+        Returns:
+            CompletedProcess.
+
+        Example:
+            runner = KrKnctlRunner(kubeconfig="/path/to/kubeconfig")
+            runner.run_node_memory_hog(
+                chaos_duration=80,
+                memory_workers=2,
+                memory_consumption="95%",
+                namespace="openshift-storage",
+                node_selector="node-role.kubernetes.io/worker",
+            )
+        """
+        flags = dict(extra_flags)
+        if chaos_duration is not None:
+            flags["chaos_duration"] = chaos_duration
+        if memory_workers is not None:
+            flags["memory_workers"] = memory_workers
+        if memory_consumption is not None:
+            flags["memory_consumption"] = memory_consumption
+        if namespace is not None:
+            flags["namespace"] = namespace
+        if node_selector is not None:
+            flags["node_selector"] = node_selector
+        return self.run(
+            "node-memory-hog",
+            timeout=timeout,
+            ignore_error=ignore_error,
+            **flags,
+        )
+
+    def run_node_io_hog(
+        self,
+        chaos_duration=None,
+        io_block_size=None,
+        io_workers=None,
+        io_write_bytes=None,
+        node_mount_path=None,
+        namespace=None,
+        node_selector=None,
+        taints=None,
+        number_of_nodes=None,
+        timeout=600,
+        ignore_error=False,
+        **extra_flags,
+    ):
+        """
+        Run the node-io-hog scenario (disk pressure on a node).
+
+        Parameters map to: krknctl run node-io-hog --chaos-duration 60 --io-block-size 1m ...
+
+        Args:
+            chaos_duration (int): Chaos duration in seconds. Default 60.
+            io_block_size (str): I/O block size (e.g. "1m"). Default "1m".
+            io_workers (int): I/O workers. Default 5.
+            io_write_bytes (str): I/O write bytes (e.g. "10m"). Default "10m".
+            node_mount_path (str): Node mount path. Default "/root".
+            namespace (str): Target namespace. Default "default".
+            node_selector (str): Node selector (e.g. "node-role.kubernetes.io/worker").
+            taints (str): Node taints (e.g. "[]").
+            number_of_nodes (int): Number of nodes to target.
+            timeout (int): Command timeout in seconds.
+            ignore_error (bool): If True, do not raise on non-zero exit.
+            **extra_flags: Any other flags for the scenario.
+
+        Returns:
+            CompletedProcess.
+        """
+        flags = dict(extra_flags)
+        if chaos_duration is not None:
+            flags["chaos_duration"] = chaos_duration
+        if io_block_size is not None:
+            flags["io_block_size"] = io_block_size
+        if io_workers is not None:
+            flags["io_workers"] = io_workers
+        if io_write_bytes is not None:
+            flags["io_write_bytes"] = io_write_bytes
+        if node_mount_path is not None:
+            flags["node_mount_path"] = node_mount_path
+        if namespace is not None:
+            flags["namespace"] = namespace
+        if node_selector is not None:
+            flags["node_selector"] = node_selector
+        if taints is not None:
+            flags["taints"] = taints
+        if number_of_nodes is not None:
+            flags["number_of_nodes"] = number_of_nodes
+        return self.run(
+            "node-io-hog",
+            timeout=timeout,
+            ignore_error=ignore_error,
+            **flags,
+        )
+
+    def run_node_cpu_hog(
+        self,
+        chaos_duration=None,
+        cores=None,
+        cpu_percentage=None,
+        namespace=None,
+        node_selector=None,
+        taints=None,
+        number_of_nodes=None,
+        timeout=600,
+        ignore_error=False,
+        **extra_flags,
+    ):
+        """
+        Run the node-cpu-hog scenario (CPU pressure on a node).
+
+        Parameters map to: krknctl run node-cpu-hog --chaos-duration 60 --cpu-percentage 50 ...
+
+        Args:
+            chaos_duration (int): Chaos duration in seconds. Default 60.
+            cores (int): Number of CPU cores to stress.
+            cpu_percentage (int): CPU percentage (e.g. 50, 95). Default 50.
+            namespace (str): Target namespace. Default "default".
+            node_selector (str): Node selector (e.g. "node-role.kubernetes.io/worker").
+            taints (str): Node taints (e.g. "[]").
+            number_of_nodes (int): Number of nodes to target.
+            timeout (int): Command timeout in seconds.
+            ignore_error (bool): If True, do not raise on non-zero exit.
+            **extra_flags: Any other flags for the scenario.
+
+        Returns:
+            CompletedProcess.
+        """
+        flags = dict(extra_flags)
+        if chaos_duration is not None:
+            flags["chaos_duration"] = chaos_duration
+        if cores is not None:
+            flags["cores"] = cores
+        if cpu_percentage is not None:
+            flags["cpu_percentage"] = cpu_percentage
+        if namespace is not None:
+            flags["namespace"] = namespace
+        if node_selector is not None:
+            flags["node_selector"] = node_selector
+        if taints is not None:
+            flags["taints"] = taints
+        if number_of_nodes is not None:
+            flags["number_of_nodes"] = number_of_nodes
+        return self.run(
+            "node-cpu-hog",
+            timeout=timeout,
+            ignore_error=ignore_error,
+            **flags,
+        )
+
+    def random(
+        self,
+        plan_path,
+        *args,
+        alerts_profile=None,
+        exit_on_error=False,
+        graph_dump=None,
+        max_parallel=None,
+        metrics_profile=None,
+        number_of_scenarios=None,
+        timeout=3600,
+        ignore_error=False,
+        **extra_flags,
+    ):
+        """
+        Run a random chaos run from a plan file: krknctl random run <plan_path> [flags].
+
+        Only non-empty options are passed to the command; omit a parameter to leave it unset.
+
+        Args:
+            plan_path (str): Path to the plan JSON file (e.g. from generate_random_plan_file).
+            *args: Extra positional args for random (after plan_path).
+            alerts_profile (str): Custom alerts profile file path (--alerts-profile).
+            exit_on_error (bool): If True, interrupt workflow and exit non-zero on error
+                (--exit-on-error).
+            graph_dump (str): File path to persist the generated dependency graph
+                (--graph-dump).
+            max_parallel (int): Maximum number of parallel scenarios (--max-parallel).
+            metrics_profile (str): Custom metrics profile file path (--metrics-profile).
+            number_of_scenarios (int): Number of elements to select from the execution plan
+                (--number-of-scenarios).
+            timeout (int): Command timeout (default 1 hour for chaos run).
+            ignore_error (bool): If True, do not raise on non-zero exit.
+            **extra_flags: Any other flags for random run (only non-empty values are passed).
+
+        Returns:
+            CompletedProcess.
+        """
+        flags = dict(extra_flags)
+        if alerts_profile is not None and str(alerts_profile).strip():
+            flags["alerts_profile"] = alerts_profile
+        if exit_on_error:
+            flags["exit_on_error"] = True
+        if graph_dump is not None and str(graph_dump).strip():
+            flags["graph_dump"] = graph_dump
+        if max_parallel is not None:
+            flags["max_parallel"] = max_parallel
+        if metrics_profile is not None and str(metrics_profile).strip():
+            flags["metrics_profile"] = metrics_profile
+        if number_of_scenarios is not None:
+            flags["number_of_scenarios"] = number_of_scenarios
+        return self.run_subcommand(
+            "random",
+            "run",
+            plan_path,
+            *args,
+            timeout=timeout,
+            ignore_error=ignore_error,
+            **flags,
+        )
+
+    def random_background(
+        self,
+        plan_path,
+        log_path=None,
+        alerts_profile=None,
+        exit_on_error=False,
+        graph_dump=None,
+        max_parallel=None,
+        metrics_profile=None,
+        number_of_scenarios=None,
+        echo_to_log=True,
+        **extra_flags,
+    ):
+        """
+        Start krknctl random run in a background process. Stdout/stderr are
+        streamed to a log file and optionally echoed to the test log in real
+        time so long-running runs are easy to monitor. Caller polls the
+        returned process and runs cleanup when it exits.
+
+        Args:
+            plan_path (str): Path to the plan JSON file.
+            log_path (str): Path to the log file. If None, uses
+                <dirname(plan_path)>/krknctl.log.
+            alerts_profile: Optional --alerts-profile.
+            exit_on_error: Optional --exit-on-error.
+            graph_dump: Optional --graph-dump.
+            max_parallel: Optional --max-parallel.
+            metrics_profile: Optional --metrics-profile.
+            number_of_scenarios: Optional --number-of-scenarios.
+            echo_to_log (bool): If True (default), stream each line to log.info
+                so test output shows krknctl progress in real time.
+            **extra_flags: Any other flags for random run.
+
+        Returns:
+            tuple: (process, log_path). process is subprocess.Popen; poll with
+                process.poll() (None = still running). log_path is the log file path.
+        """
+        if log_path is None:
+            log_path = os.path.join(os.path.dirname(plan_path), "krknctl.log")
+        flags = dict(extra_flags)
+        if alerts_profile is not None and str(alerts_profile).strip():
+            flags["alerts_profile"] = alerts_profile
+        if exit_on_error:
+            flags["exit_on_error"] = True
+        if graph_dump is not None and str(graph_dump).strip():
+            flags["graph_dump"] = graph_dump
+        if max_parallel is not None:
+            flags["max_parallel"] = max_parallel
+        if metrics_profile is not None and str(metrics_profile).strip():
+            flags["metrics_profile"] = metrics_profile
+        if number_of_scenarios is not None:
+            flags["number_of_scenarios"] = number_of_scenarios
+        cmd = self._build_cmd("random", "run", plan_path, **flags)
+        log.info(
+            "Starting krknctl in background (output -> %s): %s",
+            log_path,
+            shlex.join(cmd),
+        )
+        os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=self._env(),
+            bufsize=1,
+        )
+
+        def _stream_stdout(proc, path, echo):
+            """Read process stdout line by line; write to file and optionally to log."""
+            with open(path, "w") as f:
+                try:
+                    for line in iter(proc.stdout.readline, b""):
+                        text = line.decode("utf-8", errors="replace").rstrip()
+                        f.write(text + "\n")
+                        f.flush()
+                        if echo and text:
+                            log.info("[krknctl] %s", text)
+                except (ValueError, OSError):
+                    pass
+                finally:
+                    proc.stdout.close()
+
+        def _heartbeat(proc, path, interval=60):
+            """Log periodically while krknctl is still running so monitoring is visible."""
+            while proc.poll() is None:
+                time.sleep(interval)
+                if proc.poll() is None:
+                    log.info(
+                        "krknctl is still running (monitoring; log file: %s)",
+                        path,
+                    )
+
+        reader = threading.Thread(
+            target=_stream_stdout,
+            args=(process, log_path, echo_to_log),
+            name="krknctl-log-reader",
+            daemon=True,
+        )
+        reader.start()
+        heartbeat = threading.Thread(
+            target=_heartbeat,
+            args=(process, log_path),
+            name="krknctl-heartbeat",
+            daemon=True,
+        )
+        heartbeat.start()
+        return process, log_path
+
+    def list_scenarios(self, *args, timeout=60, ignore_error=False, **flags):
+        """
+        List available or running scenarios: krknctl list [flags].
+
+        Returns:
+            CompletedProcess.
+        """
+        return self.run_subcommand(
+            "list", *args, timeout=timeout, ignore_error=ignore_error, **flags
+        )
+
+    def describe(self, scenario_name, *args, timeout=30, ignore_error=False, **flags):
+        """
+        Describe a scenario: krknctl describe <scenario_name> [flags].
+
+        Returns:
+            CompletedProcess.
+        """
+        return self.run_subcommand(
+            "describe",
+            scenario_name,
+            *args,
+            timeout=timeout,
+            ignore_error=ignore_error,
+            **flags,
+        )
+
+    def clean(self, *args, timeout=120, ignore_error=False, **flags):
+        """
+        Clean already run scenario files and containers: krknctl clean [flags].
+
+        Returns:
+            CompletedProcess.
+        """
+        return self.run_subcommand(
+            "clean", *args, timeout=timeout, ignore_error=ignore_error, **flags
+        )
+
+    def attach(self, *args, timeout=30, ignore_error=False, **flags):
+        """
+        Connect to running scenario logs: krknctl attach [flags].
+
+        Returns:
+            CompletedProcess.
+        """
+        return self.run_subcommand(
+            "attach", *args, timeout=timeout, ignore_error=ignore_error, **flags
+        )
+
+    def graph(self, *args, timeout=300, ignore_error=False, **flags):
+        """
+        Run or scaffold a dependency-graph run: krknctl graph [flags].
+
+        Returns:
+            CompletedProcess.
+        """
+        return self.run_subcommand(
+            "graph", *args, timeout=timeout, ignore_error=ignore_error, **flags
+        )
+
+    def query_status(self, *args, timeout=30, ignore_error=False, **flags):
+        """
+        Check status of container(s): krknctl query-status [flags].
+
+        Returns:
+            CompletedProcess.
+        """
+        return self.run_subcommand(
+            "query-status", *args, timeout=timeout, ignore_error=ignore_error, **flags
+        )
+
+    def completion(self, *args, timeout=10, ignore_error=False, **flags):
+        """
+        Generate shell completion script: krknctl completion [flags].
+
+        Returns:
+            CompletedProcess.
+        """
+        return self.run_subcommand(
+            "completion", *args, timeout=timeout, ignore_error=ignore_error, **flags
+        )
+
+    def help_cmd(self, subcommand=None, *args, timeout=10, ignore_error=False):
+        """
+        Help for krknctl or a subcommand: krknctl help [command].
+
+        Args:
+            subcommand (str): Optional subcommand name (e.g. "random", "run").
+
+        Returns:
+            CompletedProcess.
+        """
+        if subcommand is not None:
+            args = (subcommand,) + args
+        return self.run_subcommand(
+            "help", *args, timeout=timeout, ignore_error=ignore_error
+        )

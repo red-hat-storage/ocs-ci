@@ -7,6 +7,11 @@ import logging
 import tempfile
 import time
 from datetime import datetime
+from time import sleep
+
+from novaclient.exceptions import ResourceNotFound
+
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -17,6 +22,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     NotFoundError,
     UnexpectedDeploymentConfiguration,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.ocp import OCP
@@ -42,6 +48,7 @@ from ocs_ci.ocs.utils import (
     enable_mco_console_plugin,
     set_recovery_as_primary,
     get_all_acm_indexes,
+    get_non_acm_cluster_and_non_provider_cluster_config,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -378,13 +385,18 @@ def relocate(
 
 
 def check_mirroring_status_ok(
-    replaying_images=None, cephblockpoolradosns=None, storageclient_uid=None
+    replaying_images=None,
+    replaying_groups=None,
+    cephblockpoolradosns=None,
+    storageclient_uid=None,
 ):
     """
-    Check if mirroring status has health OK and expected number of replaying images
+    Check if mirroring status has health OK and expected number of replaying images and groups.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
         cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
         storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
             Applicable for provider - client configuration.
@@ -407,6 +419,11 @@ def check_mirroring_status_ok(
 
         if not cephbpradosns:
             raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
+
+        if "ocs-storagecluster-cephblockpool" not in cephbpradosns:
+            cephbpradosns = "ocs-storagecluster-cephblockpool-" + cephbpradosns
+
+        logger.info(f"Got cephblockpoolradosnamespace {cephbpradosns}")
 
         cbp_obj = ocp.OCP(
             kind=constants.CEPHBLOCKPOOLRADOSNS,
@@ -475,16 +492,32 @@ def check_mirroring_status_ok(
                 )
             return False
 
+    if is_cg_enabled():
+        if replaying_groups is not None:
+            current_replaying_groups = mirroring_status.get("group_states", {}).get(
+                "replaying"
+            )
+            if current_replaying_groups != replaying_groups:
+                logger.warning(
+                    f"Unexpected replaying groups. Current: {current_replaying_groups}, "
+                    f"expected: {replaying_groups}"
+                )
+                return False
+
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
+def wait_for_mirroring_status_ok(
+    replaying_images=None, replaying_groups=None, timeout=900
+):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
-    images for each of the ODF cluster
+    images and groups for each of the ODF cluster.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
         timeout (int): time in seconds to wait for mirroring status reach OK
 
     Returns:
@@ -495,7 +528,12 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
 
     """
     restore_index = config.cur_index
-    for cluster in get_non_acm_cluster_config():
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        non_acm_cluster_config = get_non_acm_cluster_and_non_provider_cluster_config()
+    else:
+        non_acm_cluster_config = get_non_acm_cluster_config()
+    for cluster in non_acm_cluster_config:
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
         logger.info(
             f"Validating mirroring status on cluster {cluster.ENV_DATA['cluster_name']}"
@@ -505,6 +543,7 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
             sleep=5,
             func=check_mirroring_status_ok,
             replaying_images=replaying_images,
+            replaying_groups=replaying_groups,
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
@@ -1141,8 +1180,29 @@ def wait_for_all_resources_deletion(
     """
     logger.info("Waiting for all pods to be deleted")
     all_pods = get_all_pods(namespace=namespace)
+
+    # Bug https://redhat.atlassian.net/browse/DFBUGS-6048
+    for pod_obj in all_pods:
+        if "volsync-pvc-mount" in pod_obj.name:
+            # Wait for some time for all finalsync pods to schedule
+            logger.info("Wait for 90 seconds for all finalsync pods to schedule")
+            sleep(90)
+            break
+
     for pod_obj in all_pods:
         if "volsync-rsync-tls-dst" not in pod_obj.name:
+            if "volsync-pvc-mount" in pod_obj.name:
+                try:
+                    helpers.wait_for_resource_state(
+                        resource=pod_obj, state=constants.STATUS_COMPLETED, timeout=60
+                    )
+                except (ResourceWrongStatusException, CommandFailed, ResourceNotFound):
+                    # If the pod is deleted automatically
+                    pod_obj.ocp.wait_for_delete(
+                        resource_name=pod_obj.name, timeout=timeout, sleep=5
+                    )
+                    continue
+                pod_obj.delete()
             pod_obj.ocp.wait_for_delete(
                 resource_name=pod_obj.name, timeout=timeout, sleep=5
             )
@@ -1395,9 +1455,35 @@ def get_all_drpolicy():
 
     """
     config.switch_acm_ctx()
-    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
-    drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
-    return drpolicy_list
+    return_drpolicy_list = []
+    current_managed_clusters_list = []
+    acm_hub_name = config.get_cluster_name_by_index(get_active_acm_index())
+    with config.RunWithAcmConfigContext():
+        drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
+        drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
+    for cluster_name in config.clusters:
+        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+            current_managed_clusters_list.append(
+                cluster_name.ENV_DATA.get("cluster_name")
+            )
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        current_managed_clusters_list = [
+            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+            for item in dr_cluster_relations[0]
+            if is_hosted_cluster(cluster_name=item)
+        ]
+    else:
+        current_managed_clusters_list.remove(acm_hub_name)
+
+    for drpolicy in drpolicy_list:
+
+        if all(
+            mngcls in drpolicy["spec"]["drClusters"]
+            for mngcls in current_managed_clusters_list
+        ):
+            return_drpolicy_list.append(drpolicy)
+    return return_drpolicy_list
 
 
 @retry(UnexpectedBehaviour, tries=5, delay=10, backoff=2)
@@ -1564,7 +1650,14 @@ def verify_last_group_sync_time(
                 "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
             )
     else:
-        last_group_sync_time = drpc_obj.get_last_group_sync_time()
+        logger.info("Waiting for lastGroupSyncTime to be set")
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
+                break
+            logger.info("lastGroupSyncTime not yet set, retrying...")
 
     # Verify lastGroupSyncTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
@@ -2484,12 +2577,31 @@ def get_cluster_set_name(switch_ctx=None):
         list: List of uniq cluster set name
     """
     cluster_set = []
+    current_managed_clusters_list = []
     restore_index = config.cur_index
     config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
-    current_managed_clusters_list = [
-        cluster_name.ENV_DATA.get("cluster_name") for cluster_name in config.clusters
+    for cluster_name in config.clusters:
+        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+            current_managed_clusters_list.append(
+                cluster_name.ENV_DATA.get("cluster_name")
+            )
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        current_managed_clusters_list = [
+            (
+                f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+                if is_hosted_cluster(cluster_name=item)
+                else item
+            )
+            for item in dr_cluster_relations[0]
+        ]
+
+    # The list current_managed_clusters_list is required for RDR, not mandatory for MDR
+    current_managed_clusters_list = current_managed_clusters_list or [
+        mng_cluster["metadata"]["name"] for mng_cluster in managed_clusters
     ]
+
     # ignore local-cluster here
     for i in managed_clusters:
         if (
@@ -2730,7 +2842,7 @@ def validate_volumegroupsnapshot(vgs_namespace):
     namespace = config.ENV_DATA["cluster_namespace"]
     odf_external_snapshotter_pod = get_pods_having_label(
         constants.ODF_EXTERNAL_SNAPSHOTTER, namespace
-    )[0]["metadata"]["name"]
+    )
     vgs_name = get_vgs_name(vgs_namespace)
     expected_output_lst = (
         f"{vgs_name} was successfully created by the CSI driver",
@@ -2739,16 +2851,26 @@ def validate_volumegroupsnapshot(vgs_namespace):
     try:
         for expected_val in expected_output_lst:
             wait_for_matching_pattern_in_pod_logs(
-                pod_name=odf_external_snapshotter_pod,
+                pod_name=odf_external_snapshotter_pod[0]["metadata"]["name"],
                 pattern=expected_val,
                 namespace=namespace,
                 timeout=300,
                 sleep=5,
             )
     except TimeoutExpiredError:
-        raise UnexpectedBehaviour(
-            f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
-        )
+        if len(odf_external_snapshotter_pod) > 1:
+            for expected_val in expected_output_lst:
+                wait_for_matching_pattern_in_pod_logs(
+                    pod_name=odf_external_snapshotter_pod[1]["metadata"]["name"],
+                    pattern=expected_val,
+                    namespace=namespace,
+                    timeout=300,
+                    sleep=5,
+                )
+        else:
+            raise UnexpectedBehaviour(
+                f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
+            )
 
 
 def is_cg_cephfs_enabled():

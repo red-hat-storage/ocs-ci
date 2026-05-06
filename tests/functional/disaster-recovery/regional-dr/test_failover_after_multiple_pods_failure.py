@@ -19,6 +19,7 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_deletion,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
@@ -38,10 +39,7 @@ class TestFailoverAfterMultiplePodsFailure:
     """
 
     def test_failover_after_multiple_pods_failure(
-        self,
-        dr_workload,
-        scale_deployments,
-        node_restart_teardown,
+        self, dr_workload, scale_deployments, nodes_multicluster
     ):
         """
         Tests to verify application failover between managed clusters when multiple deployments are scaled down on the
@@ -143,10 +141,19 @@ class TestFailoverAfterMultiplePodsFailure:
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                performed_dr_action=True,
             )
 
-        logger.info("Calling fixture to scale up deployments")
         config.switch_to_cluster_by_name(primary_cluster_name)
+        logger.info(
+            "Restarting worker nodes on primary cluster to avoid pod sandbox creation failures "
+            "before scaling up deployments"
+        )
+        primary_cluster_index = config.cur_index
+        primary_worker_nodes = get_nodes()
+        nodes_multicluster[primary_cluster_index].restart_nodes(primary_worker_nodes)
+
+        logger.info("Calling fixture to scale up deployments")
         scale_deployments("up")
         wait_for_pods_to_be_running(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, timeout=420, sleep=30

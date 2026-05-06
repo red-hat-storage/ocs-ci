@@ -4,6 +4,7 @@ import logging
 import os
 import pandas as pd
 import random
+import secrets
 import string
 import time
 import tempfile
@@ -90,7 +91,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.fill_pool_job import FillPoolJob
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
@@ -155,7 +156,7 @@ from ocs_ci.ocs.version import (
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
     aws,
-    deployment_openshift_logging as ocp_logging_obj,
+    deployment_openshift_logging,
     ibmcloud,
     kms as KMS,
     pagerduty,
@@ -245,9 +246,12 @@ from ocs_ci.helpers.cnv_helpers import (
 )
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.utility.utils import exec_cmd
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.utility.iscsi_config import iscsi_teardown
+from ocs_ci.utility.iam_utils import (
+    generate_random_iam_path,
+    run_iam_command,
+    get_user_access_keys,
+)
 
 DEPLOYERS = {}
 
@@ -3854,144 +3858,7 @@ def install_logging(request):
 
     request.addfinalizer(finalizer)
 
-    sub = ocp.OCP(
-        kind=constants.SUBSCRIPTION,
-        namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
-    )
-    logging_sub = sub.get().get("items")
-    if logging_sub:
-        log.info("Logging is already configured, Skipping Installation")
-        return
-
-    log.info("Configuring Openshift-logging")
-
-    # Gets OCP version to align logging version to OCP version
-    package_manifest = PackageManifest(
-        resource_name=constants.CLUSTERLOGGING_SUBSCRIPTION,
-        selector="catalog=redhat-operators",
-    )
-    logging_channel = package_manifest.get_default_channel()
-
-    # Creates namespace openshift-operators-redhat
-    ocp_logging_obj.create_namespace(
-        yaml_file=constants.EO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    # Creates an operator-group for lokistack
-    assert ocp_logging_obj.create_lokistack_operator_group(
-        yaml_file=constants.EO_OG_YAML,
-        resource_name="openshift-operators-redhat",
-        skip_resource_exists=rosa_hcp_depl,
-    )
-    # Creates subscription for lokistack operator
-    subscription_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SUB_YAML)
-    subscription_yaml["spec"]["channel"] = logging_channel
-    helpers.create_resource(**subscription_yaml)
-    assert ocp_logging_obj.get_lokistack_subscription()
-
-    # Creates a namespace openshift-logging
-    ocp_logging_obj.create_namespace(
-        yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    # Create RGW obc
-    obc_yaml = templating.load_yaml(constants.LOKI_OPERATOR_OBC_YAML)
-
-    if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
-        obc_yaml["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
-    else:
-        obc_yaml["spec"]["storageClassName"] = constants.NOOBAA_SC
-
-    helpers.create_resource(**obc_yaml)
-
-    ocp_logging_obj.get_obc()
-
-    # Creating secret
-    sample = TimeoutSampler(
-        timeout=180,
-        sleep=20,
-        func=run_cmd_verify_cli_output,
-        cmd=(
-            f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get configmap"
-            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_PORT}}'"
-        ),
-    )
-    if not sample.wait_for_func_status(result=True):
-        raise Exception("Failed to get configmap")
-
-    configmap_obj = ocp.OCP(
-        kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
-    )
-    cm_dict = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
-
-    access_key_cmd = (
-        f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
-        f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_ACCESS_KEY_ID}}'"
-    )
-    access_key = exec_cmd(access_key_cmd)
-    decoded1 = base64.b64decode(access_key.stdout).decode("utf-8")
-
-    secret_key_cmd = (
-        f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
-        f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_SECRET_ACCESS_KEY}}'"
-    )
-    secret_key = exec_cmd(secret_key_cmd)
-    decoded2 = base64.b64decode(secret_key.stdout).decode("utf-8")
-
-    secret_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SECRET_YAML)
-    secret_yaml["stringData"]["access_key_id"] = decoded1
-    secret_yaml["stringData"]["access_key_secret"] = decoded2
-    secret_yaml["stringData"]["bucketnames"] = cm_dict["data"]["BUCKET_NAME"]
-    endpoint = cm_dict["data"]["BUCKET_HOST"]
-    secret_yaml["stringData"]["endpoint"] = f"https://{endpoint}:80"
-    helpers.create_resource(**secret_yaml)
-    assert ocp_logging_obj.get_secret_to_lokistack()
-
-    # creates lokistack
-    # sleeping for few seconds to avoid following error
-    # Internal error occurred: failed calling webhook
-    ocp_logging_obj.create_lokistack(
-        yaml_file=constants.LOKISTACK_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    log.info("Loki operator is installed successfuly")
-
-    # Creates an operator-group for cluster-logging
-    ocp_logging_obj.create_clusterlogging_operator_group(
-        yaml_file=constants.CL_OG_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    # Creates subscription for cluster-logging
-    cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription["spec"]["channel"] = logging_channel
-    helpers.create_resource(**cl_subscription)
-    assert ocp_logging_obj.get_clusterlogging_subscription()
-
-    # creates a service account to be used by the log collector
-    ocp_logging_obj.setup_sa_permissions()
-
-    # Creates ClusterLogForwarder
-    ocp_logging_obj.create_clusterlogforwarder(
-        yaml_file=constants.CLF_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    log.info("Openshift Logging operator is installed successfully")
-
-    # Creates namespace for openshift-cluster-observability-operator
-    ocp_logging_obj.create_namespace(
-        yaml_file=constants.CO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    # Creates OperatorGroup for openshift-cluster-observability-operator
-    ocp_logging_obj.create_clusterobservability_operator_group(
-        yaml_file=constants.CO_OG_YAML,
-        resource_name=constants.CLUSTER_OBSERVABILITY_OPERATOR,
-        skip_resource_exists=rosa_hcp_depl,
-    )
-    # Creates subscription for openshift-cluster-observability-operator
-    co_subscription_yaml = templating.load_yaml(constants.CO_SUB_YAML)
-    helpers.create_resource(**co_subscription_yaml)
-    assert ocp_logging_obj.get_cluster_observability_subscription()
-
-    # Creates UI Plugin for openshift-cluster-observability-operator
-    ocp_logging_obj.create_UI_Plugin(
-        yaml_file=constants.CO_UI_PLUGIN_YAML, resource_name="logging"
-    )
-    log.info("Cluster Observability operator is installed successfully with UIPlugin")
+    deployment_openshift_logging.install_logging(skip_resource_exists=rosa_hcp_depl)
 
 
 @pytest.fixture
@@ -6244,7 +6111,7 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             if not blockpool_ui_obj.delete_pool(instance.name):
                 instance.delete()
                 raise PoolNotDeletedFromUI(
-                    f"Could not delete block pool {instances.name} from UI."
+                    f"Could not delete block pool {instance.name} from UI."
                     " Deleted from CLI"
                 )
 
@@ -10445,6 +10312,151 @@ def nb_assign_user_role_fixture(request, mcg_obj_session):
 
 
 @pytest.fixture()
+def noobaa_db_backup_patch(request):
+    """
+    Patch custom Noobaa db backup info
+    """
+
+    ocs_storage_obj = OCP(
+        kind="storagecluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+
+    # Get the initial dbBackup value from DEFAULT_STORAGE_CLUSTER
+    initial_db_backup_info = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+        "multiCloudGateway"
+    ]["dbBackup"]
+    log.info(f"Initial dbBackup value: {initial_db_backup_info}")
+
+    def factory(schedule_cron_interval, num_backups, snapshot_class):
+        """
+        Patch the storage cluster with DB recovery configuration.
+
+        Args:
+            schedule_cron_interval (int): Automatic backup schedule interval
+            num_backups (int): Number of backups to be taken
+            snapshot_class (str): Snapshot class to be used for backup
+        Returns:
+            None
+        """
+
+        db_backup_param = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
+            f'"volumeSnapshot": {{"maxSnapshots": {num_backups}, "volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+        )
+        ocs_storage_obj.patch(params=db_backup_param, format_type="merge")
+        log.info(
+            f"DB backup info patched successfully with maxSnapshots={num_backups}, "
+            f"schedule=*/{schedule_cron_interval} * * * *"
+        )
+        time.sleep(15)
+
+    def finalizer():
+        # Restore the original dbBackup value
+        if initial_db_backup_info is None:
+            backup_params = (
+                '[{"op": "remove", "path": "/spec/multiCloudGateway/dbBackup"}]'
+            )
+            ocs_storage_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=backup_params,
+                format_type="json",
+            )
+            log.info("Successfully removed backup section from Storage cluster")
+        else:
+            db_backup_restore_param = json.dumps(
+                {"spec": {"multiCloudGateway": {"dbBackup": initial_db_backup_info}}}
+            )
+            ocs_storage_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=db_backup_restore_param,
+                format_type="merge",
+            )
+            log.info(
+                f"Successfully restored original dbBackup value: {initial_db_backup_info}"
+            )
+        log.info("Removing created backups now")
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+        backup_names = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+        )
+        for bkp_name in backup_names:
+            backup_obj.delete(resource_name=bkp_name, force=True)
+            backup_obj.wait_for_delete(resource_name=bkp_name)
+        log.info("Backups created by CNPG operator Removed successfully")
+
+        log.info("Removing created volumesnapshots now")
+        volumesnapshot_obj = OCP(
+            kind="volumesnapshot", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        volumesnapshot_names = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "volumesnapshot"
+        )
+        for volumesnapshot_name in volumesnapshot_names:
+            volumesnapshot_obj.delete(resource_name=volumesnapshot_name, force=True)
+            volumesnapshot_obj.wait_for_delete(resource_name=volumesnapshot_name)
+        log.info("volumesnapshots created by CNPG operator Removed successfully")
+
+    request.addfinalizer(finalizer)
+
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_recovery_patch(request):
+    """
+    Patch custom Noobaa db recovery info
+    """
+
+    # OCS storagecluster object
+    ocs_storage_obj = OCP(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+
+    def factory(backup_name):
+        """
+        Patch the storage cluster with DB recovery configuration.
+
+        Args:
+            ocs_storage_obj (OCP): OCS storage cluster object
+            backup_name (str): Name of the backup to use for recovery
+
+        Returns:
+            None
+        """
+        db_recovery_param = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"dbRecovery": {{"volumeSnapshotName": "{backup_name}"}}}}}}}}'
+        )
+        ocs_storage_obj.patch(params=db_recovery_param, format_type="merge")
+        log.info("DB recovery info patched successfully")
+        time.sleep(15)
+
+    def finalizer():
+        recovery_params = (
+            '[{"op": "remove", "path": "/spec/multiCloudGateway/dbRecovery"}]'
+        )
+        try:
+            ocs_storage_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=recovery_params,
+                format_type="json",
+            )
+        except Exception as e:
+            log.error(e)
+            pass
+        log.info("Successfully removed recovery section from Storage cluster")
+
+    request.addfinalizer(finalizer)
+
+    return factory
+
+
+@pytest.fixture()
 def set_encryption_at_teardown(request):
     """
     Fixture to restore encryption state and clean up resources after the test.
@@ -11753,3 +11765,71 @@ def keda_fixture(request):
         raise UnexpectedBehaviour("KEDA setup to read Thanos metrics failed")
 
     return keda
+
+
+@pytest.fixture(scope="function")
+def iam_users_factory(request, mcg_obj, awscli_pod_session):
+    return iam_users_factory_fixture(request, mcg_obj, awscli_pod_session)
+
+
+def iam_users_factory_fixture(request, mcg_obj, awscli_pod_session):
+    """
+    Create an iam users factory. Calling this fixture creates iam users
+    """
+    created_iam_users_name_list = []
+
+    def factory(num=1):
+        """
+        Args:
+            num (int): Number of new iam users to be created
+
+        Returns:
+            list: list of created users names
+        """
+        for _ in range(num):
+            random_name_part = "".join(
+                secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8)
+            )
+            new_user_name = f"iam_user_{random_name_part}"
+            new_user_path = generate_random_iam_path()
+            create_user_cmd = (
+                f"create-user --user-name {new_user_name} --path {new_user_path}"
+            )
+            run_iam_command(mcg_obj, awscli_pod_session, create_user_cmd)
+            created_iam_users_name_list.append(new_user_name)
+
+        return created_iam_users_name_list
+
+    def finalizer():
+        """
+        Deletes the created iam users
+        """
+        for user_name in created_iam_users_name_list:
+            access_keys = get_user_access_keys(mcg_obj, awscli_pod_session, user_name)
+            # Access keys should be deleted before the user deletion
+            for key in access_keys:
+                access_key_id = key["AccessKeyId"]
+                delete_key_cmd = f"delete-access-key --user-name {user_name} --access-key-id {access_key_id}"
+                run_iam_command(mcg_obj, awscli_pod_session, delete_key_cmd)
+
+            delete_user_cmd = f"delete-user --user-name {user_name}"
+            run_iam_command(mcg_obj, awscli_pod_session, delete_user_cmd)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def skip_on_hci_provider_client():
+    """
+    Skip the test at runtime when running on Fusion HCI provider+client
+    setup. Uses a fixture instead of pytest.mark.skipif to avoid the
+    eager-evaluation issue where config.clusters is not yet populated at
+    module import time.
+    """
+    if (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.hci_provider_exist()
+        and config.hci_client_exist()
+    ):
+        pytest.skip("Test will not run on Fusion HCI provider and Client clusters")

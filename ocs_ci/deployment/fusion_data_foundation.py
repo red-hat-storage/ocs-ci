@@ -10,13 +10,16 @@ import tempfile
 import yaml
 
 from ocs_ci.deployment.helpers import storage_class
-from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
+from ocs_ci.deployment.helpers.lso_helpers import (
+    add_disks_lso,
+    cleanup_nodes_for_lso_install,
+)
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
 
 from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs import constants, defaults, node
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
@@ -25,6 +28,7 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.operators import LocalStorageOperator
+from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 
 import time
 from ocs_ci.utility.utils import (
@@ -75,7 +79,9 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
+        self.ensure_install_plan_approval()
         if not self.fdf_skip_storage_setup:
+            wait_for_storageclusters_crd()
             self.setup_storage()
 
     def ensure_lso_installed(self):
@@ -199,9 +205,21 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Verifying FDF installation")
         fusion_service_instance_health_check()
-        wait_for_storageclusters_crd()
         self.get_installed_version()
         logger.info("FDF successfully installed")
+
+    def ensure_install_plan_approval(self):
+        """
+        Wait for install plan and approve once available.
+        """
+        try:
+            wait_for_install_plan_and_approve(
+                constants.OPENSHIFT_STORAGE_NAMESPACE, 5 * 60
+            )
+        except TimeoutExpiredError:
+            logger.warning(
+                "Timeout waiting for install plan approval. Continuing execution..."
+            )
 
     def get_installed_version(self):
         """
@@ -226,15 +244,32 @@ class FusionDataFoundationDeployment:
         Setup storage
         """
         logger.info("Configuring storage.")
+        storage_namespace = config.ENV_DATA.get(
+            "cluster_namespace", constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        logger.info(f"Adding cluster-monitoring label to namespace {storage_namespace}")
+        OCP(kind="namespace").add_label(
+            resource_name=storage_namespace,
+            label="openshift.io/cluster-monitoring=true",
+        )
         if self.lso_enabled:
             self.ensure_lso_installed()
+            # Perform disk cleanup after LSO is installed but before any disk operations
+            if config.ENV_DATA.get("skip_disks_cleanup", False):
+                logger.info("Skipping disks cleanup")
+            else:
+                logger.info("Performing disk cleanup for LSO")
+                cleanup_nodes_for_lso_install()
         self.patch_catalogsource()
 
         fusion_version = config.ENV_DATA["fusion_version"].replace("v", "")
         fusion_version = version.get_semantic_version(fusion_version, True)
 
         # Storage configuration method changed in Fusion 2.11
-        if fusion_version < version.VERSION_2_11:
+        if (
+            fusion_version < version.VERSION_2_11
+            or config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL
+        ):
             self.create_odfcluster()
             # Mute MON_NETSPLIT for arbiter deployments to avoid:
             # https://issues.redhat.com/browse/DFBUGS-4521
@@ -245,6 +280,12 @@ class FusionDataFoundationDeployment:
             logger.info("Storage configuration for Fusion 2.11 or greater")
             if self.lso_enabled:
                 add_disks_lso()
+            # Ensure storage class is resolved and stored in config before
+            # StorageCluster creation. The property setter populates
+            # config.ENV_DATA["storage_class"] which StorageClusterSetup
+            # reads to set storageClassName on the dataPVCTemplate.
+            sc = self.storage_class
+            logger.info(f"Resolved storage class for StorageCluster: {sc}")
             clustersetup = StorageClusterSetup()
             if self.lso_enabled:
                 create_lvs_resource(self.storage_class, self.storage_class)

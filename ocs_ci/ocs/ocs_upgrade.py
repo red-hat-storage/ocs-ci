@@ -80,6 +80,8 @@ from ocs_ci.ocs.exceptions import (
     TimeoutException,
     ExternalClusterRGWAdminOpsUserException,
     CSVNotFound,
+    UnexpectedCatalogBuildException,
+    ChannelNotFound,
 )
 from ocs_ci.ocs.ui.base_ui import logger, login_ui
 from ocs_ci.ocs.ui.views import locators, ODF_OPERATOR
@@ -313,7 +315,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
 
     """
     # Get all worker nodes for CSI nodeplugin count (they run on all workers, not just storage-labeled)
-    all_worker_nodes = get_worker_nodes()
+    all_worker_nodes = get_worker_nodes(skip_master_nodes=False)
     number_of_all_worker_nodes = len(all_worker_nodes)
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     if not (
@@ -419,9 +421,10 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
                 count=rgw_count,
             )
     if upgrade_version >= parse_version("4.6"):
-        skip_metrics_exporter = upgrade_version >= parse_version(
-            "4.21"
-        ) and config.DEPLOYMENT.get("external_mode")
+        skip_metrics_exporter = upgrade_version >= parse_version("4.21") and (
+            config.DEPLOYMENT.get("external_mode")
+            or config.ENV_DATA.get("mcg_only_deployment")
+        )
         if not skip_metrics_exporter:
             verify_pods_upgraded(old_images, selector=constants.OCS_METRICS_EXPORTER)
         else:
@@ -620,10 +623,7 @@ class OCSUpgrade(object):
             channel: (str): OCS subscription channel
 
         """
-        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_9:
-            subscription_name = constants.ODF_SUBSCRIPTION
-        else:
-            subscription_name = constants.OCS_SUBSCRIPTION
+        subscription_name = constants.ODF_SUBSCRIPTION
         kind_name = "subscription.operators.coreos.com"
         subscription = OCP(
             resource_name=subscription_name,
@@ -786,6 +786,11 @@ class OCSUpgrade(object):
                     get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
                     prune_old_df_repo_idms()
 
+                # Wait for catalog source to be ready
+                log.info("Waiting for catalog source to be ready after update.")
+                ocs_catalog.wait_for_state("READY", timeout=480)
+                log.info("Catalog source is ready.")
+
 
 def run_ocs_upgrade(
     operation=None,
@@ -878,6 +883,81 @@ def run_ocs_upgrade(
     with CephHealthMonitor(ceph_cluster):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
+
+        # Check for unexpected catalog builds during y-stream upgrades only
+        # Y-stream: 4.21 -> 4.22 (version changes), Z-stream: 4.21 -> 4.21 (same version, different patch)
+        parsed_versions = upgrade_ocs.get_parsed_versions()
+        version_change = (
+            parsed_versions[1].major != parsed_versions[0].major
+            or parsed_versions[1].minor != parsed_versions[0].minor
+        )
+
+        if version_change and not upgrade_in_current_source:
+            # Y-stream upgrade: check for unexpected builds in current channel
+            log.info(
+                f"Y-stream upgrade ({original_ocs_version} -> {upgrade_version}). "
+                "Checking for unexpected builds in current channel."
+            )
+
+            subscription_name = constants.ODF_SUBSCRIPTION
+            subscription_obj = OCP(
+                resource_name=subscription_name,
+                kind="subscription.operators.coreos.com",
+                namespace=namespace,
+            )
+            current_channel = subscription_obj.data["spec"]["channel"]
+
+            operator_selector = get_selector_for_ocs_operator()
+            package_manifest = PackageManifest(
+                resource_name=OCS_OPERATOR_NAME,
+                selector=operator_selector,
+            )
+            try:
+                csv_after_catalog_update = package_manifest.get_current_csv(
+                    channel=current_channel
+                )
+                if csv_name_pre_upgrade != csv_after_catalog_update:
+                    version_pre = version.get_semantic_version(
+                        version.extract_version_from_csv_name(csv_name_pre_upgrade)
+                    )
+                    version_after = version.get_semantic_version(
+                        version.extract_version_from_csv_name(csv_after_catalog_update)
+                    )
+
+                    # Only block if the new version is HIGHER (which would cause unwanted upgrade)
+                    # Allow if version is lower or same (downgrade scenario is OK)
+                    if version_after > version_pre:
+                        error_msg = (
+                            "UPGRADE BLOCKED: Detected unexpected build in catalog. "
+                            f"Current channel '{current_channel}' had CSV '{csv_name_pre_upgrade}' "
+                            f"before catalog update, but now shows '{csv_after_catalog_update}'. "
+                            f"This would cause OLM to upgrade to '{csv_after_catalog_update}' before "
+                            "the channel change, creating conflicting upgrade paths."
+                        )
+                        log.error(error_msg)
+                        raise UnexpectedCatalogBuildException(error_msg)
+                    else:
+                        log.info(
+                            f"CSV changed in channel '{current_channel}' from "
+                            f"'{csv_name_pre_upgrade}' to '{csv_after_catalog_update}', "
+                            f"but version decreased ({version_pre} -> {version_after}). "
+                            "This is acceptable and won't cause conflicting upgrade paths."
+                        )
+                else:
+                    log.info(
+                        f"Catalog build check passed. CSV in channel '{current_channel}' "
+                        f"remains '{csv_name_pre_upgrade}'."
+                    )
+            except ChannelNotFound:
+                log.info(
+                    f"Channel '{current_channel}' not found in updated catalog. "
+                    "Skipping build check."
+                )
+        else:
+            log.info(
+                f"Z-stream or same-source upgrade ({original_ocs_version} -> {upgrade_version}). "
+                "Skipping catalog build check."
+            )
 
         if platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
             HostedClients().apply_idms_to_hosted_clusters()

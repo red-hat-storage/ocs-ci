@@ -3,10 +3,48 @@ import subprocess
 import tempfile
 import time
 from contextlib import suppress
+from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import constants
 from ocs_ci.krkn_chaos.krkn_workload_config import KrknWorkloadConfig
 
 log = logging.getLogger(__name__)
+
+
+def _ensure_tenant_kms_for_encrypted_rbd(proj_obj, pv_encryption_kms_setup_factory):
+    """
+    Configure KMS for encrypted RBD workloads: resolve encryptionKMSID and, for
+    Vault token mode, create ceph-csi-kms-token in the tenant namespace.
+
+    Mirrors the flow in test_rbd_pv_encryption and multi_cnv_workload_factory.
+
+    Args:
+        proj_obj: Project / namespace object for tenant resources.
+        pv_encryption_kms_setup_factory: pytest fixture callable from conftest.
+
+    Returns:
+        tuple: (encryption_kms_id str or None, kms client object or None)
+    """
+    from ocs_ci.framework import config as ocsci_config
+
+    if not pv_encryption_kms_setup_factory:
+        return None, None
+
+    kms_provider = ocsci_config.ENV_DATA.get("KMS_PROVIDER", "")
+
+    if kms_provider.lower() == constants.HPCS_KMS_PROVIDER:
+        kms = pv_encryption_kms_setup_factory("v1")
+        return kms.kmsid, kms
+
+    if kms_provider == constants.AZURE_KV_PROVIDER_NAME:
+        kms = pv_encryption_kms_setup_factory()
+        return kms.azure_kms_connection_name, kms
+
+    # Vault (default): tenant must have Secret ceph-csi-kms-token for CSI.
+    use_vault_namespace = ocsci_config.ENV_DATA.get("vault_hcp", False)
+    kms = pv_encryption_kms_setup_factory("v2", use_vault_namespace)
+    kms.vault_path_token = kms.generate_vault_token()
+    kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
+    return kms.kmsid, kms
 
 
 class WorkloadOps:
@@ -213,6 +251,15 @@ class WorkloadOps:
                 with suppress(Exception):
                     workload.cleanup_workload()
 
+    def stop_background_operations_on_chaos_failure(self):
+        """
+        Stop background cluster operations when chaos aborts early (e.g. Ceph crash).
+
+        Safe to call multiple times. Does not validate or tear down workloads; use
+        validate_and_cleanup() for normal post-chaos teardown.
+        """
+        self._stop_background_cluster_operations()
+
     def _stop_background_cluster_operations(self):
         """Stop background cluster operations."""
         if not self.background_cluster_ops:
@@ -343,6 +390,7 @@ class KrknWorkloadFactory:
         loaded_fixtures=None,
         timeout=360,
         storageclass_factory=None,
+        pv_encryption_kms_setup_factory=None,
         # Backward compatibility - old signature
         resiliency_workload=None,
         vdbench_block_config=None,
@@ -362,6 +410,7 @@ class KrknWorkloadFactory:
             loaded_fixtures: Dict of loaded fixtures (preferred, registry-based)
             timeout: Timeout for operations
             storageclass_factory: Storage class factory fixture (for encrypted PVCs)
+            pv_encryption_kms_setup_factory: KMS setup fixture (tenant Vault token, etc.)
 
             # Backward compatibility (deprecated - use loaded_fixtures)
             resiliency_workload: VDBENCH fixture (optional)
@@ -436,9 +485,10 @@ class KrknWorkloadFactory:
             for param in fixture_params:
                 args.append(loaded_fixtures.get(param))
 
-            # Add storageclass_factory for VDBENCH workloads (for encrypted PVC support)
-            if workload_type == "VDBENCH" and storageclass_factory is not None:
+            # Add storageclass_factory and KMS factory for VDBENCH (encrypted PVC support)
+            if workload_type == "VDBENCH":
                 args.append(storageclass_factory)
+                args.append(pv_encryption_kms_setup_factory)
 
             # Create workloads using factory method
             try:
@@ -468,6 +518,7 @@ class KrknWorkloadFactory:
                         loaded_fixtures.get("vdbench_block_config"),
                         loaded_fixtures.get("vdbench_filesystem_config"),
                         storageclass_factory,
+                        pv_encryption_kms_setup_factory,
                     )
                     workloads_by_type[KrknWorkloadConfig.VDBENCH] = vdbench_workloads
                     all_workloads.extend(vdbench_workloads)
@@ -514,6 +565,8 @@ class KrknWorkloadFactory:
             resiliency_workload,
             vdbench_block_config,
             vdbench_filesystem_config,
+            None,
+            None,
         )
         return WorkloadOps(proj_obj, workloads, [KrknWorkloadConfig.VDBENCH])
 
@@ -525,6 +578,7 @@ class KrknWorkloadFactory:
         vdbench_block_config,
         vdbench_filesystem_config,
         storageclass_factory=None,
+        pv_encryption_kms_setup_factory=None,
     ):
         """Create VDBENCH workloads for a given project.
 
@@ -535,6 +589,7 @@ class KrknWorkloadFactory:
             vdbench_block_config: VDBENCH block config fixture
             vdbench_filesystem_config: VDBENCH filesystem config fixture
             storageclass_factory: Storage class factory fixture (optional, for encrypted PVCs)
+            pv_encryption_kms_setup_factory: KMS setup fixture (optional; required for Vault-encrypted RBD)
 
         Returns:
             list: List of created workload objects
@@ -700,13 +755,24 @@ class KrknWorkloadFactory:
         # NOTE: Only RBD (CEPHBLOCKPOOL) supports per-PVC encryption via storage class
         # CephFS does NOT support per-PVC encryption via storage class parameters
         encrypted_storage_classes = {}
+        encryption_kms_id = None
         if use_encrypted and storageclass_factory is not None:
             log.info("Creating encrypted storage classes for VDBENCH workloads")
             try:
+                encryption_kms_id, _kms = _ensure_tenant_kms_for_encrypted_rbd(
+                    proj_obj, pv_encryption_kms_setup_factory
+                )
+                if not encryption_kms_id:
+                    log.warning(
+                        "Encrypted PVCs requested but pv_encryption_kms_setup_factory "
+                        "was not provided or KMS setup returned no encryption_kms_id; "
+                        "RBD provisioning may fail (e.g. missing ceph-csi-kms-token)."
+                    )
                 # Create encrypted RBD storage class ONLY (CephFS not supported)
                 encrypted_rbd_sc = storageclass_factory(
                     interface=constants.CEPHBLOCKPOOL,
                     encrypted=True,
+                    encryption_kms_id=encryption_kms_id,
                 )
             except Exception as e:
                 log.error(f"Failed to create encrypted storage class: {e}")
@@ -718,6 +784,10 @@ class KrknWorkloadFactory:
                 log.info(
                     f"✓ Created encrypted RBD storage class: {encrypted_rbd_sc.name}"
                 )
+
+                kr_schedule = self.config.get_pv_encryption_keyrotation_schedule()
+                pvk_obj = PVKeyrotation(encrypted_rbd_sc)
+                pvk_obj.annotate_storageclass_key_rotation(schedule=kr_schedule)
 
                 # IMPORTANT: CephFS encryption is NOT supported via storage class parameters
                 # CephFS can only use cluster-wide encryption (configured at StorageCluster level)

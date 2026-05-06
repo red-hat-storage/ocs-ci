@@ -3,6 +3,7 @@ import os
 import re
 import pytest
 from ocs_ci.ocs.constants import (
+    CEPH_HEALTH_ERROR,
     KRKN_CHAOS_DIR,
     OPENSHIFT_STORAGE_NAMESPACE,
     # Component label constants
@@ -39,8 +40,12 @@ from ocs_ci.ocs.constants import (
     KRKN_CLOUD_IBM,
     KRKN_CLOUD_VMWARE,
     KRKN_CLOUD_BAREMETAL,
+    FUSIONAAS_PLATFORM,
+    MANAGED_SERVICE_PLATFORMS,
 )
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.exceptions import NoobaaHealthException
 from ocs_ci.ocs.node import get_worker_nodes, get_master_nodes
 from ocs_ci.krkn_chaos.krkn_scenario_generator import (
     ApplicationOutageScenarios,
@@ -51,6 +56,7 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import (
 )
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 from ocs_ci.framework import config
+from ocs_ci.utility.utils import ceph_crash_info_display
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +94,7 @@ def get_krkn_cloud_type():
     Get the Krkn cloud type based on the current platform.
 
     Returns:
-        str: Krkn cloud type (aws, azure, ibm, vmware, bm)
+        str: Krkn cloud type (aws, azure, ibmcloud, vmware, bm)
 
     Raises:
         pytest.skip: If platform is not supported for node chaos testing
@@ -1029,7 +1035,7 @@ class HogScenarioHelper(BaseScenarioHelper):
         super().__init__(scenario_dir, namespace)
 
     def create_cpu_hog_scenario(
-        self, duration=None, namespace=None, node_selector=None
+        self, duration=None, namespace=None, node_selector=None, output_name=None
     ):
         """Create CPU hog scenario."""
         duration = duration or self.DEFAULT_TEST_DURATION
@@ -1041,15 +1047,17 @@ class HogScenarioHelper(BaseScenarioHelper):
         default_node_selector = "node-role.kubernetes.io/worker="
         node_selector = node_selector or default_node_selector
 
+        out_file = output_name or "cpu_hog.yaml"
         return HogScenarios.cpu_hog(
             self.scenario_dir,
             duration=duration,
             namespace=target_namespace,
             node_selector=node_selector,
+            output_name=out_file,
         )
 
     def create_memory_hog_scenario(
-        self, duration=None, namespace=None, node_selector=None
+        self, duration=None, namespace=None, node_selector=None, output_name=None
     ):
         """Create memory hog scenario."""
         duration = duration or self.DEFAULT_TEST_DURATION
@@ -1059,14 +1067,18 @@ class HogScenarioHelper(BaseScenarioHelper):
         default_node_selector = "node-role.kubernetes.io/worker="
         node_selector = node_selector or default_node_selector
 
+        out_file = output_name or "memory_hog.yaml"
         return HogScenarios.memory_hog(
             self.scenario_dir,
             duration=duration,
             namespace=target_namespace,
             node_selector=node_selector,
+            output_name=out_file,
         )
 
-    def create_io_hog_scenario(self, duration=None, namespace=None, node_selector=None):
+    def create_io_hog_scenario(
+        self, duration=None, namespace=None, node_selector=None, output_name=None
+    ):
         """Create IO hog scenario."""
         duration = duration or self.DEFAULT_TEST_DURATION
         target_namespace = namespace or "default"
@@ -1075,28 +1087,54 @@ class HogScenarioHelper(BaseScenarioHelper):
         default_node_selector = "node-role.kubernetes.io/worker="
         node_selector = node_selector or default_node_selector
 
+        out_file = output_name or "io_hog.yaml"
         return HogScenarios.io_hog(
             self.scenario_dir,
             duration=duration,
             namespace=target_namespace,
             node_selector=node_selector,
+            output_name=out_file,
         )
 
-    def create_strength_test_scenarios(self, stress_level="high", duration=None):
-        """Create hog scenarios for strength testing."""
+    def create_strength_test_scenarios(
+        self, stress_level="high", duration=None, node_selector=None
+    ):
+        """Create hog scenarios for strength testing.
+
+        Each scenario is written to a unique file to avoid overwriting (e.g.
+        cpu_hog_strength_0.yaml, memory_hog_strength_1.yaml). Pass node_selector
+        to target worker vs master nodes (e.g. when running multi-stress test).
+        """
         stress_config = self.get_stress_config(stress_level)
         base_duration = duration or self.DEFAULT_TEST_DURATION
 
         scenarios = []
 
-        # Create multiple hog scenarios based on stress level
+        # Default to worker nodes when no selector provided
+        default_node_selector = "node-role.kubernetes.io/worker="
+        selector = node_selector or default_node_selector
+
+        # Create multiple hog scenarios with unique filenames to avoid overwriting
         for i in range(stress_config["multiplier"]):
             test_duration = min(300, base_duration * (i + 1))  # Capped at 5 minutes
+            suffix = f"{stress_level}_{i}"
             scenarios.extend(
                 [
-                    self.create_cpu_hog_scenario(duration=test_duration),
-                    self.create_memory_hog_scenario(duration=test_duration),
-                    self.create_io_hog_scenario(duration=test_duration),
+                    self.create_cpu_hog_scenario(
+                        duration=test_duration,
+                        node_selector=selector,
+                        output_name=f"cpu_hog_{suffix}.yaml",
+                    ),
+                    self.create_memory_hog_scenario(
+                        duration=test_duration,
+                        node_selector=selector,
+                        output_name=f"memory_hog_{suffix}.yaml",
+                    ),
+                    self.create_io_hog_scenario(
+                        duration=test_duration,
+                        node_selector=selector,
+                        output_name=f"io_hog_{suffix}.yaml",
+                    ),
                 ]
             )
 
@@ -2063,6 +2101,17 @@ class CephHealthHelper(BaseScenarioHelper):
                 return True, ""
             else:
                 self.log.error("❌ Ceph crashes detected")
+                # Same as resiliency: log each crash ID and `ceph crash info <id>` output
+                try:
+                    self.log.error(
+                        "Ceph crash details (ceph crash info <crash_id>), "
+                        "same as resiliency ceph_crash_info_display:"
+                    )
+                    ceph_crash_info_display(ceph_status.toolbox)
+                except Exception as disp_ex:
+                    self.log.warning(
+                        "Could not run ceph_crash_info_display on toolbox: %s", disp_ex
+                    )
                 # Get detailed crash information for logging and error message
                 error_msg = (
                     f"Ceph crashes detected after {component_label} {chaos_type}. "
@@ -2088,7 +2137,10 @@ class CephHealthHelper(BaseScenarioHelper):
                             self.log.error(f"   ... and {remaining} more crashes")
                             error_msg += f"  ... and {remaining} more crash(es)\n"
 
-                        error_msg += "\nRun 'ceph crash ls' and 'ceph crash info <crash_id>' for more details."
+                        error_msg += (
+                            "\nFull `ceph crash info <crash_id>` output was logged above "
+                            "(same as resiliency ceph_crash_info_display)."
+                        )
                     else:
                         error_msg += "Unable to retrieve crash details."
                 except Exception as detail_ex:
@@ -2101,6 +2153,99 @@ class CephHealthHelper(BaseScenarioHelper):
             self.log.error(f"Failed to check Ceph crashes: {e}")
             # In case of check failure, assume no crashes (conservative approach)
             return True, ""
+
+
+def _krkn_should_run_noobaa_health_check():
+    """
+    Whether to assert Noobaa health, aligned with
+    :meth:`ocs_ci.ocs.cluster.CephCluster.cluster_health_check` (Noobaa block).
+
+    Krkn chaos jobs run on OCP > 4.10 only, so the BZ 2075422 live-deployment
+    Noobaa skip from ``cluster_health_check`` is not replicated here.
+
+    Skips when ``CephCluster`` is not fully applicable (mcg-only / Fusion
+    consumer), on managed-service platforms, or when Noobaa is disabled in
+    config.
+    """
+    if config.ENV_DATA.get("mcg_only_deployment"):
+        return False
+    if (
+        config.ENV_DATA.get("platform") == FUSIONAAS_PLATFORM
+        and str(config.ENV_DATA.get("cluster_type", "")).lower() == "consumer"
+    ):
+        return False
+    if config.ENV_DATA["platform"] in MANAGED_SERVICE_PLATFORMS:
+        return False
+    if config.COMPONENTS["disable_noobaa"]:
+        return False
+    return True
+
+
+def krkn_exit_criteria(chaos_context="krkn chaos", namespace=None):
+    """
+    Generic exit criteria: assert no Ceph crash, cluster not in HEALTH_ERR, and
+    Noobaa healthy when applicable.
+
+    Call at the end of any krkn/krknctl chaos test to fail if the cluster has
+    crashes or is in HEALTH_ERR state after chaos. Noobaa health uses
+    :meth:`ocs_ci.ocs.cluster.CephCluster.wait_for_noobaa_health_ok` when
+    :func:`_krkn_should_run_noobaa_health_check` returns true (same gating as
+    ``cluster_health_check`` except the BZ 2075422 skip, omitted for OCP > 4.10
+    Krkn jobs).
+
+    Args:
+        chaos_context (str): Short description for log/assert messages
+            (e.g. "krknctl random chaos", "krknctl service disruption").
+        namespace (str): OpenShift namespace for the cluster. Defaults to
+            OPENSHIFT_STORAGE_NAMESPACE.
+
+    Raises:
+        AssertionError: If Ceph crash(es) were generated, cluster is in
+            HEALTH_ERR, or Noobaa is not healthy (when checks run).
+    """
+    if namespace is None:
+        namespace = OPENSHIFT_STORAGE_NAMESPACE
+    health_helper = CephHealthHelper(namespace=namespace)
+    no_crashes, crash_details = health_helper.check_ceph_crashes(None, chaos_context)
+    assert no_crashes, f"Ceph crash(es) generated during test: {crash_details}"
+
+    ceph_status = CephStatusTool()
+    health_status = ceph_status.get_ceph_health()
+    assert health_status != CEPH_HEALTH_ERROR, (
+        f"Ceph cluster is in {CEPH_HEALTH_ERROR} state after test "
+        f"(status: {health_status})"
+    )
+
+    if _krkn_should_run_noobaa_health_check():
+        log.info("Checking Noobaa health after %s", chaos_context)
+        try:
+            CephCluster().wait_for_noobaa_health_ok()
+        except NoobaaHealthException as exc:
+            raise AssertionError(
+                f"Noobaa is not healthy after {chaos_context}: {exc}"
+            ) from exc
+
+
+def krknctl_random_test_exit_criteria(
+    chaos_context="krknctl random chaos", namespace=None
+):
+    """
+    Exit criteria for krknctl random chaos tests.
+
+    Calls krkn_exit_criteria() with the given context. Use at the end of
+    krknctl random / service disruption tests to assert no Ceph crash and
+    cluster not in HEALTH_ERR.
+
+    Args:
+        chaos_context (str): Short description for log/assert messages
+            (e.g. "krknctl random chaos", "krknctl service disruption").
+        namespace (str): OpenShift namespace for the cluster. Defaults to
+            OPENSHIFT_STORAGE_NAMESPACE.
+
+    Raises:
+        AssertionError: If Ceph crash(es) were generated or cluster is in HEALTH_ERR.
+    """
+    krkn_exit_criteria(chaos_context=chaos_context, namespace=namespace)
 
 
 # ============================================================================
@@ -2276,18 +2421,35 @@ class ValidationHelper(BaseScenarioHelper):
 
         self.log.info(f"✅ Strength test validation passed for {component_name}")
 
-    def handle_krkn_command_failure(self, error, component_name, test_type="chaos"):
+    def handle_krkn_command_failure(
+        self, error, component_name, test_type="chaos", health_helper=None
+    ):
         """
         Handle Krkn command execution failures with detailed logging.
+        Before reporting, checks for Ceph crashes if health_helper is provided.
 
         Args:
             error (Exception): The exception that occurred
             component_name (str): Name of the component
             test_type (str): Type of test
+            health_helper (CephHealthHelper, optional): If provided, checks for
+                Ceph crashes before reporting and includes result in the failure message.
         """
+        ceph_crash_details = ""
+        if health_helper is not None:
+            no_crashes, ceph_crash_details = health_helper.check_ceph_crashes(
+                component_name, test_type
+            )
+            if not no_crashes and ceph_crash_details:
+                self.log.error(
+                    f"Ceph crash check (before reporting failure): {ceph_crash_details}"
+                )
+
         error_msg = (
             f"Krkn {test_type} command failed for {component_name}: {str(error)}"
         )
+        if ceph_crash_details:
+            error_msg += f"\nCeph crash check: {ceph_crash_details}"
         self.log.error(f"❌ {error_msg}")
 
         # Log additional context if available

@@ -1,0 +1,4 @@
+---
+UI_SELENIUM:
+  ai_fallback: True
+  llm_model: "claude:sonnet"

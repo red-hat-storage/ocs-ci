@@ -236,6 +236,19 @@ class KrknWorkloadConfig:
         vdbench_config = self.get_vdbench_config()
         return vdbench_config.get("use_encrypted_pvc", False)
 
+    def get_pv_encryption_keyrotation_schedule(self) -> str:
+        """
+        Cron schedule for PV encryption key rotation annotation on encrypted RBD StorageClass.
+
+        Applied as ``keyrotation.csiaddons.openshift.io/schedule`` when encrypted
+        RBD storage classes are created for Krkn VDBENCH workloads.
+
+        Returns:
+            str: Cron expression (default: every 3 minutes, matching prior hardcoded behavior)
+        """
+        vdbench_config = self.get_vdbench_config()
+        return vdbench_config.get("PV_ENCRYPTION_KEYROTATION_SCHEDULE", "*/3 * * * *")
+
     def get_block_workload_config(self) -> Dict[str, Any]:
         """
         Get block workload configuration.

@@ -18,6 +18,7 @@ import yaml
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 
 from ocs_ci.deployment.helpers import storage_class
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
@@ -76,6 +77,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     ACMClusterConfigurationException,
     ACMObservabilityNotEnabled,
+    WrongVersionExpression,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -102,7 +104,7 @@ from ocs_ci.ocs.resources.catalog_source import (
     CatalogSource,
     disable_specific_source,
 )
-from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
@@ -159,7 +161,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
 from ocs_ci.utility.multicluster import create_mce_catsrc
-from ocs_ci.utility.operators import NMStateOperator
+from ocs_ci.utility.operators import NMStateOperator, OADPOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -167,11 +169,11 @@ from ocs_ci.utility.ssl_certs import (
     configure_custom_api_cert,
     get_root_ca_cert,
 )
+from ocs_ci.ocs.resources.rgw import create_ec_cephobjectstore
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
-    create_unreleased_oadp_catalog,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -293,6 +295,16 @@ class Deployment(object):
                 logger.warning("OCP cluster is already running, skipping installation")
             else:
                 try:
+                    if (
+                        version.get_semantic_ocp_version_from_config()
+                        >= version.VERSION_4_21
+                    ):
+                        logger.info(
+                            "setting environment variable OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY to true"
+                        )
+                        os.environ[
+                            "OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY"
+                        ] = "true"
                     self.deploy_ocp(log_cli_level)
                     self.post_ocp_deploy()
                 except Exception as e:
@@ -328,12 +340,20 @@ class Deployment(object):
             switch_ctx (int): The cluster index by the cluster name
 
         """
+        if config.ENV_DATA.get("skip_gitops_deployment", False):
+            return
         (
             config.switch_ctx(switch_ctx)
             if switch_ctx is not None
             else config.switch_acm_ctx()
         )
 
+        if get_csvs_start_with_prefix(
+            csv_prefix=constants.GITOPS_OPERATOR_NAME,
+            namespace=constants.GITOPS_NAMESPACE,
+        ):
+            logger.info(f"Found {constants.GITOPS_OPERATOR_NAME} skipping creation")
+            return
         logger.info("Creating Namespace for GitOps Operator ")
         gitops_namespace = OCP(
             kind=constants.NAMESPACE, resource_name=constants.GITOPS_NAMESPACE
@@ -433,14 +453,21 @@ class Deployment(object):
             # Find the DR clusters under test
             dr_cluster_names = []
             dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
-            for cluster_relation in dr_cluster_relations:
-                dr_cluster_names.extend(cluster_relation)
+            if dr_cluster_relations:
+                dr_cluster_names = dr_cluster_relations[0]
+                for index, dr_cluster in enumerate(dr_cluster_names):
+                    if is_hosted_cluster(dr_cluster):
+                        dr_cluster_names[index] = (
+                            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{dr_cluster}"
+                        )
+
             if dr_cluster_names:
                 managed_clusters = [
                     cluster
                     for cluster in managed_clusters
                     if cluster["metadata"]["name"] in dr_cluster_names
                 ]
+
             # TODO: Iterate over dr_cluster_names when dr_cluster_names becomes a mandatory config parameter
             for cluster in managed_clusters:
                 if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
@@ -578,6 +605,8 @@ class Deployment(object):
         Deploy OADP Operator
 
         """
+        if config.ENV_DATA.get("skip_oadp_deployment", False):
+            return
         if config.ENV_DATA.get("skip_dr_deployment", False):
             return
 
@@ -609,25 +638,33 @@ class Deployment(object):
                 index = cluster.MULTICLUSTER["multicluster_index"]
                 with config.RunWithConfigContext(index):
                     config.switch_ctx(index)
-                    logger.info("Creating Namespace")
-                    # creating Namespace and operator group for cert-manager
-                    logger.info(
-                        "Creating namespace and operator group for Openshift-oadp"
-                    )
-                    run_cmd(f"oc apply -f {constants.OADP_NS_YAML}")
-                    logger.info("Creating OADP Operator Subscription")
-                    oadp_subscription_yaml_data = templating.load_yaml(
-                        constants.OADP_SUBSCRIPTION_YAML
-                    )
+                    if get_csvs_start_with_prefix(
+                        csv_prefix=constants.OADP_OPERATOR_NAME,
+                        namespace=constants.OADP_NAMESPACE,
+                    ):
+                        logger.info(
+                            f"Found {constants.OADP_OPERATOR_NAME} skipping creation"
+                        )
+                        continue
                     package_manifest = PackageManifest(
                         resource_name=constants.OADP_OPERATOR_NAME,
                         selector="catalog=redhat-operators",
                     )
                     try:
+
                         pm_data = package_manifest.get()
                         pm_list = pm_data if isinstance(pm_data, list) else [pm_data]
                         required_oadp_version = config.ENV_DATA["oadp_version"]
-
+                        logger.info("Creating Namespace")
+                        # creating Namespace and operator group for cert-manager
+                        logger.info(
+                            "Creating namespace and operator group for Openshift-oadp"
+                        )
+                        run_cmd(f"oc apply -f {constants.OADP_NS_YAML}")
+                        logger.info("Creating OADP Operator Subscription")
+                        oadp_subscription_yaml_data = templating.load_yaml(
+                            constants.OADP_SUBSCRIPTION_YAML
+                        )
                         if not any(
                             version_exist(pm, required_oadp_version)
                             and pm.get("status", {}).get("catalogSource")
@@ -637,52 +674,66 @@ class Deployment(object):
                             raise ResourceNotFoundError(
                                 f"Didn't find OADP {required_oadp_version}"
                             )
+                        oadp_default_channel = package_manifest.get_default_channel()
+                        if config.MULTICLUSTER["acm_cluster"]:
+                            logger.info("Skipping oadp subscription for ACM hub")
+                            continue
+
+                        oadp_subscription_yaml_data["spec"][
+                            "channel"
+                        ] = oadp_default_channel
+                        oadp_subscription_manifest = tempfile.NamedTemporaryFile(
+                            mode="w+", prefix="oadp_subscription_manifest", delete=False
+                        )
+                        templating.dump_data_to_temp_yaml(
+                            oadp_subscription_yaml_data, oadp_subscription_manifest.name
+                        )
+                        run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
+                        self.wait_for_subscription(
+                            constants.OADP_OPERATOR_NAME,
+                            namespace=constants.OADP_NAMESPACE,
+                        )
+                        logger.info(
+                            "Sleeping for 120 seconds after subscribing to OADP Operator"
+                        )
+                        time.sleep(120)
+                        oadp_subscriptions = ocp.OCP(
+                            kind=constants.SUBSCRIPTION_WITH_ACM,
+                            resource_name=constants.OADP_OPERATOR_NAME,
+                            namespace=constants.OADP_NAMESPACE,
+                        ).get()
+                        oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
+                        csv = CSV(
+                            resource_name=oadp_csv_name,
+                            namespace=constants.OADP_NAMESPACE,
+                        )
+                        csv.wait_for_phase("Succeeded", timeout=720)
+                        logger.info("OADP Operator Deployment Succeeded")
 
                     except ResourceNotFoundError as ex:
                         logger.warning(
-                            f"OADP operator not availabe - bringing up unreleased content {ex}!"
+                            f"OADP operator not available - bringing up unreleased content: {ex}"
                         )
-                        create_unreleased_oadp_catalog()
-                        package_manifest = PackageManifest(
-                            resource_name=constants.OADP_OPERATOR_NAME,
-                            selector=f"catalog={constants.OADP_CATALOG_NAME}",
-                        )
-                        oadp_subscription_yaml_data["spec"][
-                            "source"
-                        ] = constants.OADP_CATALOG_NAME
-                    oadp_default_channel = package_manifest.get_default_channel()
-                    if config.MULTICLUSTER["acm_cluster"]:
-                        logger.info("Skipping oadp subscription for ACM hub")
-                        continue
 
-                    oadp_subscription_yaml_data["spec"][
-                        "channel"
-                    ] = oadp_default_channel
-                    oadp_subscription_manifest = tempfile.NamedTemporaryFile(
-                        mode="w+", prefix="oadp_subscription_manifest", delete=False
-                    )
-                    templating.dump_data_to_temp_yaml(
-                        oadp_subscription_yaml_data, oadp_subscription_manifest.name
-                    )
-                    run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
-                    self.wait_for_subscription(
-                        constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
-                    )
-                    logger.info(
-                        "Sleeping for 120 seconds after subscribing to OADP Operator"
-                    )
-                    time.sleep(120)
-                    oadp_subscriptions = ocp.OCP(
-                        kind=constants.SUBSCRIPTION_WITH_ACM,
-                        resource_name=constants.OADP_OPERATOR_NAME,
-                        namespace=constants.OADP_NAMESPACE,
-                    ).get()
-                    oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
-                    csv = CSV(
-                        resource_name=oadp_csv_name, namespace=constants.OADP_NAMESPACE
-                    )
-                    csv.wait_for_phase("Succeeded", timeout=720)
-                    logger.info("OADP Operator Deployment Succeeded")
+                        if config.MULTICLUSTER["acm_cluster"]:
+                            # ACM hub: Only create catalog, ACM handles operator deployment
+                            logger.info("Creating OADP catalog for ACM hub")
+                            oadp_operator = OADPOperator(create_catalog=True)
+                            run_cmd(
+                                f"oc -n {constants.ACM_HUB_NAMESPACE} annotate mch multiclusterhub "
+                                f"installer.open-cluster-management.io"
+                                f'/oadp-subscription-spec=\'{{"source": "{oadp_operator.catalog_name}"}}\' --overwrite'
+                            )
+                            logger.info(
+                                f"OADP catalog '{oadp_operator.catalog_name}' created - ACM will deploy the operator"
+                            )
+                            continue
+                        else:
+                            # Non-ACM: Create catalog and deploy operator
+                            logger.info("Creating OADP catalog and deploying operator")
+                            oadp_operator = OADPOperator(create_catalog=True)
+                            oadp_operator.deploy()
+                            logger.info("OADP operator deployed successfully")
                     if cluster.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
                         apply_oadp_workaround(namespace=constants.OADP_NAMESPACE)
 
@@ -1161,12 +1212,17 @@ class Deployment(object):
         else:
             logger.info(f"Default channel will be used: {default_channel}")
             subscription_yaml_data["spec"]["channel"] = default_channel
-        if config.DEPLOYMENT.get("stage"):
-            subscription_yaml_data["spec"]["source"] = constants.OPERATOR_SOURCE_NAME
-        if config.DEPLOYMENT.get("live_deployment"):
+        rosa_hcp_non_ga = platform == constants.ROSA_HCP_PLATFORM and bool(
+            config.DEPLOYMENT.get("ocs_registry_image")
+        )
+        if config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
             )
+        elif platform == constants.ROSA_HCP_PLATFORM and (
+            not live_deployment or rosa_hcp_non_ga
+        ):
+            subscription_yaml_data["spec"]["source"] = constants.OCS_CATALOG_SOURCE_NAME
         if aws_sts_deployment:
             if "config" not in subscription_yaml_data["spec"]:
                 subscription_yaml_data["spec"]["config"] = {}
@@ -1213,7 +1269,7 @@ class Deployment(object):
 
         Args:
             subscription_name (str): Subscription name pattern
-            namespace (str): Namespace name for checking subscription if None then default from ENV_data
+            namespace (str): Namespace name for checking subscription if None then default from ENV_DATA
 
         """
         if not namespace:
@@ -1290,25 +1346,37 @@ class Deployment(object):
         stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
         konflux_build = config.DEPLOYMENT.get("konflux_build")
         upgrade = config.UPGRADE.get("upgrade", False)
-        if not live_deployment and not (stage_testing and konflux_build):
+        rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+        rosa_hcp_non_ga = rosa_hcp and bool(config.DEPLOYMENT.get("ocs_registry_image"))
+        if (not live_deployment or rosa_hcp_non_ga) and not (
+            stage_testing and konflux_build and not rosa_hcp
+        ):
             log_step("Create catalog source and wait it to be READY")
             create_catalog_source(image)
         if konflux_build and stage_testing:
-            log_step("Creating stage ImageDigestMirrorSet")
-            exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
-            if not upgrade:
-                log_step("Creating stage TagMirrorSet")
-                exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
-                log_step("Sleeping 60 seconds after applying tag mirror set.")
-            time.sleep(60)
-            log_step("Waiting max 30 mins for master MCP to get updated")
-            exec_cmd(
-                "oc wait --for=condition=Updated --timeout=30m mcp/master", timeout=2100
-            )
-            log_step("Waiting max 30 mins for worker MCP to get updated")
-            exec_cmd(
-                "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
-            )
+            if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+                log_step(
+                    "ROSA HCP: mirrors applied via worker filesystem "
+                    "inside get_and_apply_idms_from_catalog — skipping IDMS apply and MCP wait"
+                )
+            else:
+                log_step("Creating stage ImageDigestMirrorSet")
+                exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+                if not upgrade:
+                    log_step("Creating stage TagMirrorSet")
+                    exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
+                    log_step("Sleeping 60 seconds after applying tag mirror set.")
+                time.sleep(60)
+                log_step("Waiting max 30 mins for master MCP to get updated")
+                exec_cmd(
+                    "oc wait --for=condition=Updated --timeout=30m mcp/master",
+                    timeout=2100,
+                )
+                log_step("Waiting max 30 mins for worker MCP to get updated")
+                exec_cmd(
+                    "oc wait --for=condition=Updated --timeout=30m mcp/worker",
+                    timeout=2100,
+                )
 
         # with Hub/Spoke deployments LSO on IBM BareMetal is a mandatory requirement, it is installed on Dependency
         # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
@@ -1383,10 +1451,18 @@ class Deployment(object):
                         )
 
             if create_public_net:
-                nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
+                use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
                 logger.info("Creating Multus public network")
-                if config.DEPLOYMENT.get("ipv6"):
+
+                # Determine which template to use
+                if use_vlan:
+                    nad_to_load = constants.MULTUS_PUBLIC_NET_VLAN_YAML
+                    logger.info("Using VLAN-based public network template")
+                elif config.DEPLOYMENT.get("ipv6"):
                     nad_to_load = constants.MULTUS_PUBLIC_NET_IPV6_YAML
+                else:
+                    nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
+
                 public_net_data = templating.load_yaml(nad_to_load)
                 public_net_data["metadata"]["name"] = config.ENV_DATA.get(
                     "multus_public_net_name"
@@ -1396,17 +1472,57 @@ class Deployment(object):
                 )
                 public_net_config_str = public_net_data["spec"]["config"]
                 public_net_config_dict = json.loads(public_net_config_str)
-                public_net_config_dict["master"] = config.ENV_DATA.get(
-                    "multus_public_net_interface"
-                )
-                if not config.DEPLOYMENT.get("ipv6"):
-                    public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_public_net_range"
+
+                # Configure master interface
+                if use_vlan:
+                    # For VLAN mode, master is the VLAN interface
+                    vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
+                    base_interface = config.ENV_DATA.get("multus_public_net_interface")
+                    vlan_interface = f"{base_interface}.{vlan_id}"
+                    public_net_config_dict["master"] = vlan_interface
+                    logger.info(
+                        f"Public network using VLAN interface: {vlan_interface}"
                     )
+                else:
+                    # For non-VLAN mode, master is the base interface
+                    public_net_config_dict["master"] = config.ENV_DATA.get(
+                        "multus_public_net_interface"
+                    )
+
+                # Configure IP range
+                if not config.DEPLOYMENT.get("ipv6"):
+                    if use_vlan and config.ENV_DATA.get("multus_public_net_ip_range"):
+                        public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_public_net_ip_range"
+                        )
+                    else:
+                        public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_public_net_range"
+                        )
                 else:
                     public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
                         "multus_public_ipv6_net_range"
                     )
+
+                # Configure IP range limits for VLAN mode
+                if use_vlan:
+                    # Add routes to shim network (critical for host-to-pod communication)
+                    # Default shim network is 192.168.252.0/24 (shim IPs assigned starting at .5)
+                    shim_network = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    if "routes" not in public_net_config_dict["ipam"]:
+                        public_net_config_dict["ipam"]["routes"] = []
+                    # Ensure route to shim network exists
+                    if not any(
+                        r.get("dst") == shim_network
+                        for r in public_net_config_dict["ipam"]["routes"]
+                    ):
+                        public_net_config_dict["ipam"]["routes"].append(
+                            {"dst": shim_network}
+                        )
+                    logger.info(f"Added route to shim network: {shim_network}")
+
                 public_net_config_dict["type"] = config.ENV_DATA.get(
                     "multus_public_net_type"
                 )
@@ -1421,14 +1537,19 @@ class Deployment(object):
                 run_cmd(f"oc create -f {public_net_yaml.name}")
 
             if create_cluster_net:
+                use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
                 logger.info("Creating Multus cluster network")
-                if config.DEPLOYMENT.get("ipv6"):
-                    constants.MULTUS_CLUSTER_NET_YAML = (
-                        constants.MULTUS_CLUSTER_NET_IPV6_YAML
-                    )
-                cluster_net_data = templating.load_yaml(
-                    constants.MULTUS_CLUSTER_NET_YAML
-                )
+
+                # Determine which template to use
+                if use_vlan:
+                    nad_to_load = constants.MULTUS_CLUSTER_NET_VLAN_YAML
+                    logger.info("Using VLAN-based cluster network template")
+                elif config.DEPLOYMENT.get("ipv6"):
+                    nad_to_load = constants.MULTUS_CLUSTER_NET_IPV6_YAML
+                else:
+                    nad_to_load = constants.MULTUS_CLUSTER_NET_YAML
+
+                cluster_net_data = templating.load_yaml(nad_to_load)
                 cluster_net_data["metadata"]["name"] = config.ENV_DATA.get(
                     "multus_cluster_net_name"
                 )
@@ -1437,23 +1558,57 @@ class Deployment(object):
                 )
                 cluster_net_config_str = cluster_net_data["spec"]["config"]
                 cluster_net_config_dict = json.loads(cluster_net_config_str)
-                cluster_net_config_dict["master"] = config.ENV_DATA.get(
-                    "multus_cluster_net_interface"
-                )
-                if not config.DEPLOYMENT.get("ipv6"):
-                    cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_cluster_net_range"
+
+                # Configure master interface
+                if use_vlan:
+                    # For VLAN mode, master is the VLAN interface
+                    vlan_id = config.ENV_DATA.get("multus_cluster_net_vlan_id", 202)
+                    base_interface = config.ENV_DATA.get("multus_cluster_net_interface")
+                    vlan_interface = f"{base_interface}.{vlan_id}"
+                    cluster_net_config_dict["master"] = vlan_interface
+                    logger.info(
+                        f"Cluster network using VLAN interface: {vlan_interface}"
                     )
+                else:
+                    # For non-VLAN mode, master is the base interface
+                    cluster_net_config_dict["master"] = config.ENV_DATA.get(
+                        "multus_cluster_net_interface"
+                    )
+
+                # Configure IP range
+                if not config.DEPLOYMENT.get("ipv6"):
+                    if use_vlan and config.ENV_DATA.get("multus_cluster_net_ip_range"):
+                        cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_cluster_net_ip_range"
+                        )
+                    else:
+                        cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                            "multus_cluster_net_range"
+                        )
                 else:
                     cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
                         "multus_cluster_ipv6_net_range"
                     )
+
+                # Configure IP range limits for VLAN mode
+                if use_vlan:
+                    if config.ENV_DATA.get("multus_cluster_net_ip_range_start"):
+                        cluster_net_config_dict["ipam"]["range_start"] = (
+                            config.ENV_DATA.get("multus_cluster_net_ip_range_start")
+                        )
+                    if config.ENV_DATA.get("multus_cluster_net_ip_range_end"):
+                        cluster_net_config_dict["ipam"]["range_end"] = (
+                            config.ENV_DATA.get("multus_cluster_net_ip_range_end")
+                        )
+                    # Remove routes for VLAN mode (not needed)
+                    cluster_net_config_dict["ipam"].pop("routes", None)
+
                 cluster_net_config_dict["mode"] = config.ENV_DATA.get(
                     "multus_cluster_net_mode"
                 )
                 cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
                 cluster_net_yaml = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="multus_public", delete=False
+                    mode="w+", prefix="multus_cluster", delete=False
                 )
                 templating.dump_data_to_temp_yaml(
                     cluster_net_data, cluster_net_yaml.name
@@ -2076,6 +2231,13 @@ class Deployment(object):
         # Enable console plugin
         enable_console_plugin()
 
+        if (
+            config.DEPLOYMENT.get("ec_default_pools")
+            and not config.DEPLOYMENT.get("external_mode")
+            and not config.ENV_DATA.get("mcg_only_deployment")
+        ):
+            create_ec_cephobjectstore()
+
         # validate PDB creation of MON, MDS, OSD pods
         if not config.DEPLOYMENT["external_mode"]:
             validate_pdb_creation()
@@ -2117,9 +2279,7 @@ class Deployment(object):
             err = str(ex)
             logger.warning(f"Ceph health check failed with {err}")
             if "clock skew detected" in err:
-                logger.info(
-                    f"Changing NTP on compute nodes to" f" {constants.RH_NTP_CLOCK}"
-                )
+                logger.info("Changing NTP on cluster nodes")
                 if self.platform == constants.VSPHERE_PLATFORM:
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
@@ -2851,10 +3011,12 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         ignore_upgrade (bool): Ignore upgrade parameter.
 
     """
-    # Because custom catalog source will be called: redhat-operators, we need to disable
-    # default sources. This should not be an issue as OCS internal registry images
-    # are now based on OCP registry image
-    disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
+    rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+    if not rosa_hcp:
+        # Because custom catalog source will be called: redhat-operators, we need to disable
+        # default sources. This should not be an issue as OCS internal registry images
+        # are now based on OCP registry image
+        disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
@@ -2865,14 +3027,15 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             "stage_index_image_tag", f"v{ocp_version}"
         )
         image += f":{osbs_image_tag}"
-        run_cmd(
-            "oc patch image.config.openshift.io/cluster --type merge -p '"
-            '{"spec": {"registrySources": {"insecureRegistries": '
-            '["registry-proxy.engineering.redhat.com", "registry.stage.redhat.io"]'
-            "}}}'"
-        )
-        run_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
-        wait_for_machineconfigpool_status("all", timeout=1800)
+        if not rosa_hcp:
+            run_cmd(
+                "oc patch image.config.openshift.io/cluster --type merge -p '"
+                '{"spec": {"registrySources": {"insecureRegistries": '
+                '["registry-proxy.engineering.redhat.com", "registry.stage.redhat.io"]'
+                "}}}'"
+            )
+            run_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+            wait_for_machineconfigpool_status("all", timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get("upgrade", False)
     else:
@@ -2884,7 +3047,14 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         image_tag = get_latest_ds_olm_tag(
             upgrade, latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest")
         )
-    catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+    if rosa_hcp:
+        catalog_source_data = templating.load_yaml(
+            constants.PROVIDER_MODE_CATALOGSOURCE
+        )
+        cs_name = constants.OCS_CATALOG_SOURCE_NAME
+    else:
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+        cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
     managed_ibmcloud = (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
         and config.ENV_DATA["deployment_type"] == "managed"
@@ -2892,7 +3062,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     if managed_ibmcloud:
         create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         catalog_source_data["spec"]["secrets"] = [constants.OCS_SECRET]
-    cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
     change_cs_condition = (
         (image or image_tag)
         and catalog_source_data["kind"] == "CatalogSource"
@@ -2915,7 +3084,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_manifest.name)
     run_cmd(f"oc apply -f {catalog_source_manifest.name}", timeout=2400)
     catalog_source = CatalogSource(
-        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+        resource_name=cs_name,
         namespace=constants.MARKETPLACE_NAMESPACE,
     )
     # Wait for catalog source is ready
@@ -3104,10 +3273,47 @@ class RBDDRDeployOps(object):
         mirror_peer._has_phase = True
         mirror_peer.get()
         try:
-            mirror_peer.wait_for_phase(phase="ExchangedSecret", timeout=1200)
-            logger.info("Mirror peer is in expected phase 'ExchangedSecret'")
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                expected_phase = "Ready"
+            else:
+                expected_phase = "ExchangedSecret"
+            mirror_peer.wait_for_phase(phase=expected_phase, timeout=1200)
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                logger.info(
+                    "Waiting for MirrorPeer status message 'Setup is completed'"
+                )
+                try:
+                    for sample in TimeoutSampler(
+                        timeout=300,
+                        sleep=10,
+                        func=lambda: mirror_peer.get()
+                        .get("status", {})
+                        .get("message", ""),
+                    ):
+                        if sample == "Setup is completed":
+                            logger.info(f"MirrorPeer status message: {sample}")
+                            break
+                        logger.debug(
+                            f"Current MirrorPeer status message: '{sample}', waiting for 'Setup is completed'"
+                        )
+                except TimeoutExpiredError:
+                    current_message = (
+                        mirror_peer.get().get("status", {}).get("message", "")
+                    )
+                    raise ResourceWrongStatusException(
+                        f"Timeout waiting for MirrorPeer status message. "
+                        f"Current message: '{current_message}', expected: 'Setup is completed'"
+                    )
+            logger.info(f"Mirror peer is in expected phase {expected_phase}")
         except ResourceWrongStatusException:
             logger.exception("Mirror peer couldn't attain expected phase")
+            logger.error(
+                f"MirrorPeer Phase is {mirror_peer.get().get('status').get('phase')}"
+            )
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                logger.error(
+                    f"MirrorPeer Status Message is {mirror_peer.get().get('status').get('message')}"
+                )
             raise
 
         # Check for token-exchange-agent pod and its status has to be running
@@ -3238,21 +3444,34 @@ class MultiClusterDROperatorsDeploy(object):
             mode="w+", prefix="mirror_peer", delete=False
         )
         # Update all the participating clusters in mirror_peer_yaml
-        non_acm_clusters = get_non_acm_cluster_config()
-        primary = get_primary_cluster_config()
-        non_acm_clusters.remove(primary)
-        for cluster in non_acm_clusters:
-            logger.info(f"{cluster.ENV_DATA['cluster_name']}")
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            current_dr_clusters_list = [
+                (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+                    if is_hosted_cluster(cluster_name=item)
+                    else item
+                )
+                for item in dr_cluster_relations[0]
+            ]
+        else:
+            non_acm_clusters = get_non_acm_cluster_config()
+            primary = get_primary_cluster_config()
+            non_acm_clusters.remove(primary)
+            for cluster in non_acm_clusters:
+                logger.info(f"{cluster.ENV_DATA['cluster_name']}")
+            current_dr_clusters_list = [
+                primary.ENV_DATA["cluster_name"],
+                non_acm_clusters[0].ENV_DATA["cluster_name"],
+            ]
         index = -1
         # First entry should be the primary cluster
         # in the mirror peer
         for cluster_entry in mirror_peer_data["spec"]["items"]:
             if index == -1:
-                cluster_entry["clusterName"] = primary.ENV_DATA["cluster_name"]
+                cluster_entry["clusterName"] = current_dr_clusters_list[0]
             else:
-                cluster_entry["clusterName"] = non_acm_clusters[index].ENV_DATA[
-                    "cluster_name"
-                ]
+                cluster_entry["clusterName"] = current_dr_clusters_list[1]
             index += 1
 
         # Use unique cluster name to easily identify the managed clusters
@@ -3273,8 +3492,8 @@ class MultiClusterDROperatorsDeploy(object):
         Validate mirror peer,
         Begins with CTX: ACM
 
-        1. Check phase: if RDR then state =  'ExchangedSecret'
-                        if MDR then state = 'S3ProfileSynced'
+        1. Check phase: if OCP >= 4.22: 'Ready' (both RDR and MDR)
+                        if OCP < 4.22:  RDR → 'ExchangedSecret', MDR → 'S3ProfileSynced'
         2. Check token-exchange-agent pod in 'Running' phase
 
         Raises:
@@ -3290,9 +3509,15 @@ class MultiClusterDROperatorsDeploy(object):
         mirror_peer._has_phase = True
         mirror_peer.get()
         if config.MULTICLUSTER["multicluster_mode"] == "regional-dr":
-            expected_phase = "ExchangedSecret"
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                expected_phase = "Ready"
+            else:
+                expected_phase = "ExchangedSecret"
         elif config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
-            expected_phase = "S3ProfileSynced"
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
+                expected_phase = "Ready"
+            else:
+                expected_phase = "S3ProfileSynced"
 
         try:
             # Need high timeout in case of MDR
@@ -3393,13 +3618,20 @@ class MultiClusterDROperatorsDeploy(object):
         # Create DR policy on ACM hub cluster
         dr_policy_hub_data = templating.load_yaml(constants.DR_POLICY_ACM_HUB)
         # Update DR cluster name and s3profile name
-        dr_policy_hub_data["spec"]["drClusters"][
-            0
-        ] = get_primary_cluster_config().ENV_DATA["cluster_name"]
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
+        if dr_cluster_relations:
+            primary_managed_cluster = (
+                f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{primary_cluster_name}"
+                if is_hosted_cluster(cluster_name=primary_cluster_name)
+                else primary_cluster_name
+            )
+        else:
+            primary_managed_cluster = primary_cluster_name
+        dr_policy_hub_data["spec"]["drClusters"][0] = primary_managed_cluster
         # Fill in for the rest of the non-acm clusters
         # index 0 is filled by primary
         index = 1
-        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
         # The dr_cluster_relations is expected to have only 1 pair for deployment, else,
         # the first pair will be considered. This is mainly applicable for client cluster RDR pairs
         # in multiclient configuration and provider cluster contexts will also be present.
@@ -3421,9 +3653,16 @@ class MultiClusterDROperatorsDeploy(object):
                 == get_primary_cluster_config().ENV_DATA["cluster_name"]
             ) or is_recovery_cluster(cluster):
                 continue
-            dr_policy_hub_data["spec"]["drClusters"][index] = cluster.ENV_DATA[
-                "cluster_name"
-            ]
+            secondary_cluster_name = cluster.ENV_DATA["cluster_name"]
+            if dr_cluster_relations:
+                secondary_managed_cluster = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{secondary_cluster_name}"
+                    if is_hosted_cluster(cluster_name=secondary_cluster_name)
+                    else secondary_cluster_name
+                )
+            else:
+                secondary_managed_cluster = secondary_cluster_name
+            dr_policy_hub_data["spec"]["drClusters"][index] = secondary_managed_cluster
         ibm_cloud_managed = (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
@@ -3526,10 +3765,20 @@ class MultiClusterDROperatorsDeploy(object):
             bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
         return bucket_name
 
-    @retry((TimeoutExpiredError, ACMClusterConfigurationException), tries=20, delay=10)
+    @retry(
+        (TimeoutExpiredError, ACMClusterConfigurationException, WrongVersionExpression),
+        tries=20,
+        delay=10,
+    )
     def backup_pod_status_check(self):
         pods_list = get_all_pods(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
-        if len(pods_list) != 3:
+        oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
+
+        if version.compare_versions(f"{oadp_version} >= 1.6"):
+            oadp_pod_count = 5
+        else:
+            oadp_pod_count = 3
+        if len(pods_list) != oadp_pod_count:
             raise ACMClusterConfigurationException("backup pod count mismatch ")
         for pod in pods_list:
             # check pod status Running
@@ -3624,10 +3873,14 @@ class MultiClusterDROperatorsDeploy(object):
             # Remove 'restic' under 'configuration' if it exists
             oadp_data["spec"]["configuration"].pop("restic", None)
 
+            if version.compare_versions(f"{oadp_version} >= 1.6"):
+                uploader_type = "kopia"
+            else:
+                uploader_type = "restic"
             # Add 'nodeAgent' under 'configuration'
             oadp_data["spec"]["configuration"]["nodeAgent"] = {
                 "enable": True,
-                "uploaderType": "restic",
+                "uploaderType": uploader_type,
             }
         oadp_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="oadp", delete=False)
         templating.dump_data_to_temp_yaml(oadp_data, oadp_yaml.name)
@@ -3947,7 +4200,25 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # TODO: Skip backup configuration if the managed clusters under test is client clusters
         #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
         #  This should be updated for the client clusters
+        # Create DPA when the RDR clusters are client clusters.
         if config.hci_client_exist():
+            # The dr_cluster_relations is expected to have only 1 pair for deployment, else,
+            # the first pair will be considered. This is mainly applicable for client cluster RDR pairs
+            # in multiclient configuration where provider cluster contexts will also be present.
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            if dr_cluster_relations:
+                dr_cluster_names = dr_cluster_relations[0]
+                cluster_configs = [
+                    cluster
+                    for cluster in config.clusters
+                    if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+                ]
+                for cluster in cluster_configs:
+                    with config.RunWithConfigContext(
+                        cluster.MULTICLUSTER["multicluster_index"]
+                    ):
+                        logger.info("Creating Resource DataProtectionApplication")
+                        run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
             return
         # Enable cluster backup on both ACMs
         for i in acm_indexes:

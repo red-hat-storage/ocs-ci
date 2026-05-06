@@ -13,10 +13,7 @@ ENV_DATA:
   acm_hub_channel: "release-2.16"
   acm_version: "2.16"
   mce_version: "2.11"
-  submariner_version: "0.22.0"
-  submariner_image: "registry.redhat.io/redhat/redhat-operator-index@sha256:58d597646541fce982dbb646cb0aecc79abeb4f2abe9abb00c8e2078ae383050"
+  submariner_version: "0.23.1"
   # Below values needs to be changed when acm and submariner are GAed
   submariner_source: "downstream"
-  submariner_release_type: "unreleased"
-  acm_hub_unreleased: true
   oadp_version: "1.5"

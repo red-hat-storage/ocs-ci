@@ -1063,13 +1063,13 @@ def expose_ocp_version(version):
 
     """
     if version.endswith(".nightly"):
-        latest_nightly_url = (
-            f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
-            f"releasestream/{version}/latest"
-        )
-        version_url_content = get_url_content(latest_nightly_url)
-        version_json = json.loads(version_url_content)
-        return version_json["name"]
+        release_info = get_nightly_release_info(version)
+        if release_info and release_info.get("name"):
+            return release_info["name"]
+        else:
+            raise ValueError(
+                f"Unable to get nightly release info for version {version}"
+            )
     if version.endswith("-ga"):
         channel = config.DEPLOYMENT.get("ocp_channel", "stable")
         ocp_version = version.rstrip("-ga")
@@ -1077,6 +1077,128 @@ def expose_ocp_version(version):
         return get_latest_ocp_version(f"{channel}-{ocp_version}", index)
     else:
         return version
+
+
+def get_nightly_release_info(version):
+    """
+    Get full release information for a nightly build including pullSpec.
+
+    Args:
+        version (str): Nightly version string (e.g., 4.22.0-0.nightly or
+                      4.22.0-0.nightly-2026-04-18-162844)
+
+    Returns:
+        dict: Release information including 'name', 'pullSpec', 'downloadURL', etc.
+              Returns None if unable to fetch the information.
+
+    """
+    if "nightly" not in version:
+        return None
+
+    # Extract the stream name (e.g., "4.22.0-0.nightly") from full version
+    # The API expects just the stream name, not the full timestamp version
+    if ".nightly" in version:
+        stream_name = version.split(".nightly")[0] + ".nightly"
+    else:
+        # Shouldn't happen, but handle it gracefully
+        stream_name = version
+
+    try:
+        latest_nightly_url = (
+            f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
+            f"releasestream/{stream_name}/latest"
+        )
+        log.debug(f"Fetching nightly release info from: {latest_nightly_url}")
+        version_url_content = get_url_content(latest_nightly_url)
+        release_info = json.loads(version_url_content)
+        log.debug(
+            f"Retrieved release info: name={release_info.get('name')}, "
+            f"pullSpec={release_info.get('pullSpec')}"
+        )
+        return release_info
+    except Exception as e:
+        log.warning(f"Failed to get nightly release info for {version}: {e}")
+        return None
+
+
+def download_ga_oc_client_as_bootstrap(bin_dir, target_version):
+    """
+    Download a GA oc client as bootstrap to enable extraction from pullSpec.
+
+    This function downloads a GA version of the oc client (potentially N-1 or N-2)
+    to use as a bootstrap client for extracting the correct nightly version from
+    the release image pullSpec.
+
+    Args:
+        bin_dir (str): Directory to download the client to
+        target_version (str): Target version to determine which GA version to use
+
+    Returns:
+        bool: True if successfully downloaded a bootstrap client, False otherwise
+
+    """
+    log.info(
+        "Attempting to download a GA oc client as bootstrap for nightly extraction"
+    )
+
+    version_major_minor = str(
+        version_module.get_semantic_version(target_version, only_major_minor=True)
+    )
+
+    previous_dir = os.getcwd()
+    os.chdir(bin_dir)
+    tarball = "openshift-client-bootstrap.tar.gz"
+
+    try:
+        # Try to download N, N-1, or N-2 GA version
+        for current_version_count in range(3):
+            previous_version = version_module.get_previous_version(
+                version_major_minor, current_version_count
+            )
+            log.debug(
+                f"Checking if version {previous_version} (offset {current_version_count}) is GA'ed"
+            )
+
+            if is_ocp_version_gaed(previous_version):
+                log.info(
+                    f"Version {previous_version} is GA'ed, downloading as bootstrap client"
+                )
+                # Temporarily set URL template for GA version
+                original_template = config.DEPLOYMENT.get("ocp_url_template")
+                config.DEPLOYMENT["ocp_url_template"] = (
+                    "https://mirror.openshift.com/pub/openshift-v4/clients/"
+                    "ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
+                )
+
+                try:
+                    ga_version = expose_ocp_version(f"{previous_version}-ga")
+                    url = get_openshift_mirror_url("openshift-client", ga_version)
+                    download_file(url, tarball)
+                    run_cmd(f"tar xzvf {tarball} oc kubectl")
+                    delete_file(tarball)
+                    log.info(
+                        f"Successfully downloaded GA oc client {ga_version} as bootstrap"
+                    )
+                    return True
+                except Exception as e:
+                    log.warning(
+                        f"Failed to download GA version {ga_version} as bootstrap: {e}"
+                    )
+                finally:
+                    # Restore original template
+                    if original_template:
+                        config.DEPLOYMENT["ocp_url_template"] = original_template
+                    else:
+                        config.DEPLOYMENT.pop("ocp_url_template", None)
+
+        log.warning("Could not find any GA'ed version to use as bootstrap")
+        return False
+
+    except Exception as e:
+        log.error(f"Failed to download bootstrap GA oc client: {e}")
+        return False
+    finally:
+        os.chdir(previous_dir)
 
 
 @retry(CommandFailed, tries=2, delay=5, backoff=2)
@@ -1246,7 +1368,23 @@ def get_rosa_cli(
     """
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     rosa_filename = "rosa"
-    rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
+
+    # Detect platform and architecture
+    system = platform.system()
+    machine = platform.machine()
+    if system == "Darwin":
+        if machine == "arm64":
+            rosa_tarball_name = "rosa_Darwin_arm64.tar.gz"
+        else:
+            rosa_tarball_name = "rosa_Darwin_x86_64.tar.gz"
+    elif system == "Linux":
+        if machine == "aarch64":
+            rosa_tarball_name = "rosa_Linux_arm64.tar.gz"
+        else:
+            rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
+    else:
+        raise NotImplementedError(f"Unsupported platform: {system} {machine}")
+
     rosa_binary_path = os.path.join(bin_dir, rosa_filename)
     if os.path.isfile(rosa_binary_path) and force_download:
         delete_file(rosa_binary_path)
@@ -1381,18 +1519,6 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
             download_client = False
 
     if download_client:
-        # Move existing client binaries to backup location
-        client_binary_backup = f"{client_binary_path}.bak"
-        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
-
-        backup_created = False
-        try:
-            os.rename(client_binary_path, client_binary_backup)
-            os.rename(kubectl_binary_path, kubectl_binary_backup)
-            backup_created = True
-        except FileNotFoundError:
-            pass
-
         # Download the client
         log.info(f"Downloading openshift client ({version}).")
         # record current working directory and switch to BIN_DIR
@@ -1400,24 +1526,98 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
         os.chdir(bin_dir)
 
         tarball = "openshift-client.tar.gz"
-        try:
-            url = get_openshift_mirror_url("openshift-client", version)
-            download_file(url, tarball)
-            run_cmd(f"tar xzvf {tarball} oc kubectl")
-            delete_file(tarball)
-        except Exception as e:
-            log.error(f"Failed to download the openshift client. Exception '{e}'")
-            # check given version is GA'ed or not
-            if "nightly" in version:
-                get_nightly_oc_via_ga(version, tarball)
+        download_successful = False
+        backup_created = False
+        client_binary_backup = f"{client_binary_path}.bak"
+        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
+
+        # For nightly builds, try pullSpec extraction first (more reliable than downloadURL)
+        if "nightly" in version and not custom_ocp_image:
+            log.info(
+                "Nightly build detected. Attempting to download via pullSpec "
+                "(more reliable than downloadURL extraction)."
+            )
+            release_info = get_nightly_release_info(version)
+
+            if release_info and release_info.get("pullSpec"):
+                pullspec = release_info["pullSpec"]
+                log.info(f"Using pullSpec: {pullspec}")
+
+                # Check if oc client exists to perform extraction
+                if not client_exist:
+                    log.info(
+                        "No existing oc client found. Downloading GA version as bootstrap "
+                        "to enable extraction from pullSpec."
+                    )
+                    if download_ga_oc_client_as_bootstrap(bin_dir, version):
+                        log.info("Bootstrap GA oc client downloaded successfully.")
+                    else:
+                        log.warning(
+                            "Failed to download bootstrap GA client. "
+                            "Will try downloadURL method as fallback."
+                        )
+
+                # Now try to extract from pullSpec using the available oc (existing or bootstrap)
+                # Note: extract_ocp_binary_from_image() handles its own backup internally
+                if os.path.isfile(client_binary_path):
+                    try:
+                        log.info(f"Extracting oc client from pullSpec: {pullspec}")
+                        extract_ocp_binary_from_image("oc", pullspec, bin_dir)
+                        download_successful = True
+                        log.info(
+                            "Successfully extracted oc client from pullSpec "
+                            "(avoids downloadURL timeout issues)."
+                        )
+                    except Exception as e:
+                        log.warning(
+                            f"Failed to extract oc client from pullSpec: {e}. "
+                            "Falling back to downloadURL method."
+                        )
+            else:
+                log.warning(
+                    "Could not retrieve pullSpec from release stream. "
+                    "Falling back to downloadURL method."
+                )
+
+        # If pullSpec extraction wasn't attempted or failed, try traditional downloadURL method
+        # Create backup before attempting methods that don't handle their own backup
+        if not download_successful:
+            # Move existing client binaries to backup location before trying other download methods
+            try:
+                os.rename(client_binary_path, client_binary_backup)
+                os.rename(kubectl_binary_path, kubectl_binary_backup)
+                backup_created = True
+                log.debug("Created backup of existing client binaries.")
+            except FileNotFoundError:
+                pass
+
+            try:
+                url = get_openshift_mirror_url("openshift-client", version)
+                download_file(url, tarball)
+                run_cmd(f"tar xzvf {tarball} oc kubectl")
+                delete_file(tarball)
+                download_successful = True
+            except Exception as e:
+                log.error(f"Failed to download the openshift client. Exception '{e}'")
+                # check given version is GA'ed or not
+                if "nightly" in version:
+                    get_nightly_oc_via_ga(version, tarball)
+                    # Check if get_nightly_oc_via_ga succeeded
+                    if os.path.isfile(client_binary_path):
+                        download_successful = True
 
         if custom_ocp_image and not skip_if_client_downloaded_from_installer:
             extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
+        # Verify the downloaded/extracted client works
+        client_version_valid = False
         try:
             client_version = run_cmd(f"{client_binary_path} version --client")
+            client_version_valid = True
         except CommandFailed:
             log.error("Unable to get version from downloaded client.")
-        if client_version:
+
+        if client_version_valid:
+            # Download/extraction successful - clean up backups
             try:
                 delete_file(client_binary_backup)
                 delete_file(kubectl_binary_backup)
@@ -1425,15 +1625,57 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
             except FileNotFoundError:
                 pass
         else:
+            # Download/extraction failed - handle fallback
+            log.warning(
+                "Failed to download/extract the correct oc client version. "
+                "Attempting fallback strategies."
+            )
+
             if backup_created:
+                # Restore the backup (previous version)
                 os.rename(client_binary_backup, client_binary_path)
                 os.rename(kubectl_binary_backup, kubectl_binary_path)
-                log.info("Restored backup binaries to their original location.")
+                log.warning(
+                    "Restored previous oc client version. Continuing with existing client "
+                    "to avoid deployment failure. NOTE: Version mismatch may cause issues."
+                )
+                try:
+                    client_version = run_cmd(f"{client_binary_path} version --client")
+                except CommandFailed:
+                    client_version = "unknown (restored from backup)"
+            elif os.path.isfile(client_binary_path):
+                # We have a bootstrap client from download_ga_oc_client_as_bootstrap
+                log.warning(
+                    "Using bootstrap GA oc client. Continuing with bootstrap client "
+                    "to avoid deployment failure. NOTE: Version mismatch may cause issues."
+                )
+                try:
+                    client_version = run_cmd(f"{client_binary_path} version --client")
+                except CommandFailed:
+                    client_version = "unknown (bootstrap)"
             else:
-                if not use_system_available_client_and_kubectl(
+                # Try to use system available client as last resort
+                if use_system_available_client_and_kubectl(
                     client_binary_path, kubectl_binary_path
                 ):
-                    raise FileNotFoundError("No system oc client exist to copy from!")
+                    log.warning(
+                        "Using system-available oc client as last resort. "
+                        "NOTE: Version mismatch may cause issues."
+                    )
+                    try:
+                        client_version = run_cmd(
+                            f"{client_binary_path} version --client"
+                        )
+                    except CommandFailed:
+                        client_version = "unknown (system)"
+                else:
+                    log.error(
+                        "All oc client download methods failed and no fallback available."
+                    )
+                    raise FileNotFoundError(
+                        "Failed to download oc client and no fallback available!"
+                    )
+
         if not os.path.exists("kubectl"):
             log.info("Creating kubectl link to oc binary.")
             os.link("oc", "kubectl")
@@ -4974,25 +5216,36 @@ def get_module_ip(terraform_state_file, module):
     with open(terraform_state_file) as fd:
         obj = json.loads(fd.read())
 
-        if config.ENV_DATA.get("folder_structure"):
+        # Auto-detect terraform state file format
+        # Newer terraform versions use "resources", older versions use "modules"
+        if "resources" in obj:
             resources = obj["resources"]
             log.debug(f"Extracting module information for {module}")
-            log.debug(f"Resource in {terraform_state_file}: {resources}")
+            log.debug(f"Resources in {terraform_state_file}: {resources}")
+
             for resource in resources:
                 if resource.get("module") == module and resource.get("mode") == "data":
                     for each_resource in resource["instances"]:
                         resource_body = each_resource["attributes"]["body"]
                         ips.append(resource_body.split('"')[3])
-        else:
+
+            return ips
+
+        elif "modules" in obj:
             modules = obj["modules"]
             target_module = module.split("_")[1]
             log.debug(f"Extracting module information for {module}")
             log.debug(f"Modules in {terraform_state_file}: {modules}")
+
             for each_module in modules:
                 if target_module in each_module["path"]:
                     return each_module["outputs"]["ip_addresses"]["value"]
-
-        return ips
+        else:
+            raise KeyError(
+                f"Terraform state file {terraform_state_file} does not contain "
+                "'resources' or 'modules' key. Unable to extract module information."
+            )
+    return ips
 
 
 def set_aws_region(region=None):
@@ -5598,10 +5851,16 @@ def get_client_type_by_name(cluster_name):
         get_hosted_cluster_type,
     )
 
-    if not is_hosted_cluster(cluster_name):
-        return constants.NON_HOSTED_CLUSTER
+    # Store original context index to restore later
+    orig_index = config.cur_index
+    try:
+        config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
+        if not is_hosted_cluster(cluster_name):
+            return constants.NON_HOSTED_CLUSTER
 
-    return get_hosted_cluster_type(cluster_name)
+        return get_hosted_cluster_type(cluster_name)
+    finally:
+        config.switch_ctx(orig_index)
 
 
 def switch_to_correct_client_type(client_type):
@@ -5831,72 +6090,6 @@ def get_oadp_version(namespace=constants.OADP_NAMESPACE):
         if "oadp-operator" in csv["metadata"]["name"]:
             # extract version string
             return csv["spec"]["version"]
-
-
-def create_unreleased_oadp_catalog():
-    """
-    Creates catalog for unreleased OADP operator.
-
-    Raises:
-        TagNotFoundException: if no image tag for oadp oprator found in brew
-
-    """
-    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False, timeout=120)
-    json_data = resp.json()["raw_messages"]
-    image_tag = None
-    ocp_version = version_module.get_semantic_ocp_version_from_config()
-    nvr = None
-    image = None
-
-    for item in json_data:
-        pipeline = item.get("msg", {}).get("pipeline", {})
-        if pipeline.get("status") != "complete":
-            continue
-        index_image = pipeline.get("index_image", {})
-        index_image_str = index_image.get(f"v{ocp_version}")
-        if not index_image_str:
-            continue
-        try:
-            image_tag = index_image_str.split(":")[1]
-            nvr = item.get("msg", {}).get("artifact", {}).get("nvr")
-            break
-        except IndexError:
-            continue
-
-    if image_tag:
-        # Importing here to avoid circular dependency
-        from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
-        from ocs_ci.ocs.resources.catalog_source import CatalogSource
-
-        image = f"{constants.BREW_REPO}:{image_tag}"
-        log.info(
-            f"Creating catalog for OADP operator brew image NVR: {nvr} "
-            f"for OCP: v{ocp_version}. Image: {image}"
-        )
-        brew_catalog_data = load_yaml(constants.BREW_CATALOG_YAML)
-        brew_catalog_data["spec"]["image"] = image
-        brew_catalog_data["spec"]["displayName"] = constants.OADP_CATALOG_NAME
-        brew_catalog_data["metadata"]["name"] = constants.OADP_CATALOG_NAME
-        brew_catalog_data_yaml = NamedTemporaryFile(
-            mode="w+", prefix="brew-catalog", delete=False
-        )
-        dump_data_to_temp_yaml(brew_catalog_data, brew_catalog_data_yaml.name)
-        run_cmd(f"oc apply -f {constants.BREW_ICSP}", timeout=300)
-        wait_for_machineconfigpool_status("all")
-        run_cmd(f"oc apply -f {brew_catalog_data_yaml.name}", timeout=300)
-        catalog_source = CatalogSource(
-            resource_name=constants.OADP_CATALOG_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-        # Wait for catalog source is ready
-        catalog_source.wait_for_state("READY")
-        if config.MULTICLUSTER["acm_cluster"]:
-            run_cmd(
-                f"oc -n {constants.ACM_HUB_NAMESPACE} annotate mch multiclusterhub installer.open-cluster-management.io"
-                f'/oadp-subscription-spec=\'{{"source": "{constants.OADP_CATALOG_NAME}"}}\' --overwrite'
-            )
-    else:
-        raise TagNotFoundException("No brew image for oadp operator found!")
 
 
 def get_acm_version(namespace=constants.ACM_HUB_NAMESPACE):

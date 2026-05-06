@@ -25,6 +25,7 @@ from ocs_ci.deployment.helpers.hypershift_base import (
     get_current_nodepool_size,
     get_available_hosted_clusters_to_ocp_ver_dict,
     create_cluster_dir,
+    fix_hypershift_webhook_ca_bundle,
 )
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework.logger_helper import log_step, reset_current_module_log_steps
@@ -50,6 +51,7 @@ from ocs_ci.ocs.rados_utils import (
     fetch_pool_names,
     fetch_rados_namespaces,
     fetch_filesystem_names,
+    get_ec_pool_names,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -421,6 +423,36 @@ def get_autodistributed_volume_snapshot_classes():
     return snapshot_class_names
 
 
+def get_autodistributed_volumegroup_snapshot_classes():
+    """
+    Get the list of VolumeGroupSnapshotClasses that were provisioned by ODF
+
+    Returns:
+        list: List of VolumeGroupSnapshotClass names that were created by ODF
+
+    """
+    groupsnapshot_class = OCP(
+        kind=constants.VOLUMEGROUPSNAPSHOTCLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    groupsnapshot_classes = groupsnapshot_class.get()
+
+    # Filter VolumeGroupSnapshotClass by ODF
+    groupsnapshot_classes["items"] = [
+        item
+        for item in groupsnapshot_classes["items"]
+        if item["driver"]
+        in [
+            constants.RBD_PROVISIONER,
+            constants.CEPHFS_PROVISIONER,
+        ]
+    ]
+    groupsnapshot_class_names = [
+        item["metadata"]["name"] for item in groupsnapshot_classes["items"]
+    ]
+    return groupsnapshot_class_names
+
+
 def get_provider_address():
     """
     Get the provider address
@@ -454,6 +486,113 @@ def config_has_hosted_odf_image(cluster_name):
     )
 
     return version_exists
+
+
+def is_fdf_on_provider():
+    """
+    Check if FDF (Fusion Data Foundation) is installed on the management/provider cluster
+    by examining the odf-operator CSV displayName for 'Fusion'.
+
+    Returns:
+        bool: True if FDF is installed, False otherwise
+
+    """
+    ocp_obj = OCP(
+        kind=constants.CLUSTER_SERVICE_VERSION,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    try:
+        csvs = ocp_obj.get(all_namespaces=False)
+        for csv in csvs.get("items", []):
+            name = csv.get("metadata", {}).get("name", "")
+            if name.startswith("odf-operator"):
+                display_name = csv.get("spec", {}).get("displayName", "")
+                if "Fusion" in display_name:
+                    logger.info(
+                        f"FDF detected on provider: {name} displayName='{display_name}'"
+                    )
+                    return True
+    except CommandFailed as e:
+        logger.warning(f"Failed to check for FDF on provider: {e}")
+    return False
+
+
+_fdf_catalog_image_cache = None
+
+
+def _resolve_image_through_itms(image):
+    """
+    Resolve a container image reference through ImageTagMirrorSet on the
+    management cluster. If the image source matches an ITMS entry, replace
+    the source with the mirror URL so it is pullable from spoke clusters
+    that lack ITMS support (e.g. HyperShift hosted clusters).
+
+    Args:
+        image (str): Original image reference (e.g. icr.io/cpopen/catalog:v4.21)
+
+    Returns:
+        str: Resolved image with mirror URL, or original if no ITMS match
+
+    """
+    ocp_obj = OCP(kind="ImageTagMirrorSet")
+    try:
+        itms_list = ocp_obj.get(all_namespaces=True)
+    except CommandFailed:
+        logger.debug("No ImageTagMirrorSet resources found on management cluster")
+        return image
+
+    for itms in itms_list.get("items", []):
+        for entry in itms.get("spec", {}).get("imageTagMirrors", []):
+            source = entry.get("source", "")
+            mirrors = entry.get("mirrors", [])
+            if source and mirrors and image.startswith(source):
+                resolved = image.replace(source, mirrors[0], 1)
+                logger.info(f"Resolved image through ITMS: {image} -> {resolved}")
+                return resolved
+    return image
+
+
+def get_fdf_catalog_image():
+    """
+    Get the FDF CatalogSource image from the management cluster.
+    If the image uses a registry that requires ITMS (tag-based mirrors),
+    resolve it through the management cluster's ImageTagMirrorSet so it is
+    pullable from spoke clusters.
+    Result is cached to avoid redundant API calls across HostedFDF instances.
+
+    Returns:
+        str: The pullable image reference for the FDF CatalogSource
+
+    Raises:
+        ValueError: If the CatalogSource is not found or has no image
+
+    """
+    global _fdf_catalog_image_cache
+    if _fdf_catalog_image_cache:
+        return _fdf_catalog_image_cache
+
+    ocp_obj = OCP(
+        kind=constants.CATSRC,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    try:
+        catsrc = ocp_obj.get(resource_name=defaults.FUSION_CATALOG_NAME)
+    except CommandFailed as e:
+        raise ValueError(
+            f"FDF CatalogSource '{defaults.FUSION_CATALOG_NAME}' not found "
+            f"on management cluster: {e}"
+        )
+    image = catsrc.get("spec", {}).get("image", "")
+    if not image:
+        raise ValueError(
+            f"FDF CatalogSource '{defaults.FUSION_CATALOG_NAME}' has no image in spec"
+        )
+
+    image = _resolve_image_through_itms(image)
+
+    logger.info(f"FDF CatalogSource image for spoke: {image}")
+    _fdf_catalog_image_cache = image
+    return image
 
 
 def storage_installation_requested(cluster_name):
@@ -499,6 +638,8 @@ def check_ceph_resources(cluster_names):
         f"from all consumers: {consumer_names}"
     )
     pool_names = fetch_pool_names()
+    ec_pool_names = set(get_ec_pool_names())
+    pool_names = [p for p in pool_names if p not in ec_pool_names]
     rados_namespaces = fetch_rados_namespaces()
     svg_names = get_cephfs_subvolumegroup_names()
     filesystems = fetch_filesystem_names()
@@ -694,20 +835,26 @@ def deploy_hosted_ocp_clusters(cluster_names_list=None):
             deploy_hypershift_oidc = False
             create_deployer_iam_role = False
 
-        hosted_ocp_cluster.deploy_dependencies(
-            deploy_acm_hub=deploy_acm_hub,
-            deploy_cnv=deploy_cnv,
-            deploy_metallb=first_ocp_deployment,
-            download_hcp_binary=first_ocp_deployment,
-            deploy_hyperconverged=deploy_hyperconverged,
-            deploy_mce=deploy_mce,
-            deploy_hypershift_oidc=deploy_hypershift_oidc,
-            create_deployer_iam_role=create_deployer_iam_role,
-        )
+        try:
+            hosted_ocp_cluster.deploy_dependencies(
+                deploy_acm_hub=deploy_acm_hub,
+                deploy_cnv=deploy_cnv,
+                deploy_metallb=first_ocp_deployment,
+                download_hcp_binary=first_ocp_deployment,
+                deploy_hyperconverged=deploy_hyperconverged,
+                deploy_mce=deploy_mce,
+                deploy_hypershift_oidc=deploy_hypershift_oidc,
+                create_deployer_iam_role=create_deployer_iam_role,
+            )
 
-        cluster_name = hosted_ocp_cluster.deploy_ocp()
-        if cluster_name:
-            cluster_names.append(cluster_name)
+            cluster_name = hosted_ocp_cluster.deploy_ocp()
+            if cluster_name:
+                cluster_names.append(cluster_name)
+        except (RuntimeError, CommandFailed, ClientError) as e:
+            logger.error(
+                f"Failed to deploy hosted OCP cluster '{cluster_name}': {e}. "
+                "Skipping and continuing with remaining clusters."
+            )
 
     cluster_names_existing = get_hosted_cluster_names()
     cluster_names_desired_left = [
@@ -1054,16 +1201,39 @@ class HostedClients(HyperShiftBase):
                         f"oc patch -n clusters {constants.HOSTED_CLUSTERS}/{cluster_name} --type=merge "
                         f"--patch='{patch}'"
                     )
-                    exec_cmd(cmd)
+                    try:
+                        exec_cmd(cmd)
+                    except CommandFailed as e:
+                        logger.error(
+                            f"Failed to patch proxy trusted CA for cluster '{cluster_name}': {e}. "
+                            "Skipping and continuing with remaining clusters."
+                        )
 
         # Need to create networkpolicy as mentioned in bug 2281536,
         # https://bugzilla.redhat.com/show_bug.cgi?id=2281536#c21
 
         # Create Network Policy
         storage_client = StorageClient()
+        failed_network_policy = []
         for cluster_name in cluster_names:
-            storage_client.create_network_policy(
-                namespace_to_create_storage_client=f"clusters-{cluster_name}"
+            try:
+                storage_client.create_network_policy(
+                    namespace_to_create_storage_client=f"clusters-{cluster_name}"
+                )
+            except (CommandFailed, AssertionError) as e:
+                logger.error(
+                    f"Failed to create network policy for cluster '{cluster_name}': {e}. "
+                    "Dropping cluster from further deployment stages."
+                )
+                failed_network_policy.append(cluster_name)
+
+        if failed_network_policy:
+            cluster_names = [
+                name for name in cluster_names if name not in failed_network_policy
+            ]
+            logger.warning(
+                f"Clusters dropped due to network policy failure: {failed_network_policy}. "
+                f"Remaining clusters: {cluster_names}"
             )
 
         check_odf_prerequisites()
@@ -1103,29 +1273,42 @@ class HostedClients(HyperShiftBase):
                         "Continuing with deployment, but network connectivity may fail"
                     )
 
-        # stage 4 deploy ODF on all hosted clusters if not already deployed
-        log_step("Deploy ODF client on hosted OCP clusters")
+        # stage 4 deploy ODF/FDF client on all hosted clusters if not already deployed
+        fdf_on_provider = is_fdf_on_provider()
+        if fdf_on_provider:
+            logger.info(
+                "FDF detected on provider, will deploy FDF Client on spoke clusters"
+            )
+        log_step("Deploy storage client on hosted OCP clusters")
         for cluster_name in cluster_names:
 
             if not config_has_hosted_odf_image(cluster_name):
                 logger.info(
-                    f"Hosted ODF image not set for cluster '{cluster_name}', skipping ODF deployment"
+                    f"Hosted ODF image not set for cluster '{cluster_name}', skipping deployment"
                 )
                 continue
 
-            logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
-            hosted_odf = HostedODF(cluster_name)
+            if fdf_on_provider:
+                logger.info(f"Setup FDF client on hosted OCP cluster '{cluster_name}'")
+                hosted_odf = HostedFDF(cluster_name)
+            else:
+                logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
+                hosted_odf = HostedODF(cluster_name)
             hosted_odf.do_deploy()
 
-        # stage 5 verify ODF client is installed on all hosted clusters
+        # stage 5 verify ODF/FDF client is installed on all hosted clusters
         odf_installed = []
-        log_step("Verify ODF client is installed on all hosted OCP clusters")
+        log_step("Verify storage client is installed on all hosted OCP clusters")
         for cluster_name in cluster_names:
             if config_has_hosted_odf_image(cluster_name):
                 logger.info(
-                    f"Validate ODF client operator installed on hosted OCP cluster '{cluster_name}'"
+                    f"Validate storage client operator installed on hosted OCP cluster '{cluster_name}'"
                 )
-                hosted_odf = HostedODF(cluster_name)
+                hosted_odf = (
+                    HostedFDF(cluster_name)
+                    if fdf_on_provider
+                    else HostedODF(cluster_name)
+                )
                 if not hosted_odf.odf_client_installed():
                     hosted_odf.exec_oc_cmd(
                         "delete catalogsource --all -n openshift-marketplace"
@@ -1144,7 +1327,11 @@ class HostedClients(HyperShiftBase):
                 logger.info(
                     f"Setting up Storage client on hosted OCP cluster '{cluster_name}'"
                 )
-                hosted_odf = HostedODF(cluster_name)
+                hosted_odf = (
+                    HostedFDF(cluster_name)
+                    if fdf_on_provider
+                    else HostedODF(cluster_name)
+                )
 
                 client_installed = hosted_odf.setup_storage_client_converged(
                     storage_consumer_name=f"{constants.STORAGECONSUMER_NAME_PREFIX}{cluster_name}"
@@ -1942,6 +2129,10 @@ class HypershiftHostedOCP(
         data_replication_separation = config.DEPLOYMENT.get(
             "enable_data_replication_separation"
         )
+        auto_repair = config.ENV_DATA.get("auto_repair", True)
+        auto_repair = (
+            config.ENV_DATA["clusters"].get(self.name).get("auto_repair", auto_repair)
+        )
 
         hosted_cluster_platform = (
             config.ENV_DATA["clusters"]
@@ -1992,6 +2183,7 @@ class HypershiftHostedOCP(
                 cp_availability_policy=cp_availability_policy,
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
+                auto_repair=auto_repair,
             )
         else:
             return self.create_kubevirt_ocp_cluster(
@@ -2004,6 +2196,7 @@ class HypershiftHostedOCP(
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
                 data_replication_separation=data_replication_separation,
+                auto_repair=auto_repair,
             )
 
     def deploy_dependencies(
@@ -2668,8 +2861,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 else:
                     logger.warning(
                         f"Infrastructure exists but output file not found: {self.output_infra_file}. "
-                        "Infrastructure may have been created outside this tool."
+                        "Reconstructing output file from existing AWS resources."
                     )
+                    self._reconstruct_infra_output(existing_vpcs)
                     return self.output_infra_file
         except ClientError as e:
             logger.error(
@@ -2744,6 +2938,90 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             logger.warning(f"Could not read/parse infra output file: {e}")
 
         return self.output_infra_file
+
+    def _reconstruct_infra_output(self, existing_vpcs):
+        """
+        Reconstruct the infrastructure output JSON file from existing AWS resources.
+
+        Queries Route53 for public/private/local hosted zones by cluster name and
+        base domain, and reads the VPC CIDR from the existing VPC. Writes the
+        reconstructed data to self.output_infra_file and populates instance attributes.
+
+        If Route53 zones are missing the infrastructure is considered incomplete
+        (partial creation from a prior failed run) and a RuntimeError is raised
+        with instructions to clean up before retrying.
+
+        Args:
+            existing_vpcs (list): List of VPC dicts returned by describe_vpcs.
+
+        Raises:
+            RuntimeError: If Route53 zones are missing (partial infra state).
+        """
+        zone_name = f"{self.name}.{self.base_domain}."
+        logger.info(f"Querying Route53 for hosted zones with name '{zone_name}'")
+
+        r53 = self.route53_client
+        paginator = r53.get_paginator("list_hosted_zones")
+        public_zone_id = None
+        private_zone_id = None
+        local_zone_id = None
+
+        for page in paginator.paginate():
+            for zone in page["HostedZones"]:
+                if zone["Name"] != zone_name:
+                    continue
+                zone_id = zone["Id"].split("/")[-1]
+                if zone["Config"]["PrivateZone"]:
+                    tags_resp = r53.list_tags_for_resource(
+                        ResourceType="hostedzone", ResourceId=zone_id
+                    )
+                    tags = {
+                        t["Key"]: t["Value"]
+                        for t in tags_resp["ResourceTagSet"]["Tags"]
+                    }
+                    if tags.get("Name", "").endswith("-local"):
+                        local_zone_id = zone_id
+                    else:
+                        private_zone_id = zone_id
+                else:
+                    public_zone_id = zone_id
+
+        if not public_zone_id or not private_zone_id:
+            vpc_id = (
+                existing_vpcs[0].get("VpcId", "unknown") if existing_vpcs else "unknown"
+            )
+            raise RuntimeError(
+                f"Partial infrastructure detected for cluster '{self.name}': "
+                f"VPC '{vpc_id}' (tag: kubernetes.io/cluster/{self.infra_id}=owned) exists "
+                f"but Route53 hosted zones for '{zone_name}' are missing. "
+                f"This is a leftover from a previous failed run. "
+                f"Delete the VPC and its associated resources, then retry."
+            )
+
+        vpc_cidr = existing_vpcs[0].get("CidrBlock") if existing_vpcs else None
+
+        logger.info(
+            f"Reconstructed infra data: infraID={self.infra_id}, "
+            f"publicZoneID={public_zone_id}, privateZoneID={private_zone_id}, "
+            f"localZoneID={local_zone_id}, machineCIDR={vpc_cidr}"
+        )
+
+        infra_data = {
+            "infraID": self.infra_id,
+            "publicZoneID": public_zone_id,
+            "privateZoneID": private_zone_id,
+            "localZoneID": local_zone_id,
+            "machineCIDR": vpc_cidr,
+        }
+
+        os.makedirs(os.path.dirname(self.output_infra_file), exist_ok=True)
+        with open(self.output_infra_file, "w") as f:
+            json.dump(infra_data, f, indent=2)
+        logger.info(
+            f"Reconstructed infrastructure output written to {self.output_infra_file}"
+        )
+
+        self.read_infra_output()
 
     def get_vpc_from_existing_infra(self, infra_id=None):
         """
@@ -3574,6 +3852,18 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             return ""
 
         except CommandFailed as e:
+            if "x509: certificate signed by unknown authority" in str(
+                e
+            ) and "hostedclusters.hypershift.openshift.io" in str(e):
+                logger.warning(
+                    "HyperShift webhook TLS error detected — applying CA bundle fix and retrying"
+                )
+                fix_hypershift_webhook_ca_bundle()
+                exec_cmd(cmd, timeout=2700)
+            else:
+                logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
+                self._log_cmd_output(e)
+                raise
             logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
             self._log_cmd_output(e)
             raise
@@ -6621,12 +6911,16 @@ class SpokeODF(SpokeOCP, ABC):
 
         storage_class_names = get_autodistributed_storage_classes()
         volumesnapshot_class_names = get_autodistributed_volume_snapshot_classes()
+        volumegroup_snapshot_classes = (
+            get_autodistributed_volumegroup_snapshot_classes()
+        )
 
         start_time = time.time()
         storage_consumer_obj = create_storage_consumer_on_default_cluster(
             storage_consumer_name,
             storage_classes=storage_class_names,
             volume_snapshot_classes=volumesnapshot_class_names,
+            volume_group_snapshot_classes=volumegroup_snapshot_classes,
         )
         secret_name = storage_consumer_obj.get_onboarding_ticket_secret()
 
@@ -6885,6 +7179,7 @@ class SpokeODF(SpokeOCP, ABC):
         Returns:
             bool: True if the catalog source exists, False otherwise
         """
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
         ocp_obj = OCP(
             kind=constants.CATSRC,
             namespace=constants.MARKETPLACE_NAMESPACE,
@@ -6892,7 +7187,7 @@ class SpokeODF(SpokeOCP, ABC):
         )
         return ocp_obj.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
-            resource_name="ocs-catalogsource",
+            resource_name=catalog_source_data["metadata"]["name"],
             should_exist=True,
         )
 
@@ -6914,9 +7209,7 @@ class SpokeODF(SpokeOCP, ABC):
             if not reapply:
                 return True
 
-        catalog_source_data = templating.load_yaml(
-            constants.PROVIDER_MODE_CATALOGSOURCE
-        )
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
 
         if not config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"):
             if not reapply:
@@ -7294,6 +7587,148 @@ class HostedODF(HypershiftHostedOCP, SpokeODF):
         """
         HypershiftHostedOCP.__init__(self, name)
         SpokeODF.__init__(self, name)
+
+
+class HostedFDF(HypershiftHostedOCP, SpokeODF):
+    """
+    Class for managing Hosted FDF (Fusion Data Foundation) client clusters.
+    When FDF is installed on the management/provider cluster, this class
+    deploys the FDF Client operator on hosted spoke clusters using the
+    FDF CatalogSource image from the management cluster.
+    """
+
+    FDF_CATALOGSOURCE_NAME = defaults.FUSION_CATALOG_NAME
+
+    def __init__(self, name: str):
+        HypershiftHostedOCP.__init__(self, name)
+        SpokeODF.__init__(self, name)
+        self.catsrc_image = get_fdf_catalog_image()
+
+    @kubeconfig_exists_decorator
+    def create_catalog_source(self, reapply=False, odf_version_tag=None):
+        """
+        Create FDF CatalogSource on the spoke cluster using the same image
+        as the management cluster's FDF CatalogSource.
+        """
+        catalog_source_name = self.FDF_CATALOGSOURCE_NAME
+        ocp_obj = OCP(
+            kind=constants.CATSRC,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        if ocp_obj.check_resource_existence(
+            timeout=10,
+            resource_name=catalog_source_name,
+            should_exist=True,
+        ):
+            logger.info(f"FDF CatalogSource '{catalog_source_name}' already exists")
+            if not reapply:
+                return True
+
+        catalog_source_data = templating.load_yaml(
+            constants.PROVIDER_MODE_CATALOGSOURCE
+        )
+        catalog_source_data["metadata"]["name"] = catalog_source_name
+        catalog_source_data["spec"]["image"] = self.catsrc_image
+        catalog_source_data["spec"]["displayName"] = "Data Foundation Catalog"
+        catalog_source_data["spec"]["publisher"] = "IBM"
+
+        catalog_source_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="fdf_catalog_source", delete=False
+        )
+        templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_file.name)
+
+        try:
+            self.exec_oc_cmd(f"apply -f {catalog_source_file.name}", timeout=120)
+        except CommandFailed as e:
+            logger.error(f"Error during FDF CatalogSource creation: {e}")
+            return False
+
+        ocs_client_catsrc = CatalogSource(
+            resource_name=catalog_source_name,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        try:
+            ocs_client_catsrc.wait_for_state("READY")
+        except (TimeoutExpiredError, ResourceWrongStatusException) as e:
+            logger.error(f"Error during FDF CatalogSource readiness wait: {e}")
+            return False
+
+        return ocp_obj.check_resource_existence(
+            timeout=10,
+            resource_name=catalog_source_name,
+            should_exist=True,
+        )
+
+    @kubeconfig_exists_decorator
+    def catalog_source_exists(self):
+        """
+        Check if the FDF CatalogSource exists on the spoke cluster.
+        """
+        ocp_obj = OCP(
+            kind=constants.CATSRC,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+        return ocp_obj.check_resource_existence(
+            timeout=self.timeout_check_resources_exist_sec,
+            resource_name=self.FDF_CATALOGSOURCE_NAME,
+            should_exist=True,
+        )
+
+    @kubeconfig_exists_decorator
+    def create_subscription(self):
+        """
+        Create subscription for FDF Client operator, sourcing from the FDF CatalogSource.
+        """
+        if self.subscription_exists():
+            logger.info("FDF Client Subscription already exists")
+            return
+
+        subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
+        subscription_data["metadata"]["namespace"] = self.namespace_client
+        subscription_data["spec"]["source"] = self.FDF_CATALOGSOURCE_NAME
+
+        hosted_odf_version = (
+            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+        )
+        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
+            hosted_odf_version = hosted_odf_version.split("-")[-1]
+
+        version_semantic = version.get_semantic_version(hosted_odf_version)
+        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
+        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
+
+        subscription_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="fdf_subscription", delete=False
+        )
+        templating.dump_data_to_temp_yaml(subscription_data, subscription_file.name)
+
+        self.exec_oc_cmd(f"apply -f {subscription_file.name}", timeout=120)
+        return self.subscription_exists()
+
+    def do_deploy(self):
+        """
+        Deploy FDF Client on hosted OCP cluster.
+        """
+        if self.odf_csv_installed():
+            logger.info(
+                "FDF Client CSV exists, assuming FDF client is already installed"
+            )
+            return
+
+        logger.info(f"Deploying FDF client on hosted OCP cluster '{self.name}'")
+        self.create_ns()
+
+        logger.info("Creating FDF client operator group")
+        self.create_operator_group()
+
+        logger.info("Creating FDF client catalog source")
+        self.create_catalog_source()
+
+        logger.info("Creating FDF client subscription")
+        self.create_subscription()
 
 
 @skip_if_not_hcp_provider

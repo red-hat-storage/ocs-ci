@@ -189,6 +189,12 @@ version.
 * `hub_cluster_name` - Name of the Management cluster. Applicable for Agent deployments, where the hub cluster is pre-created.
 * `hub_cluster_path` - Path to the Management cluster directory to store auth_path, credentials files or cluster related files.
 * `partitioned_disk_primary_affinity` - Configure primaryAffinity for OSDs on partitioned disks, https://access.redhat.com/solutions/5807201 (default: "0.0")
+* `vsphere_vm_start_timeout` - Number of seconds to wait for vsphere vms to start up (default: 240)
+* `deploy_multiple_device_classes` - Deploy a second storageDeviceSet with a separate device class on LSO-backed vSphere clusters. When enabled, additional disks are attached to each worker node and a second device class (e.g. `localblock-1`) is added to the StorageCluster (Default: false)
+* `ec_default_pools` - Deploy ODF with Erasure Coding as the default pool type instead of replication. When true, the StorageCluster CR is patched with EC spec for block, file, and object pools. No user-facing replicated pools are created (Default: false)
+* `ec_data_chunks` - The k value for erasure coding — number of data chunks. Data is split into this many pieces. Requires `ec_default_pools: true` (Default: 2)
+* `ec_coding_chunks` - The m value for erasure coding — number of parity (coding) chunks. Determines how many simultaneous host failures the pool can tolerate. Requires `ec_default_pools: true` (Default: 1)
+* `ec_failure_domain` - CRUSH failure domain for EC pools. Each chunk is placed on a different unit of this domain. Use `host` for vSphere/bare metal. Requires k+m failure domain units. (Default: "host")
 
 #### REPORTING
 
@@ -217,6 +223,8 @@ Reporting related config. (Do not store secret data in the repository!).
 * `max_mg_fail_attempts` - Maximum attempts to run MG commands to prevent
   spending time on MG which is timeouting.
 * `rp_additional_info` - any additional information placed to Report Portal launch description
+* `primary_assignee` - Primary assignee name to be added as an attribute in ReportPortal. This allows filtering runs by the primary assignee in RP
+* `backup_assignee` - Backup assignee name to be added as an attribute in ReportPortal. This allows filtering runs by the backup assignee in RP
 * `tarball_mg_logs` - pack MG files to tarball
 * `delete_packed_mg_logs` - applicable only if `tarball_mg_logs` is True, delete the individual MG files in case they were successfully packed
 
@@ -249,7 +257,10 @@ higher priority).
 * `skip_ocs_deployment` - Skip the OCS deployment step or not (Default: false)
 * `ocs_version` - Version of OCS that is being deployed
 * `acm_version` - Version of acm to be used for this run (applicable mostly to DR scenarios)
-* `vm_template` - VMWare template to use for RHCOS images
+* `vm_template` - VMWare template to use for RHCOS images (legacy single template, used as fallback)
+* `vm_template_overwrite` - VM template to overwirthe for early testing deployment e.g. rhcos-47.84.202103151537-0-vmware.x86_64
+* `vm_templates` - Dictionary of available RHCOS templates by major version for VMWare deployments (e.g., `{"9": "rhcos-9.6...", "10": "rhcos-10.2..."}`)
+* `rhcos_version` - Select which RHCOS major version to use from vm_templates dictionary (e.g., "9" or "10"). Defaults to "9" if not specified. When set to "10", automatically configures `featureSet: "TechPreviewNoUpgrade"` and `osImageStream: "rhel-10"` in install-config.yaml.
 * `fio_storageutilization_min_mbps` - Minimal write speed of FIO used in workload_fio_storageutilization
 * `TF_LOG_LEVEL` - Terraform log level
 * `TF_LOG_FILE` - Terraform log file
@@ -260,6 +271,8 @@ higher priority).
 * `disk_enable_uuid` - Enable the disk UUID on VMs, this is required for VMDK
 * `ignition_data_encoding` - Encoding type used for the ignition config data
 * `device_size` - Size (in GB) to use for storage device sets
+* `second_device_size` - Size (in GB) for the second device class disks when `deploy_multiple_device_classes` is enabled. Defaults to the value of `device_size` for disk attachment and `1` (minimum PVC size) for the StorageCluster resource request
+* `second_device_type` - Device type for the second device class when `deploy_multiple_device_classes` is enabled (Default: "SSD")
 * `rhel_workers` - Use RHEL workers instead of RHCOS, for UPI deployments (Default: false)
 * `rhel_version` - For AWS UPI deployment over RHEL. Based on this value we
   will select one of rhelX.Y RHEL AMI mentioned below. (e.g 7.9 or 8.4)
@@ -420,7 +433,6 @@ higher priority).
 * `early_testing` - set to True if it's early testing of RHCOS and provide  release_img
     e.g. registry.ci.openshift.org/rhcos-devel/rhel4784:4.7.2
 * `release_img` - release image for early testing of RHCOS or multi arch setup
-* `vm_template_overwrite` - VM template to overwirthe for early testing deployment e.g. rhcos-47.84.202103151537-0-vmware.x86_64
 * `multi_arch` - Set to True if it's multi arch setup/deployment - it will use
     proper OCP release image for OCP deployment or you can set custom via
     release_img e.g. quay.io/openshift-release-dev/ocp-release:4.21.0-rc.1-multi.
@@ -428,7 +440,8 @@ higher priority).
 * `infra_availability_policy` - similar to clusters.<cluster name>.cp_availability_policy but applied to the infra nodes of Agent hosted cluster
 * `disable_default_sources` - similar to clusters.<cluster name>.disable_default_sources but applied to the Agent hosted cluster
 * `auto_repair` - similar to clusters.<cluster name>.auto_repair but applied to the Agent hosted cluster
-* * `ntp_server` - NTP server to use in compute nodes in case of mon skew detected in ceph health during deployment
+* `ntp_server` - NTP server to use in compute nodes in case of mon skew detected in ceph health during deployment
+* `disconnected_ntp_server` - NTP server to use in compute nodes in case of mon skew detected in ceph health during deployment for disconnected/proxy mode deployments
 * `sno` - explicitly mark single node cluster
 * `iscsi_target_ip` - The IP of iscsi server
 * `iscsi_target_username`- The username for authenticating with the iSCSI target.
