@@ -1634,7 +1634,9 @@ class TestNfsEnable(ManageTest):
         subvolumes = []
         subvolumes_list = output.strip().split("\n")[1:]
         for item in subvolumes_list:
-            fs, sv, svg, status = item.split(" ")
+            if not item.strip():
+                continue
+            fs, sv, svg, status = item.split()
             subvolumes.append((fs, sv, svg, status))
         return subvolumes
 
