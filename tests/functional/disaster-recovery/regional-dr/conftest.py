@@ -14,8 +14,8 @@ from ocs_ci.utility.utils import (
     run_cmd,
 )
 from ocs_ci.helpers.dr_helpers import (
-    _apply_itms_to_managed_clusters,
-    _generate_rdr_mirror_images,
+    apply_itms_to_managed_clusters,
+    generate_rdr_mirror_images,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
 from ocs_ci.helpers import helpers
@@ -195,7 +195,7 @@ def mirror_rdr_images():
     imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG_V2)
 
     # Get RDR images and add to additionalImages
-    rdr_images = _generate_rdr_mirror_images()
+    rdr_images = generate_rdr_mirror_images()
     if not rdr_images:
         log.warning("No RDR images found to mirror. Exiting function.")
         return
@@ -234,7 +234,7 @@ def mirror_rdr_images():
 
     if os.path.exists(itms_file_path):
         log.info(f"Found ITMS file at {itms_file_path}")
-        _apply_itms_to_managed_clusters(itms_file_path)
+        apply_itms_to_managed_clusters(itms_file_path)
     else:
         error_msg = f"ITMS file not found at expected location: {itms_file_path}"
         log.error(error_msg)

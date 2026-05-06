@@ -2727,7 +2727,6 @@ def create_service_exporter(annotate=True):
             cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
             and get_provider_service_type() == "NodePort"
             or is_hostnetwork_enabled()
-            or cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
         ):
             logger.info("Checking if multiClusterService exists")
             create_multiclusterservice_dr()
@@ -3065,7 +3064,7 @@ def validate_protection_label(kind, namespace, protection_name=None):
     )
 
 
-def _generate_rdr_mirror_images():
+def generate_rdr_mirror_images():
     """
     Extract and return list of container images from RDR workload repository.
 
@@ -3131,7 +3130,7 @@ def _generate_rdr_mirror_images():
     return []
 
 
-def _apply_itms_to_managed_clusters(itms_file_path):
+def apply_itms_to_managed_clusters(itms_file_path):
     """
     Apply itms configuration to all managed clusters and wait for MCP to complete.
 
