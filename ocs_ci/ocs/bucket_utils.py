@@ -65,7 +65,8 @@ def craft_s3_command(
     no_ssl = (
         "--no-verify-ssl"
         if (
-            (signed_request_creds and signed_request_creds.get("ssl")) is False
+            (signed_request_creds and signed_request_creds.get("ssl") is False)
+            or (mcg_obj and getattr(mcg_obj, "ssl", None) is False)
             or (
                 config.multicluster
                 and not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
