@@ -104,14 +104,236 @@ def test_deploy_rdr():
     )
 
     # ========================================================================
-    # STEP 2: Deploy RDR
+    # STEP 2: Deploy ACM Hub (if needed)
     # ========================================================================
     log.info("\n" + "=" * 80)
-    log.info("STEP 2: Deploying Regional DR")
+    log.info("STEP 2: Deploying ACM Hub")
     log.info("=" * 80)
 
     log.info("Initializing Deployment instance...")
     deployment = Deployment()
+
+    # Save current context
+    original_ctx_index = config.cur_index
+
+    # Search for ACM cluster across all clusters
+    acm_cluster_index = None
+    acm_cluster_name = None
+
+    for cluster in config.clusters:
+        cluster_index = cluster.MULTICLUSTER.get("multicluster_index")
+        if cluster.ENV_DATA.get("deploy_acm_hub_cluster", False):
+            acm_cluster_index = cluster_index
+            acm_cluster_name = cluster.ENV_DATA.get(
+                "cluster_name", f"cluster-{cluster_index}"
+            )
+            log.info(
+                f"Found ACM cluster: {acm_cluster_name} (index: {acm_cluster_index})"
+            )
+            break
+
+    if acm_cluster_index is not None:
+        log.info(f"ACM Hub deployment is enabled on cluster: {acm_cluster_name}")
+        log.info(f"Switching to ACM cluster context (index: {acm_cluster_index})")
+        config.switch_ctx(acm_cluster_index)
+
+        log.info("Deploying ACM Hub...")
+        try:
+            deployment.deploy_acm_hub()
+            log.info("✓ ACM Hub deployment completed successfully")
+        except Exception as e:
+            log.error(f"✗ ACM Hub deployment failed with error: {e}")
+            # Restore context before raising
+            config.switch_ctx(original_ctx_index)
+            raise
+        finally:
+            # Restore original context
+            log.info(f"Restoring original context (index: {original_ctx_index})")
+            config.switch_ctx(original_ctx_index)
+    else:
+        log.info("ACM Hub deployment is not enabled in any cluster configuration")
+        log.info("Skipping ACM Hub deployment")
+
+    # ========================================================================
+    # STEP 3: Deploy MCE (if needed)
+    # ========================================================================
+    log.info("\n" + "=" * 80)
+    log.info("STEP 3: Deploying Multicluster Engine (MCE)")
+    log.info("=" * 80)
+
+    # Search for all clusters that need MCE deployment
+    mce_clusters = []
+
+    for cluster in config.clusters:
+        cluster_index = cluster.MULTICLUSTER.get("multicluster_index")
+        if cluster.ENV_DATA.get("deploy_mce", False):
+            cluster_name = cluster.ENV_DATA.get(
+                "cluster_name", f"cluster-{cluster_index}"
+            )
+            mce_clusters.append((cluster_index, cluster_name))
+            log.info(
+                f"Found MCE deployment enabled on cluster: {cluster_name} (index: {cluster_index})"
+            )
+
+    if mce_clusters:
+        log.info(f"MCE deployment is enabled on {len(mce_clusters)} cluster(s)")
+
+        mce_deployment_results = []
+        for mce_cluster_index, mce_cluster_name in mce_clusters:
+            log.info("-" * 80)
+            log.info(
+                f"Deploying MCE on cluster: {mce_cluster_name} (index: {mce_cluster_index})"
+            )
+            log.info(f"Switching to cluster context (index: {mce_cluster_index})")
+            config.switch_ctx(mce_cluster_index)
+
+            try:
+                deployment.do_deploy_mce()
+                log.info(
+                    f"✓ MCE deployment completed successfully on {mce_cluster_name}"
+                )
+                mce_deployment_results.append((mce_cluster_name, True, None))
+            except Exception as e:
+                error_msg = f"MCE deployment failed on {mce_cluster_name}: {str(e)}"
+                log.error(f"✗ {error_msg}")
+                mce_deployment_results.append((mce_cluster_name, False, error_msg))
+                # Restore context before raising
+                config.switch_ctx(original_ctx_index)
+                raise
+            finally:
+                # Restore original context after each deployment
+                log.info(f"Restoring original context (index: {original_ctx_index})")
+                config.switch_ctx(original_ctx_index)
+
+        # Summary of MCE deployments
+        log.info("-" * 80)
+        log.info("MCE Deployment Summary:")
+        all_mce_passed = True
+        for cluster_name, passed, error in mce_deployment_results:
+            status = "✓ SUCCESS" if passed else "✗ FAILED"
+            log.info(f"  {status}: {cluster_name}")
+            if error:
+                log.error(f"    Error: {error}")
+                all_mce_passed = False
+
+        if not all_mce_passed:
+            failed_clusters = [
+                name for name, passed, _ in mce_deployment_results if not passed
+            ]
+            raise AssertionError(
+                f"MCE deployment failed on clusters: {', '.join(failed_clusters)}"
+            )
+    else:
+        log.info("MCE deployment is not enabled in any cluster configuration")
+        log.info("Skipping MCE deployment")
+
+    # ========================================================================
+    # STEP 3.5: Import Managed Clusters to ACM (if needed)
+    # ========================================================================
+    log.info("\n" + "=" * 80)
+    log.info("STEP 3.5: Importing Managed Clusters to ACM")
+    log.info("=" * 80)
+
+    # Check if ACM import is needed
+    if acm_cluster_index is not None:
+        log.info("ACM cluster is deployed, proceeding with cluster import")
+
+        # Import the ACM import function
+        from ocs_ci.ocs.acm.acm import import_clusters_with_acm
+        from ocs_ci.utility import version as version_util
+        from ocs_ci.utility.utils import run_cmd, wait_for_machineconfigpool_status
+
+        # Apply IDMS if ACM version >= 2.14
+        if version_util.compare_versions(
+            f"{config.ENV_DATA.get('acm_version', '2.13')} >= 2.14"
+        ):
+            log.info(
+                "ACM version >= 2.14, applying ImageDigestMirrorSet to all clusters"
+            )
+
+            def apply_idms(cluster):
+                cluster_index = cluster.MULTICLUSTER.get("multicluster_index")
+                cluster_name = cluster.ENV_DATA.get(
+                    "cluster_name", f"cluster-{cluster_index}"
+                )
+                log.info(
+                    f"Applying IDMS on cluster: {cluster_name} (index: {cluster_index})"
+                )
+                config.switch_ctx(cluster_index)
+                try:
+                    run_cmd(f"oc apply -f {constants.ACM_BREW_IDMS_YAML}")
+                    log.info(f"✓ IDMS applied successfully on {cluster_name}")
+                except Exception as e:
+                    log.error(f"✗ Error applying IDMS on {cluster_name}: {e}")
+                    raise
+                finally:
+                    config.switch_ctx(original_ctx_index)
+
+            def wait_for_mcp(cluster):
+                cluster_index = cluster.MULTICLUSTER.get("multicluster_index")
+                cluster_name = cluster.ENV_DATA.get(
+                    "cluster_name", f"cluster-{cluster_index}"
+                )
+                log.info(
+                    f"Waiting for MachineConfigPool update on cluster: {cluster_name}"
+                )
+                config.switch_ctx(cluster_index)
+                try:
+                    wait_for_machineconfigpool_status(node_type="all")
+                    log.info(
+                        f"✓ MachineConfigPool updated successfully on {cluster_name}"
+                    )
+                except Exception as e:
+                    log.error(f"✗ Error waiting for MCP on {cluster_name}: {e}")
+                    raise
+                finally:
+                    config.switch_ctx(original_ctx_index)
+
+            # Apply IDMS to all clusters
+            log.info("-" * 80)
+            log.info("Applying IDMS to all clusters...")
+            for cluster in config.clusters:
+                try:
+                    apply_idms(cluster)
+                except Exception as e:
+                    log.error(f"Failed to apply IDMS: {e}")
+                    raise
+
+            # Wait for MCP update on all clusters
+            log.info("-" * 80)
+            log.info("Waiting for MachineConfigPool updates on all clusters...")
+            for cluster in config.clusters:
+                try:
+                    wait_for_mcp(cluster)
+                except Exception as e:
+                    log.error(f"Failed waiting for MCP: {e}")
+                    raise
+
+        # Import clusters with ACM
+        log.info("-" * 80)
+        log.info("Importing managed clusters to ACM...")
+        log.info(f"Switching to ACM cluster context (index: {acm_cluster_index})")
+        config.switch_ctx(acm_cluster_index)
+
+        try:
+            import_clusters_with_acm()
+            log.info("✓ Managed clusters imported successfully to ACM")
+        except Exception as e:
+            log.error(f"✗ ACM cluster import failed with error: {e}")
+            config.switch_ctx(original_ctx_index)
+            raise
+        finally:
+            log.info(f"Restoring original context (index: {original_ctx_index})")
+            config.switch_ctx(original_ctx_index)
+    else:
+        log.info("ACM cluster is not deployed, skipping cluster import")
+
+    # ========================================================================
+    # STEP 4: Deploy RDR
+    # ========================================================================
+    log.info("\n" + "=" * 80)
+    log.info("STEP 4: Deploying Regional DR")
+    log.info("=" * 80)
 
     log.info("Calling do_deploy_rdr() to deploy Regional DR components...")
     log.info("This will deploy:")
@@ -131,10 +353,10 @@ def test_deploy_rdr():
         raise
 
     # ========================================================================
-    # STEP 3: Post-deployment validation
+    # STEP 5: Post-deployment validation
     # ========================================================================
     log.info("\n" + "=" * 80)
-    log.info("STEP 3: Running post-deployment validation")
+    log.info("STEP 5: Running post-deployment validation")
     log.info("=" * 80)
 
     # Save current context to restore later
@@ -209,10 +431,10 @@ def test_deploy_rdr():
     config.switch_ctx(restore_ctx_index)
 
     # ========================================================================
-    # STEP 4: Summary and final validation
+    # STEP 6: Summary and final validation
     # ========================================================================
     log.info("\n" + "=" * 80)
-    log.info("STEP 4: Validation Summary")
+    log.info("STEP 6: Validation Summary")
     log.info("=" * 80)
 
     all_passed = True
