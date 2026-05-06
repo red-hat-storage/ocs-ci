@@ -484,8 +484,14 @@ generic_locators = {
         By.CSS_SELECTOR,
     ),
     "confirm_dilog_input": ("//input[@placeholder='{}']", By.XPATH),
-    "confirm_delete_resource": ("//button[contains(text(), 'Delete')]", By.XPATH),
-    "cancel_delete_resource": ("//button[contains(text(), 'Cancel')]", By.XPATH),
+    "confirm_delete_resource": (
+        "//button[contains(normalize-space(), 'Delete')]",
+        By.XPATH,
+    ),
+    "cancel_delete_resource": (
+        "//button[contains(normalize-space(), 'Cancel')]",
+        By.XPATH,
+    ),
     "close_dialog": ("button[aria-label='Close']", By.XPATH),
     "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
     "ocs_operator": ('//h1[text()="OpenShift Container Storage"]', By.XPATH),
