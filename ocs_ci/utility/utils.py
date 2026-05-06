@@ -6945,7 +6945,7 @@ def create_kubeconfig(kubeconfig_path):
                 fd.write(config.RUN.get("kubeadmin_password"))
             log.info("Created kubeadmin-password file")
 
-    else:
+    elif not os.path.isfile(kubeconfig_path):
         raise ConfigurationError(
             "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
             "environment variables were not provided."
