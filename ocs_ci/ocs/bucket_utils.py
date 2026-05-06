@@ -40,7 +40,9 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 logger = logging.getLogger(__name__)
 
 
-def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
+def craft_s3_command(
+    cmd, mcg_obj=None, api=False, signed_request_creds=None, max_attempts=8
+):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran
@@ -50,6 +52,9 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         cmd: The AWSCLI command to run
         api: True if the call is for s3api, false if s3
         signed_request_creds: a dictionary containing AWS S3 creds for a signed request
+        max_attempts: The maximum number of AWSCLI retry attempts
+                     max_attempts=8 means a maximum of one minute
+                     additional waiting time in case of failure
 
     Returns:
         str: The crafted command, ready to be executed on the pod
@@ -77,6 +82,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
             f'sh -c "AWS_CA_BUNDLE={constants.AWSCLI_CA_BUNDLE_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"AWS_MAX_ATTEMPTS={max_attempts} "
             f"{region}"
             f"aws s3{api} "
             f"--endpoint={mcg_obj.s3_internal_endpoint} "
@@ -91,6 +97,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         base_command = (
             f'sh -c "AWS_ACCESS_KEY_ID={signed_request_creds.get("access_key_id")} '
             f'AWS_SECRET_ACCESS_KEY={signed_request_creds.get("access_key")} '
+            f"AWS_MAX_ATTEMPTS={max_attempts} "
             f'region={signed_request_creds.get("region")} '
             f"aws s3{api} "
             f'--endpoint={signed_request_creds.get("endpoint")} '
