@@ -194,6 +194,7 @@ from ocs_ci.utility.utils import (
     get_acm_mce_build_tag,
     apply_oadp_workaround,
     mute_mon_netsplit,
+    ceph_health_resolve_devicehealth,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -2271,6 +2272,14 @@ class Deployment(object):
         # https://issues.redhat.com/browse/DFBUGS-4521
         if config.DEPLOYMENT.get("arbiter_deployment"):
             mute_mon_netsplit(namespace=self.namespace)
+
+        # Workaround for DFBUGS-6749: devicehealth module fails when its
+        # pool cannot be created due to a missing default CRUSH rule.
+        try:
+            ceph_health_resolve_devicehealth()
+        except Exception as ex:
+            logger.warning(f"devicehealth workaround failed (may not be needed): {ex}")
+
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
         try:

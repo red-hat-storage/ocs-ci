@@ -3128,9 +3128,58 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
+def ceph_health_resolve_devicehealth():
+    """
+    Fix ceph health issue where the devicehealth module fails because
+    its pool cannot be created due to a missing CRUSH rule.
+
+    Workaround:
+        1. Set osd_pool_default_crush_rule to 0 (block pool rule)
+        2. Restart the devicehealth module so it retries pool creation
+        3. Archive any resulting crash reports
+
+    """
+    # importing here to avoid circular import
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    log.warning(
+        "Trying to fix devicehealth module failure by setting "
+        "default CRUSH rule and restarting the module"
+    )
+    ct_pod = get_ceph_tools_pod()
+
+    ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph config set mon osd_pool_default_crush_rule 0",
+        format=None,
+        out_yaml_format=False,
+    )
+    log.info("Set osd_pool_default_crush_rule to 0")
+
+    ct_pod.exec_ceph_cmd(
+        ceph_cmd=("ceph mgr module force disable devicehealth --yes-i-really-mean-it"),
+        format=None,
+        out_yaml_format=False,
+    )
+    log.info("Force disabled devicehealth module")
+
+    ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph mgr module enable devicehealth",
+        format=None,
+        out_yaml_format=False,
+    )
+    log.info("Re-enabled devicehealth module")
+
+    # give time to generate crash
+    time.sleep(180)
+
+    ceph_crash_info_display(ct_pod)
+    archive_ceph_crashes(ct_pod)
+
+
 def ceph_health_resolve_crash():
     """
     Fix ceph health issue with daemon crash
+
     """
     log.warning("Trying to fix the issue with crash by archiving crashes")
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
@@ -3249,6 +3298,20 @@ def ceph_health_recover(
 
     """
     ceph_health_fixes = [
+        {
+            "pattern": r"Module 'devicehealth' has failed",
+            "func": ceph_health_resolve_devicehealth,
+            "func_args": [],
+            "func_kwargs": {},
+            "ceph_health_tries": 10,
+            "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-6749",
+                    "pattern": r"Module 'devicehealth' has failed",
+                },
+            ],
+        },
         {
             "pattern": r"daemons have recently crashed",
             "func": ceph_health_resolve_crash,
