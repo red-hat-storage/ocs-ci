@@ -92,6 +92,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     convert_device_size,
     extract_image_urls,
+    ceph_health_resolve_devicehealth,
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.helpers.helpers import storagecluster_independent_check
@@ -785,6 +786,12 @@ def ocs_install_verification(
 
     # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
     if not (fusion_aas_consumer or hci_cluster):
+        # Workaround for DFBUGS-6749: devicehealth module fails when its
+        # pool cannot be created due to a missing default CRUSH rule.
+        try:
+            ceph_health_resolve_devicehealth()
+        except Exception as ex:
+            log.warning(f"devicehealth workaround failed (may not be needed): {ex}")
         # Temporarily disable health check for hci until we have enough healthy clusters
         assert utils.ceph_health_check(
             namespace,
