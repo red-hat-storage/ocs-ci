@@ -30,21 +30,14 @@ import logging
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import purple_squad, rdr
-from ocs_ci.framework.testlib import tier1, polarion_id
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 
 
-@purple_squad
-@rdr
-@tier1
-@polarion_id(get_polarion_id())
 def test_deploy_rdr():
     """
     Test RDR (Regional Disaster Recovery) deployment with post-deployment validation.
