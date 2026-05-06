@@ -619,6 +619,106 @@ def default_ceph_block_pool():
     return cbp_name if cbp_name else constants.DEFAULT_BLOCKPOOL
 
 
+def get_data_pool_name(interface_type=constants.CEPHBLOCKPOOL, sc_obj=None):
+    """
+    Return the name of the pool where actual block data is written.
+
+    On standard (replicated) deployments the StorageClass has a single
+    ``pool`` parameter that serves both as the RBD metadata pool and the
+    data pool, so this function returns the same value as
+    ``default_ceph_block_pool()``.
+
+    On Erasure-Coded deployments the StorageClass exposes two parameters:
+      * ``pool``     – the replicated metadata pool (stores RBD image headers)
+      * ``dataPool`` – the EC pool where all actual object data is written
+
+    For size-tracking purposes (``fetch_used_size``) we must monitor
+    ``dataPool`` on EC clusters; monitoring the metadata pool would always
+    show negligible growth regardless of how much data is written.
+
+    Args:
+        interface_type (str): Interface type constant (default CEPHBLOCKPOOL).
+        sc_obj: Optional StorageClass OCP object. When provided, it is used
+            directly instead of resolving the default StorageClass for
+            ``interface_type``. Useful for callers that already have a
+            specific SC object (e.g. a custom pool created by a test).
+
+    Returns:
+        str: Name of the pool that receives the actual written data.
+    """
+    if sc_obj is None:
+        sc_obj = default_storage_class(interface_type)
+    params = sc_obj.get().get("parameters", {})
+    data_pool = params.get("dataPool")
+    if data_pool:
+        logger.info(
+            f"EC deployment detected: using dataPool '{data_pool}' for data size tracking"
+        )
+        return data_pool
+    pool = params.get("pool") or constants.DEFAULT_BLOCKPOOL
+    logger.info(f"Replicated deployment: using pool '{pool}' for data size tracking")
+    return pool
+
+
+def get_pool_size_factor(pool_name):
+    """
+    Return the raw-storage multiplier for a given Ceph pool.
+
+    When data is written to a pool, the pool's raw ``size_bytes`` (as
+    reported by ``rados df``) grows by ``logical_bytes * factor``.
+
+    * **Replicated pool** – factor equals the replica count (``size``).
+      E.g. size=3 → factor=3.
+
+    * **Erasure-Coded pool** – factor equals ``(k + m) / k`` where *k* is
+      ``spec.erasureCoded.dataChunks`` and *m* is
+      ``spec.erasureCoded.codingChunks`` from the ``CephBlockPool`` CR.
+      E.g. k=2, m=1 → factor=1.5.
+
+    The factor is derived from the ``CephBlockPool`` CR without running any
+    Ceph commands, so no toolbox pod is required.
+
+    Args:
+        pool_name (str): Name of the CephBlockPool resource.
+
+    Returns:
+        float: Raw-storage multiplier for expected-size calculations.
+    """
+    pool_ocp = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=pool_name,
+    )
+    pool_cr = pool_ocp.get()
+    ec_spec = pool_cr.get("spec", {}).get("erasureCoded", {})
+    k = ec_spec.get("dataChunks", 0)
+    m = ec_spec.get("codingChunks", 0)
+
+    if k > 0:
+        factor = (k + m) / k
+        logger.info(
+            f"Pool '{pool_name}' is EC (k={k}, m={m}): "
+            f"raw-storage factor = (k+m)/k = {factor}"
+        )
+        return factor
+
+    # Replicated pool – read size from CR spec first, fall back to ceph cmd
+    rep_size = pool_cr.get("spec", {}).get("replicated", {}).get("size", 0)
+    if rep_size:
+        logger.info(
+            f"Pool '{pool_name}' is replicated (size={rep_size}): "
+            f"raw-storage factor = {rep_size}"
+        )
+        return float(rep_size)
+
+    # Last resort: query via toolbox
+    ct_pod = pod.get_ceph_tools_pod()
+    size_info = ct_pod.exec_ceph_cmd(ceph_cmd=f"ceph osd pool get {pool_name} size")
+    factor = float(size_info["size"])
+    logger.info(f"Pool '{pool_name}' replicated size from ceph = {factor}")
+    return factor
+
+
 def create_ceph_block_pool(
     pool_name=None,
     replica=3,
@@ -3774,7 +3874,7 @@ def run_cmd_verify_cli_output(
 
 
 def check_rbd_image_used_size(
-    pvc_objs, usage_to_compare, rbd_pool=constants.DEFAULT_BLOCKPOOL, expect_match=True
+    pvc_objs, usage_to_compare, rbd_pool=None, expect_match=True
 ):
     """
     Check if RBD image used size of the PVCs are matching with the given value
@@ -3782,7 +3882,11 @@ def check_rbd_image_used_size(
     Args:
         pvc_objs (list): List of PVC objects
         usage_to_compare (str): Value of image used size to be compared with actual value. eg: "5GiB"
-        rbd_pool (str): Name of the pool
+        rbd_pool (str): Name of the RBD metadata pool (``parameters.pool`` from the
+            StorageClass). On EC clusters this is the replicated metadata pool
+            (e.g. ``replicated-metadata-pool``), **not** the EC data pool.
+            When ``None`` the value is resolved automatically from the default
+            RBD StorageClass via ``default_ceph_block_pool()``.
         expect_match (bool): True to verify the used size is equal to 'usage_to_compare' value.
             False to verify the used size is not equal to 'usage_to_compare' value.
 
@@ -3790,6 +3894,8 @@ def check_rbd_image_used_size(
         bool: True if the verification is success for all the PVCs, False otherwise
 
     """
+    if rbd_pool is None:
+        rbd_pool = default_ceph_block_pool()
     ct_pod = pod.get_ceph_tools_pod()
     no_match_list = []
     for pvc_obj in pvc_objs:
@@ -6000,7 +6106,10 @@ def get_rbd_image_info(rbd_pool, rbd_image_name):
     Get RBD image information. (e.g provisioned size, used size, image ,   )
 
     Args:
-        rbd_pool(str) : pool name
+        rbd_pool(str) : RBD **metadata** pool name (i.e. ``parameters.pool``
+            from the StorageClass, **not** ``parameters.dataPool``). On EC
+            clusters this is the replicated metadata pool
+            (e.g. ``replicated-metadata-pool``).
         rbd_image_name(str) : name of rbd image
 
     Returns:
