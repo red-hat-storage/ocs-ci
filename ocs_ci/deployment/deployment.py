@@ -54,6 +54,9 @@ from ocs_ci.helpers.dr_helpers import (
     validate_storage_cluster_peer_state,
     verify_volsync,
     validate_drpolicy_grouping,
+    create_ingress_cert_dr,
+    create_multiclusterservice_dr,
+    setup_fdf_catsrc_for_hub,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -126,7 +129,6 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     get_osd_count,
     StorageCluster,
-    validate_serviceexport,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -365,8 +367,24 @@ class Deployment(object):
         run_cmd(f"oc apply -f {constants.GITOPS_OPERATORGROUP_YAML}")
 
         logger.info("Creating GitOps Operator Subscription")
+        if config.DEPLOYMENT.get("disconnected"):
+            gitops_catalog_name = PackageManifest(
+                resource_name=constants.GITOPS_OPERATOR_NAME,
+            ).get()["metadata"]["labels"]["catalog"]
 
-        run_cmd(f"oc apply -f {constants.GITOPS_SUBSCRIPTION_YAML}")
+            gitops_subscription_yaml_data = templating.load_yaml(
+                constants.GITOPS_SUBSCRIPTION_YAML
+            )
+            gitops_subscription_yaml_data["spec"]["source"] = gitops_catalog_name
+            gitops_subscription_manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="gitops_subscription_manifest", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                gitops_subscription_yaml_data, gitops_subscription_manifest.name
+            )
+            run_cmd(f"oc apply -f {gitops_subscription_manifest.name}")
+        else:
+            run_cmd(f"oc apply -f {constants.GITOPS_SUBSCRIPTION_YAML}")
 
         self.wait_for_subscription(
             constants.GITOPS_OPERATOR_NAME, namespace=constants.GITOPS_NAMESPACE
@@ -532,24 +550,7 @@ class Deployment(object):
                                 and cluster.ENV_DATA.get("cluster_type", "").lower()
                                 != constants.HCI_CLIENT
                             ):
-                                ptch = (
-                                    f'\'{{"spec": {{"network": {{"multiClusterService": '
-                                    f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
-                                    f'"enabled": true}}}}}}}}\''
-                                )
-                                ptch_cmd = (
-                                    f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
-                                    f"-n openshift-storage  --type merge --patch {ptch}"
-                                )
-                                run_cmd(ptch_cmd)
-                                storage_cluster.reload_data()
-                                assert (
-                                    storage_cluster.data.get("spec")
-                                    .get("network")
-                                    .get("multiClusterService")
-                                    .get("enabled")
-                                ), "Failed to update StorageCluster globalnet"
-                                validate_serviceexport()
+                                create_multiclusterservice_dr()
                             ocs_registry_image = config.DEPLOYMENT.get(
                                 "ocs_registry_image", None
                             )
@@ -646,9 +647,18 @@ class Deployment(object):
                             f"Found {constants.OADP_OPERATOR_NAME} skipping creation"
                         )
                         continue
+                    if config.DEPLOYMENT.get("disconnected"):
+                        oadp_catsrc_name = PackageManifest(
+                            resource_name=constants.OADP_OPERATOR_NAME,
+                        ).get()["metadata"]["labels"]["catalog"]
+                        oadp_selector = f"catalog={oadp_catsrc_name}"
+                    else:
+                        oadp_selector = "catalog=redhat-operators"
+                        oadp_catsrc_name = constants.OPERATOR_CATALOG_SOURCE_NAME
+
                     package_manifest = PackageManifest(
                         resource_name=constants.OADP_OPERATOR_NAME,
-                        selector="catalog=redhat-operators",
+                        selector=oadp_selector,
                     )
                     try:
 
@@ -665,10 +675,11 @@ class Deployment(object):
                         oadp_subscription_yaml_data = templating.load_yaml(
                             constants.OADP_SUBSCRIPTION_YAML
                         )
+
                         if not any(
                             version_exist(pm, required_oadp_version)
                             and pm.get("status", {}).get("catalogSource")
-                            == constants.OPERATOR_CATALOG_SOURCE_NAME
+                            == oadp_catsrc_name
                             for pm in pm_list
                         ):
                             raise ResourceNotFoundError(
@@ -682,6 +693,10 @@ class Deployment(object):
                         oadp_subscription_yaml_data["spec"][
                             "channel"
                         ] = oadp_default_channel
+                        if config.DEPLOYMENT.get("disconnected"):
+                            oadp_subscription_yaml_data["spec"][
+                                "source"
+                            ] = oadp_catsrc_name
                         oadp_subscription_manifest = tempfile.NamedTemporaryFile(
                             mode="w+", prefix="oadp_subscription_manifest", delete=False
                         )
@@ -3384,21 +3399,27 @@ class MultiClusterDROperatorsDeploy(object):
         # HUB operator will be deployed by multicluster orechestrator
         self.verify_dr_hub_operator()
 
-    def deploy_dr_multicluster_orchestrator(self):
+    def deploy_dr_multicluster_orchestrator(self, use_fdf_catsrc=False):
         """
         Deploy multicluster orchestrator
         """
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         current_csv = None
 
-        if not live_deployment:
+        if not live_deployment and not use_fdf_catsrc:
             create_catalog_source()
         odf_multicluster_orchestrator_data = templating.load_yaml(
             constants.ODF_MULTICLUSTER_ORCHESTRATOR
         )
-        package_manifest = packagemanifest.PackageManifest(
-            resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
-        )
+        if use_fdf_catsrc:
+            package_manifest = packagemanifest.PackageManifest(
+                resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
+                selector=constants.FDF_OPERATOR_SELECTOR,
+            )
+        else:
+            package_manifest = packagemanifest.PackageManifest(
+                resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
+            )
 
         retry(
             (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
@@ -3416,6 +3437,10 @@ class MultiClusterDROperatorsDeploy(object):
         logger.info(f"CurrentCSV={current_csv}")
         odf_multicluster_orchestrator_data["spec"]["channel"] = self.channel
         odf_multicluster_orchestrator_data["spec"]["startingCSV"] = current_csv
+        if use_fdf_catsrc:
+            odf_multicluster_orchestrator_data["spec"][
+                "source"
+            ] = constants.FDF_CATALOG_NAME
         odf_multicluster_orchestrator = tempfile.NamedTemporaryFile(
             mode="w+", prefix="odf_multicluster_orchestrator", delete=False
         )
@@ -3993,10 +4018,22 @@ class MultiClusterDROperatorsDeploy(object):
 
         """
 
-        ca_cert_path = get_root_ca_cert()
-        logger.info("Encoding Ca Cert")
-        ca_cert_data_byte = open(ca_cert_path, "r").read().encode("ascii")
-        ca_cert_data_encode = base64.b64encode(ca_cert_data_byte).decode("ascii")
+        if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+            ca_cert_path = get_root_ca_cert()
+            logger.info("Encoding Ca Cert")
+            ca_cert_data_byte = open(ca_cert_path, "r").read().encode("ascii")
+            ca_cert_data_encode = base64.b64encode(ca_cert_data_byte).decode("ascii")
+        else:
+            with config.RunWithPrimaryConfigContext():
+                config_data = ocp.OCP(
+                    kind=constants.CONFIGMAP,
+                    resource_name="user-ca-bundle",
+                    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+                ).get()
+                ca_cert_data = config_data["data"]["ca-bundle.crt"]
+                ca_cert_data_encode = base64.b64encode(
+                    ca_cert_data.encode("ascii")
+                ).decode("ascii")
         dr_ramen_hub_configmap_data = self.meta_obj.get_ramen_resource()
         ramen_config = yaml.safe_load(
             dr_ramen_hub_configmap_data.data["data"]["ramen_manager_config.yaml"]
@@ -4151,6 +4188,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         RDR specific steps for deploy
         """
         # current CTX: ACM
+
+        if not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+            create_ingress_cert_dr()
+            pass
+
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
             config.switch_ctx(i)
@@ -4171,7 +4213,14 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                     condition="1", column="AVAILABLE", resource_count=1, timeout=300
                 )
                 continue
-            self.deploy_dr_multicluster_orchestrator()
+            if config.ENV_DATA.get("setup_fdf_catsrc_for_hub"):
+                setup_fdf_catsrc_for_hub()
+
+            self.deploy_dr_multicluster_orchestrator(
+                use_fdf_catsrc=(
+                    True if config.ENV_DATA.get("setup_fdf_catsrc_for_hub") else False
+                )
+            )
             # Enable MCO console plugin
             enable_mco_console_plugin()
         config.switch_acm_ctx()
