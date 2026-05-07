@@ -434,38 +434,164 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"], enable_screenshot=True)
         log.info("Checking connection status of both the imported clusters")
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["connection-status-1"],
-            expected_text="Healthy",
-            timeout=timeout,
-        ), "Connection status 1 is unhealthy for Submariner"
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["connection-status-2"],
-            expected_text="Healthy",
-            timeout=timeout,
-        ), "Connection status 2 is unhealthy for Submariner"
+        try:
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["connection-status-1"],
+                expected_text="Healthy",
+                timeout=timeout,
+            ), "Connection status 1 is unhealthy for Submariner"
+        except AssertionError:
+            log.error("Connection status 1 is unhealthy. Checking pod status...")
+            try:
+                cluster_configs = get_non_acm_cluster_config()
+                for cluster in cluster_configs:
+                    with config.RunWithConfigContext(
+                        cluster.MULTICLUSTER["multicluster_index"]
+                    ):
+                        log.info(
+                            f"Getting pods from cluster: {cluster.ENV_DATA['cluster_name']}"
+                        )
+                        pod_status = run_cmd(
+                            f"oc get pods -n {constants.SUBMARINER_OPERATOR_NAMESPACE}"
+                        )
+                        log.error(
+                            f"Pod status in {cluster.ENV_DATA['cluster_name']}:\n{pod_status}"
+                        )
+            except Exception as e:
+                log.error(f"Failed to get pod status: {e}")
+            raise
+        try:
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["connection-status-2"],
+                expected_text="Healthy",
+                timeout=timeout,
+            ), "Connection status 2 is unhealthy for Submariner"
+        except AssertionError:
+            log.error("Connection status 2 is unhealthy. Checking pod status...")
+            try:
+                cluster_configs = get_non_acm_cluster_config()
+                for cluster in cluster_configs:
+                    with config.RunWithConfigContext(
+                        cluster.MULTICLUSTER["multicluster_index"]
+                    ):
+                        log.info(
+                            f"Getting pods from cluster: {cluster.ENV_DATA['cluster_name']}"
+                        )
+                        pod_status = run_cmd(
+                            f"oc get pods -n {constants.SUBMARINER_OPERATOR_NAMESPACE}"
+                        )
+                        log.error(
+                            f"Pod status in {cluster.ENV_DATA['cluster_name']}:\n{pod_status}"
+                        )
+            except Exception as e:
+                log.error(f"Failed to get pod status: {e}")
+            raise
         log.info("Checking agent status of both the imported clusters")
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["agent-status-1"],
-            expected_text="Healthy",
-            timeout=timeout,
-        ), "Agent status 1 is unhealthy for Submariner"
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["agent-status-2"],
-            expected_text="Healthy",
-            timeout=timeout,
-        ), "Agent status 2 is unhealthy for Submariner"
+        try:
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["agent-status-1"],
+                expected_text="Healthy",
+                timeout=timeout,
+            ), "Agent status 1 is unhealthy for Submariner"
+        except AssertionError:
+            log.error("Agent status 1 is unhealthy. Checking pod status...")
+            try:
+                cluster_configs = get_non_acm_cluster_config()
+                for cluster in cluster_configs:
+                    with config.RunWithConfigContext(
+                        cluster.MULTICLUSTER["multicluster_index"]
+                    ):
+                        log.info(
+                            f"Getting pods from cluster: {cluster.ENV_DATA['cluster_name']}"
+                        )
+                        pod_status = run_cmd(
+                            f"oc get pods -n {constants.SUBMARINER_OPERATOR_NAMESPACE}"
+                        )
+                        log.error(
+                            f"Pod status in {cluster.ENV_DATA['cluster_name']}:\n{pod_status}"
+                        )
+            except Exception as e:
+                log.error(f"Failed to get pod status: {e}")
+            raise
+        try:
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["agent-status-2"],
+                expected_text="Healthy",
+                timeout=timeout,
+            ), "Agent status 2 is unhealthy for Submariner"
+        except AssertionError:
+            log.error("Agent status 2 is unhealthy. Checking pod status...")
+            try:
+                cluster_configs = get_non_acm_cluster_config()
+                for cluster in cluster_configs:
+                    with config.RunWithConfigContext(
+                        cluster.MULTICLUSTER["multicluster_index"]
+                    ):
+                        log.info(
+                            f"Getting pods from cluster: {cluster.ENV_DATA['cluster_name']}"
+                        )
+                        pod_status = run_cmd(
+                            f"oc get pods -n {constants.SUBMARINER_OPERATOR_NAMESPACE}"
+                        )
+                        log.error(
+                            f"Pod status in {cluster.ENV_DATA['cluster_name']}:\n{pod_status}"
+                        )
+            except Exception as e:
+                log.error(f"Failed to get pod status: {e}")
+            raise
         log.info("Checking if nodes of both the imported clusters are labeled or not")
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["node-label-1"],
-            expected_text="Nodes labeled",
-            timeout=timeout,
-        ), "First gateway node label check did not pass for Submariner"
-        assert self.wait_until_expected_text_is_found(
-            locator=self.page_nav["node-label-2"],
-            expected_text="Nodes labeled",
-            timeout=timeout,
-        ), "Second gateway node label check did not pass for Submariner"
+        try:
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["node-label-1"],
+                expected_text="Nodes labeled",
+                timeout=timeout,
+            ), "First gateway node label check did not pass for Submariner"
+        except AssertionError:
+            log.error("First gateway node label check failed. Checking pod status...")
+            try:
+                cluster_configs = get_non_acm_cluster_config()
+                for cluster in cluster_configs:
+                    with config.RunWithConfigContext(
+                        cluster.MULTICLUSTER["multicluster_index"]
+                    ):
+                        log.info(
+                            f"Getting pods from cluster: {cluster.ENV_DATA['cluster_name']}"
+                        )
+                        pod_status = run_cmd(
+                            f"oc get pods -n {constants.SUBMARINER_OPERATOR_NAMESPACE}"
+                        )
+                        log.error(
+                            f"Pod status in {cluster.ENV_DATA['cluster_name']}:\n{pod_status}"
+                        )
+            except Exception as e:
+                log.error(f"Failed to get pod status: {e}")
+            raise
+        try:
+            assert self.wait_until_expected_text_is_found(
+                locator=self.page_nav["node-label-2"],
+                expected_text="Nodes labeled",
+                timeout=timeout,
+            ), "Second gateway node label check did not pass for Submariner"
+        except AssertionError:
+            log.error("Second gateway node label check failed. Checking pod status...")
+            try:
+                cluster_configs = get_non_acm_cluster_config()
+                for cluster in cluster_configs:
+                    with config.RunWithConfigContext(
+                        cluster.MULTICLUSTER["multicluster_index"]
+                    ):
+                        log.info(
+                            f"Getting pods from cluster: {cluster.ENV_DATA['cluster_name']}"
+                        )
+                        pod_status = run_cmd(
+                            f"oc get pods -n {constants.SUBMARINER_OPERATOR_NAMESPACE}"
+                        )
+                        log.error(
+                            f"Pod status in {cluster.ENV_DATA['cluster_name']}:\n{pod_status}"
+                        )
+            except Exception as e:
+                log.error(f"Failed to get pod status: {e}")
+            raise
         self.take_screenshot()
         log.info("Submariner is healthy, check passed")
 
