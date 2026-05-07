@@ -90,6 +90,17 @@ class TopologyReplica1Config:
     pool_prefix: str = "rbd-zone"
     pg_num: int = 32
 
+    @property
+    def pool_names(self) -> list[str]:
+        return [
+            zone.pool_name or f"{self.pool_prefix}-{zone.zone_name}"
+            for zone in self.zones
+        ]
+
+    @property
+    def zone_names(self) -> list[str]:
+        return [zone.zone_name for zone in self.zones]
+
 
 class ExternalCluster(object):
     """
@@ -780,10 +791,7 @@ class ExternalCluster(object):
         logger.debug(f"Existing pools: {existing_pools}")
 
         created_pools = []
-        for zone in topology_config.zones:
-            pool_name = (
-                zone.pool_name or f"{topology_config.pool_prefix}-{zone.zone_name}"
-            )
+        for zone, pool_name in zip(topology_config.zones, topology_config.pool_names):
             rule_name = f"{zone.zone_name}-rule"
             pg_num = topology_config.pg_num
 
@@ -989,6 +997,128 @@ class ExternalCluster(object):
                 logger.warning(f"Failed to delete CRUSH rule {rule_name}: {err}")
 
         logger.info("Cleanup of CRUSH rules completed")
+
+    def run_topology_exporter_script(
+        self, topology_config: TopologyReplica1Config, additional_params: str = ""
+    ) -> list[dict]:
+        """
+        Run exporter script with topology flags for replica-1 pools.
+
+        Builds topology-specific parameters from the configuration:
+        - --topology-pools (comma-separated pool names)
+        - --topology-failure-domain-label (from constants.ZONE_LABEL)
+        - --topology-failure-domain-values (comma-separated zone names)
+        - --rbd-data-pool-name (first pool in list)
+        - --format json
+
+        Args:
+            topology_config (TopologyReplica1Config): Topology configuration with zones.
+            additional_params (str): Additional parameters to pass to the script.
+
+        Returns:
+            list[dict]: Parsed JSON output from the exporter script.
+
+        Raises:
+            ExternalClusterExporterRunFailed: If script execution fails.
+            ValueError: If topology_config.zones is empty.
+
+        """
+        if not topology_config.zones:
+            raise ValueError("topology_config.zones cannot be empty")
+
+        pool_names = topology_config.pool_names
+        zone_names = topology_config.zone_names
+
+        # Build topology params
+        topology_params = (
+            f"--rbd-data-pool-name {pool_names[0]} "
+            f"--topology-pools {','.join(pool_names)} "
+            f"--topology-failure-domain-label {constants.ZONE_LABEL} "
+            f"--topology-failure-domain-values {','.join(zone_names)} "
+            f"--format json"
+        )
+
+        if additional_params:
+            topology_params = f"{topology_params} {additional_params}"
+
+        logger.info(f"Running topology exporter with params: {topology_params}")
+
+        # Run the exporter script using existing infrastructure
+        out = self.run_exporter_script(params=topology_params)
+
+        # Parse JSON output
+        try:
+            resources = json.loads(out)
+            logger.info(f"Parsed {len(resources)} resources from exporter output")
+            return resources
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse exporter JSON output: {e}")
+            logger.debug(f"Raw output: {out}")
+            raise ExternalClusterExporterRunFailed(
+                f"Failed to parse topology exporter output as JSON: {e}"
+            )
+
+    def apply_topology_export_resources(
+        self, resources: list[dict], namespace: str | None = None
+    ) -> dict[str, list[str]]:
+        """
+        Apply exported topology resources (secrets, configmaps) to the cluster.
+
+        Args:
+            resources (list[dict]): List of resource dicts from exporter script.
+                Each dict has 'name', 'kind', and 'data' keys.
+            namespace (str): Namespace to create resources in.
+                Defaults to cluster_namespace from config.
+
+        Returns:
+            dict[str, list[str]]: Dictionary with keys 'secrets' and 'configmaps',
+                each containing list of created resource names.
+
+        Raises:
+            CommandFailed: If resource creation fails.
+
+        """
+        namespace = namespace or config.ENV_DATA["cluster_namespace"]
+        created = {"secrets": [], "configmaps": []}
+
+        for resource in resources:
+            name = resource.get("name")
+            kind = resource.get("kind")
+            data = resource.get("data", {})
+
+            if kind == "Secret":
+                secret_data = {
+                    "apiVersion": "v1",
+                    "kind": "Secret",
+                    "metadata": {"name": name, "namespace": namespace},
+                    "type": "Opaque",
+                    "stringData": data,
+                }
+                ocp_secret = OCP(kind="Secret", namespace=namespace)
+                ocp_secret.create(resource_data_path=None, body=secret_data)
+                created["secrets"].append(name)
+                logger.info(f"Created Secret: {name}")
+
+            elif kind == "ConfigMap":
+                configmap_data = {
+                    "apiVersion": "v1",
+                    "kind": "ConfigMap",
+                    "metadata": {"name": name, "namespace": namespace},
+                    "data": data,
+                }
+                ocp_cm = OCP(kind="ConfigMap", namespace=namespace)
+                ocp_cm.create(resource_data_path=None, body=configmap_data)
+                created["configmaps"].append(name)
+                logger.info(f"Created ConfigMap: {name}")
+
+            else:
+                logger.debug(f"Skipping resource kind '{kind}': {name}")
+
+        logger.info(
+            f"Applied topology resources - Secrets: {created['secrets']}, "
+            f"ConfigMaps: {created['configmaps']}"
+        )
+        return created
 
 
 def get_exporter_script_from_configmap():
