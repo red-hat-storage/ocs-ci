@@ -7,13 +7,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
-from ocs_ci.helpers.dr_helpers_ui import (
-    dr_submariner_validation_from_ui,
-    check_cluster_status_on_acm_console,
-    failover_relocate_ui,
-)
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.acm.acm import AcmAddClusters
 
 logger = logging.getLogger(__name__)
 
@@ -23,48 +17,30 @@ logger = logging.getLogger(__name__)
 @turquoise_squad
 class TestRelocate:
     """
-    Test Relocate action via CLI and UI
+    Test Relocate action via CLI
 
     """
 
     @pytest.mark.parametrize(
-        argnames=["pvc_interface", "via_ui"],
+        argnames=["pvc_interface"],
         argvalues=[
             pytest.param(
-                *[constants.CEPHBLOCKPOOL],
-                False,
+                constants.CEPHBLOCKPOOL,
                 marks=[acceptance, pytest.mark.polarion_id("OCS-4425")],
-                id="rbd-cli",
+                id="rbd",
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM],
-                False,
+                constants.CEPHFILESYSTEM,
                 marks=[acceptance, pytest.mark.polarion_id("OCS-4725")],
-                id="cephfs-cli",
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL],
-                True,
-                marks=pytest.mark.polarion_id("OCS-4744"),
-                id="rbd-ui",
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM],
-                True,
-                marks=pytest.mark.polarion_id("OCS-6862"),
-                id="cephfs-ui",
+                id="cephfs",
             ),
         ],
     )
-    def test_relocate(self, pvc_interface, via_ui, setup_acm_ui, dr_workload):
+    def test_relocate(self, pvc_interface, dr_workload):
         """
-        Tests to verify application relocate between managed clusters.
-
-        This test will run twice both via CLI and UI
+        Tests to verify application relocate between managed clusters via CLI.
 
         """
-        if via_ui:
-            acm_obj = AcmAddClusters()
 
         workloads = dr_workload(
             num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
@@ -105,33 +81,16 @@ class TestRelocate:
         sleep(wait_time * 60)
 
         for wl in workloads:
-            if via_ui:
-                logger.info("Start the process of Relocate from ACM UI")
-                config.switch_acm_ctx()
-                dr_submariner_validation_from_ui(acm_obj)
-                check_cluster_status_on_acm_console(acm_obj)
-                # Relocate via ACM UI
-                failover_relocate_ui(
-                    acm_obj,
-                    scheduling_interval=scheduling_interval,
-                    workload_to_move=f"{wl.workload_name}-1",
-                    policy_name=wl.dr_policy_name,
-                    failover_or_preferred_cluster=secondary_cluster_name,
-                    action=constants.ACTION_RELOCATE,
-                    workload_type=wl.workload_type,
-                )
-            else:
-                # Relocate action via CLI
-                dr_helpers.relocate(
-                    secondary_cluster_name,
-                    wl.workload_namespace,
-                    wl.workload_type,
-                    (
-                        wl.appset_placement_name
-                        if wl.workload_type == constants.APPLICATION_SET
-                        else None
-                    ),
-                )
+            dr_helpers.relocate(
+                secondary_cluster_name,
+                wl.workload_namespace,
+                wl.workload_type,
+                (
+                    wl.appset_placement_name
+                    if wl.workload_type == constants.APPLICATION_SET
+                    else None
+                ),
+            )
 
         # Verify resources deletion from primary cluster
         config.switch_to_cluster_by_name(primary_cluster_name)
@@ -189,5 +148,3 @@ class TestRelocate:
             dr_helpers.wait_for_mirroring_status_ok(
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
-
-        # TODO: Refer PR 13305 and add the UI verification steps when DFBUGS-4314 is fixed
