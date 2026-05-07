@@ -3163,6 +3163,110 @@ data_foundation_overview = {
         By.XPATH,
     ),
 }
+
+# VirtualMachine Page Locators
+VM_LOCATORS = {
+    # Navigation and main page
+    "virtualization_menu": ("//a[contains(., 'Virtualization')]", By.XPATH),
+    "virtualmachines_tab": ("//a[contains(., 'VirtualMachines')]", By.XPATH),
+    "create_vm_button": ("//button[contains(., 'Create VirtualMachine')]", By.XPATH),
+    "from_instancetype_option": (
+        "//button[contains(., 'From InstanceType')]",
+        By.XPATH,
+    ),
+    # Create VirtualMachine form
+    "bootable_volume_table": (
+        "//table[contains(@aria-label, 'Bootable volumes') or contains(@class, 'pf-v5-c-table')]",
+        By.XPATH,
+    ),
+    "first_bootable_volume_radio": (
+        "//table[contains(@aria-label, 'Bootable volumes')]//tbody//tr[1]//input[@type='radio']",
+        By.XPATH,
+    ),
+    # InstanceType section
+    "instancetype_section": (
+        "//div[contains(@class, 'instancetype-section') or .//h3[contains(., 'InstanceType')]]",
+        By.XPATH,
+    ),
+    "general_purpose_radio": (
+        "//input[@type='radio' and @value='general-purpose']",
+        By.XPATH,
+    ),
+    "general_purpose_label": ("//label[contains(., 'General Purpose')]", By.XPATH),
+    # VirtualMachine details section
+    "vm_details_section": (
+        "//div[contains(@class, 'vm-details') or .//h3[contains(., 'VirtualMachine details')]]",
+        By.XPATH,
+    ),
+    "storageclass_dropdown": (
+        "//select[@id='storageclass-dropdown' or contains(@name, 'storageclass')]",
+        By.XPATH,
+    ),
+    "storageclass_dropdown_button": (
+        "//button[contains(@aria-label, 'storageclass') or contains(@id, 'storageclass')]",
+        By.XPATH,
+    ),
+    # Checkbox and buttons
+    "start_vm_checkbox": (
+        "//input[@type='checkbox' and contains(@name, 'start')]",
+        By.XPATH,
+    ),
+    "start_vm_checkbox_label": (
+        "//label[contains(., 'Start this VirtualMachine after creation')]",
+        By.XPATH,
+    ),
+    "create_vm_submit_button": (
+        "//button[@type='submit' and contains(., 'Create VirtualMachine')]",
+        By.XPATH,
+    ),
+    # VirtualMachine details page
+    "vm_status": (
+        "//span[contains(@class, 'vm-status') or @data-test='vm-status']",
+        By.XPATH,
+    ),
+    "vm_status_provisioning": ("//span[contains(., 'Provisioning')]", By.XPATH),
+    "vm_status_running": ("//span[contains(., 'Running')]", By.XPATH),
+    "vm_status_stopping": ("//span[contains(., 'Stopping')]", By.XPATH),
+    "vm_status_stopped": ("//span[contains(., 'Stopped')]", By.XPATH),
+    "vm_name_field": (
+        "//h1[contains(@class, 'vm-name') or @data-test='vm-name']",
+        By.XPATH,
+    ),
+    # VirtualMachine list page
+    "vm_checkbox_by_name": (
+        "//tr[contains(., '{vm_name}')]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "vm_row_by_name": ("//tr[contains(., '{vm_name}')]", By.XPATH),
+    # Actions menu
+    "actions_button": (
+        "//button[contains(., 'Actions') or @aria-label='Actions']",
+        By.XPATH,
+    ),
+    "actions_control_menu": ("//button[contains(., 'Control')]", By.XPATH),
+    "actions_stop_option": ("//button[contains(., 'Stop')]", By.XPATH),
+    "actions_delete_option": ("//button[contains(., 'Delete')]", By.XPATH),
+    # Delete confirmation modal
+    "delete_modal": ("//div[contains(@class, 'pf-v5-c-modal-box')]", By.XPATH),
+    "delete_grace_period_checkbox": (
+        "//input[@type='checkbox' and contains(@name, 'grace')]",
+        By.XPATH,
+    ),
+    "delete_grace_period_label": (
+        "//label[contains(., 'with grace period')]",
+        By.XPATH,
+    ),
+    "delete_disk_checkbox": (
+        "//input[@type='checkbox' and contains(@name, 'disk')]",
+        By.XPATH,
+    ),
+    "delete_disk_label": ("//label[contains(., 'Delete disk')]", By.XPATH),
+    "delete_confirm_button": (
+        "//button[contains(@class, 'pf-m-danger') and contains(., 'Delete')]",
+        By.XPATH,
+    ),
+}
+
 external_systems = {
     "connect_external_system": (
         "//button[@data-test='configure-external-systems']",
