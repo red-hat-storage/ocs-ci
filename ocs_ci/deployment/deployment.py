@@ -2999,6 +2999,14 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             upgrade, latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest")
         )
     catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+
+    # workaround for https://github.com/red-hat-storage/ocs-ci/issues/15085
+    # Remove extractContent for disconnected deployments to avoid init container issues
+    # in air-gapped environments while keeping memoryTarget to prevent OOM
+    if config.DEPLOYMENT.get("disconnected"):
+        if "grpcPodConfig" in catalog_source_data.get("spec", {}):
+            catalog_source_data["spec"]["grpcPodConfig"].pop("extractContent", None)
+
     managed_ibmcloud = (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
         and config.ENV_DATA["deployment_type"] == "managed"
