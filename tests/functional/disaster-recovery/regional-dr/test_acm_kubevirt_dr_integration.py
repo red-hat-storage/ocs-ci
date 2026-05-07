@@ -77,6 +77,7 @@ class TestACMKubevirtDRIntergration:
 
 
         """
+        dr_helpers.validate_cluster_odf_cli()
 
         md5sum_original = []
         md5sum_failover = []

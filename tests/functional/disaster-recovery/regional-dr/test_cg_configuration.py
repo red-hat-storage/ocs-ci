@@ -29,10 +29,14 @@ class TestCGConfiguration:
         """
         Validate DRPolicy has grouping=true for every storageClass
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         dr_helpers.validate_drpolicy_grouping()
 
     def test_vgrc_count(self):
         """
         Validate VGRC exists on each managed cluster per scheduling interval
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         dr_helpers.validate_vgrc_count()

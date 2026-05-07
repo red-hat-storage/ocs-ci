@@ -45,6 +45,8 @@ class TestFailoverAndRelocateWithDiscoveredAppsMultiNs:
         Tests to verify failover and relocate with discovered applications spread across multiple namespaces.
 
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         rdr_workload = discovered_apps_dr_workload(
             kubeobject=2, multi_ns=True, pvc_interface=pvc_interface
         )

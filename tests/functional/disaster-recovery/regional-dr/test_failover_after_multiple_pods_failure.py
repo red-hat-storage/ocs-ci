@@ -46,6 +46,7 @@ class TestFailoverAfterMultiplePodsFailure:
         primary managed cluster.
 
         """
+        dr_helpers.validate_cluster_odf_cli()
 
         # Deploy Subscription and Appset based application of both RBD and CephFS SC
         rdr_workload = dr_workload(

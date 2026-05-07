@@ -73,6 +73,8 @@ class TestCnvApplicationRDR:
         failover/relocate between managed clusters.
 
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         md5sum_original = []
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
