@@ -56,6 +56,7 @@ class TestRelocate:
             ),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_relocate(self, pvc_interface, via_ui, setup_acm_ui, dr_workload):
         """
         Tests to verify application relocate between managed clusters.
