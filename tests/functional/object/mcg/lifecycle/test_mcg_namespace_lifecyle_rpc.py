@@ -63,6 +63,7 @@ class TestMcgNamespaceLifecycleRpc(E2ETest):
 
     @pytest.mark.polarion_id("OCS-2298")
     @tier2
+    @pytest.mark.zstream_4_16_13
     def test_mcg_namespace_lifecycle_rpc(
         self,
         mcg_obj,
