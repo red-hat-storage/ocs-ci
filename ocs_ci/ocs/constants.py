@@ -1609,6 +1609,7 @@ ALERT_ODF_PERSISTENT_VOLUME_MIRROR_STATUS = "ODFPersistentVolumeMirrorStatus"
 ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
 ALERT_MDSCACHEUSAGEHIGH = "MDSCacheUsageHigh"
 ALERT_MDSCPUUSAGEHIGH = "MDSCPUUsageHigh"
+ALERT_MDSXATTR = "CephXattrSetLatency"
 ALERT_ODFOPERATORNOTUPGRADABLE = "ODFOperatorNotUpgradeable"
 RUNBOOK_URL_ODFOPERATORNOTUPGRADABLE = (
     "https://github.com/openshift/runbooks/blob/master/alerts/"
@@ -3663,6 +3664,9 @@ METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
 # helper script to perform file creation IO on app pod to fill MDS cpu
 FILE_CREATOR_IO = os.path.join(
     TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
+)
+EXTENDED_ATTRIBUTES = os.path.join(
+    TEMPLATE_WORKLOAD_DIR, "helper_scripts/check_xattr.py"
 )
 
 # workaround: marking disks as ssd
