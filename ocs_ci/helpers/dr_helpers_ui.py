@@ -1012,7 +1012,7 @@ def remove_drprotection_for_discovered_vm_via_ui(
                 acm_obj.driver.find_element("tag name", "body").send_keys(Keys.ESCAPE)
                 log.info("Sent Escape key to dismiss modal dialog")
             except Exception as esc_err:
-                log.warning("Failed to send Escape key: %s", esc_err)
+                log.warning(f"Failed to send Escape key: {esc_err}")
 
     vm_locator = format_locator(acm_loc["cnv-vm-name"], vm.vm_name)
     vm_already_visible = acm_obj.check_element_presence(
@@ -1166,7 +1166,7 @@ def navigate_using_fleet_virtualization(acm_obj):
                     )
                     log.info("Sent Escape key to dismiss modal dialog")
                 except Exception as esc_err:
-                    log.warning("Failed to send Escape key: %s", esc_err)
+                    log.warning(f"Failed to send Escape key: {esc_err}")
             acm_obj.page_has_loaded(retries=10, sleep_time=5)
     log.info("From side nav bar, navigate to VirtualMachines page")
     nav_clicked = False
@@ -1192,7 +1192,7 @@ def navigate_using_fleet_virtualization(acm_obj):
             f"{base_url}/k8s/all-clusters"
             "/all-namespaces/kubevirt.io~v1~VirtualMachine"
         )
-        log.info("Navigating to VMs URL: %s", vms_url)
+        log.info(f"Navigating to VMs URL: {vms_url}")
         acm_obj.driver.get(vms_url)
         acm_obj.page_has_loaded(retries=10, sleep_time=5)
     log.info(
