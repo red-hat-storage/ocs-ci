@@ -93,6 +93,7 @@ class TestFailoverAndRelocate:
     @pytest.mark.parametrize(
         argnames=["primary_cluster_down", "pvc_interface", "via_ui"], argvalues=params
     )
+    @pytest.mark.zstream_4_16_13
     def test_failover_and_relocate(
         self,
         primary_cluster_down,
