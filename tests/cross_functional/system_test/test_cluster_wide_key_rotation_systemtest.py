@@ -5,11 +5,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     magenta_squad,
     ignore_leftovers,
-<<<<<<< HEAD
     encryption_at_rest_required,
     jira,
-=======
->>>>>>> e9c7d2322 (NFS export code)
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.keyrotation_helper import (
