@@ -2453,6 +2453,32 @@ validation_4_21 = {
     "issue_table_rows_locator": ("//table//tbody//tr", By.XPATH),
 }
 
+validation_4_22 = {
+    # OCP 4.22 uses PF6 UI. The "Requested capacity" dropdown button changed
+    # from a div with c-select to a button with c-menu-toggle.
+    "req_capacity_dropdown_selected": (
+        "//div[@id='breakdown-card-title']/following-sibling::*//*[contains(@class, 'c-select__toggle-text')] | "
+        "//button[contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')]"
+        "//span[contains(@class, 'c-menu-toggle__text')]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_btn_one": (
+        "//button[contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')] | "
+        "//div[contains(@class, 'select') and contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_list_option": (
+        "//button[contains(@class, 'c-select__menu-item') and contains(text(), '{}')] | "
+        "//button[contains(@class, 'c-menu__item')]"
+        "[.//span[contains(@class, 'menu__item-text') and text()='{}']]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_namespace_input_select": (
+        "//button[@id='{}-link'] | //li[@id='{}-link']",
+        By.XPATH,
+    ),
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": (
@@ -3328,6 +3354,7 @@ locators = {
             **validation_4_18,
             **validation_4_20,
             **validation_4_21,
+            **validation_4_22,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
