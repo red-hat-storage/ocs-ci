@@ -126,6 +126,7 @@ class TestBucketCreationAndDeletion(MCGTest):
             "1-CLI-PVPOOL",
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_bucket_creation_deletion(
         self,
         verify_rgw_restart_count,
@@ -191,6 +192,7 @@ class TestBucketCreationAndDeletion(MCGTest):
             ),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_duplicate_bucket_creation(
         self, mcg_obj, bucket_factory, amount, interface
     ):
