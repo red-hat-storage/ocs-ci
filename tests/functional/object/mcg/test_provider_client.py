@@ -35,6 +35,7 @@ def return_to_original_context():
 @provider_client_ms_platform_required
 @tier1
 @polarion_id("OCS-5415")
+@pytest.mark.zstream_4_16_13
 def test_verify_backingstore_uses_rgw(mcg_obj_session):
     """
     Validates whether default MCG backingstore uses rgw endpoint
@@ -62,6 +63,7 @@ def test_verify_backingstore_uses_rgw(mcg_obj_session):
 @provider_client_ms_platform_required
 @run_on_all_clients_push_missing_configs
 @pytest.mark.polarion_id("OCS-5214")
+@pytest.mark.zstream_4_16_13
 def test_write_file_to_bucket_on_client(
     bucket_factory,
     mcg_obj,
