@@ -79,6 +79,7 @@ class TestNetSplit:
         ],
     )
     @pytest.mark.polarion_id("OCS-5850")
+    @pytest.mark.zstream_4_16_13
     def test_netsplit(
         self,
         setup_logwriter_cephfs_workload_factory,
