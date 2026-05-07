@@ -1028,6 +1028,13 @@ class VSPHEREUPI(VSPHEREBASE):
             Generates manifest files
             """
             logger.info("creating manifest files for the cluster")
+            # Backup install-config.yaml before it gets consumed by openshift-install
+            install_config_src = os.path.join(self.cluster_path, "install-config.yaml")
+            install_config_backup = os.path.join(
+                self.cluster_path, "install-config.yaml.backup"
+            )
+            copyfile(install_config_src, install_config_backup)
+            logger.info(f"Backed up install-config.yaml to {install_config_backup}")
             run_cmd(f"{self.installer} create manifests --dir {self.cluster_path}")
 
             # remove machines and machinesets
@@ -2896,10 +2903,17 @@ def resolve_vm_template():
     rhcos_version = config.ENV_DATA.get("rhcos_version")
 
     if vm_templates:
-        # Default to RHCOS 9 if no version specified
+        # Default RHCOS version based on OCP version if not specified
         if not rhcos_version:
-            rhcos_version = "9"
-            logger.info("No rhcos_version specified, defaulting to RHCOS 9")
+            ocp_version = version.get_semantic_ocp_version_from_config()
+            if ocp_version >= version.VERSION_5_0:
+                rhcos_version = "10"
+                logger.info(
+                    "No rhcos_version specified, defaulting to RHCOS 10 for OCP >= 5.0"
+                )
+            else:
+                rhcos_version = "9"
+                logger.info("No rhcos_version specified, defaulting to RHCOS 9")
 
         # Ensure rhcos_version is a string for dictionary lookup
         rhcos_version = str(rhcos_version)
