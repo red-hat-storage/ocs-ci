@@ -47,6 +47,7 @@ class TestMcgNamespaceS3OperationsRpc(E2ETest):
             pytest.param(constants.AZURE_PLATFORM),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_mcg_namespace_basic_s3_ops_rpc(
         self, mcg_obj, ns_resource_factory, bucket_factory, platform
     ):
@@ -336,6 +337,7 @@ class TestMcgNamespaceS3OperationsRpc(E2ETest):
         argnames=["platform"],
         argvalues=[pytest.param(constants.AWS_PLATFORM)],
     )
+    @pytest.mark.zstream_4_16_13
     def test_mcg_namespace_object_versions_rpc(
         self, mcg_obj, cld_mgr, ns_resource_factory, bucket_factory, platform
     ):
@@ -434,6 +436,7 @@ class TestMcgNamespaceS3OperationsRpc(E2ETest):
             pytest.param(constants.AZURE_PLATFORM),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_mcg_namespace_mpu_rpc(
         self,
         mcg_obj,
