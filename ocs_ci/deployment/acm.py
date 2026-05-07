@@ -99,7 +99,15 @@ class Submariner(object):
 
     def deploy(self):
         # Download subctl binary in any case.
-        self.download_binary()
+        # If the current context cluster is in disconnected environment, try from ACM cluster context
+        if config.DEPLOYMENT.get("disconnected"):
+            with config.RunWithAcmConfigContext():
+                if config.DEPLOYMENT.get("disconnected"):
+                    logger.warning(
+                        "Skip subctl binary download because the cluster is in disconnected environment"
+                    )
+                else:
+                    self.download_binary()
         if self.source == "upstream":
             self.deploy_upstream()
         elif self.source == "downstream":
