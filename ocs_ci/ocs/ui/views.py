@@ -2468,13 +2468,13 @@ validation_4_22 = {
         By.XPATH,
     ),
     "req_capacity_dropdown_list_option": (
-        "//button[contains(@class, 'c-select__menu-item') and contains(text(), '{}')] | "
+        "//button[contains(@class, 'c-select__menu-item') and contains(text(), '{0}')] | "
         "//button[contains(@class, 'c-menu__item')]"
-        "[.//span[contains(@class, 'menu__item-text') and text()='{}']]",
+        "[.//span[contains(@class, 'menu__item-text') and text()='{0}']]",
         By.XPATH,
     ),
     "req_capacity_dropdown_namespace_input_select": (
-        "//button[@id='{}-link'] | //li[@id='{}-link']",
+        "//button[@id='{0}-link'] | //li[@id='{0}-link']",
         By.XPATH,
     ),
 }
