@@ -39,6 +39,7 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2231")
 class TestCephDefaultValuesCheck(ManageTest):
+    @pytest.mark.zstream_4_16_13
     def test_ceph_default_values_check(self):
         """
         This test checks ceph default values taken from OCS 4.3 with the
@@ -201,6 +202,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         config.DEPLOYMENT.get("ceph_debug"),
         reason="Ceph was configured with customized values by ocs-ci so there is point in validating its config values",
     )
+    @pytest.mark.zstream_4_16_13
     def test_validate_ceph_config_values_in_rook_config_override(self):
         """
         Test case for comparing the cluster's config values of
@@ -219,6 +221,7 @@ class TestCephDefaultValuesCheck(ManageTest):
     @skipif_mcg_only
     @runs_on_provider
     @pytest.mark.polarion_id("OCS-2554")
+    @pytest.mark.zstream_4_16_13
     def test_check_mds_cache_memory_limit(self):
         """
         Testcase to check mds cache memory limit post ocs upgrade
@@ -272,6 +275,7 @@ class TestCephDefaultValuesCheck(ManageTest):
     @skipif_managed_service
     @skipif_ocs_version(["<4.9", ">=4.19"])
     @tier2
+    @pytest.mark.zstream_4_16_13
     def test_noobaa_postgres_cm_post_ocs_upgrade(self):
         """
         Important: Postgres configmap is replaced with CNPG in 4.19.
@@ -326,6 +330,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             )
 
     @post_ocs_upgrade
+    @pytest.mark.zstream_4_16_13
     def test_check_number_of_pgs(self, project_factory, pvc_factory, pod_factory):
         """
         Testcase to check number of pgs per pool
