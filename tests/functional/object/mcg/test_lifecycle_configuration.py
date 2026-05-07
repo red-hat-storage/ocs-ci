@@ -72,7 +72,7 @@ class TestLifecycleConfiguration(MCGTest):
             to the noobaa-core statefulset
 
         """
-        new_interval_in_miliseconds = 60 * 1000
+        new_interval_in_miliseconds = 2 * 60 * 1000
         add_env_vars_to_noobaa_core_class(
             [
                 (constants.LIFECYCLE_INTERVAL_PARAM, new_interval_in_miliseconds),
