@@ -59,6 +59,7 @@ class TestMcgNamespaceDisruptionsRpc(E2ETest):
 
     @pytest.mark.polarion_id("OCS-2297")
     @flowtests
+    @pytest.mark.zstream_4_16_13
     def test_mcg_namespace_disruptions_rpc(
         self,
         mcg_obj,
