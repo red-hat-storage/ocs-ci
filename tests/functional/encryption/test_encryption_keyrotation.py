@@ -53,6 +53,7 @@ class TestEncryptionKeyrotation:
 
     @pytest.mark.polarion_id("OCS-5790")
     @tier1
+    @pytest.mark.zstream_4_16_13
     def test_osd_keyrotation(self):
         """
         Test to verify the key rotation of the OSD
@@ -141,6 +142,7 @@ class TestEncryptionKeyrotation:
 
     @pytest.mark.polarion_id("OCS-5791")
     @tier1
+    @pytest.mark.zstream_4_16_13
     def test_noobaa_keyrotation(self, minutes=3):
         """
         Test to verify the keyrotation for noobaa.
@@ -224,6 +226,7 @@ class TestEncryptionKeyrotation:
 
     @pytest.mark.polarion_id("OCS-5963")
     @tier2
+    @pytest.mark.zstream_4_16_13
     def test_bucket_checksum_with_noobaa_keyrotation(
         self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
     ):
@@ -320,6 +323,7 @@ class TestOSDKeyrotationWithKMS:
                 timeout=180,
             )
 
+    @pytest.mark.zstream_4_16_13
     def test_osd_keyrotation_with_kms(self, multi_pvc_factory, pod_factory):
         """Test OSD KEyrotation operation for vault KMS.
 
@@ -411,6 +415,7 @@ class TestNoobaaKeyrotationWithKMS:
 
     @pytest.mark.polarion_id("OCS-5791")
     @tier1
+    @pytest.mark.zstream_4_16_13
     def test_noobaa_keyrotation(self, minutes=3):
         """
         Test to verify the keyrotation for noobaa.
@@ -498,6 +503,7 @@ class TestNoobaaKeyrotationWithKMS:
 
     @pytest.mark.polarion_id("OCS-5963")
     @tier2
+    @pytest.mark.zstream_4_16_13
     def test_bucket_checksum_with_noobaa_keyrotation(
         self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
     ):
