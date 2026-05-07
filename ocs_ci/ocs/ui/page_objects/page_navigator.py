@@ -316,13 +316,19 @@ class PageNavigator(BaseUI):
             enable_screenshot=False,
         )
 
-    def navigate_buckets_page(self):
+    def navigate_buckets_page(self, provider: str = constants.S3_PROVIDER_NOOBAA):
         """
-        Navigate to Object Buckets Page
+        Navigate to Object Buckets Page with optional provider selection.
+
+        Args:
+            provider (str): Storage provider - constants.S3_PROVIDER_NOOBAA (default) or
+                constants.S3_PROVIDER_RGW_INTERNAL.
 
         """
-
-        return self.nav_object_storage_page().nav_buckets_tab()
+        obj_storage = self.nav_object_storage_page()
+        if provider != constants.S3_PROVIDER_NOOBAA:
+            obj_storage.select_storage_provider(provider)
+        return obj_storage.nav_buckets_tab()
 
     def navigate_object_bucket_claims_page(self):
         """
