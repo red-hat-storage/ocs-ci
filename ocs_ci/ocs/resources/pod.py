@@ -2250,6 +2250,53 @@ def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provis
     return leader_pod
 
 
+def get_odf_external_snapshotter_leader(namespace=None):
+    """
+    Get ODF external snapshotter operator leader pod
+
+    Args:
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        Pod: ODF external snapshotter operator leader pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    non_leader_msg = "failed to acquire lease"
+    lease_acq_msg = "successfully acquired lease"
+    lease_renew_msg = "successfully renewed lease"
+    leader_pod = ""
+
+    # Get all ODF external snapshotter pods
+    pods = get_pods_having_label(constants.ODF_EXTERNAL_SNAPSHOTTER, namespace)
+    odf_snapshotter_pods = [Pod(**pod) for pod in pods]
+
+    pods_log = {}
+    for pod in odf_snapshotter_pods:
+        pods_log[pod] = get_pod_logs(
+            pod_name=pod.name,
+            container="odf-external-snapshotter",
+            namespace=namespace,
+        ).split("\n")
+
+    for pod, log_list in pods_log.items():
+        log_list.reverse()
+        for log_msg in log_list:
+            # Check for last occurrence of leader message
+            # This will be the first occurrence in reversed list.
+            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
+                curr_index = log_list.index(log_msg)
+                # Ensure that there is no non leader message logged after
+                # the last occurrence of leader message
+                if not any(non_leader_msg in msg for msg in log_list[:curr_index]):
+                    leader_pod = pod
+                break
+    assert leader_pod, "Couldn't identify ODF external snapshotter leader pod."
+    logger.info(f"ODF external snapshotter leader pod is {leader_pod.name}")
+    return leader_pod
+
+
 def get_operator_pods(operator_label=constants.OPERATOR_LABEL, namespace=None):
     """
     Fetches info about rook-ceph-operator pods in the cluster
