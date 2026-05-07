@@ -178,6 +178,7 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
             "AWS-OC-Cache",
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_mcg_namespace_basic_s3_ops_crd(
         self, mcg_obj, cld_mgr, bucket_factory, bucketclass_dict
     ):
@@ -450,6 +451,7 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
             ),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_mcg_namespace_object_versions_crd(
         self, mcg_obj, cld_mgr, bucket_factory, bucketclass_dict
     ):
@@ -591,6 +593,7 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         ],
         ids=["AWS-OC-Single", "Azure-OC-Single", "RGW-OC-Single", "AWS-OC-Cache"],
     )
+    @pytest.mark.zstream_4_16_13
     def test_mcg_namespace_mpu_crd(
         self,
         mcg_obj,
