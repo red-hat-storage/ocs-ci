@@ -1250,74 +1250,130 @@ def verify_storage_device_class(
         deviceset_name_per_deviceclass = {}
     log.info(f"deviceset name per deviceclass = {deviceset_name_per_deviceclass}")
 
-    # If the user has not provided any specific DeviceClass in the StorageDeviceSet for internal deployment then
-    # tunefastDeviceClass will be true and crushDeviceClass will set to "ssd"
     log.info("Verifying crushDeviceClass for storageClassDeviceSets")
     cephcluster = OCP(
         kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
     )
     cephcluster_data = cephcluster.get()
-    storage_class_device_sets = cephcluster_data["items"][0]["spec"]["storage"][
+    all_device_sets = cephcluster_data["items"][0]["spec"]["storage"][
         "storageClassDeviceSets"
     ]
+    storage_class_device_sets = filter_user_defined_device_sets(all_device_sets)
+    log.info(
+        "storage class device sets: %s",
+        storage_class_device_sets,
+    )
 
-    log.info(f"storage class device sets: {storage_class_device_sets}")
-
+    expected_device_classes = set()
     for each_devise_set in storage_class_device_sets:
         if deviceset_name_per_deviceclass:
             device_set_name = each_devise_set["name"]
-            # Remove the -<number> suffix from device set name to get the original device set name
             orig_device_set_name = re.sub(r"-[0-9]$", "", device_set_name)
-            log.info(f"original device set name = {orig_device_set_name}")
-            # Get the deviceclass per the storagecluster deviceset name if exist or get the provided deviceclass
+            log.info(
+                "original device set name = %s",
+                orig_device_set_name,
+            )
             device_class = deviceset_name_per_deviceclass.get(
                 orig_device_set_name, device_class
             )
+
+        expected_device_classes.add(device_class)
 
         # check tuneFastDeviceClass
         device_set_name = each_devise_set["name"]
         log.info(f"device set name = {device_set_name}")
         if config.ENV_DATA.get("tune_fast_device_class"):
             tune_fast_device_class = each_devise_set["tuneFastDeviceClass"]
-            msg = f"tuneFastDeviceClass for {device_set_name} is set to {tune_fast_device_class}"
+            msg = (
+                f"tuneFastDeviceClass for {device_set_name}"
+                f" is set to {tune_fast_device_class}"
+            )
             log.debug(msg)
-            assert (
-                tune_fast_device_class
-            ), f"{msg} when {constants.DEVICECLASS} is not selected explicitly"
+            assert tune_fast_device_class, (
+                f"{msg} when {constants.DEVICECLASS}" " is not selected explicitly"
+            )
 
         # check crushDeviceClass
         crush_device_class = each_devise_set["volumeClaimTemplates"][0]["metadata"][
             "annotations"
         ]["crushDeviceClass"]
         crush_device_class_msg = (
-            f"crushDeviceClass for {device_set_name} is set to {crush_device_class}"
+            f"crushDeviceClass for {device_set_name}" f" is set to {crush_device_class}"
         )
         log.debug(crush_device_class_msg)
-        assert (
-            crush_device_class == device_class
-        ), f"{crush_device_class_msg} but it should be set to {device_class}"
+        assert crush_device_class == device_class, (
+            f"{crush_device_class_msg} but it should be" f" set to {device_class}"
+        )
 
     sc_device_classes = deviceset_name_per_deviceclass.values()
-    # get deviceClasses for overall storage
     device_classes = cephcluster_data["items"][0]["status"]["storage"]["deviceClasses"]
     log.debug(f"deviceClasses are {device_classes}")
     for each_device_class in device_classes:
         device_class_name = each_device_class["name"]
+        if device_class_name not in expected_device_classes:
+            log.info(
+                "Skipping operator-generated " "device class '%s'",
+                device_class_name,
+            )
+            continue
         if sc_device_classes:
-            assert (
-                device_class_name in sc_device_classes
-            ), f"deviceClass {device_class_name} is not in the expected device classes {sc_device_classes}"
+            assert device_class_name in sc_device_classes, (
+                f"deviceClass {device_class_name} is not in"
+                " the expected device classes"
+                f" {sc_device_classes}"
+            )
         else:
-            assert (
-                device_class_name == device_class
-            ), f"deviceClass is set to {device_class_name} but it should be set to {device_class}"
+            assert device_class_name == device_class, (
+                f"deviceClass is set to {device_class_name}"
+                f" but it should be set to {device_class}"
+            )
+
+
+def get_operator_generated_device_classes():
+    """
+    Get device class names that were auto-generated by the operator
+    (e.g., zone-based device classes) and are not explicitly defined
+    in the StorageCluster.
+
+    Returns:
+        set: Device class names present in the CephCluster but not
+            in the StorageCluster.
+
+    """
+    cephcluster = OCP(
+        kind="CephCluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    cephcluster_data = cephcluster.get()
+    all_ceph_device_classes = {
+        dc["name"]
+        for dc in cephcluster_data["items"][0]
+        .get("status", {})
+        .get("storage", {})
+        .get("deviceClasses", [])
+    }
+
+    sc_device_sets = get_all_device_sets()
+    sc_device_classes = {get_deviceclass_name(d) for d in sc_device_sets}
+
+    operator_classes = all_ceph_device_classes - sc_device_classes
+    if operator_classes:
+        log.info(
+            "Operator-generated device classes: %s",
+            operator_classes,
+        )
+    return operator_classes
 
 
 def verify_device_class_in_osd_tree(
     ct_pod, device_class, check_multiple_deviceclasses=False
 ):
     """
-    Verifies device class in ceph osd tree output
+    Verifies device class in ceph osd tree output.
+
+    Skips OSDs whose device class is operator-generated
+    (e.g., zone-based classes like ``europe-west1-b``) since
+    those are not defined in the StorageCluster.
 
     Args:
         ct_pod (:obj:`OCP`):  Object of the Ceph tools pod
@@ -1331,15 +1387,26 @@ def verify_device_class_in_osd_tree(
         osd_id_per_deviceclass = {}
     log.info(f"osd id per deviceclass = {osd_id_per_deviceclass}")
 
+    operator_device_classes = get_operator_generated_device_classes()
+
     log.info("Verifying DeviceClass in ceph osd tree")
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
     for each in osd_tree["nodes"]:
         if each["type"] == "osd":
             osd_id = each.get("id")
-            current_device_class = osd_id_per_deviceclass.get(osd_id, device_class)
             osd_name = each["name"]
             device_class_in_osd_tree = each["device_class"]
             log.debug(f"DeviceClass for {osd_name} is {device_class_in_osd_tree}")
+
+            if device_class_in_osd_tree in operator_device_classes:
+                log.debug(
+                    "Skipping operator-generated device class " "'%s' for %s",
+                    device_class_in_osd_tree,
+                    osd_name,
+                )
+                continue
+
+            current_device_class = osd_id_per_deviceclass.get(osd_id, device_class)
             assert (
                 device_class_in_osd_tree == current_device_class
             ), f"DeviceClass for {osd_name} is {device_class_in_osd_tree} but expected value is {current_device_class}"
@@ -3601,6 +3668,36 @@ def get_deviceset_name_per_deviceclass():
     """
     device_sets = get_all_device_sets()
     return {d.get("name"): get_deviceclass_name(d) for d in device_sets}
+
+
+def filter_user_defined_device_sets(cephcluster_device_sets):
+    """
+    Filter CephCluster storageClassDeviceSets to only include
+    device sets that correspond to StorageCluster entries,
+    excluding operator-generated ones (e.g., arbiter zone
+    device sets).
+
+    Args:
+        cephcluster_device_sets (list): The storageClassDeviceSets
+            from the CephCluster spec
+
+    Returns:
+        list: Filtered list of device sets
+
+    """
+    sc_device_set_names = {d.get("name") for d in get_all_device_sets()}
+    result = []
+    for device_set in cephcluster_device_sets:
+        name = device_set["name"]
+        orig_name = re.sub(r"-[0-9]$", "", name)
+        if orig_name in sc_device_set_names:
+            result.append(device_set)
+        else:
+            log.info(
+                "Skipping operator-generated device set '%s'",
+                name,
+            )
+    return result
 
 
 def get_deviceset_name_per_count():
