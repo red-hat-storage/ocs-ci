@@ -55,6 +55,7 @@ class TestSequentialFailover:
             ),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_sequential_failover_to_secondary(
         self,
         primary_cluster_down,
