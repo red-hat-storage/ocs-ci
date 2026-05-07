@@ -34,6 +34,7 @@ class TestNoobaaStorageAccount:
     Test azure Noobaa SA
     """
 
+    @pytest.mark.zstream_4_16_13
     def test_tls_version_and_secure_transfer(
         self,
     ):

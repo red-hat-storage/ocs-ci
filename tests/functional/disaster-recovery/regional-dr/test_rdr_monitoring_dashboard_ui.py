@@ -46,6 +46,7 @@ class TestRDRMonitoringDashboardUI:
     """
 
     @pytest.mark.polarion_id("OCS-5013")
+    @pytest.mark.zstream_4_16_13
     def test_rdr_monitoring_dashboard_ui(
         self, setup_acm_ui, dr_workload, nodes_multicluster, node_restart_teardown
     ):
