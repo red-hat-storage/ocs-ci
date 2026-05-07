@@ -5,8 +5,9 @@ import time
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.deployment import acm
+from ocs_ci.ocs.node import get_master_nodes, get_worker_nodes
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
-from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers import helpers
@@ -173,3 +174,55 @@ def scale_deployments(request):
 
     request.addfinalizer(teardown)
     return _scale
+
+
+@pytest.fixture(scope="session")
+def verify_arbiter_deployment_with_zone_failure():
+    """
+    Verify that the cluster is configured for arbiter deployment with proper node count
+    for zone failure testing. This fixture checks:
+    - Arbiter deployment is enabled
+    - Cluster has 3 master nodes
+    - Cluster has either 4 or 6 worker nodes (for 2AZ + arbiter configuration)
+
+    Raises:
+        pytest.skip: If the cluster doesn't meet the requirements
+
+    """
+    # log.info(f'======={get_primary_cluster_config().DEPLOYMENT.get("arbiter_deployment"}')
+
+    if not get_primary_cluster_config().DEPLOYMENT.get("arbiter_deployment", False):
+        pytest.skip(
+            "Test requires arbiter deployment. "
+            "Set 'arbiter_deployment: true' in deployment config."
+        )
+
+    # Check node counts on each managed cluster
+    with config.RunWithPrimaryConfigContext():
+
+        master_nodes = get_master_nodes()
+        worker_nodes = get_worker_nodes(skip_master_nodes=True)
+
+        master_count = len(master_nodes)
+        worker_count = len(worker_nodes)
+
+        log.info(
+            f"Cluster {config.ENV_DATA.get('cluster_name', 'unknown')}: "
+            f"{master_count} masters, {worker_count} workers"
+        )
+
+        if master_count != 3:
+            pytest.skip(
+                f"Test requires exactly 3 master nodes for arbiter deployment. "
+                f"Found {master_count} master nodes."
+            )
+
+        if worker_count not in [4, 6]:
+            pytest.skip(
+                f"Test requires 4 or 6 worker nodes for 2AZ + arbiter zone failure testing. "
+                f"Found {worker_count} worker nodes. "
+                f"Expected configuration: 3 masters + 4 workers (2+1+1) or 3 masters + 6 workers (3+2+1)."
+            )
+
+    config.reset_ctx()
+    log.info("Arbiter deployment with proper node configuration verified successfully")

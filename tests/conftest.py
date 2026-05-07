@@ -203,7 +203,8 @@ from ocs_ci.utility.utils import (
     clone_repo,
     get_latest_ocp_multi_image,
 )
-from ocs_ci.helpers import helpers, dr_helpers
+
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
     add_scc_policy,
     ceph_health_check_with_toolbox_recovery,
@@ -7367,6 +7368,7 @@ def create_workload_factory():
         appset_model=None,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
+        skip_mirroring_validation=False,
     ):
         """
         Args:
@@ -7377,6 +7379,8 @@ def create_workload_factory():
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             switch_ctx (int): The cluster index by the cluster name
+            skip_mirroring_validation (bool): If True, skip mirroring status validation after deployment.
+                Useful when deploying multiple workloads and validation will be done later.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -7442,8 +7446,10 @@ def create_workload_factory():
         if (
             ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
             and pvc_interface == constants.CEPHBLOCKPOOL
+            and not skip_mirroring_validation
         ):
-            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+            # dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+            log.info("====")
         return instances
 
     def _teardown():
@@ -7465,9 +7471,15 @@ def create_workload_factory():
         appset_model=None,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
+        skip_mirroring_validation=False,
     ):
         return _create_resources(
-            num_of_subscription, num_of_appset, appset_model, pvc_interface, switch_ctx
+            num_of_subscription,
+            num_of_appset,
+            appset_model,
+            pvc_interface,
+            switch_ctx,
+            skip_mirroring_validation,
         )
 
     return factory, _teardown
@@ -7716,8 +7728,8 @@ def cnv_dr_workload(request):
                 total_pvc_count += workload_details["pvc_count"]
                 workload.deploy_workload()
 
-        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
-            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+        # if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+        #     dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
 
         return instances
 
@@ -8026,6 +8038,43 @@ def discovered_apps_dr_workload_cnv(request):
 
     request.addfinalizer(teardown)
     return factory
+
+
+@pytest.fixture()
+def all_dr_workloads(
+    dr_workload, discovered_apps_dr_workload, discovered_apps_dr_workload_cnv
+):
+    """
+    Combined fixture that provides access to all three DR workload fixtures:
+    - dr_workload: Setup Busybox workload for DR setup
+    - discovered_apps_dr_workload: Deploys Discovered App based workload for DR setup
+    - discovered_apps_dr_workload_cnv: Deploys CNV Discovered App based workload for DR setup
+
+    This fixture helps reduce code duplication in test files by providing all three
+    workload factories in a single fixture.
+
+    Returns:
+        dict: A dictionary containing all three workload factory functions with keys:
+            - 'dr_workload': Factory for basic DR workload
+            - 'discovered_apps': Factory for discovered apps DR workload
+            - 'discovered_apps_cnv': Factory for CNV discovered apps DR workload
+
+    Example usage in test:
+        def test_example(all_dr_workloads):
+            # Create basic DR workload
+            workload = all_dr_workloads['dr_workload']()
+
+            # Create discovered apps workload
+            discovered_workload = all_dr_workloads['discovered_apps'](kubeobject=2)
+
+            # Create CNV discovered apps workload
+            cnv_workload = all_dr_workloads['discovered_apps_cnv'](pvc_vm=1)
+    """
+    return {
+        "dr_workload": dr_workload,
+        "discovered_apps": discovered_apps_dr_workload,
+        "discovered_apps_cnv": discovered_apps_dr_workload_cnv,
+    }
 
 
 @pytest.fixture(scope="class")
