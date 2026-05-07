@@ -191,6 +191,7 @@ from ocs_ci.utility.utils import (
     get_random_str,
     get_testrun_name,
     load_auth_config,
+    load_config_file,
     ocsci_log_path,
     skipif_ocp_version,
     skipif_ocs_version,
@@ -10491,6 +10492,47 @@ def pytest_sessionstart(session):
 
     prev_ctx = ocsci_config.cur_index
     log.info("Setting up dr workloads running along the session")
+
+    # Check if any DR workload configuration is loaded
+    # Look for common DR workload keys that should exist
+    dr_workload_keys = [
+        "dr_workload_subscription_placement_rbd",
+        "dr_workload_subscription_placement_cephfs",
+        "dr_workload_subscription_rbd",
+        "dr_workload_subscription_cephfs",
+        "dr_workload_appset_rbd",
+        "dr_workload_appset_cephfs",
+    ]
+
+    dr_config_loaded = any(key in ocsci_config.ENV_DATA for key in dr_workload_keys)
+
+    if not dr_config_loaded:
+        log.info(
+            "DR workload configuration not found in ENV_DATA. "
+            "Loading conf/ocsci/dr_workload.yaml on-demand."
+        )
+        dr_workload_config_path = os.path.join(
+            constants.TOP_DIR, "conf", "ocsci", "dr_workload.yaml"
+        )
+        if os.path.exists(dr_workload_config_path):
+            try:
+                load_config_file(dr_workload_config_path)
+                log.info(
+                    f"Successfully loaded DR workload configuration from {dr_workload_config_path}"
+                )
+            except Exception as e:
+                log.warning(
+                    f"Failed to load DR workload configuration from {dr_workload_config_path}: {e}. "
+                    f"Skipping session-based DR workload setup."
+                )
+                return
+        else:
+            log.warning(
+                f"DR workload configuration file not found at {dr_workload_config_path}. "
+                f"Skipping session-based DR workload setup."
+            )
+            return
+
     factory, teardown = create_workload_factory()
     session._dr_workload_teardown = teardown
     try:
