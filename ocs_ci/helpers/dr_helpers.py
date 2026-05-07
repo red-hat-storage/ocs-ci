@@ -2920,3 +2920,207 @@ def validate_protection_label(kind, namespace, protection_name=None):
     logger.info(
         f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
     )
+
+
+
+def validate_s3_bucket_dryrun_metadata(
+    bucket_name,
+    workload_namespace,
+    primary_cluster_name,
+    failover_cluster_name,
+    is_discovered_app=False,
+    placement_name=None,
+):
+    """
+    Validate S3 bucket metadata during dryRun to ensure no data is uploaded from failoverCluster.
+
+    This function checks VRG (VolumeReplicationGroup) metadata in the S3 bucket to verify:
+    1. dryRun field is not present or set to false
+    2. destination-cluster annotation matches primary cluster (not failoverCluster)
+
+    Args:
+        bucket_name (str): Name of the ODF bucket (e.g., odrbucket-*)
+        workload_namespace (str): Namespace of the workload
+        primary_cluster_name (str): Name of the primary cluster
+        failover_cluster_name (str): Name of the failover cluster
+        is_discovered_app (bool): True if workload is discovered app, False for appset
+        placement_name (str): Placement name for discovered apps
+
+    Raises:
+        AssertionError: If dryRun metadata validation fails
+
+    Returns:
+        bool: True if validation passes
+
+    """
+    from ocs_ci.ocs.resources.mcg import MCG
+    import zipfile
+    import io
+
+    logger.info(
+        f"Validating S3 bucket metadata for dryRun - bucket: {bucket_name}, "
+        f"namespace: {workload_namespace}"
+    )
+
+    # Initialize MCG object to access S3
+    mcg_obj = MCG()
+
+    # Construct the expected S3 path based on workload type
+    if is_discovered_app:
+        # Path: odrbucket-*/openshift-dr-ops/workload-ns/v1alpha1.VolumeReplicationGroup/
+        s3_prefix = f"openshift-dr-ops/{workload_namespace}/v1alpha1.VolumeReplicationGroup/"
+    else:
+        # Path: odrbucket-*/workload-ns/placement-drpc/v1alpha1.VolumeReplicationGroup/
+        s3_prefix = f"{workload_namespace}/{placement_name}/v1alpha1.VolumeReplicationGroup/"
+
+    logger.info(f"Checking S3 path: {s3_prefix}")
+
+    try:
+        # List objects in the bucket with the specified prefix
+        objects = mcg_obj.s3_list_all_objects_in_bucket(bucket_name)
+        vrg_objects = [obj for obj in objects if obj.key.startswith(s3_prefix)]
+
+        if not vrg_objects:
+            logger.warning(f"No VRG objects found at path: {s3_prefix}")
+            return True
+
+        # Check each VRG zip file
+        for obj in vrg_objects:
+            if obj.key.endswith(".zip"):
+                logger.info(f"Validating VRG metadata in: {obj.key}")
+
+                # Download the zip file
+                zip_data = io.BytesIO()
+                mcg_obj.s3_resource.Object(bucket_name, obj.key).download_fileobj(
+                    zip_data
+                )
+                zip_data.seek(0)
+
+                # Extract and parse metadata
+                with zipfile.ZipFile(zip_data, "r") as zip_ref:
+                    # Look for VRG metadata file
+                    for file_name in zip_ref.namelist():
+                        if "volumereplicationgroup" in file_name.lower():
+                            with zip_ref.open(file_name) as f:
+                                vrg_data = json.load(f)
+
+                                # Validate dryRun field
+                                spec = vrg_data.get("spec", {})
+                                dry_run_value = spec.get("dryRun")
+                                assert dry_run_value is None or dry_run_value is False, (
+                                    f"VRG has dryRun set to {dry_run_value}, "
+                                    f"expected None or False"
+                                )
+                                logger.info(
+                                    f"✓ dryRun field validation passed: {dry_run_value}"
+                                )
+
+                                # Validate destination-cluster annotation
+                                annotations = vrg_data.get("metadata", {}).get(
+                                    "annotations", {}
+                                )
+                                dest_cluster = annotations.get(
+                                    "drplacementcontrol.ramendr.openshift.io/destination-cluster"
+                                )
+                                assert dest_cluster == primary_cluster_name, (
+                                    f"destination-cluster is {dest_cluster}, "
+                                    f"expected {primary_cluster_name}"
+                                )
+                                logger.info(
+                                    f"✓ destination-cluster annotation validated: {dest_cluster}"
+                                )
+
+        logger.info("✓ S3 bucket metadata validation passed")
+        return True
+
+    except Exception as e:
+        logger.error(f"S3 bucket metadata validation failed: {e}")
+        raise
+
+
+def validate_velero_backup_dryrun(
+    bucket_name,
+    workload_namespace,
+    primary_cluster_name,
+    failover_cluster_name,
+    placement_name,
+):
+    """
+    Validate Velero backup paths during dryRun for discovered apps.
+
+    This function ensures that Velero backups exist only for the primary cluster
+    and NOT for the failoverCluster during dryRun operation.
+
+    Args:
+        bucket_name (str): Name of the ODF bucket (e.g., odrbucket-*)
+        workload_namespace (str): Namespace of the workload
+        primary_cluster_name (str): Name of the primary cluster
+        failover_cluster_name (str): Name of the failover cluster
+        placement_name (str): Placement name for discovered apps
+
+    Raises:
+        AssertionError: If Velero backup validation fails
+
+    Returns:
+        bool: True if validation passes
+
+    """
+    from ocs_ci.ocs.resources.mcg import MCG
+
+    logger.info(
+        f"Validating Velero backups for dryRun - bucket: {bucket_name}, "
+        f"namespace: {workload_namespace}"
+    )
+
+    # Initialize MCG object to access S3
+    mcg_obj = MCG()
+
+    # Construct the Velero backup path
+    # Path: odrbucket-*/openshift-dr-ops/workload-ns/kube-objects/1/velero/backups/
+    velero_prefix = (
+        f"openshift-dr-ops/{workload_namespace}/kube-objects/1/velero/backups/"
+    )
+
+    logger.info(f"Checking Velero backup path: {velero_prefix}")
+
+    try:
+        # List objects in the bucket with the specified prefix
+        objects = mcg_obj.s3_list_all_objects_in_bucket(bucket_name)
+        velero_objects = [obj for obj in objects if obj.key.startswith(velero_prefix)]
+
+        if not velero_objects:
+            logger.warning(f"No Velero backup objects found at path: {velero_prefix}")
+            return True
+
+        # Check that backup paths contain primary cluster name, not failoverCluster name
+        primary_cluster_backups = []
+        failover_cluster_backups = []
+
+        for obj in velero_objects:
+            if primary_cluster_name in obj.key:
+                primary_cluster_backups.append(obj.key)
+            if failover_cluster_name in obj.key:
+                failover_cluster_backups.append(obj.key)
+
+        # Validate: should have backups from primary, NOT from failoverCluster
+        assert len(primary_cluster_backups) > 0, (
+            f"No Velero backups found for primary cluster {primary_cluster_name}"
+        )
+        logger.info(
+            f"✓ Found {len(primary_cluster_backups)} Velero backups from primary cluster"
+        )
+
+        assert len(failover_cluster_backups) == 0, (
+            f"Found {len(failover_cluster_backups)} Velero backups from failoverCluster "
+            f"{failover_cluster_name}, expected 0. Backups: {failover_cluster_backups}"
+        )
+        logger.info(
+            f"✓ Confirmed no Velero backups from failoverCluster {failover_cluster_name}"
+        )
+
+        logger.info("✓ Velero backup validation passed")
+        return True
+
+    except Exception as e:
+        logger.error(f"Velero backup validation failed: {e}")
+        raise
