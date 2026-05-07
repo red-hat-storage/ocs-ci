@@ -1940,7 +1940,7 @@ validation = {
         By.CSS_SELECTOR,
     ),
     "input_value_validator_icon": (
-        "//button[@aria-label='Validation']/child::*[contains(@class, 'c-icon')]",
+        "//button[@aria-label='Validation']",
         By.XPATH,
     ),
     "input_validation_popup_container": (

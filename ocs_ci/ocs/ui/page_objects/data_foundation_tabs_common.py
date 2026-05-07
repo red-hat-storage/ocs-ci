@@ -142,7 +142,11 @@ class CreateResourceForm(PageNavigator):
         Returns:
             List[str]: A list of rule strings (either names only or full texts depending on strip_status).
         """
-        self.do_click(self.validation_loc["input_value_validator_icon"])
+        # In PF6 the popup is toggled (added/removed from DOM) by the button.
+        # Only click to open if the popup is not already present in the DOM.
+        popup_locator = self.validation_loc["input_validation_popup_container"]
+        if not self.driver.find_elements(popup_locator[0], popup_locator[1]):
+            self.do_click(self.validation_loc["input_value_validator_icon"])
         # wait async function to load all rules in popup
         time.sleep(0.5)
         container = WebDriverWait(self.driver, 15).until(
