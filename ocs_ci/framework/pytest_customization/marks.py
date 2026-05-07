@@ -51,7 +51,7 @@ from ocs_ci.utility.utils import load_auth_config
 from ocs_ci.deployment.hub_spoke import hypershift_cluster_factory
 from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
 from ocs_ci.ocs.node import check_cluster_resources
-
+from ocs_ci.helpers.helpers import is_scale_connected
 
 # tier marks
 
@@ -902,3 +902,10 @@ def skipif_insufficient_resources(ram_gb=65, cpu_cores=6):
         not check_cluster_resources(ram_gb=ram_gb, cpu_cores=cpu_cores),
         reason=f"Cluster hardware requirements not met: Need {ram_gb}GB RAM and {cpu_cores} Cores.",
     )
+
+
+# Define the marker
+skipif_scale_not_connected = pytest.mark.skipif(
+    not is_scale_connected(),
+    reason="IBM Spectrum Scale is not connected or RemoteCluster is not Ready",
+)
