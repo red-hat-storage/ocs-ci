@@ -1,4 +1,6 @@
 import logging
+import tempfile
+import yaml
 from subprocess import CompletedProcess
 
 import pytest
@@ -10,8 +12,10 @@ from ocs_ci.framework.testlib import (
     tier2,
     green_squad,
 )
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
+from ocs_ci.utility.templating import dump_data_to_temp_yaml
+from ocs_ci.utility.utils import run_cmd
 
 from ocs_ci.framework.testlib import ignore_leftovers
 
@@ -83,8 +87,11 @@ class TestSubvolumesCommand(ManageTest):
         subvolumes = []
         subvolumes_list = output.strip().split("\n")[1:]
         for item in subvolumes_list:
-            fs, sv, svg, status = item.split(" ")
-            subvolumes.append((fs, sv, svg, status))
+            # Split by whitespace and filter out empty strings
+            parts = [part for part in item.split() if part]
+            if len(parts) >= 4:
+                fs, sv, svg, status = parts[0], parts[1], parts[2], parts[3]
+                subvolumes.append((fs, sv, svg, status))
         return subvolumes
 
     @tier2
@@ -245,3 +252,117 @@ class TestSubvolumesCommand(ManageTest):
         output = self.odf_cli_runner.run_command("subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
         assert len(stale_volumes) == 0  # No stale volumes available
+
+    @skipif_ocs_version("<4.17")
+    @pytest.mark.polarion_id("OCS-6196")
+    @tier2
+    def test_pv_backup_restore_with_stale_volume_check(
+        self, storageclass_factory, pvc_factory
+    ):
+        """
+        Test to verify PV backup/restore workflow and stale volume detection.
+
+        Steps:
+        1. Create a PVC with cephfs storageclass and set the deletionPolicy to retain.
+        2. Back up the PV yaml for the above created PVC. Delete the PV and remove its finalizer.
+        3. Edit the PV backup file by removing all the volumeAttributes and apply this yaml file.
+        4. Verify that the PV is bound.
+        5. Run the odf-cli command to list the stale subvolumes.
+        6. The volume attached to the above PVC would be labelled as in-use by the cli tool.
+        """
+
+        logger.info("Creating PVC with CephFS storageclass and retain deletionPolicy")
+        cephfs_sc_obj = storageclass_factory(
+            interface=constants.CEPHFILESYSTEM,
+            reclaim_policy=constants.RECLAIM_POLICY_RETAIN,
+        )
+        pvc_obj = pvc_factory(
+            storageclass=cephfs_sc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            size=3,
+            access_mode=constants.ACCESS_MODE_RWX,
+            status=constants.STATUS_BOUND,
+        )
+
+        # Get initial subvolume list
+        output = self.odf_cli_runner.run_command("subvolume ls")
+        initial_subvolume_list = self.parse_subvolume_ls_output(output)
+        logger.info(f"Initial subvolume list: {initial_subvolume_list}")
+
+        # Backup PV yaml, delete PV and remove finalizer
+        logger.info("Backing up PV yaml")
+        pv_name = pvc_obj.get().get("spec").get("volumeName")
+        backup_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="pv_backup_", suffix=".yaml", delete=False
+        )
+        backup_file_path = backup_file.name
+        backup_get = pvc_obj.backed_pv_obj.get()
+        dump_data_to_temp_yaml(backup_get, backup_file_path)
+        logger.info(f"PV backup file created: {backup_file_path}")
+
+        logger.info(f"Deleting PV: {pv_name}")
+        ocp_pv = ocp.OCP(kind=constants.PV)
+        ocp_pv.delete(resource_name=pv_name, wait=False)
+        ocp_pv.patch(
+            resource_name=pv_name,
+            params='{"metadata": {"finalizers":null}}',
+            format_type="merge",
+        )
+        ocp_pv.wait_for_delete(resource_name=pv_name)
+        logger.info(f"PV {pv_name} deleted successfully")
+
+        logger.info("Editing PV backup file to remove volumeAttributes")
+        with open(backup_file_path, "r") as backup:
+            backup_data = yaml.safe_load(backup)
+
+        # Remove volumeAttributes and metadata fields for re-creation
+        backup_data.get("spec", {}).get("csi", {}).pop("volumeAttributes", None)
+        metadata = backup_data.get("metadata", {})
+        for field in ["resourceVersion", "uid", "creationTimestamp"]:
+            metadata.pop(field, None)
+
+        # Write modified backup
+        with open(backup_file_path, "w") as backup:
+            yaml.dump(backup_data, backup)
+        logger.info(f"PV backup file updated: {backup_file_path}")
+
+        # Apply the modified PV yaml and Verify PV is bound
+        logger.info("Applying modified PV yaml")
+        run_cmd(f"oc apply -f {backup_file_path}")
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=120)
+        logger.info(f"PV {pv_name} recreated and bound successfully")
+
+        logger.info("Checking stale subvolumes with odf-cli")
+        output = self.odf_cli_runner.run_command("subvolume ls")
+        current_subvolume_list = self.parse_subvolume_ls_output(output)
+        logger.info(f"Current subvolume list: {current_subvolume_list}")
+
+        # Find the subvolume for PVC
+        new_subvolumes = list(set(current_subvolume_list) - set(initial_subvolume_list))
+        pvc_subvolume = None
+        if new_subvolumes:
+            pvc_subvolume = new_subvolumes[0]
+            logger.info(f"PVC subvolume found: {pvc_subvolume}")
+            # Verify the volume is marked as "in-use" (not stale)
+            assert (
+                pvc_subvolume[3] == "in-use"
+            ), f"Expected volume status to be 'in-use', but got '{pvc_subvolume[3]}'"
+            logger.info("Volume correctly marked as 'in-use' by odf-cli tool")
+        else:
+            logger.error("No new subvolumes found, PVC might be using existing volume")
+
+        # Check stale volumes - should not include created PVC's volume
+        output = self.odf_cli_runner.run_command("subvolume ls --stale")
+        stale_volumes = self.parse_subvolume_ls_output(output)
+        logger.info(f"Stale volumes: {stale_volumes}")
+        if pvc_subvolume is not None:
+            pvc_subvolume_identifier = (
+                pvc_subvolume[0],
+                pvc_subvolume[1],
+                pvc_subvolume[2],
+            )
+            for stale_vol in stale_volumes:
+                stale_identifier = (stale_vol[0], stale_vol[1], stale_vol[2])
+                assert (
+                    stale_identifier != pvc_subvolume_identifier
+                ), f"PVC volume should not be in stale list: {pvc_subvolume}"
