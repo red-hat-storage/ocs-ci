@@ -3244,6 +3244,14 @@ external_systems = {
         "//td/a[contains(text(), '{}')]",
         By.XPATH,
     ),
+    "filesystem_status": (
+        "//td/a[contains(text(), '{}')]/../following-sibling::td",
+        By.XPATH,
+    ),
+    "fs_alert": (
+        "//div[contains(@class, 'alert__description')]",
+        By.XPATH,
+    ),
     "delete_filesystem": (
         "Delete",
         By.ID,
@@ -3263,6 +3271,10 @@ external_systems = {
     "scale_connection_health": (
         "div[data-item-id='Connection-health-item'] title",
         By.CSS_SELECTOR,
+    ),
+    "scale_version": (
+        "//dt/*[text()='Version']/../following-sibling::dd",
+        By.XPATH,
     ),
     "breadcrumb-link": (
         "a[data-test-id='breadcrumb-link-0']",
