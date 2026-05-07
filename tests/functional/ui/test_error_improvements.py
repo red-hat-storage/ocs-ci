@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_disconnected_cluster,
     external_mode_required,
     jira,
+    ignore_leftovers,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
@@ -116,6 +117,7 @@ class TestErrorMessageImprovements(ManageTest):
         namespace_store_tab.check_error_messages()
 
     @polarion_id("OCS-4873")
+    @ignore_leftovers
     @skipif_hci_provider_or_client
     def test_blocking_pool_creation_rules(self, cephblockpool_factory_ui_class):
         """
