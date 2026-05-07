@@ -60,6 +60,7 @@ class TestFailover:
     @pytest.mark.parametrize(
         argnames=["primary_cluster_down", "pvc_interface"], argvalues=params
     )
+    @pytest.mark.zstream_4_16_13
     def test_failover(
         self,
         primary_cluster_down,
