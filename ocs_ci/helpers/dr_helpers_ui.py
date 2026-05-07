@@ -11,7 +11,10 @@ from ocs_ci.utility.version import compare_versions
 from selenium.common.exceptions import (
     NoSuchElementException,
     StaleElementReferenceException,
+    TimeoutException as SeleniumTimeoutException,
 )
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -821,53 +824,77 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
 
     """
     acm_loc = locators_for_current_ocp_version()["acm_page"]
-    if acm_obj.check_element_presence(
-        (
-            acm_loc["modal_dialog_close_button"][1],
-            acm_loc["modal_dialog_close_button"][0],
-        ),
-        timeout=10,
-    ):
-        log.info("Modal dialog box found, closing it..")
-        acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
-    log.info("Look for 'All Clusters'")
-    all_clusters = acm_obj.wait_until_expected_text_is_found(
-        acm_loc["all-clusters"], expected_text="All clusters"
-    )
-    if all_clusters:
-        log.info("All Clusters option found")
-    else:
-        log.warning("'All Clusters' not found on the VMs page")
-        return False
     for vm in vms:
-        log.info("Select the cluster where VM workload is running")
-        acm_obj.do_click(
-            format_locator(acm_loc["managed-cluster-name"], managed_cluster_name)
+        vm_locator = format_locator(acm_loc["cnv-vm-name"], vm.vm_name)
+        # The visibility shortcut (skip tree navigation when the VM is already
+        # on-screen) is safe for enrollment calls because only one instance of
+        # the VM exists at that point. For status-check-only calls
+        # (assign_policy=False) we must navigate through the cluster tree to
+        # guarantee we reach the correct cluster's VM; otherwise the XPath may
+        # match a stale ACM-cached entry from a different cluster (e.g. the
+        # old primary after failover cleanup) and produce a non-Running status.
+        vm_already_visible = assign_policy and acm_obj.check_element_presence(
+            (vm_locator[1], vm_locator[0]), timeout=10
         )
-        log.info(f"Managed cluster {managed_cluster_name} found ")
-        log.info("Select the namespace where VM workload is running")
-        acm_obj.do_click(
-            format_locator(acm_loc["cnv-workload-namespace"], namespace),
-            enable_screenshot=True,
-        )
-        log.info(f"Namespace {namespace} found on cluster {managed_cluster_name}")
-        log.info("Click on the VM")
-        acm_obj.do_click(
-            format_locator(acm_loc["cnv-vm-name"], vm.vm_name), enable_screenshot=True
-        )
-        log.info("Check the status of the VM")
-        vm_current_status = acm_obj.get_element_text(acm_loc["vm-status"])
-        if vm_current_status != "Running":
-            wait_for_status = acm_obj.wait_until_expected_text_is_found(
-                acm_loc["vm-status"], expected_text="Running", timeout=300
-            )
-            assert (
-                wait_for_status
-            ), f"Expected VM status is 'Running', but got '{vm_current_status}'"
-        else:
+        if vm_already_visible:
             log.info(
-                f"VM status is running on the managed cluster {managed_cluster_name}"
+                f"VM {vm.vm_name} already visible on the page, "
+                "skipping tree navigation"
             )
+        else:
+            if acm_obj.check_element_presence(
+                (
+                    acm_loc["modal_dialog_close_button"][1],
+                    acm_loc["modal_dialog_close_button"][0],
+                ),
+                timeout=10,
+            ):
+                log.info("Modal dialog box found, closing it..")
+                acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+            log.info("Look for 'All Clusters'")
+            all_clusters = acm_obj.wait_until_expected_text_is_found(
+                acm_loc["all-clusters"], expected_text="All clusters"
+            )
+            if all_clusters:
+                log.info("All Clusters option found")
+            else:
+                log.warning("'All Clusters' not found on the VMs page")
+                return False
+            ns_locator = format_locator(acm_loc["cnv-workload-namespace"], namespace)
+            # Gate this shortcut on assign_policy for the same reason as
+            # vm_already_visible: when assign_policy=False (status-check) we
+            # must navigate the full cluster tree to guarantee we land on the
+            # correct cluster's namespace (e.g. secondary after failover), not
+            # a stale tree state left over from the previous iteration.
+            ns_already_visible = assign_policy and acm_obj.check_element_presence(
+                (ns_locator[1], ns_locator[0]), timeout=10
+            )
+            if not ns_already_visible:
+                log.info("Select the cluster where VM workload is running")
+                acm_obj.do_click(
+                    format_locator(
+                        acm_loc["managed-cluster-name"],
+                        managed_cluster_name,
+                    )
+                )
+                log.info(f"Managed cluster {managed_cluster_name} found ")
+            else:
+                log.info("Namespace already visible, " "skipping managed cluster click")
+            log.info("Select the namespace where VM workload is running")
+            acm_obj.do_click(ns_locator, enable_screenshot=True)
+            log.info(
+                f"Namespace {namespace} found on " f"cluster {managed_cluster_name}"
+            )
+        log.info("Click on the VM")
+        acm_obj.do_click(vm_locator, enable_screenshot=True)
+        log.info("Check the status of the VM")
+        vm_running = acm_obj.wait_until_expected_text_is_found(
+            acm_loc["vm-status"], expected_text="Running", timeout=300
+        )
+        assert vm_running, (
+            "Expected VM status is 'Running' but the status element "
+            "was not found or did not reach Running state"
+        )
         if assign_policy:
             log.info("Click on the Actions button")
             acm_obj.do_click(acm_loc["vm-actions"], enable_screenshot=True)
@@ -884,12 +911,29 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
                 log.info("Protecting VM with Shared Protection type")
                 acm_obj.do_click(acm_loc["select-shared"], enable_screenshot=True)
                 radio_buttons = acm_obj.get_elements(acm_loc["select-drpc"])
-                # Assert that exactly one element is found
                 assert (
-                    len(radio_buttons) == 1
-                ), f"Expected 1 radio button but found {len(radio_buttons)}"
-                log.info("Expected 1 radio button found, select existing DRPC")
-                acm_obj.do_click(acm_loc["select-drpc"], enable_screenshot=True)
+                    len(radio_buttons) >= 1
+                ), f"Expected at least 1 radio button but found {len(radio_buttons)}"
+                if len(radio_buttons) == 1:
+                    log.info("Only 1 radio button found, selecting existing DRPC")
+                    acm_obj.do_click(acm_loc["select-drpc"], enable_screenshot=True)
+                else:
+                    log.info(
+                        "%d radio buttons found, selecting DRPC matching "
+                        "protection name '%s'",
+                        len(radio_buttons),
+                        protection_name,
+                    )
+                    # The radio button value is the DRPC resource name.
+                    # Standalone enrollment creates a DRPC named
+                    # '{protection_name}-drpc'; try both forms.
+                    drpc_radio_locator = (
+                        f"//input[@name='radioGroup']"
+                        f"[@value='{protection_name}' or "
+                        f"@value='{protection_name}-drpc']",
+                        By.XPATH,
+                    )
+                    acm_obj.do_click(drpc_radio_locator, enable_screenshot=True)
             log.info("Click next")
             acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
             if standalone:
@@ -915,10 +959,146 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
             conf_msg = acm_obj.get_element_text(acm_loc["conf-msg"])
             log.info(f"Confirmation message is {conf_msg}")
             acm_obj.take_screenshot()
-            expected_conf_msg = conf_msg.split("\n", 1)[1].strip()
-            assert expected_conf_msg == "New policy assigned to application"
+            assert (
+                "New policy assigned to application" in conf_msg
+            ), f"Unexpected confirmation message: '{conf_msg}'"
             log.info("Close page")
             acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
+    return True
+
+
+def remove_drprotection_for_discovered_vm_via_ui(
+    acm_obj,
+    vm,
+    managed_cluster_name,
+    namespace,
+):
+    """
+    Remove DR protection from a single discovered VM via the ACM Fleet Virtualization UI.
+
+    Works for both Standalone and Shared protection types.
+    Standalone removes the VM's protection and its associated DRPC entirely.
+    Shared removes only this VM from its shared DRPC group; the DRPC and
+    other VMs enrolled in the same group remain protected.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        vm (object): The VM workload object whose DR protection should be removed
+        managed_cluster_name (str): Name of the managed cluster where the VM runs
+        namespace (str): Namespace of the VM workload
+
+    Returns:
+        True if the removal completed successfully
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+
+    if acm_obj.check_element_presence(
+        (
+            acm_loc["modal_dialog_close_button"][1],
+            acm_loc["modal_dialog_close_button"][0],
+        ),
+        timeout=10,
+    ):
+        log.info("Modal dialog box found, closing it..")
+        try:
+            acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+        except SeleniumTimeoutException:
+            log.warning(
+                "Modal dialog close button not clickable, "
+                "sending Escape key to dismiss the dialog"
+            )
+            try:
+                acm_obj.driver.find_element("tag name", "body").send_keys(Keys.ESCAPE)
+                log.info("Sent Escape key to dismiss modal dialog")
+            except Exception as esc_err:
+                log.warning(f"Failed to send Escape key: {esc_err}")
+
+    vm_locator = format_locator(acm_loc["cnv-vm-name"], vm.vm_name)
+    vm_already_visible = acm_obj.check_element_presence(
+        (vm_locator[1], vm_locator[0]), timeout=10
+    )
+    if vm_already_visible:
+        log.info(
+            f"VM {vm.vm_name} already visible on the page, " "skipping tree navigation"
+        )
+    else:
+        log.info("Look for 'All Clusters'")
+        all_clusters = acm_obj.wait_until_expected_text_is_found(
+            acm_loc["all-clusters"], expected_text="All clusters"
+        )
+        assert all_clusters, "'All Clusters' not found on the VMs page"
+
+        ns_locator = format_locator(acm_loc["cnv-workload-namespace"], namespace)
+        ns_already_visible = acm_obj.check_element_presence(
+            (ns_locator[1], ns_locator[0]), timeout=10
+        )
+        if not ns_already_visible:
+            log.info(f"Select cluster '{managed_cluster_name}'")
+            acm_obj.do_click(
+                format_locator(acm_loc["managed-cluster-name"], managed_cluster_name)
+            )
+        else:
+            log.info("Namespace already visible, skipping managed cluster click")
+        log.info(f"Select namespace '{namespace}'")
+        acm_obj.do_click(
+            format_locator(acm_loc["cnv-workload-namespace"], namespace),
+            enable_screenshot=True,
+        )
+        # Guard: the namespace sidebar button occasionally triggers a navigation to
+        # the ACM Search page instead of filtering the Fleet Virtualization VM list.
+        # Detect this by checking for the Fleet Virtualization nav and re-navigate
+        # if we've been taken to the wrong page.
+        fleet_nav_present = acm_obj.check_element_presence(
+            (
+                By.XPATH,
+                "//nav[@data-test-id="
+                "'fleet-virtualization-perspective-perspective-nav']",
+            ),
+            timeout=5,
+        )
+        if not fleet_nav_present:
+            log.warning(
+                "Namespace button click navigated away from Fleet "
+                "Virtualization page. Re-navigating."
+            )
+            navigate_using_fleet_virtualization(acm_obj)
+    log.info(f"Click on VM '{vm.vm_name}'")
+    acm_obj.do_click(
+        vm_locator,
+        enable_screenshot=True,
+    )
+
+    log.info("Click Actions -> Manage disaster recovery")
+    acm_obj.do_click(acm_loc["vm-actions"], enable_screenshot=True)
+    acm_obj.do_click(acm_loc["manage-dr"], enable_screenshot=True)
+
+    log.info("Click 'Remove protection'")
+    acm_obj.do_click(acm_loc["remove-vm-protection"], enable_screenshot=True)
+
+    log.info("Confirm removal")
+    acm_obj.do_click(acm_loc["confirm-remove-protection"], enable_screenshot=True)
+
+    log.info("Verify removal confirmation message")
+    removal_confirmed = acm_obj.wait_until_expected_text_is_found(
+        acm_loc["remove-protection-conf-msg"],
+        expected_text="removed",
+        timeout=60,
+    )
+    if not removal_confirmed:
+        log.warning(
+            "Protection removal confirmation message not found on UI. "
+            "Will rely on backend DRPC verification."
+        )
+        acm_obj.take_screenshot()
+
+    log.info("Close the dialog")
+    acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
+
+    log.info(
+        f"DR protection successfully removed from VM '{vm.vm_name}' "
+        f"in namespace '{namespace}'"
+    )
     return True
 
 
@@ -943,9 +1123,27 @@ def navigate_using_fleet_virtualization(acm_obj):
     acm_version_str = ".".join(get_running_acm_version().split(".")[:2])
     acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info("Navigate to VMs console using Fleet Virtulization dropdown")
-    acm_obj.do_click(acm_loc["switch-perspective"])
-    acm_obj.do_click(acm_loc["fleet-virtual"])
     acm_obj.page_has_loaded(retries=10, sleep_time=5)
+    # Check for the Fleet Virtualization perspective-specific nav container.
+    # Using the nav data-test-id avoids false positives from the AI locator
+    # fallback, which can match the Clusters nav link as the VMs nav item.
+    fleet_virt_nav_visible = acm_obj.check_element_presence(
+        (
+            By.XPATH,
+            "//nav[@data-test-id="
+            "'fleet-virtualization-perspective-perspective-nav']",
+        ),
+        timeout=5,
+    )
+    if fleet_virt_nav_visible:
+        log.info(
+            "Already in Fleet Virtualization with sidebar visible, "
+            "skipping perspective switch"
+        )
+    else:
+        acm_obj.do_click(acm_loc["switch-perspective"])
+        acm_obj.do_click(acm_loc["fleet-virtual"])
+        acm_obj.page_has_loaded(retries=10, sleep_time=5)
     if compare_versions(f"{acm_version_str} >= 2.16"):
         if acm_obj.check_element_presence(
             (
@@ -955,9 +1153,48 @@ def navigate_using_fleet_virtualization(acm_obj):
             timeout=10,
         ):
             log.info("Modal dialog box found, closing it..")
-            acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+            try:
+                acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+            except SeleniumTimeoutException:
+                log.warning(
+                    "Modal dialog close button not clickable, "
+                    "sending Escape key to dismiss the dialog"
+                )
+                try:
+                    acm_obj.driver.find_element("tag name", "body").send_keys(
+                        Keys.ESCAPE
+                    )
+                    log.info("Sent Escape key to dismiss modal dialog")
+                except Exception as esc_err:
+                    log.warning(f"Failed to send Escape key: {esc_err}")
+            acm_obj.page_has_loaded(retries=10, sleep_time=5)
     log.info("From side nav bar, navigate to VirtualMachines page")
-    acm_obj.do_click(acm_loc["nav-bar-vms-page"])
+    nav_clicked = False
+    if acm_obj.check_element_presence(
+        (acm_loc["nav-bar-vms-page"][1], acm_loc["nav-bar-vms-page"][0]),
+        timeout=10,
+    ):
+        try:
+            acm_obj.do_click(acm_loc["nav-bar-vms-page"])
+            nav_clicked = True
+        except SeleniumTimeoutException:
+            log.warning(
+                "VMs nav item found in DOM but not clickable, "
+                "falling back to direct URL navigation"
+            )
+    if not nav_clicked:
+        # Fleet Virtualization perspective may have been renamed or its sidebar
+        # nav items reorganised; fall back to direct URL navigation.
+        log.info("VMs nav item not in sidebar, navigating to VMs page via URL")
+        current_url = acm_obj.driver.current_url
+        base_url = current_url.split("/k8s")[0].split("/multicloud")[0]
+        vms_url = (
+            f"{base_url}/k8s/all-clusters"
+            "/all-namespaces/kubevirt.io~v1~VirtualMachine"
+        )
+        log.info(f"Navigating to VMs URL: {vms_url}")
+        acm_obj.driver.get(vms_url)
+        acm_obj.page_has_loaded(retries=10, sleep_time=5)
     log.info(
         "Successfully navigate to the VirtualMachines page under Fleet Virtualization"
     )
@@ -970,6 +1207,12 @@ def navigate_using_fleet_virtualization(acm_obj):
             timeout=10,
         ):
             log.info("Modal dialog box found, closing it..")
-            acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+            try:
+                acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+            except SeleniumTimeoutException:
+                log.warning(
+                    "Modal dialog close button not clickable, "
+                    "dialog may have already closed"
+                )
 
     return True

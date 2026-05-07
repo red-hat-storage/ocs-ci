@@ -2160,44 +2160,74 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         config.switch_acm_ctx()
         if not shared_drpc_protection:
+            # Delete both possible DRPC names (CLI-created has no suffix, UI-created has -drpc suffix).
+            # --ignore-not-found handles cases where the DRPC was already cleaned up by the test flow.
+            # --wait=false avoids blocking on Ramen finalizer processing (which can exceed 600 s);
+            # Ramen will process the deletion asynchronously and release VRG/PV resources.
             log.info("Deleting DRPC")
-            try:
-                run_cmd(
-                    f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}"
-                )
-            except CommandFailed:
-                # This is needed when DRPolicy is applied via UI, where DRPC which is created has suffix -drpc
-                # hence deletion fails
-                run_cmd(
-                    f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-drpc"
-                )
-                log.info("DRPC deleted")
+            run_cmd(
+                f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} "
+                f"{self.discovered_apps_placement_name} "
+                f"{self.discovered_apps_placement_name}-drpc "
+                f"--ignore-not-found --wait=false"
+            )
+            log.info("DRPC deletion submitted")
+            # Delete both possible Placement names (CLI-created has -plmnt-1 suffix, UI-created has -placement-1).
+            # --wait=false avoids blocking on finalizer processing (same reason as DRPC above).
             log.info("Deleting Placement")
-            try:
-                run_cmd(
-                    f"oc delete placement -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-plmnt-1"
-                )
-            except CommandFailed:
-                # When the VMs are protected from UI, placement created does not contain suffix "-plmnt-1",
-                # hence this is needed for deletion
-                placement_name = f"{self.discovered_apps_placement_name}-placement-1"
-                run_cmd(
-                    f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
-                    f"{placement_name}"
-                )
+            run_cmd(
+                f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
+                f"{self.discovered_apps_placement_name}-plmnt-1 "
+                f"{self.discovered_apps_placement_name}-placement-1 "
+                f"--ignore-not-found --wait=false"
+            )
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
-                f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
+                f"oc delete -k {self.workload_path} -n {self.workload_namespace}"
+                " --wait=false --ignore-not-found --force",
                 ignore_error=True,
             )
             if not skip_resource_deletion_verification:
+                # Determine the VRG name on this managed cluster before waiting
+                # for deletion. VRGs live on managed clusters (openshift-dr-ops),
+                # not on the hub, and may already be gone if the test's
+                # relocate/failover cleanup ran before delete_workload.
+                # CLI-created DRPCs have no suffix; UI-created have a -drpc suffix.
+                workload_vrg_name = ""
+                if not shared_drpc_protection:
+                    vrg_obj = ocp.OCP(
+                        kind=constants.VOLUME_REPLICATION_GROUP,
+                        namespace=constants.DR_OPS_NAMESPACE,
+                    )
+                    for candidate in [
+                        self.discovered_apps_placement_name,
+                        f"{self.discovered_apps_placement_name}-drpc",
+                    ]:
+                        if vrg_obj.is_exist(resource_name=candidate):
+                            workload_vrg_name = candidate
+                            log.info(
+                                "Found VRG '%s' in %s on cluster %s",
+                                workload_vrg_name,
+                                constants.DR_OPS_NAMESPACE,
+                                cluster.ENV_DATA["cluster_name"],
+                            )
+                            break
+                    if not workload_vrg_name:
+                        log.info(
+                            "VRG for workload '%s' not found on cluster %s "
+                            "(already cleaned up) — skipping VRG deletion wait",
+                            self.discovered_apps_placement_name,
+                            cluster.ENV_DATA["cluster_name"],
+                        )
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
                     discovered_apps=True,
                     workload_cleanup=True,
+                    vrg_name=workload_vrg_name,
+                    skip_vrg_check=not workload_vrg_name,
                 )
                 ocp_obj = ocp.OCP()
                 ocp_obj.delete_project(project_name=self.workload_namespace)
