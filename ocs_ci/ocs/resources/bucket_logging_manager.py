@@ -429,6 +429,68 @@ class BucketLoggingManager:
                 )
             raise
 
+    def await_and_verify_bucket_logs(
+        self,
+        logs_bucket,
+        source_bucket,
+        expected_ops,
+        check_intent=False,
+        timeout=600,
+        sleep=10,
+    ):
+        """
+        Poll the target logs bucket until all expected operations
+        are found in the logs.
+
+        Unlike await_interm_logs_transfer, this method checks the final
+        destination directly, avoiding a race where intermediate logs
+        are transferred before the first poll.
+
+        Args:
+            logs_bucket(str): Name of the logs bucket
+            source_bucket(str): Name of the source bucket to filter by
+            expected_ops(list): A list of tuples representing operations.
+                                I.E [('PUT', 'object1'), ('GET', 'object2')]
+            check_intent(bool): Whether to also verify intent logs
+            timeout(int): The maximum time to wait for the logs
+            sleep(int): Time to sleep between each check
+
+        Returns:
+            list: The verified list of log dicts from the logs bucket
+
+        Raises:
+            TimeoutError: If the expected logs were not found in time
+        """
+        logger.info(
+            f"Waiting for all expected operations to appear in logs bucket {logs_bucket}"
+        )
+        last_logs = []
+        try:
+            for bucket_logs in TimeoutSampler(
+                timeout=timeout,
+                sleep=sleep,
+                func=self.get_bucket_logs,
+                logs_bucket=logs_bucket,
+                source_bucket=source_bucket,
+            ):
+                last_logs = bucket_logs
+                if bucket_logs and self.verify_logs_integrity(
+                    bucket_logs, expected_ops, check_intent
+                ):
+                    logger.info("All expected operations were found in the logs bucket")
+                    return bucket_logs
+                logger.info(
+                    f"Found {len(bucket_logs)} log entries so far, "
+                    "waiting for all expected operations"
+                )
+        except TimeoutError:
+            logger.error(
+                f"Expected operations were not found in the logs bucket "
+                f"{logs_bucket} within {timeout}s. "
+                f"Last poll returned {len(last_logs)} log entries."
+            )
+            raise
+
     def get_bucket_logs(self, logs_bucket, source_bucket=None):
         """
         Get the logs from a logs bucket
