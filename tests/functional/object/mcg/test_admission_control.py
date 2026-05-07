@@ -124,6 +124,7 @@ class TestAdmissionWebhooks(MCGTest):
             "Exceedingly long PVPool name",
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_backingstore_creation_webhook(self, spec_dict, err_msg):
         """
         Test the MCG admission control webhooks for backingstore creation
@@ -241,6 +242,7 @@ class TestAdmissionWebhooks(MCGTest):
             "Exceedingly long mount path",
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_namespacestore_creation_webhook(self, spec_dict, err_msg):
         """
         Test the MCG admission control webhooks for Namespacestore creation
@@ -287,6 +289,7 @@ class TestAdmissionWebhooks(MCGTest):
         ],
         ids=["AWS Backingstore", "AWS Namespacestore"],
     )
+    @pytest.mark.zstream_4_16_13
     def test_deletion_of_store_with_attached_buckets(
         self, bucket_factory_session, bucketclass_dict
     ):
@@ -335,6 +338,7 @@ class TestAdmissionWebhooks(MCGTest):
         ],
         ids=["AWS Backingstore", "AWS Namespacestore"],
     )
+    @pytest.mark.zstream_4_16_13
     def test_store_target_bucket_change(self, bucket_factory_session, bucketclass_dict):
         """
         Verify that store target bucket changing is blocked
@@ -374,6 +378,7 @@ class TestAdmissionWebhooks(MCGTest):
     @tier3
     @skipif_mcg_only
     @polarion_id("OCS-2792")
+    @pytest.mark.zstream_4_16_13
     def test_pvpool_downscaling(self, backingstore_factory_session):
         """
         Verify that PVPool downscaling is blocked
@@ -439,6 +444,7 @@ class TestAdmissionWebhooks(MCGTest):
             "Exceedingly high amount of tiers",
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_bucketclass_creation(self, spec_dict, err_msg):
         """
         Test that bucketclass creation fails when given invalid parameters
