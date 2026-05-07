@@ -4744,7 +4744,7 @@ def get_noobaa_db_usage_percent():
 
     """
     noobaa_db_pod_obj = pod.get_noobaa_pods(
-        noobaa_label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE
+        noobaa_label=constants.NOOBAA_DB_LABEL_46_AND_UNDER
     )
     cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
         command="df -h /var/lib/pgsql/", out_yaml_format=False
@@ -4762,7 +4762,7 @@ def get_noobaa_db_size():
 
     """
     noobaa_db_pod_obj = pod.get_noobaa_pods(
-        noobaa_label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE
+        noobaa_label=constants.NOOBAA_DB_LABEL_46_AND_UNDER
     )
     cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
         command="df -h /var/lib/pgsql/", out_yaml_format=False
@@ -4780,7 +4780,7 @@ def get_noobaa_db_used_space():
 
     """
     noobaa_db_pod_obj = pod.get_noobaa_pods(
-        noobaa_label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE
+        noobaa_label=constants.NOOBAA_DB_LABEL_46_AND_UNDER
     )
     cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
         command="df -h /var/lib/pgsql/", out_yaml_format=False
