@@ -861,7 +861,12 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
                 log.warning("'All Clusters' not found on the VMs page")
                 return False
             ns_locator = format_locator(acm_loc["cnv-workload-namespace"], namespace)
-            ns_already_visible = acm_obj.check_element_presence(
+            # Gate this shortcut on assign_policy for the same reason as
+            # vm_already_visible: when assign_policy=False (status-check) we
+            # must navigate the full cluster tree to guarantee we land on the
+            # correct cluster's namespace (e.g. secondary after failover), not
+            # a stale tree state left over from the previous iteration.
+            ns_already_visible = assign_policy and acm_obj.check_element_presence(
                 (ns_locator[1], ns_locator[0]), timeout=10
             )
             if not ns_already_visible:
