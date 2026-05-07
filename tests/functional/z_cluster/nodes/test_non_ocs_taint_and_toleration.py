@@ -27,6 +27,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
+    get_not_running_pods,
     wait_for_pods_to_be_running,
     check_toleration_on_pods,
     check_toleration_on_subscriptions,
@@ -186,6 +187,30 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info("Apply custom taints and tolerations.")
         apply_custom_taint_and_toleration()
 
+        logger.info(
+            "After adding toleration wait for some time for pods to respin as expected"
+        )
+        time.sleep(300)
+
+        def _ensure_pods_running():
+            if not wait_for_pods_to_be_running(timeout=900, sleep=15):
+                not_running = get_not_running_pods(
+                    namespace=config.ENV_DATA["cluster_namespace"]
+                )
+                details = [f"{p.name}: {p.status()}" for p in not_running[:20]]
+                if len(not_running) > 20:
+                    details.append(f"... and {len(not_running) - 20} more")
+                logger.error(
+                    "Pods not in Running state (sample): %s",
+                    details,
+                )
+                raise AssertionError(
+                    "Few pods failed to reach the desired running state"
+                )
+
+        # Retry to handle variable operator reconciliation/rollout after taint/toleration
+        retry((AssertionError,), tries=3, delay=60)(_ensure_pods_running)()
+
         retry(
             (CommandFailed, TolerationNotFoundException),
             tries=10,
@@ -193,14 +218,6 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )(
             check_toleration_on_subscriptions
         )(toleration_key="xyz")
-
-        logger.info(
-            "After adding toleration wait for some time for pods to respin as expected"
-        )
-        time.sleep(300)
-        assert wait_for_pods_to_be_running(
-            timeout=900, sleep=15
-        ), "Few pods failed to reach the desired running state"
 
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
@@ -231,7 +248,18 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )(wait_for_nodes_status(timeout=1800))
 
         # Check cluster is health ok and check toleration on pods
-        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
+        pods_ok = wait_for_pods_to_be_running(timeout=900, sleep=15)
+        if not pods_ok:
+            not_running = get_not_running_pods(
+                namespace=config.ENV_DATA["cluster_namespace"]
+            )
+            details = [f"{p.name}: {p.status()}" for p in not_running[:20]]
+            if len(not_running) > 20:
+                details.append(f"... and {len(not_running) - 20} more")
+            logger.error("Pods not in Running state after reboot (sample): %s", details)
+        assert (
+            pods_ok
+        ), "Few pods failed to reach the desired running state after reboot"
         retry(
             (CommandFailed, TolerationNotFoundException),
             tries=5,
