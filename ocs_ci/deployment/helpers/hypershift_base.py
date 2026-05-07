@@ -947,9 +947,18 @@ class HyperShiftBase:
 
         """
 
-        timeout_pods_wait_min = 30
-        timeout_hosted_cluster_completed_min = 20
-        timeout_worker_nodes_ready_min = 30
+        # Increase timeouts for data replication separation deployments
+        data_replication_separation = config.DEPLOYMENT.get(
+            "enable_data_replication_separation", False
+        )
+        if data_replication_separation:
+            timeout_pods_wait_min = 60
+            timeout_hosted_cluster_completed_min = 60
+            timeout_worker_nodes_ready_min = 90
+        else:
+            timeout_pods_wait_min = 30
+            timeout_hosted_cluster_completed_min = 20
+            timeout_worker_nodes_ready_min = 30
 
         namespace = f"clusters-{name}"
         logger.info(
