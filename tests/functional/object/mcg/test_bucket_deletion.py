@@ -116,6 +116,7 @@ class TestBucketDeletion(MCGTest):
         ],
     )
     @flaky
+    @pytest.mark.zstream_4_16_13
     def test_bucket_delete_with_objects(
         self, mcg_obj, awscli_pod_session, bucket_factory, interface, bucketclass_dict
     ):
@@ -151,6 +152,7 @@ class TestBucketDeletion(MCGTest):
             pytest.param(*["OC"], marks=[tier3, pytest.mark.polarion_id("OCS-1400")]),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_nonexist_bucket_delete(self, mcg_obj, interface):
         """
         Negative test with deletion of non-exist OBC.
@@ -185,6 +187,7 @@ class TestBucketDeletion(MCGTest):
         logger.info(f"Delete non-exist OBC {name} failed as expected")
 
     @pytest.mark.polarion_id("OCS-1924")
+    @pytest.mark.zstream_4_16_13
     def test_s3_bucket_delete_1t_objects(self, mcg_obj, awscli_pod_session):
         """
         Test with deletion of bucket has 1T objects stored in.
@@ -227,6 +230,7 @@ class TestBucketDeletion(MCGTest):
     @skipif_managed_service
     @pytest.mark.polarion_id("OCS-2704")
     @skipif_ocs_version("<4.9")
+    @pytest.mark.zstream_4_16_13
     def test_delete_all_buckets(self, request, mcg_obj, bucket_factory):
         """
         Test with deletion of all buckets including the default first.bucket.
