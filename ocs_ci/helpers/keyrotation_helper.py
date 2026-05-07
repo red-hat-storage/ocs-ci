@@ -926,7 +926,7 @@ def verify_new_key_after_rotation(tries, delays):
 
     log.info("Record existing OSD keys before rotation is happened.")
     osd_keys_before_rotation = {}
-    for device in osd_keyrotation.deviceset:
+    for device in osd_keyrotation.refresh_deviceset():
         osd_keys_before_rotation[device] = osd_keyrotation.get_osd_dm_crypt(device)
 
     log.info("Record Noobaa volume and backend keys before rotation.")

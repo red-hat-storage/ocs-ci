@@ -49,6 +49,7 @@ class TestKeyRotationWithClusterFull(E2ETest):
     def teardown(self):
         OSDKeyrotation().set_keyrotation_schedule("@weekly")
 
+    @encryption_at_rest_required
     def test_cluster_wide_encryption_key_rotation(
         self,
         bucket_factory_session,
