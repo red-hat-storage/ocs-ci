@@ -1549,6 +1549,7 @@ NODE_READY = "Ready"
 NODE_NOT_READY = "NotReady"
 NODE_READY_SCHEDULING_DISABLED = "Ready,SchedulingDisabled"
 NODE_NOT_READY_SCHEDULING_DISABLED = "NotReady,SchedulingDisabled"
+NODE_READY_UNKNOWN = "Unknown"
 
 # Volume modes
 VOLUME_MODE_BLOCK = "Block"
