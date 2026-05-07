@@ -3,6 +3,8 @@ import logging
 from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.pytest_customization.marks import tier1, blue_squad
 from ocs_ci.framework.testlib import (
+import pytest
+
     runs_on_provider,
     skipif_ocs_version,
     skipif_ocp_version,
@@ -21,6 +23,7 @@ logger = logging.getLogger(__name__)
 @marks.polarion_id("OCS-2375")
 @runs_on_provider
 @skipif_managed_service
+@pytest.mark.zstream_4_16_13
 def test_hpa_maxreplica_alert(threading_lock):
     """
     Test to verify that no HPA max replica alert is triggered
