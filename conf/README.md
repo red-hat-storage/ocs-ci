@@ -448,6 +448,8 @@ higher priority).
 * `iscsi_target_password`- The password for the iSCSI target authentication.
 * `iscsi_target_iqn`- The iSCSI Qualified Name (IQN) identifying the iSCSI target.
 * `iscsi_setup` - Configure iscsi or not (Default: false). Necessory for FDF backed by SAN storage.
+* `is_multus_enabled` - Create Multus networks before ODF deployment, during OCP deployment setup (Default: false). Mutually exclusive with `multus_after_odf_install`.
+* `multus_after_odf_install` - Create Multus networks after ODF deployment and patch the existing StorageCluster with multus network selectors (Default: false). Mutually exclusive with `is_multus_enabled`.
 
 #### UPGRADE
 
