@@ -206,6 +206,7 @@ class BaseUI:
         enable_screenshot=False,
         copy_dom=False,
         avoid_stale=False,
+        use_fallback=True,
     ):
         """
         Click on Button/link on OpenShift Console
@@ -217,6 +218,7 @@ class BaseUI:
         avoid_stale (bool): if got StaleElementReferenceException, caused by reference to stale, cached element,
         refresh the page once and try click again
         * don't use when refreshed page expected to be different from initial page, or loose input values
+        use_fallback (bool): if True, attempt AI locator fallback on TimeoutException
         """
 
         def _do_click(_locator, _timeout=30, _enable_screenshot=False, _copy_dom=False):
@@ -244,15 +246,16 @@ class BaseUI:
                 self.take_screenshot(f"{type(self).__name__}-{date_time}")
                 self.copy_dom(f"{type(self).__name__}-{date_time}")
                 logger.error(e)
-                new_locator = self.locator_fallback.attempt_fallback(
-                    locator, "click", stack_trace=traceback.format_exc()
-                )
-                if new_locator:
-                    element = WebDriverWait(self.driver, timeout).until(
-                        ec.element_to_be_clickable((new_locator[1], new_locator[0]))
+                if use_fallback:
+                    new_locator = self.locator_fallback.attempt_fallback(
+                        locator, "click", stack_trace=traceback.format_exc()
                     )
-                    element.click()
-                    return
+                    if new_locator:
+                        element = WebDriverWait(self.driver, timeout).until(
+                            ec.element_to_be_clickable((new_locator[1], new_locator[0]))
+                        )
+                        element.click()
+                        return
                 raise TimeoutException(
                     f"Failed to find the element ({locator[1]},{locator[0]})"
                 )
@@ -273,6 +276,24 @@ class BaseUI:
             self.copy_dom()
             time.sleep(5)
             _do_click(locator, timeout, enable_screenshot, copy_dom)
+
+    def click_with_script(self, locator):
+        """
+        Click a web element using JavaScript dispatchEvent instead of Selenium's
+        native coordinate-based click. Use as a fallback when ElementClickInterceptedException
+        occurs because an overlay covers the element's click coordinates (e.g. SVG nodes
+        in the ODF Topology view that are positioned outside the scrollable content area).
+
+        Args:
+            locator (tuple): (selector string, By type) identifying the element to click.
+        """
+        element = self.driver.find_element(locator[1], locator[0])
+        self.driver.execute_script(
+            "arguments[0].dispatchEvent("
+            "new MouseEvent('click', {bubbles: true, cancelable: true, view: window})"
+            ")",
+            element,
+        )
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)

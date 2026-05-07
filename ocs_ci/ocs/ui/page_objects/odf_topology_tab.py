@@ -4,7 +4,11 @@ import time
 from abc import ABC
 
 import pandas as pd
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    NoSuchElementException,
+    TimeoutException,
+)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.errorhandler import ErrorHandler
 
@@ -144,13 +148,20 @@ class TopologySidebar(BaseUI):
 
             for i in range(1, 4):
                 try:
-                    self.do_click(loc)
+                    self.do_click(loc, use_fallback=False)
                     break
-                except NoSuchElementException:
+                except (NoSuchElementException, TimeoutException):
                     logger.info("zooming out topology view")
                     self.do_click(self.topology_loc["zoom_out"])
                     self.page_has_loaded(module_loc=self.topology_loc["topology_graph"])
                     logger.info(f"try read topology again. attempt number {i} ")
+                except ElementClickInterceptedException:
+                    logger.info(
+                        "Click intercepted by page container (PF6 layout). "
+                        "Falling back to JS dispatchEvent click for topology node."
+                    )
+                    self.click_with_script(loc)
+                    break
             logger.info(f"Entity {entity_name} sidebar is opened")
 
     def close_sidebar(self, soft=False):
@@ -494,7 +505,11 @@ class AbstractTopologyView(ABC, TopologySidebar):
                     raise NoSuchElementException("Cannot read element text")
                 # with ODF 4.18 we sometimes see no D, N prefix in the name of entity. This is not confirmed visually
                 # so we make exception for this case, checking "\n" within text
-                name = text.split("\n")[1] if "\n" in text else text
+                # In OCP 4.22+ the type prefix (N/D) is no longer separated by \n
+                if "\n" in text:
+                    name = text.split("\n")[1]
+                else:
+                    name = text[1:] if text and text[0] in ("N", "D") else text
                 entity_names.append(name)
                 time.sleep(0.1)
             self.topology_df["entity_name"] = entity_names
@@ -1052,7 +1067,15 @@ class OdfTopologyNodesView(TopologyTab):
             raise IncorrectUiOptionRequested(
                 f"Pass one of required options to use method '{self.nav_into_node.__name__}'"
             )
-        self.do_click(loc, 60, True)
+        self.do_click(self.topology_loc["fill_to_screen"])
+        try:
+            self.do_click(loc, 60, True)
+        except ElementClickInterceptedException:
+            logger.info(
+                "Click intercepted by page container (PF6 layout). "
+                "Falling back to JS dispatchEvent click for topology node arrow."
+            )
+            self.click_with_script(loc)
         self.page_has_loaded(5, 5, self.topology_loc["topology_graph"])
         return OdfTopologyDeploymentsView()
 
