@@ -40,6 +40,7 @@ class TestSequentialRelocate:
 
     """
 
+    @pytest.mark.zstream_4_16_13
     def test_sequential_relocate_to_secondary(self, pvc_interface, dr_workload):
         """
         Test to verify relocate action for multiple workloads one after another from primary to secondary cluster
