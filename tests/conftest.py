@@ -8188,6 +8188,7 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
     - Storage class: Custom storage classes, including default compression and aggressive profiles.
 
     """
+    created_vms = []
 
     def factory(namespace=None, encrypted=False, use_cluster_capacity=False):
         """
@@ -8329,6 +8330,7 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
                     sc_compression = futures[future]
                     try:
                         vm_obj = future.result()
+                        created_vms.append(vm_obj)
                         run_fio(vm_obj)
                         if sc_compression == "aggressive":
                             vm_list_agg_compr.append(vm_obj)
@@ -8343,6 +8345,21 @@ def multi_cnv_workload_factory(request, storageclass_factory, cnv_workload):
             sc_obj_def_compr,
             sc_obj_aggressive,
         )
+
+    def teardown():
+        log.info("Starting multi_cnv_workload teardown")
+        for vm in created_vms:
+            try:
+                log.info(f"Deleting VM {vm.name}")
+                if vm.exists:
+                    vm.delete(wait=True)
+                else:
+                    log.info(f"VM {vm.name} already deleted, skipping cleanup")
+            except Exception as e:
+                log.warning(f"Failed to delete VM {vm.name}: {e}")
+        log.info("multi_cnv_workload teardown completed")
+
+    request.addfinalizer(teardown)
 
     return factory
 
@@ -10894,6 +10911,19 @@ def vm_clone_fixture(request):
             log.info(f"Deleting VM {cloned_vm.name}")
             try:
                 cloned_vm.delete()
+
+                def _vm_deleted():
+                    try:
+                        cloned_vm.get()
+                        return False
+                    except CommandFailed as e:
+                        if "NotFound" in str(e):
+                            return True
+                        raise
+
+                TimeoutSampler(
+                    timeout=600, sleep=5, func=_vm_deleted
+                ).wait_for_func_value(True)
                 log.info(f"Cloned VM {cloned_vm.name} deleted")
             except CommandFailed as e:
                 if "NotFound" in str(e):
