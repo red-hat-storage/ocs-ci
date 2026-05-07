@@ -2512,7 +2512,17 @@ class Deployment(object):
             self.deploy_multicluster_hub()
             return
 
-        if config.ENV_DATA.get("acm_hub_unreleased"):
+        # Check if this is an IBM Cloud managed cluster
+        managed_ibmcloud = (
+            config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA.get("deployment_type") == "managed"
+        )
+
+        # Use IBM Cloud addon for managed IBM Cloud clusters, otherwise use legacy methods
+        if managed_ibmcloud:
+            logger.info("Deploying ACM HUB via IBM Cloud addon")
+            self.deploy_acm_hub_ibmcloud_addon()
+        elif config.ENV_DATA.get("acm_hub_unreleased"):
             if version.compare_versions(
                 f"{config.ENV_DATA.get('acm_version')} >= 2.14"
             ):
@@ -2523,10 +2533,11 @@ class Deployment(object):
         else:
             self.deploy_acm_hub_released()
             self.deploy_multicluster_hub()
+            
         if config.ENV_DATA.get("configure_acm_to_import_mce"):
             self.configure_acm_to_import_mce_clusters()
+        
         from ocs_ci.ocs.acm.acm import verify_running_acm
-
         verify_running_acm()
 
     def configure_acm_to_import_mce_clusters(self):
@@ -2704,6 +2715,40 @@ class Deployment(object):
             label=backup_label,
             resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
         )
+
+    def deploy_acm_hub_ibmcloud_addon(self):
+        """
+        Handle ACM HUB deployment via IBM Cloud addon
+        """
+        logger.info("Deploying ACM HUB via IBM Cloud addon")
+        clustername = config.ENV_DATA.get("cluster_name")
+        acm_version = config.ENV_DATA.get("acm_version")
+        
+        if not clustername:
+            raise ValueError("cluster_name is required for IBM Cloud addon deployment")
+        
+        if not acm_version:
+            raise ValueError("acm_version is required for IBM Cloud addon deployment")
+        
+        # Import the run_ibmcloud_cmd function
+        from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
+        
+        # Enable ACM addon using IBM Cloud CLI
+        cmd = (
+            f"ibmcloud oc cluster addon enable advanced-cluster-management "
+            f"--cluster {clustername} --version {acm_version}"
+        )
+        
+        logger.info(f"Enabling ACM addon with command: {cmd}")
+        run_ibmcloud_cmd(cmd)
+        
+        # Wait for addon to be enabled
+        logger.info("Waiting for ACM addon to be enabled (120 seconds)")
+        time.sleep(120)
+        
+        # Validate ACM hub installation
+        validate_acm_hub_install()
+        logger.info("ACM HUB addon deployment completed successfully")
 
     def deploy_acm_hub_unreleased(self):
         """
