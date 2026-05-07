@@ -764,7 +764,8 @@ class Deployment(object):
 
         This path is taken when agnostic_dr: true is set in ENV_DATA.
         It installs LSO + local PVs, VolSync (via Helm), and MinIO
-        on the primary and secondary clusters instead of full ODF/MCO.
+        on the primary and secondary clusters instead of full ODF/MCO,
+        then installs MCO on the hub and creates the DRPolicy.
         """
         logger.info("Starting agnostic DR deployment on managed clusters")
         setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
@@ -772,6 +773,34 @@ class Deployment(object):
         install_volsync_from_helm()
         deploy_minio()
         create_volume_group_replication_class()
+
+        dr_conf = self.get_rdr_conf()
+        rdr_deploy = RDRMultiClusterDROperatorsDeploy(dr_conf)
+
+        acm_indexes = get_all_acm_indexes()
+        for i in acm_indexes:
+            config.switch_ctx(i)
+            orchestrator_controller = ocp.OCP(
+                kind=constants.DEPLOYMENT,
+                resource_name=constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER,
+                namespace=constants.OPENSHIFT_OPERATORS,
+            )
+            if orchestrator_controller.is_exist():
+                orchestrator_controller.wait_for_resource(
+                    condition="1", column="AVAILABLE", resource_count=1, timeout=300
+                )
+            else:
+                rdr_deploy.deploy_dr_multicluster_orchestrator()
+                enable_mco_console_plugin()
+
+        config.switch_acm_ctx()
+
+        multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
+        if not multicluster_observability.get()["items"]:
+            rdr_deploy.enable_acm_observability()
+
+        rdr_deploy.deploy_dr_policy()
+
         logger.info("Agnostic DR deployment completed successfully")
 
     def do_deploy_lvmo(self):
