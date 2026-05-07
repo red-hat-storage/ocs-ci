@@ -10,6 +10,8 @@ from ocs_ci.helpers.ceph_helpers import (
     wait_for_ceph_used_capacity_reached,
 )
 from ocs_ci.ocs.cluster import CephCluster, get_ceph_used_capacity
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 
@@ -35,12 +37,20 @@ class TestFillPoolJob(ManageTest):
             f"Original used capacity: {orig_ceph_used_capacity}GiB"
         )
         if ceph_capacity > 500:
-            storage_to_fill = 240  # in GiB
+            storage_to_fill = 200  # in GiB
             timeout = 1200
         else:
-            storage_to_fill = ceph_capacity / 2  # in GiB
+            storage_to_fill = ceph_capacity // 3  # in GiB
             timeout = 600
 
+        if config.ENV_DATA.get("platform").lower() == constants.VSPHERE_PLATFORM:
+            # On vSphere, we limit the 'storage to fill' to avoid long test execution times,
+            # due to the slower performance of vSphere compared to other platforms.
+            storage_to_fill = min(storage_to_fill, 60)
+            timeout = 900
+            log.info(
+                f"Running on vSphere platform, adjusting storage to fill to {storage_to_fill}GiB"
+            )
         # Divide the storage to fill between zero and random modes. The random mode will
         # fill 25% of the total. This is to optimize the time taken to fill the cluster,
         # as the zero mode is faster.
@@ -60,6 +70,79 @@ class TestFillPoolJob(ManageTest):
         fill_job_factory(
             fill_mode="random",
             storage=f"{storage_to_fill_random_mode}Gi",
+        )
+
+        gap_difference = storage_to_fill * 0.2  # 20% gap
+        # Calculate the expected used capacity after filling the cluster
+        expected_used_capacity = (
+            orig_ceph_used_capacity + storage_to_fill - gap_difference
+        )
+        wait_for_ceph_used_capacity_reached(
+            expected_used_capacity=expected_used_capacity,
+            timeout=timeout,
+            sleep=20,
+        )
+
+        end = time.time()
+        fill_up_time = end - start
+        used_capacity = get_ceph_used_capacity()
+        log.info(
+            f"Fill Pool Job workload completed. Total used capacity: {used_capacity}GiB. "
+            f"Elapsed time: {fill_up_time} seconds."
+        )
+
+    def test_fill_pool_job_zero_mode(self, fill_job_factory):
+        """
+        Run Fill Pool Job using zero mode to fill the cluster to a target usage.
+        Verifies that the workload completes, logs capacity usage and elapsed time.
+
+        """
+        ceph_cluster = CephCluster()
+        ceph_capacity = ceph_cluster.get_ceph_capacity()
+        orig_ceph_used_capacity = get_ceph_used_capacity()
+        log.info(
+            f"Ceph Cluster capacity: {ceph_capacity}GiB, "
+            f"Original used capacity: {orig_ceph_used_capacity}GiB"
+        )
+        if ceph_capacity > 500:
+            storage_to_fill = 240  # in GiB
+            timeout = 1200
+        else:
+            storage_to_fill = ceph_capacity / 2  # in GiB
+            timeout = 600
+
+        block_size = "16M"
+        cpu_request = "100m"
+        mem_request = "128Mi"
+        cpu_limit = "500m"
+        mem_limit = "256Mi"
+
+        if config.ENV_DATA.get("platform").lower() == constants.VSPHERE_PLATFORM:
+            # On vSphere, we limit the 'storage to fill' to avoid long test execution times,
+            # due to the slower performance of vSphere compared to other platforms.
+            # The block size is also increased to 512M to optimize the time taken to fill the cluster.
+            storage_to_fill = min(storage_to_fill, 150)
+            timeout = 2100
+            block_size = "512M"
+            cpu_request = "200m"
+            mem_request = "512Mi"
+            cpu_limit = "500m"
+            mem_limit = "1Gi"
+            log.info(
+                f"Running on vSphere platform, adjusting storage to fill to {storage_to_fill}GiB "
+                f"and block size to {block_size}. "
+            )
+
+        log.info(f"Total storage to fill the cluster: {storage_to_fill}Gi")
+        start = time.time()
+        fill_job_factory(
+            block_size=block_size,
+            cpu_request=cpu_request,
+            mem_request=mem_request,
+            cpu_limit=cpu_limit,
+            mem_limit=mem_limit,
+            fill_mode="zero",
+            storage=f"{storage_to_fill}Gi",
         )
 
         gap_difference = storage_to_fill * 0.1  # 10% gap
