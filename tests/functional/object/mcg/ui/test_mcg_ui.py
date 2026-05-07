@@ -80,6 +80,7 @@ class TestStoreUserInterface(object):
             ),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_store_creation_and_deletion(
         self,
         setup_ui_class_factory,
@@ -184,6 +185,7 @@ class TestBucketclassUserInterface(object):
             ),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_standard_bc_creation_and_deletion(
         self,
         setup_ui_class,
@@ -239,6 +241,7 @@ class TestBucketclassUserInterface(object):
             ),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_namespace_bc_creation_and_deletion(
         self,
         setup_ui_class,
@@ -359,6 +362,7 @@ class TestObcUserInterface(object):
     @ui
     @tier1
     @runs_on_provider
+    @pytest.mark.zstream_4_16_13
     def test_obc_creation_and_deletion(
         self,
         setup_ui_class_factory,
@@ -432,6 +436,7 @@ class TestBucketCreate:
     @tier1
     @post_upgrade
     @pytest.mark.polarion_id("OCS-6334")
+    @pytest.mark.zstream_4_16_13
     def test_bucket_create(self, setup_ui_class_factory):
         """
         Test bucket creation functionality in UI.
@@ -456,6 +461,7 @@ class TestBucketCreate:
     @post_upgrade
     @tier2
     @pytest.mark.polarion_id("OCS-6397")
+    @pytest.mark.zstream_4_16_13
     def test_empty_bucket_delete(self, setup_ui_class_factory):
         """
         Test bucket deletion functionality in UI.
@@ -507,6 +513,7 @@ class TestBucketCreate:
 
     @pytest.mark.polarion_id("OCS-6398")
     @tier2
+    @pytest.mark.zstream_4_16_13
     def test_bucket_list_comparison(self, setup_ui_class_factory, mcg_obj):
         """
         Test that the bucket list from UI matches the bucket list from CLI.
@@ -580,6 +587,7 @@ class TestBucketCreate:
     @tier2
     @black_squad
     @pytest.mark.polarion_id("OCS-6399")
+    @pytest.mark.zstream_4_16_13
     def test_bucket_pagination(self, setup_ui_class_factory, mcg_obj):
         """
         Test bucket pagination functionality in UI.
