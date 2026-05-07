@@ -1596,6 +1596,18 @@ acm_configuration_4_21 = {
     ),
 }
 
+acm_configuration_4_22 = {
+    # OCP 4.22 uses PF6 UI: local cluster view shows "Core platform" h2 in the sidebar nav
+    "local-cluster_dropdown": (
+        "//h2[text()='local-cluster'] | "
+        "//span[contains(@class, 'c-menu-toggle__text') "
+        "and text()='local-cluster']/.. | "
+        "//h2[normalize-space()='Fleet Management'] | "
+        "//h2[normalize-space()='Core platform']",
+        By.XPATH,
+    ),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -3340,6 +3352,7 @@ locators = {
             **acm_page_nav_420,
             **acm_configuration_4_20,
             **acm_configuration_4_21,
+            **acm_configuration_4_22,
         },
         "validation": {
             **validation,
