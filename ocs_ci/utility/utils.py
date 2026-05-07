@@ -4356,6 +4356,10 @@ def convert_yaml2tfvars(yaml):
                 fd.write(f'vm_dns_addresses = ["{val}"]\n')
                 continue
 
+            if key == "vm_dns_ipv6_addresses":
+                fd.write(f'vm_dns_ipv6_addresses = ["{val}"]\n')
+                continue
+
             fd.write(key)
             fd.write(" = ")
             fd.write('"')
