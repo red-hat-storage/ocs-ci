@@ -263,12 +263,12 @@ class TestSubvolumesCommand(ManageTest):
         Test to verify PV backup/restore workflow and stale volume detection.
 
         Steps:
-        1.Create a PVC with cephfs storageclass and set the deletionPolicy to retain.
-        2.Back up the PV yaml for the above created PVC. Delete the PV and remove its finalizer.
-        3.Edit the PV backup file by removing all the volumeAttributes and apply this yaml file.
-        4.Verify that the PV is bound.
-        5.Run the odf-cli command to list the stale subvolumes.
-        6.The volume attached to the above PVC would be labelled as in-use by the cli tool.
+        1. Create a PVC with cephfs storageclass and set the deletionPolicy to retain.
+        2. Back up the PV yaml for the above created PVC. Delete the PV and remove its finalizer.
+        3. Edit the PV backup file by removing all the volumeAttributes and apply this yaml file.
+        4. Verify that the PV is bound.
+        5. Run the odf-cli command to list the stale subvolumes.
+        6. The volume attached to the above PVC would be labelled as in-use by the cli tool.
         """
 
         logger.info("Creating PVC with CephFS storageclass and retain deletionPolicy")
@@ -349,9 +349,7 @@ class TestSubvolumesCommand(ManageTest):
             ), f"Expected volume status to be 'in-use', but got '{pvc_subvolume[3]}'"
             logger.info("Volume correctly marked as 'in-use' by odf-cli tool")
         else:
-            logger.warning(
-                "No new subvolumes found, PVC might be using existing volume"
-            )
+            logger.error("No new subvolumes found, PVC might be using existing volume")
 
         # Check stale volumes - should not include created PVC's volume
         output = self.odf_cli_runner.run_command("subvolume ls --stale")
