@@ -401,6 +401,27 @@ def create_account_roles(prefix="ManagedOpenShift"):
     else:
         hosted_cp_param = ""
 
+    # Idempotent: skip creation if account roles with this prefix already exist.
+    # This prevents accumulating multiple Installer roles on retry, which causes
+    # 'rosa create cluster' to fail with "More than one Installer role found".
+    check = exec_cmd(
+        f"rosa list account-roles --prefix {prefix} -o json",
+        ignore_error=True,
+    )
+    existing = []
+    try:
+        import json as _json
+
+        existing = _json.loads(check.stdout.decode().strip() or "[]")
+    except Exception:
+        pass
+    if existing:
+        logger.info(
+            f"Account roles with prefix '{prefix}' already exist "
+            f"({len(existing)} roles) — skipping creation"
+        )
+        return
+
     cmd = f"rosa create account-roles {hosted_cp_param} --mode auto --prefix {prefix} --yes"
     exec_cmd(cmd, timeout=1200)
 
@@ -424,6 +445,17 @@ def create_operator_roles(
         if prefix == ""
         else prefix
     )
+    # Idempotent: delete any stale operator roles with this prefix before creating.
+    # Stale roles from a previous failed run trust a different OIDC config and
+    # cause "does not have trusted relationship" errors on retry.
+    existing_roles = get_operator_roles_data(prefix)
+    if existing_roles:
+        logger.warning(
+            f"Stale operator roles with prefix '{prefix}' found — deleting before recreating "
+            f"to avoid OIDC trust mismatch on retry"
+        )
+        delete_operator_roles(prefix)
+
     cmd = f"rosa create operator-roles --cluster {cluster} --mode auto --yes"
     # command with prefix should look another way, to avoid error:
     # ERR: A cluster key for STS cluster and an operator roles prefix cannot be specified alongside each other
