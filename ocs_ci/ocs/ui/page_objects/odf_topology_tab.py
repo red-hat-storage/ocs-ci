@@ -4,7 +4,11 @@ import time
 from abc import ABC
 
 import pandas as pd
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    NoSuchElementException,
+    TimeoutException,
+)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.errorhandler import ErrorHandler
 
@@ -151,6 +155,13 @@ class TopologySidebar(BaseUI):
                     self.do_click(self.topology_loc["zoom_out"])
                     self.page_has_loaded(module_loc=self.topology_loc["topology_graph"])
                     logger.info(f"try read topology again. attempt number {i} ")
+                except ElementClickInterceptedException:
+                    logger.info(
+                        "Click intercepted by page container (PF6 layout). "
+                        "Falling back to JS dispatchEvent click for topology node."
+                    )
+                    self.click_with_script(loc)
+                    break
             logger.info(f"Entity {entity_name} sidebar is opened")
 
     def close_sidebar(self, soft=False):

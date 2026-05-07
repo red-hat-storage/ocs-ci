@@ -277,6 +277,24 @@ class BaseUI:
             time.sleep(5)
             _do_click(locator, timeout, enable_screenshot, copy_dom)
 
+    def click_with_script(self, locator):
+        """
+        Click a web element using JavaScript dispatchEvent instead of Selenium's
+        native coordinate-based click. Use as a fallback when ElementClickInterceptedException
+        occurs because an overlay covers the element's click coordinates (e.g. SVG nodes
+        in the ODF Topology view that are positioned outside the scrollable content area).
+
+        Args:
+            locator (tuple): (selector string, By type) identifying the element to click.
+        """
+        element = self.driver.find_element(locator[1], locator[0])
+        self.driver.execute_script(
+            "arguments[0].dispatchEvent("
+            "new MouseEvent('click', {bubbles: true, cancelable: true, view: window})"
+            ")",
+            element,
+        )
+
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
 
