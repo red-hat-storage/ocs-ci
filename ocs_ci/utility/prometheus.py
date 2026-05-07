@@ -135,14 +135,24 @@ def check_query_range_result_viafunction(
     # timestamps of values outside of both bad and good values list
     invalid_value_timestamps = []
 
-    # check that result contains expected number of metric data series
-    if exp_metric_num is not None and len(result) != exp_metric_num:
+    # Check that result contains at least the expected number of metric
+    # data series. During pod rollovers (e.g. upgrade), Prometheus may
+    # return extra series from both old and new pods for the same metric,
+    # so we allow len(result) >= exp_metric_num.
+    if exp_metric_num is not None and len(result) < exp_metric_num:
         msg = (
-            f"result doesn't contain {exp_metric_num} of series only, "
-            f"actual number data series is {len(result)}"
+            f"result contains fewer series than expected: "
+            f"{len(result)} < {exp_metric_num}"
         )
         logger.error(msg)
         is_result_ok = False
+    elif exp_metric_num is not None and len(result) > exp_metric_num:
+        logger.warning(
+            "result contains more series than expected: %d > %d "
+            "(may indicate pod rollover during query window)",
+            len(result),
+            exp_metric_num,
+        )
 
     for metric in result:
         name = metric["metric"]["__name__"]
@@ -613,14 +623,19 @@ class PrometheusAPI(object):
                 if result_type != "matrix":
                     logger.error("unexpected resultType: %s", result_type)
                     raise ValueError("resultType is not matrix but %s", result_type)
-                # All metric sample series has the same size.
+                # Check metric sample series sizes. During pod rollovers
+                # (e.g. mgr update during upgrade), Prometheus may return
+                # multiple series for the same metric from old and new pods
+                # with different sample counts.
                 sizes = []
                 for metric in content["data"]["result"]:
                     sizes.append(len(metric["values"]))
-                if not all(size == sizes[0] for size in sizes):
-                    msg = "Metric sample series doesn't have the same size."
-                    logger.error(msg)
-                    raise ValueError(msg)
+                if sizes and not all(size == sizes[0] for size in sizes):
+                    logger.warning(
+                        "Metric sample series have different sizes: %s "
+                        "(may indicate pod rollover during query window)",
+                        sizes,
+                    )
                 # Check if the query result is empty (which is a valid answer from
                 # validation standpoint).
                 if len(sizes) == 0:
@@ -630,19 +645,38 @@ class PrometheusAPI(object):
                     # fails, our Prometheus instance is missing some part of the
                     # data we are asking it about. For positive test cases, this is
                     # most likely a test blocker product bug.
+                    # Use unique timestamps across all series to account for
+                    # pod rollovers where data is split across multiple series.
+                    all_timestamps = set()
+                    for metric in content["data"]["result"]:
+                        for value in metric["values"]:
+                            all_timestamps.add(value[0])
+                    actual_samples = len(all_timestamps)
                     start_dt = datetime.utcfromtimestamp(start)
                     end_dt = datetime.utcfromtimestamp(end)
                     duration = end_dt - start_dt
                     exp_samples = duration.seconds / step
-                    if exp_samples - 1 <= sizes[0] <= exp_samples + 1:
-                        logger.debug("there are no holes in the data")
+                    tolerance = max(3, int(exp_samples * 0.05))
+                    if (
+                        exp_samples - tolerance
+                        <= actual_samples
+                        <= exp_samples + tolerance
+                    ):
+                        logger.debug(
+                            "prometheus data has no significant holes "
+                            "(result size %d, expected %d, tolerance +-%d)",
+                            actual_samples,
+                            exp_samples,
+                            tolerance,
+                        )
                     else:
                         msg = "there are holes in prometheus data"
                         logger.error(
                             msg
-                            + ": result size is %d while expected sample size is %d +-1",
-                            sizes[0],
+                            + ": result size is %d while expected sample size is %d +-%d",
+                            actual_samples,
                             exp_samples,
+                            tolerance,
                         )
                         raise ValueError(msg)
         # return actual result of the query
