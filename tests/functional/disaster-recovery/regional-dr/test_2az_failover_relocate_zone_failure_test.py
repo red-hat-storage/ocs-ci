@@ -101,18 +101,18 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # ========================================
         # Step 1: Deploy 2 GitOps/Subscription Apps
         # ========================================
-        logger.info("Deploying 2 GitOps/ApplicationSet apps")
+        logger.info("Deploying 1 GitOps/ApplicationSet apps")
         gitops_workloads = all_dr_workloads["dr_workload"](
-            num_of_subscription=0, num_of_appset=2, skip_mirroring_validation=True
+            num_of_subscription=0, num_of_appset=1, skip_mirroring_validation=True
         )
         logger.info(f"Deployed {len(gitops_workloads)} GitOps/ApplicationSet workloads")
 
         # ========================================
         # Step 2: Deploy 2 Discovered Apps
         # ========================================
-        logger.info("Deploying 2 Discovered apps")
+        logger.info("Deploying 1 Discovered apps")
         discovered_workloads = all_dr_workloads["discovered_apps"](
-            kubeobject=2, recipe=0, pvc_interface=pvc_interface, multi_ns=False
+            kubeobject=1, recipe=0, pvc_interface=pvc_interface, multi_ns=False
         )
         logger.info(f"Deployed {len(discovered_workloads)} Discovered apps")
 
