@@ -6673,48 +6673,70 @@ def remove_toleration():
     return success
 
 
-def get_reclaimspacecronjob_for_pvc(pvc_obj):
+def get_reclaimspacecronjob_for_pvc(pvc_obj, timeout=120):
     """
     Retrieve the ReclaimSpaceCronJob object associated with a given PVC.
 
+    Waits until the ReclaimSpaceCronJob CR exists. The controller may set the
+    ``reclaimspace.csiaddons.openshift.io/cronjob`` annotation on the PVC, or
+    create the CR as ``<pvc_name>-reclaimspace`` without the annotation first;
+    both patterns are handled (same as storageclass reclaim-space tests).
+
     Args:
         pvc_obj (object): PersistentVolumeClaim (PVC) object.
+        timeout (int): Seconds to wait for the ReclaimSpaceCronJob to appear.
 
     Returns:
         object: OCP object representing the ReclaimSpaceCronJob associated with the PVC.
 
     Raises:
-        ValueError: If the PVC does not have the required annotation for ReclaimSpaceCronJob.
+        ValueError: If no ReclaimSpaceCronJob is found within the timeout.
     """
-    # Reload PVC object if annotations are missing
-    if "annotations" not in pvc_obj.data["metadata"]:
-        pvc_obj.reload()
+    cronjob_annotation_key = "reclaimspace.csiaddons.openshift.io/cronjob"
+    default_name = f"{pvc_obj.name}-reclaimspace"
 
-    # Retrieve the CronJob name from annotations
-    cron_job_name = pvc_obj.data["metadata"]["annotations"].get(
-        "reclaimspace.csiaddons.openshift.io/cronjob"
+    try:
+        for _ in TimeoutSampler(timeout=timeout, sleep=5, func=lambda: None):
+            pvc_obj.reload()
+            annotations = pvc_obj.data.get("metadata", {}).get("annotations") or {}
+            cron_job_name = annotations.get(cronjob_annotation_key) or default_name
+            try:
+                cron_obj = OCP(
+                    kind=constants.RECLAIMSPACECRONJOB,
+                    namespace=pvc_obj.namespace,
+                    resource_name=cron_job_name,
+                )
+                cron_obj.get()
+                logger.info(
+                    f"Found ReclaimSpaceCronJob '{cron_job_name}' for PVC '{pvc_obj.name}'"
+                )
+                return cron_obj
+            except Exception as ex:
+                logger.debug(
+                    f"ReclaimSpaceCronJob '{cron_job_name}' not yet available for PVC "
+                    f"'{pvc_obj.name}': {ex}"
+                )
+    except TimeoutExpiredError:
+        pass
+
+    logger.error(
+        f"ReclaimSpaceCronJob not found for PVC '{pvc_obj.name}' within {timeout}s "
+        f"(tried annotation '{cronjob_annotation_key}' and default name '{default_name}')."
     )
-    if not cron_job_name:
-        logger.error(f"PVC '{pvc_obj.name}' lacks annotation for reclaimspace cronjob.")
-        raise ValueError("PVC has no annotation for reclaimspace cronjob")
-
-    logger.info(f"Found ReclaimSpaceCronJob '{cron_job_name}' for PVC '{pvc_obj.name}'")
-
-    # Create and return the CronJob object
-    return OCP(
-        kind=constants.RECLAIMSPACECRONJOB,
-        namespace=pvc_obj.namespace,
-        resource_name=cron_job_name,
+    raise ValueError(
+        f"ReclaimSpaceCronJob not found for PVC '{pvc_obj.name}' within {timeout} seconds"
     )
 
 
-def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
+def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True, timeout=120):
     """
     Enable or disable the ReclaimSpace operation for the PVC's ReclaimSpaceCronJob.
 
     Args:
         pvc_objs (list): List of PersistentVolumeClaim (PVC) objects.
         suspend (bool): If True, disables ReclaimSpace; if False, enables ReclaimSpace.
+        timeout (int): Seconds to wait for the ReclaimSpaceCronJob CR to exist
+            (see ``get_reclaimspacecronjob_for_pvc``).
 
     Returns:
         bool: True if the operation was successfully applied to all PVCs.
@@ -6725,7 +6747,7 @@ def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
         logger.info(f"{action} ReclaimSpace operation for PVC '{pvc_obj.name}'")
 
         # Retrieve the associated CronJob object
-        cron_obj = get_reclaimspacecronjob_for_pvc(pvc_obj)
+        cron_obj = get_reclaimspacecronjob_for_pvc(pvc_obj, timeout=timeout)
 
         # Update the annotation state
         state_value = "unmanaged" if suspend else "managed"
@@ -6828,18 +6850,20 @@ def set_schedule_precedence(precedence):
     logger.info("CSI Addons controller manager pods restarted.")
 
 
-def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj):
+def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj, timeout=120):
     """
     Verify the suspend state of the ReclaimSpaceCronJob associated with the given PVC.
 
     Args:
         pvc_obj (object): PersistentVolumeClaim (PVC) object.
+        timeout (int): Seconds to wait for the ReclaimSpaceCronJob CR to exist
+            (see ``get_reclaimspacecronjob_for_pvc``).
 
     Returns:
         bool: True if the suspend state is True and the state annotation is 'unmanaged', False otherwise.
     """
     # Retrieve the ReclaimSpaceCronJob object for the PVC
-    reclaimspace_cronjob = get_reclaimspacecronjob_for_pvc(pvc_obj)
+    reclaimspace_cronjob = get_reclaimspacecronjob_for_pvc(pvc_obj, timeout=timeout)
 
     # Extract and log the suspend state
     suspend_state = reclaimspace_cronjob.data["spec"].get("suspend", False)
