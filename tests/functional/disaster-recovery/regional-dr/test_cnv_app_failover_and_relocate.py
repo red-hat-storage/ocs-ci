@@ -60,6 +60,7 @@ class TestCnvApplicationRDR:
             ),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_cnv_app_failover_and_relocate(
         self,
         vm_type,
