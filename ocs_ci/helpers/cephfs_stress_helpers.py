@@ -9,6 +9,7 @@ and resource cleanup.
 
 import os
 from pathlib import Path
+import gc
 import logging
 import threading
 
@@ -80,7 +81,8 @@ class CephFSStressTestManager:
         self.created_resources = []
         self.background_checks_thread = None
         self.checks_paused = False
-        check_prometheus_alerts
+        # Reuse PrometheusAPI instance to prevent memory leaks from creating new instances
+        self.prometheus_api = PrometheusAPI(threading_lock=self.verification_lock)
 
     def setup_stress_test_environment(self, pvc_size):
         """
@@ -504,7 +506,7 @@ class CephFSStressTestManager:
         )
 
         checks_to_run = [
-            (check_prometheus_alerts, {"threading_lock": self.verification_lock}),
+            (check_prometheus_alerts, {"stress_manager": self}),
             (check_mds_pods_resource_utilization, {}),
             (get_mon_db_usage, {}),
             (get_nodes_resource_utilization, {}),
@@ -660,6 +662,8 @@ def get_filtered_pods():
         for pod_obj in list_of_all_pods
         if not any(pod_name in pod_obj.name for pod_name in ignore_pods)
     ]
+    # Clean up the full list to prevent memory accumulation
+    del list_of_all_pods
     return filtered_list_objs
 
 
@@ -707,7 +711,9 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
         pod_restarts = []
         oomkilled_pods = []
         for pod_obj in pod_objs:
-            pod_name = pod_obj.get().get("metadata").get("name")
+            # Fetch pod data once and reuse to avoid redundant API calls
+            pod_data = pod_obj.get()
+            pod_name = pod_data.get("metadata").get("name")
             if not validate_pods_are_running_and_not_restarted(
                 pod_name=pod_name,
                 pod_restart_count=0,
@@ -715,7 +721,7 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
             ):
                 pod_restarts.append(pod_name)
 
-            for item in pod_obj.get().get("status").get("containerStatuses"):
+            for item in pod_data.get("status").get("containerStatuses"):
                 container_name = item.get("name")
                 if not validate_pod_oomkilled(
                     pod_name=pod_name, container=container_name
@@ -741,6 +747,13 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
         logger.info(
             "All pods in the openshift-storage namespace are healthy (no restarts or OOMs)"
         )
+
+        # Explicitly clean up pod objects to prevent memory leaks
+        del pod_objs
+        del pod_restarts
+        del oomkilled_pods
+        gc.collect()
+
         return True
 
     try:
@@ -750,17 +763,16 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
 
 
 @retry(CommandFailed, tries=3, delay=60, backoff=1)
-def check_prometheus_alerts(threading_lock):
+def check_prometheus_alerts(stress_manager):
     """
     Fetches alerts from the PrometheusAPI and logs alerts in a tabulated format
 
     Args:
-        threading_lock ([threading.Lock]): A threading lock for synchronization
+        stress_manager: CephFSStressTestManager instance with prometheus_api
 
     """
     prometheus_alert_list = list()
-    prometheus_api = PrometheusAPI(threading_lock=threading_lock)
-    prometheus_api.prometheus_log(prometheus_alert_list)
+    stress_manager.prometheus_api.prometheus_log(prometheus_alert_list)
     table = PrettyTable()
     table.field_names = ["Alert Name", "Description", "State"]
     table.align = "l"
@@ -780,6 +792,11 @@ def check_prometheus_alerts(threading_lock):
         f"\n{table}"
         "\n"
     )
+
+    # Clean up to prevent memory accumulation
+    del prometheus_alert_list
+    del alert_names_seen
+    del table
 
 
 @retry(CommandFailed, tries=3, delay=60, backoff=1)
