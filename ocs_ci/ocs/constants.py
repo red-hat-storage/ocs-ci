@@ -2599,10 +2599,15 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.21"] = (
     DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"]
 )
 
+# the list is gathered via following command (run it on one line!)
+# opm-rhel9 render quay.io/rhceph-dev/ocs-registry:4.22.0-65.konflux -o json |
+#   jq 'select(.name=="odf-dependencies.v4.22.0-65.stable") | .properties[] |
+#   select(.type=="olm.package.required") | .value.packageName'
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "4.22"
 ] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] + [
     "ceph-volsync-plugin-operator",
+    "ocs-tls-profiles",
 ]
 
 # PSI-openstack constants
