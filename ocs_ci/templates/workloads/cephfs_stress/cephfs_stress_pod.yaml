@@ -6,9 +6,23 @@ metadata:
 spec:
   containers:
   - name: cephfs-stress
-    image: quay.io/ocsci/cephfs-stress-pod:latest
+    image: quay.io/ocsci/cephfs-stress-pod:optimized-v1.0
     imagePullPolicy: Always
-    command: ["python3", "/script/smallfile.py"]
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        echo "Initializing Stress Test..."
+        mkdir -p ${OUTPUT_DIR}
+
+        # Start filesystem monitoring in background if enabled
+        if [ "${ENABLE_FS_MONITORING:-true}" = "true" ]; then
+          echo "Starting filesystem monitoring in background..."
+          python3 /script/cephfs_filesystem_monitor.py &
+          MONITOR_PID=$!
+          echo "Filesystem monitor started with PID: $MONITOR_PID"
+        fi
+
+        python3 /script/smallfile.py
     env:
       - name: BASE_DIR         # directory used by smallfile to perform file and directory operations (e.g., append, stat, chmod, ls-l, etc.)
         value: "/mnt"
@@ -24,6 +38,43 @@ spec:
         value: "/mnt/output"
       - name: THREADS
         value: "20"
+      # Filesystem Monitoring Configuration
+      - name: ENABLE_FS_MONITORING
+        value: "true"
+        # Enable/disable filesystem monitoring. Set to "true" to run continuous ls -lRf, find+stat commands
+        # in background to detect CephFS hangs during stress tests. Set to "false" to disable.
+
+      - name: MONITOR_TIMEOUT
+        value: "3600"
+        # Timeout in seconds for monitoring commands (ls -lRf, find+stat). Commands exceeding
+        # this duration are considered hung.
+
+      - name: MONITOR_FULL_FS_ENABLED
+        value: "false"
+        # Enable/disable full filesystem monitoring (scans entire mount point)
+
+      - name: MONITOR_SAMPLE_INTERVAL
+        value: "300"
+        # Interval in seconds between sampled directory monitoring runs. Randomly samples
+        # MONITOR_SAMPLE_SIZE directories and runs ls -lRf on them. Default: 300s (5 min).
+        # Provides cross-validation across different parts of the filesystem.
+
+      - name: MONITOR_CURRENT_INTERVAL
+        value: "180"
+        # Interval in seconds between current iteration monitoring runs. Monitors the actively
+        # written directory (current iteration).
+
+      - name: MONITOR_SAMPLE_SIZE
+        value: "20"
+        # Number of random directories to sample during each sampled monitoring run. Higher values
+        # provide better coverage but take longer.
+
+      - name: HANG_DETECTION_CONSECUTIVE_FAILURES
+        value: "2"
+        # Number of consecutive command timeouts required before declaring a genuine hang.
+        # Filters transient issues (network hiccups, temporary slowness). Default: 2.
+        # Increase to 3+ for more conservative detection, decrease to 1 for aggressive detection
+        # (may cause false positives).
     volumeMounts:
     - mountPath: /mnt
       name: mypvc
