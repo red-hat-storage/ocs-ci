@@ -13,6 +13,7 @@ from ocs_ci.framework.exceptions import (
     InvalidDeploymentType,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import reporting, utils
 from ocs_ci.utility.framework.initialization import load_config
@@ -199,6 +200,31 @@ class Initializer(object):
 
         setup_bin_dir()
         check_cluster_access(config.RUN["kubeconfig"])
+
+        # Load OCP version config based on running cluster version
+        self.load_ocp_version_config()
+
+    def load_ocp_version_config(self) -> None:
+        """
+        Load OCP version configuration file based on the running cluster version.
+        This ensures that the correct OCP-specific settings are loaded dynamically.
+        """
+        logger.info("Fetching OCP version from cluster")
+        ocp_version = get_running_ocp_version(kubeconfig=config.RUN["kubeconfig"])
+        logger.info(f"Detected OCP version: {ocp_version}")
+
+        ocp_version_config_file = f"ocp-{ocp_version}-config.yaml"
+        ocp_version_config_file_path = os.path.join(
+            OCP_VERSION_CONF_DIR, ocp_version_config_file
+        )
+
+        if os.path.exists(ocp_version_config_file_path):
+            logger.info(f"Loading OCP version config: {ocp_version_config_file_path}")
+            load_config([ocp_version_config_file_path])
+        else:
+            logger.warning(
+                f"OCP version config file not found: {ocp_version_config_file_path}"
+            )
 
     def get_test_suite_props(self) -> dict:
         """

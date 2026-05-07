@@ -169,6 +169,7 @@ from ocs_ci.utility.ssl_certs import (
     configure_custom_api_cert,
     get_root_ca_cert,
 )
+from ocs_ci.ocs.resources.rgw import create_ec_cephobjectstore
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -193,6 +194,7 @@ from ocs_ci.utility.utils import (
     get_acm_mce_build_tag,
     apply_oadp_workaround,
     mute_mon_netsplit,
+    ceph_health_resolve_devicehealth,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -1211,12 +1213,17 @@ class Deployment(object):
         else:
             logger.info(f"Default channel will be used: {default_channel}")
             subscription_yaml_data["spec"]["channel"] = default_channel
-        if config.DEPLOYMENT.get("stage"):
-            subscription_yaml_data["spec"]["source"] = constants.OPERATOR_SOURCE_NAME
-        if config.DEPLOYMENT.get("live_deployment"):
+        rosa_hcp_non_ga = platform == constants.ROSA_HCP_PLATFORM and bool(
+            config.DEPLOYMENT.get("ocs_registry_image")
+        )
+        if config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
             )
+        elif platform == constants.ROSA_HCP_PLATFORM and (
+            not live_deployment or rosa_hcp_non_ga
+        ):
+            subscription_yaml_data["spec"]["source"] = constants.OCS_CATALOG_SOURCE_NAME
         if aws_sts_deployment:
             if "config" not in subscription_yaml_data["spec"]:
                 subscription_yaml_data["spec"]["config"] = {}
@@ -1340,25 +1347,37 @@ class Deployment(object):
         stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
         konflux_build = config.DEPLOYMENT.get("konflux_build")
         upgrade = config.UPGRADE.get("upgrade", False)
-        if not live_deployment and not (stage_testing and konflux_build):
+        rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+        rosa_hcp_non_ga = rosa_hcp and bool(config.DEPLOYMENT.get("ocs_registry_image"))
+        if (not live_deployment or rosa_hcp_non_ga) and not (
+            stage_testing and konflux_build and not rosa_hcp
+        ):
             log_step("Create catalog source and wait it to be READY")
             create_catalog_source(image)
         if konflux_build and stage_testing:
-            log_step("Creating stage ImageDigestMirrorSet")
-            exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
-            if not upgrade:
-                log_step("Creating stage TagMirrorSet")
-                exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
-                log_step("Sleeping 60 seconds after applying tag mirror set.")
-            time.sleep(60)
-            log_step("Waiting max 30 mins for master MCP to get updated")
-            exec_cmd(
-                "oc wait --for=condition=Updated --timeout=30m mcp/master", timeout=2100
-            )
-            log_step("Waiting max 30 mins for worker MCP to get updated")
-            exec_cmd(
-                "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
-            )
+            if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+                log_step(
+                    "ROSA HCP: mirrors applied via worker filesystem "
+                    "inside get_and_apply_idms_from_catalog — skipping IDMS apply and MCP wait"
+                )
+            else:
+                log_step("Creating stage ImageDigestMirrorSet")
+                exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+                if not upgrade:
+                    log_step("Creating stage TagMirrorSet")
+                    exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
+                    log_step("Sleeping 60 seconds after applying tag mirror set.")
+                time.sleep(60)
+                log_step("Waiting max 30 mins for master MCP to get updated")
+                exec_cmd(
+                    "oc wait --for=condition=Updated --timeout=30m mcp/master",
+                    timeout=2100,
+                )
+                log_step("Waiting max 30 mins for worker MCP to get updated")
+                exec_cmd(
+                    "oc wait --for=condition=Updated --timeout=30m mcp/worker",
+                    timeout=2100,
+                )
 
         # with Hub/Spoke deployments LSO on IBM BareMetal is a mandatory requirement, it is installed on Dependency
         # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
@@ -2213,6 +2232,13 @@ class Deployment(object):
         # Enable console plugin
         enable_console_plugin()
 
+        if (
+            config.DEPLOYMENT.get("ec_default_pools")
+            and not config.DEPLOYMENT.get("external_mode")
+            and not config.ENV_DATA.get("mcg_only_deployment")
+        ):
+            create_ec_cephobjectstore()
+
         # validate PDB creation of MON, MDS, OSD pods
         if not config.DEPLOYMENT["external_mode"]:
             validate_pdb_creation()
@@ -2246,6 +2272,14 @@ class Deployment(object):
         # https://issues.redhat.com/browse/DFBUGS-4521
         if config.DEPLOYMENT.get("arbiter_deployment"):
             mute_mon_netsplit(namespace=self.namespace)
+
+        # Workaround for DFBUGS-6749: devicehealth module fails when its
+        # pool cannot be created due to a missing default CRUSH rule.
+        try:
+            ceph_health_resolve_devicehealth()
+        except Exception as ex:
+            logger.warning(f"devicehealth workaround failed (may not be needed): {ex}")
+
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
         try:
@@ -2986,10 +3020,12 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         ignore_upgrade (bool): Ignore upgrade parameter.
 
     """
-    # Because custom catalog source will be called: redhat-operators, we need to disable
-    # default sources. This should not be an issue as OCS internal registry images
-    # are now based on OCP registry image
-    disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
+    rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+    if not rosa_hcp:
+        # Because custom catalog source will be called: redhat-operators, we need to disable
+        # default sources. This should not be an issue as OCS internal registry images
+        # are now based on OCP registry image
+        disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
     logger.info("Adding CatalogSource")
     if not image:
         image = config.DEPLOYMENT.get("ocs_registry_image", "")
@@ -3000,14 +3036,15 @@ def create_catalog_source(image=None, ignore_upgrade=False):
             "stage_index_image_tag", f"v{ocp_version}"
         )
         image += f":{osbs_image_tag}"
-        run_cmd(
-            "oc patch image.config.openshift.io/cluster --type merge -p '"
-            '{"spec": {"registrySources": {"insecureRegistries": '
-            '["registry-proxy.engineering.redhat.com", "registry.stage.redhat.io"]'
-            "}}}'"
-        )
-        run_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
-        wait_for_machineconfigpool_status("all", timeout=1800)
+        if not rosa_hcp:
+            run_cmd(
+                "oc patch image.config.openshift.io/cluster --type merge -p '"
+                '{"spec": {"registrySources": {"insecureRegistries": '
+                '["registry-proxy.engineering.redhat.com", "registry.stage.redhat.io"]'
+                "}}}'"
+            )
+            run_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
+            wait_for_machineconfigpool_status("all", timeout=1800)
     if not ignore_upgrade:
         upgrade = config.UPGRADE.get("upgrade", False)
     else:
@@ -3019,7 +3056,22 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         image_tag = get_latest_ds_olm_tag(
             upgrade, latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest")
         )
-    catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+    if rosa_hcp:
+        catalog_source_data = templating.load_yaml(
+            constants.PROVIDER_MODE_CATALOGSOURCE
+        )
+        cs_name = constants.OCS_CATALOG_SOURCE_NAME
+    else:
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+        cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
+
+    # workaround for https://github.com/red-hat-storage/ocs-ci/issues/15085
+    # Remove extractContent for disconnected deployments to avoid init container issues
+    # in air-gapped environments while keeping memoryTarget to prevent OOM
+    if config.DEPLOYMENT.get("disconnected"):
+        if "grpcPodConfig" in catalog_source_data.get("spec", {}):
+            catalog_source_data["spec"]["grpcPodConfig"].pop("extractContent", None)
+
     managed_ibmcloud = (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
         and config.ENV_DATA["deployment_type"] == "managed"
@@ -3027,7 +3079,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     if managed_ibmcloud:
         create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         catalog_source_data["spec"]["secrets"] = [constants.OCS_SECRET]
-    cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
     change_cs_condition = (
         (image or image_tag)
         and catalog_source_data["kind"] == "CatalogSource"
@@ -3050,7 +3101,7 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     templating.dump_data_to_temp_yaml(catalog_source_data, catalog_source_manifest.name)
     run_cmd(f"oc apply -f {catalog_source_manifest.name}", timeout=2400)
     catalog_source = CatalogSource(
-        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+        resource_name=cs_name,
         namespace=constants.MARKETPLACE_NAMESPACE,
     )
     # Wait for catalog source is ready
@@ -3741,7 +3792,7 @@ class MultiClusterDROperatorsDeploy(object):
         oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
 
         if version.compare_versions(f"{oadp_version} >= 1.6"):
-            oadp_pod_count = 4
+            oadp_pod_count = 5
         else:
             oadp_pod_count = 3
         if len(pods_list) != oadp_pod_count:

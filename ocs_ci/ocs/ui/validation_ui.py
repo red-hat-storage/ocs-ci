@@ -11,6 +11,7 @@ from ocs_ci.ocs.cluster import (
 )
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException, CephHealthException
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.ui.base_ui import navigate_to_local_cluster
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
@@ -205,6 +206,8 @@ class ValidationUI(PageNavigator):
         if not, this function will enable it so as to see ODF tab under Storage section
 
         """
+        logger.info("Ensure we are in local cluster view, not Fleet Management")
+        navigate_to_local_cluster()
 
         self.navigate_installed_operators_page()
         logger.info("Click on project dropdown")

@@ -13,10 +13,7 @@ ENV_DATA:
   acm_hub_channel: "release-2.16"
   acm_version: "2.16"
   mce_version: "2.11"
-  submariner_version: "0.22.1"
-  submariner_image: "quay.io/redhat-user-workloads/submariner-tenant/submariner-fbc-4-21@sha256:14b379cf94a7ee452a381055c35a58770068d659e263a98e67ff4e54250738cf"
+  submariner_version: "0.23.1"
   # Below values needs to be changed when acm and submariner are GAed
   submariner_source: "downstream"
-  submariner_release_type: "unreleased"
-  acm_hub_unreleased: true
   oadp_version: "1.5"

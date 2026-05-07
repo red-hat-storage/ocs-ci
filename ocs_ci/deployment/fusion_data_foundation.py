@@ -10,7 +10,10 @@ import tempfile
 import yaml
 
 from ocs_ci.deployment.helpers import storage_class
-from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
+from ocs_ci.deployment.helpers.lso_helpers import (
+    add_disks_lso,
+    cleanup_nodes_for_lso_install,
+)
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
 
@@ -87,10 +90,8 @@ class FusionDataFoundationDeployment:
         """
 
         logger.info("Ensuring Local Storage Operator (LSO) is installed")
-        lso_operator = LocalStorageOperator()
-        if not lso_operator.is_available():
-            lso_operator.create_catalog()
-            lso_operator.deploy()
+        lso_operator = LocalStorageOperator(create_catalog=True)
+        lso_operator.deploy()
 
     def create_image_tag_mirror_set(self):
         """
@@ -251,6 +252,12 @@ class FusionDataFoundationDeployment:
         )
         if self.lso_enabled:
             self.ensure_lso_installed()
+            # Perform disk cleanup after LSO is installed but before any disk operations
+            if config.ENV_DATA.get("skip_disks_cleanup", False):
+                logger.info("Skipping disks cleanup")
+            else:
+                logger.info("Performing disk cleanup for LSO")
+                cleanup_nodes_for_lso_install()
         self.patch_catalogsource()
 
         fusion_version = config.ENV_DATA["fusion_version"].replace("v", "")

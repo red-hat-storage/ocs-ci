@@ -201,6 +201,17 @@ class OCPDeployment:
         ssh_key = self.get_ssh_key()
         if ssh_key:
             install_config_obj["sshKey"] = ssh_key
+
+        # Configure RHCOS 10 specific settings
+        rhcos_version = config.ENV_DATA.get("rhcos_version")
+        if rhcos_version and str(rhcos_version) == "10":
+            install_config_obj["featureSet"] = "TechPreviewNoUpgrade"
+            install_config_obj["osImageStream"] = "rhel-10"
+            logger.info(
+                "Configured install-config for RHEL 10 deployment with "
+                "TechPreviewNoUpgrade feature set"
+            )
+
         install_config_str = yaml.safe_dump(install_config_obj)
         install_config = os.path.join(self.cluster_path, "install-config.yaml")
         with open(install_config, "w") as f:

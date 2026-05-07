@@ -288,8 +288,7 @@ def get_selector_for_ocs_operator():
     This is the helper function which returns selector for package manifest.
     It's needed because of conflict with live content and multiple package
     manifests with the ocs-operator name. In case we are using internal builds
-    we label catalog source or operator source and using the same selector for
-    package manifest.
+    we label catalog source and using the same selector for package manifest.
 
     Returns:
         str: Selector for package manifest if we are on internal
@@ -306,15 +305,5 @@ def get_selector_for_ocs_operator():
             return constants.OPERATOR_INTERNAL_SELECTOR
     except CommandFailed:
         log.info("Internal catalog source not found!")
-    operator_source = OCP(
-        kind="OperatorSource",
-        resource_name=constants.OPERATOR_SOURCE_NAME,
-        namespace=constants.MARKETPLACE_NAMESPACE,
-    )
-    try:
-        operator_source.get()
-        return constants.OPERATOR_INTERNAL_SELECTOR
-    except CommandFailed:
-        log.info("Catalog source not found!")
     # TODO: we might need to limit this to ODF only as FDF might come from different source
     return constants.REDHAT_OPERATOR_SELECTOR

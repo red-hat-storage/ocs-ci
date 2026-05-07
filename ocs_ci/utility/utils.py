@@ -1063,13 +1063,13 @@ def expose_ocp_version(version):
 
     """
     if version.endswith(".nightly"):
-        latest_nightly_url = (
-            f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
-            f"releasestream/{version}/latest"
-        )
-        version_url_content = get_url_content(latest_nightly_url)
-        version_json = json.loads(version_url_content)
-        return version_json["name"]
+        release_info = get_nightly_release_info(version)
+        if release_info and release_info.get("name"):
+            return release_info["name"]
+        else:
+            raise ValueError(
+                f"Unable to get nightly release info for version {version}"
+            )
     if version.endswith("-ga"):
         channel = config.DEPLOYMENT.get("ocp_channel", "stable")
         ocp_version = version.rstrip("-ga")
@@ -1077,6 +1077,128 @@ def expose_ocp_version(version):
         return get_latest_ocp_version(f"{channel}-{ocp_version}", index)
     else:
         return version
+
+
+def get_nightly_release_info(version):
+    """
+    Get full release information for a nightly build including pullSpec.
+
+    Args:
+        version (str): Nightly version string (e.g., 4.22.0-0.nightly or
+                      4.22.0-0.nightly-2026-04-18-162844)
+
+    Returns:
+        dict: Release information including 'name', 'pullSpec', 'downloadURL', etc.
+              Returns None if unable to fetch the information.
+
+    """
+    if "nightly" not in version:
+        return None
+
+    # Extract the stream name (e.g., "4.22.0-0.nightly") from full version
+    # The API expects just the stream name, not the full timestamp version
+    if ".nightly" in version:
+        stream_name = version.split(".nightly")[0] + ".nightly"
+    else:
+        # Shouldn't happen, but handle it gracefully
+        stream_name = version
+
+    try:
+        latest_nightly_url = (
+            f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
+            f"releasestream/{stream_name}/latest"
+        )
+        log.debug(f"Fetching nightly release info from: {latest_nightly_url}")
+        version_url_content = get_url_content(latest_nightly_url)
+        release_info = json.loads(version_url_content)
+        log.debug(
+            f"Retrieved release info: name={release_info.get('name')}, "
+            f"pullSpec={release_info.get('pullSpec')}"
+        )
+        return release_info
+    except Exception as e:
+        log.warning(f"Failed to get nightly release info for {version}: {e}")
+        return None
+
+
+def download_ga_oc_client_as_bootstrap(bin_dir, target_version):
+    """
+    Download a GA oc client as bootstrap to enable extraction from pullSpec.
+
+    This function downloads a GA version of the oc client (potentially N-1 or N-2)
+    to use as a bootstrap client for extracting the correct nightly version from
+    the release image pullSpec.
+
+    Args:
+        bin_dir (str): Directory to download the client to
+        target_version (str): Target version to determine which GA version to use
+
+    Returns:
+        bool: True if successfully downloaded a bootstrap client, False otherwise
+
+    """
+    log.info(
+        "Attempting to download a GA oc client as bootstrap for nightly extraction"
+    )
+
+    version_major_minor = str(
+        version_module.get_semantic_version(target_version, only_major_minor=True)
+    )
+
+    previous_dir = os.getcwd()
+    os.chdir(bin_dir)
+    tarball = "openshift-client-bootstrap.tar.gz"
+
+    try:
+        # Try to download N, N-1, or N-2 GA version
+        for current_version_count in range(3):
+            previous_version = version_module.get_previous_version(
+                version_major_minor, current_version_count
+            )
+            log.debug(
+                f"Checking if version {previous_version} (offset {current_version_count}) is GA'ed"
+            )
+
+            if is_ocp_version_gaed(previous_version):
+                log.info(
+                    f"Version {previous_version} is GA'ed, downloading as bootstrap client"
+                )
+                # Temporarily set URL template for GA version
+                original_template = config.DEPLOYMENT.get("ocp_url_template")
+                config.DEPLOYMENT["ocp_url_template"] = (
+                    "https://mirror.openshift.com/pub/openshift-v4/clients/"
+                    "ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
+                )
+
+                try:
+                    ga_version = expose_ocp_version(f"{previous_version}-ga")
+                    url = get_openshift_mirror_url("openshift-client", ga_version)
+                    download_file(url, tarball)
+                    run_cmd(f"tar xzvf {tarball} oc kubectl")
+                    delete_file(tarball)
+                    log.info(
+                        f"Successfully downloaded GA oc client {ga_version} as bootstrap"
+                    )
+                    return True
+                except Exception as e:
+                    log.warning(
+                        f"Failed to download GA version {ga_version} as bootstrap: {e}"
+                    )
+                finally:
+                    # Restore original template
+                    if original_template:
+                        config.DEPLOYMENT["ocp_url_template"] = original_template
+                    else:
+                        config.DEPLOYMENT.pop("ocp_url_template", None)
+
+        log.warning("Could not find any GA'ed version to use as bootstrap")
+        return False
+
+    except Exception as e:
+        log.error(f"Failed to download bootstrap GA oc client: {e}")
+        return False
+    finally:
+        os.chdir(previous_dir)
 
 
 @retry(CommandFailed, tries=2, delay=5, backoff=2)
@@ -1397,18 +1519,6 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
             download_client = False
 
     if download_client:
-        # Move existing client binaries to backup location
-        client_binary_backup = f"{client_binary_path}.bak"
-        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
-
-        backup_created = False
-        try:
-            os.rename(client_binary_path, client_binary_backup)
-            os.rename(kubectl_binary_path, kubectl_binary_backup)
-            backup_created = True
-        except FileNotFoundError:
-            pass
-
         # Download the client
         log.info(f"Downloading openshift client ({version}).")
         # record current working directory and switch to BIN_DIR
@@ -1416,24 +1526,98 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
         os.chdir(bin_dir)
 
         tarball = "openshift-client.tar.gz"
-        try:
-            url = get_openshift_mirror_url("openshift-client", version)
-            download_file(url, tarball)
-            run_cmd(f"tar xzvf {tarball} oc kubectl")
-            delete_file(tarball)
-        except Exception as e:
-            log.error(f"Failed to download the openshift client. Exception '{e}'")
-            # check given version is GA'ed or not
-            if "nightly" in version:
-                get_nightly_oc_via_ga(version, tarball)
+        download_successful = False
+        backup_created = False
+        client_binary_backup = f"{client_binary_path}.bak"
+        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
+
+        # For nightly builds, try pullSpec extraction first (more reliable than downloadURL)
+        if "nightly" in version and not custom_ocp_image:
+            log.info(
+                "Nightly build detected. Attempting to download via pullSpec "
+                "(more reliable than downloadURL extraction)."
+            )
+            release_info = get_nightly_release_info(version)
+
+            if release_info and release_info.get("pullSpec"):
+                pullspec = release_info["pullSpec"]
+                log.info(f"Using pullSpec: {pullspec}")
+
+                # Check if oc client exists to perform extraction
+                if not client_exist:
+                    log.info(
+                        "No existing oc client found. Downloading GA version as bootstrap "
+                        "to enable extraction from pullSpec."
+                    )
+                    if download_ga_oc_client_as_bootstrap(bin_dir, version):
+                        log.info("Bootstrap GA oc client downloaded successfully.")
+                    else:
+                        log.warning(
+                            "Failed to download bootstrap GA client. "
+                            "Will try downloadURL method as fallback."
+                        )
+
+                # Now try to extract from pullSpec using the available oc (existing or bootstrap)
+                # Note: extract_ocp_binary_from_image() handles its own backup internally
+                if os.path.isfile(client_binary_path):
+                    try:
+                        log.info(f"Extracting oc client from pullSpec: {pullspec}")
+                        extract_ocp_binary_from_image("oc", pullspec, bin_dir)
+                        download_successful = True
+                        log.info(
+                            "Successfully extracted oc client from pullSpec "
+                            "(avoids downloadURL timeout issues)."
+                        )
+                    except Exception as e:
+                        log.warning(
+                            f"Failed to extract oc client from pullSpec: {e}. "
+                            "Falling back to downloadURL method."
+                        )
+            else:
+                log.warning(
+                    "Could not retrieve pullSpec from release stream. "
+                    "Falling back to downloadURL method."
+                )
+
+        # If pullSpec extraction wasn't attempted or failed, try traditional downloadURL method
+        # Create backup before attempting methods that don't handle their own backup
+        if not download_successful:
+            # Move existing client binaries to backup location before trying other download methods
+            try:
+                os.rename(client_binary_path, client_binary_backup)
+                os.rename(kubectl_binary_path, kubectl_binary_backup)
+                backup_created = True
+                log.debug("Created backup of existing client binaries.")
+            except FileNotFoundError:
+                pass
+
+            try:
+                url = get_openshift_mirror_url("openshift-client", version)
+                download_file(url, tarball)
+                run_cmd(f"tar xzvf {tarball} oc kubectl")
+                delete_file(tarball)
+                download_successful = True
+            except Exception as e:
+                log.error(f"Failed to download the openshift client. Exception '{e}'")
+                # check given version is GA'ed or not
+                if "nightly" in version:
+                    get_nightly_oc_via_ga(version, tarball)
+                    # Check if get_nightly_oc_via_ga succeeded
+                    if os.path.isfile(client_binary_path):
+                        download_successful = True
 
         if custom_ocp_image and not skip_if_client_downloaded_from_installer:
             extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
+        # Verify the downloaded/extracted client works
+        client_version_valid = False
         try:
             client_version = run_cmd(f"{client_binary_path} version --client")
+            client_version_valid = True
         except CommandFailed:
             log.error("Unable to get version from downloaded client.")
-        if client_version:
+
+        if client_version_valid:
+            # Download/extraction successful - clean up backups
             try:
                 delete_file(client_binary_backup)
                 delete_file(kubectl_binary_backup)
@@ -1441,15 +1625,57 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
             except FileNotFoundError:
                 pass
         else:
+            # Download/extraction failed - handle fallback
+            log.warning(
+                "Failed to download/extract the correct oc client version. "
+                "Attempting fallback strategies."
+            )
+
             if backup_created:
+                # Restore the backup (previous version)
                 os.rename(client_binary_backup, client_binary_path)
                 os.rename(kubectl_binary_backup, kubectl_binary_path)
-                log.info("Restored backup binaries to their original location.")
+                log.warning(
+                    "Restored previous oc client version. Continuing with existing client "
+                    "to avoid deployment failure. NOTE: Version mismatch may cause issues."
+                )
+                try:
+                    client_version = run_cmd(f"{client_binary_path} version --client")
+                except CommandFailed:
+                    client_version = "unknown (restored from backup)"
+            elif os.path.isfile(client_binary_path):
+                # We have a bootstrap client from download_ga_oc_client_as_bootstrap
+                log.warning(
+                    "Using bootstrap GA oc client. Continuing with bootstrap client "
+                    "to avoid deployment failure. NOTE: Version mismatch may cause issues."
+                )
+                try:
+                    client_version = run_cmd(f"{client_binary_path} version --client")
+                except CommandFailed:
+                    client_version = "unknown (bootstrap)"
             else:
-                if not use_system_available_client_and_kubectl(
+                # Try to use system available client as last resort
+                if use_system_available_client_and_kubectl(
                     client_binary_path, kubectl_binary_path
                 ):
-                    raise FileNotFoundError("No system oc client exist to copy from!")
+                    log.warning(
+                        "Using system-available oc client as last resort. "
+                        "NOTE: Version mismatch may cause issues."
+                    )
+                    try:
+                        client_version = run_cmd(
+                            f"{client_binary_path} version --client"
+                        )
+                    except CommandFailed:
+                        client_version = "unknown (system)"
+                else:
+                    log.error(
+                        "All oc client download methods failed and no fallback available."
+                    )
+                    raise FileNotFoundError(
+                        "Failed to download oc client and no fallback available!"
+                    )
+
         if not os.path.exists("kubectl"):
             log.info("Creating kubectl link to oc binary.")
             os.link("oc", "kubectl")
@@ -2902,9 +3128,58 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
+def ceph_health_resolve_devicehealth():
+    """
+    Fix ceph health issue where the devicehealth module fails because
+    its pool cannot be created due to a missing CRUSH rule.
+
+    Workaround:
+        1. Set osd_pool_default_crush_rule to 0 (block pool rule)
+        2. Restart the devicehealth module so it retries pool creation
+        3. Archive any resulting crash reports
+
+    """
+    # importing here to avoid circular import
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    log.warning(
+        "Trying to fix devicehealth module failure by setting "
+        "default CRUSH rule and restarting the module"
+    )
+    ct_pod = get_ceph_tools_pod()
+
+    ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph config set mon osd_pool_default_crush_rule 0",
+        format=None,
+        out_yaml_format=False,
+    )
+    log.info("Set osd_pool_default_crush_rule to 0")
+
+    ct_pod.exec_ceph_cmd(
+        ceph_cmd=("ceph mgr module force disable devicehealth --yes-i-really-mean-it"),
+        format=None,
+        out_yaml_format=False,
+    )
+    log.info("Force disabled devicehealth module")
+
+    ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph mgr module enable devicehealth",
+        format=None,
+        out_yaml_format=False,
+    )
+    log.info("Re-enabled devicehealth module")
+
+    # give time to generate crash
+    time.sleep(180)
+
+    ceph_crash_info_display(ct_pod)
+    archive_ceph_crashes(ct_pod)
+
+
 def ceph_health_resolve_crash():
     """
     Fix ceph health issue with daemon crash
+
     """
     log.warning("Trying to fix the issue with crash by archiving crashes")
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
@@ -3023,6 +3298,20 @@ def ceph_health_recover(
 
     """
     ceph_health_fixes = [
+        {
+            "pattern": r"Module 'devicehealth' has failed",
+            "func": ceph_health_resolve_devicehealth,
+            "func_args": [],
+            "func_kwargs": {},
+            "ceph_health_tries": 10,
+            "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-6749",
+                    "pattern": r"Module 'devicehealth' has failed",
+                },
+            ],
+        },
         {
             "pattern": r"daemons have recently crashed",
             "func": ceph_health_resolve_crash,
@@ -6684,44 +6973,43 @@ def create_kubeconfig(kubeconfig_path):
         kubeconfig_path (str): kubeconfig file location
 
     """
-    if not os.path.isfile(kubeconfig_path):
-        if config.RUN.get("kubeadmin_password") and config.RUN.get("ocp_url"):
-            log.info(
-                "Generating kubeconfig file from provided kubeadmin password and OCP URL"
-            )
-            # check and correct OCP URL (change it to API url if console url provided and add port if needed
-            ocp_api_url = config.RUN.get("ocp_url").replace(
-                "console-openshift-console.apps", "api"
-            )
-            if ":6443" not in ocp_api_url:
-                ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
+    if config.RUN.get("kubeadmin_password") and config.RUN.get("ocp_url"):
+        log.info(
+            "Generating kubeconfig file from provided kubeadmin password and OCP URL"
+        )
+        # check and correct OCP URL (change it to API url if console url provided and add port if needed
+        ocp_api_url = config.RUN.get("ocp_url").replace(
+            "console-openshift-console.apps", "api"
+        )
+        if ":6443" not in ocp_api_url:
+            ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
 
-            cmd = (
-                f"oc login --username {config.RUN['username']} "
-                f"--password {config.RUN['kubeadmin_password']} "
-                f"{ocp_api_url} "
-                f"--kubeconfig {kubeconfig_path} "
-                "--insecure-skip-tls-verify=true"
-            )
-            result = exec_cmd(cmd, secrets=(config.RUN["kubeadmin_password"],))
-            if result.returncode:
-                log.warning(f"executed command: {cmd}")
-                log.warning(f"returncode: {result.returncode}")
-                log.warning(f"stdout: {result.stdout}")
-                log.warning(f"stderr: {result.stderr}")
-            else:
-                log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
-
-            kubeadmin_password_file = os.path.join(
-                config.ENV_DATA["cluster_path"], config.RUN["password_location"]
-            )
-            if not os.path.isfile(kubeadmin_password_file):
-                with open(kubeadmin_password_file, "w") as fd:
-                    fd.write(config.RUN.get("kubeadmin_password"))
-                log.info("Created kubeadmin-password file")
-
+        cmd = (
+            f"oc login --username {config.RUN['username']} "
+            f"--password {config.RUN['kubeadmin_password']} "
+            f"{ocp_api_url} "
+            f"--kubeconfig {kubeconfig_path} "
+            "--insecure-skip-tls-verify=true"
+        )
+        result = exec_cmd(cmd, secrets=(config.RUN["kubeadmin_password"],))
+        if result.returncode:
+            log.warning(f"executed command: {cmd}")
+            log.warning(f"returncode: {result.returncode}")
+            log.warning(f"stdout: {result.stdout}")
+            log.warning(f"stderr: {result.stderr}")
         else:
-            raise ConfigurationError(
-                "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
-                "environment variables were not provided."
-            )
+            log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+
+        kubeadmin_password_file = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["password_location"]
+        )
+        if not os.path.isfile(kubeadmin_password_file):
+            with open(kubeadmin_password_file, "w") as fd:
+                fd.write(config.RUN.get("kubeadmin_password"))
+            log.info("Created kubeadmin-password file")
+
+    elif not os.path.isfile(kubeconfig_path):
+        raise ConfigurationError(
+            "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
+            "environment variables were not provided."
+        )

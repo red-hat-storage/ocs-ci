@@ -25,6 +25,7 @@ from ocs_ci.ocs.resources.pod import (
     check_file_existence,
     delete_pods,
 )
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import fetch_used_size, default_storage_class
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -55,6 +56,8 @@ class TestRbdSpaceReclaim(ManageTest):
                 replica=self.pool_replica,
                 new_rbd_pool=True,
             )
+        self.data_pool = helpers.get_data_pool_name(sc_obj=self.sc_obj)
+        self.pool_size_factor = helpers.get_pool_size_factor(self.data_pool)
 
         self.pvc, self.pod = create_pvcs_and_pods(
             pvc_size=pvc_size_gi,
@@ -90,8 +93,7 @@ class TestRbdSpaceReclaim(ManageTest):
         fio_filename2 = "fio_file2"
 
         # Fetch the used size of pool
-        cbp_name = self.sc_obj.get().get("parameters").get("pool")
-        used_size_before_io = fetch_used_size(cbp_name)
+        used_size_before_io = fetch_used_size(self.data_pool)
         log.info(f"Used size before IO is {used_size_before_io}")
 
         # Create two 10 GB file
@@ -106,8 +108,8 @@ class TestRbdSpaceReclaim(ManageTest):
             pod_obj.get_fio_results()
 
         # Verify used size after IO
-        exp_used_size_after_io = used_size_before_io + (20 * self.pool_replica)
-        used_size_after_io = fetch_used_size(cbp_name, exp_used_size_after_io)
+        exp_used_size_after_io = used_size_before_io + (20 * self.pool_size_factor)
+        used_size_after_io = fetch_used_size(self.data_pool, exp_used_size_after_io)
         log.info(f"Used size after IO is {used_size_after_io}")
 
         # Delete one file
@@ -135,7 +137,7 @@ class TestRbdSpaceReclaim(ManageTest):
 
         # Verify space is reclaimed by checking the used size of the RBD pool
         used_after_reclaiming_space = fetch_used_size(
-            cbp_name, used_size_after_io - (10 * self.pool_replica)
+            self.data_pool, used_size_after_io - (10 * self.pool_size_factor)
         )
         log.info(
             f"Space has been reclaimed. Used size after io is {used_after_reclaiming_space}."
@@ -172,8 +174,7 @@ class TestRbdSpaceReclaim(ManageTest):
         fio_filename2 = "fio_file2"
 
         # Fetch the used size of pool
-        cbp_name = self.sc_obj.get().get("parameters").get("pool")
-        used_size_before_io = fetch_used_size(cbp_name)
+        used_size_before_io = fetch_used_size(self.data_pool)
         log.info(f"Used size before IO is {used_size_before_io}")
 
         # Create a 10 GB file
@@ -188,8 +189,8 @@ class TestRbdSpaceReclaim(ManageTest):
             pod_obj.get_fio_results()
 
         # Verify used size after IO
-        exp_used_size_after_io = used_size_before_io + (20 * self.pool_replica)
-        used_size_after_io = fetch_used_size(cbp_name, exp_used_size_after_io)
+        exp_used_size_after_io = used_size_before_io + (20 * self.pool_size_factor)
+        used_size_after_io = fetch_used_size(self.data_pool, exp_used_size_after_io)
         log.info(f"Used size after IO is {used_size_after_io}")
 
         # Create ReclaimSpaceJob
@@ -199,7 +200,9 @@ class TestRbdSpaceReclaim(ManageTest):
         self.reclaim_space_job(reclaim_space_job)
 
         # Verify space is reclaimed by checking the used size of the RBD pool
-        used_after_reclaiming_space = fetch_used_size(cbp_name, used_size_after_io)
+        used_after_reclaiming_space = fetch_used_size(
+            self.data_pool, used_size_after_io
+        )
         log.info(
             f"Memory remains intact. Used size after io is {used_after_reclaiming_space}."
         )
@@ -227,8 +230,7 @@ class TestRbdSpaceReclaim(ManageTest):
         fio_filename1 = "fio_file1"
 
         # Fetch the used size of pool
-        cbp_name = self.sc_obj.get().get("parameters").get("pool")
-        used_size_before_io = fetch_used_size(cbp_name)
+        used_size_before_io = fetch_used_size(self.data_pool)
         log.info(f"Used size before IO is {used_size_before_io}")
 
         # Create a 10 GB file
@@ -242,8 +244,8 @@ class TestRbdSpaceReclaim(ManageTest):
         pod_obj.get_fio_results()
 
         # Verify used size after IO
-        exp_used_size_after_io = used_size_before_io + (10 * self.pool_replica)
-        used_size_after_io = fetch_used_size(cbp_name, exp_used_size_after_io)
+        exp_used_size_after_io = used_size_before_io + (10 * self.pool_size_factor)
+        used_size_after_io = fetch_used_size(self.data_pool, exp_used_size_after_io)
         log.info(f"Used size after IO is {used_size_after_io}")
 
         # Delete the file

@@ -90,7 +90,7 @@ DEPLOYMENT:
   # Following options are defaults for deployment with infra worker nodes
   infra_nodes: False
   # How long should ocs-ci wait for `openshift-install create cluster` run?
-  openshift_install_timeout: 3600
+  openshift_install_timeout: 7200
   # redhat-operators CatalogSource image (used for disconnected installation)
   cs_redhat_operators_image: "registry.redhat.io/redhat/redhat-operator-index"
   # Deployment with KMS (vault etc)
@@ -117,6 +117,10 @@ DEPLOYMENT:
   #api_ssl_cert: "data/api-cert.crt"
   #api_ssl_key: "data/api-cert.key"
   #api_ssl_ca_cert: "data/ca.crt"
+  # Boto3 S3 (MCG): skip TLS verification when true (e.g. ad-hoc clusters).
+  disable_s3_ssl_verify: false
+  # When true, do not apply IBM Cloud qe.rh-ocs.com S3 TLS workaround (use normal verify path).
+  force_s3_ssl_verify: false
   install_lvmo: False
   # AWS profile ( profile must exist in ~/.aws/credentials )
   aws_profile: "ocs_ci"
@@ -131,6 +135,8 @@ DEPLOYMENT:
   enable_nested_virtualization: False # Enable nested virtualization on the cluster nodes
   host_network: False # Use host network for ODF pods, propagates to spec of StorageCluster. Mandatory for Hub/Spoke deployments.
   enable_data_replication_separation: False # separates client data path from data replication
+  # Erasure Coding: deploy ODF with EC as default pool type instead of replication
+  ec_default_pools: False
 
 # Section for reporting configuration
 REPORTING:
@@ -350,6 +356,8 @@ UI_SELENIUM:
   ignore_ssl: True
   ai_fallback: True
   llm_model: "claude:sonnet"
+  llm_host: "http://localhost:11434" # Only for locally running llm server, using Ollama.
+  llm_screenshot_resolution: "1920,1400"
 
 # This section is related to performance tests which need Elasticsearch server
 PERF:

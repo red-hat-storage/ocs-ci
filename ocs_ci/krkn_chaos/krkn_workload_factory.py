@@ -3,10 +3,48 @@ import subprocess
 import tempfile
 import time
 from contextlib import suppress
+from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import constants
 from ocs_ci.krkn_chaos.krkn_workload_config import KrknWorkloadConfig
 
 log = logging.getLogger(__name__)
+
+
+def _ensure_tenant_kms_for_encrypted_rbd(proj_obj, pv_encryption_kms_setup_factory):
+    """
+    Configure KMS for encrypted RBD workloads: resolve encryptionKMSID and, for
+    Vault token mode, create ceph-csi-kms-token in the tenant namespace.
+
+    Mirrors the flow in test_rbd_pv_encryption and multi_cnv_workload_factory.
+
+    Args:
+        proj_obj: Project / namespace object for tenant resources.
+        pv_encryption_kms_setup_factory: pytest fixture callable from conftest.
+
+    Returns:
+        tuple: (encryption_kms_id str or None, kms client object or None)
+    """
+    from ocs_ci.framework import config as ocsci_config
+
+    if not pv_encryption_kms_setup_factory:
+        return None, None
+
+    kms_provider = ocsci_config.ENV_DATA.get("KMS_PROVIDER", "")
+
+    if kms_provider.lower() == constants.HPCS_KMS_PROVIDER:
+        kms = pv_encryption_kms_setup_factory("v1")
+        return kms.kmsid, kms
+
+    if kms_provider == constants.AZURE_KV_PROVIDER_NAME:
+        kms = pv_encryption_kms_setup_factory()
+        return kms.azure_kms_connection_name, kms
+
+    # Vault (default): tenant must have Secret ceph-csi-kms-token for CSI.
+    use_vault_namespace = ocsci_config.ENV_DATA.get("vault_hcp", False)
+    kms = pv_encryption_kms_setup_factory("v2", use_vault_namespace)
+    kms.vault_path_token = kms.generate_vault_token()
+    kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
+    return kms.kmsid, kms
 
 
 class WorkloadOps:
@@ -71,6 +109,10 @@ class WorkloadOps:
                     self._validate_cnv_workload(workload)
                 elif workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
                     self._validate_rgw_workload(workload)
+                elif workload_type == KrknWorkloadConfig.MCG_WORKLOAD:
+                    self._validate_mcg_workload(workload)
+                elif workload_type == KrknWorkloadConfig.WARP_WORKLOAD:
+                    self._validate_warp_workload(workload)
 
                 ready_count += 1
             except Exception as e:
@@ -153,6 +195,8 @@ class WorkloadOps:
                     self._validate_cnv_workload(workload)
                 elif workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
                     self._validate_rgw_workload(workload)
+                elif workload_type == KrknWorkloadConfig.MCG_WORKLOAD:
+                    self._validate_mcg_workload(workload)
                 else:
                     log.warning(f"Unknown workload type: {workload_type}")
 
@@ -198,6 +242,10 @@ class WorkloadOps:
                     self._validate_cnv_workload(workload)
                 elif workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
                     self._validate_rgw_workload(workload)
+                elif workload_type == KrknWorkloadConfig.MCG_WORKLOAD:
+                    self._validate_mcg_workload(workload)
+                elif workload_type == KrknWorkloadConfig.WARP_WORKLOAD:
+                    self._validate_warp_workload(workload)
                 else:
                     log.warning(f"Unknown workload type: {workload_type}")
 
@@ -212,6 +260,15 @@ class WorkloadOps:
                     workload.stop_workload()
                 with suppress(Exception):
                     workload.cleanup_workload()
+
+    def stop_background_operations_on_chaos_failure(self):
+        """
+        Stop background cluster operations when chaos aborts early (e.g. Ceph crash).
+
+        Safe to call multiple times. Does not validate or tear down workloads; use
+        validate_and_cleanup() for normal post-chaos teardown.
+        """
+        self._stop_background_cluster_operations()
 
     def _stop_background_cluster_operations(self):
         """Stop background cluster operations."""
@@ -253,7 +310,14 @@ class WorkloadOps:
                 return KrknWorkloadConfig.CNV_WORKLOAD
             elif "vdbench" in class_name:
                 return KrknWorkloadConfig.VDBENCH
+            elif "warp" in class_name:
+                return KrknWorkloadConfig.WARP_WORKLOAD
             elif "rgw" in class_name:
+                # Check if this is MCG or RGW based on bucket type
+                if hasattr(workload, "rgw_bucket") and workload.rgw_bucket:
+                    bucket_class_name = workload.rgw_bucket.__class__.__name__
+                    if "MCG" in bucket_class_name:
+                        return KrknWorkloadConfig.MCG_WORKLOAD
                 return KrknWorkloadConfig.RGW_WORKLOAD
 
         return (
@@ -316,6 +380,30 @@ class WorkloadOps:
             except Exception as e:
                 log.warning(f"Failed to get RGW workload status: {e}")
 
+    def _validate_mcg_workload(self, workload):
+        """Validate MCG/NooBaa workload health."""
+        # MCG workload uses same RGWWorkload class, so validation is similar
+        self._validate_rgw_workload(workload)
+
+    def _validate_warp_workload(self, workload):
+        """Validate Warp workload health."""
+        # Check if Warp workload is still running
+        if hasattr(workload, "is_running") and callable(workload.is_running):
+            if not workload.is_running():
+                log.warning("Warp workload is not running")
+
+        # Check workload status
+        if hasattr(workload, "get_workload_status") and callable(
+            workload.get_workload_status
+        ):
+            try:
+                status = workload.get_workload_status()
+                log.info(f"Warp workload status: {status}")
+                if not status.get("is_running", False):
+                    log.warning("Warp workload reports as not running")
+            except Exception as e:
+                log.warning(f"Failed to get Warp workload status: {e}")
+
 
 class KrknWorkloadFactory:
     """
@@ -343,6 +431,7 @@ class KrknWorkloadFactory:
         loaded_fixtures=None,
         timeout=360,
         storageclass_factory=None,
+        pv_encryption_kms_setup_factory=None,
         # Backward compatibility - old signature
         resiliency_workload=None,
         vdbench_block_config=None,
@@ -362,6 +451,7 @@ class KrknWorkloadFactory:
             loaded_fixtures: Dict of loaded fixtures (preferred, registry-based)
             timeout: Timeout for operations
             storageclass_factory: Storage class factory fixture (for encrypted PVCs)
+            pv_encryption_kms_setup_factory: KMS setup fixture (tenant Vault token, etc.)
 
             # Backward compatibility (deprecated - use loaded_fixtures)
             resiliency_workload: VDBENCH fixture (optional)
@@ -436,9 +526,10 @@ class KrknWorkloadFactory:
             for param in fixture_params:
                 args.append(loaded_fixtures.get(param))
 
-            # Add storageclass_factory for VDBENCH workloads (for encrypted PVC support)
-            if workload_type == "VDBENCH" and storageclass_factory is not None:
+            # Add storageclass_factory and KMS factory for VDBENCH (encrypted PVC support)
+            if workload_type == "VDBENCH":
                 args.append(storageclass_factory)
+                args.append(pv_encryption_kms_setup_factory)
 
             # Create workloads using factory method
             try:
@@ -468,6 +559,7 @@ class KrknWorkloadFactory:
                         loaded_fixtures.get("vdbench_block_config"),
                         loaded_fixtures.get("vdbench_filesystem_config"),
                         storageclass_factory,
+                        pv_encryption_kms_setup_factory,
                     )
                     workloads_by_type[KrknWorkloadConfig.VDBENCH] = vdbench_workloads
                     all_workloads.extend(vdbench_workloads)
@@ -514,6 +606,8 @@ class KrknWorkloadFactory:
             resiliency_workload,
             vdbench_block_config,
             vdbench_filesystem_config,
+            None,
+            None,
         )
         return WorkloadOps(proj_obj, workloads, [KrknWorkloadConfig.VDBENCH])
 
@@ -525,6 +619,7 @@ class KrknWorkloadFactory:
         vdbench_block_config,
         vdbench_filesystem_config,
         storageclass_factory=None,
+        pv_encryption_kms_setup_factory=None,
     ):
         """Create VDBENCH workloads for a given project.
 
@@ -535,6 +630,7 @@ class KrknWorkloadFactory:
             vdbench_block_config: VDBENCH block config fixture
             vdbench_filesystem_config: VDBENCH filesystem config fixture
             storageclass_factory: Storage class factory fixture (optional, for encrypted PVCs)
+            pv_encryption_kms_setup_factory: KMS setup fixture (optional; required for Vault-encrypted RBD)
 
         Returns:
             list: List of created workload objects
@@ -700,13 +796,24 @@ class KrknWorkloadFactory:
         # NOTE: Only RBD (CEPHBLOCKPOOL) supports per-PVC encryption via storage class
         # CephFS does NOT support per-PVC encryption via storage class parameters
         encrypted_storage_classes = {}
+        encryption_kms_id = None
         if use_encrypted and storageclass_factory is not None:
             log.info("Creating encrypted storage classes for VDBENCH workloads")
             try:
+                encryption_kms_id, _kms = _ensure_tenant_kms_for_encrypted_rbd(
+                    proj_obj, pv_encryption_kms_setup_factory
+                )
+                if not encryption_kms_id:
+                    log.warning(
+                        "Encrypted PVCs requested but pv_encryption_kms_setup_factory "
+                        "was not provided or KMS setup returned no encryption_kms_id; "
+                        "RBD provisioning may fail (e.g. missing ceph-csi-kms-token)."
+                    )
                 # Create encrypted RBD storage class ONLY (CephFS not supported)
                 encrypted_rbd_sc = storageclass_factory(
                     interface=constants.CEPHBLOCKPOOL,
                     encrypted=True,
+                    encryption_kms_id=encryption_kms_id,
                 )
             except Exception as e:
                 log.error(f"Failed to create encrypted storage class: {e}")
@@ -718,6 +825,10 @@ class KrknWorkloadFactory:
                 log.info(
                     f"✓ Created encrypted RBD storage class: {encrypted_rbd_sc.name}"
                 )
+
+                kr_schedule = self.config.get_pv_encryption_keyrotation_schedule()
+                pvk_obj = PVKeyrotation(encrypted_rbd_sc)
+                pvk_obj.annotate_storageclass_key_rotation(schedule=kr_schedule)
 
                 # IMPORTANT: CephFS encryption is NOT supported via storage class parameters
                 # CephFS can only use cluster-wide encryption (configured at StorageCluster level)
@@ -1057,5 +1168,344 @@ class KrknWorkloadFactory:
             )
         else:
             log.info(f"✓ Successfully created all {len(workloads)} RGW workloads")
+
+        return workloads
+
+    def _create_mcg_workloads_for_project(
+        self, proj_obj, multi_pvc_factory, awscli_pod
+    ):
+        """
+        Create multiple MCG/NooBaa workloads with different configurations.
+
+        Args:
+            proj_obj: Project object
+            multi_pvc_factory: Multi-PVC factory (not used by MCG, but required for consistency)
+            awscli_pod: Pod with AWS CLI for S3 operations
+
+        Returns:
+            List of MCG workload objects (using RGWWorkload class for S3 operations)
+        """
+        from ocs_ci.resiliency.resiliency_workload import RGWWorkload
+
+        # Get MCG configuration from krkn_config
+        mcg_config = self.config.get_mcg_config()
+
+        # Configure workload parameters from config
+        num_buckets = mcg_config.get("num_buckets", 3)
+        iteration_count = mcg_config.get("iteration_count", 10)
+        operation_types = mcg_config.get(
+            "operation_types", ["upload", "download", "list", "delete"]
+        )
+        upload_multiplier = mcg_config.get("upload_multiplier", 1)
+        metadata_ops_enabled = mcg_config.get(
+            "metadata_ops_enabled", True
+        )  # Enable metadata ops for NooBaa
+        delay_between_iterations = mcg_config.get("delay_between_iterations", 30)
+        delete_bucket_on_cleanup = mcg_config.get("delete_bucket_on_cleanup", True)
+
+        workloads = []
+
+        log.info(f"Creating {num_buckets} MCG/NooBaa workloads")
+
+        # Pre-flight check: Verify NooBaa pods are running
+        try:
+            from ocs_ci.ocs.ocp import OCP
+            from ocs_ci.ocs import constants
+
+            log.info("Checking NooBaa pod health before creating buckets...")
+
+            # Check NooBaa core pods
+            noobaa_core_pods = OCP(
+                kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            ).get(selector=constants.NOOBAA_CORE_POD_LABEL)
+
+            # Check NooBaa DB pods
+            noobaa_db_pods = OCP(
+                kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            ).get(selector=constants.NOOBAA_DB_LABEL_419_AND_ABOVE)
+
+            if (
+                not noobaa_core_pods
+                or "items" not in noobaa_core_pods
+                or not noobaa_core_pods["items"]
+            ):
+                log.warning("No NooBaa core pods found - NooBaa may not be deployed")
+                raise RuntimeError("NooBaa core service is not available")
+
+            if (
+                not noobaa_db_pods
+                or "items" not in noobaa_db_pods
+                or not noobaa_db_pods["items"]
+            ):
+                log.warning(
+                    "No NooBaa DB pods found - NooBaa database may not be deployed"
+                )
+                raise RuntimeError("NooBaa database is not available")
+
+            # Check pod status
+            core_running = sum(
+                1
+                for pod in noobaa_core_pods["items"]
+                if pod.get("status", {}).get("phase") == "Running"
+            )
+            core_total = len(noobaa_core_pods["items"])
+
+            db_running = sum(
+                1
+                for pod in noobaa_db_pods["items"]
+                if pod.get("status", {}).get("phase") == "Running"
+            )
+            db_total = len(noobaa_db_pods["items"])
+
+            log.info(f"NooBaa core pods: {core_running}/{core_total} running")
+            log.info(f"NooBaa DB pods: {db_running}/{db_total} running")
+
+            if core_running == 0 or db_running == 0:
+                raise RuntimeError(
+                    "NooBaa services are not running. "
+                    "Ensure NooBaa is healthy in your ODF deployment."
+                )
+
+        except Exception as e:
+            log.error(f"NooBaa health check failed: {e}")
+            raise RuntimeError(f"Cannot create MCG workloads: {e}")
+
+        # Create MCG buckets for workload testing
+        try:
+            log.info("Creating MCG buckets for workload testing")
+
+            for i in range(num_buckets):
+                try:
+                    # Create MCG bucket using MCGOCBucket
+                    from ocs_ci.ocs.resources.objectbucket import MCGOCBucket
+                    import fauxfactory
+
+                    bucket_name = f"mcg-workload-{fauxfactory.gen_alpha(4).lower()}"
+                    log.info(f"Creating MCG bucket: {bucket_name}")
+
+                    # Create MCG bucket - it creates the OBC
+                    mcg_bucket = MCGOCBucket(bucket_name)
+
+                    # Give OBC a moment to be reconciled by the operator
+                    log.info(f"Waiting 15s for OBC {bucket_name} to be reconciled...")
+                    time.sleep(15)
+
+                    # Wait for bucket to be bound and ready (timeout 300s)
+                    log.info(
+                        f"Waiting for bucket {bucket_name} to be ready (up to 5 minutes)..."
+                    )
+                    try:
+                        mcg_bucket.verify_health(timeout=300)
+                        log.info(f"✓ Bucket {bucket_name} is ready")
+                    except Exception as e:
+                        log.error(f"Bucket {bucket_name} failed to become healthy: {e}")
+                        # Continue with next bucket instead of failing completely
+                        continue
+
+                    # Workload configuration
+                    workload_config = {
+                        "iteration_count": iteration_count,
+                        "operation_types": operation_types,
+                        "upload_multiplier": upload_multiplier,
+                        "metadata_ops_enabled": metadata_ops_enabled,
+                        "delay_between_iterations": delay_between_iterations,
+                    }
+
+                    # Create MCG workload (reuse RGWWorkload for S3 operations)
+                    mcg_workload = RGWWorkload(
+                        rgw_bucket=mcg_bucket,  # MCG bucket also works with RGWWorkload
+                        awscli_pod=awscli_pod,
+                        namespace=proj_obj.namespace,
+                        workload_config=workload_config,
+                        delete_bucket_on_cleanup=delete_bucket_on_cleanup,
+                    )
+
+                    # Start the workload
+                    mcg_workload.start_workload()
+
+                    workloads.append(mcg_workload)
+                    log.info(f"✓ Created and started MCG workload: {bucket_name}")
+
+                except Exception as e:
+                    log.error(f"Failed to create MCG workload {i + 1}: {e}")
+                    import traceback
+
+                    log.error(traceback.format_exc())
+                    # Continue with next workload instead of failing completely
+                    continue
+
+        except Exception as e:
+            log.error(f"Failed to create MCG workloads: {e}")
+            raise RuntimeError(f"Failed to create any MCG workloads: {e}")
+
+        if not workloads:
+            log.error("Failed to create any MCG workloads")
+            log.error(
+                "This may be due to NooBaa health issues. "
+                "Check NooBaa pod status and OBC controller health."
+            )
+            raise RuntimeError("Failed to create any MCG workloads")
+
+        if len(workloads) < num_buckets:
+            log.warning(
+                f"Only created {len(workloads)} out of {num_buckets} requested MCG workloads. "
+                f"Some buckets failed to bind - check cluster health."
+            )
+        else:
+            log.info(f"✓ Successfully created all {len(workloads)} MCG workloads")
+
+        return workloads
+
+    def _create_warp_workloads_for_project(
+        self, proj_obj, multi_pvc_factory, mcg_obj_session
+    ):
+        """
+        Create Warp workloads for high-intensity MCG/NooBaa stress testing.
+
+        Warp is MinIO's S3 benchmarking tool that provides high-performance
+        S3 operations for stress testing MCG/NooBaa.
+
+        Args:
+            proj_obj: Project object
+            multi_pvc_factory: Multi-PVC factory (not used by Warp, but required for consistency)
+            mcg_obj_session: MCG object for NooBaa access (session-scoped fixture)
+
+        Returns:
+            List of Warp workload objects
+        """
+        from ocs_ci.resiliency.resiliency_workload import WarpWorkload
+
+        # Get Warp configuration from krkn_config
+        warp_config = self.config.get_warp_config()
+
+        # Configure workload parameters from config
+        num_workloads = warp_config.get("num_workloads", 1)
+        workload_type = warp_config.get("workload_type", "mixed")
+        duration = warp_config.get("duration", "10m")
+        concurrent = warp_config.get("concurrent", 1)
+        objects = warp_config.get("objects", 1000)
+        obj_size = warp_config.get("obj_size", "1MiB")
+
+        # Get namespace configuration (default to 'default')
+        warp_namespace = warp_config.get("namespace", "default")
+        log.info(f"Warp workloads will be deployed in namespace: {warp_namespace}")
+
+        workloads = []
+
+        log.info(f"Creating {num_workloads} Warp MCG stress workloads")
+
+        # Pre-flight check: Verify NooBaa pods are running
+        try:
+            from ocs_ci.ocs.ocp import OCP
+            from ocs_ci.ocs import constants
+
+            log.info("Checking NooBaa pod health before creating Warp workloads...")
+
+            # Check NooBaa core pods
+            noobaa_core_pods = OCP(
+                kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            ).get(selector=constants.NOOBAA_CORE_POD_LABEL)
+
+            if (
+                not noobaa_core_pods
+                or "items" not in noobaa_core_pods
+                or not noobaa_core_pods["items"]
+            ):
+                log.warning("No NooBaa core pods found - NooBaa may not be deployed")
+                raise RuntimeError("NooBaa core service is not available")
+
+            # Check pod status
+            core_running = sum(
+                1
+                for pod in noobaa_core_pods["items"]
+                if pod.get("status", {}).get("phase") == "Running"
+            )
+            core_total = len(noobaa_core_pods["items"])
+
+            log.info(f"NooBaa core pods: {core_running}/{core_total} running")
+
+            if core_running == 0:
+                raise RuntimeError(
+                    "NooBaa services are not running. "
+                    "Ensure NooBaa is healthy in your ODF deployment."
+                )
+
+        except Exception as e:
+            log.error(f"NooBaa health check failed: {e}")
+            raise RuntimeError(f"Cannot create Warp workloads: {e}")
+
+        # Create Warp workloads
+        try:
+            log.info("Creating Warp workloads for MCG stress testing")
+
+            for i in range(num_workloads):
+                try:
+                    # Create a unique bucket for each Warp workload
+                    import fauxfactory
+
+                    bucket_name = f"warp-test-{fauxfactory.gen_alpha(4).lower()}"
+                    log.info(
+                        f"Creating Warp workload {i + 1} with bucket: {bucket_name}"
+                    )
+
+                    # Create the bucket using MCG
+                    from ocs_ci.ocs.bucket_utils import s3_create_bucket
+
+                    s3_create_bucket(
+                        s3_obj=mcg_obj_session,
+                        bucket_name=bucket_name,
+                    )
+                    log.info(f"✓ Created bucket: {bucket_name}")
+
+                    # Workload configuration
+                    workload_config = {
+                        "workload_type": workload_type,
+                        "duration": duration,
+                        "concurrent": concurrent,
+                        "objects": objects,
+                        "obj_size": obj_size,
+                    }
+
+                    # Create Warp workload
+                    warp_workload = WarpWorkload(
+                        mcg_obj=mcg_obj_session,
+                        bucket_name=bucket_name,
+                        namespace=warp_namespace,  # Use configured namespace
+                        workload_config=workload_config,
+                    )
+
+                    # Start the workload
+                    warp_workload.start_workload()
+
+                    workloads.append(warp_workload)
+                    log.info(f"✓ Created and started Warp workload: {bucket_name}")
+
+                except Exception as e:
+                    log.error(f"Failed to create Warp workload {i + 1}: {e}")
+                    import traceback
+
+                    log.error(traceback.format_exc())
+                    # Continue with next workload instead of failing completely
+                    continue
+
+        except Exception as e:
+            log.error(f"Failed to create Warp workloads: {e}")
+            raise RuntimeError(f"Failed to create any Warp workloads: {e}")
+
+        if not workloads:
+            log.error("Failed to create any Warp workloads")
+            log.error(
+                "This may be due to NooBaa health issues. "
+                "Check NooBaa pod status and S3 service health."
+            )
+            raise RuntimeError("Failed to create any Warp workloads")
+
+        if len(workloads) < num_workloads:
+            log.warning(
+                f"Only created {len(workloads)} out of {num_workloads} requested Warp workloads. "
+                f"Some workloads failed to start - check cluster health."
+            )
+        else:
+            log.info(f"✓ Successfully created all {len(workloads)} Warp workloads")
 
         return workloads

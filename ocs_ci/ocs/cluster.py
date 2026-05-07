@@ -1261,29 +1261,35 @@ def _collect_bound_ocs_pvcs(namespace, timeout=300, sleep=10):
 
     # pvc name for the disks created with LSO and ODF is dynamic and depends on the
     # storage cluster name, so we need to get it here
-    storage_device_set_name = ""
+    storage_device_set_names = []
     if lso_deployed:
         storage_cluster_obj = OCP(
             kind=constants.STORAGECLUSTER,
             namespace=namespace,
             resource_name=config.ENV_DATA["storage_cluster_name"],
         )
-        storage_device_set_name = (
-            storage_cluster_obj.get()
+        storage_device_set_names = [
+            ds.get("name", "")
+            for ds in storage_cluster_obj.get()
             .get("spec", {})
-            .get("storageDeviceSets", [])[0]
-            .get("name", "")
-        )
+            .get("storageDeviceSets", [])
+        ]
 
     def _get_matching_bound_pvcs():
         ocs_pvc_obj = get_all_pvc_objs(namespace=namespace)
-        matching_pvcs = [
-            pvc_obj
-            for pvc_obj in ocs_pvc_obj
-            if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME)
-            or pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME)
-            or pvc_obj.name.startswith(storage_device_set_name)
-        ]
+        matching_pvcs = []
+        for pvc_obj in ocs_pvc_obj:
+            if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+                matching_pvcs.append(pvc_obj)
+            elif pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME):
+                matching_pvcs.append(pvc_obj)
+            elif pvc_obj.name.startswith(constants.NB_DB_CNPG_CLUSTER_NAME):
+                matching_pvcs.append(pvc_obj)
+            else:
+                for name in storage_device_set_names:
+                    if pvc_obj.name.startswith(name):
+                        matching_pvcs.append(pvc_obj)
+                        break
         not_bound = [
             pvc_obj.name
             for pvc_obj in matching_pvcs
@@ -1356,9 +1362,7 @@ def validate_cluster_on_pvc():
             "deployment we don't have mon pods backed by PVC"
         )
     logger.info("Validating all osd pods have PVC")
-    osd_deviceset_pods = get_pod_name_by_pattern(
-        "rook-ceph-osd-prepare-ocs-deviceset", ns
-    )
+    osd_deviceset_pods = get_pod_name_by_pattern("rook-ceph-osd-prepare", ns)
     validate_ocs_pods_on_pvc(
         osd_deviceset_pods,
         pvc_names,
@@ -2194,6 +2198,27 @@ def check_osds_in_hosts_are_up(osd_tree):
     return True
 
 
+@retry(
+    CommandFailed,
+    tries=5,
+    delay=15,
+    backoff=1,
+    text_in_exception="use of closed network connection",
+)
+def exec_ceph_osd_tree_with_retry():
+    """
+    Execute ceph osd tree command with retry logic for transient network errors.
+
+    This wrapper handles cases where kubelet API connections are interrupted
+    during operations like transit encryption upgrades or node replacements.
+
+    Returns:
+        dict: The output of ceph osd tree command
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    return ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+
+
 def check_ceph_osd_tree():
     """
     Checks whether an OSD tree is created/modified correctly.
@@ -2208,8 +2233,7 @@ def check_ceph_osd_tree():
     number_of_osds = len(osd_pods)
     # 'ceph osd tree' should show the new osds under right nodes/hosts
     #  Verification is different for 3 AZ and 1 AZ configs
-    ct_pod = pod.get_ceph_tools_pod()
-    tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+    tree_output = exec_ceph_osd_tree_with_retry()
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         if is_flexible_scaling_enabled():
             return check_osd_tree_1az_vmware_flex(tree_output, number_of_osds)
@@ -2238,8 +2262,7 @@ def check_ceph_osd_tree_after_node_replacement():
         and all the OSD's are up. Else False
 
     """
-    ct_pod = pod.get_ceph_tools_pod()
-    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+    osd_tree = exec_ceph_osd_tree_with_retry()
     if not check_ceph_osd_tree():
         logger.warning("Incorrect ceph osd tree formation found")
         return False

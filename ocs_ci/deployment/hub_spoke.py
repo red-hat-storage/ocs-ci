@@ -25,6 +25,7 @@ from ocs_ci.deployment.helpers.hypershift_base import (
     get_current_nodepool_size,
     get_available_hosted_clusters_to_ocp_ver_dict,
     create_cluster_dir,
+    fix_hypershift_webhook_ca_bundle,
 )
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework.logger_helper import log_step, reset_current_module_log_steps
@@ -50,6 +51,7 @@ from ocs_ci.ocs.rados_utils import (
     fetch_pool_names,
     fetch_rados_namespaces,
     fetch_filesystem_names,
+    get_ec_pool_names,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -421,6 +423,36 @@ def get_autodistributed_volume_snapshot_classes():
     return snapshot_class_names
 
 
+def get_autodistributed_volumegroup_snapshot_classes():
+    """
+    Get the list of VolumeGroupSnapshotClasses that were provisioned by ODF
+
+    Returns:
+        list: List of VolumeGroupSnapshotClass names that were created by ODF
+
+    """
+    groupsnapshot_class = OCP(
+        kind=constants.VOLUMEGROUPSNAPSHOTCLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    groupsnapshot_classes = groupsnapshot_class.get()
+
+    # Filter VolumeGroupSnapshotClass by ODF
+    groupsnapshot_classes["items"] = [
+        item
+        for item in groupsnapshot_classes["items"]
+        if item["driver"]
+        in [
+            constants.RBD_PROVISIONER,
+            constants.CEPHFS_PROVISIONER,
+        ]
+    ]
+    groupsnapshot_class_names = [
+        item["metadata"]["name"] for item in groupsnapshot_classes["items"]
+    ]
+    return groupsnapshot_class_names
+
+
 def get_provider_address():
     """
     Get the provider address
@@ -606,6 +638,8 @@ def check_ceph_resources(cluster_names):
         f"from all consumers: {consumer_names}"
     )
     pool_names = fetch_pool_names()
+    ec_pool_names = set(get_ec_pool_names())
+    pool_names = [p for p in pool_names if p not in ec_pool_names]
     rados_namespaces = fetch_rados_namespaces()
     svg_names = get_cephfs_subvolumegroup_names()
     filesystems = fetch_filesystem_names()
@@ -801,20 +835,26 @@ def deploy_hosted_ocp_clusters(cluster_names_list=None):
             deploy_hypershift_oidc = False
             create_deployer_iam_role = False
 
-        hosted_ocp_cluster.deploy_dependencies(
-            deploy_acm_hub=deploy_acm_hub,
-            deploy_cnv=deploy_cnv,
-            deploy_metallb=first_ocp_deployment,
-            download_hcp_binary=first_ocp_deployment,
-            deploy_hyperconverged=deploy_hyperconverged,
-            deploy_mce=deploy_mce,
-            deploy_hypershift_oidc=deploy_hypershift_oidc,
-            create_deployer_iam_role=create_deployer_iam_role,
-        )
+        try:
+            hosted_ocp_cluster.deploy_dependencies(
+                deploy_acm_hub=deploy_acm_hub,
+                deploy_cnv=deploy_cnv,
+                deploy_metallb=first_ocp_deployment,
+                download_hcp_binary=first_ocp_deployment,
+                deploy_hyperconverged=deploy_hyperconverged,
+                deploy_mce=deploy_mce,
+                deploy_hypershift_oidc=deploy_hypershift_oidc,
+                create_deployer_iam_role=create_deployer_iam_role,
+            )
 
-        cluster_name = hosted_ocp_cluster.deploy_ocp()
-        if cluster_name:
-            cluster_names.append(cluster_name)
+            cluster_name = hosted_ocp_cluster.deploy_ocp()
+            if cluster_name:
+                cluster_names.append(cluster_name)
+        except (RuntimeError, CommandFailed, ClientError) as e:
+            logger.error(
+                f"Failed to deploy hosted OCP cluster '{cluster_name}': {e}. "
+                "Skipping and continuing with remaining clusters."
+            )
 
     cluster_names_existing = get_hosted_cluster_names()
     cluster_names_desired_left = [
@@ -1161,16 +1201,39 @@ class HostedClients(HyperShiftBase):
                         f"oc patch -n clusters {constants.HOSTED_CLUSTERS}/{cluster_name} --type=merge "
                         f"--patch='{patch}'"
                     )
-                    exec_cmd(cmd)
+                    try:
+                        exec_cmd(cmd)
+                    except CommandFailed as e:
+                        logger.error(
+                            f"Failed to patch proxy trusted CA for cluster '{cluster_name}': {e}. "
+                            "Skipping and continuing with remaining clusters."
+                        )
 
         # Need to create networkpolicy as mentioned in bug 2281536,
         # https://bugzilla.redhat.com/show_bug.cgi?id=2281536#c21
 
         # Create Network Policy
         storage_client = StorageClient()
+        failed_network_policy = []
         for cluster_name in cluster_names:
-            storage_client.create_network_policy(
-                namespace_to_create_storage_client=f"clusters-{cluster_name}"
+            try:
+                storage_client.create_network_policy(
+                    namespace_to_create_storage_client=f"clusters-{cluster_name}"
+                )
+            except (CommandFailed, AssertionError) as e:
+                logger.error(
+                    f"Failed to create network policy for cluster '{cluster_name}': {e}. "
+                    "Dropping cluster from further deployment stages."
+                )
+                failed_network_policy.append(cluster_name)
+
+        if failed_network_policy:
+            cluster_names = [
+                name for name in cluster_names if name not in failed_network_policy
+            ]
+            logger.warning(
+                f"Clusters dropped due to network policy failure: {failed_network_policy}. "
+                f"Remaining clusters: {cluster_names}"
             )
 
         check_odf_prerequisites()
@@ -2793,8 +2856,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 else:
                     logger.warning(
                         f"Infrastructure exists but output file not found: {self.output_infra_file}. "
-                        "Infrastructure may have been created outside this tool."
+                        "Reconstructing output file from existing AWS resources."
                     )
+                    self._reconstruct_infra_output(existing_vpcs)
                     return self.output_infra_file
         except ClientError as e:
             logger.error(
@@ -2869,6 +2933,90 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             logger.warning(f"Could not read/parse infra output file: {e}")
 
         return self.output_infra_file
+
+    def _reconstruct_infra_output(self, existing_vpcs):
+        """
+        Reconstruct the infrastructure output JSON file from existing AWS resources.
+
+        Queries Route53 for public/private/local hosted zones by cluster name and
+        base domain, and reads the VPC CIDR from the existing VPC. Writes the
+        reconstructed data to self.output_infra_file and populates instance attributes.
+
+        If Route53 zones are missing the infrastructure is considered incomplete
+        (partial creation from a prior failed run) and a RuntimeError is raised
+        with instructions to clean up before retrying.
+
+        Args:
+            existing_vpcs (list): List of VPC dicts returned by describe_vpcs.
+
+        Raises:
+            RuntimeError: If Route53 zones are missing (partial infra state).
+        """
+        zone_name = f"{self.name}.{self.base_domain}."
+        logger.info(f"Querying Route53 for hosted zones with name '{zone_name}'")
+
+        r53 = self.route53_client
+        paginator = r53.get_paginator("list_hosted_zones")
+        public_zone_id = None
+        private_zone_id = None
+        local_zone_id = None
+
+        for page in paginator.paginate():
+            for zone in page["HostedZones"]:
+                if zone["Name"] != zone_name:
+                    continue
+                zone_id = zone["Id"].split("/")[-1]
+                if zone["Config"]["PrivateZone"]:
+                    tags_resp = r53.list_tags_for_resource(
+                        ResourceType="hostedzone", ResourceId=zone_id
+                    )
+                    tags = {
+                        t["Key"]: t["Value"]
+                        for t in tags_resp["ResourceTagSet"]["Tags"]
+                    }
+                    if tags.get("Name", "").endswith("-local"):
+                        local_zone_id = zone_id
+                    else:
+                        private_zone_id = zone_id
+                else:
+                    public_zone_id = zone_id
+
+        if not public_zone_id or not private_zone_id:
+            vpc_id = (
+                existing_vpcs[0].get("VpcId", "unknown") if existing_vpcs else "unknown"
+            )
+            raise RuntimeError(
+                f"Partial infrastructure detected for cluster '{self.name}': "
+                f"VPC '{vpc_id}' (tag: kubernetes.io/cluster/{self.infra_id}=owned) exists "
+                f"but Route53 hosted zones for '{zone_name}' are missing. "
+                f"This is a leftover from a previous failed run. "
+                f"Delete the VPC and its associated resources, then retry."
+            )
+
+        vpc_cidr = existing_vpcs[0].get("CidrBlock") if existing_vpcs else None
+
+        logger.info(
+            f"Reconstructed infra data: infraID={self.infra_id}, "
+            f"publicZoneID={public_zone_id}, privateZoneID={private_zone_id}, "
+            f"localZoneID={local_zone_id}, machineCIDR={vpc_cidr}"
+        )
+
+        infra_data = {
+            "infraID": self.infra_id,
+            "publicZoneID": public_zone_id,
+            "privateZoneID": private_zone_id,
+            "localZoneID": local_zone_id,
+            "machineCIDR": vpc_cidr,
+        }
+
+        os.makedirs(os.path.dirname(self.output_infra_file), exist_ok=True)
+        with open(self.output_infra_file, "w") as f:
+            json.dump(infra_data, f, indent=2)
+        logger.info(
+            f"Reconstructed infrastructure output written to {self.output_infra_file}"
+        )
+
+        self.read_infra_output()
 
     def get_vpc_from_existing_infra(self, infra_id=None):
         """
@@ -3699,6 +3847,18 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             return ""
 
         except CommandFailed as e:
+            if "x509: certificate signed by unknown authority" in str(
+                e
+            ) and "hostedclusters.hypershift.openshift.io" in str(e):
+                logger.warning(
+                    "HyperShift webhook TLS error detected — applying CA bundle fix and retrying"
+                )
+                fix_hypershift_webhook_ca_bundle()
+                exec_cmd(cmd, timeout=2700)
+            else:
+                logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
+                self._log_cmd_output(e)
+                raise
             logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
             self._log_cmd_output(e)
             raise
@@ -6746,12 +6906,16 @@ class SpokeODF(SpokeOCP, ABC):
 
         storage_class_names = get_autodistributed_storage_classes()
         volumesnapshot_class_names = get_autodistributed_volume_snapshot_classes()
+        volumegroup_snapshot_classes = (
+            get_autodistributed_volumegroup_snapshot_classes()
+        )
 
         start_time = time.time()
         storage_consumer_obj = create_storage_consumer_on_default_cluster(
             storage_consumer_name,
             storage_classes=storage_class_names,
             volume_snapshot_classes=volumesnapshot_class_names,
+            volume_group_snapshot_classes=volumegroup_snapshot_classes,
         )
         secret_name = storage_consumer_obj.get_onboarding_ticket_secret()
 
@@ -7010,6 +7174,7 @@ class SpokeODF(SpokeOCP, ABC):
         Returns:
             bool: True if the catalog source exists, False otherwise
         """
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
         ocp_obj = OCP(
             kind=constants.CATSRC,
             namespace=constants.MARKETPLACE_NAMESPACE,
@@ -7017,7 +7182,7 @@ class SpokeODF(SpokeOCP, ABC):
         )
         return ocp_obj.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
-            resource_name="ocs-catalogsource",
+            resource_name=catalog_source_data["metadata"]["name"],
             should_exist=True,
         )
 
@@ -7039,9 +7204,7 @@ class SpokeODF(SpokeOCP, ABC):
             if not reapply:
                 return True
 
-        catalog_source_data = templating.load_yaml(
-            constants.PROVIDER_MODE_CATALOGSOURCE
-        )
+        catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
 
         if not config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"):
             if not reapply:
