@@ -1230,6 +1230,87 @@ def get_cluster_name_from_storage_consumer(storage_consumer):
         return consumer_url.split(".")[0] if consumer_url else ""
 
 
+def add_storageclasses_to_storageconsumer(consumer_name, storageclasses):
+    """
+    Add storageclass(es) to a specific StorageConsumer on the provider cluster.
+
+    This function runs on the provider cluster and adds the specified storageclasses
+    to the StorageConsumer's spec.storageClasses list if they are not already present.
+
+    Args:
+        consumer_name (str): Name of the StorageConsumer CR
+        storageclasses (str or list): Storageclass name(s) to add
+
+    Returns:
+        tuple: (success: bool, added_scs: list, current_scs: list)
+            - success: True if operation completed without errors
+            - added_scs: List of storageclasses that were added
+            - current_scs: Final list of storageclasses in the StorageConsumer
+
+    Example:
+        # Add single storageclass
+        success, added, current = add_storageclasses_to_storageconsumer(
+            "consumer-c21-c5", "openshift-storage.noobaa.io"
+        )
+
+        # Add multiple storageclasses
+        success, added, current = add_storageclasses_to_storageconsumer(
+            "consumer-c21-c5",
+            ["openshift-storage.noobaa.io", "my-custom-noobaa-sc"]
+        )
+
+    """
+    # Normalize to list
+    if isinstance(storageclasses, str):
+        storageclasses = [storageclasses]
+
+    if not isinstance(storageclasses, list):
+        log.error("storageclasses must be a string or list of strings")
+        return False, [], []
+
+    added_scs = []
+    current_scs = []
+
+    # Must run on provider cluster
+    with config.RunWithProviderConfigContextIfAvailable():
+        try:
+            consumer = StorageConsumer(consumer_name)
+            current_scs = consumer.get_storage_classes()
+            log.info(
+                "StorageConsumer '%s' current storage classes: %s",
+                consumer_name,
+                current_scs,
+            )
+
+            # Check which SCs need to be added
+            scs_missing = [sc for sc in storageclasses if sc not in current_scs]
+
+            if scs_missing:
+                log.info(
+                    "Adding %s to StorageConsumer '%s'", scs_missing, consumer_name
+                )
+                updated_scs = current_scs + scs_missing
+                consumer.set_storage_classes(updated_scs)
+                added_scs = scs_missing
+                current_scs = updated_scs
+                log.info(
+                    "Updated StorageConsumer '%s' with storage classes: %s",
+                    consumer_name,
+                    updated_scs,
+                )
+            else:
+                log.info(
+                    "StorageConsumer '%s' already has all specified storageclasses",
+                    consumer_name,
+                )
+
+            return True, added_scs, current_scs
+
+        except Exception as e:
+            log.error("Failed to update StorageConsumer '%s': %s", consumer_name, e)
+            return False, [], current_scs
+
+
 def verify_last_heartbeat_timestamp(cluster_name):
     """
     Verify that the last heartbeat timestamp of the storage consumer for `cluster_name`

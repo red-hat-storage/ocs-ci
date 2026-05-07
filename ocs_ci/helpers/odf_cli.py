@@ -372,6 +372,32 @@ class ODFCliRunner:
         """
         return self.run_command(f" maintenance stop {deployment_name}")
 
+    def run_object_enable_remote_obc(self):
+        """
+        Enable remote OBC on client cluster.
+
+        This command is used in Provider/Client (HCI) deployments to enable
+        Object Bucket Claims (OBC) on the client cluster.
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+
+        """
+        return self.run_command(" object enable remote-obc")
+
+    def run_object_disable_remote_obc(self):
+        """
+        Disable remote OBC on client cluster.
+
+        This command is used in Provider/Client (HCI) deployments to disable
+        Object Bucket Claims (OBC) on the client cluster.
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+
+        """
+        return self.run_command(" object disable remote-obc")
+
 
 def odf_cli_setup_helper():
     """
