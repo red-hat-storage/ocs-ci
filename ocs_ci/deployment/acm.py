@@ -99,7 +99,9 @@ class Submariner(object):
 
     def deploy(self):
         # Download subctl binary in any case.
-        self.download_binary()
+        # TODO: Improvement
+        if not config.DEPLOYMENT.get("disconnected"):
+            self.download_binary()
         if self.source == "upstream":
             self.deploy_upstream()
         elif self.source == "downstream":
