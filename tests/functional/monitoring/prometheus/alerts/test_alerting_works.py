@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 
 @blue_squad
 @runs_on_provider
+@pytest.mark.zstream_4_16_13
 def test_alerting_works(threading_lock):
     """
     If alerting works then there is at least one alert.
@@ -37,6 +38,7 @@ def test_alerting_works(threading_lock):
 @pytest.mark.polarion_id("OCS-2503")
 @tier1
 @runs_on_provider
+@pytest.mark.zstream_4_16_13
 def test_prometheus_rule_failures(threading_lock):
     """
     There should be no PrometheusRuleFailures alert when OCS is configured.
