@@ -1637,17 +1637,35 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
 
 
 def retrieve_verification_mode():
+    if config.DEPLOYMENT.get("disable_s3_ssl_verify"):
+        logger.info(
+            "S3 boto3 TLS verification disabled (DEPLOYMENT.disable_s3_ssl_verify)"
+        )
+        return False
+    base_domain = config.ENV_DATA.get("base_domain") or ""
     if (
-        (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and config.ENV_DATA["deployment_type"] == "managed"
+        not config.DEPLOYMENT.get("force_s3_ssl_verify")
+        and config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and "qe.rh-ocs.com" in base_domain
+    ):
+        # Router CA (DEFAULT_INGRESS_CRT_LOCAL_PATH) and public CAs often do not
+        # validate the NooBaa S3 HTTPS endpoint chain on IBM Cloud QE (self-signed
+        # intermediates, or routes not signed by router-ca). Boto3 then fails with
+        # SSL: CERTIFICATE_VERIFY_FAILED. AWS CLI in-cluster uses SERVICE_CA mounts;
+        # the Jenkins runner only has local PEMs, so we skip verify on this domain.
+        logger.info(
+            "S3 boto3 TLS verification disabled for IBM Cloud QE base_domain "
+            "(non-matching S3 certificate chain). "
+            "Set DEPLOYMENT.force_s3_ssl_verify: true to enforce verification."
         )
-        or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM
-        or (
-            config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
-            and config.DEPLOYMENT["custom_ssl_cert_provider"]
-            == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT
-        )
+        return False
+    # IBM Cloud managed: do not use verify=True here. Many QE clusters present
+    # S3 endpoints with a self-signed chain; MCG.__init__ already writes the
+    # cluster router CA to DEFAULT_INGRESS_CRT_LOCAL_PATH for boto3.
+    if config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM or (
+        config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
+        and config.DEPLOYMENT["custom_ssl_cert_provider"]
+        == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT
     ):
         verify = True
     elif (

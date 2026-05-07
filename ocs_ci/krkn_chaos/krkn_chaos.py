@@ -8,7 +8,13 @@ import json
 import re
 import yaml
 
-from ocs_ci.ocs.constants import KRKN_OUTPUT_DIR, KRKN_RUN_CMD, KRKNCTL
+from ocs_ci.ocs.constants import (
+    HCI_VSPHERE,
+    KRKN_OUTPUT_DIR,
+    KRKN_RUN_CMD,
+    KRKNCTL,
+    VSPHERE_PLATFORM,
+)
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.krkn_chaos.krkn_port_manager import KrknPortManager
 from ocs_ci.framework import config
@@ -542,6 +548,35 @@ class KrKnRunner:
                     )
         except Exception as e:
             log.warning(f"Failed to set IBM Cloud credentials: {str(e)}")
+
+        # VMware: Krkn node_scenarios plugin requires VSPHERE_* (same as krknctl plan)
+        try:
+            platform = config.ENV_DATA.get("platform", "").lower()
+            if platform in (VSPHERE_PLATFORM.lower(), HCI_VSPHERE.lower()):
+                from ocs_ci.krkn_chaos.krkn_helpers import (
+                    vsphere_creds_for_krkn_from_ocs_config,
+                )
+
+                server, user, password = vsphere_creds_for_krkn_from_ocs_config()
+                if server and not env.get("VSPHERE_IP"):
+                    env["VSPHERE_IP"] = server
+                    log.info("Setting VSPHERE_IP for Krkn VMware node scenarios")
+                if user and not env.get("VSPHERE_USERNAME"):
+                    env["VSPHERE_USERNAME"] = user
+                    log.info("Setting VSPHERE_USERNAME for Krkn VMware node scenarios")
+                if password and not env.get("VSPHERE_PASSWORD"):
+                    env["VSPHERE_PASSWORD"] = password
+                    log.info(
+                        "Setting VSPHERE_PASSWORD for Krkn VMware node scenarios (value not logged)"
+                    )
+                if not (server and user and password):
+                    log.warning(
+                        "VMware platform but vSphere credentials incomplete in AUTH/ENV_DATA; "
+                        "Krkn node scenarios need VSPHERE_IP, VSPHERE_USERNAME, VSPHERE_PASSWORD. "
+                        "Set in data auth (vmware/vsphere) or export these env vars."
+                    )
+        except Exception as e:
+            log.warning("Failed to set VMware vSphere environment for Krkn: %s", e)
 
         # Use krkn venv python directly to run krkn
         # KRKN_RUN_CMD is data/krkn/run_kraken.py

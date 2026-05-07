@@ -115,6 +115,41 @@ def get_krkn_cloud_type():
     return cloud_type
 
 
+def vsphere_creds_for_krkn_from_ocs_config():
+    """
+    vSphere server, user, and password from ``AUTH`` (``vmware`` / ``vsphere``) and
+    ``ENV_DATA`` (e.g. ``vsphere_server``), aligned with ``platform_nodes.VMWare``.
+
+    Returns:
+        tuple: (server or None, user or None, password or None)
+    """
+    vm_auth = {}
+    for key in ("vmware", "vsphere"):
+        block = config.AUTH.get(key)
+        if isinstance(block, dict):
+            vm_auth.update(block)
+
+    env_data = config.ENV_DATA or {}
+
+    server = (
+        vm_auth.get("vsphere_server")
+        or vm_auth.get("vsphere_ip")
+        or vm_auth.get("server")
+        or env_data.get("vsphere_server")
+    )
+    user = (
+        vm_auth.get("vsphere_user")
+        or vm_auth.get("username")
+        or env_data.get("vsphere_user")
+    )
+    password = (
+        vm_auth.get("vsphere_password")
+        or vm_auth.get("password")
+        or env_data.get("vsphere_password")
+    )
+    return server, user, password
+
+
 def get_node_scenario_generator():
     """
     Get the appropriate NodeScenarios generator method based on the platform.
