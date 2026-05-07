@@ -101,6 +101,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
             "RGW-OC-Single",
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_mcg_namespace_lifecycle_crd(
         self,
         mcg_obj,
@@ -359,6 +360,7 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
     @tier2
     @skipif_ocs_version("<4.8")
     @pytest.mark.polarion_id("OCS-2471")
+    @pytest.mark.zstream_4_16_13
     def test_mcg_cache_lifecycle(
         self,
         mcg_obj,
