@@ -608,6 +608,10 @@ class VSPHEREUPI(VSPHEREBASE):
             if config.ENV_DATA.get("enable_hw_virtualization"):
                 enable_hardware_virtualization()
 
+            # enable efi secure boot
+            if config.ENV_DATA.get("enable_efi_secure_boot"):
+                enable_efi_secure_boot()
+
             # sync guest time with host
             vm_file = (
                 constants.VM_MAIN
@@ -2742,6 +2746,27 @@ def add_shutdown_wait_timeout():
         ] = 10
     dump_data_to_json(obj, f"{constants.VM_MAIN}.json")
     os.rename(constants.VM_MAIN, f"{constants.VM_MAIN}.backup")
+
+
+def enable_efi_secure_boot():
+    """
+    Enable EFI secure boot mode in VMs.
+    """
+    used_tf_file = False
+    if os.path.isfile(constants.VM_MAIN):
+        used_tf_file = True
+        with open(constants.VM_MAIN, "r") as fd:
+            obj = hcl2.load(fd)
+    else:
+        with open(f"{constants.VM_MAIN}.json", "r") as fd:
+            obj = json.load(fd)
+    obj["resource"][0]["vsphere_virtual_machine"]["vm"]["firmware"] = "efi"
+    obj["resource"][0]["vsphere_virtual_machine"]["vm"][
+        "efi_secure_boot_enabled"
+    ] = "true"
+    dump_data_to_json(obj, f"{constants.VM_MAIN}.json")
+    if used_tf_file:
+        os.rename(constants.VM_MAIN, f"{constants.VM_MAIN}.backup")
 
 
 def update_dns():
