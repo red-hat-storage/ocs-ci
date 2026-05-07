@@ -1936,20 +1936,25 @@ def add_capacity_lso(ui_flag=False):
     check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
 
 
-def set_deviceset_count(count):
+def set_deviceset_count(count, index=0):
     """
     Set osd count for Storage cluster.
 
     Args:
         count (int): the count param is storagecluster
+        index (int): index of the StorageDeviceSet in the storageDeviceSets
+            list. Defaults to 0.
 
     """
     sc = get_storage_cluster()
-    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
-                "value": {count}}}]"""
+    params = (
+        f'[{{"op": "replace",'
+        f' "path": "/spec/storageDeviceSets/{index}/count",'
+        f' "value": {count}}}]'
+    )
     sc.patch(
         resource_name=sc.get()["items"][0]["metadata"]["name"],
-        params=params.strip("\n"),
+        params=params,
         format_type="json",
     )
 
