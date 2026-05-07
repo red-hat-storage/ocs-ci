@@ -3,7 +3,6 @@ import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.views import generic_locators
 from ocs_ci.utility.utils import get_running_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
@@ -334,4 +333,4 @@ class PvcUI(PageNavigator):
             self.do_click(self.pvc_loc[cloned_pvc_access_mode])
 
         logger.info("Click on Clone button")
-        self.do_click(generic_locators["confirm_action"], enable_screenshot=True)
+        self.do_click(self.pvc_loc["clone-btn"], enable_screenshot=True)

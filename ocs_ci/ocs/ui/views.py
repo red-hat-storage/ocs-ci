@@ -749,11 +749,18 @@ pvc = {
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "clone_pvc": ("button[data-test-action='Clone PVC']", By.CSS_SELECTOR),
     "clone_name_input": ("//input[@aria-label='Clone PVC']", By.XPATH),
+    "clone-btn": (
+        'button[form="clone-pvc-form"], button[data-test="confirm-action"], #confirm-action',
+        By.CSS_SELECTOR,
+    ),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
     "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
     "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
-    "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
+    "expand-btn": (
+        'button[form="expand-pvc-form"], button[data-test="confirm-action"], #confirm-action',
+        By.CSS_SELECTOR,
+    ),
     "pvc-status": (
         "dd[data-test-id='pvc-status'] span[data-test='status-text']",
         By.CSS_SELECTOR,
