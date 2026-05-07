@@ -2956,6 +2956,6 @@ def wait_for_managed_cluster_unreachable(cluster_name, timeout=600, sleep=15):
     for reachable in TimeoutSampler(timeout=timeout, sleep=sleep, func=_is_unreachable):
         if reachable:
             break
-        logger.info("Managed cluster '%s' still reachable, retrying...", cluster_name)
+        logger.info(f"Managed cluster '{cluster_name}' still reachable, retrying...")
 
     config.switch_ctx(restore_index)
