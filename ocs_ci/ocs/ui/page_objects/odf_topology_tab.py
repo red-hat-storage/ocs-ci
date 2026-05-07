@@ -505,7 +505,11 @@ class AbstractTopologyView(ABC, TopologySidebar):
                     raise NoSuchElementException("Cannot read element text")
                 # with ODF 4.18 we sometimes see no D, N prefix in the name of entity. This is not confirmed visually
                 # so we make exception for this case, checking "\n" within text
-                name = text.split("\n")[1] if "\n" in text else text
+                # In OCP 4.22+ the type prefix (N/D) is no longer separated by \n
+                if "\n" in text:
+                    name = text.split("\n")[1]
+                else:
+                    name = text[1:] if text and text[0] in ("N", "D") else text
                 entity_names.append(name)
                 time.sleep(0.1)
             self.topology_df["entity_name"] = entity_names
@@ -1063,7 +1067,15 @@ class OdfTopologyNodesView(TopologyTab):
             raise IncorrectUiOptionRequested(
                 f"Pass one of required options to use method '{self.nav_into_node.__name__}'"
             )
-        self.do_click(loc, 60, True)
+        self.do_click(self.topology_loc["fill_to_screen"])
+        try:
+            self.do_click(loc, 60, True)
+        except ElementClickInterceptedException:
+            logger.info(
+                "Click intercepted by page container (PF6 layout). "
+                "Falling back to JS dispatchEvent click for topology node arrow."
+            )
+            self.click_with_script(loc)
         self.page_has_loaded(5, 5, self.topology_loc["topology_graph"])
         return OdfTopologyDeploymentsView()
 
