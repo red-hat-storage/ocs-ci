@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 import pytest
 import requests
@@ -31,6 +32,7 @@ from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
+is_collect_only = "--collect-only" in sys.argv or "--co" in sys.argv
 ALERT_MAP = {
     constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES: 0,
     constants.ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES: 0,
@@ -39,7 +41,12 @@ ALERT_MAP = {
     constants.ALERT_ODF_DISK_UTILIZATION_HIGH: 0,
     constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: 0,
 }
-ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+
+if is_collect_only:
+    ocs_version = version.VERSION_4_22  # Default to latest for collection
+else:
+    ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+
 if ocs_version >= version.VERSION_4_22:
     ALERT_MAP.update(
         {
