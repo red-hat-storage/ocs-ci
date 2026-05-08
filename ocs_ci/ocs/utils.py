@@ -1381,33 +1381,42 @@ def _collect_ocs_logs(
 
             # We want to skip submariner log collection if it's in import clusters phase
             if not cluster_config.ENV_DATA.get("import_clusters_to_acm", False):
+                subctl_available = True
                 with subctl_lock:
                     try:
                         run_cmd("subctl")
                     except (CommandFailed, FileNotFoundError):
-                        log.debug("subctl binary not found, downloading now...")
-                        # Importing here to avoid circular import error
-                        from ocs_ci.deployment.acm import Submariner
+                        if not cluster_config.ENV_DATA.get("subctl_version"):
+                            log.warning(
+                                "subctl binary not found and subctl_version not configured, "
+                                "skipping submariner log collection"
+                            )
+                            subctl_available = False
+                        else:
+                            log.debug("subctl binary not found, downloading now...")
+                            # Importing here to avoid circular import error
+                            from ocs_ci.deployment.acm import Submariner
 
-                        submariner = Submariner()
-                        submariner.download_binary()
+                            submariner = Submariner()
+                            submariner.download_binary()
 
-                submariner_log_path = os.path.join(
-                    log_dir_path,
-                    "submariner",
-                )
-                run_cmd(f"mkdir -p {submariner_log_path}")
-                cwd = os.getcwd()
-                run_cmd(f"chmod -R 777 {submariner_log_path}")
-                os.chdir(submariner_log_path)
-                submariner_log_collect = (
-                    f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
-                )
-                log.info("Collecting submariner logs")
-                out = run_cmd(submariner_log_collect, timeout=1200)
-                run_cmd(f"chmod -R 777 {submariner_log_path}")
-                os.chdir(cwd)
-                log.info(out)
+                if subctl_available:
+                    submariner_log_path = os.path.join(
+                        log_dir_path,
+                        "submariner",
+                    )
+                    run_cmd(f"mkdir -p {submariner_log_path}")
+                    cwd = os.getcwd()
+                    run_cmd(f"chmod -R 777 {submariner_log_path}")
+                    os.chdir(submariner_log_path)
+                    submariner_log_collect = (
+                        f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
+                    )
+                    log.info("Collecting submariner logs")
+                    out = run_cmd(submariner_log_collect, timeout=1200)
+                    run_cmd(f"chmod -R 777 {submariner_log_path}")
+                    os.chdir(cwd)
+                    log.info(out)
 
 
 def collect_ocs_logs(
