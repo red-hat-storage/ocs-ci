@@ -19,6 +19,8 @@ from ocs_ci.ocs.constants import (
     CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
     # Container chaos specific labels
     NOOBAA_APP_LABEL,
+    NOOBAA_CORE_POD_LABEL,
+    NOOBAA_ENDPOINT_POD_LABEL,
     # Platform constants
     AWS_PLATFORM,
     ROSA_PLATFORM,
@@ -207,8 +209,25 @@ class BaseScenarioHelper:
         "rbd-ctrlplugin": CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
         # Rook Operator
         "rook-operator": OPERATOR_LABEL,
-        # NooBaa
+        # NooBaa (avoid broad app=noobaa for chaos; legacy key retained for callers)
         "noobaa": NOOBAA_APP_LABEL,
+        "noobaa-core": NOOBAA_CORE_POD_LABEL,
+        "noobaa-endpoint": NOOBAA_ENDPOINT_POD_LABEL,
+    }
+
+    # Primary workload container per component (avoids killing random sidecars).
+    COMPONENT_PRIMARY_CONTAINERS = {
+        "cephfs-nodeplugin": "csi-cephfsplugin",
+        "mgr": "mgr",
+        "rbd-nodeplugin": "csi-rbdplugin",
+        "rgw": "rgw",
+        "noobaa-core": "noobaa-core",
+        "noobaa-endpoint": "noobaa-endpoint",
+        "cephfs-ctrlplugin": "csi-cephfsplugin",
+        "rbd-ctrlplugin": "csi-rbdplugin",
+        "mon": "mon",
+        "mds": "mds",
+        "osd": "osd",
     }
 
     # Component criticality mapping - for chaos testing approach, not exclusion
@@ -298,6 +317,10 @@ class BaseScenarioHelper:
             )
         elif "rook-operator" in label_selector:
             return "rook-operator"
+        elif "noobaa-core" in label_selector:
+            return "noobaa-core"
+        elif "noobaa-s3" in label_selector:
+            return "noobaa-endpoint"
         else:
             return "unknown"
 
@@ -345,8 +368,12 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             "description": "RGW (RADOS Gateway)",
         },
         {
-            "name": "noobaa",
-            "description": "NooBaa",
+            "name": "noobaa-core",
+            "description": "NooBaa Core",
+        },
+        {
+            "name": "noobaa-endpoint",
+            "description": "NooBaa Endpoint",
         },
         {
             "name": "cephfs-ctrlplugin",
@@ -357,8 +384,18 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             "description": "RBD Control Plugin",
         },
         {
+            "name": "mon",
+            "description": "MON",
+            "count": 1,
+        },
+        {
+            "name": "mds",
+            "description": "MDS",
+        },
+        {
             "name": "osd",
             "description": "OSD",
+            "expected_recovery_time": 300,
         },
     ]
 
@@ -382,7 +419,8 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             kill_signal (str): Kill signal to use (default: "SIGKILL")
             count (int): Number of containers to kill (default: 1)
             expected_recovery_time (int): Expected recovery time in seconds (default: 120)
-            container_name (str): Specific container name (default: "" for all containers)
+            container_name (str): Override container name for all scenarios when non-empty;
+                otherwise each component uses COMPONENT_PRIMARY_CONTAINERS (recommended).
             components (list): List of component configs to use (default: all components)
 
         Returns:
@@ -403,14 +441,21 @@ class ContainerScenarioHelper(BaseScenarioHelper):
                     f"No label selector found for component: {component['name']}"
                 )
                 continue
+            resolved_container = component.get("container_name") or container_name
+            if not resolved_container:
+                resolved_container = self.COMPONENT_PRIMARY_CONTAINERS.get(
+                    component["name"], ""
+                )
             scenario = {
                 "name": f"{component['name'].replace('-', '_')}_{kill_signal.lower()}_kill",
                 "namespace": namespace,
                 "label_selector": label_selector,
-                "container_name": container_name,
+                "container_name": resolved_container,
                 "kill_signal": kill_signal_number,
-                "count": count,
-                "expected_recovery_time": expected_recovery_time,
+                "count": component.get("count", count),
+                "expected_recovery_time": component.get(
+                    "expected_recovery_time", expected_recovery_time
+                ),
                 "description": component["description"],
             }
             scenarios.append(scenario)
@@ -484,6 +529,7 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             for scenario in scenarios:
                 self.log.info(
                     f"   • {scenario['name']}: {scenario['label_selector']}\n"
+                    f"     - Container: {scenario['container_name']}\n"
                     f"     - Kill signal: {scenario['kill_signal']}\n"
                     f"     - Target count: {scenario['count']}\n"
                     f"     - Recovery time: {scenario['expected_recovery_time']}s"
