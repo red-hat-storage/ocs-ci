@@ -32,10 +32,20 @@ def check_pod_vanished(pod_names):
 def delete_logging_namespaces(force=False):
     """
     Deleting namespaces
-    1. Openshift-operators-redhat
+    1. UIPlugin
+    1. Openshift-cluster-observability-operator
     2. Openshift-logging
+    3. Openshift-operators-redhat
 
     """
+    uiplugin_obj = ocp.OCP(
+        kind=constants.UIPLUGIN,
+        namespace=constants.OPENSHIFT_CLUSTER_OBSERVABILITY_OPERATOR,
+    )
+    openshift_cluster_observability_namespace = ocp.OCP(
+        kind=constants.NAMESPACES,
+        resource_name=constants.OPENSHIFT_CLUSTER_OBSERVABILITY_OPERATOR,
+    )
     openshift_logging_namespace = ocp.OCP(
         kind=constants.NAMESPACES, resource_name=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
@@ -44,12 +54,24 @@ def delete_logging_namespaces(force=False):
         resource_name=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
     )
     try:
-        openshift_operators_redhat_namespace.delete(
-            resource_name=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
+        uiplugin_obj.delete(
+            resource_name="logging",
             force=force,
             wait=True,
         )
-        logger.info("The project openshift-operators-redhat got deleted successfully")
+        logger.info("UI Plugin deleted successfully")
+    except CommandFailed as e:
+        logger.info("UI Plugin not found" f"Error message {e}")
+
+    try:
+        openshift_cluster_observability_namespace.delete(
+            resource_name=constants.OPENSHIFT_CLUSTER_OBSERVABILITY_OPERATOR,
+            force=force,
+            wait=True,
+        )
+        logger.info(
+            "The project openshift_cluster_observability_namespace got deleted successfully"
+        )
     except CommandFailed as e:
         logger.info("Namespace not found" f"Error message {e}")
 
@@ -63,11 +85,22 @@ def delete_logging_namespaces(force=False):
     except CommandFailed as e:
         logger.info("Namespace not found" f"Error message {e}")
 
+    try:
+        openshift_operators_redhat_namespace.delete(
+            resource_name=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
+            force=force,
+            wait=True,
+        )
+        logger.info("The namespace openshift-operators-redhat got deleted successfully")
+    except CommandFailed as e:
+        logger.info("Namespace not found" f"Error message {e}")
+
 
 def uninstall_cluster_logging():
     """
     Function to uninstall cluster-logging from the cluster
-    Deletes the project "openshift-logging" and "openshift-operators-redhat"
+    Deletes UI Plugin and projects "openshift-logging",
+    "openshift_cluster_observability_namespace" and "openshift-operators-redhat"
     """
 
     # Validating the pods before deleting the instance
@@ -77,7 +110,12 @@ def uninstall_cluster_logging():
         logger.info(f"Pods running in the openshift-logging namespace {pod.name}")
 
     # Excluding cluster-logging-operator from pod_list and getting pod names
-    pod_names_list = [
+    pod_names_list1 = [
+        pod.name
+        for pod in pod_list
+        if not pod.name.startswith(("cluster-logging-operator", "instance"))
+    ]
+    pod_names_list2 = [
         pod.name
         for pod in pod_list
         if not pod.name.startswith("cluster-logging-operator")
@@ -96,14 +134,27 @@ def uninstall_cluster_logging():
         f"Used space before deletion of cluster logging {used_space_before_deletion}"
     )
 
-    # Deleting the clusterlogging instance
-    clusterlogging_obj = ocp.OCP(
-        kind=constants.CLUSTER_LOGGING, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    # Deleting the lokistack and cluster logging pods in openshift-storage namespace
+    lokistack_obj = ocp.OCP(
+        kind=constants.LOKISTACK, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
     try:
-        clusterlogging_obj.delete(resource_name="instance", wait=True)
-        logger.info("Instance got deleted successfully")
-        check_pod_vanished(pod_names_list)
+        lokistack_obj.delete(resource_name="logging-loki", wait=True)
+        logger.info("lokistack got deleted successfully")
+        check_pod_vanished(pod_names_list1)
+
+    except CommandFailed as error:
+        delete_logging_namespaces(force=True)
+        raise error
+
+    clf_obj = ocp.OCP(
+        kind=constants.CLUSTER_LOG_FORWADER,
+        namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
+    )
+    try:
+        clf_obj.delete(resource_name="instance", wait=True)
+        logger.info("clusterlogforwader got deleted successfully")
+        check_pod_vanished(pod_names_list2)
 
     except CommandFailed as error:
         delete_logging_namespaces(force=True)
@@ -132,11 +183,5 @@ def uninstall_cluster_logging():
         logger.info("Expected !!! Space has reclaimed")
     else:
         logger.warning("Unexpected !! No space reclaimed after deletion of PVC")
-
-    # Deleting the RBAC permission set
-    rbac_role = ocp.OCP(
-        kind=constants.ROLE, namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
-    )
-    rbac_role.delete(yaml_file=constants.EO_RBAC_YAML)
 
     delete_logging_namespaces()

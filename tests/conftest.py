@@ -129,7 +129,7 @@ from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
     aws,
-    deployment_openshift_logging as ocp_logging_obj,
+    deployment_openshift_logging,
     ibmcloud,
     kms as KMS,
     pagerduty,
@@ -199,7 +199,6 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
-
 
 log = logging.getLogger(__name__)
 
@@ -3315,81 +3314,14 @@ def install_logging(request):
     * The teardown will uninstall cluster-logging from the cluster
 
     """
+    rosa_hcp_depl = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
 
     def finalizer():
         uninstall_cluster_logging()
 
     request.addfinalizer(finalizer)
 
-    sub = ocp.OCP(
-        kind=constants.SUBSCRIPTION,
-        namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
-    )
-    logging_sub = sub.get().get("items")
-    if logging_sub:
-        log.info("Logging is already configured, Skipping Installation")
-        return
-
-    log.info("Configuring Openshift-logging")
-
-    # Gets OCP version to align logging version to OCP version
-    ocp_version = version.get_semantic_ocp_version_from_config()
-
-    logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
-
-    # Creates namespace openshift-operators-redhat
-    ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
-
-    # Creates an operator-group for elasticsearch
-    assert ocp_logging_obj.create_elasticsearch_operator_group(
-        yaml_file=constants.EO_OG_YAML, resource_name="openshift-operators-redhat"
-    )
-
-    # Set RBAC policy on the project
-    assert ocp_logging_obj.set_rbac(
-        yaml_file=constants.EO_RBAC_YAML, resource_name="prometheus-k8s"
-    )
-
-    # Creates subscription for elastic-search operator
-    subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
-    subscription_yaml["spec"]["channel"] = logging_channel
-    helpers.create_resource(**subscription_yaml)
-    assert ocp_logging_obj.get_elasticsearch_subscription()
-
-    # Checks for Elasticsearch operator
-    elastic_search_operator = OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE
-    )
-    elastic_search_operator.wait_for_resource(
-        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
-    )
-
-    # Creates a namespace openshift-logging
-    ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
-
-    # Creates an operator-group for cluster-logging
-    assert ocp_logging_obj.create_clusterlogging_operator_group(
-        yaml_file=constants.CL_OG_YAML
-    )
-
-    # Creates subscription for cluster-logging
-    cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription["spec"]["channel"] = logging_channel
-    helpers.create_resource(**cl_subscription)
-    assert ocp_logging_obj.get_clusterlogging_subscription()
-
-    # Creates instance in namespace openshift-logging
-    cluster_logging_operator = OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
-    )
-    cluster_logging_operator.wait_for_resource(
-        resource_count=1, condition=constants.STATUS_RUNNING, timeout=200, sleep=20
-    )
-    if cluster_logging_operator:
-        log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
-        ocp_logging_obj.create_instance()
-    else:
-        log.error("The cluster logging operator pod is not created")
+    deployment_openshift_logging.install_logging(skip_resource_exists=rosa_hcp_depl)
 
 
 @pytest.fixture
