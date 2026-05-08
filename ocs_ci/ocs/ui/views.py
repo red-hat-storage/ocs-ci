@@ -749,11 +749,18 @@ pvc = {
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "clone_pvc": ("button[data-test-action='Clone PVC']", By.CSS_SELECTOR),
     "clone_name_input": ("//input[@aria-label='Clone PVC']", By.XPATH),
+    "clone-btn": (
+        'button[form="clone-pvc-form"], button[data-test="confirm-action"], #confirm-action',
+        By.CSS_SELECTOR,
+    ),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
     "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
     "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
-    "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
+    "expand-btn": (
+        'button[form="expand-pvc-form"], button[data-test="confirm-action"], #confirm-action',
+        By.CSS_SELECTOR,
+    ),
     "pvc-status": (
         "dd[data-test-id='pvc-status'] span[data-test='status-text']",
         By.CSS_SELECTOR,
@@ -1592,6 +1599,18 @@ acm_configuration_4_21 = {
     ),
     "assign": (
         "//button[contains(@class, 'c-button pf-m-primary pf-m-progress') and contains(text(), 'Assign')]",
+        By.XPATH,
+    ),
+}
+
+acm_configuration_4_22 = {
+    # OCP 4.22 uses PF6 UI: local cluster view shows "Core platform" h2 in the sidebar nav
+    "local-cluster_dropdown": (
+        "//h2[text()='local-cluster'] | "
+        "//span[contains(@class, 'c-menu-toggle__text') "
+        "and text()='local-cluster']/.. | "
+        "//h2[normalize-space()='Fleet Management'] | "
+        "//h2[normalize-space()='Core platform']",
         By.XPATH,
     ),
 }
@@ -2451,6 +2470,32 @@ validation_4_21 = {
         By.XPATH,
     ),
     "issue_table_rows_locator": ("//table//tbody//tr", By.XPATH),
+}
+
+validation_4_22 = {
+    # OCP 4.22 uses PF6 UI. The "Requested capacity" dropdown button changed
+    # from a div with c-select to a button with c-menu-toggle.
+    "req_capacity_dropdown_selected": (
+        "//div[@id='breakdown-card-title']/following-sibling::*//*[contains(@class, 'c-select__toggle-text')] | "
+        "//button[contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')]"
+        "//span[contains(@class, 'c-menu-toggle__text')]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_btn_one": (
+        "//button[contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')] | "
+        "//div[contains(@class, 'select') and contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_list_option": (
+        "//button[contains(@class, 'c-select__menu-item') and contains(text(), '{0}')] | "
+        "//button[contains(@class, 'c-menu__item')]"
+        "[.//span[contains(@class, 'menu__item-text') and text()='{0}']]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_namespace_input_select": (
+        "//button[@id='{0}-link'] | //li[@id='{0}-link']",
+        By.XPATH,
+    ),
 }
 
 topology = {
@@ -3314,6 +3359,7 @@ locators = {
             **acm_page_nav_420,
             **acm_configuration_4_20,
             **acm_configuration_4_21,
+            **acm_configuration_4_22,
         },
         "validation": {
             **validation,
@@ -3328,6 +3374,7 @@ locators = {
             **validation_4_18,
             **validation_4_20,
             **validation_4_21,
+            **validation_4_22,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},

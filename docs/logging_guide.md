@@ -1930,3 +1930,16 @@ Following these guidelines helps create logs that are:
 - **Debuggable** - Provide enough context to diagnose issues
 - **Consistent** - Follow predictable patterns across the codebase
 - **Actionable** - Clear what succeeded, failed, or needs attention
+
+---
+
+## Automation
+
+The `/update-logging` skill can automatically apply these guidelines to Python files:
+
+```bash
+/update-logging tests/functional/test_example.py
+```
+
+The skill reads this guide as its authoritative source and applies the patterns documented here.
+See `.claude/skills/update-logging/SKILL.md` for details.
