@@ -17,6 +17,8 @@ SEVERITY_BY_CHECK = {
     constants.ALERT_ODF_DISK_UTILIZATION_HIGH: "Medium",
     constants.ALERT_ODF_CORE_POD_RESTART: "Medium",
     constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: "Medium",
+    constants.ALERT_CLUSTERERRORSTATE: "Critical",
+    constants.ALERT_CLUSTERWARNINGSTATE: "Medium",
 }
 
 logger = logging.getLogger(__name__)
