@@ -516,6 +516,7 @@ class TestHealthOverview(ManageTest):
         """
         self.rule = None
         ocp = OCP(namespace=config.ENV_DATA.get("cluster_namespace"))
+        self.mon_scaling = False
         if alert_name == constants.ALERT_ODF_CORE_POD_RESTART:
             self.restart_pod()
             logger.info("Waiting for 120 sec for pod to restart")
