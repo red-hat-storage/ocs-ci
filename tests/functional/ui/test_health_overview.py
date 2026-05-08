@@ -55,6 +55,52 @@ SEVERITY_DROP_MAP = {
 }
 
 
+def get_alert_params():
+    """
+    Get alert parameters based on OCS version
+
+    Returns:
+        list: List of tuples (alert_name, alert_yaml)
+    """
+    # Base parameters for all versions
+    params = [
+        (
+            constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000,
+            "custom-odf-mtu-less-than-9000.yaml",
+        ),
+        (
+            constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION,
+            "custom-odf-nic-bandwidth-saturation.yaml",
+        ),
+        (
+            constants.ALERT_ODF_DISK_UTILIZATION_HIGH,
+            "custom-odf-disk-utilization-high.yaml",
+        ),
+        (
+            constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES,
+            "custom-odf-latency-rule.yaml",
+        ),
+        (
+            constants.ALERT_ODF_CORE_POD_RESTART,
+            "custom-odf-core-pod-restarted.yaml",
+        ),
+    ]
+    if ocs_version >= version.VERSION_4_22:
+        params.extend(
+            [
+                (
+                    constants.ALERT_CLUSTERERRORSTATE,
+                    "custom-ceph-cluster-error.yaml",
+                ),
+                (
+                    constants.ALERT_CLUSTERWARNINGSTATE,
+                    "custom-ceph-cluster-warn.yaml",
+                ),
+            ]
+        )
+    return params
+
+
 @ui
 @black_squad
 @runs_on_provider
@@ -360,51 +406,6 @@ class TestHealthOverview(ManageTest):
                     logger.warning(f"Failed to scale mon during cleanup: {ex}")
 
         request.addfinalizer(finalizer)
-
-    def get_alert_params(self):
-        """
-        Get alert parameters based on OCS version
-
-        Returns:
-            list: List of tuples (alert_name, alert_yaml)
-        """
-        # Base parameters for all versions
-        params = [
-            (
-                constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000,
-                "custom-odf-mtu-less-than-9000.yaml",
-            ),
-            (
-                constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION,
-                "custom-odf-nic-bandwidth-saturation.yaml",
-            ),
-            (
-                constants.ALERT_ODF_DISK_UTILIZATION_HIGH,
-                "custom-odf-disk-utilization-high.yaml",
-            ),
-            (
-                constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES,
-                "custom-odf-latency-rule.yaml",
-            ),
-            (
-                constants.ALERT_ODF_CORE_POD_RESTART,
-                "custom-odf-core-pod-restarted.yaml",
-            ),
-        ]
-        if ocs_version >= version.VERSION_4_22:
-            params.extend(
-                [
-                    (
-                        constants.ALERT_CLUSTERERRORSTATE,
-                        "custom-ceph-cluster-error.yaml",
-                    ),
-                    (
-                        constants.ALERT_CLUSTERWARNINGSTATE,
-                        "custom-ceph-cluster-warn.yaml",
-                    ),
-                ]
-            )
-        return params
 
     @tier1
     @polarion_id("OCS-7475")
