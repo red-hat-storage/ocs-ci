@@ -2185,6 +2185,7 @@ class HypershiftHostedOCP(
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
                 auto_repair=auto_repair,
+                hcp_image=hcp_image,
             )
         else:
             return self.create_kubevirt_ocp_cluster(
@@ -2198,6 +2199,7 @@ class HypershiftHostedOCP(
                 disable_default_sources=disable_default_sources,
                 data_replication_separation=data_replication_separation,
                 auto_repair=auto_repair,
+                hcp_image=hcp_image,
             )
 
     def deploy_dependencies(
