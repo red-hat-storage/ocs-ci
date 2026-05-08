@@ -30,6 +30,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility.version import (
     get_semantic_running_odf_version,
     get_semantic_version,
+    get_ocs_version_from_csv,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,14 @@ ALERT_MAP = {
     constants.ALERT_ODF_DISK_UTILIZATION_HIGH: 0,
     constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: 0,
 }
+ocs_version = get_ocs_version_from_csv(only_major_minor=True)
+if ocs_version >= get_semantic_version("4.22"):
+    ALERT_MAP.update(
+        {
+            constants.ALERT_CLUSTERWARNINGSTATE: 0,
+            constants.ALERT_CLUSTERERRORSTATE: 0,
+        }
+    )
 
 SEVERITY_DROP_MAP = {
     "Minor": 2,
@@ -344,6 +353,69 @@ class TestHealthOverview(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @pytest.fixture
+    def scale_mon_teardown(self, request):
+        """
+        Teardown fixture to scale up mon after mock critical alert test completes.
+        """
+
+        def finalizer():
+            if self.mon_scaling:
+                logger.info("[CLEANUP] Ensuring mon scaling is done")
+                try:
+                    ocp = OCP(namespace=config.ENV_DATA.get("cluster_namespace"))
+                    scale_cmd = "scale deployment rook-ceph-mon-a --replicas=1"
+                    ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+                except Exception as ex:
+                    logger.warning(f"Failed to scale mon during cleanup: {ex}")
+
+        request.addfinalizer(finalizer)
+
+    def get_alert_params(self):
+        """
+        Get alert parameters based on OCS version
+
+        Returns:
+            list: List of tuples (alert_name, alert_yaml)
+        """
+        # Base parameters for all versions
+        params = [
+            (
+                constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000,
+                "custom-odf-mtu-less-than-9000.yaml",
+            ),
+            (
+                constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION,
+                "custom-odf-nic-bandwidth-saturation.yaml",
+            ),
+            (
+                constants.ALERT_ODF_DISK_UTILIZATION_HIGH,
+                "custom-odf-disk-utilization-high.yaml",
+            ),
+            (
+                constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES,
+                "custom-odf-latency-rule.yaml",
+            ),
+            (
+                constants.ALERT_ODF_CORE_POD_RESTART,
+                "custom-odf-core-pod-restarted.yaml",
+            ),
+        ]
+        if ocs_version >= get_semantic_version("4.22"):
+            params.extend(
+                [
+                    (
+                        constants.ALERT_CLUSTERERRORSTATE,
+                        "custom-ceph-cluster-error.yaml",
+                    ),
+                    (
+                        constants.ALERT_CLUSTERWARNINGSTATE,
+                        "custom-ceph-cluster-warn.yaml",
+                    ),
+                ]
+            )
+        return params
+
     @tier1
     @polarion_id("OCS-7475")
     def test_health_overview_modal(
@@ -422,28 +494,7 @@ class TestHealthOverview(ManageTest):
     @polarion_id("OCS-7509")
     @pytest.mark.parametrize(
         "alert_name, alert_yaml",
-        [
-            (
-                constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000,
-                "custom-odf-mtu-less-than-9000.yaml",
-            ),
-            (
-                constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION,
-                "custom-odf-nic-bandwidth-saturation.yaml",
-            ),
-            (
-                constants.ALERT_ODF_DISK_UTILIZATION_HIGH,
-                "custom-odf-disk-utilization-high.yaml",
-            ),
-            (
-                constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES,
-                "custom-odf-latency-rule.yaml",
-            ),
-            (
-                constants.ALERT_ODF_CORE_POD_RESTART,
-                "custom-odf-core-pod-restarted.yaml",
-            ),
-        ],
+        get_alert_params(),
     )
     def test_health_score_changes_based_on_alert_severity(
         self,
@@ -453,6 +504,7 @@ class TestHealthOverview(ManageTest):
         threading_lock,
         unsilence_alerts_teardown,
         alert_rule_teardown,
+        scale_mon_teardown,
     ):
         """
         Test to decrease health score based on alert severity and recover after alert is reversed.
@@ -465,6 +517,7 @@ class TestHealthOverview(ManageTest):
         7. Verify health score is recovered
         """
         self.rule = None
+        ocp = OCP(namespace=config.ENV_DATA.get("cluster_namespace"))
         if alert_name == constants.ALERT_ODF_CORE_POD_RESTART:
             self.restart_pod()
             logger.info("Waiting for 120 sec for pod to restart")
@@ -482,7 +535,16 @@ class TestHealthOverview(ManageTest):
         assert (
             baseline_score == self.get_health_score_ui()
         ), "Full health score not recovered"
-
+        if (
+            alert_name == constants.ALERT_CLUSTERWARNINGSTATE
+            or alert_name == constants.ALERT_CLUSTERERRORSTATE
+        ):
+            logger.info(
+                "Scaling down rook-ceph-mon-a deployment to 0 replicas to mock up alert"
+            )
+            scale_cmd = "scale deployment rook-ceph-mon-a --replicas=0 "
+            ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+            self.mon_scaling = True
         severity = SEVERITY_BY_CHECK.get(alert_name)
         PageNavigator().take_screenshot(f"severity_of_alert_{alert_name}")
         assert severity, f"Severity not defined for alert {alert_name}"
@@ -508,13 +570,15 @@ class TestHealthOverview(ManageTest):
                 "Waiting for 120 sec to update health score after alert is triggered"
             )
             time.sleep(120)
-            self.wait_for_health_score_change(
-                len(alerts) * expected_drop, baseline_score
-            )
+            self.wait_for_health_score_change(expected_drop, baseline_score)
 
             logger.info("Deleting alert rule to resolve alert")
             self.rule.delete()
             self.rule = None
+            if self.mon_scaling:
+                scale_cmd = "scale deployment rook-ceph-mon-a --replicas=1 "
+                ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+                self.mon_scaling = False
             logger.info("Waiting for alert to be resolved...")
             api.refresh_connection()
             alerts = api.wait_for_alert(name=alert_name, timeout=180, sleep=60)
@@ -529,9 +593,7 @@ class TestHealthOverview(ManageTest):
             logger.info("Alert already present no need to trigger again")
             infra_health_overview = df_overview.nav_health_view_checks()
             infra_health_overview.unsilence_alert_by_name(alert_name)
-            self.wait_for_health_score_change(
-                ALERT_MAP[alert_name] * expected_drop, baseline_score
-            )
+            self.wait_for_health_score_change(expected_drop, baseline_score)
 
     @tier2
     @polarion_id("OCS-7731")
