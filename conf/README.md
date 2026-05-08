@@ -397,6 +397,7 @@ higher priority).
       * `infra_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "HighlyAvailable"
       * `disable_default_sources` - If set to true, default sources will be disabled on the hosted cluster
       * `auto_repair` - If set to true, auto repair of the nodes will be enabled on the hosted cluster
+      * `hcp_image` - The OCP image url to be used for the hcp cluster
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
 * `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.

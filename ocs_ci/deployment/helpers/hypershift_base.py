@@ -702,6 +702,7 @@ class HyperShiftBase:
         disable_default_sources=None,
         data_replication_separation=False,
         auto_repair=True,
+        hcp_image=None,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -724,6 +725,7 @@ class HyperShiftBase:
             data_replication_separation (bool): If the deployment uses data replication separation
                 then add additional network
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
+            hcp_image (str): OCP image url for HCP cluster
 
         Returns:
             str: Name of the hosted cluster
@@ -740,14 +742,19 @@ class HyperShiftBase:
         pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
-        if not ocp_version:
-            provider_version = get_ocp_version()
-            if "nightly" in provider_version:
-                index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
-            else:
-                index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+        if hcp_image:
+            index_image = hcp_image
         else:
-            index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
+            if not ocp_version:
+                provider_version = get_ocp_version()
+                if "nightly" in provider_version:
+                    index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
+                else:
+                    index_image = (
+                        f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+                    )
+            else:
+                index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
 
         if not name:
             name = "hcp-" + datetime.utcnow().strftime("%f")
@@ -836,6 +843,7 @@ class HyperShiftBase:
         infra_availability_policy=None,
         disable_default_sources=None,
         auto_repair=True,
+        hcp_image=None,
     ):
         """
         Create agent hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -853,6 +861,7 @@ class HyperShiftBase:
                 available quorum 1 in pdb.
             disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
+            hcp_image (str): OCP image url for HCP cluster
 
         Returns:
             str: Name of the hosted cluster
@@ -863,7 +872,10 @@ class HyperShiftBase:
         pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
-        index_image = resolve_ocp_image(ocp_version)
+        if hcp_image:
+            index_image = hcp_image
+        else:
+            index_image = resolve_ocp_image(ocp_version)
 
         if not name:
             name = "hcp-" + datetime.now().strftime("%f")
