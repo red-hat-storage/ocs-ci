@@ -94,6 +94,18 @@ ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
 MANIFESTS_DIR = "manifests"
+VOLSYNC_HELM_CONFIG = os.path.join(TOP_DIR, MANIFESTS_DIR, "volsync-helm.yaml")
+MINIO_NAMESPACE = "minio"
+MINIO_YAML_URL = (
+    "https://raw.githubusercontent.com/RamenDR/ramen/main/test/addons/minio/minio.yaml"
+)
+MINIO_INTERNAL_ENDPOINT = "http://minio.minio.svc:9000"
+MINIO_BUCKET = "bucket"
+MINIO_ACCESS_KEY = "minio"
+MINIO_SECRET_KEY = "minio123"
+MOCK_VGRC_NAME = "vgrc-1"
+LSO_PROVISIONER = "kubernetes.io/no-provisioner"
+VOLSYNC_PSK_SECRET_NAME = "volsync-rsync-tls-secret"
 PROVIDER_CLIENT_DEPLOYMENT_DIR = os.path.join(
     TEMPLATE_DIR, "provider-client-deployment"
 )
@@ -2366,6 +2378,7 @@ LOCAL_VOLUME_DISCOVERY = (
 )
 LOCAL_VOLUME_SET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "local-volume-set.yaml")
 LOCAL_VOLUME_SET = "localvolumesets.local.storage.openshift.io"
+LOCAL_PV_DISK_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "local-pv-disk.yaml")
 
 AUTO_DISCOVER_DEVICES_RESOURCE = "auto-discover-devices"
 LOCAL_BLOCK_RESOURCE = "localblock"

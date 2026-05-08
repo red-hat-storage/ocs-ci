@@ -4,6 +4,7 @@ Helper functions specific for DR
 
 import json
 import logging
+import secrets
 import tempfile
 import time
 from datetime import datetime
@@ -2766,6 +2767,263 @@ def verify_volsync():
             resource_count=1,
             timeout=600,
         )
+    config.switch_ctx(restore_index)
+
+
+def deploy_minio():
+    """
+    Deploy and verify MinIO on every managed (non-ACM) cluster for agnostic DR.
+
+    Performs the following steps on each managed cluster:
+
+    1. Deploys the upstream Ramen MinIO addon manifest
+    2. Grants anyuid SCC to the default service account in the minio namespace
+    3. Removes the hostPort from the MinIO container spec
+    4. Replaces the hostPath volume with emptyDir
+    5. Waits for the MinIO rollout to complete
+    6. Creates the S3 bucket via a temporary mc-client pod
+    7. Exposes MinIO via an OpenShift route
+
+    Returns:
+        dict: cluster_name -> external MinIO endpoint URL (http://<route-host>)
+            for each managed cluster.
+
+    Raises:
+        CommandFailed: if any oc command fails on a cluster.
+        AssertionError: if the route host is empty after deployment.
+    """
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    endpoints = {}
+
+    for cluster in managed_clusters:
+        cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(cluster_index)
+        cluster_name = config.ENV_DATA.get("cluster_name", f"cluster-{cluster_index}")
+
+        logger.info(
+            f"Deploying MinIO on managed cluster '{cluster_name}' for agnostic DR"
+        )
+
+        run_cmd(
+            f"oc apply -f {constants.MINIO_YAML_URL}",
+            cluster_config=cluster,
+        )
+
+        run_cmd(
+            f"oc adm policy add-scc-to-user anyuid -z default"
+            f" -n {constants.MINIO_NAMESPACE}",
+            cluster_config=cluster,
+        )
+
+        run_cmd(
+            f"oc patch deployment minio -n {constants.MINIO_NAMESPACE}"
+            " --type=json"
+            ' -p \'[{"op":"remove",'
+            '"path":"/spec/template/spec/containers/0/ports/0/hostPort"}]\'',
+            cluster_config=cluster,
+        )
+
+        run_cmd(
+            f"oc patch deployment minio -n {constants.MINIO_NAMESPACE}"
+            " --type=json"
+            ' -p \'[{"op":"replace",'
+            '"path":"/spec/template/spec/volumes/0",'
+            '"value":{"name":"storage","emptyDir":{}}}]\'',
+            cluster_config=cluster,
+        )
+
+        run_cmd(
+            f"oc rollout status deployment/minio"
+            f" -n {constants.MINIO_NAMESPACE} --timeout=120s",
+            cluster_config=cluster,
+        )
+
+        run_cmd(
+            f"oc run mc-client --image=quay.io/minio/mc --rm --restart=Never"
+            f" -n {constants.MINIO_NAMESPACE} --command"
+            f" -- /bin/sh -c"
+            f" 'mc alias set myminio {constants.MINIO_INTERNAL_ENDPOINT}"
+            f" {constants.MINIO_ACCESS_KEY} {constants.MINIO_SECRET_KEY}"
+            f" && mc mb myminio/{constants.MINIO_BUCKET}'",
+            timeout=120,
+            cluster_config=cluster,
+        )
+
+        run_cmd(
+            f"oc expose svc/minio -n {constants.MINIO_NAMESPACE} --port=9000",
+            cluster_config=cluster,
+        )
+
+        minio_route = run_cmd(
+            f"oc get route minio -n {constants.MINIO_NAMESPACE}"
+            " -o jsonpath='{.spec.host}'",
+            cluster_config=cluster,
+        ).strip()
+        assert minio_route, (
+            f"MinIO route host is empty on cluster '{cluster_name}' — "
+            "route may not have been created"
+        )
+
+        external_endpoint = f"http://{minio_route}"
+        endpoints[cluster_name] = external_endpoint
+
+        logger.info(
+            f"MinIO successfully deployed on cluster '{cluster_name}':\n"
+            f"  Internal endpoint : {constants.MINIO_INTERNAL_ENDPOINT}\n"
+            f"  External endpoint : {external_endpoint}\n"
+            f"  Bucket            : {constants.MINIO_BUCKET}\n"
+            f"  Access key        : {constants.MINIO_ACCESS_KEY}\n"
+            f"  Secret key        : {constants.MINIO_SECRET_KEY}"
+        )
+
+    config.switch_ctx(restore_index)
+    return endpoints
+
+
+def create_volume_group_replication_class(scheduling_interval="5m"):
+    """
+    Create VolumeGroupReplicationClass on every managed (non-ACM) cluster.
+
+    The groupreplicationid label is generated once and applied identically to
+    both clusters so Ramen can correlate the VGRClass across primary and
+    secondary. The storageid label is generated independently per cluster.
+
+    Args:
+        scheduling_interval (str): Replication scheduling interval.
+            Use "0m" for Metro DR, ">0m" (e.g. "5m") for Regional DR.
+            Defaults to "5m".
+    """
+    group_replication_id = secrets.token_hex(10)
+
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+
+    for cluster in managed_clusters:
+        cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(cluster_index)
+        cluster_name = config.ENV_DATA.get("cluster_name", f"cluster-{cluster_index}")
+
+        storage_id = secrets.token_hex(14)
+
+        vgrc_data = {
+            "apiVersion": "replication.storage.openshift.io/v1alpha1",
+            "kind": constants.VOLUME_GROUP_REPLICATION_CLASS,
+            "metadata": {
+                "name": constants.MOCK_VGRC_NAME,
+                "labels": {
+                    "ramendr.openshift.io/groupreplicationid": group_replication_id,
+                    "ramendr.openshift.io/storageid": storage_id,
+                    "ramendr.openshift.io/offloaded": "true",
+                },
+            },
+            "spec": {
+                "provisioner": constants.LSO_PROVISIONER,
+                "parameters": {
+                    "pskSecretName": constants.VOLSYNC_PSK_SECRET_NAME,
+                    "schedulingInterval": scheduling_interval,
+                },
+            },
+        }
+
+        logger.info(
+            f"Creating VolumeGroupReplicationClass '{constants.MOCK_VGRC_NAME}'"
+            f" on cluster '{cluster_name}' "
+            f"(groupreplicationid={group_replication_id},"
+            f" storageid={storage_id})"
+        )
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
+            templating.dump_data_to_temp_yaml(vgrc_data, tmp.name)
+            run_cmd(
+                f"oc apply -f {tmp.name}",
+                cluster_config=cluster,
+            )
+
+        vgrc_obj = ocp.OCP(
+            kind=constants.VOLUME_GROUP_REPLICATION_CLASS,
+            resource_name=constants.MOCK_VGRC_NAME,
+        )
+        assert vgrc_obj.get(resource_name=constants.MOCK_VGRC_NAME), (
+            f"VolumeGroupReplicationClass '{constants.MOCK_VGRC_NAME}' "
+            f"not found on cluster '{cluster_name}' after apply"
+        )
+
+        logger.info(
+            f"VolumeGroupReplicationClass '{constants.MOCK_VGRC_NAME}'"
+            f" successfully created on cluster '{cluster_name}'"
+        )
+
+    config.switch_ctx(restore_index)
+
+
+def install_volsync_from_helm():
+    """
+    Install VolSync via Helm on every managed (non-ACM) cluster for agnostic DR.
+
+    Reads helm configuration from ``manifests/volsync-helm.yaml`` (repo name,
+    repo URL, chart, release name and namespace) and runs the standard three-step
+    helm install on each primary and secondary cluster:
+
+    1. ``helm repo add <repo_name> <repo_url>``
+    2. ``helm repo update``
+    3. ``helm install <release_name> <chart> -n <namespace> --create-namespace``
+
+    After installation the VolSync pod in ``volsync-system`` namespace is
+    verified to reach Running state.
+
+    Raises:
+        FileNotFoundError: if helm CLI is not installed.
+        CommandFailed: if any helm command or the post-install verification fails.
+    """
+    helm_config = templating.load_yaml(constants.VOLSYNC_HELM_CONFIG)
+    repo_name = helm_config["repo_name"]
+    repo_url = helm_config["repo_url"]
+    chart = helm_config["chart"]
+    release_name = helm_config["release_name"]
+    namespace = helm_config["namespace"]
+
+    try:
+        exec_cmd("helm version")
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            "helm CLI not found — install helm before running agnostic DR deployment"
+        )
+
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+
+    for cluster in managed_clusters:
+        cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(cluster_index)
+        cluster_name = config.ENV_DATA.get("cluster_name", f"cluster-{cluster_index}")
+
+        logger.info(f"Installing VolSync via Helm on cluster '{cluster_name}'")
+
+        exec_cmd(
+            f"helm repo add {repo_name} {repo_url}",
+            cluster_config=cluster,
+        )
+        exec_cmd("helm repo update", cluster_config=cluster)
+        exec_cmd(
+            f"helm install {release_name} {chart}"
+            f" -n {namespace} --create-namespace",
+            cluster_config=cluster,
+        )
+
+        logger.info(f"Verifying VolSync pod on cluster '{cluster_name}'")
+        volsync_pod = ocp.OCP(
+            kind=constants.POD, namespace=constants.VOLSYNC_SYSTEM_NAMESPACE
+        )
+        assert volsync_pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.VOLSYNC_LABEL,
+            resource_count=1,
+            timeout=300,
+        ), f"VolSync pod did not reach Running state on cluster '{cluster_name}'"
+
+        logger.info(f"VolSync successfully installed on cluster '{cluster_name}'")
+
     config.switch_ctx(restore_index)
 
 
