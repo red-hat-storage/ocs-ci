@@ -64,8 +64,10 @@ class TestMultiStorageCoexistence(ManageTest):
         cluster_name = "ibm-spectrum-scale"
 
         # 1. Apply MCO (Operator)
-        mco_url = ("https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
-                   "v6.0.0.x/generated/scale/mco/mco.yaml")
+        mco_url = (
+            "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
+            "v6.0.0.x/generated/scale/mco/mco.yaml"
+        )
         helpers.run_cmd(f"oc apply -f {mco_url}")
 
         # 2. Check and Create Entitlement Secret
@@ -136,7 +138,7 @@ class TestMultiStorageCoexistence(ManageTest):
                     name = res["metadata"]["name"]
                     log.info(f"Scrubbing {kind}: {name}")
                     exec_cmd(
-                        f'oc patch {kind.lower()}.scale.spectrum.ibm.com {name} -n {ns}'
+                        f"oc patch {kind.lower()}.scale.spectrum.ibm.com {name} -n {ns}"
                         f' --type=merge -p \'{{"metadata":{{"finalizers":null}}}}\''
                     )
                     ocp_obj.delete(resource_name=name)
