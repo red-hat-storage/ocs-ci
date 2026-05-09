@@ -1486,13 +1486,8 @@ ACM_POLICY_BACKUP_RESTORE = "backup-restore-enabled"
 # DR constants
 SUBMARINER_DOWNLOAD_URL = "https://get.submariner.io"
 DR_DEFAULT_NAMESPACE = "openshift-dr-systems"
-IBM_STORAGE_SCALE_NAMESPACE = "ibm-spectrum-scale"
 TOKEN_EXCHANGE_AGENT_LABEL = "app=token-exchange-agent"
 RBD_MIRROR_APP_LABEL = "app=rook-ceph-rbd-mirror"
-REMOTE_CLUSTER = "RemoteCluster"
-SCALE_FILESYSTEM = "Filesystem"
-SCALE_GUI_USER = "fdf_user_apr16"
-SCALE_GUI_PASSWORD = "passw0rd"
 RBD_MIRRORING_STORAGECLUSTER_PATCH = (
     "-n openshift-storage --type json --patch  "
     "'[{ 'op': 'replace', 'path': '/spec/mirroring', 'value': {'enabled': true} }]'"
@@ -2604,10 +2599,15 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.21"] = (
     DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"]
 )
 
+# the list is gathered via following command (run it on one line!)
+# opm-rhel9 render quay.io/rhceph-dev/ocs-registry:4.22.0-65.konflux -o json |
+#   jq 'select(.name=="odf-dependencies.v4.22.0-65.stable") | .properties[] |
+#   select(.type=="olm.package.required") | .value.packageName'
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "4.22"
 ] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] + [
     "ceph-volsync-plugin-operator",
+    "ocs-tls-profiles",
 ]
 
 # PSI-openstack constants
@@ -2671,6 +2671,11 @@ RHEL_OS = "RHEL"
 RHCOS = "RHCOS"
 
 # Scale constants
+IBM_STORAGE_SCALE_NAMESPACE = "ibm-spectrum-scale"
+REMOTE_CLUSTER = "RemoteCluster"
+SCALE_FILESYSTEM = "Filesystem"
+SCALE_GUI_USER = "fdf_user_apr16"
+SCALE_GUI_PASSWORD = "passw0rd"
 SCALE_NODE_SELECTOR = {"scale-label": "app-scale"}
 SCALE_LABEL = "scale-label=app-scale"
 # TODO: Revisit the dict value once there is change in instance/vm/server type
