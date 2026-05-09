@@ -2671,6 +2671,8 @@ RHEL_OS = "RHEL"
 RHCOS = "RHCOS"
 
 # Scale constants
+IBM_STORAGE_SCALE_NAMESPACE = "ibm-spectrum-scale"
+REMOTE_CLUSTER = "RemoteCluster"
 SCALE_NODE_SELECTOR = {"scale-label": "app-scale"}
 SCALE_LABEL = "scale-label=app-scale"
 # TODO: Revisit the dict value once there is change in instance/vm/server type
