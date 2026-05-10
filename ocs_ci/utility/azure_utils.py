@@ -494,6 +494,145 @@ class AZURE:
         os.environ["AZURE_CLIENT_ID"] = self._client_id
         os.environ["AZURE_CLIENT_SECRET"] = self._client_secret
 
+    def create_noobaa_managed_identity(
+        self, cluster_name, resource_group, subscription_id
+    ):
+        """
+        Create an Azure user-assigned managed identity for NooBaa with
+        federated credentials for workload identity federation (STS).
+
+        Creates:
+
+        1. A user-assigned managed identity named '{cluster_name}-noobaa-mi'
+        2. Role assignments: 'Storage Account Contributor' and
+           'Storage Blob Data Contributor' scoped to the cluster resource group
+        3. Federated credentials for NooBaa service accounts (noobaa,
+           noobaa-core, noobaa-endpoint) linked to the cluster's OIDC issuer
+
+        Assumes the caller has already authenticated via az_login().
+
+        Args:
+            cluster_name (str): Name of the OCP cluster
+            resource_group (str): Azure resource group name
+            subscription_id (str): Azure subscription ID
+
+        Returns:
+            dict: {"client_id": str, "resource_group": str}
+
+        """
+        mi_name = f"{cluster_name}-noobaa-mi"
+        region = config.ENV_DATA["region"]
+
+        logger.info(
+            f"Creating managed identity {mi_name} in resource group {resource_group}"
+        )
+        result = exec_cmd(
+            f"az identity create --name {mi_name} --resource-group {resource_group} "
+            f"--location {region} --subscription {subscription_id} -o json"
+        )
+        mi_data = json.loads(result.stdout)
+        client_id = mi_data["clientId"]
+        principal_id = mi_data["principalId"]
+
+        scope = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}"
+        roles = ["Storage Account Contributor", "Storage Blob Data Contributor"]
+        for role in roles:
+            logger.info(f"Assigning role '{role}' to managed identity {mi_name}")
+            exec_cmd(
+                f"az role assignment create --assignee-object-id {principal_id} "
+                f'--assignee-principal-type ServicePrincipal --role "{role}" '
+                f"--scope {scope} --subscription {subscription_id}"
+            )
+
+        logger.info("Retrieving OIDC issuer URL from the cluster")
+        auth_result = exec_cmd("oc get authentication cluster -ojson")
+        auth_data = json.loads(auth_result.stdout)
+        oidc_issuer = auth_data["spec"]["serviceAccountIssuer"]
+
+        namespace = config.ENV_DATA.get(
+            "cluster_namespace", constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        service_accounts = ["noobaa", "noobaa-core", "noobaa-endpoint"]
+        for sa in service_accounts:
+            subject = f"system:serviceaccount:{namespace}:{sa}"
+            logger.info(
+                f"Creating federated credential for {subject} on managed identity {mi_name}"
+            )
+            exec_cmd(
+                f"az identity federated-credential create "
+                f"--name {mi_name}-{sa} "
+                f"--identity-name {mi_name} "
+                f"--resource-group {resource_group} "
+                f"--issuer {oidc_issuer} "
+                f'--subject "{subject}" '
+                f"--audiences openshift "
+                f"--subscription {subscription_id}"
+            )
+
+        logger.info(f"Managed identity {mi_name} created with client ID {client_id}")
+        return {"client_id": client_id, "resource_group": resource_group}
+
+    def delete_noobaa_managed_identity(
+        self, cluster_name, resource_group, subscription_id
+    ):
+        """
+        Delete the NooBaa Azure managed identity created for STS deployments.
+
+        Deleting the MI cascades to its federated credentials, but role
+        assignments are NOT auto-deleted — they become orphaned. This method
+        explicitly removes role assignments before deleting the identity.
+
+        Safe to call if the identity doesn't exist (e.g., partial teardown).
+        Assumes the caller has already authenticated via az_login().
+
+        Args:
+            cluster_name (str): Name of the OCP cluster
+            resource_group (str): Azure resource group name
+            subscription_id (str): Azure subscription ID
+
+        """
+        mi_name = f"{cluster_name}-noobaa-mi"
+        logger.info(
+            f"Deleting managed identity {mi_name} from resource group {resource_group}"
+        )
+
+        # Get the MI's principal ID for role assignment cleanup
+        show_result = exec_cmd(
+            f"az identity show --name {mi_name} --resource-group {resource_group} "
+            f"--subscription {subscription_id} -o json",
+            ignore_error=True,
+        )
+        if show_result.returncode:
+            logger.warning(
+                f"Managed identity {mi_name} not found (may already be deleted): {show_result.stderr}"
+            )
+            return
+
+        mi_data = json.loads(show_result.stdout)
+        principal_id = mi_data.get("principalId", "")
+
+        if principal_id:
+            scope = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}"
+            logger.info(
+                f"Removing role assignments for principal {principal_id} in scope {scope}"
+            )
+            exec_cmd(
+                f"az role assignment delete --assignee {principal_id} --scope {scope}",
+                ignore_error=True,
+            )
+
+        result = exec_cmd(
+            f"az identity delete --name {mi_name} --resource-group {resource_group} "
+            f"--subscription {subscription_id}",
+            ignore_error=True,
+        )
+        if result.returncode:
+            logger.warning(
+                f"Failed to delete managed identity {mi_name}: {result.stderr}"
+            )
+        else:
+            logger.info(f"Managed identity {mi_name} deleted successfully")
+
 
 class AzureAroUtil(AZURE):
     """
