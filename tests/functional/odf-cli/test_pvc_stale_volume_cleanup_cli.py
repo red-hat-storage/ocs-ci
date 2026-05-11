@@ -1,4 +1,5 @@
 import logging
+import os
 import tempfile
 import yaml
 from subprocess import CompletedProcess
@@ -292,45 +293,52 @@ class TestSubvolumesCommand(ManageTest):
         # Backup PV yaml, delete PV and remove finalizer
         logger.info("Backing up PV yaml")
         pv_name = pvc_obj.get().get("spec").get("volumeName")
-        backup_file = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="pv_backup_", suffix=".yaml", delete=False
-        )
-        backup_file_path = backup_file.name
-        backup_get = pvc_obj.backed_pv_obj.get()
-        dump_data_to_temp_yaml(backup_get, backup_file_path)
-        logger.info(f"PV backup file created: {backup_file_path}")
+        backup_file_path = None
+        try:
+            backup_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="pv_backup_", suffix=".yaml", delete=False
+            )
+            backup_file_path = backup_file.name
 
-        logger.info(f"Deleting PV: {pv_name}")
-        ocp_pv = ocp.OCP(kind=constants.PV)
-        ocp_pv.delete(resource_name=pv_name, wait=False)
-        ocp_pv.patch(
-            resource_name=pv_name,
-            params='{"metadata": {"finalizers":null}}',
-            format_type="merge",
-        )
-        ocp_pv.wait_for_delete(resource_name=pv_name)
-        logger.info(f"PV {pv_name} deleted successfully")
+            backup_get = pvc_obj.backed_pv_obj.get()
+            dump_data_to_temp_yaml(backup_get, backup_file_path)
+            logger.info(f"PV backup file created: {backup_file_path}")
 
-        logger.info("Editing PV backup file to remove volumeAttributes")
-        with open(backup_file_path, "r") as backup:
-            backup_data = yaml.safe_load(backup)
+            logger.info(f"Deleting PV: {pv_name}")
+            ocp_pv = ocp.OCP(kind=constants.PV)
+            ocp_pv.delete(resource_name=pv_name, wait=False)
+            ocp_pv.patch(
+                resource_name=pv_name,
+                params='{"metadata": {"finalizers":null}}',
+                format_type="merge",
+            )
+            ocp_pv.wait_for_delete(resource_name=pv_name)
+            logger.info(f"PV {pv_name} deleted successfully")
 
-        # Remove volumeAttributes and metadata fields for re-creation
-        backup_data.get("spec", {}).get("csi", {}).pop("volumeAttributes", None)
-        metadata = backup_data.get("metadata", {})
-        for field in ["resourceVersion", "uid", "creationTimestamp"]:
-            metadata.pop(field, None)
+            logger.info("Editing PV backup file to remove volumeAttributes")
+            with open(backup_file_path, "r") as backup:
+                backup_data = yaml.safe_load(backup)
 
-        # Write modified backup
-        with open(backup_file_path, "w") as backup:
-            yaml.dump(backup_data, backup)
-        logger.info(f"PV backup file updated: {backup_file_path}")
+            backup_data.get("spec", {}).get("csi", {}).pop("volumeAttributes", None)
+            metadata = backup_data.get("metadata", {})
+            for field in ["resourceVersion", "uid", "creationTimestamp"]:
+                metadata.pop(field, None)
 
-        # Apply the modified PV yaml and Verify PV is bound
-        logger.info("Applying modified PV yaml")
-        run_cmd(f"oc apply -f {backup_file_path}")
-        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=120)
-        logger.info(f"PV {pv_name} recreated and bound successfully")
+            with open(backup_file_path, "w") as backup:
+                yaml.dump(backup_data, backup)
+            logger.info(f"PV backup file updated: {backup_file_path}")
+
+            logger.info("Applying modified PV yaml")
+            run_cmd(f"oc apply -f {backup_file_path}")
+            helpers.wait_for_resource_state(
+                pvc_obj, constants.STATUS_BOUND, timeout=120
+            )
+            logger.info(f"PV {pv_name} recreated and bound successfully")
+
+        finally:
+            if backup_file_path and os.path.exists(backup_file_path):
+                os.unlink(backup_file_path)
+                logger.info(f"Deleted temp backup file: {backup_file_path}")
 
         logger.info("Checking stale subvolumes with odf-cli")
         output = self.odf_cli_runner.run_command("subvolume ls")
@@ -349,7 +357,7 @@ class TestSubvolumesCommand(ManageTest):
             ), f"Expected volume status to be 'in-use', but got '{pvc_subvolume[3]}'"
             logger.info("Volume correctly marked as 'in-use' by odf-cli tool")
         else:
-            logger.error("No new subvolumes found, PVC might be using existing volume")
+            pytest.fail("No new subvolumes found, PVC might be using existing volume")
 
         # Check stale volumes - should not include created PVC's volume
         output = self.odf_cli_runner.run_command("subvolume ls --stale")
