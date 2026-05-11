@@ -183,7 +183,9 @@ class TestCloneDeletion(E2ETest):
             else:
                 logger.info("Alerts not found yet. Creating extra clones...")
                 # Continue creating more clones (e.g., in batches of 2)
-                self.create_clones(2, start_num=len(self.clones_list))
+                self.create_clones(
+                    2, pvc_clone_factory, start_num=len(self.clones_list)
+                )
                 attempt += 1
 
         if attempt == max_attempts:
