@@ -466,6 +466,9 @@ example: <brew_registry_url>/rh-osbs/iib:565330
 * `upgrade_cnv_version` - cnv version to which we have to upgrade
 * `upgrade_metallb_version` - metallb version to which we have to upgrade
 * `upgrade_lso_version` - lso version to which want to upgrade
+* `custom_ramen_image` - Replace the downstream Ramen image for DR testing.
+    Set to true to use the default upstream image (quay.io/ramendr/ramen-operator:canary),
+    or set to a specific image URL to use that instead.
 
 #### AUTH
 
