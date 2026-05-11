@@ -7,6 +7,7 @@ import pytest
 import botocore.exceptions as boto3exception
 
 from ocs_ci.framework.pytest_customization.marks import (
+    ignore_leftover_label,
     skipif_aws_creds_are_missing,
     skipif_managed_service,
     red_squad,
@@ -63,6 +64,7 @@ def setup_base_objects(awscli_pod, origin_dir, amount=2):
 @skipif_managed_service
 @skipif_aws_creds_are_missing
 @skipif_ocs_version("<4.7")
+@ignore_leftover_label(constants.NOOBAA_ENDPOINT_POD_LABEL)
 class TestMcgNamespaceLifecycleCrd(E2ETest):
     """
     Test MCG namespace resource/bucket lifecycle
