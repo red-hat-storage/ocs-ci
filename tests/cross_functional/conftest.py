@@ -51,7 +51,6 @@ from ocs_ci.helpers.helpers import (
 )
 
 from ocs_ci.utility.kms import is_kms_enabled
-
 from ocs_ci.utility.utils import clone_notify
 
 logger = logging.getLogger(__name__)
