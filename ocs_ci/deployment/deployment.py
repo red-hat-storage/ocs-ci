@@ -3673,10 +3673,7 @@ class MultiClusterDROperatorsDeploy(object):
                 }
             ]
         )
-        run_cmd(
-            f"oc patch csv {csv_name} -n {namespace} "
-            f"--type='json' -p='{patch}'"
-        )
+        run_cmd(f"oc patch csv {csv_name} -n {namespace} --type='json' -p='{patch}'")
         logger.info(f"Patched CSV {csv_name} with {new_image}")
 
     def deploy_dr_policy(self):
