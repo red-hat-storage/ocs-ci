@@ -347,17 +347,22 @@ class TestSubvolumesCommand(ManageTest):
 
         # Find the subvolume for PVC
         new_subvolumes = list(set(current_subvolume_list) - set(initial_subvolume_list))
-        pvc_subvolume = None
-        if new_subvolumes:
-            pvc_subvolume = new_subvolumes[0]
-            logger.info(f"PVC subvolume found: {pvc_subvolume}")
-            # Verify the volume is marked as "in-use" (not stale)
-            assert (
-                pvc_subvolume[3] == "in-use"
-            ), f"Expected volume status to be 'in-use', but got '{pvc_subvolume[3]}'"
-            logger.info("Volume correctly marked as 'in-use' by odf-cli tool")
-        else:
-            pytest.fail("No new subvolumes found, PVC might be using existing volume")
+
+        # Assert that new subvolumes were created
+        assert new_subvolumes, (
+            "No new subvolumes found, PVC might be using existing volume. "
+            f"Initial subvolumes: {len(initial_subvolume_list)}, "
+            f"Current subvolumes: {len(current_subvolume_list)}"
+        )
+
+        pvc_subvolume = new_subvolumes[0]
+        logger.info(f"PVC subvolume found: {pvc_subvolume}")
+
+        # Verify the volume is marked as "in-use" (not stale)
+        assert (
+            pvc_subvolume[3] == "in-use"
+        ), f"Expected volume status to be 'in-use', but got '{pvc_subvolume[3]}'"
+        logger.info("Volume correctly marked as 'in-use' by odf-cli tool")
 
         # Check stale volumes - should not include created PVC's volume
         output = self.odf_cli_runner.run_command("subvolume ls --stale")
