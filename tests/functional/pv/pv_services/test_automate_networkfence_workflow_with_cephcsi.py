@@ -8,7 +8,6 @@ and data integrity, recover node, remove taint, verify IO and redeploy on node.
 
 import logging
 import random
-import time
 
 import pytest
 
@@ -18,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import ManageTest, tier4b, green_squad
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.node import (
     get_worker_nodes,
     node_network_failure,
@@ -34,6 +34,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_node,
     get_pvc_name,
 )
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,9 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
     healthy node.
     """
 
-    WAIT_FOR_POD_MIGRATION_SEC = 180
+    # Max time to wait for pods to reschedule off the out-of-service node
+    WORKLOAD_MIGRATION_TIMEOUT_SEC = 180
+    WORKLOAD_MIGRATION_POLL_INTERVAL_SEC = 10
     IO_SIZE = "1G"
     IO_RUNTIME_SEC = 30
 
@@ -159,8 +162,8 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
         node_shutdown = outage_type == "shutdown"
 
         worker_node_names = get_worker_nodes()
-        co_locate_node_name = random.choice(worker_node_names)
-        workers_to_cordon = [n for n in worker_node_names if n != co_locate_node_name]
+        selected_node_name = random.choice(worker_node_names)
+        workers_to_cordon = [n for n in worker_node_names if n != selected_node_name]
         self._cordoned_workers_not_restored = list(workers_to_cordon)
         unschedule_nodes(workers_to_cordon)
 
@@ -169,8 +172,8 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
             pod_obj_list.append(pod_obj)
 
         pod_nodes = {get_pod_node(p).name for p in pod_obj_list}
-        assert pod_nodes == {co_locate_node_name}, (
-            f"Expected both workloads on {co_locate_node_name} while other workers "
+        assert pod_nodes == {selected_node_name}, (
+            f"Expected both workloads on {selected_node_name} while other workers "
             f"were cordoned; got {pod_nodes}"
         )
         schedule_nodes(workers_to_cordon)
@@ -214,10 +217,43 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
         ), f"Failed to add taint on node {outage_node.name}"
         self.taint_nodes_list.append(outage_node)
 
+        def workloads_rescheduled_off_outage_node():
+            pods = pods_for_test_workload_pvcs(pod_obj_list)
+            if len(pods) != len(pod_obj_list):
+                logger.info(
+                    f"Migration wait: expected {len(pod_obj_list)} workload pods, "
+                    f"found {len(pods)}"
+                )
+                return False
+            migrated_by_pvc = {get_pvc_name(p): p for p in pods}
+            for orig in pod_obj_list:
+                migrated_pod = migrated_by_pvc.get(orig.pvc.name)
+                if migrated_pod is None:
+                    return False
+                if get_pod_node(migrated_pod).name == outage_node.name:
+                    logger.info(
+                        f"PVC {orig.pvc.name}: pod {migrated_pod.name} still on "
+                        f"outage node {outage_node.name}"
+                    )
+                    return False
+            return True
+
         logger.info(
-            f"Waiting {self.WAIT_FOR_POD_MIGRATION_SEC}s for workloads to reschedule after taint"
+            f"Polling until workloads leave outage node {outage_node.name} "
+            f"(timeout {self.WORKLOAD_MIGRATION_TIMEOUT_SEC}s, "
+            f"interval {self.WORKLOAD_MIGRATION_POLL_INTERVAL_SEC}s)"
         )
-        time.sleep(self.WAIT_FOR_POD_MIGRATION_SEC)
+        migration_sampler = TimeoutSampler(
+            self.WORKLOAD_MIGRATION_TIMEOUT_SEC,
+            self.WORKLOAD_MIGRATION_POLL_INTERVAL_SEC,
+            workloads_rescheduled_off_outage_node,
+        )
+        if not migration_sampler.wait_for_func_status(True):
+            raise TimeoutExpiredError(
+                self.WORKLOAD_MIGRATION_TIMEOUT_SEC,
+                f"Workloads did not reschedule off {outage_node.name} within "
+                f"{self.WORKLOAD_MIGRATION_TIMEOUT_SEC}s",
+            )
 
         migrated_pod_list = pods_for_test_workload_pvcs(pod_obj_list)
         assert len(migrated_pod_list) == len(pod_obj_list), (
