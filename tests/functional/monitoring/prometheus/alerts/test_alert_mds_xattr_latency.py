@@ -6,8 +6,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     blue_squad,
     ignore_leftovers,
 )
-from ocs_ci.framework.testlib import E2ETest, tier2
+from ocs_ci.framework.testlib import E2ETest, tier2, tier4b, tier4c
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.helpers import helpers
 from ocs_ci.templates.workloads.helper_scripts.meta_data_io import (
     perform_xattr_only_operations,
@@ -38,6 +39,40 @@ storagecluster_obj = OCP(
     namespace=config.ENV_DATA["cluster_namespace"],
     resource_name=constants.DEFAULT_STORAGE_CLUSTER,
 )
+
+
+def cleanup_pvc_with_timeout_handling(pvc_obj, max_retries=9, retry_delay=60):
+    """
+    Clean up PVC with timeout handling and retries.
+
+    Args:
+        pvc_obj: PVC object to delete
+        max_retries: Maximum number of retries (default: 3)
+        retry_delay: Delay between retries in seconds (default: 60)
+    """
+    if pvc_obj.is_deleted:
+        return
+
+    for attempt in range(max_retries):
+        try:
+            pvc_obj.delete()
+            pvc_obj.ocp.wait_for_delete(pvc_obj.name, timeout=900)
+            return
+        except TimeoutExpiredError:
+            try:
+                pvc_obj.ocp.get(resource_name=pvc_obj.name)
+                if attempt < max_retries - 1:
+                    log.info(f"PVC still exists, waiting {retry_delay}s before retry")
+                    time.sleep(retry_delay)
+                else:
+                    log.error(
+                        f"PVC {pvc_obj.name} still exists after {max_retries} attempts"
+                    )
+                    raise
+            except Exception:
+                log.info(f"PVC {pvc_obj.name} successfully deleted despite timeout")
+                pvc_obj._is_deleted = True
+                return
 
 
 @pytest.fixture(scope="function")
@@ -100,6 +135,13 @@ def set_xattr_with_high_cpu_usage(
         ),
         format_type="merge",
     )
+
+    def finalizer():
+        """Custom finalizer to handle PVC cleanup with timeout handling"""
+
+        cleanup_pvc_with_timeout_handling(pvc_obj)
+
+    request.addfinalizer(finalizer)
 
 
 def MDSxattr_alert_values(threading_lock, timeout):
@@ -171,7 +213,12 @@ def initiate_alert_clearance():
 
 
 def verify_alert_cleared(threading_lock):
+    """
+    Verify that MDS xattr latency alert is cleared after increasing resources.
 
+    Args:
+        threading_lock: Threading lock for Prometheus API calls
+    """
     api = prometheus.PrometheusAPI(threading_lock=threading_lock)
     initiate_alert_clearance()
     # waiting for sometime for load distribution
@@ -185,6 +232,10 @@ def verify_alert_cleared(threading_lock):
 @blue_squad
 @tier2
 @ignore_leftovers
+@pytest.mark.skipif(
+    config.ENV_DATA.get("platform") == "external",
+    reason="MDS xattr tests require internal MDS management, not supported in external mode",
+)
 class TestMdsXattrAlerts(E2ETest):
     """
     Test class for MDS xattr latency alert validation.
@@ -268,6 +319,7 @@ class TestMdsXattrAlerts(E2ETest):
         )
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
+    @tier4c
     @pytest.mark.polarion_id("OCS-7734")
     def test_alert_triggered_by_restarting_operator_and_metrics_pods(
         self, set_xattr_with_high_cpu_usage, threading_lock
@@ -360,6 +412,7 @@ class TestMdsXattrAlerts(E2ETest):
 
         assert MDSxattr_alert_values(threading_lock, timeout=300)
 
+    @tier4c
     @pytest.mark.polarion_id("OCS-7736")
     def test_alert_after_active_mds_scaledown(
         self, set_xattr_with_high_cpu_usage, threading_lock
@@ -479,6 +532,7 @@ class TestMdsXattrAlerts(E2ETest):
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
+    @tier4b
     @pytest.mark.polarion_id("OCS-7738")
     def test_alert_with_mds_running_node_restart(
         self, set_xattr_with_high_cpu_usage, threading_lock, nodes
