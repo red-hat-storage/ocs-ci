@@ -1,4 +1,5 @@
 import logging
+import os
 import subprocess
 import tempfile
 import threading
@@ -45,11 +46,10 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
 
     @tier4c
     @pytest.mark.parametrize(
-        argnames=["disruption_during", "platform", "bucketclass_dict"],
+        argnames=["disruption_during", "bucketclass_dict"],
         argvalues=[
             pytest.param(
                 "download",
-                constants.AWS_PLATFORM,
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
@@ -62,7 +62,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "download",
-                constants.AZURE_PLATFORM,
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
@@ -75,7 +74,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "download",
-                constants.IBM_COS_PLATFORM,
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
@@ -88,7 +86,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "download",
-                constants.AWS_PLATFORM,
                 {
                     "interface": "OC",
                     "backingstore_dict": {"aws": [(1, None)]},
@@ -98,7 +95,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "download",
-                constants.AZURE_PLATFORM,
                 {
                     "interface": "OC",
                     "backingstore_dict": {"azure": [(1, None)]},
@@ -108,7 +104,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "download",
-                constants.GCP_PLATFORM,
                 {
                     "interface": "OC",
                     "backingstore_dict": {"gcp": [(1, None)]},
@@ -118,7 +113,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "download",
-                constants.IBM_COS_PLATFORM,
                 {
                     "interface": "OC",
                     "backingstore_dict": {"ibmcos": [(1, None)]},
@@ -128,7 +122,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "upload",
-                constants.AWS_PLATFORM,
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
@@ -141,7 +134,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "upload",
-                constants.AZURE_PLATFORM,
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
@@ -154,7 +146,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "upload",
-                constants.IBM_COS_PLATFORM,
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
@@ -167,7 +158,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "upload",
-                constants.AWS_PLATFORM,
                 {
                     "interface": "OC",
                     "backingstore_dict": {"aws": [(1, None)]},
@@ -177,7 +167,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "upload",
-                constants.AZURE_PLATFORM,
                 {
                     "interface": "OC",
                     "backingstore_dict": {"azure": [(1, None)]},
@@ -187,7 +176,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "upload",
-                constants.GCP_PLATFORM,
                 {
                     "interface": "OC",
                     "backingstore_dict": {"gcp": [(1, None)]},
@@ -197,7 +185,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
             ),
             pytest.param(
                 "upload",
-                constants.IBM_COS_PLATFORM,
                 {
                     "interface": "OC",
                     "backingstore_dict": {"ibmcos": [(1, None)]},
@@ -211,7 +198,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
         self,
         request,
         disruption_during,
-        platform,
         bucketclass_dict,
         mcg_obj,
         awscli_pod_session,
@@ -235,6 +221,14 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
         """
         namespace = config.ENV_DATA["cluster_namespace"]
         awscli_pod = awscli_pod_session
+
+        store_dict = bucketclass_dict.get(
+            "backingstore_dict",
+            bucketclass_dict.get("namespace_policy_dict", {}).get(
+                "namespacestore_dict", {}
+            ),
+        )
+        platform = next(iter(store_dict))
 
         # Step 1: Create bucket with parametrized bucketclass
         logger.info(f"Creating bucket backed by {platform} cloud storage")
@@ -340,6 +334,7 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
         templating.dump_data_to_temp_yaml(network_policy_data, temp_yaml.name)
         ocp_obj = ocp.OCP(kind=constants.NETWORK_POLICY, namespace=namespace)
         ocp_obj.exec_oc_cmd(f"apply -f {temp_yaml.name}")
+        os.unlink(temp_yaml.name)
         logger.info(
             "NetworkPolicy applied - external egress blocked "
             "for noobaa-endpoint pods"
@@ -365,7 +360,6 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
                 f"instead of Running"
             )
 
-        for ep in endpoint_pods_after:
             if ep.name in restart_counts_before:
                 current_restarts = ep.restart_count
                 assert current_restarts == restart_counts_before[ep.name], (
@@ -374,16 +368,15 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
                     f"after={current_restarts}"
                 )
 
-        for ep in endpoint_pods_after:
             panics = pod.search_pattern_in_pod_logs(
                 pod_name=ep.name,
                 pattern="PANIC.*uncaughtException",
                 container="endpoint",
                 since="5m",
             )
-            assert not panics, (
-                f"Found PANIC/uncaughtException in endpoint pod " f"{ep.name}: {panics}"
-            )
+            assert (
+                not panics
+            ), f"Found PANIC/uncaughtException in endpoint pod {ep.name}: {panics}"
 
         logger.info(
             f"All endpoint pods survived the cloud connection "
