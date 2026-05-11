@@ -272,6 +272,11 @@ class TestSubvolumesCommand(ManageTest):
         6. The volume attached to the above PVC would be labelled as in-use by the cli tool.
         """
 
+        # Get initial subvolume list
+        output = self.odf_cli_runner.run_command("subvolume ls")
+        initial_subvolume_list = self.parse_subvolume_ls_output(output)
+        logger.info(f"Initial subvolume list: {initial_subvolume_list}")
+
         logger.info("Creating PVC with CephFS storageclass and retain deletionPolicy")
         cephfs_sc_obj = storageclass_factory(
             interface=constants.CEPHFILESYSTEM,
@@ -284,11 +289,6 @@ class TestSubvolumesCommand(ManageTest):
             access_mode=constants.ACCESS_MODE_RWX,
             status=constants.STATUS_BOUND,
         )
-
-        # Get initial subvolume list
-        output = self.odf_cli_runner.run_command("subvolume ls")
-        initial_subvolume_list = self.parse_subvolume_ls_output(output)
-        logger.info(f"Initial subvolume list: {initial_subvolume_list}")
 
         # Backup PV yaml, delete PV and remove finalizer
         logger.info("Backing up PV yaml")
