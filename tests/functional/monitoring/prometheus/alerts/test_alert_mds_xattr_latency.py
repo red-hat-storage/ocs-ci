@@ -1,5 +1,6 @@
 import logging
 import pytest
+import subprocess
 import time
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -58,11 +59,11 @@ def cleanup_pvc_with_timeout_handling(pvc_obj, max_retries=9, retry_delay=60):
             pvc_obj.delete()
             pvc_obj.ocp.wait_for_delete(pvc_obj.name, timeout=900)
             return
-        except TimeoutExpiredError:
+        except (TimeoutExpiredError, subprocess.TimeoutExpired):
+
             try:
                 pvc_obj.ocp.get(resource_name=pvc_obj.name)
                 if attempt < max_retries - 1:
-                    log.info(f"PVC still exists, waiting {retry_delay}s before retry")
                     time.sleep(retry_delay)
                 else:
                     log.error(
@@ -136,12 +137,7 @@ def set_xattr_with_high_cpu_usage(
         format_type="merge",
     )
 
-    def finalizer():
-        """Custom finalizer to handle PVC cleanup with timeout handling"""
-
-        cleanup_pvc_with_timeout_handling(pvc_obj)
-
-    request.addfinalizer(finalizer)
+    return pvc_obj
 
 
 def MDSxattr_alert_values(threading_lock, timeout):
@@ -535,7 +531,7 @@ class TestMdsXattrAlerts(E2ETest):
     @tier4b
     @pytest.mark.polarion_id("OCS-7738")
     def test_alert_with_mds_running_node_restart(
-        self, set_xattr_with_high_cpu_usage, threading_lock, nodes
+        self, set_xattr_with_high_cpu_usage, threading_lock, nodes, request
     ):
         """
         Test MDS xattr latency alert persistence after active MDS node restart.
@@ -554,8 +550,18 @@ class TestMdsXattrAlerts(E2ETest):
 
         Args:
             nodes: Node fixture for performing node operations
+            request: pytest request for finalizer
 
         """
+        # Get the PVC object from fixture for custom cleanup
+        pvc_obj = set_xattr_with_high_cpu_usage
+
+        def finalizer():
+            """Custom finalizer for PVC cleanup with timeout handling"""
+            cleanup_pvc_with_timeout_handling(pvc_obj)
+
+        request.addfinalizer(finalizer)
+
         log.info(
             "Setting extended attributes and file creation IO started in the background."
             " Script will look for CephXattrSetLatency  alert"
