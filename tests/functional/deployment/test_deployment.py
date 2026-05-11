@@ -47,7 +47,11 @@ def test_deployment(pvc_factory, pod_factory):
                         sanity_helpers = SanityExternalCluster()
                     else:
                         sanity_helpers = Sanity()
-                    sanity_helpers.health_check()
+                    sanity_helpers.health_check(
+                        fix_ceph_health=True,
+                        update_jira=True,
+                        no_exception_if_jira_issue_updated=True,
+                    )
                     sanity_helpers.delete_resources()
                 config.switch_ctx(restore_ctx_index)
                 if (
