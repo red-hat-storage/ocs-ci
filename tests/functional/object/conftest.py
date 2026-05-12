@@ -34,56 +34,44 @@ def remote_obc_setup_session(request):
     log.info(f"Will add noobaa storageclass: {constants.NOOBAA_SC}")
 
     # Step 1: Add noobaa storageclass to all StorageConsumer CRs on provider
+    # This is required for remote OBC to function - fail if it doesn't work
     with config.RunWithProviderConfigContextIfAvailable():
-        try:
-            consumer_names = get_consumer_names()
-            if consumer_names:
-                log.info(
-                    f"Found {len(consumer_names)} StorageConsumer(s) on provider: {consumer_names}"
-                )
-
-                for consumer_name in consumer_names:
-                    add_storageclasses_to_storageconsumer(
-                        consumer_name, constants.NOOBAA_SC
-                    )
-
-        except Exception as e:
-            # Log error but continue - we still attempt to enable remote OBC on clients
-            # even if StorageConsumer update fails, as clients may already have the SC
-            log.error(
-                f"Failed to process StorageConsumer CRs on provider: {e}. "
-                "Continuing with client setup..."
+        consumer_names = get_consumer_names()
+        if consumer_names:
+            log.info(
+                f"Found {len(consumer_names)} StorageConsumer(s) on provider: {consumer_names}"
             )
 
+            for consumer_name in consumer_names:
+                add_storageclasses_to_storageconsumer(
+                    consumer_name, constants.NOOBAA_SC
+                )
+        else:
+            log.warning("No StorageConsumer CRs found on provider")
+
     # Step 2: Enable remote OBC on all client clusters
+    # Fail if ANY client setup fails (fail-fast approach)
     for client_index in client_indices:
         with config.RunWithConfigContext(client_index):
             cluster_name = config.ENV_DATA.get("cluster_name")
-            try:
-                cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
+            cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
 
-                if cluster_type != constants.HCI_CLIENT:
-                    log.warning(
-                        f"Cluster '{cluster_name}' (index {client_index}) is '{cluster_type}', "
-                        f"not {constants.HCI_CLIENT}, skipping"
-                    )
-                    continue
+            if cluster_type != constants.HCI_CLIENT:
+                log.warning(
+                    f"Cluster '{cluster_name}' (index {client_index}) is '{cluster_type}', "
+                    f"not {constants.HCI_CLIENT}, skipping"
+                )
+                continue
 
-                log.info(
-                    f"Enabling remote OBC on client cluster '{cluster_name}' (index {client_index})"
-                )
-                odf_cli = odf_cli_setup_helper()
-                odf_cli.run_object_enable_remote_obc()
-                enabled_clients[client_index] = odf_cli
-                log.info(
-                    f"Remote OBC enabled on client '{cluster_name}' (index {client_index})"
-                )
-
-            except Exception as e:
-                log.error(
-                    f"Failed to enable remote OBC on client '{cluster_name}' "
-                    f"(index {client_index}): {e}"
-                )
+            log.info(
+                f"Enabling remote OBC on client cluster '{cluster_name}' (index {client_index})"
+            )
+            odf_cli = odf_cli_setup_helper()
+            odf_cli.run_object_enable_remote_obc()
+            enabled_clients[client_index] = odf_cli
+            log.info(
+                f"Remote OBC enabled on client '{cluster_name}' (index {client_index})"
+            )
 
     def teardown_remote_obc():
         """Disable remote OBC on all client clusters."""
