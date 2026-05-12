@@ -1,0 +1,16 @@
+---
+# Azure Performance Plus StorageClass - Premium SSD v2
+# For disks with PremiumV2_LRS
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ocs-disk-perfplus-sc
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: PremiumV2_LRS
+  cachingMode: None  # PremiumV2 doesn't support caching
+  enablePerformancePlus: "true"
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+

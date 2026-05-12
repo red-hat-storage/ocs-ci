@@ -107,6 +107,8 @@ def get_custom_storage_class_path() -> str:
             )
             if disk_type == constants.AZURE_PERFORMANCE_PLUS_DISK_TYPE_STANDARD_SSD:
                 template_name = "azure_storageclass_perfplus_standard_ssd.yaml"
+            elif disk_type == constants.AZURE_PERFORMANCE_PLUS_DISK_TYPE_PREMIUM_V2:
+                template_name = "azure_storageclass_perfplus_premiumv2.yaml"
             else:
                 template_name = "azure_storageclass_perfplus_premium_ssd.yaml"
             custom_sc_path = os.path.join(
