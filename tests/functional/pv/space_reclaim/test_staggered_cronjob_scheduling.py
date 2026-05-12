@@ -15,9 +15,11 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import green_squad, skipif_ocs_version
 from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csi_addons import (
     get_csi_addons_config_value,
+    remove_csi_addons_config_key,
     update_csi_addons_config,
 )
 from ocs_ci.utility.utils import TimeoutSampler
@@ -79,6 +81,11 @@ class TestStaggeredCronjobScheduling(ManageTest):
                 update_csi_addons_config(
                     SCHEDULE_PRECEDENCE_KEY, self.original_precedence
                 )
+            else:
+                logger.info(
+                    "Removing schedule-precedence key (was not set before test)"
+                )
+                remove_csi_addons_config_key(SCHEDULE_PRECEDENCE_KEY)
 
         request.addfinalizer(finalizer)
 
@@ -222,19 +229,20 @@ class TestStaggeredCronjobScheduling(ManageTest):
             resource_name=expected_name,
         )
 
-        for result in TimeoutSampler(
-            timeout=CRONJOB_CREATION_TIMEOUT,
-            sleep=10,
-            func=cronjob_ocp.check_resource_existence,
-            should_exist=True,
-        ):
-            if result:
-                logger.info(
-                    "CronJob '%s' found for PVC '%s'",
-                    expected_name,
-                    pvc_obj.name,
-                )
-                return cronjob_ocp
+        found = cronjob_ocp.check_resource_existence(
+            should_exist=True, timeout=CRONJOB_CREATION_TIMEOUT
+        )
+        if not found:
+            raise TimeoutExpiredError(
+                f"CronJob '{expected_name}' not created within "
+                f"{CRONJOB_CREATION_TIMEOUT}s"
+            )
+        logger.info(
+            "CronJob '%s' found for PVC '%s'",
+            expected_name,
+            pvc_obj.name,
+        )
+        return cronjob_ocp
 
     def _get_earliest_job_timestamps(
         self, ocp_jobs: OCP, cronjob_names: list[str]

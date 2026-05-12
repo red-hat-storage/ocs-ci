@@ -22,6 +22,34 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
+def _restart_csi_addons_controller(namespace: str) -> None:
+    """
+    Restart the CSI Addons controller manager and wait for it to be Ready.
+
+    Args:
+        namespace (str): The namespace where the controller runs.
+
+    """
+    logger.info("Restarting CSI Addons controller manager pods...")
+    pod.restart_pods_having_label(
+        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+        namespace=namespace,
+    )
+
+    logger.info("Waiting for CSI Addons controller manager pod to be Ready...")
+    for pods_data in TimeoutSampler(
+        timeout=120,
+        sleep=10,
+        func=pod.get_pods_having_label,
+        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+        namespace=namespace,
+        statuses=[constants.STATUS_RUNNING],
+    ):
+        if pods_data:
+            logger.info("CSI Addons controller manager pod is Ready.")
+            break
+
+
 def update_csi_addons_config(key: str, value: str) -> None:
     """
     Create or update a key in the 'csi-addons-config' ConfigMap and restart
@@ -82,25 +110,60 @@ def update_csi_addons_config(key: str, value: str) -> None:
                 pass
 
     logger.info("ConfigMap '%s' updated: %s=%s", configmap_name, key, value)
+    _restart_csi_addons_controller(namespace)
 
-    logger.info("Restarting CSI Addons controller manager pods...")
-    pod.restart_pods_having_label(
-        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
-        namespace=namespace,
+
+def remove_csi_addons_config_key(key: str) -> None:
+    """
+    Remove a key from the 'csi-addons-config' ConfigMap and restart
+    the CSI Addons controller manager so the change is picked up.
+
+    No-op if the ConfigMap does not exist or the key is already absent.
+
+    Args:
+        key (str): The ConfigMap data key to remove.
+
+    Raises:
+        CommandFailed: If the patch operation fails for a reason other
+            than the key already being absent.
+
+    """
+    configmap_name = constants.CSI_ADDONS_CONFIGMAP_NAME
+    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+
+    cm_ocp = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+
+    if not cm_ocp.is_exist(configmap_name):
+        logger.info(
+            "ConfigMap '%s' not found in ns '%s'; nothing to remove.",
+            configmap_name,
+            namespace,
+        )
+        return
+
+    cm = cm_ocp.get(resource_name=configmap_name)
+    if key not in cm.get("data", {}):
+        logger.info(
+            "Key '%s' not present in ConfigMap '%s'; nothing to remove.",
+            key,
+            configmap_name,
+        )
+        return
+
+    patch_payload = json.dumps([{"op": "remove", "path": f"/data/{key}"}])
+    logger.info(
+        "Removing key '%s' from ConfigMap '%s' in ns '%s'",
+        key,
+        configmap_name,
+        namespace,
+    )
+    cm_ocp.exec_oc_cmd(
+        f"patch configmap {configmap_name} -p '{patch_payload}' --type=json",
+        out_yaml_format=False,
     )
 
-    logger.info("Waiting for CSI Addons controller manager pod to be Ready...")
-    for pods_data in TimeoutSampler(
-        timeout=120,
-        sleep=10,
-        func=pod.get_pods_having_label,
-        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
-        namespace=namespace,
-        statuses=[constants.STATUS_RUNNING],
-    ):
-        if pods_data:
-            logger.info("CSI Addons controller manager pod is Ready.")
-            break
+    logger.info("Key '%s' removed from ConfigMap '%s'", key, configmap_name)
+    _restart_csi_addons_controller(namespace)
 
 
 def get_csi_addons_config_value(key: str, default: str = "") -> str:
