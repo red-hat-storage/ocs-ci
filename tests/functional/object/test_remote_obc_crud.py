@@ -7,7 +7,6 @@ including bucket creation, S3 CRUD operations, and data integrity verification.
 
 import base64
 import boto3
-import botocore
 import hashlib
 import logging
 import pytest
