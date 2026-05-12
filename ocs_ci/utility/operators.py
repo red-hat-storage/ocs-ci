@@ -171,7 +171,6 @@ class Operator:
         with open(catalog_data_yaml.name, "w") as fd:
             fd.write(yaml.dump(catalog_data))
         run_cmd(f"oc apply -f {catalog_data_yaml.name}")
-        wait_for_machineconfigpool_status("all", force_delete_pods=False)
 
     def create_unreleased_catalog(self):
         """
@@ -188,7 +187,8 @@ class Operator:
             is_hosted_cluster,
         )
 
-        if is_hosted_cluster(cluster_name):
+        is_hosted = is_hosted_cluster(cluster_name)
+        if is_hosted:
             with config.RunWithProviderConfigContextIfAvailable():
                 idms_data = self.get_idms_data()
                 hypershift_base = HyperShiftBase()
@@ -202,6 +202,8 @@ class Operator:
         self._create_catalog(
             self.unreleased_catalog_full_image, self.unreleased_catalog_name
         )
+        if not is_hosted:
+            wait_for_machineconfigpool_status("all", force_delete_pods=False)
 
     def create_disconnected_catalog(self):
         # in case of disconnected environment, we have to mirror all the
@@ -218,6 +220,11 @@ class Operator:
             idms=idms,
         )
         self._create_catalog(mirrored_index_image, self.unreleased_catalog_name)
+        # Import here to avoid circular import
+        from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
+
+        if not is_hosted_cluster(config.ENV_DATA.get("cluster_name")):
+            wait_for_machineconfigpool_status("all", force_delete_pods=False)
 
     @retry(CommandFailed, tries=5, delay=30, backoff=1)
     def is_available(self):
