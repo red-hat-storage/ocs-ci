@@ -33,7 +33,6 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import UsernameNotFoundException, CommandFailed
 from ocs_ci.helpers import cnv_helpers
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -317,6 +316,7 @@ chpasswd:
             self.verify_dv()
         self.wait_for_vm_status(status=constants.VM_RUNNING)
         if verify_ssh:
+            self.vmi_obj.wait_for_guest_agent_connected()
             self.wait_for_ssh_connectivity(timeout=1200)
 
     def verify_dv(self):
@@ -465,14 +465,21 @@ chpasswd:
 
         """
         username = username if username else self.get_os_username()
-        logger.info(f"Waiting for the SSH connectivity to establish to {self.name} ")
+        logger.info("Waiting for the SSH connectivity to establish to %s", self.name)
+
+        def _try_ssh():
+            try:
+                return self.run_ssh_cmd(
+                    username=username, command="exit", use_sudo=False
+                )
+            except CommandFailed as e:
+                logger.warning("SSH to %s failed: %s", self.name, e)
+                raise
+
         for sample in TimeoutSampler(
             timeout=timeout,
             sleep=30,
-            func=self.run_ssh_cmd,
-            username=username,
-            command="exit",
-            use_sudo=False,
+            func=_try_ssh,
         ):
             if sample == "":
                 logger.info(f"{self.name} is ready for SSH connection")
