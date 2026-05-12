@@ -1248,21 +1248,23 @@ def add_storageclasses_to_storageconsumer(consumer_name, storageclasses):
 
     Returns:
         tuple: (success: bool, added_scs: list, current_scs: list)
-            - success: True if operation completed without errors
-            - added_scs: List of storageclasses that were added
-            - current_scs: Final list of storageclasses in the StorageConsumer
+            success: True if operation completed without errors
+            added_scs: List of storageclasses that were added
+            current_scs: Final list of storageclasses in the StorageConsumer
 
-    Example:
-        # Add single storageclass
-        success, added, current = add_storageclasses_to_storageconsumer(
-            "consumer-c21-c5", "openshift-storage.noobaa.io"
-        )
+    Examples:
+        Add single storageclass::
 
-        # Add multiple storageclasses
-        success, added, current = add_storageclasses_to_storageconsumer(
-            "consumer-c21-c5",
-            ["openshift-storage.noobaa.io", "my-custom-noobaa-sc"]
-        )
+            success, added, current = add_storageclasses_to_storageconsumer(
+                "consumer-c21-c5", "openshift-storage.noobaa.io"
+            )
+
+        Add multiple storageclasses::
+
+            success, added, current = add_storageclasses_to_storageconsumer(
+                "consumer-c21-c5",
+                ["openshift-storage.noobaa.io", "my-custom-noobaa-sc"]
+            )
 
     """
     # Normalize to list
