@@ -359,6 +359,28 @@ class TestNfsEnable(ManageTest):
                 nfs_utils.update_etc_hosts_on_nfs_client(con, hostname_add)
         return con
 
+    def _mount_nfs_with_retry(self, cmd, tries=28, delay=10):
+        """
+        Execute an NFS mount command on the client VM with retry.
+
+        Args:
+            cmd (str): Mount command to execute on the NFS client VM
+            tries (int): Number of retry attempts (default: 28)
+            delay (int): Delay in seconds between retries (default: 10)
+
+        Raises:
+            CommandFailed: If mount does not succeed within the retry limit
+        """
+
+        def _do_mount():
+            retcode, _, stderr = self.con.exec_cmd(cmd)
+            if retcode != 0:
+                raise CommandFailed(
+                    f"NFS mount command failed with retcode " f"{retcode}: {stderr}"
+                )
+
+        retry((CommandFailed), tries=tries, delay=delay)(_do_mount)()
+
     @tier1
     @polarion_id("OCS-4269")
     @skipif_hci_client
@@ -569,11 +591,7 @@ class TestNfsEnable(ManageTest):
             + self.test_folder
         )
 
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(self.con.exec_cmd(export_nfs_external_cmd))
+        self._mount_nfs_with_retry(export_nfs_external_cmd)
 
         # Verify able to read exported volume
         command = f"cat {self.test_folder}/index.html"
@@ -741,11 +759,7 @@ class TestNfsEnable(ManageTest):
                 + " "
                 + self.test_folder
             )
-            retry(
-                (CommandFailed),
-                tries=28,
-                delay=10,
-            )(self.con.exec_cmd(export_nfs_external_cmd))
+            self._mount_nfs_with_retry(export_nfs_external_cmd)
 
             # Verify able to access exported volume
             command = f"cat {self.test_folder}/index.html"
@@ -874,11 +888,7 @@ class TestNfsEnable(ManageTest):
             + " "
             + self.test_folder
         )
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(self.con.exec_cmd(export_nfs_external_cmd))
+        self._mount_nfs_with_retry(export_nfs_external_cmd)
 
         # Verify able to access exported volume
         command = f"cat {self.test_folder}/shared_file.html"
@@ -1007,11 +1017,7 @@ class TestNfsEnable(ManageTest):
             + " "
             + self.test_folder
         )
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(self.con.exec_cmd(export_nfs_external_cmd))
+        self._mount_nfs_with_retry(export_nfs_external_cmd)
 
         # Verify able to write new file in exported volume by external client
         command = (
@@ -1772,11 +1778,7 @@ class TestNfsEnable(ManageTest):
             + self.test_folder
         )
 
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(self.con.exec_cmd(export_nfs_external_cmd))
+        self._mount_nfs_with_retry(export_nfs_external_cmd)
 
         # Verify able to read exported volume
         command = f"cat {self.test_folder}/index.html"
