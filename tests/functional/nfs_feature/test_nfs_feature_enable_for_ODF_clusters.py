@@ -1619,19 +1619,19 @@ class TestNfsEnable(ManageTest):
         # Checking for stale volumes
         output = exec_cmd(cmd=f"{odf_cli_path} subvolume ls --stale")
         stale_before = self.parse_subvolume_ls_output(output)
-        log.info("Stale subvolumes before delete: %s", stale_before)
+        log.info(f"Stale subvolumes before delete: {stale_before}")
 
         # Deleting stale subvolume
         delete_output = exec_cmd(
             cmd=f"{odf_cli_path} subvolume delete"
             f" {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}"
         )
-        log.info("Subvolume delete output: %s", delete_output.stdout)
+        log.info(f"Subvolume delete output: {delete_output.stdout}")
 
         # Verify the specific subvolume was deleted
         output = exec_cmd(cmd=f"{odf_cli_path} subvolume ls --stale")
         stale_after = self.parse_subvolume_ls_output(output)
-        log.info("Stale subvolumes after delete: %s", stale_after)
+        log.info(f"Stale subvolumes after delete: {stale_after}")
         stale_svs = {sv[1] for sv in stale_after}
         assert (
             new_pvc[1] not in stale_svs

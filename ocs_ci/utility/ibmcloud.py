@@ -1502,20 +1502,16 @@ def _get_lb_security_groups(svc_name, namespace):
     lb_ingress = svc_data.get("status", {}).get("loadBalancer", {}).get("ingress", [])
     if not lb_ingress:
         logger.warning(
-            "No LB ingress on service %s, cannot configure " "security group",
-            svc_name,
+            f"No LB ingress on service {svc_name}, cannot configure " f"security group"
         )
         return []
 
     lb_hostname = lb_ingress[0].get("hostname") or lb_ingress[0].get("ip")
     if not lb_hostname:
-        logger.warning(
-            "No hostname/IP in LB ingress for service %s",
-            svc_name,
-        )
+        logger.warning(f"No hostname/IP in LB ingress for service {svc_name}")
         return []
 
-    logger.debug("LB endpoint for %s: %s", svc_name, lb_hostname)
+    logger.debug(f"LB endpoint for {svc_name}: {lb_hostname}")
 
     cmd = f"ibmcloud is lbs --resource-group-name {rg_name} " f"--output json"
     out = run_ibmcloud_cmd(cmd)
@@ -1528,18 +1524,12 @@ def _get_lb_security_groups(svc_name, namespace):
             break
 
     if not matching_lb:
-        logger.error(
-            "Could not find IBM Cloud VPC LB with hostname %s",
-            lb_hostname,
-        )
+        logger.error(f"Could not find IBM Cloud VPC LB with hostname {lb_hostname}")
         return []
 
     security_groups = matching_lb.get("security_groups", [])
     if not security_groups:
-        logger.warning(
-            "No security groups on LB %s",
-            matching_lb.get("name"),
-        )
+        logger.warning(f"No security groups on LB {matching_lb.get('name')}")
     return security_groups
 
 
@@ -1559,13 +1549,12 @@ def configure_nfs_lb_security_group():
     for sg in security_groups:
         sg_name = sg.get("name")
         try:
-            logger.info("Adding inbound TCP 2049 to %s", sg_name)
+            logger.info(f"Adding inbound TCP 2049 to {sg_name}")
             add_security_group_rule(sg_name, "inbound", "tcp", 2049, 2049)
         except Exception as e:
             logger.warning(
-                "Failed to add port 2049 rule to %s " "(may already exist): %s",
-                sg_name,
-                e,
+                f"Failed to add port 2049 rule to {sg_name} "
+                f"(may already exist): {e}"
             )
 
     logger.info("NFS LB security group configuration done")
@@ -1592,11 +1581,7 @@ def remove_nfs_lb_security_group_rules():
             out = run_ibmcloud_cmd(cmd)
             sg_detail = json.loads(out)
         except Exception as e:
-            logger.warning(
-                "Could not fetch rules for %s: %s",
-                sg_name,
-                e,
-            )
+            logger.warning(f"Could not fetch rules for {sg_name}: {e}")
             continue
 
         for rule in sg_detail.get("rules", []):
@@ -1607,22 +1592,14 @@ def remove_nfs_lb_security_group_rules():
                 and rule.get("port_max") == 2049
             ):
                 rule_id = rule.get("id")
-                logger.info(
-                    "Deleting rule %s from %s",
-                    rule_id,
-                    sg_name,
-                )
+                logger.info(f"Deleting rule {rule_id} from {sg_name}")
                 try:
                     run_ibmcloud_cmd(
                         f"ibmcloud is security-group-rule-delete "
                         f"{sg_id} {rule_id} --force"
                     )
                 except Exception as e:
-                    logger.warning(
-                        "Failed to delete rule %s: %s",
-                        rule_id,
-                        e,
-                    )
+                    logger.warning(f"Failed to delete rule {rule_id}: {e}")
 
     logger.info("NFS LB security group cleanup done")
 

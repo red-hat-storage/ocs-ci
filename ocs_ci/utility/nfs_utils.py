@@ -198,7 +198,7 @@ def create_nfs_load_balancer_service(
         log.info("ingress hostname, %s", hostname_add)
     elif "ip" in host_details:
         hostname_add = host_details["ip"]
-        log.info("ingress host ip, %s", hostname_add)
+        log.info(f"ingress host ip, {hostname_add}")
     else:
         log.error("host details unavailable")
         return None
