@@ -3,7 +3,7 @@ import pytest
 import subprocess
 import time
 
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad, skipif_external_mode
 from ocs_ci.framework.testlib import E2ETest, tier2, tier4b, tier4c
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -199,16 +199,19 @@ def is_cluster_healthy():
     return ceph_not_health_error() and pod.wait_for_pods_to_be_running(timeout=900)
 
 
-def initiate_alert_clearance():
+def verify_alert_cleared(threading_lock):
     """
-    Initiate clearance of MDS xattr latency alert by increasing MDS resources.
+    Verify that MDS xattr latency alert is cleared after restoring MDS resources.
 
-    Returns:
-        None
+    This function restores MDS CPU and memory resources to default values (2 CPU, 6Gi memory),
+    waits for load distribution, and verifies that the alert is cleared.
 
+    Args:
+        threading_lock: Threading lock for Prometheus API calls
     """
-    log.info("Increasing MDS CPU and memory resources to clear MDS xattr latency alert")
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
+    log.info("Restoring MDS CPU and memory resources to default values to clear alert")
     storagecluster_obj.patch(
         resource_name=constants.DEFAULT_STORAGE_CLUSTER,
         params=(
@@ -219,16 +222,6 @@ def initiate_alert_clearance():
         format_type="merge",
     )
 
-
-def verify_alert_cleared(threading_lock):
-    """
-    Verify that MDS xattr latency alert is cleared after increasing resources.
-
-    Args:
-        threading_lock: Threading lock for Prometheus API calls
-    """
-    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
-    initiate_alert_clearance()
     # waiting for sometime for load distribution
     time.sleep(400)
     test_end_time = int(time.time())
@@ -238,11 +231,7 @@ def verify_alert_cleared(threading_lock):
 
 
 @blue_squad
-@tier2
-@pytest.mark.skipif(
-    config.ENV_DATA.get("platform") == "external",
-    reason="MDS xattr tests require internal MDS management, not supported in external mode",
-)
+@skipif_external_mode
 class TestMdsXattrAlerts(E2ETest):
     """
     Test class for MDS xattr latency alert validation.
@@ -270,34 +259,30 @@ class TestMdsXattrAlerts(E2ETest):
 
         def finalizer():
             """
-            Finalizer function to restore MDS resources and clear memory usage.
+            Finalizer function to ensure toolbox pod is ready and restore MDS resources.
 
-            This function:
-            1. Verifies that the alert is cleared (if test passed)
-            2. Waits for toolbox pod to be in running state (up to 10 minutes)
-            3. Calls cluster function to gradually bring down MDS memory usage
+            This function waits for toolbox pod to be in running state before cleanup,
+            then restores MDS CPU and memory resources to default values as a safety measure.
+            Alert verification is done at the end of each test method.
 
             """
-            try:
-                verify_alert_cleared(threading_lock)
-            except Exception as e:
-                log.warning(
-                    f"Failed to verify alert cleared in teardown: {e}. "
-                    "This may happen if the test failed before alert was triggered."
-                )
 
             log.info(
-                "Waiting for toolbox pod to be in running state (timeout: 900 seconds)"
+                "Restoring MDS CPU and memory resources to default values in teardown"
             )
-            OCP_POD_OBJ.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=constants.TOOL_APP_LABEL,
-                timeout=900,
-                resource_count=1,
+            storagecluster_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=(
+                    '{"spec": {"resources": {"mds": {"limits": {"cpu": "2", '
+                    '"memory": "6Gi"}, "requests": {"cpu": "2", "memory": '
+                    '"6Gi"}}}}}'
+                ),
+                format_type="merge",
             )
 
         request.addfinalizer(finalizer)
 
+    @tier2
     @pytest.mark.polarion_id("OCS-7733")
     def test_mds_xattr_alert_triggered(
         self, set_xattr_with_high_cpu_usage, threading_lock
@@ -313,9 +298,7 @@ class TestMdsXattrAlerts(E2ETest):
             1. Set up extended attributes and file creation IO using fixture
             2. Wait for CephXattrSetLatency alert to trigger (timeout: 1200s)
             3. Validate alert properties (message, description, runbook, severity, state)
-            4. Initiate alert clearance by increasing MDS CPU resources to 16 CPUs
-            5. Wait for 600 seconds for load distribution
-            6. Verify alert is cleared within 300 seconds
+            4. Verify alert is cleared after test completion
 
         """
         log.info(
@@ -323,6 +306,8 @@ class TestMdsXattrAlerts(E2ETest):
             " Script will look for CephXattrSetLatency  alert"
         )
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
+
+        verify_alert_cleared(threading_lock)
 
     @tier4c
     @pytest.mark.polarion_id("OCS-7734")
@@ -345,6 +330,7 @@ class TestMdsXattrAlerts(E2ETest):
             6. Delete the ocs-metrics-exporter pod
             7. Wait for ocs-metrics-exporter pod to come up (timeout: 600s)
             8. Re-validate the alert after metrics exporter restart (timeout: 1200s)
+            9. Verify alert is cleared after test completion
 
         """
         log.info(
@@ -387,6 +373,9 @@ class TestMdsXattrAlerts(E2ETest):
         log.info("Validating the alert after ocs-metrics-exporter pod restart")
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
+        verify_alert_cleared(threading_lock)
+
+    @tier2
     @pytest.mark.polarion_id("OCS-7735")
     def test_alert_after_recovering_prometheus_from_failures(
         self, set_xattr_with_high_cpu_usage, threading_lock
@@ -403,6 +392,7 @@ class TestMdsXattrAlerts(E2ETest):
             3. Delete all Prometheus pods to simulate failure
             4. Wait for Prometheus pods to be recreated automatically
             5. Re-validate the alert after Prometheus recovery (timeout: 300s)
+            6. Verify alert is cleared after test completion
         """
 
         log.info(
@@ -416,6 +406,8 @@ class TestMdsXattrAlerts(E2ETest):
         delete_pods(list_of_prometheus_pod_obj)
 
         assert MDSxattr_alert_values(threading_lock, timeout=300)
+
+        verify_alert_cleared(threading_lock)
 
     @tier4c
     @pytest.mark.polarion_id("OCS-7736")
@@ -438,6 +430,7 @@ class TestMdsXattrAlerts(E2ETest):
             7. Wait 60 seconds for MDS scale up to complete
             8. Wait for all MDS pods to reach Running state
             9. Re-validate the alert after MDS scale operations (timeout: 60s)
+            10. Verify alert is cleared after test completion
 
         """
 
@@ -470,6 +463,9 @@ class TestMdsXattrAlerts(E2ETest):
 
         assert MDSxattr_alert_values(threading_lock, timeout=60)
 
+        verify_alert_cleared(threading_lock)
+
+    @tier2
     @pytest.mark.polarion_id("OCS-7737")
     def test_alert_with_both_mds_scaledown(
         self, set_xattr_with_high_cpu_usage, threading_lock
@@ -493,6 +489,7 @@ class TestMdsXattrAlerts(E2ETest):
             9. Wait 60 seconds for both MDS scale up operations to complete
             10. Wait for all MDS pods to reach Running state
             11. Re-validate the alert after MDS scale operations (timeout: 1200s)
+            12. Verify alert is cleared after test completion
 
         """
         log.info(
@@ -537,6 +534,8 @@ class TestMdsXattrAlerts(E2ETest):
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
+        verify_alert_cleared(threading_lock)
+
     @tier4b
     @pytest.mark.polarion_id("OCS-7738")
     def test_alert_with_mds_running_node_restart(
@@ -554,8 +553,9 @@ class TestMdsXattrAlerts(E2ETest):
             3. Identify the active MDS pod and its running node
             4. Restart the node where active MDS is running
             5. Wait for the node to reach Ready state (timeout: 420s)
-            6. Wait for MDS pods to be rescheduled and reach Running state
+            6. Verify cluster health after node restart
             7. Re-validate the alert after node restart (timeout: 1200s)
+            8. Verify alert is cleared after test completion
 
         Args:
             nodes: Node fixture for performing node operations
@@ -589,3 +589,5 @@ class TestMdsXattrAlerts(E2ETest):
         ), "Cluster is not healthy after active MDS node restart"
 
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
+
+        verify_alert_cleared(threading_lock)
