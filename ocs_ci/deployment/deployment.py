@@ -455,7 +455,7 @@ class Deployment(object):
             dr_cluster_names = []
             dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
             if dr_cluster_relations:
-                dr_cluster_names = dr_cluster_relations[0]
+                dr_cluster_names = dr_cluster_relations[0].copy()
                 for index, dr_cluster in enumerate(dr_cluster_names):
                     if is_hosted_cluster(dr_cluster):
                         dr_cluster_names[index] = (
