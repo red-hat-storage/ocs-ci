@@ -147,14 +147,6 @@ class TestRemoteOBCCRUD(ManageTest):
             # Step 5: Verify ConfigMap and Secret are created on Client
             logger.info("Verifying ConfigMap and Secret creation")
 
-            # Get OBC status to retrieve bucket name
-            obc_ocp = OCP(
-                kind="ObjectBucketClaim", namespace=namespace, resource_name=obc_name
-            )
-            obc_data = obc_ocp.get()
-            self.bucket_name = obc_data.get("spec", {}).get("bucketName")
-            assert self.bucket_name, f"Bucket name not found for OBC {obc_name}"
-
             # Verify ConfigMap exists
             configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace)
             assert configmap_obj.is_exist(
@@ -170,6 +162,14 @@ class TestRemoteOBCCRUD(ManageTest):
             # Step 6: Extract S3 credentials from ConfigMap and Secret
             logger.info("Extracting S3 credentials from Secret and ConfigMap")
 
+            # Get ConfigMap data to retrieve bucket name and endpoint
+            configmap_data = configmap_obj.get(resource_name=obc_name)
+
+            # For remote OBC on client clusters, bucket name is in ConfigMap, not in spec
+            self.bucket_name = configmap_data["data"].get("BUCKET_NAME")
+            assert self.bucket_name, f"Bucket name not found in ConfigMap for OBC {obc_name}"
+            logger.info(f"Retrieved bucket name from ConfigMap: {self.bucket_name}")
+
             # Get credentials from Secret
             secret_data = secret_obj.get(resource_name=obc_name)
 
@@ -181,7 +181,6 @@ class TestRemoteOBCCRUD(ManageTest):
             ).decode("utf-8")
 
             # Get endpoint from ConfigMap
-            configmap_data = configmap_obj.get(resource_name=obc_name)
             s3_endpoint = configmap_data["data"]["BUCKET_HOST"]
 
             assert access_key_id, f"Access key ID not found for OBC {obc_name}"
