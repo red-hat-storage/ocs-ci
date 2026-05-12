@@ -1455,12 +1455,10 @@ class TestNfsEnable(ManageTest):
 
         """
         # checking subvolume before retain nfs pvc creation
-        from pathlib import Path
-
         self.retain_nfs_sc = nfs_utils.create_nfs_sc_retain(self.retain_nfs_sc_name)
-        if not (Path(config.RUN["bin_dir"]) / "odf").exists():
+        odf_cli_path = constants.ODF_CLI_LOCAL_PATH
+        if not os.path.exists(odf_cli_path):
             helpers.retrieve_cli_binary(cli_type="odf")
-        odf_cli_path = os.path.join(config.RUN["bin_dir"], "odf")
         output = exec_cmd(cmd=f"{odf_cli_path} subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
         log.info(f"{inital_subvolume_list=}")
