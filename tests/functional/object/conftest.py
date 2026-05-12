@@ -48,28 +48,42 @@ def remote_obc_setup_session(request):
                     )
 
         except Exception as e:
-            log.error(f"Failed to process StorageConsumer CRs on provider: {e}")
+            # Log error but continue - we still attempt to enable remote OBC on clients
+            # even if StorageConsumer update fails, as clients may already have the SC
+            log.error(
+                f"Failed to process StorageConsumer CRs on provider: {e}. "
+                "Continuing with client setup..."
+            )
 
     # Step 2: Enable remote OBC on all client clusters
     for client_index in client_indices:
         with config.RunWithConfigContext(client_index):
+            cluster_name = config.ENV_DATA.get("cluster_name")
             try:
                 cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
 
                 if cluster_type != constants.HCI_CLIENT:
                     log.warning(
-                        f"Cluster {client_index} is '{cluster_type}', not HCI_CLIENT, skipping"
+                        f"Cluster '{cluster_name}' (index {client_index}) is '{cluster_type}', "
+                        f"not {constants.HCI_CLIENT}, skipping"
                     )
                     continue
 
-                log.info(f"Enabling remote OBC on client cluster {client_index}")
+                log.info(
+                    f"Enabling remote OBC on client cluster '{cluster_name}' (index {client_index})"
+                )
                 odf_cli = odf_cli_setup_helper()
                 odf_cli.run_object_enable_remote_obc()
                 enabled_clients[client_index] = odf_cli
-                log.info(f"Remote OBC enabled on client {client_index}")
+                log.info(
+                    f"Remote OBC enabled on client '{cluster_name}' (index {client_index})"
+                )
 
             except Exception as e:
-                log.error(f"Failed to enable remote OBC on client {client_index}: {e}")
+                log.error(
+                    f"Failed to enable remote OBC on client '{cluster_name}' "
+                    f"(index {client_index}): {e}"
+                )
 
     def teardown_remote_obc():
         """Disable remote OBC on all client clusters."""
@@ -77,13 +91,19 @@ def remote_obc_setup_session(request):
 
         for client_index, odf_cli in enabled_clients.items():
             with config.RunWithConfigContext(client_index):
+                cluster_name = config.ENV_DATA.get("cluster_name")
                 try:
-                    log.info(f"Disabling remote OBC on client {client_index}")
+                    log.info(
+                        f"Disabling remote OBC on client '{cluster_name}' (index {client_index})"
+                    )
                     odf_cli.run_object_disable_remote_obc()
-                    log.info(f"Remote OBC disabled on client {client_index}")
+                    log.info(
+                        f"Remote OBC disabled on client '{cluster_name}' (index {client_index})"
+                    )
                 except Exception as e:
                     log.error(
-                        f"Failed to disable remote OBC on client {client_index}: {e}"
+                        f"Failed to disable remote OBC on client '{cluster_name}' "
+                        f"(index {client_index}): {e}"
                     )
 
     request.addfinalizer(teardown_remote_obc)
