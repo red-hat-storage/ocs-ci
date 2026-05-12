@@ -167,7 +167,9 @@ class TestRemoteOBCCRUD(ManageTest):
 
             # For remote OBC on client clusters, bucket name is in ConfigMap, not in spec
             self.bucket_name = configmap_data["data"].get("BUCKET_NAME")
-            assert self.bucket_name, f"Bucket name not found in ConfigMap for OBC {obc_name}"
+            assert (
+                self.bucket_name
+            ), f"Bucket name not found in ConfigMap for OBC {obc_name}"
             logger.info(f"Retrieved bucket name from ConfigMap: {self.bucket_name}")
 
             # Get credentials from Secret
