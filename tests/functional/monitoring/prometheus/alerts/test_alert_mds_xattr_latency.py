@@ -3,10 +3,7 @@ import pytest
 import subprocess
 import time
 
-from ocs_ci.framework.pytest_customization.marks import (
-    blue_squad,
-    ignore_leftovers,
-)
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import E2ETest, tier2, tier4b, tier4c
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -143,6 +140,17 @@ def set_xattr_with_high_cpu_usage(
 def MDSxattr_alert_values(threading_lock, timeout):
     """
     Validate MDS xattr latency alert using Prometheus API.
+
+    This function validates the CephXattrSetLatency alert by checking its
+    properties including message, description, runbook URL, severity, and state.
+
+    Args:
+        threading_lock: Threading lock for Prometheus API calls
+        timeout (int): Timeout in seconds to wait for the alert to appear
+
+    Returns:
+        bool: True if alert is found and validated successfully, False otherwise
+
     """
     return prometheus.validate_alert(
         threading_lock=threading_lock,
@@ -164,7 +172,11 @@ def MDSxattr_alert_values(threading_lock, timeout):
 
 def ceph_not_health_error():
     """
-    Check if Ceph health is good.
+    Check if Ceph cluster health is in a healthy state.
+
+    Returns:
+        bool: True if Ceph health check passes (cluster is healthy),
+              False if health check fails or raises an exception
 
     """
     try:
@@ -227,7 +239,6 @@ def verify_alert_cleared(threading_lock):
 
 @blue_squad
 @tier2
-@ignore_leftovers
 @pytest.mark.skipif(
     config.ENV_DATA.get("platform") == "external",
     reason="MDS xattr tests require internal MDS management, not supported in external mode",
@@ -284,8 +295,6 @@ class TestMdsXattrAlerts(E2ETest):
                 timeout=900,
                 resource_count=1,
             )
-
-            cluster.bring_down_mds_memory_usage_gradually()
 
         request.addfinalizer(finalizer)
 
