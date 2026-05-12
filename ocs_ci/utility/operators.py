@@ -5,7 +5,7 @@ Operators utility functions
 # Properly order all imports
 
 from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
-from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase, is_hosted_cluster
+from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
@@ -183,6 +183,10 @@ class Operator:
                 "Child class must define attribute `unreleased_catalog_image`"
             )
         cluster_name = config.ENV_DATA.get("cluster_name")
+
+        # Import here to avoid circular import
+        from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
+
         if is_hosted_cluster(cluster_name):
             with config.RunWithProviderConfigContextIfAvailable():
                 idms_data = self.get_idms_data()
