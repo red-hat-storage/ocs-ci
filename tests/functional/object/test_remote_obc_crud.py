@@ -23,6 +23,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    polarion_id,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
@@ -41,6 +42,7 @@ pytestmark = pytest.mark.usefixtures("remote_obc_setup_session")
 @mcg
 @runs_on_provider
 @hci_provider_and_client_required
+@polarion_id("OCS-7916")
 class TestRemoteOBCCRUD(ManageTest):
     """
     Test OBC creation and CRUD operations on client clusters.
