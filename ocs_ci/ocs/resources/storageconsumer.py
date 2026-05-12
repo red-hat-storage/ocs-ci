@@ -1281,7 +1281,13 @@ def add_storageclasses_to_storageconsumer(consumer_name, storageclasses):
     # Must run on provider cluster
     with config.RunWithProviderConfigContextIfAvailable():
         try:
-            consumer = StorageConsumer(consumer_name)
+            # StorageConsumer CR lives on provider, so we need provider context
+            provider_index = config.get_provider_index()
+            consumer = StorageConsumer(
+                consumer_name,
+                config.ENV_DATA["cluster_namespace"],
+                provider_index,
+            )
             current_scs = consumer.get_storage_classes()
             log.info(
                 "StorageConsumer '%s' current storage classes: %s",
