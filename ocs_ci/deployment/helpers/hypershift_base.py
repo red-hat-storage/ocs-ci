@@ -18,6 +18,7 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
+    ClusterNotFoundException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
@@ -242,7 +243,10 @@ def is_hosted_cluster(cluster_name=None):
 
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
     config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
-    config.switch_to_provider()
+    try:
+        config.switch_to_provider()
+    except ClusterNotFoundException:
+        return False
     ocp_obj = OCP(
         kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
     )
@@ -1141,8 +1145,9 @@ class HyperShiftBase:
 
         Args:
             name (str): HostedCluster name (namespace is clusters-<name> but resource lives in clusters namespace)
-            idms_json_dict (dict|None): If provided, use this pre-fetched dict
-                (output of 'oc get imagedigestmirrorsets -o json').
+            idms_json_dict (dict|None): If provided, use this pre-fetched dict. Can be either:
+                - Output of 'oc get imagedigestmirrorsets -o json' (list with "items")
+                - A single ImageDigestMirrorSet resource dict (without "items" wrapper)
                 If None, it will be fetched automatically.
             replace (bool): If True, replace any existing spec.imageContentSources with the new list.
                             If False, merge (append new unique entries after existing ones).

@@ -5,6 +5,7 @@ Operators utility functions
 # Properly order all imports
 
 from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
+from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase, is_hosted_cluster
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
@@ -181,7 +182,18 @@ class Operator:
             raise ValueError(
                 "Child class must define attribute `unreleased_catalog_image`"
             )
-        self.create_idms_for_unreleased_catalog()
+        cluster_name = config.ENV_DATA.get("cluster_name")
+        if is_hosted_cluster(cluster_name):
+            with config.RunWithProviderConfigContextIfAvailable():
+                idms_data = self.get_idms_data()
+                hypershift_base = HyperShiftBase()
+
+                # Apply IDMS mirrors to the hosted cluster's imageContentSources
+                hypershift_base.apply_idms_to_hosted_cluster(
+                    name=cluster_name, idms_json_dict=idms_data, replace=False
+                )
+        else:
+            self.create_idms_for_unreleased_catalog()
         self._create_catalog(
             self.unreleased_catalog_full_image, self.unreleased_catalog_name
         )
