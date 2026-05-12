@@ -1552,6 +1552,12 @@ class TestNfsEnable(ManageTest):
 
     def parse_subvolume_ls_output(self, output):
         subvolumes = []
+        if hasattr(output, "stdout"):
+            output = (
+                output.stdout.decode()
+                if isinstance(output.stdout, bytes)
+                else output.stdout
+            )
         subvolumes_list = output.strip().split("\n")[1:]
         for item in subvolumes_list:
             fs, sv, svg, status = item.split(" ")
