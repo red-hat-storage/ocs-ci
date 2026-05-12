@@ -37,7 +37,7 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         add_env_vars_to_noobaa_core(new_env_var_tuples)
 
     @tier2
-    @polarion_id("OCS-XXXX")
+    @polarion_id("OCS-7917")
     def test_noobaa_replication_target_unreachable(
         self,
         bucket_factory,
