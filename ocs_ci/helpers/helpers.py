@@ -6962,12 +6962,29 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
     for storageconsumer_dict in storageconsumer_obj.get()["items"]:
         if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
             storageconsumer = storageconsumer_dict["metadata"]["name"]
+            # TODO: Use configmap with name storageconsumer_dict["status"]["resourceNameMappingConfigMap"]["name"] to
+            #  identify the radosnamespace and then use it to find the cephblockpoolradosnamespace CR. This is not
+            #  applicable for internal storageconsumer because the configmap will not have the exact name of
+            #  radosnamespace
             break
+
+    cephblockpool_rns_names = [
+        cephbprns_data["metadata"]["name"]
+        for cephbprns_data in ocp.OCP(kind=constants.CEPHBLOCKPOOLRADOSNS).get()[
+            "items"
+        ]
+    ]
+    if storageconsumer == constants.INTERNAL_STORAGE_CONSUMER_NAME:
+        cephbpradosns = list(
+            filter(lambda x: "-builtin-implicit" in x, cephblockpool_rns_names)
+        )[0]
+    else:
+        cephbpradosns = list(
+            filter(lambda x: f"-{storageconsumer}" in x, cephblockpool_rns_names)
+        )[0]
     logger.info(
         f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
     )
-
-    cephbpradosns = storageconsumer
 
     # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clusters have it,
     # but StorageRequest is not reconciled. StorageConsumer exists in storage hub cluster and in consumer clusters
@@ -7054,6 +7071,31 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
             "cephfs-subvolumegroup"
         )
     return cephbfssubvolumegroup
+
+
+def find_radosnamespace(storageclient_uid=None):
+    """
+    Find the radosnamespace related to a storageclient if present
+
+    Args:
+        storageclient_id(string): The uid of the storageclient for which the lradosnamespace has to be identified
+
+    Returns:
+        str: The name of the radosnamespace, if present
+
+    """
+    cephblockpoolradosnamespace = find_cephblockpoolradosnamespace(
+        storageclient_uid=storageclient_uid
+    )
+    if "-builtin-implicit" not in cephblockpoolradosnamespace:
+        with config.RunWithProviderConfigContextIfAvailable():
+            cbp_rns = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=cephblockpoolradosnamespace,
+            )
+            radosnamespace = cbp_rns.get()["spec"]["name"]
+        return radosnamespace
 
 
 def remove_port_from_url(url):
