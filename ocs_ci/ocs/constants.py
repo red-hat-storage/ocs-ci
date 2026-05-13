@@ -59,6 +59,9 @@ TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
 TEMPLATE_COUCHBASE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "pillowfight")
 TEMPLATE_CEPHFS_STRESS_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cephfs_stress")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
+TEMPLATE_BLOCK_NB_EGRESS_NETWORK_POLICY = os.path.join(
+    TEMPLATE_MCG_DIR, "block_egress_network_policy.yaml"
+)
 TEMPLATE_RGW_DIR = os.path.join(TEMPLATE_DIR, "rgw")
 TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(TEMPLATE_DIR, "openshift-infra/")
