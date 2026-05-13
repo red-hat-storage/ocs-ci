@@ -6968,12 +6968,14 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
             #  radosnamespace
             break
 
-    cephblockpool_rns_names = [
-        cephbprns_data["metadata"]["name"]
-        for cephbprns_data in ocp.OCP(kind=constants.CEPHBLOCKPOOLRADOSNS).get()[
-            "items"
+    with config.RunWithProviderConfigContextIfAvailable:
+        cephblockpool_rns_names = [
+            cephbprns_data["metadata"]["name"]
+            for cephbprns_data in ocp.OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            ).get()["items"]
         ]
-    ]
     if storageconsumer == constants.INTERNAL_STORAGE_CONSUMER_NAME:
         cephbpradosns = list(
             filter(lambda x: "-builtin-implicit" in x, cephblockpool_rns_names)
