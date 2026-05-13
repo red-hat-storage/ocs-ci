@@ -1744,7 +1744,7 @@ def set_in_transit_encryption(enabled=True):
 
         log.info(f"In-transit encryption is {action}d successfully.")
         try:
-            ocp_obj.wait_for_phase(constants.STATUS_PROGRESSING, timeout=60)
+            ocp_obj.wait_for_phase(constants.STATUS_PROGRESSING, timeout=300)
         except ResourceWrongStatusException:
             is_sc_status_ready = ocp_obj.check_phase(constants.STATUS_READY)
 
