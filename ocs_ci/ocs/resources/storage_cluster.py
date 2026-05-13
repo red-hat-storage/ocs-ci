@@ -1190,6 +1190,15 @@ def verify_storage_cluster_extended():
             "resourceProfile"
         ) != storage_cluster.data["status"].get("lastAppliedResourceProfile"):
             timeout = 1800
+        elif (
+            storage_cluster.data["spec"]
+            .get("network")
+            .get("connections")
+            .get("encryption")
+            .get("enabled")
+            == "true"
+        ):
+            timeout = 1200
         else:
             timeout = 600
         storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
