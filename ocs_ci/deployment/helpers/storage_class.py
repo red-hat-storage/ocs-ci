@@ -100,7 +100,7 @@ def get_custom_storage_class_path() -> str:
         if config.ENV_DATA.get("azure_performance_plus") or config.DEPLOYMENT.get(
             "azure_performance_plus"
         ):
-            # Select template by disk type: Standard SSD, Premium V2, or Premium SSD (default)
+            # Select template by disk type: Standard SSD, Premium V2, Ultra Disk, or Premium SSD (default)
             # Check ENV_DATA first, then fall back to DEPLOYMENT
             disk_type = config.ENV_DATA.get(
                 "azure_performance_plus_disk_type",
@@ -113,6 +113,8 @@ def get_custom_storage_class_path() -> str:
                 template_name = "azure_storageclass_perfplus_standard_ssd.yaml"
             elif disk_type == constants.AZURE_PERFORMANCE_PLUS_DISK_TYPE_PREMIUM_V2:
                 template_name = "azure_storageclass_perfplus_premiumv2.yaml"
+            elif disk_type == constants.AZURE_PERFORMANCE_PLUS_DISK_TYPE_ULTRA:
+                template_name = "azure_storageclass_ultra_disk.yaml"
             else:
                 template_name = "azure_storageclass_perfplus_premium_ssd.yaml"
             custom_sc_path = os.path.join(
