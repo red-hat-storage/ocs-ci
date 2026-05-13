@@ -834,15 +834,17 @@ def exec_cmd(
         log.info(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
-        completed_process = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            timeout=timeout,
-            env=_env,
-            **kwargs,
-        )
+        run_kw = {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "timeout": timeout,
+            "env": _env,
+        }
+        # subprocess.run forbids stdin= and input= together; when callers pass input,
+        # stdin is managed internally. Do not inject stdin=PIPE if the caller set stdin.
+        if "input" not in kwargs and "stdin" not in kwargs:
+            run_kw["stdin"] = subprocess.PIPE
+        completed_process = subprocess.run(cmd, **run_kw, **kwargs)
     finally:
         if threading_lock and cmd[0] == "oc":
             threading_lock.release()
