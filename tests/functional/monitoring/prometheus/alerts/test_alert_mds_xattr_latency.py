@@ -3,7 +3,11 @@ import pytest
 import subprocess
 import time
 
-from ocs_ci.framework.pytest_customization.marks import blue_squad, skipif_external_mode
+from ocs_ci.framework.pytest_customization.marks import (
+    blue_squad,
+    ignore_leftovers,
+    skipif_external_mode,
+)
 from ocs_ci.framework.testlib import E2ETest, tier2, tier4b, tier4c
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -231,6 +235,7 @@ def verify_alert_cleared(threading_lock):
 
 
 @blue_squad
+@ignore_leftovers
 @skipif_external_mode
 class TestMdsXattrAlerts(E2ETest):
     """
