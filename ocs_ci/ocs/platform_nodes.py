@@ -4036,6 +4036,30 @@ class IBMHCINode(object):
             "Wait for volume attach functionality is not implemented"
         )
 
+    def _is_api_unavailable_error(self, error):
+        """
+        Check if an error indicates API unavailability
+
+        Args:
+            error (Exception or str): The error to check
+
+        Returns:
+            bool: True if error indicates API is unavailable, False otherwise
+        """
+        error_msg = str(error).lower()
+        api_unavailable_indicators = [
+            "tls handshake timeout",
+            "connection refused",
+            "unable to connect",
+            "unauthorized",
+            "connection reset",
+            "timeout",
+            "connection timed out",
+            "no route to host",
+            "network is unreachable",
+        ]
+        return any(indicator in error_msg for indicator in api_unavailable_indicators)
+
     def restart_nodes_by_stop_and_start_teardown(self):
         """
         Teardown method to ensure all nodes are powered on and cluster is accessible
@@ -4072,9 +4096,14 @@ class IBMHCINode(object):
                         refresh_oc_login_connection()
                         logger.info("Successfully re-authenticated to cluster")
                     except Exception as login_error:
-                        logger.warning(
-                            f"Could not re-authenticate (attempt {attempt + 1}): {login_error}"
-                        )
+                        if self._is_api_unavailable_error(login_error):
+                            logger.warning(
+                                f"API unavailable (attempt {attempt + 1}): {str(login_error)[:100]}"
+                            )
+                        else:
+                            logger.warning(
+                                f"Could not re-authenticate (attempt {attempt + 1}): {login_error}"
+                            )
                         if attempt < max_retries - 1:
                             logger.info("Waiting 30 seconds before retry...")
                             time.sleep(30)
@@ -4086,13 +4115,22 @@ class IBMHCINode(object):
                     break
 
                 except Exception as e:
-                    logger.warning(
-                        f"Could not verify node status (attempt {attempt + 1}): {e}"
-                    )
+                    if self._is_api_unavailable_error(e):
+                        logger.warning(
+                            f"API unavailable (attempt {attempt + 1}): {str(e)[:100]}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Could not verify node status (attempt {attempt + 1}): {e}"
+                        )
                     if attempt < max_retries - 1:
                         logger.info("Waiting 30 seconds before retry...")
                         time.sleep(30)
                     else:
+                        logger.warning(
+                            "Could not verify cluster status via API after all retries. "
+                            "This is expected if control plane nodes were powered off."
+                        )
                         logger.info(
                             "Nodes have been powered on. Waiting additional time for cluster recovery..."
                         )
