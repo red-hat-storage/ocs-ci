@@ -1302,7 +1302,14 @@ def storageclass_factory_fixture(
                     return
                 raise
 
-            owner_refs = sc_data.get("metadata", {}).get("ownerReferences", [])
+            owner_refs = sc_data.get("metadata", {}).get("ownerReferences") or []
+            if not isinstance(owner_refs, list):
+                log.warning(
+                    "Unexpected ownerReferences type for StorageClass %s: %s",
+                    instance.name,
+                    type(owner_refs).__name__,
+                )
+                owner_refs = []
             filtered = [r for r in owner_refs if r.get("kind") != "StorageClient"]
             if len(filtered) < len(owner_refs):
                 patch_value = "null" if not filtered else json.dumps(filtered)
