@@ -2,9 +2,12 @@
 # Azure Ultra Disk deployment configuration
 # Ultra Disk provides highest performance with customizable IOPS and throughput
 # Note: Ultra Disk requires specific VM sizes and availability zone support
+# IMPORTANT: Ultra SSD requires additionalCapabilities.ultraSSDEnabled to be set on VMs
 DEPLOYMENT:
   openshift_install_timeout: 4800
   allow_lower_instance_requirements: false
+  # Enable Ultra SSD capability on worker nodes
+  azure_ultra_ssd_enabled: true
 ENV_DATA:
   platform: 'azure'
   deployment_type: 'ipi'
@@ -12,6 +15,8 @@ ENV_DATA:
   azure_base_domain_resource_group_name: 'odfqe'
   azure_performance_plus: true
   azure_performance_plus_disk_type: 'UltraSSD_LRS'
+  # Enable Ultra SSD capability on worker nodes (required for Ultra Disk)
+  azure_ultra_ssd_enabled: true
   worker_availability_zones:
     - '1'
   master_availability_zones:
