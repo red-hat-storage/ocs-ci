@@ -8,7 +8,7 @@ DEPLOYMENT:
 ENV_DATA:
   platform: 'azure'
   deployment_type: 'ipi'
-  region: 'eastus'
+  region: 'westeurope'
   azure_base_domain_resource_group_name: 'odfqe'
   azure_performance_plus: true
   azure_performance_plus_disk_type: 'UltraSSD_LRS'
