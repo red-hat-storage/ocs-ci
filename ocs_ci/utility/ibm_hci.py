@@ -624,10 +624,14 @@ class IBMHCI(object):
         # Get required information
         node_ip = node_info.get("ipv4")
         manufacturer = node_info.get("manufacturer", "").lower()
-        rack_ip = rack_data.get("rack_ip")
+        rack_info = rack_data.get("rackInfo", {})
+        rack_ip = rack_info.get("rackIP")
 
         if not all([node_ip, rack_ip]):
-            log.error(f"Missing required information for node {node_name}")
+            log.error(
+                f"Missing required information for node {node_name}: "
+                f"node_ip={node_ip}, rack_ip={rack_ip}"
+            )
             return None
 
         # Get credentials
@@ -691,10 +695,14 @@ class IBMHCI(object):
         # Get required information
         node_ip = node_info.get("ipv4")
         manufacturer = node_info.get("manufacturer", "").lower()
-        rack_ip = rack_data.get("rack_ip")
+        rack_info = rack_data.get("rackInfo", {})
+        rack_ip = rack_info.get("rackIP")
 
         if not all([node_ip, rack_ip]):
-            log.error(f"Missing required information for node {node_name}")
+            log.error(
+                f"Missing required information for node {node_name}: "
+                f"node_ip={node_ip}, rack_ip={rack_ip}"
+            )
             return False
 
         # Get credentials from node_info
