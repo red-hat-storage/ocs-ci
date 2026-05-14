@@ -4003,9 +4003,13 @@ class IBMHCINode(object):
                 node_name = f"{node_role}.{rack_serial}.fusion.tadn.ibm.com"
                 try:
                     logger.info(f"Powering on node: {node_name}")
-                    self.ibm_hci.power_on(node_name)
-                    powered_on_nodes.append(node_name)
-                    logger.info(f"Successfully powered on: {node_name}")
+                    # Use power_on_direct which doesn't require API access
+                    result = self.ibm_hci.power_on_direct(node_name)
+                    if result:
+                        powered_on_nodes.append(node_name)
+                        logger.info(f"Successfully powered on: {node_name}")
+                    else:
+                        logger.warning(f"Failed to power on {node_name}")
                 except Exception as e:
                     logger.warning(f"Failed to power on {node_name}: {e}")
 
@@ -4038,7 +4042,10 @@ class IBMHCINode(object):
 
         This method is designed to recover the cluster even when the API is down.
         It powers on all nodes directly via IPMI/Redfish and waits for cluster recovery.
+        Includes automatic re-login if authentication is lost.
         """
+        from ocs_ci.helpers.helpers import refresh_oc_login_connection
+
         logger.info(
             "Teardown: Ensuring all nodes are powered on and cluster is accessible"
         )
@@ -4053,17 +4060,44 @@ class IBMHCINode(object):
             time.sleep(30)
 
             # Try to verify nodes are ready (may fail if API still down)
-            try:
-                logger.info("Attempting to verify node status via API...")
-                wait_for_nodes_status(timeout=900, status=constants.NODE_READY)
-                logger.info("All nodes are ready - cluster is accessible")
-            except Exception as e:
-                logger.warning(f"Could not verify node status via API: {e}")
-                logger.info(
-                    "Nodes have been powered on. Waiting additional time for cluster recovery..."
-                )
-                time.sleep(60)
-                logger.info("Teardown complete - nodes are powered on")
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    logger.info(
+                        f"Attempting to verify node status via API (attempt {attempt + 1}/{max_retries})..."
+                    )
+
+                    # Try to re-login if we lost authentication
+                    try:
+                        refresh_oc_login_connection()
+                        logger.info("Successfully re-authenticated to cluster")
+                    except Exception as login_error:
+                        logger.warning(
+                            f"Could not re-authenticate (attempt {attempt + 1}): {login_error}"
+                        )
+                        if attempt < max_retries - 1:
+                            logger.info("Waiting 30 seconds before retry...")
+                            time.sleep(30)
+                            continue
+
+                    # Try to check node status
+                    wait_for_nodes_status(timeout=900, status=constants.NODE_READY)
+                    logger.info("All nodes are ready - cluster is accessible")
+                    break
+
+                except Exception as e:
+                    logger.warning(
+                        f"Could not verify node status (attempt {attempt + 1}): {e}"
+                    )
+                    if attempt < max_retries - 1:
+                        logger.info("Waiting 30 seconds before retry...")
+                        time.sleep(30)
+                    else:
+                        logger.info(
+                            "Nodes have been powered on. Waiting additional time for cluster recovery..."
+                        )
+                        time.sleep(60)
+                        logger.info("Teardown complete - nodes are powered on")
 
         except Exception as e:
             logger.error(f"Error during teardown: {e}")

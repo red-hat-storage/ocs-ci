@@ -575,5 +575,147 @@ class IBMHCI(object):
         return self.power_operation(node_name, "reset", force=force, wait=wait)
 
     def power_status(self, node_name):
-        """Get power status of a node"""
+        """
+        Get power status of a node
+
+        Args:
+            node_name (str): Name of the node
+
+        Returns:
+            str: Power status of the node
+        """
+        return self.power_operation(node_name, "status")
+
+    def power_status_direct(self, node_name):
+        """
+        Get power status of a node directly using rack details without querying Kubernetes API
+
+        This method is useful when the cluster API is unavailable.
+
+        Args:
+            node_name (str): Full node name (e.g., "control-1-ru2.f51l039.fusion.tadn.ibm.com")
+
+        Returns:
+            str: Power status ("on", "off", etc.) or None if failed
+        """
+        # Parse node name to extract rack serial and node role
+        parts = node_name.split(".")
+        if len(parts) < 2:
+            log.error(f"Invalid node name format: {node_name}")
+            return None
+
+        node_role = parts[0]
+        rack_serial = parts[1]
+
+        # Get rack data
+        if rack_serial not in self.rack_details:
+            log.error(f"Rack {rack_serial} not found in rack details")
+            return None
+
+        rack_data = self.rack_details[rack_serial]
+        nodes_dict = rack_data.get("nodes", {})
+
+        if node_role not in nodes_dict:
+            log.error(f"Node {node_role} not found in rack {rack_serial}")
+            return None
+
+        node_info = nodes_dict[node_role]
+
+        # Get required information
+        node_ip = node_info.get("ipv4")
+        manufacturer = node_info.get("manufacturer", "").lower()
+        rack_ip = rack_data.get("rack_ip")
+
+        if not all([node_ip, rack_ip]):
+            log.error(f"Missing required information for node {node_name}")
+            return None
+
+        # Get credentials
+        node_username = node_info.get("username", "USERID")
+        node_password = node_info.get("password", "PASSW0RD")
+
+        log.info(f"Checking power status of node {node_name} directly via IPMI/Redfish")
+
+        # Execute power status based on manufacturer
+        if "lenovo" in manufacturer:
+            result = self._power_operation_ipmi(
+                rack_ip, node_username, node_password, node_ip, "status", force=False
+            )
+        elif "dell" in manufacturer:
+            result = self._power_operation_redfish(
+                rack_ip, node_username, node_password, node_ip, "status", force=False
+            )
+        else:
+            log.error(f"Unsupported manufacturer: {manufacturer}")
+            return None
+
+        return result
+
+    def power_on_direct(self, node_name):
+        """
+        Power on a node directly using rack details without querying Kubernetes API
+
+        This method is useful when the cluster API is unavailable.
+        It extracts node information directly from rack_details.
+
+        Args:
+            node_name (str): Full node name (e.g., "control-1-ru2.f51l039.fusion.tadn.ibm.com")
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        # Parse node name to extract rack serial and node role
+        # Format: <role>.<rack_serial>.fusion.tadn.ibm.com
+        parts = node_name.split(".")
+        if len(parts) < 2:
+            log.error(f"Invalid node name format: {node_name}")
+            return False
+
+        node_role = parts[0]  # e.g., "control-1-ru2"
+        rack_serial = parts[1]  # e.g., "f51l039"
+
+        # Get rack data
+        if rack_serial not in self.rack_details:
+            log.error(f"Rack {rack_serial} not found in rack details")
+            return False
+
+        rack_data = self.rack_details[rack_serial]
+        nodes_dict = rack_data.get("nodes", {})
+
+        if node_role not in nodes_dict:
+            log.error(f"Node {node_role} not found in rack {rack_serial}")
+            return False
+
+        node_info = nodes_dict[node_role]
+
+        # Get required information
+        node_ip = node_info.get("ipv4")
+        manufacturer = node_info.get("manufacturer", "").lower()
+        rack_ip = rack_data.get("rack_ip")
+
+        if not all([node_ip, rack_ip]):
+            log.error(f"Missing required information for node {node_name}")
+            return False
+
+        # Get credentials from node_info
+        node_username = node_info.get("username", "USERID")
+        node_password = node_info.get("password", "PASSW0RD")
+
+        log.info(f"Powering on node {node_name} directly via IPMI/Redfish")
+        log.info(
+            f"Node IP: {node_ip}, Rack IP: {rack_ip}, Manufacturer: {manufacturer}"
+        )
+
+        # Execute power on based on manufacturer
+        if "lenovo" in manufacturer:
+            return self._power_operation_ipmi(
+                rack_ip, node_username, node_password, node_ip, "on", force=False
+            )
+        elif "dell" in manufacturer:
+            return self._power_operation_redfish(
+                rack_ip, node_username, node_password, node_ip, "on", force=False
+            )
+        else:
+            log.error(f"Unsupported manufacturer: {manufacturer}")
+            return False
         return self.power_operation(node_name, "status")
