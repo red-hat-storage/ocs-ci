@@ -120,11 +120,11 @@ class ExternalCluster(object):
                 "No SSH Auth to connect to external RHCS cluster provided! "
                 "Either password or SSH key is missing in EXTERNAL_MODE['login'] section!"
             )
-        self.jump_host = config.DEPLOYMENT.get("ssh_jump_host", None)
+        self.jump_host = config.DEPLOYMENT.get("ssh_jump_host")
         if self.jump_host and not self.jump_host.get("private_key"):
-            self.jump_host["private_key"] = os.path.expanduser(
-                config.DEPLOYMENT["ssh_key_private"]
-            )
+            ssh_key_private = config.DEPLOYMENT.get("ssh_key_private")
+            if ssh_key_private:
+                self.jump_host["private_key"] = os.path.expanduser(ssh_key_private)
 
         self.rhcs_conn = Connection(
             host=self.host,

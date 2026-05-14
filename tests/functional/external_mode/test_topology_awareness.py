@@ -84,6 +84,11 @@ def _build_topology_config():
     pool_size = topo_cfg.get("pool_size", 3)
     pg_num = topo_cfg.get("pg_num", 32)
 
+    assert len(pool_names) == len(fd_values), (
+        f"Topology config mismatch: pool_names={len(pool_names)} "
+        f"!= failure_domain_values={len(fd_values)}"
+    )
+
     return {
         "pool_names": pool_names,
         "failure_domain_label": fd_label,
@@ -362,6 +367,7 @@ class TestTopologyAwarenessExternal(ManageTest):
         sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_NON_RESILIENT_RBD
         sc_ocp = OCP(kind=constants.STORAGECLASS)
         log.info(f"Waiting for StorageClass {sc_name} to be created")
+        sc_created = False
         for sample in TimeoutSampler(
             timeout=120,
             sleep=10,
@@ -371,7 +377,9 @@ class TestTopologyAwarenessExternal(ManageTest):
         ):
             if sample:
                 log.info(f"StorageClass {sc_name} created by operator")
+                sc_created = True
                 break
+        assert sc_created, f"StorageClass {sc_name} was not created within timeout"
 
     @polarion_id("OCS-XXXX")
     def test_topology_sc_auto_created(self):
