@@ -6968,7 +6968,7 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
             #  radosnamespace
             break
 
-    with config.RunWithProviderConfigContextIfAvailable:
+    with config.RunWithProviderConfigContextIfAvailable():
         cephblockpool_rns_names = [
             cephbprns_data["metadata"]["name"]
             for cephbprns_data in ocp.OCP(
