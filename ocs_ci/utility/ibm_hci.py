@@ -1,11 +1,12 @@
 import json
 import logging
 from pathlib import Path
-from paramiko import SSHClient, AutoAddPolicy
+from paramiko import SSHClient, RejectPolicy, WarningPolicy
 
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import genereate_cred_file_rack
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -105,12 +106,19 @@ class IBMHCI(object):
         rack_ip = rack_info.get("rackInfo", {}).get("rackIP")
 
         # Find the specific node by matching node name with OCPRole
+        # Node names format: "control-1-ru2.f51l039.abc.xyz.pqr.com"
+        # OCPRole format: "control-1-ru2"
         node_short_name = node_name.split(".")[0]
+
+        # Use exact match to avoid false positives (e.g., "worker-10" matching "worker-1")
         for ocp_role, node_info in rack_info.get("nodes", {}).items():
-            if node_short_name.startswith(ocp_role):
+            if node_short_name == ocp_role:
                 return rack_serial, node_info, rack_ip
 
-        log.error(f"Node {node_name} not found in rack {rack_serial} details")
+        log.error(
+            f"Node {node_name} (short name: {node_short_name}) not found in rack {rack_serial} details. "
+            f"Available nodes: {list(rack_info.get('nodes', {}).keys())}"
+        )
         return None, None, None
 
     def _execute_ssh_command(self, rack_ip, username, password, command):
@@ -127,7 +135,31 @@ class IBMHCI(object):
             tuple: (stdout, stderr, exit_code)
         """
         ssh = SSHClient()
-        ssh.set_missing_host_key_policy(AutoAddPolicy())
+
+        # Load known hosts for secure SSH connections
+        try:
+            ssh.load_system_host_keys()
+            log.debug("Loaded system host keys")
+        except Exception as e:
+            log.warning(f"Could not load system host keys: {e}")
+
+        # Check if we should use strict host key checking
+        # For IBM HCI racks in test environments, we may need to be more permissive
+        strict_host_key_checking = config.ENV_DATA.get(
+            "ibm_hci_strict_host_key_checking", False
+        )
+
+        if strict_host_key_checking:
+            # Strict mode: Reject unknown hosts (most secure)
+            ssh.set_missing_host_key_policy(RejectPolicy())
+            log.info(f"Using strict host key checking for {rack_ip}")
+        else:
+            # Permissive mode: Warn but allow unknown hosts (for test environments)
+            ssh.set_missing_host_key_policy(WarningPolicy())
+            log.warning(
+                f"Using permissive host key checking for {rack_ip}. "
+                "Set 'ibm_hci_strict_host_key_checking: true' in ENV_DATA for strict mode."
+            )
 
         try:
             ssh.connect(rack_ip, username=username, password=password, timeout=30)
@@ -216,7 +248,8 @@ class IBMHCI(object):
             force (bool): Force operation (for off/reset)
 
         Returns:
-            bool: True if successful, False otherwise
+            str: Power state ("on", "off") if operation is "status"
+            bool: True if successful, False otherwise for other operations
         """
         # Ensure ipmitool is installed
         if not self._ensure_ipmitool_installed(rack_ip):
@@ -240,7 +273,9 @@ class IBMHCI(object):
         command = f"ipmitool -I lanplus -H {node_ip} -U {node_username} -P {node_password} {ipmi_cmd}"
 
         log.info(f"Executing IPMI command via SSH for {operation} on node {node_ip}")
-        log.info(f"IPMI Command: {command}")
+        log.info(
+            f"IPMI Command: ipmitool -I lanplus -H {node_ip} -U <REDACTED> -P <REDACTED> {ipmi_cmd}"
+        )
         try:
             stdout, stderr, exit_code = self._execute_ssh_command(
                 rack_ip, self.rack_ssh_username, self.rack_ssh_password, command
@@ -248,15 +283,26 @@ class IBMHCI(object):
 
             if exit_code == 0:
                 log.info(f"IPMI {operation} successful: {stdout}")
+                # For status operation, parse and return the actual state
+                if operation == "status":
+                    # IPMI output format: "Chassis Power is on" or "Chassis Power is off"
+                    stdout_lower = stdout.lower()
+                    if "on" in stdout_lower:
+                        return "on"
+                    elif "off" in stdout_lower:
+                        return "off"
+                    else:
+                        log.warning(f"Could not parse power state from: {stdout}")
+                        return None
                 return True
             else:
                 log.error(
                     f"IPMI {operation} failed with exit code {exit_code}: {stderr}"
                 )
-                return False
+                return False if operation != "status" else None
         except Exception as e:
             log.error(f"IPMI operation via SSH failed: {e}")
-            return False
+            return False if operation != "status" else None
 
     def _power_operation_ipmi(
         self, rack_ip, node_username, node_password, node_ip, operation, force=False
@@ -273,7 +319,8 @@ class IBMHCI(object):
             force (bool): Force operation (for off/reset)
 
         Returns:
-            bool: True if successful, False otherwise
+            str: Power state ("on", "off") if operation is "status"
+            bool: True if successful, False otherwise for other operations
         """
         log.info("Using IPMI protocol for Lenovo node")
         return self._power_operation_ipmi_ssh(
@@ -295,7 +342,8 @@ class IBMHCI(object):
             force (bool): Force operation (for off/reset)
 
         Returns:
-            bool: True if successful, False otherwise
+            str: Power state ("on", "off") if operation is "status"
+            bool: True if successful, False otherwise for other operations
         """
         # Map operations to Redfish reset types
         redfish_ops = {
@@ -312,8 +360,10 @@ class IBMHCI(object):
 
         # First, discover the Systems URI
         log.info(f"Discovering Redfish Systems URI for node {node_ip}")
-        discover_cmd = f"curl -k -s -u {node_username}:{node_password} https://{node_ip}/redfish/v1/Systems"
-        log.info(f"Redfish Discovery Command: {discover_cmd}")
+        discover_cmd = f"curl -k -sS -f -u {node_username}:{node_password} https://{node_ip}/redfish/v1/Systems"
+        log.info(
+            f"Redfish Discovery Command: curl -k -sS -f -u <REDACTED>:<REDACTED> https://{node_ip}/redfish/v1/Systems"
+        )
 
         try:
             stdout, stderr, exit_code = self._execute_ssh_command(
@@ -351,34 +401,58 @@ class IBMHCI(object):
             if operation == "status":
                 # Get power status
                 command = (
-                    f"curl -k -s -u {node_username}:{node_password} "
+                    f"curl -k -sS -f -u {node_username}:{node_password} "
+                    f"https://{node_ip}{system_uri} | grep -i powerstate"
+                )
+                redacted_command = (
+                    f"curl -k -sS -f -u <REDACTED>:<REDACTED> "
                     f"https://{node_ip}{system_uri} | grep -i powerstate"
                 )
             else:
                 reset_type = redfish_ops[operation]
                 command = (
-                    f"curl -k -s -u {node_username}:{node_password} -X POST "
+                    f"curl -k -sS -f -u {node_username}:{node_password} -X POST "
+                    f"https://{node_ip}{system_uri}/Actions/ComputerSystem.Reset "
+                    f"-H 'Content-Type: application/json' "
+                    f'-d \'{{"ResetType": "{reset_type}"}}\''
+                )
+                redacted_command = (
+                    f"curl -k -sS -f -u <REDACTED>:<REDACTED> -X POST "
                     f"https://{node_ip}{system_uri}/Actions/ComputerSystem.Reset "
                     f"-H 'Content-Type: application/json' "
                     f'-d \'{{"ResetType": "{reset_type}"}}\''
                 )
 
             log.info(f"Executing Redfish command for {operation} on node {node_ip}")
-            log.info(f"Redfish Command: {command}")
+            log.info(f"Redfish Command: {redacted_command}")
 
             stdout, stderr, exit_code = self._execute_ssh_command(
                 rack_ip, self.rack_ssh_username, self.rack_ssh_password, command
             )
 
-            if exit_code == 0 or "success" in stdout.lower():
+            # Rely on exit_code for success determination (curl -f fails on HTTP errors)
+            if exit_code == 0:
                 log.info(f"Redfish {operation} successful: {stdout}")
+                # For status operation, parse and return the actual state
+                if operation == "status":
+                    # Redfish output format: "PowerState": "On" or "PowerState": "Off"
+                    stdout_lower = stdout.lower()
+                    if '"on"' in stdout_lower or "poweron" in stdout_lower:
+                        return "on"
+                    elif '"off"' in stdout_lower or "poweroff" in stdout_lower:
+                        return "off"
+                    else:
+                        log.warning(f"Could not parse power state from: {stdout}")
+                        return None
                 return True
             else:
-                log.error(f"Redfish {operation} failed: {stderr}")
-                return False
+                log.error(
+                    f"Redfish {operation} failed (exit code: {exit_code}): {stderr}"
+                )
+                return False if operation != "status" else None
         except Exception as e:
             log.error(f"Redfish operation failed: {e}")
-            return False
+            return False if operation != "status" else None
 
     def _detach_baremetalhost(self, node_name):
         """
@@ -477,60 +551,72 @@ class IBMHCI(object):
             wait (bool): Wait for operation to complete
 
         Returns:
-            bool: True if successful, False otherwise
+            str: Power state ("on", "off") if operation is "status"
+            bool: True if successful, False otherwise for other operations
         """
         log.info(
             f"Performing {operation} operation on node {node_name} (force={force}, wait={wait})"
         )
 
-        # Detach BareMetalHost before power off/cycle/reset to prevent auto-recovery
-        if operation in ["off", "cycle", "reset"]:
-            log.info("Detaching BareMetalHost to prevent auto-recovery")
-            self._detach_baremetalhost(node_name)
+        # Track if we detached the BareMetalHost so we can re-attach in finally block
+        detached_bmh = False
+        result = False if operation != "status" else None
 
-        # Get node details
-        rack_serial, node_info, rack_ip = self._get_node_details_by_name(node_name)
+        try:
+            # Get node details first to validate before detaching
+            rack_serial, node_info, rack_ip = self._get_node_details_by_name(node_name)
 
-        if not node_info or not rack_ip:
-            log.error(f"Failed to get node details for {node_name}")
-            return False
+            if not node_info or not rack_ip:
+                log.error(f"Failed to get node details for {node_name}")
+                return False
 
-        node_ip = node_info.get("ipv4")
-        manufacturer = node_info.get("manufacturer", "").lower()
-        username = node_info.get("username")
-        password = node_info.get("password")
+            node_ip = node_info.get("ipv4")
+            manufacturer = node_info.get("manufacturer", "").lower()
+            username = node_info.get("username")
+            password = node_info.get("password")
 
-        if not all([node_ip, username, password]):
-            log.error(f"Missing required credentials for node {node_name}")
-            return False
+            if not all([node_ip, username, password]):
+                log.error(f"Missing required credentials for node {node_name}")
+                return False
 
-        # Determine which protocol to use based on manufacturer
-        if "lenovo" in manufacturer:
-            log.info(f"Using IPMI for Lenovo node {node_name}")
-            result = self._power_operation_ipmi(
-                rack_ip, username, password, node_ip, operation, force
-            )
-        elif "dell" in manufacturer:
-            log.info(f"Using Redfish for Dell node {node_name}")
-            result = self._power_operation_redfish(
-                rack_ip, username, password, node_ip, operation, force
-            )
-        else:
-            log.error(f"Unsupported manufacturer: {manufacturer}")
-            return False
+            # Detach BareMetalHost AFTER validation, before power off/cycle/reset
+            if operation in ["off", "cycle", "reset"]:
+                log.info("Detaching BareMetalHost to prevent auto-recovery")
+                self._detach_baremetalhost(node_name)
+                detached_bmh = True
 
-        if wait and result and operation in ["off", "on", "cycle", "reset"]:
-            import time
+            # Determine which protocol to use based on manufacturer
+            if "lenovo" in manufacturer:
+                log.info(f"Using IPMI for Lenovo node {node_name}")
+                result = self._power_operation_ipmi(
+                    rack_ip, username, password, node_ip, operation, force
+                )
+            elif "dell" in manufacturer:
+                log.info(f"Using Redfish for Dell node {node_name}")
+                result = self._power_operation_redfish(
+                    rack_ip, username, password, node_ip, operation, force
+                )
+            else:
+                log.error(f"Unsupported manufacturer: {manufacturer}")
+                return False
 
-            log.info(f"Waiting for {operation} operation to complete...")
-            time.sleep(30)  # Wait for operation to take effect
+            if wait and result and operation in ["off", "on", "cycle", "reset"]:
+                import time
 
-        # Re-attach BareMetalHost after power on to restore normal management
-        if operation == "on" and result:
-            log.info("Re-attaching BareMetalHost to restore normal management")
-            self._attach_baremetalhost(node_name)
+                log.info(f"Waiting for {operation} operation to complete...")
+                time.sleep(30)  # Wait for operation to take effect
 
-        return result
+            return result
+
+        finally:
+            # Always re-attach BareMetalHost if we detached it, regardless of success/failure
+            # This prevents leaving hosts in detached state
+            if detached_bmh:
+                log.info(
+                    "Re-attaching BareMetalHost to restore normal management "
+                    f"(operation: {operation}, result: {result})"
+                )
+                self._attach_baremetalhost(node_name)
 
     def power_on(self, node_name, wait=False):
         """
@@ -582,7 +668,7 @@ class IBMHCI(object):
             node_name (str): Name of the node
 
         Returns:
-            str: Power status of the node
+            str: Power state ("on", "off") or None if failed
         """
         return self.power_operation(node_name, "status")
 
