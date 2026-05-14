@@ -48,6 +48,7 @@ log = logging.getLogger(__name__)
 # Error message to look in a command output
 ERRMSG = "Error in command"
 
+
 @skipif_rosa_hcp
 @skipif_external_mode
 @skipif_ocs_version("<4.11")
@@ -108,9 +109,7 @@ class TestNfsExport(ManageTest):
             kind=constants.STORAGECLUSTER, namespace=cls.namespace
         )
         cls.sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
-        cls.config_map_obj = ocp.OCP(
-            kind=constants.CONFIGMAP, namespace=cls.namespace
-        )
+        cls.config_map_obj = ocp.OCP(kind=constants.CONFIGMAP, namespace=cls.namespace)
         cls.pod_obj = ocp.OCP(kind=constants.POD, namespace=cls.namespace)
         cls.service_obj = ocp.OCP(kind=constants.SERVICE, namespace=cls.namespace)
         cls.pvc_obj = ocp.OCP(kind=constants.PVC, namespace=cls.namespace)
@@ -214,12 +213,13 @@ class TestNfsExport(ManageTest):
             cls.sc_obj.wait_for_delete(resource_name=cls.retain_nfs_sc_name)
 
         # Check if NFS client connection was established and clean up mount
-        if hasattr(cls, '_TestNfsExport__nfs_client_connection') and cls._TestNfsExport__nfs_client_connection:
+        if (
+            hasattr(cls, "_TestNfsExport__nfs_client_connection")
+            and cls._TestNfsExport__nfs_client_connection
+        ):
             try:
                 con = cls._TestNfsExport__nfs_client_connection
-                retcode, stdout, _ = con.exec_cmd(
-                    "findmnt -t nfs4 " + cls.test_folder
-                )
+                retcode, stdout, _ = con.exec_cmd("findmnt -t nfs4 " + cls.test_folder)
                 if stdout:
                     log.info("unmounting existing nfs mount")
                     nfs_utils.unmount(con, cls.test_folder)
@@ -261,18 +261,18 @@ class TestNfsExport(ManageTest):
 
     def get_nfs_client_connection(self, re_try=True):
         """
-                Create connection to NFS Client VM.
+        Create connection to NFS Client VM.
 
-                After establishing the SSH connection, if the NFS LB endpoint is a
-                hostname (not a raw IP), the hostname is resolved from within the
-                cluster and /etc/hosts on the client VM is updated. This is required
-                when the NFS client VM is in a different VPC from the OpenShift cluster
-                and cannot resolve IBM Cloud VPC LB hostnames via its DNS servers.
+        After establishing the SSH connection, if the NFS LB endpoint is a
+        hostname (not a raw IP), the hostname is resolved from within the
+        cluster and /etc/hosts on the client VM is updated. This is required
+        when the NFS client VM is in a different VPC from the OpenShift cluster
+        and cannot resolve IBM Cloud VPC LB hostnames via its DNS servers.
 
 
-                If hostname resolution from the cluster fails (timeout), the code will
-                proceed without updating /etc/hosts, assuming the NFS client VM can
-                resolve the hostname via its own DNS configuration.
+        If hostname resolution from the cluster fails (timeout), the code will
+        proceed without updating /etc/hosts, assuming the NFS client VM can
+        resolve the hostname via its own DNS configuration.
         """
         log.info("Connecting to nfs client test VM")
         tries = 3 if re_try else 1
@@ -487,9 +487,7 @@ class TestNfsExport(ManageTest):
 
         # Fetch sharing details for the nfs pvc
         fetch_vol_name_cmd = (
-            "get pvc "
-            + nfs_pvc_obj.name
-            + " --output jsonpath='{.spec.volumeName}'"
+            "get pvc " + nfs_pvc_obj.name + " --output jsonpath='{.spec.volumeName}'"
         )
         vol_name = self.pvc_obj.exec_oc_cmd(fetch_vol_name_cmd)
         log.info(f"For pvc {nfs_pvc_obj.name} volume name is, {vol_name}")
@@ -550,14 +548,18 @@ class TestNfsExport(ManageTest):
             (CommandFailed),
             tries=28,
             delay=10,
-        )(con.exec_cmd)(export_nfs_external_cmd)
-        
+        )(
+            con.exec_cmd
+        )(export_nfs_external_cmd)
+
         # Verify mount is successful
         retcode, stdout, _ = con.exec_cmd(f"findmnt -M {test_folder_for_pod}")
         assert retcode == 0, f"Mount verification failed for {test_folder_for_pod}"
         log.info(f"Successfully mounted NFS export at {test_folder_for_pod}")
 
-        import pdb; pdb.set_trace()
+        import pdb
+
+        pdb.set_trace()
 
         # Verify able to read exported volume
         command = f"cat {test_folder_for_pod}/index.html"
@@ -595,37 +597,37 @@ class TestNfsExport(ManageTest):
 
         # Cleanup
         log.info("Cleaning up resources")
-        
+
         # Unmount
         log.info(f"Unmounting {test_folder_for_pod}")
         nfs_utils.unmount(con, test_folder_for_pod)
-        
+
         # Remove mount point directory
         con.exec_cmd(f"rm -rf {test_folder_for_pod}")
-        
+
         # Wait a bit after unmounting to ensure NFS server releases the export
         log.info("Waiting for NFS export to be fully released...")
         time.sleep(10)
-        
+
         # Deletion of Pods and PVCs
         log.info("Deleting pod")
         pod_obj.delete()
         pod_obj.ocp.wait_for_delete(
             pod_obj.name, 180
         ), f"Pod {pod_obj.name} is not deleted"
-        
+
         pv_obj = nfs_pvc_obj.backed_pv_obj
         log.info(f"pv object-----{pv_obj}")
 
-        import pdb; pdb.set_trace()
+        import pdb
 
-        
+        pdb.set_trace()
+
         log.info("Deleting PVC")
         nfs_pvc_obj.delete(wait=True)
         log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
-        
+
         log.info("Check nfs pv is deleted")
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
-        
+
         log.info("Cleanup complete")
-        
