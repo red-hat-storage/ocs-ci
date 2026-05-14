@@ -3892,6 +3892,42 @@ class IBMHCINode(object):
 
         self.ibm_hci = IBMHCI()
 
+        # Derive domain suffix from rack details
+        self.domain_suffix = self._get_domain_suffix()
+
+    def _get_domain_suffix(self):
+        """
+        Derive domain suffix automatically from existing cluster nodes
+
+        Returns:
+            str: Domain suffix for node names
+        """
+        # Try to derive from existing cluster nodes
+        try:
+            from ocs_ci.ocs.node import get_all_nodes
+
+            nodes = get_all_nodes()
+            if nodes:
+                # Get first node's FQDN and extract domain
+                first_node_name = nodes[0].name
+                # Node name format: nodename.domain.suffix
+                parts = first_node_name.split(".", 1)
+                if len(parts) > 1:
+                    # Return everything after the first dot
+                    return parts[1]
+        except Exception as e:
+            logger.debug(f"Could not derive domain from cluster nodes: {e}")
+
+        # Try to derive from rack details metadata
+        if self.ibm_hci.rack_details:
+            for rack_serial, rack_data in self.ibm_hci.rack_details.items():
+                rack_info = rack_data.get("rackInfo", {})
+                if "domain" in rack_info:
+                    return rack_info["domain"]
+
+        # Default fallback for IBM Fusion environments
+        return "fusion.tadn.ibm.com"
+
     def get_data_volumes(self):
         raise NotImplementedError("Get data volume functionality is not implemented")
 
@@ -3999,8 +4035,8 @@ class IBMHCINode(object):
         for rack_serial, rack_data in self.ibm_hci.rack_details.items():
             nodes_dict = rack_data.get("nodes", {})
             for node_role, _node_info in nodes_dict.items():
-                # Construct full node name
-                node_name = f"{node_role}.{rack_serial}.fusion.tadn.ibm.com"
+                # Construct full node name using configurable domain suffix
+                node_name = f"{node_role}.{rack_serial}.{self.domain_suffix}"
                 try:
                     logger.info(f"Powering on node: {node_name}")
                     # Use power_on_direct which doesn't require API access
@@ -4127,21 +4163,19 @@ class IBMHCINode(object):
                         logger.info("Waiting 30 seconds before retry...")
                         time.sleep(30)
                     else:
-                        logger.warning(
+                        logger.error(
                             "Could not verify cluster status via API after all retries. "
-                            "This is expected if control plane nodes were powered off."
+                            "Nodes have been powered on but cluster may not be fully recovered."
                         )
-                        logger.info(
-                            "Nodes have been powered on. Waiting additional time for cluster recovery..."
+                        raise RuntimeError(
+                            f"Failed to verify cluster status after {max_retries} attempts. "
+                            "Nodes are powered on but API verification failed."
                         )
-                        time.sleep(60)
-                        logger.info("Teardown complete - nodes are powered on")
 
         except Exception as e:
-            logger.error(f"Error during teardown: {e}")
-            logger.warning(
-                "Teardown completed with errors - some nodes may still be off"
-            )
+            logger.error(f"Critical error during teardown: {e}")
+            # Re-raise to propagate failure to test harness
+            raise
 
     def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
         """

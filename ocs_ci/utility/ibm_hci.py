@@ -777,14 +777,15 @@ class IBMHCI(object):
 
         # Execute power on based on manufacturer
         if "lenovo" in manufacturer:
-            return self._power_operation_ipmi(
+            result = self._power_operation_ipmi(
                 rack_ip, node_username, node_password, node_ip, "on", force=False
             )
         elif "dell" in manufacturer:
-            return self._power_operation_redfish(
+            result = self._power_operation_redfish(
                 rack_ip, node_username, node_password, node_ip, "on", force=False
             )
         else:
             log.error(f"Unsupported manufacturer: {manufacturer}")
-            return False
-        return self.power_operation(node_name, "status")
+            result = False
+
+        return result
