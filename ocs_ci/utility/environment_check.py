@@ -23,11 +23,10 @@ def _pv_or_pvc_storage_provisioner(item):
             .get("pv.kubernetes.io/provisioned-by")
         )
     if kind == constants.PVC:
-        return (
-            item.get("metadata", {})
-            .get("annotations", {})
-            .get("volume.kubernetes.io/storage-provisioner")
-        )
+        annotations = item.get("metadata", {}).get("annotations", {})
+        return annotations.get(
+            "volume.kubernetes.io/storage-provisioner"
+        ) or annotations.get("volume.beta.kubernetes.io/storage-provisioner")
     return None
 
 
