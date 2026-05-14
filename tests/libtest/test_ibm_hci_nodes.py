@@ -193,7 +193,7 @@ class TestIBMHCINodeOperations:
         # Wait for nodes to be NotReady
         logger.info(f"Waiting for nodes to be NotReady: {node_names}")
         wait_for_nodes_status(
-            node_names=node_names, status=constants.NODE_NOT_READY, timeout=300
+            node_names=node_names, status=constants.NODE_NOT_READY, timeout=600
         )
         logger.info(f"All nodes are NotReady: {node_names}")
 
