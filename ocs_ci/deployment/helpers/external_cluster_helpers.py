@@ -1204,11 +1204,12 @@ def _external_ceph_semantic_version_or_none():
 
 def external_rgw_ca_should_use_cephadm_fetch():
     """
-    True when external Ceph reports version >= 19.0 (cephadm certmgr path).
+    True when external Ceph reports version >= 19.0 (cephadm certmgr path), or if
+    version is not determined (None) - assuming that from ODF 4.18 we are using Ceph >= 19.
     """
     v = _external_ceph_semantic_version_or_none()
     if v is None:
-        return False
+        return True
     return v >= version.get_semantic_version("19.0", only_major_minor=True)
 
 
