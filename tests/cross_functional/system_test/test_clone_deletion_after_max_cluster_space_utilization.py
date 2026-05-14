@@ -110,6 +110,42 @@ class TestCloneDeletion(E2ETest):
         self.pod_obj.get_fio_results()
         logger.info(f"IO finished on pod {self.pod_obj.name}")
 
+    def log_capacity_details(self):
+        """
+        Log current cluster capacity details for debugging purposes.
+
+        This method fetches and logs:
+        - Total ceph capacity
+        - Free ceph capacity
+        - OSD full size (85% of total capacity)
+        - Currently used capacity
+        - Capacity available to write
+        - Calculated filesize to fill cluster
+        """
+        logger.info("Fetching current cluster capacity details...")
+
+        # Getting the total Storage capacity
+        ceph_capacity = int(self.ceph_cluster.get_ceph_capacity())
+        logger.info(f"Total ceph_capacity: {ceph_capacity}")
+
+        # Getting the free Storage capacity
+        ceph_free_capacity = int(self.ceph_cluster.get_ceph_free_capacity())
+        logger.info(f"ceph_free_capacity: {ceph_free_capacity}")
+
+        osd_full_size = int(ceph_capacity * 0.85)
+        logger.info(f"osd_full_size: {osd_full_size}")
+
+        currently_used_capacity = int(ceph_capacity - ceph_free_capacity)
+        logger.info(f"currently_used_capacity: {currently_used_capacity}")
+
+        # Available free storage capacity in the test
+        capacity_to_write = int(osd_full_size - currently_used_capacity)
+        logger.info(f"capacity_to_write: {capacity_to_write}")
+
+        # Calculating the file size
+        filesize = float(capacity_to_write / (self.num_of_clones + 1))
+        logger.info(f"filesize to fill the cluster to full ratio: {filesize}")
+
     # Function to create clones
     def create_clones(self, num_of_clones, pvc_clone_factory, start_num=0):
         for clone_num in range(start_num, start_num + num_of_clones):
@@ -179,6 +215,8 @@ class TestCloneDeletion(E2ETest):
                 logger.info(
                     "Expected alerts have been detected. Stopping clone creation."
                 )
+                # Log capacity details when alerts are detected
+                self.log_capacity_details()
                 break
             else:
                 logger.info("Alerts not found yet. Creating extra clones...")
@@ -190,6 +228,8 @@ class TestCloneDeletion(E2ETest):
 
         if attempt == max_attempts:
             logger.error("Maximum attempts reached. Expected alerts were not detected.")
+            # Log capacity details when alerts are not detected
+            self.log_capacity_details()
             raise TimeoutExpiredError(
                 "Expected alerts were not detected after maximum attempts"
             )
