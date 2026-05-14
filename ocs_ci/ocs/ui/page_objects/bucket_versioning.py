@@ -1,7 +1,10 @@
 import logging
 import time
 from typing import Optional
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    StaleElementReferenceException,
+)
 
 from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
@@ -120,29 +123,52 @@ class BucketVersioning(ObjectStorage, ConfirmDialog):
         Returns:
             bool: True if versioning is enabled, False otherwise.
         """
-        try:
-            # Method 1: Check if the checkbox input is checked (most reliable)
-            checkbox_elements = self.get_elements(
-                self.bucket_tab["versioning_checkbox_input"]
-            )
-            if checkbox_elements:
-                return checkbox_elements[0].is_selected()
 
-            # Method 2: Fallback - check checkbox 'checked' attribute
-            checkbox_checked_attr = self.get_element_attribute(
-                self.bucket_tab["versioning_checkbox_input"], "checked", safe=True
-            )
-            if checkbox_checked_attr is not None:
-                return checkbox_checked_attr == "true"
+        max_retries = 2
+        retry_delay = 1
 
-            # Method 3: Final fallback - check status text
-            versioning_status = self.get_element_text(
-                self.bucket_tab["versioning_status"]
-            )
-            return versioning_status.lower() != "disabled"
-        except NoSuchElementException:
-            logger.error("Could not find versioning status element")
-            return False
+        for attempt in range(max_retries):
+            try:
+                # Wait for the element to be present before checking its state
+                self.wait_for_element_to_be_present(
+                    self.bucket_tab["versioning_checkbox_input"], timeout=10
+                )
+
+                # Method 1: Check if the checkbox input is checked (most reliable)
+                checkbox_elements = self.get_elements(
+                    self.bucket_tab["versioning_checkbox_input"]
+                )
+                if checkbox_elements:
+                    return checkbox_elements[0].is_selected()
+
+                # Method 2: Fallback - check checkbox 'checked' attribute
+                checkbox_checked_attr = self.get_element_attribute(
+                    self.bucket_tab["versioning_checkbox_input"], "checked", safe=True
+                )
+                if checkbox_checked_attr is not None:
+                    return checkbox_checked_attr == "true"
+
+                # Method 3: Final fallback - check status text
+                versioning_status = self.get_element_text(
+                    self.bucket_tab["versioning_status"]
+                )
+                return versioning_status.lower() != "disabled"
+
+            except StaleElementReferenceException:
+                logger.warning(
+                    f"StaleElementReferenceException on attempt {attempt + 1}/{max_retries}, retrying..."
+                )
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    logger.error("Failed to check versioning status after all retries")
+                    return False
+            except NoSuchElementException:
+                logger.error("Could not find versioning status element")
+                return False
+
+        return False
 
     def enable_versioning(self, bucket_name: Optional[str] = None) -> bool:
         """
