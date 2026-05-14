@@ -13,6 +13,24 @@ from ocs_ci.ocs import ocp, defaults, constants, exceptions
 log = logging.getLogger(__name__)
 
 
+def _pv_or_pvc_storage_provisioner(item):
+    kind = item.get("kind")
+    if kind == constants.PV:
+        return (
+            item.get("spec", {}).get("csi", {}).get("driver")
+            or item.get("metadata", {})
+            .get("annotations", {})
+            .get("pv.kubernetes.io/provisioned-by")
+        )
+    if kind == constants.PVC:
+        return (
+            item.get("metadata", {})
+            .get("annotations", {})
+            .get("volume.kubernetes.io/storage-provisioner")
+        )
+    return None
+
+
 def compare_dicts(before, after):
     """
     Comparing 2 dicts and providing diff list of [added items, removed items]
@@ -100,6 +118,16 @@ def assign_get_values(
         ):
             log.debug("ignoring item in %s namespace: %s", ns, item)
             continue
+        if item.get("kind") in (constants.PV, constants.PVC):
+            provisioner = _pv_or_pvc_storage_provisioner(item)
+            if provisioner and provisioner not in constants.OCS_PROVISIONERS:
+                log.debug(
+                    "ignoring non-ODF %s with provisioner %s: %s",
+                    item.get("kind"),
+                    provisioner,
+                    item.get("metadata", {}).get("name"),
+                )
+                continue
         if item.get("kind") == constants.POD:
             name = item.get("metadata", {}).get("name", "")
             if name.endswith("-debug") or "-debug-" in name:
@@ -140,9 +168,7 @@ def assign_get_values(
             owner_refs = item.get("metadata", {}).get("ownerReferences", [])
             if any(ref.get("kind") == "StorageClient" for ref in owner_refs):
                 name = item.get("metadata", {}).get("name", "")
-                log.debug(
-                    f"ignoring controller-owned StorageClass: {name}"
-                )
+                log.debug("ignoring controller-owned StorageClass: %s", name)
                 continue
         items_filtered.append(item)
 
