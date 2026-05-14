@@ -412,7 +412,11 @@ class TestTopologyAwarenessExternal(ManageTest):
             ), f"Pool {pool} not found in topologyConstrainedPools: {pool_names_in_sc}"
 
         # topologyFailureDomainLabel should match config
-        assert "topologyFailureDomainLabel" in params
+        expected_fd_label = self.topo_config["failure_domain_label"]
+        assert params.get("topologyFailureDomainLabel") == expected_fd_label, (
+            f"Expected topologyFailureDomainLabel={expected_fd_label}, "
+            f"got {params.get('topologyFailureDomainLabel')}"
+        )
         log.info(f"StorageClass {sc_name} validated successfully")
 
     @polarion_id("OCS-XXXX")

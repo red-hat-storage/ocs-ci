@@ -243,14 +243,15 @@ class ExternalCluster(object):
         rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
         cluster_name = config.ENV_DATA.get("cluster_name") or defaults.RHCS_CLUSTER_NAME
 
-        params = self.build_exporter_base_params()
-
-        # Side effects that must only run during deployment/upgrade
+        # Side effects that must run before building params so that
+        # build_exporter_base_params() sees restricted-auth and alias flags
         if "." in rbd_name or "_" in rbd_name:
             config.ENV_DATA["restricted-auth-permission"] = True
             config.ENV_DATA["alias_rbd_name"] = rbd_name.replace(".", "-").replace(
                 "_", "-"
             )
+
+        params = self.build_exporter_base_params()
 
         # remove user 'rgw-admin-ops-user' if it exists since user creation is handled by
         # external python script with necessary caps
