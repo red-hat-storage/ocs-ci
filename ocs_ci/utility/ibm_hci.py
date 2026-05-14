@@ -1,12 +1,11 @@
 import json
 import logging
 from pathlib import Path
-from paramiko import SSHClient, RejectPolicy, WarningPolicy
+from paramiko import SSHClient, AutoAddPolicy
 
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import genereate_cred_file_rack
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -135,31 +134,7 @@ class IBMHCI(object):
             tuple: (stdout, stderr, exit_code)
         """
         ssh = SSHClient()
-
-        # Load known hosts for secure SSH connections
-        try:
-            ssh.load_system_host_keys()
-            log.debug("Loaded system host keys")
-        except Exception as e:
-            log.warning(f"Could not load system host keys: {e}")
-
-        # Check if we should use strict host key checking
-        # For IBM HCI racks in test environments, we may need to be more permissive
-        strict_host_key_checking = config.ENV_DATA.get(
-            "ibm_hci_strict_host_key_checking", False
-        )
-
-        if strict_host_key_checking:
-            # Strict mode: Reject unknown hosts (most secure)
-            ssh.set_missing_host_key_policy(RejectPolicy())
-            log.info(f"Using strict host key checking for {rack_ip}")
-        else:
-            # Permissive mode: Warn but allow unknown hosts (for test environments)
-            ssh.set_missing_host_key_policy(WarningPolicy())
-            log.warning(
-                f"Using permissive host key checking for {rack_ip}. "
-                "Set 'ibm_hci_strict_host_key_checking: true' in ENV_DATA for strict mode."
-            )
+        ssh.set_missing_host_key_policy(AutoAddPolicy())
 
         try:
             ssh.connect(rack_ip, username=username, password=password, timeout=30)
