@@ -3982,6 +3982,35 @@ class IBMHCINode(object):
             node_names=[n.name for n in nodes], status=constants.NODE_READY, timeout=900
         )
 
+    def power_on_all_nodes(self):
+        """
+        Power on all nodes in the cluster using rack details
+
+        This method works even when the cluster API is unreachable,
+        as it directly accesses nodes via IPMI/Redfish using rack details.
+        Useful for recovery scenarios where nodes are powered off.
+
+        Returns:
+            list: Names of nodes that were successfully powered on
+        """
+        logger.info("Powering on all nodes from rack details")
+        powered_on_nodes = []
+
+        for rack_serial, rack_data in self.ibm_hci.rack_details.items():
+            nodes_dict = rack_data.get("nodes", {})
+            for node_role, node_info in nodes_dict.items():
+                # Construct full node name
+                node_name = f"{node_role}.{rack_serial}.fusion.tadn.ibm.com"
+                try:
+                    logger.info(f"Powering on node: {node_name}")
+                    self.ibm_hci.power_on(node_name)
+                    powered_on_nodes.append(node_name)
+                    logger.info(f"Successfully powered on: {node_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to power on {node_name}: {e}")
+
+        return powered_on_nodes
+
     def detach_volume(self, volume, node=None, delete_from_backend=True):
         raise NotImplementedError("Detach volume functionality is not implemented")
 
@@ -4004,10 +4033,43 @@ class IBMHCINode(object):
         )
 
     def restart_nodes_by_stop_and_start_teardown(self):
-        raise NotImplementedError(
-            "Restart nodes by stop and start teardown functionality is "
-            "not implemented"
+        """
+        Teardown method to ensure all nodes are powered on and cluster is accessible
+
+        This method is designed to recover the cluster even when the API is down.
+        It powers on all nodes directly via IPMI/Redfish and waits for cluster recovery.
+        """
+        logger.info(
+            "Teardown: Ensuring all nodes are powered on and cluster is accessible"
         )
+
+        try:
+            # Power on all nodes (works even if API is down)
+            powered_on_nodes = self.power_on_all_nodes()
+            logger.info(f"Powered on {len(powered_on_nodes)} nodes")
+
+            # Wait for nodes to start booting
+            logger.info("Waiting 30 seconds for nodes to start booting...")
+            time.sleep(30)
+
+            # Try to verify nodes are ready (may fail if API still down)
+            try:
+                logger.info("Attempting to verify node status via API...")
+                wait_for_nodes_status(timeout=900, status=constants.NODE_READY)
+                logger.info("All nodes are ready - cluster is accessible")
+            except Exception as e:
+                logger.warning(f"Could not verify node status via API: {e}")
+                logger.info(
+                    "Nodes have been powered on. Waiting additional time for cluster recovery..."
+                )
+                time.sleep(60)
+                logger.info("Teardown complete - nodes are powered on")
+
+        except Exception as e:
+            logger.error(f"Error during teardown: {e}")
+            logger.warning(
+                "Teardown completed with errors - some nodes may still be off"
+            )
 
     def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
         """
