@@ -498,6 +498,27 @@ class DeploymentUI(PageNavigator):
             )
         self.do_click(locator=self.dep_loc[osd_size], enable_screenshot=True)
 
+    def check_odf_operators_succeeded(self, operator):
+        """
+        Check that exactly 2 rows whose data-test-operator-row contains the given
+        operator name show a Succeeded status-text span.
+
+        This targets the operator rows directly via data-test-operator-row, so it is
+        not affected by the page-level name filter or by other operators such as
+        Package Server that also show Succeeded.
+
+        Args:
+            operator (str): operator name substring to match, e.g. "OpenShift Data Foundation"
+
+        Returns:
+            bool: True when exactly 2 matching operator rows show Succeeded
+        """
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
+        locator = format_locator(self.dep_loc["odf_operator_row_succeeded"], operator)
+        elements = self.driver.find_elements(locator[1], locator[0])
+        return len(elements) == 2
+
     def verify_operator_succeeded(
         self, operator=OCS_OPERATOR, timeout_install=600, sleep=20
     ):
@@ -523,9 +544,8 @@ class DeploymentUI(PageNavigator):
             sample = TimeoutSampler(
                 timeout=timeout_install,
                 sleep=sleep,
-                func=self.check_number_occurrences_text,
-                expected_text="Succeeded",
-                number=2,
+                func=self.check_odf_operators_succeeded,
+                operator=operator,
             )
         else:
             sample = TimeoutSampler(

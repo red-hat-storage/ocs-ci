@@ -2240,7 +2240,66 @@ class AWS(object):
             )
             logger.info(f"Deleted OIDC provider: {oidc_provider_arn}")
         except Exception as e:
-            logger.error(f"Error deleting OIDC provider: {e}")
+            if "NoSuchEntity" in str(e):
+                logger.warning(
+                    f"OIDC provider {oidc_provider_arn} not found — "
+                    "likely already deleted by rosa delete oidc-config"
+                )
+            else:
+                logger.error(f"Error deleting OIDC provider: {e}")
+
+    def cleanup_oidc_providers_by_prefix(self, url_prefix):
+        """
+        Delete all OIDC providers whose URL starts with the given prefix.
+
+        AWS has a hard limit of 100 OpenID Connect providers per account.
+        When HCP cluster deployments fail or are aborted without proper
+        cleanup, their OIDC providers remain and accumulate until the limit
+        is hit, blocking all new deployments.
+
+        This method lists all OIDC providers in the account and deletes
+        those whose issuer URL starts with the given prefix (typically
+        the cluster's OIDC bucket name). This safely scopes the cleanup
+        to a single cluster's providers without affecting other clusters.
+
+        Args:
+            url_prefix (str): URL prefix to match, e.g.
+                ``"mycluster-oidc-bucket.s3.us-west-2.amazonaws.com"``
+
+        Returns:
+            int: Number of OIDC providers deleted.
+        """
+        try:
+            response = self.iam_client.list_open_id_connect_providers()
+        except Exception as e:
+            logger.error(f"Failed to list OIDC providers: {e}")
+            return 0
+
+        providers = response.get("OpenIDConnectProviderList", [])
+        deleted_count = 0
+        for provider in providers:
+            arn = provider["Arn"]
+            url = (
+                arn.split(":oidc-provider/", 1)[-1] if ":oidc-provider/" in arn else ""
+            )
+            if not url.startswith(url_prefix):
+                continue
+
+            logger.info(f"Deleting OIDC provider matching prefix '{url_prefix}': {arn}")
+            try:
+                self.iam_client.delete_open_id_connect_provider(
+                    OpenIDConnectProviderArn=arn
+                )
+                deleted_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete OIDC provider {arn}: {e}")
+
+        if deleted_count:
+            logger.info(
+                f"Deleted {deleted_count} OIDC provider(s) "
+                f"matching prefix '{url_prefix}'"
+            )
+        return deleted_count
 
     def get_caller_identity(self):
         """
@@ -2874,9 +2933,16 @@ def create_and_attach_sts_role():
     return role_data
 
 
-def delete_sts_iam_roles():
+def delete_sts_iam_roles(oidc_endpoint_url=None):
     """
     Delete IAM roles for the cluster.
+
+    Args:
+        oidc_endpoint_url (str): Optional OIDC endpoint URL (serviceAccountIssuer)
+            pre-fetched while the cluster API was still reachable. When provided,
+            the cluster API is not contacted. When None, the function attempts to
+            retrieve the URL from the live cluster; if the cluster is already
+            unreachable the OIDC provider deletion is skipped with a warning.
     """
     logger.info("Deleting STS IAM Roles")
     cluster_path = config.ENV_DATA["cluster_path"]
@@ -2902,11 +2968,22 @@ def delete_sts_iam_roles():
                 role_name, instance_profile["InstanceProfileName"]
             )
         aws.delete_iam_role(role_name)
-    auth_cluster = exec_cmd("oc get authentication cluster -o json")
-    auth_cluster_dict = json.loads(auth_cluster.stdout)
-    oidc_provider_name = auth_cluster_dict["spec"]["serviceAccountIssuer"].replace(
-        "https://", ""
-    )
+
+    if oidc_endpoint_url is None:
+        auth_cluster = exec_cmd(
+            "oc get authentication cluster -o json", ignore_error=True
+        )
+        if auth_cluster.returncode != 0:
+            logger.warning(
+                "Could not retrieve authentication cluster info — cluster API is "
+                "unreachable and no oidc_endpoint_url was pre-fetched. "
+                "Skipping OIDC provider deletion."
+            )
+            return
+        auth_cluster_dict = json.loads(auth_cluster.stdout)
+        oidc_endpoint_url = auth_cluster_dict["spec"]["serviceAccountIssuer"]
+
+    oidc_provider_name = oidc_endpoint_url.replace("https://", "")
     aws.delete_oidc_provider(provider_name=oidc_provider_name)
 
 
@@ -3161,6 +3238,28 @@ def create_s3_bucket_for_hypershift_oidc(
         f"HyperShift OIDC S3 bucket setup completed successfully:\n{json.dumps(result, indent=2)}"
     )
     return result
+
+
+def get_cluster_region():
+    """
+    Get the AWS region of the current cluster from the Infrastructure CR.
+
+    Returns:
+        str: AWS region name (e.g. 'us-westa-2')
+
+    Raises:
+        CommandFailed: If the oc command fails.
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    ocp_obj = OCP()
+    region = ocp_obj.exec_oc_cmd(
+        "get -o jsonpath='{.status.platformStatus.aws.region}' "
+        "infrastructure cluster"
+    )
+    logger.info(f"Cluster region: {region}")
+    return region
 
 
 def get_cluster_vpc_cidr(region_name=None):

@@ -160,6 +160,7 @@ class IBMCloudIPI(CloudDeploymentBase):
             raise UnsupportedPlatformVersionError(
                 "IBM Cloud IPI deployments are only supported on OCP versions >= 4.10"
             )
+
         # By default, IBM cloud has load balancer limit of 50 per region.
         # switch to us-south, if current load balancers are more than 45.
         # https://cloud.ibm.com/docs/vpc?topic=vpc-quotas

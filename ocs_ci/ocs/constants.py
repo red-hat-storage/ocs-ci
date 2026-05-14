@@ -201,6 +201,7 @@ CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 CEPHOBJECTSTORE = "CephObjectStore"
 LVM_SC = "lvms-vg1"
 NOOBAA_SC = "openshift-storage.noobaa.io"
+ROSA_NOOBAA_SC = "odf-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
 STORAGECLASS = "StorageClass"
@@ -241,6 +242,7 @@ NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
 DRCLUSTER = "DRCluster"
+DRCLUSTERCONFIG = "DRClusterConfig"
 DRPOLICY = "DRPolicy"
 ACTION_FENCE = "Fenced"
 ACTION_UNFENCE = "Unfenced"
@@ -266,6 +268,7 @@ STORAGECLIENTS = "storageclients.ocs.openshift.io"
 MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
 CEPH_CLUSTER = "CephCluster"
 EXTERNAL_CEPHCLUSTER_NAME = "ocs-external-storagecluster-cephcluster"
+EXTERNAL_RGW_SC_NAME = "ocs-external-storagecluster-ceph-rgw"
 CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
 REPLICA1_STORAGECLASS = "ocs-storagecluster-ceph-non-resilient-rbd"
 ENDPOINTS = "Endpoints"
@@ -320,6 +323,7 @@ TRIGGER_AUTHENTICATION = "TriggerAuthentication"
 SCALED_OBJECT = "ScaledObject"
 ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME = "addon-ns-config"
 ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG = "hypershift-addon-deploy-config"
+SUBMARINERCONFIG = "SubmarinerConfig"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -646,7 +650,7 @@ HYPERCONVERGED_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged.yaml"
 )
 HYPERCONVERGED_CRD = "hyperconvergeds.hco.kubevirt.io"
-
+MACHINESET_KIND = "machinesets.machine.openshift.io"
 
 # CNV deployment constants
 CNV_NAMESPACE = "openshift-cnv"
@@ -678,6 +682,7 @@ VOLUME_IMPORT_SOURCE = "VolumeImportSource"
 VM_VOLUME_PVC = "PVC"
 VM_VOLUME_DV = "DV"
 VM_VOLUME_DVT = "DVT"
+VM_DATAVOLUME = "DataVolume"
 
 # CNV VM source images:
 CNV_FEDORA_SOURCE = "docker://quay.io/containerdisks/fedora:latest"
@@ -889,6 +894,8 @@ MCG_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml")
 RGW_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim-RGW.yaml")
 
 CEPHOBJECTSTORE_USER_YAML = os.path.join(TEMPLATE_RGW_DIR, "cephobjectstoreuser.yaml")
+EC_CEPHOBJECTSTORE_YAML = os.path.join(TEMPLATE_RGW_DIR, "ec_cephobjectstore.yaml")
+EC_STORAGECLASS_RGW_YAML = os.path.join(TEMPLATE_RGW_DIR, "ec_storageclass_rgw.yaml")
 
 MCG_AWS_CREDS_YAML = os.path.join(TEMPLATE_MCG_DIR, "AwsCreds.yaml")
 
@@ -1193,12 +1200,6 @@ EXTERNAL_PGSQL_NOOBAA_SECRET_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "external-pgsql-noobaa-secret.yaml"
 )
 
-OPERATOR_SOURCE_SECRET_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "operator-source-secret.yaml"
-)
-
-OPERATOR_SOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "operator-source.yaml")
-
 HTPASSWD_IDP_YAML = os.path.join(TEMPLATE_AUTHENTICATION_DIR, "htpasswd_provider.yaml")
 NOOBAA_ODF_UI_CLUSTERROLE_YAML = os.path.join(
     TEMPLATE_AUTHENTICATION_DIR, "noobaa_odf_ui_clusterrole.yaml"
@@ -1306,14 +1307,23 @@ NODE_NETWORK_CONFIGURATION_POLICY_IPV6 = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy_ipv6.yaml"
 )
 
+# VLAN-based Multus Networks (without shim interfaces)
+NODE_NETWORK_CONFIGURATION_POLICY_VLAN = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy_vlan.yaml"
+)
+NODE_NETWORK_CONFIGURATION_POLICY_VLAN_DUAL = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy_vlan_dual.yaml"
+)
+MULTUS_PUBLIC_NET_VLAN_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "multus-public-net-vlan.yaml"
+)
+MULTUS_CLUSTER_NET_VLAN_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "multus-cluster-net-vlan.yaml"
+)
+
 
 NETWORK_ATTACHEMENT_DEFINITION = "network-attachment-definitions.k8s.cni.cncf.io"
 VSPHERE_MULTUS_INTERFACE = "ens224"
-
-OPERATOR_SOURCE_NAME = "ocs-operatorsource"
-
-OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
-
 
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml")
@@ -1451,6 +1461,7 @@ DR_AWS_S3_PROFILE_YAML = os.path.join(
 )
 DR_RAMEN_HUB_OPERATOR_CONFIG = "ramen-hub-operator-config"
 DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
+RAMEN_UPSTREAM_IMAGE = "quay.io/ramendr/ramen-operator:canary"
 ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
 DR_RESTORE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "restore.yaml")
 RDR_MODE = "regional-dr"
@@ -1498,6 +1509,7 @@ DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocs-workloads"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
 DRPOLICY_STATUS = "Validated"
+DRPOLICY_SUCCESS_REASONS = frozenset({"Succeeded", "Validated"})
 RDR_REPLICATION_POLICY = "async"
 RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL = "app=ramen-dr-cluster"
 RDR_OSD_MODE_GREENFIELD = "greenfield"
@@ -1505,6 +1517,7 @@ RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
 RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool"
 RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc"
+RDR_VM_PROTECTION_LABEL = "ramendr.openshift.io/k8s-resource-selector"
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -1600,6 +1613,10 @@ ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
 ALERT_MDSCACHEUSAGEHIGH = "MDSCacheUsageHigh"
 ALERT_MDSCPUUSAGEHIGH = "MDSCPUUsageHigh"
 ALERT_ODFOPERATORNOTUPGRADABLE = "ODFOperatorNotUpgradeable"
+RUNBOOK_URL_ODFOPERATORNOTUPGRADABLE = (
+    "https://github.com/openshift/runbooks/blob/master/alerts/"
+    "openshift-container-storage-operator/ODFOperatorNotUpgradeable.md"
+)
 # ODF 4.21 new alerts
 ALERT_ODF_CORE_POD_RESTART = "ODFCorePodRestarted"
 ALERT_ODF_DISK_UTILIZATION_HIGH = "ODFDiskUtilizationHigh"
@@ -1766,6 +1783,7 @@ AZURE_WITH_LOGS_PLATFORM = "azure-with-logs"
 GCP_PLATFORM = "gcp"
 VSPHERE_PLATFORM = "vsphere"
 BAREMETAL_PLATFORM = "baremetal"
+FYRE_PLATFORM = "fyre"
 IBM_POWER_PLATFORM = "powervs"
 IBM_CLOUD_BAREMETAL_PLATFORM = "ibm_cloud_baremetal"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
@@ -1779,6 +1797,25 @@ ROSA_PLATFORM = "rosa"
 FUSIONAAS_PLATFORM = "fusion_aas"
 ROSA_HCP_PLATFORM = "rosa_hcp"
 ROSA_PLATFORMS = [ROSA_PLATFORM, ROSA_HCP_PLATFORM]
+ROSA_HCP_DS_NAMESPACE = "kube-system"
+ROSA_HCP_DS_LABEL = "app=roks-icsp"
+ROSA_HCP_HOST_REGISTRIES_CONF_D = "/host/etc/containers/registries.conf.d"
+ROSA_HCP_HOST_AUTH_JSON = "/host/etc/containers/auth.json"
+ROSA_HCP_HOST_KUBELET_CONFIG = "/host/var/lib/kubelet/config.json"
+ROSA_HCP_CRIO_CONF_DROP_IN = "/host/etc/crio/crio.conf.d/00-default"
+ROSA_HCP_KONFLUX_MIRROR_CONF = "020-konflux-mirror.conf"
+ROSA_HCP_ROKS_ICSP_SA_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-serviceaccount.yaml"
+)
+ROSA_HCP_ROKS_ICSP_DS_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-daemonset.yaml"
+)
+ROSA_HCP_ROKS_ICSP_SVC_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-service.yaml"
+)
+ROSA_HCP_ROKS_ICSP_MC_CRD_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-machineconfig-crd.yaml"
+)
 HCI_BAREMETAL = "hci_baremetal"
 HCI_VSPHERE = "hci_vsphere"
 HCP_AWS = "hcp_aws"
@@ -2378,6 +2415,8 @@ SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_MONITORS = "servicemonitors"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
 AWSCLI_CA_BUNDLE_PATH = "/tmp/ca-bundle.crt"
+EXTERNAL_RGW_CA_CM_KEY = "rgw-external-ca.pem"
+EXTERNAL_RGW_CA_CONTAINER_PATH = f"/cert/{EXTERNAL_RGW_CA_CM_KEY}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 JAVAS3_POD_NAME = "java-s3"
 SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
@@ -2565,6 +2604,17 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.21"] = (
     DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"]
 )
 
+# the list is gathered via following command (run it on one line!)
+# opm-rhel9 render quay.io/rhceph-dev/ocs-registry:4.22.0-65.konflux -o json |
+#   jq 'select(.name=="odf-dependencies.v4.22.0-65.stable") | .properties[] |
+#   select(.type=="olm.package.required") | .value.packageName'
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.22"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] + [
+    "ceph-volsync-plugin-operator",
+    "ocs-tls-profiles",
+]
+
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
 CINDER_CLNT_VERSION = "3.0"
@@ -2715,6 +2765,9 @@ OPERATOR_ROLE_PREFIX_ROSA_HCP = "oproleshcp"
 HCP_DEPLOYER_POLICY = os.path.join(
     TEMPLATE_DIR, "ocs-deployment", "provider-mode", "aws-hcp", "iam_role_policy.json"
 )
+HCP_DEPLOYER_IAM_ROLE = "aws-agent-deployer-role"
+HCP_DEPLOYER_IAM_POLICY = "aws-hcp-deployer-policy"
+HCP_OIDC_S3_SECRET = "hypershift-operator-oidc-provider-s3-credentials"
 
 
 # aws volume constants
@@ -3167,7 +3220,7 @@ ACM_BREW_BUILD_URL = (
     "&rows_per_page=25&delta=1296000&contains=acm"
 )
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
-SUBCTL_BREW_DOWNSTREAM_URL = "brew.registry.redhat.io/rh-osbs/rhacm2-"
+SUBCTL_BREW_DOWNSTREAM_URL = "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-"
 
 # OADP
 OADP_BREW_BUILD_URL = (
@@ -3695,6 +3748,7 @@ NFS_CSI_PLUGIN_PROVISIONER_LABEL = "app=csi-nfsplugin-provisioner"
 NFS_CSI_PLUGIN_LABEL = "app=csi-nfsplugin"
 NFS_CSI_CTRLPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-ctrlplugin"
 NFS_CSI_NODEPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-nodeplugin"
+NFS_DEFAULT_SERVICE_NAME = "ocs-storagecluster-cephnfs-service"
 DAEMONSET_CSI_CEPHFS = "openshift-storage.cephfs.csi.ceph.com-nodeplugin"
 DAEMONSET_CSI_RBD = "openshift-storage.rbd.csi.ceph.com-nodeplugin"
 DAEMONSET_CSI_RBD_CSI_ADDONS = (
@@ -3768,7 +3822,8 @@ KRKN_SCENARIO_TEMPLATE = os.path.join(KRKN_SCENARIO_TEMPLATE_DIR, "scenarios")
 # Krkn supported cloud types for node scenarios
 KRKN_CLOUD_AWS = "aws"
 KRKN_CLOUD_AZURE = "azure"
-KRKN_CLOUD_IBM = "ibm"
+# krknctl / krkn-hub node-scenarios validate CLOUD_TYPE against ibmcloud (not "ibm")
+KRKN_CLOUD_IBM = "ibmcloud"
 KRKN_CLOUD_BAREMETAL = "bm"
 KRKN_CLOUD_VMWARE = "vmware"
 
@@ -3784,6 +3839,15 @@ KRKN_STOP_START_KUBELET = "stop_start_kubelet_scenario"
 KRKN_RESTART_KUBELET = "restart_kubelet_scenario"
 KRKN_NODE_CRASH = "node_crash_scenario"
 
+# krknclt chaos constants
+KRKNCTL_BINARY_TAR = (
+    "https://krkn-chaos.gateway.scarf.sh/krknctl-v0.10.20-beta-linux-amd64.tar.gz"
+)
+KRKNCTL = os.path.join(DATA_DIR, "krknctl")
+KRKNCTL_PLAN_TEMPLATE = os.path.join(
+    KRKN_SCENARIO_TEMPLATE_DIR, "scenarios", "keknctl", "plan.json.j2"
+)
+
 CSI_ADDONS_CONFIGMAP_NAME = "csi-addons-config"
 RBD_CSI_ADDONS_PLUGIN_DIR = (
     "/var/lib/kubelet/plugins/openshift-storage.rbd.csi.ceph.com"
@@ -3792,9 +3856,8 @@ CEPHFS_CSI_ADDONS_PLUGIN_DIR = (
     "/var/lib/kubelet/plugins/openshift-storage.cephfs.csi.ceph.com"
 )
 RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
-CEPHFS_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
-
 HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"
+CEPHFS_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
 
 # Fill pool job and PVC Yaml files
 FILL_POOL_JOB_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_job.yaml")
@@ -3809,6 +3872,8 @@ KEDA_SCALED_OBJECT_YAML = os.path.join(TEMPLATE_DIR, "keda", "scaled_object.yaml
 THANOS_QUERIER_INTERNAL_ADDRESS = "https://thanos-querier.openshift-monitoring.svc:9091"
 CLUSTER_MONITORING_VIEW_ROLE = "cluster-monitoring-view"
 CEPHOBJECTSTORE_NAME = f"{DEFAULT_STORAGE_CLUSTER}-{CEPHOBJECTSTORE}"
+CEPHOBJECTSTORE_NAME_EC = f"{DEFAULT_STORAGE_CLUSTER}-{CEPHOBJECTSTORE}-ec"
+DEFAULT_STORAGECLASS_RGW_EC = f"{DEFAULT_CLUSTERNAME}-ceph-rgw-ec"
 ENABLE_RGW_HPA_ANNOTATION_KEY = "ocs.openshift.io/enable-rgw-autoscale"
 
 # Monitoring status

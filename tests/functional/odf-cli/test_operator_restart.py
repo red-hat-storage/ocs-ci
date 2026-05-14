@@ -6,13 +6,19 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.odf_cli import ODFCLIRetriever, ODFCliRunner
-from ocs_ci.framework.testlib import tier3, brown_squad, polarion_id
+from ocs_ci.framework.testlib import (
+    tier3,
+    brown_squad,
+    polarion_id,
+    runs_on_provider,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @tier3
 @brown_squad
+@runs_on_provider
 @polarion_id("OCS-6235")
 class TestOperatorRestart:
     def check_operator_status(self):

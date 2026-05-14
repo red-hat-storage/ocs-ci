@@ -511,9 +511,29 @@ class PageNavigator(BaseUI):
 
         logger.info("Navigate to External Storage Systems Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.page_has_loaded(retries=120)
+        self.page_has_loaded(retries=20)
         self.do_click(
             locator=self.page_nav["external_systems_page"],
             enable_screenshot=False,
         )
+        self.page_has_loaded(retries=30)
         return ExternalSystems()
+
+    def nav_to_attach_storage_page(self):
+        """
+        Navigate to Attach Storage Page
+
+        Returns:
+            AttachStorage: Attach Storage page object
+
+        """
+        from ocs_ci.ocs.ui.attach_storage import AttachStorage
+
+        logger.info("Navigate to Attach Storage Page")
+        storage_cluster = PageNavigator().nav_storage_cluster_default_page()
+        storage_cluster.wait_for_element_to_be_visible(
+            self.attach_storage_loc["storage_cluster_actions"]
+        )
+        storage_cluster.do_click(self.attach_storage_loc["storage_cluster_actions"])
+        storage_cluster.do_click(self.attach_storage_loc["attach_storage_button"])
+        return AttachStorage()

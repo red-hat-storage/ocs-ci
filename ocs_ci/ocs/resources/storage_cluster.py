@@ -92,6 +92,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     convert_device_size,
     extract_image_urls,
+    ceph_health_resolve_devicehealth,
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.helpers.helpers import storagecluster_independent_check
@@ -234,16 +235,9 @@ def ocs_install_verification(
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")
     exporter_pod_count = len(get_nodes_where_ocs_pods_running())
-    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-    storage_cluster = StorageCluster(
-        resource_name=storage_cluster_name,
-        namespace=namespace,
-    )
     pod = OCP(kind=constants.POD, namespace=namespace)
     if not external:
-        osd_count = int(
-            storage_cluster.data["spec"]["storageDeviceSets"][0]["count"]
-        ) * int(storage_cluster.data["spec"]["storageDeviceSets"][0]["replica"])
+        osd_count = get_osd_count()
     rgw_count = None
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
         if not disable_rgw:
@@ -491,7 +485,7 @@ def ocs_install_verification(
             log.info("Verifying OSDs are distributed evenly across worker nodes")
             ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
             osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)["items"]
-            deviceset_count = get_deviceset_count()
+            deviceset_count = get_total_deviceset_count()
             node_names = [osd["spec"]["nodeName"] for osd in osds]
             for node in node_names:
                 assert (
@@ -792,6 +786,12 @@ def ocs_install_verification(
 
     # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
     if not (fusion_aas_consumer or hci_cluster):
+        # Workaround for DFBUGS-6749: devicehealth module fails when its
+        # pool cannot be created due to a missing default CRUSH rule.
+        try:
+            ceph_health_resolve_devicehealth()
+        except Exception as ex:
+            log.warning(f"devicehealth workaround failed (may not be needed): {ex}")
         # Temporarily disable health check for hci until we have enough healthy clusters
         assert utils.ceph_health_check(
             namespace,
@@ -883,8 +883,18 @@ def ocs_install_verification(
             or config.UPGRADE.get("upgrade_ocs_registry_image")
         ):
             device_class = get_device_class()
-            verify_storage_device_class(device_class)
-            verify_device_class_in_osd_tree(ct_pod, device_class)
+            check_multiple_deviceclasses = config.DEPLOYMENT.get(
+                "deploy_multiple_device_classes", False
+            )
+            verify_storage_device_class(
+                device_class,
+                check_multiple_deviceclasses=check_multiple_deviceclasses,
+            )
+            verify_device_class_in_osd_tree(
+                ct_pod,
+                device_class,
+                check_multiple_deviceclasses=check_multiple_deviceclasses,
+            )
 
     # RDR with globalnet submariner
     if (
@@ -1975,8 +1985,9 @@ def get_osd_count():
     sc_data = sc.get().get("items")[0]
     if sc_data["spec"].get("externalStorage", {}).get("enable"):
         return 0
-    return int(sc_data["spec"]["storageDeviceSets"][0]["count"]) * int(
-        sc.get().get("items")[0]["spec"]["storageDeviceSets"][0]["replica"]
+    return sum(
+        int(ds["count"]) * int(ds["replica"])
+        for ds in sc_data["spec"]["storageDeviceSets"]
     )
 
 
@@ -1993,15 +2004,31 @@ def get_osd_size():
 
 def get_deviceset_count():
     """
-    Get storageDeviceSets count  from storagecluster
+    Get the first storageDeviceSet count from storagecluster
 
     Returns:
-        int: storageDeviceSets count
+        int: The count of the first storageDeviceSet
 
     """
     sc = get_storage_cluster()
     return int(
         sc.get().get("items")[0].get("spec").get("storageDeviceSets")[0].get("count")
+    )
+
+
+def get_total_deviceset_count():
+    """
+    Get the total storageDeviceSets count from storagecluster,
+    summed across all storageDeviceSets.
+
+    Returns:
+        int: Total count across all storageDeviceSets
+
+    """
+    sc = get_storage_cluster()
+    return sum(
+        int(ds.get("count", 0))
+        for ds in sc.get()["items"][0]["spec"]["storageDeviceSets"]
     )
 
 

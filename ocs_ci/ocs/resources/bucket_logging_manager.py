@@ -3,9 +3,8 @@ import json
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import craft_s3_command
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.bucket_utils import list_objects_from_bucket
+from ocs_ci.ocs.bucket_utils import craft_s3_command, list_objects_from_bucket
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import TimeoutSampler
 

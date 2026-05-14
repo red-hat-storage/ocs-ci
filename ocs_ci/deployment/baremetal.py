@@ -714,6 +714,17 @@ class BAREMETALUPI(BAREMETALBASE):
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
             install_config_obj["metadata"]["name"] = config.ENV_DATA.get("cluster_name")
+
+            # Configure RHCOS 10 specific settings
+            rhcos_version = config.ENV_DATA.get("rhcos_version")
+            if rhcos_version and str(rhcos_version) == "10":
+                install_config_obj["featureSet"] = "TechPreviewNoUpgrade"
+                install_config_obj["osImageStream"] = "rhel-10"
+                logger.info(
+                    "Configured install-config for RHEL 10 deployment with "
+                    "TechPreviewNoUpgrade feature set"
+                )
+
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             install_config_backup = os.path.join(
@@ -1453,28 +1464,29 @@ def clean_disks(worker, namespace=constants.DEFAULT_NAMESPACE):
 
     """
     ocp_obj = ocp.OCP()
-    disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(worker)
-
-    # Get the name and size in bytes of the disks
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=worker.name,
-        cmd_list=["lsblk -nd -e252,7 --output NAME,SIZE -b --json"],
-        namespace=namespace,
+    disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
+        worker, namespace
     )
-    lsblk_output = json.loads(str(out))
-    lsblk_devices = lsblk_output["blockdevices"]
 
-    for lsblk_device in lsblk_devices:
-        if lsblk_device["name"] not in disks_available_on_worker_nodes_for_cleanup:
-            logger.info(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
-            pass
-        else:
-            clean_disk(
-                worker.name,
-                f"/dev/{lsblk_device['name']}",
-                int(lsblk_device["size"]),
-                ocp_obj=ocp_obj,
-            )
+    # Clean each eligible disk directly using the validated list from
+    # disks_available_to_cleanup. Avoids a global lsblk scan with major-number
+    # exclusions (e.g. -e252) that inadvertently skips virtio-blk devices on
+    # KVM/Fyre platforms where major 252 is assigned to virtio-blk instead of
+    # device-mapper.
+    for disk_name in disks_available_on_worker_nodes_for_cleanup:
+        out = ocp_obj.exec_oc_debug_cmd(
+            node=worker.name,
+            cmd_list=[f"lsblk -n --output SIZE -b --json /dev/{disk_name}"],
+            namespace=namespace,
+        )
+        size = int(json.loads(str(out))["blockdevices"][0]["size"])
+        clean_disk(
+            worker.name,
+            f"/dev/{disk_name}",
+            size,
+            ocp_obj=ocp_obj,
+            namespace=namespace,
+        )
 
     if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
         root_disk_common_path = config.ENV_DATA["baremetal"]["root_disk_common_path"]

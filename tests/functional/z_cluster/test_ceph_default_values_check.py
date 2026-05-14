@@ -303,13 +303,27 @@ class TestCephDefaultValuesCheck(ManageTest):
 
         stored_values = [value for value in stored_values if value]
 
-        assert collections.Counter(config_data) == collections.Counter(stored_values), (
+        # Check that all expected values are present in the cluster config
+        # Allow additional parameters that may be added in newer versions
+        stored_values_set = set(stored_values)
+        config_data_set = set(config_data)
+
+        missing_values = stored_values_set - config_data_set
+        assert not missing_values, (
             f"The config set in {constants.NOOBAA_POSTGRES_CONFIGMAP} "
-            "is different than expected. Please inform OCS-QE about this "
-            "discrepancy.\n"
-            f"Expected values:\n{stored_values}\n"
-            f"Cluster values:\n{config_data}"
+            "is missing expected parameters."
+            f"Expected values:\n{sorted(stored_values)}\n"
+            f"Cluster values:\n{sorted(config_data)}\n"
+            f"Missing values:\n{sorted(missing_values)}"
         )
+
+        # Log any additional parameters found in cluster but not in expected values
+        additional_values = config_data_set - stored_values_set
+        if additional_values:
+            log.info(
+                f"Additional parameters found in cluster config (this is acceptable): "
+                f"{sorted(additional_values)}"
+            )
 
     @post_ocs_upgrade
     def test_check_number_of_pgs(self, project_factory, pvc_factory, pod_factory):

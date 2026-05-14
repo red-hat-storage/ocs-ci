@@ -130,7 +130,8 @@ class Sanity:
                 )
             )
 
-            self.ceph_cluster.wait_for_noobaa_health_ok()
+            if not is_hci_client_cluster():
+                self.ceph_cluster.wait_for_noobaa_health_ok()
 
     def delete_resources(self):
         """

@@ -1732,6 +1732,34 @@ def get_non_acm_cluster_config():
     return non_acm_list
 
 
+def get_non_acm_cluster_and_non_provider_cluster_config():
+    """
+    Get a list of non-acm and non_provider cluster's config objects
+    Returns:
+        list: of cluster config objects
+    """
+    non_acm_list = []
+    for i in range(len(ocsci_config.clusters)):
+        if i in get_non_acm_cluster_and_non_provider_cluster_index():
+            non_acm_list.append(ocsci_config.clusters[i])
+
+    return non_acm_list
+
+
+def get_non_acm_cluster_and_non_provider_cluster_index():
+    """
+    Get config index of all non-acm and non_provider clusters
+    Returns:
+        list: Cluster indices of all non-acm and non-provider clusters
+    """
+    all_indices = list(range(len(ocsci_config.clusters)))
+    exclude_indices = config.get_provider_cluster_indexes() + get_all_acm_indexes()
+    required_indices = [
+        index_val for index_val in all_indices if index_val not in exclude_indices
+    ]
+    return required_indices
+
+
 def get_non_acm_and_non_recovery_cluster_config():
     """
     Get a list of non-acm and non-recovery cluster config objects
@@ -2056,9 +2084,11 @@ def collect_pod_container_rpm_package(dir_name):
         tarball_path = f"{package_log_dir_path}.tar.gz"
         try:
             with tarfile.open(tarball_path, "w:gz") as tar:
-                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+                tar.add(
+                    package_log_dir_path, arcname=os.path.basename(package_log_dir_path)
+                )
             if config.REPORTING.get("delete_packed_mg_logs"):
-                shutil.rmtree(log_dir_path)
+                shutil.rmtree(package_log_dir_path)
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
 

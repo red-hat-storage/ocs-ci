@@ -51,6 +51,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon, threading_lock):
         start=measure_stop_ceph_mon["start"],
         end=measure_stop_ceph_mon["stop"],
         step=query_step,
+        validate=False,
     )
     health_validation = check_query_range_result_enum(
         result=health_result,

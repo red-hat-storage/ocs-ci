@@ -1429,7 +1429,8 @@ def cal_md5sum(pod_obj, file_name, block=False, raw_path=False):
         file_path = file_name
 
     md5sum_cmd_out = pod_obj.ocp.exec_oc_cmd(
-        command=f"exec {pod_obj.name} -- md5sum {file_path}"
+        command=f"exec {pod_obj.name} -- md5sum {file_path}",
+        out_yaml_format=False,
     )
     md5sum = md5sum_cmd_out.split()[0]
 
@@ -2249,6 +2250,53 @@ def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provis
     return leader_pod
 
 
+def get_odf_external_snapshotter_leader(namespace=None):
+    """
+    Get ODF external snapshotter operator leader pod
+
+    Args:
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        Pod: ODF external snapshotter operator leader pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    non_leader_msg = "Failed to acquire lease"
+    lease_acq_msg = "Successfully acquired lease"
+    lease_renew_msg = "Successfully renewed lease"
+    leader_pod = ""
+
+    # Get all ODF external snapshotter pods
+    pods = get_pods_having_label(constants.ODF_EXTERNAL_SNAPSHOTTER, namespace)
+    odf_snapshotter_pods = [Pod(**pod) for pod in pods]
+
+    pods_log = {}
+    for pod in odf_snapshotter_pods:
+        pods_log[pod] = get_pod_logs(
+            pod_name=pod.name,
+            container="odf-external-snapshotter-operator",
+            namespace=namespace,
+        ).split("\n")
+
+    for pod, log_list in pods_log.items():
+        log_list.reverse()
+        for log_msg in log_list:
+            # Check for last occurrence of leader message
+            # This will be the first occurrence in reversed list.
+            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
+                curr_index = log_list.index(log_msg)
+                # Ensure that there is no non leader message logged after
+                # the last occurrence of leader message
+                if not any(non_leader_msg in msg for msg in log_list[:curr_index]):
+                    leader_pod = pod
+                break
+    assert leader_pod, "Couldn't identify ODF external snapshotter leader pod."
+    logger.info(f"ODF external snapshotter leader pod is {leader_pod.name}")
+    return leader_pod
+
+
 def get_operator_pods(operator_label=constants.OPERATOR_LABEL, namespace=None):
     """
     Fetches info about rook-ceph-operator pods in the cluster
@@ -2669,12 +2717,16 @@ def check_pods_in_running_state(
     )
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
+        # Also skip CatalogSource pods (managed by OLM) — they may be Pending
+        # when nodes are tainted with custom taints that lack matching tolerations
+        # on the CatalogSource resource.
         if (
             ("rook-ceph-osd-prepare" not in p.name)
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
             and (constants.REPORT_STATUS_TO_PROVIDER_POD not in p.name)
             and ("status-reporter" not in p.name)
+            and not p.get_labels().get("olm.catalogSource")
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if skip_for_status:
@@ -3833,21 +3885,25 @@ def exit_osd_maintenance_mode(osd_deployment):
     helpers.modify_deployment_replica_count(
         deployment_name=constants.OCS_CSV_PREFIX, replica_count=1
     )
+    try:
+        # UnSet ceph osd noout and pause flags BEFORE waiting for pods.
+        # Pods cannot fully start while I/O is paused, so unsetting first
+        # avoids a deadlock where we wait for pods that can never be ready.
+        ct_pod = get_ceph_tools_pod()
+        logger.info("UnSet osd noout flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset noout")
+        logger.info("UnSet osd pause flag")
+        ct_pod.exec_ceph_cmd("ceph osd unset pause")
+    finally:
+        # Remove the backup files regardless of flag-unset outcome
+        for deployment in osd_deployment:
+            if os.path.isfile(f"backup_{deployment.name}.yaml"):
+                os.remove(f"backup_{deployment.name}.yaml")
     # Sleep for 60 sec for the OSD pods to respin
     logger.info("Sleeping for 60s for the osd pods to stabilize")
     time.sleep(60)
     for pod in get_osd_pods():
         helpers.wait_for_resource_state(resource=pod, state=constants.STATUS_RUNNING)
-    ct_pod = get_ceph_tools_pod()
-    # UnSet ceph osd noout and pause flags
-    logger.info("UnSet osd noout flag")
-    ct_pod.exec_ceph_cmd("ceph osd unset noout")
-    logger.info("UnSet osd pause flag")
-    ct_pod.exec_ceph_cmd("ceph osd unset pause")
-    # Remove the backup files
-    for deployment in osd_deployment:
-        if os.path.isfile(f"backup_{deployment.name}.yaml"):
-            os.remove(f"backup_{deployment.name}.yaml")
 
 
 def restart_pods_having_label(label, namespace=None):

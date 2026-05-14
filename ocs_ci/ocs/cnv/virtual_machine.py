@@ -12,12 +12,14 @@ from ocs_ci.helpers.cnv_helpers import (
     create_dv,
     clone_dv,
     verifyvolume,
+    generate_vm_password,
 )
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_project,
     wait_for_resource_state,
+    wait_for_pv_delete,
     create_resource,
 )
 from ocs_ci.ocs.ocp import OCP
@@ -33,6 +35,48 @@ from ocs_ci.helpers import cnv_helpers
 
 
 logger = logging.getLogger(__name__)
+
+
+def delete_pv_with_force_and_finalizers(pv_obj, timeout=600):
+    """
+    Delete PV using wait_for_pv_delete, with force delete (remove finalizers)
+    if initial deletion fails.
+
+    Args:
+        pv_obj: OCS instance of kind PersistentVolume
+        timeout: Timeout in seconds for wait_for_delete
+    """
+    try:
+        wait_for_pv_delete([pv_obj], timeout=timeout)
+    except (CommandFailed, TimeoutError) as ex:
+        logger.warning(
+            "PV %s was not deleted by wait_for_pv_delete: %s. "
+            "Attempting to remove finalizers and force delete.",
+            pv_obj.name,
+            ex,
+        )
+        try:
+            pv_obj.delete(wait=False)
+            params = '{"metadata": {"finalizers":null}}'
+            pv_obj.ocp.patch(resource_name=pv_obj.name, params=params)
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=60)
+            logger.info(
+                "PV %s deleted successfully after removing finalizers", pv_obj.name
+            )
+        except CommandFailed as patch_ex:
+            if "not found" in str(patch_ex).lower():
+                logger.info("PV %s already deleted", pv_obj.name)
+            else:
+                logger.warning(
+                    "Failed to force delete PV %s: %s. Continuing with teardown.",
+                    pv_obj.name,
+                    patch_ex,
+                )
+        except TimeoutError:
+            logger.warning(
+                "PV %s still exists after removing finalizers. Continuing with teardown.",
+                pv_obj.name,
+            )
 
 
 class VirtualMachine(Virtctl):
@@ -147,10 +191,23 @@ class VirtualMachine(Virtctl):
         """
         Prepares the VM data.
         """
+        self.password = generate_vm_password()
         vm_data = templating.load_yaml(constants.CNV_VM_TEMPLATE_YAML)
         vm_data["metadata"]["name"] = self._vm_name
         vm_data["metadata"]["namespace"] = self.namespace
 
+        # Escape special characters in password for YAML/cloud-init
+        # Replace double quotes and backslashes that could break YAML format
+        escaped_password = self.password.replace("\\", "\\\\").replace('"', '\\"')
+
+        vm_data["spec"]["template"]["spec"]["volumes"][1]["cloudInitNoCloud"][
+            "userData"
+        ] = f"""#cloud-config
+user: admin
+password: "{escaped_password}"
+chpasswd:
+    expire: False
+"""
         return vm_data
 
     def _create_namespace_if_not_exists(self):
@@ -697,15 +754,21 @@ class VirtualMachine(Virtctl):
                 data = dict()
                 data["api_version"] = self.pvc_obj.get().get("apiVersion")
                 data["kind"] = "PersistentVolume"
-                data["metadata"] = {"name": pv_name, "namespace": self.namespace}
+                # PV is cluster-scoped, no namespace
+                data["metadata"] = {"name": pv_name}
                 self.pv_obj = OCS(**data)
                 self.pvc_obj.delete()
                 self.pvc_obj.ocp.wait_for_delete(
                     resource_name=self.pvc_obj.name, timeout=180
                 )
-                self.pv_obj.ocp.wait_for_delete(
-                    resource_name=self.pv_obj.name, timeout=600
-                )
+                # Clean up backing PV (handles Retain policy Released PVs)
+                # PV may already be deleted by PVC (Delete reclaim policy) - check first
+                if (
+                    self.pv_obj.ocp.get(resource_name=self.pv_obj.name, dont_raise=True)
+                    is not None
+                ):
+                    self.pv_obj.reload()
+                    delete_pv_with_force_and_finalizers(self.pv_obj, timeout=600)
             if self.volumeimportsource_obj:
                 self.volumeimportsource_obj.delete()
         elif self.volume_interface == constants.VM_VOLUME_DV:
@@ -722,9 +785,13 @@ class VirtualMachine(Virtctl):
                 self.dv_obj.ocp.wait_for_delete(
                     resource_name=self.dv_obj.name, timeout=300
                 )
-                self.dv_pv.ocp.wait_for_delete(
-                    resource_name=self.dv_pv.name, timeout=600
-                )
+                # Clean up backing PV (handles Retain policy Released PVs)
+                # PV may already be deleted (Delete reclaim policy) - check first
+                if (
+                    self.dv_pv.ocp.get(resource_name=self.dv_pv.name, dont_raise=True)
+                    is not None
+                ):
+                    delete_pv_with_force_and_finalizers(self.dv_pv, timeout=600)
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
 
@@ -894,13 +961,27 @@ class VMCloner(VirtualMachine):
         self.vm_ocp_obj.delete(resource_name=self._vm_name)
         self.vm_ocp_obj.wait_for_delete(resource_name=self._vm_name, timeout=180)
         if self.volume_interface == constants.VM_VOLUME_PVC:
+            pv_obj = self.pvc_obj.backed_pv_obj
             self.pvc_obj.delete()
             self.pvc_obj.ocp.wait_for_delete(
                 resource_name=self.pvc_obj.name, timeout=180
             )
+            # PV may already be deleted (Delete reclaim policy) - check first
+            if pv_obj.ocp.get(resource_name=pv_obj.name, dont_raise=True) is not None:
+                delete_pv_with_force_and_finalizers(pv_obj, timeout=600)
         elif self.volume_interface == constants.VM_VOLUME_DV:
+            dv_pvc_name = self.dv_obj.get().get("status").get("claimName")
+            data = dict()
+            data["api_version"] = "v1"
+            data["kind"] = "PersistentVolumeClaim"
+            data["metadata"] = {"name": dv_pvc_name, "namespace": self.namespace}
+            dv_pvc = PVC(**data)
+            dv_pv = dv_pvc.backed_pv_obj
             self.dv_obj.delete()
             self.dv_obj.ocp.wait_for_delete(resource_name=self.dv_obj.name, timeout=180)
+            # PV may already be deleted (Delete reclaim policy) - check first
+            if dv_pv.ocp.get(resource_name=dv_pv.name, dont_raise=True) is not None:
+                delete_pv_with_force_and_finalizers(dv_pv, timeout=600)
         elif self.volume_interface == constants.VM_VOLUME_DVT:
             self.dv_rb_data_obj.delete()
             self.dv_cr_data_obj.delete()

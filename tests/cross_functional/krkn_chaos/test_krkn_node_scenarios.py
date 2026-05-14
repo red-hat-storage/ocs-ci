@@ -172,6 +172,7 @@ class TestKrknNodeScenarios:
                         e,
                         platform,
                         f"{cloud_type} node scenarios (instance_count={instance_count})",
+                        health_helper=health_helper,
                     )
                     raise
                 except Exception as e:
@@ -324,7 +325,9 @@ class TestKrknNodeScenarios:
             log.info(f"{action} execution completed")
 
         except CommandFailed as e:
-            validator.handle_krkn_command_failure(e, platform, action)
+            validator.handle_krkn_command_failure(
+                e, platform, action, health_helper=health_helper
+            )
             raise
         except Exception as e:
             log.error(f"{action} failed on {platform}: {e}")
@@ -437,7 +440,9 @@ class TestKrknAWSNodeScenarios:
             chaos_output = krkn_runner.get_chaos_data()
 
         except CommandFailed as e:
-            validator.handle_krkn_command_failure(e, "aws", "node stop/start parallel")
+            validator.handle_krkn_command_failure(
+                e, "aws", "node stop/start parallel", health_helper=health_helper
+            )
             raise
         finally:
             workload_ops.validate_and_cleanup()
@@ -524,7 +529,9 @@ class TestKrknIBMCloudNodeScenarios:
             chaos_output = krkn_runner.get_chaos_data()
 
         except CommandFailed as e:
-            validator.handle_krkn_command_failure(e, "ibm", "IBM Cloud node scenarios")
+            validator.handle_krkn_command_failure(
+                e, "ibm", "IBM Cloud node scenarios", health_helper=health_helper
+            )
             raise
         finally:
             workload_ops.validate_and_cleanup()
@@ -605,7 +612,9 @@ class TestKrknVMwareNodeScenarios:
             chaos_output = krkn_runner.get_chaos_data()
 
         except CommandFailed as e:
-            validator.handle_krkn_command_failure(e, "vmware", "VMware node scenarios")
+            validator.handle_krkn_command_failure(
+                e, "vmware", "VMware node scenarios", health_helper=health_helper
+            )
             raise
         finally:
             workload_ops.validate_and_cleanup()
@@ -700,7 +709,10 @@ class TestKrknBaremetalNodeScenarios:
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
-                e, "baremetal", "BareMetal node scenarios"
+                e,
+                "baremetal",
+                "BareMetal node scenarios",
+                health_helper=health_helper,
             )
             raise
         finally:

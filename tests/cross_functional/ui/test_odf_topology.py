@@ -30,6 +30,7 @@ from ocs_ci.ocs.ui.odf_topology import (
     get_node_names_of_the_pods_by_pattern,
 )
 from ocs_ci.ocs.ui.workload_ui import WorkloadUi
+from ocs_ci.ocs.ui.llm_tools.llm_helper import get_llm_client
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility import prometheus
 from ocs_ci.helpers import helpers
@@ -143,7 +144,7 @@ class TestODFTopology(object):
 
     @tier3
     @polarion_id("OCS-4903")
-    def test_validate_topology_node_details(self, setup_ui_class):
+    def deprecated_test_validate_topology_node_details(self, setup_ui_class):
         """
         Test to validate ODF Topology node details
         BZ #2214023 fixed in 4.14.0-0.nightly-2023-09-02-132842
@@ -202,8 +203,159 @@ class TestODFTopology(object):
             )
 
     @tier3
+    @polarion_id("OCS-4903")
+    def test_validate_topology_node_details_llm(self, setup_ui_class):
+        """
+        Test to validate ODF Topology node details using LLM-based screen reading.
+
+        Instead of using fragile XPath locators to read node details from the sidebar,
+        this test takes a screenshot and passes it to a locally-running vision LLM
+        to extract the information.
+
+        Steps:
+        1. Check ollama availability — skip if not running
+        2. Get node names and pick random node
+        3. Get node details with CLI
+        4. Navigate to ODF topology tab
+        5. Click on the random node to open sidebar and click Details tab
+        6. Take screenshot of the current page
+        7. Ask LLM to extract node details from the screenshot
+        8. Compare LLM-extracted details with CLI details
+        9. Close sidebar
+        """
+        llm_client = get_llm_client()
+        if not llm_client.is_available():
+            pytest.skip(
+                "LLM backend is not available. "
+                "Configure llm_model in UI_SELENIUM settings to enable this test."
+            )
+
+        log_step("Get node names and pick random node")
+        node_names = get_node_names()
+        random_node_name = random.choice(node_names)
+        logger.info(f"Selected random node: {random_node_name}")
+
+        log_step("Get node details with CLI")
+        node_details_cli = get_node_details_cli(random_node_name)
+
+        log_step("Navigate to ODF topology tab")
+        topology_tab = (
+            PageNavigator().nav_storage_cluster_default_page().nav_topology_tab()
+        )
+        topology_tab.nodes_view.read_presented_topology()
+
+        log_step("Open sidebar and click Details tab")
+        topology_tab.nodes_view.open_side_bar_of_entity(random_node_name)
+        topology_tab.nodes_view.open_details_tab()
+
+        log_step("Query LLM and validate node details (with retries)")
+        prompt = (
+            "Read the node details panel in this screenshot. "
+            "Extract the exact text character by character. "
+            "Do not guess or infer characters. "
+            "Return the details as a JSON object with these keys: "
+            "name, status, role, instance_type, zone, addresses. "
+            "For addresses return a single string with all address lines joined by '; '. "
+            "Only include fields that are visible in the panel."
+        )
+
+        fields_to_check = ["name", "status", "role"]
+        if node_details_cli.get("zone"):
+            fields_to_check.append("zone")
+        if node_details_cli.get("instance_type"):
+            fields_to_check.append("instance_type")
+
+        def normalize(text):
+            import re
+
+            return re.sub(r"[\s\-_.:/]", "", str(text).strip().lower())
+
+        max_llm_attempts = 1
+        mismatches = {}
+        for attempt in range(1, max_llm_attempts + 1):
+            screenshot_paths = topology_tab.nodes_view.take_screenshot_for_llm(
+                name_suffix="node_details", region="right_side"
+            )
+            logger.info(f"Screenshots saved: {screenshot_paths}")
+
+            node_details_llm = llm_client.query_screenshot_json(
+                screenshot_paths, prompt
+            )
+            logger.info(
+                f"LLM attempt {attempt}/{max_llm_attempts} "
+                f"extracted details: {node_details_llm}"
+            )
+
+            mismatches = {}
+            for field in fields_to_check:
+                cli_val = str(node_details_cli.get(field, "")).strip().lower()
+                llm_val = str(node_details_llm.get(field, "")).strip().lower()
+                cli_norm = normalize(cli_val)
+                llm_norm = normalize(llm_val)
+
+                if cli_norm in llm_norm or llm_norm in cli_norm:
+                    logger.info(
+                        f"  [PASS] {field}: CLI='{cli_val}' matches LLM='{llm_val}'"
+                    )
+                else:
+                    logger.error(
+                        f"  [FAIL] {field}: CLI='{cli_val}' != LLM='{llm_val}'"
+                    )
+                    mismatches[field] = {"cli": cli_val, "llm": llm_val}
+
+            cli_addresses = node_details_cli.get("addresses", "").lower()
+            llm_addresses = node_details_llm.get("addresses", "")
+            if isinstance(llm_addresses, dict):
+                llm_addr_str = "; ".join(
+                    f"{k}: {v}" for k, v in llm_addresses.items()
+                ).lower()
+            else:
+                llm_addr_str = str(llm_addresses).lower()
+            logger.info(f"  CLI addresses: '{cli_addresses}'")
+            logger.info(f"  LLM addresses: '{llm_addr_str}'")
+
+            cli_hostname = normalize(node_details_cli.get("name", ""))
+            llm_addr_norm = normalize(llm_addr_str)
+            if cli_hostname and cli_hostname in llm_addr_norm:
+                logger.info(
+                    f"  [PASS] addresses contain node hostname '{cli_hostname}'"
+                )
+            elif cli_hostname:
+                logger.error(
+                    f"  [FAIL] addresses do not contain node hostname "
+                    f"'{cli_hostname}'. LLM addresses: '{llm_addr_str}'"
+                )
+                mismatches["addresses"] = {
+                    "cli": cli_addresses,
+                    "llm": llm_addr_str,
+                }
+
+            if not mismatches:
+                logger.info(f"All fields matched on LLM attempt {attempt}")
+                break
+
+            if attempt < max_llm_attempts:
+                logger.warning(
+                    f"LLM attempt {attempt}/{max_llm_attempts} had "
+                    f"{len(mismatches)} mismatch(es), retrying..."
+                )
+
+        topology_tab.nodes_view.close_sidebar()
+
+        if mismatches:
+            mismatch_report = "\n".join(
+                f"  {field}: CLI='{vals['cli']}' vs LLM='{vals['llm']}'"
+                for field, vals in mismatches.items()
+            )
+            pytest.fail(
+                f"Node details mismatch for '{random_node_name}' "
+                f"after {max_llm_attempts} LLM attempt(s) "
+                f"({len(mismatches)} field(s) differ):\n{mismatch_report}"
+            )
+
+    @tier3
     @polarion_id("OCS-4904")
-    def test_validate_topology_deployment_details(self, setup_ui_class):
+    def deprecated_test_validate_topology_deployment_details(self, setup_ui_class):
         """
         Test to validate ODF Topology deployments details
 
@@ -274,6 +426,174 @@ class TestODFTopology(object):
                 f"details of the deployment '{random_deployment}' of the node '{random_node_name}' "
                 f"from the UI and details from the CLI are not identical"
                 f"\n{deviations_df.to_markdown(headers='keys', index=True, tablefmt='grid')}"
+            )
+
+    @tier3
+    @polarion_id("OCS-4904")
+    def test_validate_topology_deployment_details_llm(self, setup_ui_class):
+        """
+        Test to validate ODF Topology deployment details using LLM-based screen reading.
+
+        Instead of using fragile XPath locators to read deployment details from the sidebar,
+        this test takes screenshots and passes them to a vision LLM to extract the information.
+
+        Steps:
+        1. Check LLM availability — skip if not available
+        2. Navigate to ODF topology tab
+        3. Get random node and pick random deployment from it
+        4. Get deployment details with CLI
+        5. Navigate into node and open deployment sidebar, click Details tab
+        6. Take screenshots of the deployment details panel
+        7. Ask LLM to extract deployment details from the screenshots
+        8. Compare LLM-extracted details with CLI details
+        9. Close sidebar
+        """
+        llm_client = get_llm_client()
+        if not llm_client.is_available():
+            pytest.skip(
+                "LLM backend is not available. "
+                "Configure llm_model in UI_SELENIUM settings to enable this test."
+            )
+
+        log_step("Navigate to ODF topology tab")
+        topology_tab = (
+            PageNavigator().nav_storage_cluster_default_page().nav_topology_tab()
+        )
+
+        log_step("Get random node and deployment")
+        node_names = get_node_names()
+        random_node_name = random.choice(node_names)
+        logger.info(f"Selected random node: {random_node_name}")
+
+        log_step("Read topology CLI and pick random deployment")
+        topology_cli = topology_tab.topology_helper.read_topology_cli_all()
+        random_deployment = random.choice(
+            topology_cli[random_node_name].dropna().index.to_list()
+        )
+        logger.info(f"Selected random deployment: {random_deployment}")
+
+        log_step("Get deployment details with CLI")
+        deployment_details_cli = get_deployment_details_cli(random_deployment)
+
+        log_step("Navigate into node and open deployment sidebar")
+        topology_tab.nodes_view.read_presented_topology()
+        deployment_view = topology_tab.nodes_view.nav_into_node(
+            node_name_option=random_node_name
+        )
+        deployment_view.read_presented_topology()
+        deployment_view.open_side_bar_of_entity(random_deployment)
+        deployment_view.open_details_tab()
+
+        log_step("Query LLM and validate deployment details (with retries)")
+        prompt = (
+            "Read the deployment details panel in this screenshot. "
+            "Extract the exact text character by character. "
+            "Do not guess or infer characters. "
+            "Return the details as a JSON object with these keys: "
+            "name, namespace, annotation, owner, created_at. "
+            "For annotation, return the full annotation text as shown, e.g. '5 annotation'. "
+            "Only include fields that are visible in the panel."
+        )
+
+        fields_to_check = ["name", "namespace"]
+
+        def normalize(text):
+            import re
+
+            return re.sub(r"[\s\-_.:/]", "", str(text).strip().lower())
+
+        max_llm_attempts = 3
+        mismatches = {}
+        for attempt in range(1, max_llm_attempts + 1):
+            screenshot_paths = deployment_view.take_screenshot_for_llm(
+                name_suffix="deployment_details", region="right_side"
+            )
+            logger.info(f"Screenshots saved: {screenshot_paths}")
+
+            deployment_details_llm = llm_client.query_screenshot_json(
+                screenshot_paths, prompt
+            )
+            logger.info(
+                f"LLM attempt {attempt}/{max_llm_attempts} "
+                f"extracted details: {deployment_details_llm}"
+            )
+
+            mismatches = {}
+            for field in fields_to_check:
+                cli_val = str(deployment_details_cli.get(field, "")).strip().lower()
+                llm_val = str(deployment_details_llm.get(field, "")).strip().lower()
+                cli_norm = normalize(cli_val)
+                llm_norm = normalize(llm_val)
+
+                if cli_norm in llm_norm or llm_norm in cli_norm:
+                    logger.info(
+                        f"  [PASS] {field}: CLI='{cli_val}' matches LLM='{llm_val}'"
+                    )
+                else:
+                    logger.error(
+                        f"  [FAIL] {field}: CLI='{cli_val}' != LLM='{llm_val}'"
+                    )
+                    mismatches[field] = {"cli": cli_val, "llm": llm_val}
+
+            cli_annotation = deployment_details_cli.get("annotation", "")
+            llm_annotation = str(deployment_details_llm.get("annotation", "")).lower()
+            cli_ann_num = normalize(cli_annotation.split()[0]) if cli_annotation else ""
+            llm_ann_norm = normalize(llm_annotation)
+            logger.info(f"  CLI annotation: '{cli_annotation}'")
+            logger.info(f"  LLM annotation: '{llm_annotation}'")
+            if cli_ann_num and cli_ann_num in llm_ann_norm:
+                logger.info(
+                    f"  [PASS] annotation count '{cli_ann_num}' found in LLM output"
+                )
+            elif cli_ann_num:
+                logger.error(
+                    f"  [FAIL] annotation count '{cli_ann_num}' not found in "
+                    f"LLM annotation: '{llm_annotation}'"
+                )
+                mismatches["annotation"] = {
+                    "cli": cli_annotation,
+                    "llm": llm_annotation,
+                }
+
+            cli_owner = deployment_details_cli.get("owner", "")
+            if cli_owner:
+                llm_owner = str(deployment_details_llm.get("owner", "")).lower()
+                cli_owner_norm = normalize(cli_owner)
+                llm_owner_norm = normalize(llm_owner)
+                logger.info(f"  CLI owner: '{cli_owner}'")
+                logger.info(f"  LLM owner: '{llm_owner}'")
+                if cli_owner_norm in llm_owner_norm or llm_owner_norm in cli_owner_norm:
+                    logger.info(
+                        f"  [PASS] owner: CLI='{cli_owner}' matches LLM='{llm_owner}'"
+                    )
+                else:
+                    logger.error(
+                        f"  [FAIL] owner: CLI='{cli_owner}' != LLM='{llm_owner}'"
+                    )
+                    mismatches["owner"] = {"cli": cli_owner, "llm": llm_owner}
+
+            if not mismatches:
+                logger.info(f"All fields matched on LLM attempt {attempt}")
+                break
+
+            if attempt < max_llm_attempts:
+                logger.warning(
+                    f"LLM attempt {attempt}/{max_llm_attempts} had "
+                    f"{len(mismatches)} mismatch(es), retrying..."
+                )
+
+        deployment_view.close_sidebar()
+
+        if mismatches:
+            mismatch_report = "\n".join(
+                f"  {field}: CLI='{vals['cli']}' vs LLM='{vals['llm']}'"
+                for field, vals in mismatches.items()
+            )
+            pytest.fail(
+                f"Deployment details mismatch for '{random_deployment}' "
+                f"on node '{random_node_name}' "
+                f"after {max_llm_attempts} LLM attempt(s) "
+                f"({len(mismatches)} field(s) differ):\n{mismatch_report}"
             )
 
     @tier4a

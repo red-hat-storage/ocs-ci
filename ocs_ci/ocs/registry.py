@@ -35,7 +35,7 @@ def change_registry_backend_to_ocs():
         access_mode=constants.ACCESS_MODE_RWX,
     )
     helpers.wait_for_resource_state(pv_obj, "Bound", timeout=300)
-    param_cmd = f'[{{"op": "add", "path": "/spec/storage", "value": {{"pvc": {{"claim": "{pv_obj.name}"}}}}}}]'
+    param_cmd = f'[{{"op": "replace", "path": "/spec/storage", "value": {{"pvc": {{"claim": "{pv_obj.name}"}}}}}}]'
 
     run_cmd(
         f"oc patch {constants.IMAGE_REGISTRY_CONFIG} -p " f"'{param_cmd}' --type json"

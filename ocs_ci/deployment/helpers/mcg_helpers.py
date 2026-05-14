@@ -5,11 +5,12 @@ This module contains helper functions which is needed for MCG only deployment
 import logging
 import tempfile
 
-from ocs_ci.framework import config
+from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.utils import enable_console_plugin
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import get_primary_nb_db_pod, run_cmd
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,33 @@ def mcg_only_deployment():
     cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
     cluster_data["spec"]["multiCloudGateway"] = {}
     cluster_data["spec"]["multiCloudGateway"]["reconcileStrategy"] = "standalone"
+    if config.ENV_DATA.get("noobaa_db_backup_enabled"):
+        db_schedule_map = {
+            "daily": "0 0 * * *",
+            "Weekly": "0 0 * * 0",
+            "Monthly": "0 0 1 * *",
+        }
+        schedule_cron_interval = db_schedule_map[
+            config.ENV_DATA.get("noobaa_db_backup_schedule", "daily")
+        ]
+        max_snapshots = config.ENV_DATA.get("noobaa_db_backup_max_snapshots", 5)
+        snapshot_class = helpers.get_default_cluster_volumesnapshotclass()
+        merge_dict(
+            cluster_data,
+            {
+                "spec": {
+                    "multiCloudGateway": {
+                        "dbBackup": {
+                            "schedule": schedule_cron_interval,
+                            "volumeSnapshot": {
+                                "maxSnapshots": max_snapshots,
+                                "volumeSnapshotClass": snapshot_class,
+                            },
+                        }
+                    }
+                }
+            },
+        )
     del cluster_data["spec"]["storageDeviceSets"]
     cluster_data_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="cluster_storage", delete=False

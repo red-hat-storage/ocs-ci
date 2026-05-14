@@ -157,6 +157,22 @@ class MCG:
                 .get("serviceMgmt")
                 .get("externalDNS")[0]
             ) + "/rpc"
+
+            # serviceIam is not available on some platforms (e.g., Azure ARO)
+            service_iam = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceIam")
+            )
+            if service_iam:
+                self.iam_endpoint = service_iam.get("externalDNS")[0]
+            else:
+                logger.info(
+                    "serviceIam not found in NooBaa services - IAM endpoint will not be available"
+                )
+                self.iam_endpoint = None
+
             self.region = config.ENV_DATA["region"]
 
             noobaa_cr_services = (

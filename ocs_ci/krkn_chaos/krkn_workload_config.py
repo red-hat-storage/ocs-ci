@@ -95,6 +95,32 @@ class KrknWorkloadConfig:
         krkn_config = self.config.ENV_DATA.get("krkn_config", {})
         return krkn_config.get("cnv_config", {})
 
+    def get_mcg_config(self) -> Dict[str, Any]:
+        """
+        Get MCG/NooBaa configuration.
+
+        Returns:
+            dict: MCG configuration
+        """
+        krkn_config = self.config.ENV_DATA.get("krkn_config", {})
+        return krkn_config.get("mcg_config", {})
+
+    def get_warp_config(self) -> Dict[str, Any]:
+        """
+        Get Warp MCG stress workload configuration.
+
+        Returns:
+            dict: Warp configuration
+        """
+        krkn_config = self.config.ENV_DATA.get("krkn_config", {})
+        warp_config = krkn_config.get("warp_config", {})
+
+        # Set default namespace to 'default' if not specified
+        if "namespace" not in warp_config:
+            warp_config["namespace"] = "default"
+
+        return warp_config
+
     def get_background_cluster_operations_config(self) -> Dict[str, Any]:
         """
         Get background cluster operations configuration.
@@ -236,6 +262,19 @@ class KrknWorkloadConfig:
         vdbench_config = self.get_vdbench_config()
         return vdbench_config.get("use_encrypted_pvc", False)
 
+    def get_pv_encryption_keyrotation_schedule(self) -> str:
+        """
+        Cron schedule for PV encryption key rotation annotation on encrypted RBD StorageClass.
+
+        Applied as ``keyrotation.csiaddons.openshift.io/schedule`` when encrypted
+        RBD storage classes are created for Krkn VDBENCH workloads.
+
+        Returns:
+            str: Cron expression (default: every 3 minutes, matching prior hardcoded behavior)
+        """
+        vdbench_config = self.get_vdbench_config()
+        return vdbench_config.get("PV_ENCRYPTION_KEYROTATION_SCHEDULE", "*/3 * * * *")
+
     def get_block_workload_config(self) -> Dict[str, Any]:
         """
         Get block workload configuration.
@@ -376,3 +415,5 @@ class KrknWorkloadConfig:
     VDBENCH = "VDBENCH"
     CNV_WORKLOAD = "CNV_WORKLOAD"
     RGW_WORKLOAD = "RGW_WORKLOAD"
+    MCG_WORKLOAD = "MCG_WORKLOAD"  # NooBaa/MCG S3 workload
+    WARP_WORKLOAD = "WARP_WORKLOAD"  # Warp MCG stress workload

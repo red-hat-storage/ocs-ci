@@ -38,19 +38,15 @@ def add_nodes():
         new_nodes = []
         platform = config.ENV_DATA["platform"].lower()
         dt = config.ENV_DATA["deployment_type"]
+        is_hcp = (
+            dt == constants.MANAGED_CP_DEPL_TYPE
+            or config.ENV_DATA.get("cluster_type", "") == "hci_client"
+        )
         log.info(f"The worker nodes number before expansion {len(get_worker_nodes())}")
         if platform in constants.CLOUD_PLATFORMS:
 
-            if dt == "ipi":
-                machines = machine_utils.get_machinesets()
-                for machine in machines:
-                    new_nodes.append(
-                        add_new_node_and_label_it(machine, mark_for_ocs_label=ocs_nodes)
-                    )
-            elif dt == constants.MANAGED_CP_DEPL_TYPE:
+            if is_hcp:
                 new_nodes.append(
-                    # RHEL is not supported in ROSA HCP clusters,
-                    # currently the only from Control Plane maneged deployments
                     add_new_nodes_and_label_them_rosa_hcp(
                         node_type=constants.RHCOS,
                         num_nodes=node_count,
@@ -59,6 +55,12 @@ def add_nodes():
                         node_conf=node_conf,
                     )
                 )
+            elif dt == "ipi":
+                machines = machine_utils.get_machinesets()
+                for machine in machines:
+                    new_nodes.append(
+                        add_new_node_and_label_it(machine, mark_for_ocs_label=ocs_nodes)
+                    )
             else:
                 if config.ENV_DATA.get("rhel_workers"):
                     node_type = constants.RHEL_OS

@@ -156,7 +156,7 @@ class BenchmarkOperator(object):
         """
         log.info("Deploy the benchmark-operator project")
         try:
-            bo_image = "quay.io/ocsci/benchmark-operator:testing"
+            bo_image = "quay.io/cloud-bulldozer/benchmark-operator:latest"
             if config.DEPLOYMENT.get("disconnected"):
                 bo_image = mirror_image(bo_image)
             run(

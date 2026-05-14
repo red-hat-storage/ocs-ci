@@ -5,7 +5,7 @@ metadata:
 spec:
   imageTagMirrors:
   - mirrors:
-    - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/isf-data-foundation-catalog
+    - cp.stg.icr.io/cp/df/isf-data-foundation-catalog
     source: icr.io/cpopen/isf-data-foundation-catalog
   mirrorSourcePolicy:
     AllowContactingSource 0

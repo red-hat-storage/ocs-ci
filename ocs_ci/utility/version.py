@@ -72,6 +72,7 @@ VERSION_4_18 = get_semantic_version("4.18", True)
 VERSION_4_19 = get_semantic_version("4.19", True)
 VERSION_4_20 = get_semantic_version("4.20", True)
 VERSION_4_21 = get_semantic_version("4.21", True)
+VERSION_4_22 = get_semantic_version("4.22", True)
 
 # Fusion version constants
 VERSION_2_11 = get_semantic_version("2.11", True)
@@ -388,12 +389,13 @@ def get_volsync_operator_version(namespace=constants.SUBMARINER_OPERATOR_NAMESPA
             return csv["spec"]["version"]
 
 
-def get_ocp_versions_rosa(yaml_format=False):
+def get_ocp_versions_rosa(yaml_format=False, hosted_cp=False):
     """
     Get the list of available versions for ROSA.
 
     Args:
         yaml_format (bool): Use yaml output from rosa command and parse it as yaml.
+        hosted_cp (bool): List versions for ROSA Hosted Control Plane (HCP) clusters.
 
     Returns:
         str: a list of available versions for ROSA in string format
@@ -401,8 +403,9 @@ def get_ocp_versions_rosa(yaml_format=False):
     from ocs_ci.utility.utils import exec_cmd
 
     yaml_arg = "-o yaml" if yaml_format else ""
+    hosted_cp_arg = "--hosted-cp" if hosted_cp else ""
 
-    cmd = f"rosa list versions {yaml_arg}"
+    cmd = f"rosa list versions {yaml_arg} {hosted_cp_arg}".strip()
     output = exec_cmd(cmd, timeout=1800).stdout.decode()
     if yaml_format:
         return yaml.safe_load(output)
@@ -459,18 +462,19 @@ def get_next_ocp_version_rosa(version):
     return str(next_version)
 
 
-def get_latest_rosa_ocp_version(version):
+def get_latest_rosa_ocp_version(version, hosted_cp=False):
     """
     Returns latest z-stream version available for ROSA.
 
     Args:
         version (str): OCP version in format `x.y`
+        hosted_cp (bool): Check versions for ROSA Hosted Control Plane (HCP) clusters.
 
     Returns:
         str: Latest available z-stream version
 
     """
-    output = get_ocp_versions_rosa()
+    output = get_ocp_versions_rosa(hosted_cp=hosted_cp)
     rosa_version = None
     for line in output.splitlines():
         match = re.search(f"^{version}\\.(\\d+) ", line)
@@ -478,10 +482,11 @@ def get_latest_rosa_ocp_version(version):
             rosa_version = match.group(0).rstrip()
             break
     if rosa_version is None:
+        cluster_type = "ROSA HCP" if hosted_cp else "ROSA"
         error_msg = (
-            f"Could not find any version of {version} available for ROSA. "
+            f"Could not find any version of {version} available for {cluster_type}. "
             f"Try providing an older version of OCP with --ocp-version. "
-            f"Latest OCP versions available for ROSA are: \n"
+            f"Latest OCP versions available for {cluster_type} are: \n"
         )
         for i in range(3):
             error_msg += f"{output.splitlines()[i + 1]}"
@@ -568,3 +573,26 @@ def get_semantic_running_odf_version():
     odf_full_version = get_running_odf_version()
     odf_version = get_semantic_version(version=odf_full_version)
     return odf_version
+
+
+def extract_version_from_csv_name(csv_name):
+    """
+    Extract version string from CSV name.
+
+    Args:
+        csv_name (str): CSV name in the format 'ocs-operator.v<version>-<suffix>'
+                       or 'odf-operator.v<version>-<suffix>'
+                       Example: 'ocs-operator.v4.21.2-rhodf' or 'odf-operator.v4.22.0-rhodf'
+
+    Returns:
+        str: Version string (e.g., '4.21.2')
+
+    Raises:
+        IndexError: If CSV name format doesn't match expected pattern
+        ValueError: If version cannot be extracted from CSV name
+
+    """
+    # CSV format: ocs-operator.v<version>-<suffix> or odf-operator.v<version>-<suffix>
+    # Extract the version part between 'v' and the last '-'
+    version_part = csv_name.split(".v")[1].rsplit("-", 1)[0]
+    return version_part

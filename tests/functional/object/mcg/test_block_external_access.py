@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
+    skipif_mcg_only,
     post_upgrade,
 )
 from ocs_ci.ocs import constants, ocp
@@ -92,6 +93,7 @@ def save_original_state(request):
 @pytest.mark.usefixtures("save_original_state")
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@skipif_mcg_only  # Workaround for https://github.com/red-hat-storage/ocs-ci/issues/14813
 @post_upgrade
 class TestBlockExternalAccess(MCGTest):
     @pytest.fixture(scope="class", autouse=True)

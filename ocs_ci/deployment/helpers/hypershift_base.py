@@ -263,6 +263,7 @@ def get_hosted_cluster_type(cluster_name=None):
 
     """
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
     config.switch_to_provider()
     ocp_hosted_cluster_obj = OCP(
         kind=constants.HOSTED_CLUSTERS,
@@ -281,22 +282,19 @@ def get_current_nodepool_size(name):
         name (str): name of the cluster
 
     Returns:
-         str: number of nodes in the nodepool
+         str: total number of current nodes across all nodepools for the cluster
 
     """
 
     logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
-    cmd = f"get --namespace {constants.CLUSTERS_NAMESPACE} nodepools | awk '$1==\"{name}\" {{print $4}}'"
     with config.RunWithProviderConfigContextIfAvailable():
-        out = OCP().exec_oc_cmd(
-            command=cmd,
-            cluster_config=config,
-            shell=True,
-            out_yaml_format=False,
-            silent=True,
-        )
-
-    return out.strip() if out else ""
+        nodepools = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE).get()
+    total = sum(
+        item.get("status", {}).get("replicas", 0)
+        for item in nodepools.get("items", [])
+        if item.get("spec", {}).get("clusterName") == name
+    )
+    return str(total)
 
 
 def get_desired_nodepool_size(name: str):
@@ -307,23 +305,19 @@ def get_desired_nodepool_size(name: str):
         name (str): of the cluster
 
     Returns:
-        int: number of nodes in the nodepool
+        str: total number of desired nodes across all nodepools for the cluster
 
     """
 
     logger.info(f"Getting desired nodepool of HyperShift hosted cluster {name}")
     with config.RunWithProviderConfigContextIfAvailable():
-        out = OCP().exec_oc_cmd(
-            command=f"get --namespace {constants.CLUSTERS_NAMESPACE} nodepools | awk '$1==\"{name}\" {{print $3}}'",
-            cluster_config=config,
-            shell=True,
-            out_yaml_format=False,
-            silent=True,
-        )
-    if not out:
-        return ""
-
-    return out.strip() if out else ""
+        nodepools = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE).get()
+    total = sum(
+        item.get("spec", {}).get("replicas", 0)
+        for item in nodepools.get("items", [])
+        if item.get("spec", {}).get("clusterName") == name
+    )
+    return str(total)
 
 
 def worker_nodes_deployed(name: str):
@@ -382,17 +376,13 @@ def get_hosted_cluster_kubeconfig_name(name: str):
     """
 
     logger.info(f"Getting kubeconfig for HyperShift hosted cluster {name}")
-    cmd = f"get --namespace {constants.CLUSTERS_NAMESPACE} hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
-
     with config.RunWithProviderConfigContextIfAvailable():
-        out = OCP().exec_oc_cmd(
-            command=cmd,
-            cluster_config=config,
-            shell=True,
-            out_yaml_format=False,
-            silent=True,
-        )
-    return out.strip() if out else ""
+        data = OCP(
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=constants.CLUSTERS_NAMESPACE,
+            resource_name=name,
+        ).get()
+    return data.get("status", {}).get("kubeconfig", {}).get("name", "")
 
 
 def delete_hcp_podman_container():
@@ -712,6 +702,7 @@ class HyperShiftBase:
         disable_default_sources=None,
         data_replication_separation=False,
         auto_repair=True,
+        hcp_image=None,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -734,6 +725,7 @@ class HyperShiftBase:
             data_replication_separation (bool): If the deployment uses data replication separation
                 then add additional network
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
+            hcp_image (str): OCP image url for HCP cluster
 
         Returns:
             str: Name of the hosted cluster
@@ -750,14 +742,19 @@ class HyperShiftBase:
         pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
-        if not ocp_version:
-            provider_version = get_ocp_version()
-            if "nightly" in provider_version:
-                index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
-            else:
-                index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+        if hcp_image:
+            index_image = hcp_image
         else:
-            index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
+            if not ocp_version:
+                provider_version = get_ocp_version()
+                if "nightly" in provider_version:
+                    index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
+                else:
+                    index_image = (
+                        f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+                    )
+            else:
+                index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
 
         if not name:
             name = "hcp-" + datetime.utcnow().strftime("%f")
@@ -820,7 +817,19 @@ class HyperShiftBase:
             create_hcp_cluster_cmd += " --olm-disable-default-sources"
 
         logger.info("Creating HyperShift hosted cluster")
-        exec_cmd(create_hcp_cluster_cmd)
+        try:
+            exec_cmd(create_hcp_cluster_cmd)
+        except CommandFailed as e:
+            if "x509: certificate signed by unknown authority" in str(
+                e
+            ) and "hostedclusters.hypershift.openshift.io" in str(e):
+                logger.warning(
+                    "HyperShift webhook TLS error detected — applying CA bundle fix and retrying"
+                )
+                fix_hypershift_webhook_ca_bundle()
+                exec_cmd(create_hcp_cluster_cmd)
+            else:
+                raise
 
         return name
 
@@ -834,6 +843,7 @@ class HyperShiftBase:
         infra_availability_policy=None,
         disable_default_sources=None,
         auto_repair=True,
+        hcp_image=None,
     ):
         """
         Create agent hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -851,6 +861,7 @@ class HyperShiftBase:
                 available quorum 1 in pdb.
             disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
+            hcp_image (str): OCP image url for HCP cluster
 
         Returns:
             str: Name of the hosted cluster
@@ -861,7 +872,10 @@ class HyperShiftBase:
         pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
-        index_image = resolve_ocp_image(ocp_version)
+        if hcp_image:
+            index_image = hcp_image
+        else:
+            index_image = resolve_ocp_image(ocp_version)
 
         if not name:
             name = "hcp-" + datetime.now().strftime("%f")
@@ -917,7 +931,19 @@ class HyperShiftBase:
             create_hcp_cluster_cmd += " --olm-disable-default-sources"
 
         logger.info("Creating HyperShift hosted cluster")
-        exec_cmd(create_hcp_cluster_cmd)
+        try:
+            exec_cmd(create_hcp_cluster_cmd)
+        except CommandFailed as e:
+            if "x509: certificate signed by unknown authority" in str(
+                e
+            ) and "hostedclusters.hypershift.openshift.io" in str(e):
+                logger.warning(
+                    "HyperShift webhook TLS error detected — applying CA bundle fix and retrying"
+                )
+                fix_hypershift_webhook_ca_bundle()
+                exec_cmd(create_hcp_cluster_cmd)
+            else:
+                raise
 
         return name
 
@@ -933,9 +959,9 @@ class HyperShiftBase:
 
         """
 
-        timeout_pods_wait_min = 40
-        timeout_hosted_cluster_completed_min = 40
-        timeout_worker_nodes_ready_min = 60
+        timeout_pods_wait_min = 30
+        timeout_hosted_cluster_completed_min = 20
+        timeout_worker_nodes_ready_min = 30
 
         namespace = f"clusters-{name}"
         logger.info(
@@ -1075,12 +1101,21 @@ class HyperShiftBase:
             name (str): name of the cluster
 
         Returns:
-            str: progress status; 'Completed' is expected in most cases
+            str: progress status; 'Completed' is expected in most cases, '' if cluster not found
 
         """
 
-        cmd = f"oc get --namespace {constants.CLUSTERS_NAMESPACE} hostedclusters | awk '$1==\"{name}\" {{print $4}}'"
-        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                data = OCP(
+                    kind=constants.HOSTED_CLUSTERS,
+                    namespace=constants.CLUSTERS_NAMESPACE,
+                    resource_name=name,
+                ).get()
+            history = data.get("status", {}).get("version", {}).get("history", [])
+            return history[0].get("state", "") if history else ""
+        except CommandFailed:
+            return ""
 
     def save_mirrors_list_to_file(self):
         """
@@ -1290,6 +1325,67 @@ class HyperShiftBase:
             return False
         logger.info(cmd_res.stdout.decode("utf-8").splitlines())
         return True
+
+
+def fix_hypershift_webhook_ca_bundle():
+    """
+    Fix HyperShift webhook configurations when the CA bundle is missing or mismatched,
+    causing 'x509: certificate signed by unknown authority' errors during hosted cluster
+    creation.
+
+    Patches all HyperShift-related MutatingWebhookConfiguration and ValidatingWebhookConfiguration
+    resources (including 'hypershift.openshift.io' and 'nodepools.hypershift.openshift.io')
+    with the CA bundle from the 'webhook-serving-ca' secret in the 'hypershift' namespace.
+
+    This workaround addresses a known race condition where the HyperShift operator
+    creates or rotates its webhook-serving-ca after the webhook configurations are
+    registered, leaving the caBundle field stale or empty.
+    """
+    logger.info(
+        "Fixing HyperShift webhook CA bundle mismatch — patching all HyperShift "
+        "MutatingWebhookConfiguration and ValidatingWebhookConfiguration resources"
+    )
+    secret_obj = OCP(kind="Secret", namespace=constants.HYPERSHIFT_NAMESPACE)
+    secret_data = secret_obj.get(resource_name="webhook-serving-ca")
+    ca_bundle = secret_data["data"]["ca.crt"]
+
+    # List of HyperShift webhook configurations to patch
+    webhook_names = [
+        "hypershift.openshift.io",
+        "nodepools.hypershift.openshift.io",
+    ]
+
+    for webhook_kind in (
+        "mutatingwebhookconfiguration",
+        "validatingwebhookconfiguration",
+    ):
+        webhook_obj = OCP(kind=webhook_kind)
+        for webhook_name in webhook_names:
+            try:
+                wh_data = webhook_obj.get(resource_name=webhook_name)
+            except Exception as e:
+                logger.warning(
+                    f"No {webhook_kind} named '{webhook_name}' found, skipping. Error: {e}"
+                )
+                continue
+            num_webhooks = len(wh_data.get("webhooks", []))
+            patch = [
+                {
+                    "op": "replace",
+                    "path": f"/webhooks/{i}/clientConfig/caBundle",
+                    "value": ca_bundle,
+                }
+                for i in range(num_webhooks)
+            ]
+            webhook_obj.patch(
+                resource_name=webhook_name,
+                params=patch,
+                format_type="json",
+            )
+            logger.info(
+                f"Patched {num_webhooks} webhook(s) in {webhook_kind}/{webhook_name}"
+            )
+    logger.info("HyperShift webhook CA bundle fix applied successfully")
 
 
 def create_cluster_dir(cluster_name):

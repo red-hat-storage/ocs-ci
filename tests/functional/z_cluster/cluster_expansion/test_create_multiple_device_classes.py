@@ -12,6 +12,10 @@ from ocs_ci.framework.testlib import (
     skipif_bm,
     skipif_hci_provider_or_client,
     polarion_id,
+    ui,
+    black_squad,
+    skipif_external_mode,
+    skipif_mcg_only,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
@@ -21,6 +25,7 @@ from ocs_ci.ocs.device_classes import (
     verify_deviceclasses_steps,
     add_disks_matching_lvs_size,
     get_default_lvs_obj,
+    verify_available_pvs_for_deviceclass,
 )
 from ocs_ci.ocs.resources.pv import (
     wait_for_pvs_in_lvs_to_reach_status,
@@ -32,12 +37,14 @@ from ocs_ci.ocs.resources.storage_cluster import (
     add_new_deviceset_in_storagecluster,
     get_storage_cluster,
     get_first_sc_name_from_storagecluster,
+    get_deviceset_name_per_deviceclass,
 )
 from ocs_ci.helpers.helpers import (
     create_ceph_block_pool,
     create_rbd_deviceclass_storageclass,
 )
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 
 log = logging.getLogger(__name__)
@@ -48,6 +55,8 @@ log = logging.getLogger(__name__)
 @skipif_no_lso
 @skipif_bm
 @skipif_hci_provider_or_client
+@skipif_external_mode
+@skipif_mcg_only
 class TestMultipleDeviceClasses(ManageTest):
     """
     Automate the multiple device classes tests
@@ -250,3 +259,134 @@ class TestMultipleDeviceClasses(ManageTest):
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
+
+
+@brown_squad
+@ui
+@black_squad
+@ignore_leftovers
+@skipif_no_lso
+@skipif_bm
+@skipif_hci_provider_or_client
+@skipif_external_mode
+@skipif_mcg_only
+class TestMultipleDeviceClassesUI(ManageTest):
+    """
+    Automate the multiple device classes tests via UI
+
+    """
+
+    @pytest.fixture(autouse=True)
+    def init_sanity(self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory):
+        """
+        Initialize Sanity instance
+
+        """
+        self.pvc_factory = pvc_factory
+        self.pod_factory = pod_factory
+        self.bucket_factory = bucket_factory
+        self.rgw_bucket_factory = rgw_bucket_factory
+        self.sanity_helpers = Sanity()
+
+        self.old_deviceset_name_per_deviceclass = get_deviceset_name_per_deviceclass()
+        log.info(
+            f"Old deviceset name per deviceclass: {self.old_deviceset_name_per_deviceclass}"
+        )
+        self.available_pvs_count = None
+        self.new_device_class_name = None
+
+    def verify_new_deviceset_pvcs(self):
+        """
+        Wait for the new deviceset PVCs to reach Bound status after adding a new device class
+
+        """
+        new_deviceset_name_per_deviceclass = get_deviceset_name_per_deviceclass()
+        # Get the new deviceset name by comparing the old and new deviceset name per device class
+        deviceset_name = None
+        for deviceset_name, deviceclass in new_deviceset_name_per_deviceclass.items():
+            if deviceclass not in self.old_deviceset_name_per_deviceclass.values():
+                break
+        assert (
+            deviceset_name
+        ), "Failed to get the new deviceset name for the new device class"
+
+        assert deviceclass == self.new_device_class_name, (
+            f"The new device class name in the deviceset {deviceclass} doesn't match the expected new "
+            f"device class name {self.new_device_class_name}",
+        )
+        log.info(
+            f"The new deviceset {deviceset_name} with the new device class {deviceclass} was "
+            f"added successfully"
+        )
+
+        log.info("Wait for the new deviceset PVCs to reach Bound status")
+        wait_for_pvcs_in_deviceset_to_reach_status(
+            deviceset_name, self.available_pvs_count, constants.STATUS_BOUND
+        )
+
+    def post_deviceclass_checks(self, verify_new_deviceset_pvcs=True):
+        """
+        Run the verification steps after adding a new device class:
+        1. Wait for the new deviceset PVCs to reach the Bound state.
+        2. Wait for the storage cluster to be ready.
+        3. Check the verification steps as defined in the function 'verify_deviceclasses_steps'.
+        4. Check the cluster and Ceph health.
+        5. Check basic cluster functionality by creating some resources.
+
+        Args:
+            verify_new_deviceset_pvcs (bool): Whether to verify the new deviceset PVCs. Default is True.
+
+        """
+        log.info("Verification steps after adding a new deviceclass...")
+        if verify_new_deviceset_pvcs:
+            self.verify_new_deviceset_pvcs()
+        sc_obj = get_storage_cluster()
+        sc_obj.wait_for_resource(
+            condition=constants.STATUS_READY,
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            column="PHASE",
+            timeout=360,
+            sleep=20,
+        )
+
+        # Continue with the rest of the verification steps as defined in the function
+        # 'verification_steps_after_adding_new_deviceclass'
+        verify_deviceclasses_steps()
+        log.info("Checking the cluster and Ceph health")
+        self.sanity_helpers.health_check(cluster_check=True, tries=40)
+        log.info("Check basic cluster functionality by creating some resources")
+        self.sanity_helpers.create_resources(
+            self.pvc_factory,
+            self.pod_factory,
+            self.bucket_factory,
+            self.rgw_bucket_factory,
+        )
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Check that the ceph health is OK
+
+        """
+
+        def finalizer():
+            log.info("Wait for the ceph health to be OK")
+            ceph_health_check(tries=20)
+
+        request.addfinalizer(finalizer)
+
+    @tier2
+    @polarion_id("OCS-7512")
+    def test_add_new_device_class_ui(self, setup_ui_session):
+        """
+        The test will perform the following steps:
+        1. Verify that there are available PVs for attaching a new device class.
+        2. Navigate to the 'Attach Storage' form in the UI.
+        3. Fill the form with the default values and submit it, which will add a new device class.
+        4. Run the verification steps as defined in the method 'post_deviceclass_checks'.
+
+        """
+        self.available_pvs_count = verify_available_pvs_for_deviceclass()
+        attach_storage = PageNavigator().nav_to_attach_storage_page()
+        self.new_device_class_name = attach_storage.send_form_with_default_values()
+        self.post_deviceclass_checks()

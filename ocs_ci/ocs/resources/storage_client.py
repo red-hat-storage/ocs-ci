@@ -81,9 +81,7 @@ class StorageClient:
         if not is_available:
             if catalog_yaml:
 
-                catalog_data = templating.load_yaml(
-                    constants.PROVIDER_MODE_CATALOGSOURCE
-                )
+                catalog_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
                 log.info(
                     f"Updating image details for client subscription: {client_subcription_image}"
                 )
@@ -95,7 +93,7 @@ class StorageClient:
                 self.ocp_obj.exec_oc_cmd(f"apply -f {catalog_data_yaml.name}")
 
                 catalog_source = CatalogSource(
-                    resource_name=constants.OCS_CATALOG_SOURCE_NAME,
+                    resource_name=catalog_data["metadata"]["name"],
                     namespace=constants.MARKETPLACE_NAMESPACE,
                 )
                 # Wait for catalog source is ready

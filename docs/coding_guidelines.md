@@ -92,13 +92,6 @@ def my_example(arg1, arg2=10):
     pass
 ```
 
-* **Logging**: let the logger format log message for you:
+* **Logging**
 
-```python
-logger.info("My message %s", variable)  # No usage of % after string!
-# This is still under consideration. We can set the style of logger
-# format to use {} instead %s which is possible from Python 3.2.
-```
-
-Here is the [Python documentation](https://docs.python.org/3/howto/logging-cookbook.html#use-of-alternative-formatting-styles)
-for Logger Styles.
+See the [Logging Guide](logging_guide.md) for comprehensive logging best practices and guidelines.

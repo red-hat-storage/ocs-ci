@@ -17,11 +17,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_noobaa_external_pgsql,
 )
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.helpers.helpers import (
-    craft_s3_command,
-)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
+    craft_s3_command,
     change_versions_creation_date_in_noobaa_db,
     craft_s3cmd_command,
     create_multipart_upload,

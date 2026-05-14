@@ -315,6 +315,7 @@ class InfraHealthOverview(PageNavigator):
 
         time.sleep(5)
         logger.info("Clicking silence button")
+        self.take_screenshot("silence_alerts_page")
         self.do_click(self.validation_loc["silence_popup_button"])
 
     def unsilence_alerts(self):
@@ -322,6 +323,7 @@ class InfraHealthOverview(PageNavigator):
         This method is necessary to unsilence alerts.
         """
         logger.info("Unsilencing alerts")
+        self.take_screenshot("unsilence_alerts_page")
         self.do_click(self.validation_loc["unsilence_alerts"])
 
     def unsilence_all_alerts(self):

@@ -10,7 +10,7 @@ log = getLogger(__name__)
 class JiraHelper:
     """
     Simple Jira integration for OCS-CI.
-    Requires a dict with keys: url, token.
+    Requires a dict with keys: url, username, password.
     """
 
     def __init__(self):
@@ -31,25 +31,28 @@ class JiraHelper:
                 )
 
         self.url = jira_auth["url"]
-        self.token = jira_auth["token"]
+        self.username = jira_auth["username"]
+        self.password = jira_auth["password"]
         self.visibility = jira_auth.get(
             "visibility", {"type": "group", "value": "Red Hat Employee"}
         )
 
         log.debug(f"Initializing Jira: {self.url}")
-        self.jira = Jira(url=self.url, token=self.token, cloud=True)
+        self.jira = Jira(
+            url=self.url, username=self.username, password=self.password, cloud=True
+        )
 
     @staticmethod
     def _load_from_file(path: str) -> dict:
         """
         Load an INI config file with a [DEFAULT] section
-        containing url, token and optionally other values.
+        containing url, username, password and optionally other values.
 
         Args:
             path (str): Path to the INI config file
 
         Returns:
-            dict: A dictionary containing the URL and token for the Jira instance
+            dict: A dictionary containing the URL, username and password for the Jira instance
 
         """
         config = configparser.ConfigParser()
@@ -59,7 +62,8 @@ class JiraHelper:
 
         return {
             "url": section["url"],
-            "token": section["token"],
+            "username": section["username"],
+            "password": section["password"],
         }
 
     def get_issue(self, issue_key: str) -> dict:

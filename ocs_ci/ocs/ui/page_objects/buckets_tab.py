@@ -485,7 +485,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
                 try:
                     dialog = self.driver.find_element(
-                        By.CSS_SELECTOR, ".pf-v5-c-modal-box"
+                        By.CSS_SELECTOR, "[data-ouia-component-type*='ModalContent']"
                     )
                     dialog.click()
                     time.sleep(0.5)

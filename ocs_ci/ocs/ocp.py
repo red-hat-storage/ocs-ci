@@ -1635,7 +1635,11 @@ def get_all_resource_of_kind_containing_string(search_string, kind):
     """
 
     resource_list = []
-    for resource in OCP(kind=kind).get().get("items"):
+    for resource in (
+        OCP(kind=kind, namespace=config.ENV_DATA["cluster_namespace"])
+        .get()
+        .get("items")
+    ):
         if search_string in resource["metadata"]["name"]:
             resource_list.append(resource.get("metadata").get("name"))
     return resource_list
@@ -1991,20 +1995,21 @@ def get_all_cluster_operators():
     return operator_names
 
 
-def verify_cluster_operator_status(cluster_operator):
+def verify_cluster_operator_status(cluster_operator, skip_tls_verify=False):
     """
     Checks if cluster operator status is degraded or progressing,
     as sign that upgrade not yet completed
 
     Args:
         cluster_operator (str): OCP cluster operator name
+        skip_tls_verify (bool): True if allow skipping TLS verification
 
     Returns:
         bool: True if cluster operator status is valid, False if cluster operator status
         is "degraded" or "progressing"
 
     """
-    ocp = OCP(kind="clusteroperators")
+    ocp = OCP(kind="clusteroperators", skip_tls_verify=skip_tls_verify)
     operator_data = ocp.get(
         resource_name=f"{cluster_operator} -o json", out_yaml_format=False
     )

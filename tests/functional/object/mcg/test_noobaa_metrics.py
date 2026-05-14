@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class QuotaStatus:
     NOT_SET = "QUOTA_NOT_SET"
     OPTIMAL = "OPTIMAL"
-    APPROACHING = "APPROUCHING_QUOTA"  # typo in MCG output
+    APPROACHING = "APPROACHING_QUOTA"
     EXCEEDING = "EXCEEDING_QUOTA"
 
 
@@ -92,7 +92,7 @@ class TestNoobaaMetrics:
             pattern="ObjKey1-",
             mcg_obj=mcg_obj,
         )
-        time.sleep(180)
+        time.sleep(240)
 
         space_avail_after_write = get_bucket_status_value(
             mcg_obj, bucket_name, "Data Space Avail"

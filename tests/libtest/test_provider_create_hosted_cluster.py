@@ -28,7 +28,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import ClusterNotFoundException, CommandFailed
 from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
 from ocs_ci.utility.utils import (
     get_latest_release_version,
@@ -873,3 +873,57 @@ class TestAWSHCPNetworkRouting:
             pytest.skip("Could not create AWS HCP instance")
 
         aws_hcp.setup_and_verify_network(nodeport=constants.CEPH_NODE_PORT)
+
+
+@libtest
+@purple_squad
+class TestAWSHCPDestroy:
+    """
+    Test class for destroying AWS HCP clusters and cleaning up resources.
+    """
+
+    @aws_platform_required
+    def test_destroy_first_aws_hcp_cluster(self):
+        """
+        Destroy the first AWS HCP client cluster and clean up all associated
+        resources on both AWS and the management cluster.
+
+        destroy_aws_hcp_cluster() handles:
+        1. Destroy cluster via hypershift CLI
+        2. Verify/fallback infra cleanup
+        3. Manual VPC cleanup if needed
+        4. IAM roles and OIDC provider cleanup
+        5. S3 OIDC documents cleanup
+        6. VPC peering and routing cleanup
+        7. HostedCluster secrets cleanup
+        8. Management cluster resources (HostedCluster CR, NodePool CRs, namespace)
+        """
+        aws_hcp_clusters = _get_aws_hcp_cluster_names()
+        if not aws_hcp_clusters:
+            pytest.skip("No AWS HCP clusters configured")
+
+        cluster_name = aws_hcp_clusters[0]
+        logger.info(f"Destroying AWS HCP cluster: {cluster_name}")
+
+        aws_hcp = _get_aws_hcp_instance(cluster_name)
+
+        result = aws_hcp.destroy_aws_hcp_cluster()
+
+        try:
+            ocsci_config.remove_cluster_by_name(cluster_name)
+            logger.info(f"Removed '{cluster_name}' from multicluster config")
+        except (ClusterNotFoundException, KeyError, ValueError) as e:
+            logger.warning(f"Failed to remove '{cluster_name}' from config: {e}")
+
+        hc_ocp = OCP(
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=constants.CLUSTERS_NAMESPACE,
+        )
+        assert not hc_ocp.is_exist(
+            resource_name=cluster_name
+        ), f"HostedCluster '{cluster_name}' still exists after cleanup"
+
+        assert result, (
+            f"Final verification failed for '{cluster_name}': "
+            "VPC, IAM roles, or HostedCluster CR still exist in AWS/cluster"
+        )

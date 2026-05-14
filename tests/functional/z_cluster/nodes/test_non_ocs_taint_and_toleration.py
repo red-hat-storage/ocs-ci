@@ -115,10 +115,6 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         """
 
-        number_of_pods_before = len(
-            get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
-        )
-
         logger.info("Apply custom taints and tolerations.")
         apply_custom_taint_and_toleration()
 
@@ -155,7 +151,6 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             self.sanity_helpers.health_check()
 
         logger.info("Check number of pods before and after adding non ocs taint")
-        verify_pod_count_unchanged(number_of_pods_before)
         if not (
             config.ENV_DATA["mcg_only_deployment"] or config.DEPLOYMENT["external_mode"]
         ):

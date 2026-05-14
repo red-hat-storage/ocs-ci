@@ -44,10 +44,8 @@ class TestVmOperations(E2ETest):
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
         all_vm_list = self.vm_objs_def + self.vm_objs_aggr
-        log.info("All vms created successfully")
 
         for vm_obj in all_vm_list:
             vm_obj.restart()
             if check_fio_status(vm_obj):
                 log.info("FIO started after restarting VM")
-            vm_obj.stop()
