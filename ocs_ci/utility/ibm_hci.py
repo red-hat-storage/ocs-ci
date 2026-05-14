@@ -22,8 +22,8 @@ class IBMHCI(object):
         from ocs_ci.framework import config
 
         # SSH credentials for rack access
-        self.rack_ssh_username = (config.AUTH["ibm_hci"]["rack_ssh_username"],)
-        self.rack_ssh_password = (config.AUTH["ibm_hci"]["rack_ssh_password"],)
+        self.rack_ssh_username = config.AUTH["ibm_hci"]["rack_ssh_username"]
+        self.rack_ssh_password = config.AUTH["ibm_hci"]["rack_ssh_password"]
 
         # Get cluster name and construct file path
         cluster_name = config.ENV_DATA.get("cluster_name")
