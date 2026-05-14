@@ -1,11 +1,10 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import libtest, tier1
+from ocs_ci.framework.testlib import libtest, tier1, resiliency
 from ocs_ci.framework.pytest_customization.marks import skipif_ibm_power
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
-    get_all_nodes,
     get_worker_nodes,
     get_node_objs,
     wait_for_nodes_status,
@@ -17,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 @libtest
 @tier1
+@resiliency
 @skipif_ibm_power
 @pytest.mark.polarion_id("OCS-5678")
 class TestIBMHCINodeOperations:
@@ -33,24 +33,18 @@ class TestIBMHCINodeOperations:
         Setup and teardown fixture for IBM HCI node tests
 
         Ensures all nodes are powered on and ready after each test
+        Uses the IBMHCINode.restart_nodes_by_stop_and_start_teardown() method
         """
 
         def finalizer():
             logger.info("Teardown: Ensuring all nodes are powered on and ready")
             try:
                 ibm_hci = IBMHCINode()
-                nodes = get_all_nodes()
-                node_objs = get_node_objs(nodes)
-
-                # Start all nodes to ensure they're running
-                ibm_hci.start_nodes(node_objs)
-
-                # Wait for all nodes to be ready
-                wait_for_nodes_status(timeout=900, status=constants.NODE_READY)
-                logger.info("All nodes are ready after teardown")
+                # Use the teardown method from IBMHCINode class
+                ibm_hci.restart_nodes_by_stop_and_start_teardown()
             except Exception as e:
                 logger.error(f"Error during teardown: {e}")
-                raise
+                # Don't raise - we want teardown to complete even if there are errors
 
         request.addfinalizer(finalizer)
 
