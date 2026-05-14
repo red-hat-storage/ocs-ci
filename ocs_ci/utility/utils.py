@@ -7249,7 +7249,15 @@ def genereate_cred_file_rack():
     with open(file_path, "w") as f:
         json.dump(rack_dict, f, indent=2)
     log.info(f"Rack details saved to {file_path}")
-    with open(file_path) as f:
-        log.info(f"Content of {file_path}:\n{f.read()}")
+
+    # Log summary without exposing credentials
+    num_racks = len(rack_dict)
+    total_nodes = sum(
+        len(rack_data.get("nodes", {})) for rack_data in rack_dict.values()
+    )
+    log.info(
+        f"Rack details summary: {num_racks} rack(s), {total_nodes} node(s) configured. "
+        f"File location: {file_path}"
+    )
 
     return rack_dict
