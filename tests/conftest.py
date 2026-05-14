@@ -1283,10 +1283,17 @@ def storageclass_factory_fixture(
         return sc_obj
 
     def finalizer():
+        """Run teardown for every factory-created StorageClass instance."""
         for instance in instances:
             _delete_storageclass_with_retry(instance)
 
     def _delete_storageclass_with_retry(instance, max_attempts=3, wait_timeout=20):
+        """
+        Delete a StorageClass while tolerating controller-driven recreation.
+
+        Clears StorageClient ownerReferences when present, deletes the object,
+        and retries when a controller recreates it before the delete completes.
+        """
         for attempt in range(max_attempts):
             try:
                 sc_data = instance.ocp.get(resource_name=instance.name)
