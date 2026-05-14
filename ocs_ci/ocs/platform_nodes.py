@@ -3998,7 +3998,7 @@ class IBMHCINode(object):
 
         for rack_serial, rack_data in self.ibm_hci.rack_details.items():
             nodes_dict = rack_data.get("nodes", {})
-            for node_role, node_info in nodes_dict.items():
+            for node_role, _node_info in nodes_dict.items():
                 # Construct full node name
                 node_name = f"{node_role}.{rack_serial}.fusion.tadn.ibm.com"
                 try:
