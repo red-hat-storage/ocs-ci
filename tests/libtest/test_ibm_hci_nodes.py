@@ -43,8 +43,9 @@ class TestIBMHCINodeOperations:
                 # Use the teardown method from IBMHCINode class
                 ibm_hci.restart_nodes_by_stop_and_start_teardown()
             except Exception as e:
-                logger.error(f"Error during teardown: {e}")
-                # Don't raise - we want teardown to complete even if there are errors
+                logger.error(f"Critical error during teardown: {e}")
+                # Re-raise to propagate teardown failures to test harness
+                pytest.fail(f"Teardown failed: {e}")
 
         request.addfinalizer(finalizer)
 
