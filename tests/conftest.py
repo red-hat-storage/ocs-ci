@@ -1286,6 +1286,9 @@ def storageclass_factory_fixture(
         """
         Delete the storageclass with retry
         """
+        from ocs_ci.ocs.resources.storage_cluster import (
+            patch_storageclass_ocs_external_label,
+        )
 
         @retry((CommandFailed, TimeoutExpiredError), tries=3, delay=5, backoff=2)
         def delete_storageclass_with_retry(sc_instance):
@@ -1300,6 +1303,7 @@ def storageclass_factory_fixture(
                 TimeoutExpiredError: If wait_for_delete times out
             """
             log.info(f"Attempting to delete storageclass: {sc_instance.name}")
+            patch_storageclass_ocs_external_label(sc_instance.name)
             sc_instance.delete()
             sc_instance.ocp.wait_for_delete(sc_instance.name, timeout=120)
             log.info(f"Successfully deleted storageclass: {sc_instance.name}")

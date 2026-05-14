@@ -1402,8 +1402,12 @@ def delete_storageclasses(sc_objs):
     Returns:
         bool: True if deletion is successful
     """
+    from ocs_ci.ocs.resources.storage_cluster import (
+        patch_storageclass_ocs_external_label,
+    )
 
     for sc in sc_objs:
+        patch_storageclass_ocs_external_label(sc.name)
         logger.info("Deleting StorageClass with name %s", sc.name)
         sc.delete()
     return True
