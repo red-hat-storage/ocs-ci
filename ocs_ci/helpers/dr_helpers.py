@@ -423,7 +423,7 @@ def check_mirroring_status_ok(
 
         if (
             "ocs-storagecluster-cephblockpool" not in cephbpradosns
-            or "replicated-metadata-pool" not in cephbpradosns
+            and "replicated-metadata-pool" not in cephbpradosns
         ):
             cephblockpool_rns_names = [
                 cephbprns_data["metadata"]["name"]
