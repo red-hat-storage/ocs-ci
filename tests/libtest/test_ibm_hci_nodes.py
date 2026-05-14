@@ -190,10 +190,10 @@ class TestIBMHCINodeOperations:
         logger.info(f"Stopping nodes: {node_names}")
         ibm_hci.stop_nodes(test_nodes)
 
-        # Wait for nodes to be NotReady
+        # Wait for nodes to be NotReady (multiple nodes take longer)
         logger.info(f"Waiting for nodes to be NotReady: {node_names}")
         wait_for_nodes_status(
-            node_names=node_names, status=constants.NODE_NOT_READY, timeout=600
+            node_names=node_names, status=constants.NODE_NOT_READY, timeout=900
         )
         logger.info(f"All nodes are NotReady: {node_names}")
 
