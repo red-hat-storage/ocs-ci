@@ -3946,7 +3946,9 @@ class IBMHCINode(object):
 
         if wait:
             wait_for_nodes_status(
-                node_names=[n.name for n in nodes], status=constants.NODE_READY
+                node_names=[n.name for n in nodes],
+                status=constants.NODE_READY,
+                timeout=300,
             )
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
@@ -3977,7 +3979,7 @@ class IBMHCINode(object):
 
         # Wait for nodes to be ready
         wait_for_nodes_status(
-            node_names=[n.name for n in nodes], status=constants.NODE_READY
+            node_names=[n.name for n in nodes], status=constants.NODE_READY, timeout=900
         )
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
