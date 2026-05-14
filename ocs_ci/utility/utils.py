@@ -1,3 +1,4 @@
+import binascii
 import tempfile
 from datetime import datetime, timedelta
 from functools import reduce
@@ -7200,30 +7201,58 @@ def genereate_cred_file_rack():
                         )
                         secret_data = secret_obj.get()
 
-                        if secret_data:
-                            data = secret_data.get("data", {})
-                            # Decode base64 encoded username and password
-                            if (
-                                "isfmgmtUserName" in data
-                                and "isfmgmtUserPasswrd" in data
-                            ):
-                                username_encoded = data.get("isfmgmtUserName")
-                                password_encoded = data.get("isfmgmtUserPasswrd")
+                        if not secret_data:
+                            log.error(
+                                f"Failed to retrieve secret {secret_name} for node {ocp_role}: "
+                                "Secret data is empty"
+                            )
+                            raise ValueError(f"Empty secret data for {secret_name}")
 
-                                # Decode from base64
-                                username = base64.b64decode(username_encoded).decode(
-                                    "utf-8"
-                                )
-                                password = base64.b64decode(password_encoded).decode(
-                                    "utf-8"
-                                )
+                        data = secret_data.get("data", {})
 
-                                node_entry["username"] = username
-                                node_entry["password"] = password
+                        # Verify required fields exist
+                        if (
+                            "isfmgmtUserName" not in data
+                            or "isfmgmtUserPasswrd" not in data
+                        ):
+                            log.error(
+                                f"Secret {secret_name} for node {ocp_role} is missing required fields: "
+                                f"isfmgmtUserName={'present' if 'isfmgmtUserName' in data else 'MISSING'}, "
+                                f"isfmgmtUserPasswrd={'present' if 'isfmgmtUserPasswrd' in data else 'MISSING'}"
+                            )
+                            raise KeyError(
+                                f"Secret {secret_name} missing required credential fields"
+                            )
+
+                        username_encoded = data.get("isfmgmtUserName")
+                        password_encoded = data.get("isfmgmtUserPasswrd")
+
+                        # Decode from base64 with error handling
+                        try:
+                            username = base64.b64decode(username_encoded).decode(
+                                "utf-8"
+                            )
+                            password = base64.b64decode(password_encoded).decode(
+                                "utf-8"
+                            )
+                        except (binascii.Error, UnicodeDecodeError) as decode_err:
+                            log.error(
+                                f"Failed to decode credentials from secret {secret_name} "
+                                f"for node {ocp_role}: {decode_err}"
+                            )
+                            raise ValueError(
+                                f"Invalid base64 encoding in secret {secret_name}"
+                            ) from decode_err
+
+                        node_entry["username"] = username
+                        node_entry["password"] = password
+
                     except Exception as e:
-                        log.warning(
-                            f"Failed to fetch secret {secret_name} for node {ocp_role}: {e}"
+                        log.error(
+                            f"Failed to fetch/decode secret {secret_name} for node {ocp_role}: {e}"
                         )
+                        # Re-raise to fail fast instead of continuing with missing credentials
+                        raise
 
                 rack_dict[rack_serial]["nodes"][ocp_role] = node_entry
 
@@ -7243,12 +7272,18 @@ def genereate_cred_file_rack():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_path = rack_dir / f"{cluster_name}_backup_{timestamp}.json"
         shutil.copy2(file_path, backup_path)
+        # Set restrictive permissions on backup (owner read/write only)
+        backup_path.chmod(0o600)
         log.info(f"Created backup of existing file: {backup_path}")
 
-    # Write to JSON file
-    with open(file_path, "w") as f:
+    # Write to JSON file with restrictive permissions
+    # Create file with owner-only read/write permissions
+    import os
+
+    fd = os.open(file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         json.dump(rack_dict, f, indent=2)
-    log.info(f"Rack details saved to {file_path}")
+    log.info(f"Rack details saved to {file_path} with restrictive permissions (0o600)")
 
     # Log summary without exposing credentials
     num_racks = len(rack_dict)
