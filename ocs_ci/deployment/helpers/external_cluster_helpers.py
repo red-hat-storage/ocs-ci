@@ -312,6 +312,37 @@ class ExternalCluster(object):
                 config.EXTERNAL_MODE["admin_keyring"]["key"] = client_admin[index + 2]
                 return
 
+    def fetch_cephadm_root_ca_cert_pem(self):
+        """
+        Return the cephadm-managed root CA (``cephadm_root_ca_cert``) from this host.
+
+        Used for Ceph 19+ when RGW TLS is signed by the cephadm CA. Runs
+        ``cephadm shell``; prefixes ``sudo`` when the SSH user is not ``root``.
+
+        Returns:
+            str: PEM text (with trailing newline).
+
+        Raises:
+            ExternalClusterExporterRunFailed: If the remote command fails or PEM is empty.
+
+        """
+        cmd = (
+            "/usr/sbin/cephadm shell -- ceph orch certmgr cert get cephadm_root_ca_cert"
+        )
+        if self.user != "root":
+            cmd = f"sudo {cmd}"
+        ret, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if ret != 0:
+            raise ExternalClusterExporterRunFailed(
+                f"cephadm_root_ca_cert fetch failed: {err}"
+            )
+        pem = _normalize_cephadm_certmgr_stdout(out)
+        if not pem:
+            raise ExternalClusterExporterRunFailed(
+                "cephadm_root_ca_cert fetch returned empty output"
+            )
+        return pem if pem.endswith("\n") else f"{pem}\n"
+
     def get_rgw_endpoint_api_port(self):
         """
         Fetches rgw endpoint api port.
@@ -1126,16 +1157,92 @@ def generate_exporter_script(use_configmap=False):
     return external_cluster_details_exporter.name
 
 
+def _normalize_cephadm_certmgr_stdout(raw_stdout):
+    text = (raw_stdout or "").strip()
+    if "BEGIN CERTIFICATE" in text or "BEGIN TRUSTED CERTIFICATE" in text:
+        return text
+    if text.startswith("{"):
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            return text
+        for key in ("certificate", "cert", "pem", "data", "ca_certificate"):
+            val = payload.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+    return text
+
+
+def _external_ceph_semantic_version_or_none():
+    """
+    Parse Ceph version from ``ceph --version`` on the default external SSH host.
+
+    Uses ``cephadm shell`` so the command runs in the cephadm environment; if that
+    fails (e.g. legacy non-cephadm layout), falls back to host ``ceph --version``.
+    """
+    try:
+        ext = get_external_cluster_instance()
+        cmd = "/usr/sbin/cephadm shell -- ceph --version"
+        if ext.user != "root":
+            cmd = f"sudo {cmd}"
+        rc, out, _ = ext.rhcs_conn.exec_cmd(cmd)
+        if rc != 0 or not (out or "").strip():
+            rc, out, _ = ext.rhcs_conn.exec_cmd("ceph --version")
+        if rc != 0:
+            return None
+        m = re.search(r"ceph\s+version\s+(\d+)\.(\d+)", out, re.I)
+        if not m:
+            return None
+        return version.get_semantic_version(
+            f"{m.group(1)}.{m.group(2)}", only_major_minor=True
+        )
+    except Exception as exc:
+        logger.debug("Could not determine external Ceph version: %s", exc)
+        return None
+
+
+def external_rgw_ca_should_use_cephadm_fetch():
+    """
+    True when external Ceph reports version >= 19.0 (cephadm certmgr path).
+    """
+    v = _external_ceph_semantic_version_or_none()
+    if v is None:
+        return False
+    return v >= version.get_semantic_version("19.0", only_major_minor=True)
+
+
+def try_embed_rgw_ca_pem_in_mcg_cli_resources(service_ca_data, sts_dict):
+    """
+    If deploy stashed ``embedded_external_rgw_ca_pem``, add it to the service-ca
+    ConfigMap and add a matching volumeMount on ``sts_dict`` (first container).
+
+    Returns:
+        bool: True if embedding was applied.
+    """
+    pem = config.EXTERNAL_MODE.get("embedded_external_rgw_ca_pem")
+    if not pem:
+        return False
+    service_ca_data.setdefault("data", {})[constants.EXTERNAL_RGW_CA_CM_KEY] = pem
+    sts_dict["spec"]["template"]["spec"]["containers"][0]["volumeMounts"].append(
+        {
+            "name": "service-ca",
+            "mountPath": constants.EXTERNAL_RGW_CA_CONTAINER_PATH,
+            "subPath": constants.EXTERNAL_RGW_CA_CM_KEY,
+        }
+    )
+    return True
+
+
 def get_and_apply_rgw_cert_ca(apply=True):
     """
-    Downloads CA Certificate of RGW if SSL is used and apply it to be trusted
-    by the OCP cluster
+    Obtain the RGW TLS CA: for external Ceph **19.0+**, fetch ``cephadm_root_ca_cert``
+    from the ``_admin`` node via SSH; otherwise download from ``rgw_cert_ca`` URL.
 
     Args:
         apply (bool): if True, the certificate is applied as trusted CA by the OCP cluster
 
     Returns:
-        str: path to the downloaded RGW Cert CA
+        str: path to the local RGW CA PEM file
 
     """
     rgw_cert_ca_path = tempfile.NamedTemporaryFile(
@@ -1144,10 +1251,33 @@ def get_and_apply_rgw_cert_ca(apply=True):
         suffix=".pem",
         delete=False,
     ).name
-    download_file(
-        config.EXTERNAL_MODE["rgw_cert_ca"],
-        rgw_cert_ca_path,
-    )
+    config.EXTERNAL_MODE.pop("embedded_external_rgw_ca_pem", None)
+
+    if external_rgw_ca_should_use_cephadm_fetch():
+        try:
+            host, user, password, ssh_key = get_external_cluster_client("_admin")
+            pem = ExternalCluster(
+                host, user, password, ssh_key
+            ).fetch_cephadm_root_ca_cert_pem()
+            with open(rgw_cert_ca_path, "w", encoding="utf-8") as pem_fd:
+                pem_fd.write(pem)
+            config.EXTERNAL_MODE["embedded_external_rgw_ca_pem"] = pem
+            logger.info(
+                "Using cephadm_root_ca_cert from external cluster (Ceph >= 19.0)"
+            )
+        except Exception as exc:
+            logger.warning(
+                "cephadm CA fetch failed (%s); falling back to rgw_cert_ca URL", exc
+            )
+            download_file(
+                config.EXTERNAL_MODE["rgw_cert_ca"],
+                rgw_cert_ca_path,
+            )
+    else:
+        download_file(
+            config.EXTERNAL_MODE["rgw_cert_ca"],
+            rgw_cert_ca_path,
+        )
     # configure the CA cert to be trusted by the OCP cluster
     if apply:
         ssl_certs.configure_trusted_ca_bundle(ca_cert_path=rgw_cert_ca_path)
@@ -1191,12 +1321,16 @@ def get_rgw_endpoint():
         raise ExternalClusterRGWEndPointMissing(err_msg)
 
 
-def get_external_cluster_client():
+def get_external_cluster_client(role=None):
     """
-    Finding the client role node IP address.
+    Resolve SSH target for an external RHCS node by role.
+
+    Args:
+        role (str or None): Node role to match in ``external_cluster_node_roles`` (e.g.
+            ``client``, ``_admin``). If None, uses ``_admin`` when multicluster else ``client``.
 
     Returns:
-        tuple: IP address, user, password of the client, ssh key
+        tuple: (ip_address, user, password, ssh_key)
 
     Raises:
         ExternalClusterCephSSHAuthDetailsMissing: In case one of SSH key or password
@@ -1212,13 +1346,13 @@ def get_external_cluster_client():
             "Either password or SSH key is missing in EXTERNAL_MODE['login'] section!"
         )
     nodes = config.EXTERNAL_MODE["external_cluster_node_roles"]
-    node_role = None
-    node_role = "_admin" if config.multicluster else "client"
+    if role is None:
+        role = "_admin" if config.multicluster else "client"
 
     try:
-        return get_node_by_role(nodes, node_role, user, password, ssh_key)
+        return get_node_by_role(nodes, role, user, password, ssh_key)
     except ExternalClusterNodeRoleNotFound:
-        logger.warning(f"No {node_role} role defined, using node1 address!")
+        logger.warning(f"No {role} role defined, using node1 address!")
         return (nodes["node1"]["ip_address"], user, password, ssh_key)
 
 
