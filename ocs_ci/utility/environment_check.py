@@ -16,12 +16,9 @@ log = logging.getLogger(__name__)
 def _pv_or_pvc_storage_provisioner(item):
     kind = item.get("kind")
     if kind == constants.PV:
-        return (
-            item.get("spec", {}).get("csi", {}).get("driver")
-            or item.get("metadata", {})
-            .get("annotations", {})
-            .get("pv.kubernetes.io/provisioned-by")
-        )
+        return item.get("spec", {}).get("csi", {}).get("driver") or item.get(
+            "metadata", {}
+        ).get("annotations", {}).get("pv.kubernetes.io/provisioned-by")
     if kind == constants.PVC:
         annotations = item.get("metadata", {}).get("annotations", {})
         return annotations.get(

@@ -1320,9 +1320,7 @@ def storageclass_factory_fixture(
 
             instance.ocp.delete(resource_name=instance.name)
             try:
-                instance.ocp.wait_for_delete(
-                    instance.name, timeout=wait_timeout
-                )
+                instance.ocp.wait_for_delete(instance.name, timeout=wait_timeout)
                 return
             except TimeoutError:
                 if attempt < max_attempts - 1:
