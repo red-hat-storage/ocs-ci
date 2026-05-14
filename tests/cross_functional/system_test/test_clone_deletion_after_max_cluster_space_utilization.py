@@ -193,7 +193,7 @@ class TestCloneDeletion(E2ETest):
         self.create_clones(self.num_of_clones, pvc_clone_factory)
 
         # Maximum number of attempts to avoid indefinite looping
-        max_attempts = 10
+        max_attempts = 5
         attempt = 0
 
         # Verify if expected alerts are seen; if not, continue creating extra clones
