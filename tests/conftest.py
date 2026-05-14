@@ -1302,17 +1302,20 @@ def storageclass_factory_fixture(
                     return
                 raise
 
-            if sc_data.get("metadata", {}).get("ownerReferences"):
+            owner_refs = sc_data.get("metadata", {}).get("ownerReferences", [])
+            filtered = [r for r in owner_refs if r.get("kind") != "StorageClient"]
+            if len(filtered) < len(owner_refs):
+                patch_value = "null" if not filtered else json.dumps(filtered)
                 try:
                     instance.ocp.patch(
                         resource_name=instance.name,
-                        params='{"metadata": {"ownerReferences": null}}',
+                        params=f'{{"metadata": {{"ownerReferences": {patch_value}}}}}',
                         format_type="merge",
                     )
                 except CommandFailed:
                     log.warning(
-                        f"Failed to clear ownerReferences from "
-                        f"StorageClass {instance.name}"
+                        f"Failed to clear StorageClient ownerReferences "
+                        f"from StorageClass {instance.name}"
                     )
 
             instance.ocp.delete(resource_name=instance.name)
