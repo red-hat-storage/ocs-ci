@@ -100,6 +100,7 @@ class TestNetSplit:
             "Arbiter-Data-1-and-Data-1-Data-2",
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_netsplit(
         self,
         setup_logwriter_cephfs_workload_factory,

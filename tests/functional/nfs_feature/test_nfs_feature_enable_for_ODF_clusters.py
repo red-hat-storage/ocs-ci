@@ -54,6 +54,7 @@ class TestDefaultNfsDisabled(ManageTest):
 
     """
 
+    @pytest.mark.zstream_4_16_13
     def test_nfs_not_enabled_by_default(self):
         """
         This test is to validate nfs feature is not enabled by default for  ODF(4.11) clusters
@@ -244,6 +245,7 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4269")
+    @pytest.mark.zstream_4_16_13
     def test_nfs_feature_enable(
         self,
     ):
@@ -262,6 +264,7 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4272")
+    @pytest.mark.zstream_4_16_13
     def test_incluster_nfs_export(
         self,
         pod_factory,
@@ -343,6 +346,7 @@ class TestNfsEnable(ManageTest):
     @tier1
     @aws_platform_required
     @polarion_id("OCS-4273")
+    @pytest.mark.zstream_4_16_13
     def test_outcluster_nfs_export(
         self,
         pod_factory,
@@ -520,6 +524,7 @@ class TestNfsEnable(ManageTest):
     @tier2
     @aws_platform_required
     @polarion_id("OCS-4274")
+    @pytest.mark.zstream_4_16_13
     def test_multiple_nfs_based_PVs(
         self,
         pod_factory,
@@ -663,6 +668,7 @@ class TestNfsEnable(ManageTest):
     @tier2
     @aws_platform_required
     @polarion_id("OCS-4293")
+    @pytest.mark.zstream_4_16_13
     def test_multiple_mounts_of_same_nfs_volume(
         self,
         pod_factory,
@@ -801,6 +807,7 @@ class TestNfsEnable(ManageTest):
     @tier2
     @aws_platform_required
     @polarion_id("OCS-4312")
+    @pytest.mark.zstream_4_16_13
     def test_external_nfs_client_can_write_read_new_file(
         self,
         pod_factory,
@@ -945,6 +952,7 @@ class TestNfsEnable(ManageTest):
 
     @tier1
     @polarion_id("OCS-4275")
+    @pytest.mark.zstream_4_16_13
     def test_nfs_volume_with_different_accesss_mode(
         self,
         pod_factory,
@@ -1029,6 +1037,7 @@ class TestNfsEnable(ManageTest):
 
     @tier4c
     @polarion_id("OCS-4284")
+    @pytest.mark.zstream_4_16_13
     def test_respin_of_nfs_plugin_pods_for_incluster_consumer(
         self,
         pod_factory,
@@ -1128,6 +1137,7 @@ class TestNfsEnable(ManageTest):
 
     @tier4c
     @polarion_id("OCS-4296")
+    @pytest.mark.zstream_4_16_13
     def test_respin_app_pod_exported_nfs_volume_incluster(
         self,
     ):
@@ -1283,6 +1293,7 @@ class TestNfsEnable(ManageTest):
 
     @tier4c
     @polarion_id("OCS-4294")
+    @pytest.mark.zstream_4_16_13
     def test_respin_of_cephfs_plugin_provisioner_pods_for_incluster_consumer(
         self,
         pod_factory,
