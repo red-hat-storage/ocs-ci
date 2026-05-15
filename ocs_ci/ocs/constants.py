@@ -3550,6 +3550,12 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
 DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
 DRPC_RECIPE_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc_with_recipe.yaml")
 RECIPE_PATH = os.path.join(TEMPLATE_DIR, "DR", "recipe_with_checkhooks.yaml")
+RECIPE_CNV_DISCOVERED_VM_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "recipe_cnv_discovered_vm.yaml"
+)
+RECIPE_CNV_DISCOVERED_VM_CHECKHOOKS_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "recipe_cnv_discovered_vm_checkhooks.yaml"
+)
 PLACEMENT_PATH = os.path.join(TEMPLATE_DIR, "DR", "placement.yaml")
 PLACEMENT_SUBSCRIPTION_PATH = os.path.join(
     TEMPLATE_DIR, "DR", "placement_subscription.yaml"

@@ -8305,6 +8305,8 @@ def discovered_apps_dr_workload_cnv(request):
         dr_protect=True,
         shared_drpc_protection=False,
         vm_type=constants.VM_VOLUME_PVC,
+        recipe=False,
+        checkhooks=True,
     ):
         """
         Args:
@@ -8316,6 +8318,8 @@ def discovered_apps_dr_workload_cnv(request):
             shared_drpc_protection (bool): False by default, True will use Shared Protection type to DR Protect
                                         a workload using the existing DRPC in the same namespace
             vm_type (str): VM deployment type
+            recipe (bool): When True with dr_protect, deploy a Ramen Recipe on managed clusters
+            checkhooks (bool): When ``recipe`` is True, use the Recipe template that runs VirtualMachine
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
 
@@ -8342,6 +8346,8 @@ def discovered_apps_dr_workload_cnv(request):
             if shared_drpc_protection and instances:
                 workload_details["workload_namespace"] = instances[0].workload_namespace
                 workload_namespace = instances[0].workload_namespace
+            placement_base = workload_details["dr_workload_app_placement_name"]
+            placement_name = f"{placement_base}-recipe" if recipe else placement_base
             workload = CnvWorkloadDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
@@ -8359,19 +8365,23 @@ def discovered_apps_dr_workload_cnv(request):
                 discovered_apps_pod_selector_value=workload_details[
                     "dr_workload_app_pod_selector_value"
                 ],
-                workload_placement_name=workload_details[
-                    "dr_workload_app_placement_name"
-                ],
+                workload_placement_name=placement_name,
                 vm_secret=workload_details["vm_secret"],
                 vm_username=workload_details["vm_username"],
                 workload_name=workload_details["name"],
                 vm_name=workload_details["vm_name"],
+                discovered_apps_vm_name_selector_value=workload_details.get(
+                    "dr_workload_app_recipe_vm_name_selector_value", "vm-.*"
+                ),
             )
 
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload(
-                dr_protect=dr_protect, shared_drpc_protection=shared_drpc_protection
+                dr_protect=dr_protect,
+                shared_drpc_protection=shared_drpc_protection,
+                recipe=recipe,
+                checkhooks=checkhooks,
             )
 
         return instances

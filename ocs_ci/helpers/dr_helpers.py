@@ -2918,7 +2918,7 @@ def verify_cluster_data_protected_status(
     Verify that the cluster dataProtected is True
 
     Args:
-        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet or DiscoveredApps
         namespace (str): the namespace of the drpc resources
         workload_placement_name (str): Placement name
     """
@@ -2928,6 +2928,11 @@ def verify_cluster_data_protected_status(
         drpc_obj = DRPC(
             namespace=namespace,
             resource_name=f"{workload_placement_name}-drpc",
+        )
+    elif workload_type == constants.DISCOVERED_APPS:
+        drpc_obj = DRPC(
+            namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=workload_placement_name,
         )
     else:
         drpc_obj = DRPC(namespace=namespace)
@@ -2944,6 +2949,13 @@ def mdr_post_failover_check(namespace, timeout=1200):
         timeout (int): time in seconds to wait for resource deletion
 
     """
+    vm_obj = ocp.OCP(kind=constants.VIRTUALMACHINE, namespace=namespace)
+    if vm_obj.get().get("items"):
+        vm_obj.wait_for_resource(
+            condition=constants.STATUS_TERMINATING,
+            resource_count=1,
+            timeout=timeout,
+        )
     logger.info("Waiting for all pods to be deleted")
     all_pods = get_all_pods(namespace=namespace)
     for pod_obj in all_pods:
