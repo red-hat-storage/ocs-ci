@@ -45,6 +45,8 @@ class TestFailoverAndRelocateWithDiscoveredAppsWorkloads:
             2) Relocate back to primary
 
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         rdr_workload = discovered_apps_dr_workload(
             pvc_interface=pvc_interface, kubeobject=1, recipe=0, workloads=workload
         )[0]

@@ -72,6 +72,7 @@ class TestFailover:
         Tests to verify application failover between managed clusters when the primary cluster is either UP or DOWN.
 
         """
+        dr_helpers.validate_cluster_odf_cli()
 
         workloads = dr_workload(
             num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface

@@ -45,6 +45,8 @@ class TestSequentialRelocate:
         Test to verify relocate action for multiple workloads one after another from primary to secondary cluster
 
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         workloads = dr_workload(
             num_of_subscription=2, num_of_appset=3, pvc_interface=pvc_interface
         )

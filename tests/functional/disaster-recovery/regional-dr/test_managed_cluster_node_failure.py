@@ -96,6 +96,8 @@ class TestManagedClusterNodeFailure:
         verify the pod is rescheduled on a healthy node and mirroring is working as expected.
 
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         dr_workload(num_of_subscription=1)
         managed_clusters = get_non_acm_cluster_config()
 
@@ -170,6 +172,8 @@ class TestManagedClusterNodeFailure:
         verify the pod is rescheduled on a healthy node and mirroring is working as expected.
 
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         dr_workload(num_of_subscription=1)
         managed_clusters = get_non_acm_cluster_config()
         resources = []

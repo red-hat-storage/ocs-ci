@@ -63,6 +63,8 @@ class TestNodeDrainDuringFailoverRelocate:
         Tests cases to verify that the failover and relocate operations are not affected when node is drained
 
         """
+        dr_helpers.validate_cluster_odf_cli()
+
         if workload_type == constants.SUBSCRIPTION:
             rdr_workload = dr_workload(num_of_subscription=1)[0]
         else:
