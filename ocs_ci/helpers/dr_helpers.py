@@ -2902,8 +2902,10 @@ def create_service_exporter(annotate=True):
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
 
         if annotate:
-            if config.ENV_DATA.get("odf_provider_mode_deployment") or (
-                cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_PROVIDER
+            cluster_type = cluster.ENV_DATA.get("cluster_type", "").lower()
+            if (
+                config.ENV_DATA.get("odf_provider_mode_deployment")
+                or cluster_type == constants.HCI_PROVIDER
                 or get_provider_service_type() == "NodePort"
             ):
                 cluster_address = get_node_internal_ip(
@@ -3065,6 +3067,9 @@ def create_ingress_cert_dr(
     LiteralString = enable_literal_block_style()
     ssl_data = []
 
+    # Save original context to restore later
+    original_index = config.cur_index
+
     for non_acm_index in non_acm_indexes:
         config.switch_ctx(non_acm_index)
         default_ingress_cert = ocp.OCP(
@@ -3084,13 +3089,20 @@ def create_ingress_cert_dr(
         )
         templating.dump_data_to_temp_yaml(ingress_data, ingress_file.name)
 
+    # Restore original context
+    config.switch_ctx(original_index)
+
     for cluster in config.clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
         with config.RunWithConfigContext(index):
+            # Skip proxy patches and MachineConfigPool waits for hosted (HCP) clusters
+            is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+
             logger.info(f"[{cluster_name}] Creating Ingress cert")
             run_cmd(cmd=f"oc apply -f {ingress_file.name}")
-            if patch_proxy:
+
+            if patch_proxy and not is_hosted:
                 logger.info(f"[{cluster_name}] Proxy patch")
                 cmd = (
                     f"oc patch proxy/cluster --type=merge "
@@ -3101,9 +3113,14 @@ def create_ingress_cert_dr(
     for cluster in config.clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
-        with config.RunWithConfigContext(index):
-            logger.info(f"[{cluster_name}] Waiting for MachineConfigPool to be updated")
-            wait_for_machineconfigpool_status(node_type="all")
+        is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+
+        if not is_hosted:
+            with config.RunWithConfigContext(index):
+                logger.info(
+                    f"[{cluster_name}] Waiting for MachineConfigPool to be updated"
+                )
+                wait_for_machineconfigpool_status(node_type="all")
 
 
 def create_multiclusterservice_dr():
@@ -3365,7 +3382,25 @@ def extract_images_from_yaml(obj, images=None):
                 # (contains registry path or common image patterns)
                 value = obj[key].strip()
                 if value and ("/" in value or ":" in value):
-                    images.add(value)
+                    # Skip obvious non-image schemes (URLs, git refs, file paths)
+                    if any(
+                        value.startswith(scheme)
+                        for scheme in ["http://", "https://", "git://", "git@"]
+                    ):
+                        continue
+                    if "://" in value and not value.startswith("docker://"):
+                        continue
+                    # Require either a registry-like domain (contains '.' or ':' before first '/')
+                    # or typical image pattern (path segments with optional :tag or @sha256:)
+                    first_slash = value.find("/")
+                    if first_slash > 0:
+                        # Check if there's a domain-like prefix before the first slash
+                        prefix = value[:first_slash]
+                        if "." in prefix or ":" in prefix:
+                            images.add(value)
+                    elif ":" in value and not value.startswith("/"):
+                        # Simple image:tag format without registry
+                        images.add(value)
 
         # Recursively process all values
         for value in obj.values():

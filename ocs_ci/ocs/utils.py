@@ -2256,12 +2256,11 @@ def enable_literal_block_style():
     class LiteralString(str):
         pass
 
-    yaml.add_representer(
-        LiteralString,
-        lambda dumper, data: dumper.represent_scalar(
-            "tag:yaml.org,2002:str", data, style="|"
-        ),
-    )
+    def represent_literal(dumper, data):
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+
+    yaml.add_representer(LiteralString, represent_literal)
+    yaml.SafeDumper.add_representer(LiteralString, represent_literal)
 
     return LiteralString
 
@@ -2279,7 +2278,15 @@ def is_hostnetwork_enabled():
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.DEFAULT_STORAGE_CLUSTER,
     )
-    spec = storagecluster_obj.get().get("spec", {})
+    try:
+        resp = storagecluster_obj.get()
+        if resp is None:
+            resp = {}
+    except Exception as e:
+        log.debug(f"Failed to get StorageCluster: {e}")
+        resp = {}
+
+    spec = resp.get("spec", {})
     host_network = spec.get("hostNetwork", False)
     if host_network:
         log.info("Cluster has HostNetworking enabled")

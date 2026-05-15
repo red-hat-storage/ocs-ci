@@ -292,11 +292,9 @@ def mirror_rdr_images():
         exec_cmd(cmd, timeout=18000)
     except CommandFailed as e:
         # if itms is configured, the oc mirror command might fail (return non 0 rc),
-        # even though we use --continue-on-error and --skip-missing arguments
-        # (not sure if it is because of a bug in oc mirror plugin or because of some other issue),
         # but we want to continue to try to mirror the images manually with applied the itms rules
         log.warning(f"oc mirror command failed: {e}")
-        raise
+        # Continue to apply ITMS rules and mirror images manually
 
     # Look for itms file in the workspace
     itms_file_path = "oc-mirror-workspace/results-files/working-dir/cluster-resources/itms-oc-mirror.yaml"

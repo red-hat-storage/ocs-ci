@@ -4154,7 +4154,8 @@ class MultiClusterDROperatorsDeploy(object):
         if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
             ca_cert_path = get_root_ca_cert()
             logger.info("Encoding Ca Cert")
-            ca_cert_data_byte = open(ca_cert_path, "r").read().encode("ascii")
+            with open(ca_cert_path, "r") as f:
+                ca_cert_data_byte = f.read().encode("ascii")
             ca_cert_data_encode = base64.b64encode(ca_cert_data_byte).decode("ascii")
         else:
             with config.RunWithPrimaryConfigContext():
@@ -4349,9 +4350,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                 setup_fdf_catsrc_for_hub()
 
             self.deploy_dr_multicluster_orchestrator(
-                use_fdf_catsrc=(
-                    True if config.ENV_DATA.get("setup_fdf_catsrc_for_hub") else False
-                )
+                use_fdf_catsrc=bool(config.ENV_DATA.get("setup_fdf_catsrc_for_hub"))
             )
             # Enable MCO console plugin
             enable_mco_console_plugin()
