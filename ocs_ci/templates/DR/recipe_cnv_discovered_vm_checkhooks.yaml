@@ -1,0 +1,42 @@
+apiVersion: ramendr.openshift.io/v1alpha1
+kind: Recipe
+metadata:
+  name: PLACEHOLDER
+spec:
+  appType: kubevirt
+  groups:
+  - backupRef: rg1
+    excludedResourceTypes:
+    - configmaps
+    includedNamespaces:
+    - PLACEHOLDER
+    labelSelector:
+      matchExpressions:
+      - key: appname
+        operator: In
+        values:
+        - kubevirt
+    name: rg1
+    type: resource
+  hooks:
+  - name: vm-ready-hook
+    type: check
+    namespace: PLACEHOLDER
+    selectResource: kubevirt.io/v1/virtualmachines
+    nameSelector: PLACEHOLDER
+    onError: fail
+    timeout: 300
+    chks:
+    - name: check-ready
+      condition: "{$.status.ready} == {true}"
+  workflows:
+  - failOn: any-error
+    name: backup
+    sequence:
+    - hook: vm-ready-hook/check-ready
+    - group: rg1
+  - failOn: any-error
+    name: restore
+    sequence:
+    - group: rg1
+    - hook: vm-ready-hook/check-ready
