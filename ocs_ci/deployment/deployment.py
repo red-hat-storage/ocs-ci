@@ -4324,7 +4324,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
         if not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
             create_ingress_cert_dr()
-            pass
 
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
