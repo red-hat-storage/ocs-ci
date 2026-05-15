@@ -322,6 +322,78 @@ def test_deploy_rdr():
         log.info("ACM cluster is not deployed, skipping cluster import")
 
     # ========================================================================
+    # STEP 3.6: Deploy Submariner (if needed)
+    # ========================================================================
+    log.info("\n" + "=" * 80)
+    log.info("STEP 3.6: Deploying Submariner")
+    log.info("=" * 80)
+
+    if not config.ENV_DATA.get("skip_submariner_deployment", False):
+        log.info("Submariner deployment is enabled")
+        log.info("Deploying Submariner operator on non-ACM clusters...")
+
+        try:
+            deployment.do_deploy_submariner()
+            log.info("✓ Submariner deployment completed successfully")
+        except Exception as e:
+            log.error(f"✗ Submariner deployment failed with error: {e}")
+            raise
+    else:
+        log.info("Submariner deployment is disabled (skip_submariner_deployment: true)")
+        log.info("Skipping Submariner deployment")
+
+    # ========================================================================
+    # STEP 3.7: Deploy GitOps (if needed)
+    # ========================================================================
+    log.info("\n" + "=" * 80)
+    log.info("STEP 3.7: Deploying GitOps Operator")
+    log.info("=" * 80)
+
+    if not config.ENV_DATA.get("skip_gitops_deployment", False):
+        log.info("GitOps deployment is enabled")
+        log.info("Deploying GitOps operator on all clusters...")
+        log.info("This will:")
+        log.info("  - Deploy GitOps operator on all clusters")
+        log.info("  - Create GitOps cluster resources on ACM hub")
+        log.info("  - Configure ManagedClusterSetBinding")
+        log.info("  - Set up clusterrolebinding for pull model deployment")
+
+        try:
+            deployment.do_gitops_deploy()
+            log.info("✓ GitOps deployment completed successfully")
+        except Exception as e:
+            log.error(f"✗ GitOps deployment failed with error: {e}")
+            raise
+    else:
+        log.info("GitOps deployment is disabled (skip_gitops_deployment: true)")
+        log.info("Skipping GitOps deployment")
+
+    # ========================================================================
+    # STEP 3.8: Deploy OADP (if needed)
+    # ========================================================================
+    log.info("\n" + "=" * 80)
+    log.info("STEP 3.8: Deploying OADP Operator")
+    log.info("=" * 80)
+
+    if not config.ENV_DATA.get("skip_oadp_deployment", False):
+        log.info("OADP deployment is enabled")
+        log.info("Deploying OADP operator on all non-ACM clusters...")
+        log.info("This will:")
+        log.info("  - Create OADP namespace and operator group")
+        log.info("  - Subscribe to OADP operator")
+        log.info("  - Wait for OADP CSV to reach Succeeded phase")
+
+        try:
+            deployment.do_deploy_oadp()
+            log.info("✓ OADP deployment completed successfully")
+        except Exception as e:
+            log.error(f"✗ OADP deployment failed with error: {e}")
+            raise
+    else:
+        log.info("OADP deployment is disabled (skip_oadp_deployment: true)")
+        log.info("Skipping OADP deployment")
+
+    # ========================================================================
     # STEP 4: Deploy RDR
     # ========================================================================
     log.info("\n" + "=" * 80)
@@ -449,6 +521,3 @@ def test_deploy_rdr():
     log.info("=" * 80)
     log.info("✓ RDR deployment and validation completed successfully")
     log.info("=" * 80)
-
-
-# Made with Bob
