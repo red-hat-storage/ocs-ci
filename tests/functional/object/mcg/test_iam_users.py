@@ -233,7 +233,7 @@ class TestIAMUsers(MCGTest):
             aws_access_key_id=mcg_obj.access_key_id,
             aws_secret_access_key=mcg_obj.access_key,
             verify=False,
-            region_name=mcg_obj.region if mcg_obj.region else "",
+            region_name=mcg_obj.region or None,
         )
         iam_client.put_user_policy(
             UserName=user_name,
