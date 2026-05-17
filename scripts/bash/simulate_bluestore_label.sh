@@ -53,7 +53,7 @@ podman run --rm --privileged --net=host \
   -v /run/udev:/run/udev:ro \
   -v /etc/ceph:/etc/ceph:ro \
   -v /var/lib/ceph/bootstrap-osd:/var/lib/ceph/bootstrap-osd:ro \
-  quay.io/ceph/ceph:$TAG \
+  quay.io/ceph/ceph:"$TAG" \
   ceph-volume --log-path /tmp/ceph-log \
     raw prepare --bluestore --data "$DEVICE" --crush-device-class ssd
 
@@ -65,7 +65,7 @@ podman run --rm --privileged --net=host \
   -v /run/udev:/run/udev:ro \
   -v /etc/ceph:/etc/ceph:ro \
   -v /var/lib/ceph:/var/lib/ceph:ro \
-  quay.io/ceph/ceph:$TAG \
+  quay.io/ceph/ceph:"$TAG" \
   ceph-volume raw list "$DEVICE" --format json
 
 echo ">>> BlueStore simulation complete."

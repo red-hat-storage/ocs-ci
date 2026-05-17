@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+CEPHADM_URL="https://download.ceph.com/rpm-tentacle/el9/noarch/cephadm"
+CEPHADM_VERSION_MAJOR="20"
+
  if [ "$#" -ne 3 ]; then
    echo "Usage: $0 <fsid> <bootstrap-osd-key> <mon_host>"
    exit 1
@@ -16,16 +19,16 @@ set -euo pipefail
  fi
 
 # Download cephadm
-curl -fsSL "https://download.ceph.com/rpm-tentacle/el9/noarch/cephadm" -o /tmp/cephadm
+curl -fsSL "$CEPHADM_URL" -o /tmp/cephadm
 # Make it executable and move to PATH
 chmod +x /tmp/cephadm
 mv /tmp/cephadm /usr/local/bin/
 
 # Verify cephadm version
 cephadm version
-# Check that cephadm version starts with 'cephadm version 20.'
-if ! cephadm version | grep -q '^cephadm version 20\.'; then
-  echo "Error: cephadm version is not 20.x"
+# Check that cephadm version starts with the expected major version
+if ! cephadm version | grep -q "^cephadm version ${CEPHADM_VERSION_MAJOR}\."; then
+  echo "Error: cephadm version is not ${CEPHADM_VERSION_MAJOR}.x"
   exit 1
 fi
 

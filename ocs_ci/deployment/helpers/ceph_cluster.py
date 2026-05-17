@@ -188,9 +188,7 @@ def install_minimal_ceph_conf(wnode, host_node, namespace=None):
     ceph_key = get_ceph_admin_key(host_node, namespace)
     ceph_fsid = get_ceph_fsid(host_node, namespace)
     host_node_ip = get_node_internal_ip(host_node)
-    logger.info(
-        f"Ceph FSID: {ceph_fsid}, Ceph Key: {ceph_key}, Host Node IP: {host_node_ip}"
-    )
+    logger.info(f"Ceph FSID: {ceph_fsid}, Host Node IP: {host_node_ip}")
 
     script_name = "install_minimal_ceph_conf.sh"
     top_dir = Path(constants.TOP_DIR)
@@ -209,7 +207,7 @@ def install_minimal_ceph_conf(wnode, host_node, namespace=None):
     args = f"{ceph_fsid} {ceph_key} {host_node_ip}"
     logger.info(
         f"Running install minimal ceph conf script on the worker node {wnode.name} "
-        f"with the args: {args}"
+        f"with fsid={ceph_fsid}, host_node_ip={host_node_ip}"
     )
     out = node_obj.run_script(script_path=script_dest_path, args=args, timeout=300)
     logger.info("Script output:\n" + out)

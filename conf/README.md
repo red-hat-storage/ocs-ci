@@ -428,6 +428,7 @@ higher priority).
 * `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
 * `configure_acm_to_import_mce` - If set to true while installing ACM, the configuration to discover and import MCE clusters will be done
 * `skip_disks_cleanup` - If set to true, skips disks cleanup on BareMetal and LSO cluster deployments.
+* `simulate_bluestore_label` - If set to true, simulates Ceph OSD BlueStore metadata on OSD disks before deploying a new ODF cluster. Used to test whether Ceph correctly detects existing BlueStore metadata. Intended for use only with LSO deployments (Default: false)
 * `wipe_devices_from_other_clusters` - If set to true, automatically wipes devices with old Ceph metadata during ODF deployment. This prevents conflicts when reusing disks that were previously part of a different Ceph cluster.
 * `product_type` - Differentiate between ODF or FDF deployments. Set via --product-type CLI option. Default value is 'odf'
 * `enable_infrastructure_management_for_agent` - To enable central infrastructure management service while installing dependencies for hosted cluster. This is used to create agent based hosted cluster.
