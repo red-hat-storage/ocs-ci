@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     encryption_at_rest_required,
     skipif_kms_deployment,
     skipif_external_mode,
+    zstream_4_16_13,
 )
 from ocs_ci.helpers.keyrotation_helper import (
     NoobaaKeyrotation,
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 @skipif_kms_deployment
 @green_squad
 @tier1
+@zstream_4_16_13
 class TestEncryptionKeyrotation:
     @pytest.fixture(autouse=True)
     def teardown(self, request):

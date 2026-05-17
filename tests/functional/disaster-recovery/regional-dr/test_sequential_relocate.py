@@ -6,7 +6,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier1
-from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad, zstream_4_16_13
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 
@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
         ),
     ],
 )
+@zstream_4_16_13
 class TestSequentialRelocate:
     """
     Test Sequential Relocate actions

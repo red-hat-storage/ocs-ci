@@ -12,7 +12,7 @@ from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_16_13
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -48,6 +48,7 @@ ERRMSG = "Error in command"
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @polarion_id("OCS-4270")
+@zstream_4_16_13
 class TestDefaultNfsDisabled(ManageTest):
     """
     Test nfs feature enable for ODF 4.11
@@ -81,6 +82,7 @@ class TestDefaultNfsDisabled(ManageTest):
 @skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@zstream_4_16_13
 class TestNfsEnable(ManageTest):
     """
     Test nfs feature enable for ODF 4.11
