@@ -5,7 +5,7 @@ import pytest
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import rdr, tier1, turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import rdr, tier1, turquoise_squad, zstream_4_16_13
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.ocs import constants
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 @rdr
 @tier1
 @turquoise_squad
+@zstream_4_16_13
 class TestCnvApplicationRDR:
     """
     Includes tests related to CNV workloads on RDR environment.
