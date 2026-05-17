@@ -1583,18 +1583,19 @@ def detect_simulation_disk_on_node(wnode, namespace=None, timeout=300):
     # Determine disk naming pattern based on platform type
     platform = config.ENV_DATA["platform"].lower()
     if platform in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
-        # NVMe disks typically used in baremetal environments
-        disk_names_available = disks_available_to_cleanup(wnode)
-        nvme_disks = [
+        disk_names_available = disks_available_to_cleanup(wnode, namespace=namespace)
+        candidate_disks = [
             disk_name
             for disk_name in disk_names_available
-            if disk_name.startswith("nvme")
+            if disk_name.startswith(("nvme", "sd"))
         ]
-        if not nvme_disks:
+        if not candidate_disks:
             raise ValueError(
-                f"Didnt find any nvme disks available on the node {wnode.name}"
+                f"Didn't find any sd*/nvme* disks available on node {wnode.name}"
             )
-        disk_name_pattern = nvme_disks[0]
+        disk_name_pattern = "|".join(
+            f"^{re.escape(disk_name)}$" for disk_name in candidate_disks
+        )
     else:
         # SATA/SCSI disks typically used in virtualized environments
         disk_name_pattern = "^sd[a-z]$"

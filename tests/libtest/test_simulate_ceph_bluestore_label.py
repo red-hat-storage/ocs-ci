@@ -34,5 +34,6 @@ class TestSimulateCephBlueStoreLabel(ManageTest):
         """
         if not config.ENV_DATA.get("simulate_bluestore_label", False):
             pytest.skip("simulate_bluestore_label not set in config")
-        simulate_full_ceph_bluestore_process_on_wnodes()
+        result = simulate_full_ceph_bluestore_process_on_wnodes()
+        assert result, "BlueStore label simulation failed on worker nodes"
         log.info("BlueStore label simulation succeeded on all worker nodes disks")
