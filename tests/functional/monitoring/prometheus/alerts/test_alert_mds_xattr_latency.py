@@ -1,6 +1,5 @@
 import logging
 import pytest
-import subprocess
 import time
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -10,7 +9,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import E2ETest, tier2, tier4b, tier4c
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.helpers import helpers
 from ocs_ci.templates.workloads.helper_scripts.meta_data_io import (
     perform_xattr_only_operations,
@@ -41,40 +39,6 @@ storagecluster_obj = OCP(
     namespace=config.ENV_DATA["cluster_namespace"],
     resource_name=constants.DEFAULT_STORAGE_CLUSTER,
 )
-
-
-def cleanup_pvc_with_timeout_handling(pvc_obj, max_retries=9, retry_delay=60):
-    """
-    Clean up PVC with timeout handling and retries.
-
-    Args:
-        pvc_obj: PVC object to delete
-        max_retries: Maximum number of retries (default: 3)
-        retry_delay: Delay between retries in seconds (default: 60)
-    """
-    if pvc_obj.is_deleted:
-        return
-
-    for attempt in range(max_retries):
-        try:
-            pvc_obj.delete()
-            pvc_obj.ocp.wait_for_delete(pvc_obj.name, timeout=900)
-            return
-        except (TimeoutExpiredError, subprocess.TimeoutExpired):
-
-            try:
-                pvc_obj.ocp.get(resource_name=pvc_obj.name)
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                else:
-                    log.error(
-                        f"PVC {pvc_obj.name} still exists after {max_retries} attempts"
-                    )
-                    raise
-            except Exception:
-                log.info(f"PVC {pvc_obj.name} successfully deleted despite timeout")
-                pvc_obj._is_deleted = True
-                return
 
 
 @pytest.fixture(scope="function")
@@ -232,6 +196,29 @@ def verify_alert_cleared(threading_lock):
     api.check_alert_cleared(
         label=constants.ALERT_MDSXATTR, measure_end_time=test_end_time, time_min=600
     )
+
+
+def ensure_mds_deployments_scaled(deployment_names):
+    """
+    Ensure MDS deployments are scaled to 1 replica.
+
+    Checks if both MDS pods are running. If not, scales the deployments to 1
+    and waits for all MDS pods to reach Running state.
+
+    Args:
+        deployment_names: List of MDS deployment names to check/scale
+    """
+    mds_pods = cluster.get_mds_pods()
+    if len(mds_pods) < 2:
+        log.info("Scaling MDS deployments to 1")
+        for deployment_name in deployment_names:
+            helpers.modify_deployment_replica_count(
+                deployment_name=deployment_name, replica_count=1
+            )
+        time.sleep(60)
+        mds_pods = cluster.get_mds_pods()
+    for pd in mds_pods:
+        helpers.wait_for_resource_state(resource=pd, state=constants.STATUS_RUNNING)
 
 
 @blue_squad
@@ -417,7 +404,7 @@ class TestMdsXattrAlerts(E2ETest):
     @tier4c
     @pytest.mark.polarion_id("OCS-7736")
     def test_alert_after_active_mds_scaledown(
-        self, set_xattr_with_high_cpu_usage, threading_lock
+        self, set_xattr_with_high_cpu_usage, threading_lock, request
     ):
         """
         Test MDS xattr latency alert persistence after active MDS scale down and up.
@@ -449,6 +436,12 @@ class TestMdsXattrAlerts(E2ETest):
         active_mds_pod = cluster.get_active_mds_info()["active_pod"]
         deployment_name = "rook-ceph-mds-" + active_mds
 
+        def finalizer():
+            """Ensure MDS deployment is scaled to 1"""
+            ensure_mds_deployments_scaled([deployment_name])
+
+        request.addfinalizer(finalizer)
+
         log.info(f"Scale down {deployment_name} to 0")
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=0
@@ -473,7 +466,7 @@ class TestMdsXattrAlerts(E2ETest):
     @tier2
     @pytest.mark.polarion_id("OCS-7737")
     def test_alert_with_both_mds_scaledown(
-        self, set_xattr_with_high_cpu_usage, threading_lock
+        self, set_xattr_with_high_cpu_usage, threading_lock, request
     ):
         """
         Test MDS xattr latency alert persistence after both active and standby MDS scale down and up.
@@ -496,17 +489,28 @@ class TestMdsXattrAlerts(E2ETest):
             11. Re-validate the alert after MDS scale operations (timeout: 1200s)
             12. Verify alert is cleared after test completion
 
+        Args:
+            request: pytest request for finalizer registration
+
         """
+        # Get MDS info first for teardown
+        active_mds = cluster.get_active_mds_info()["mds_daemon"]
+        standby_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
+        active_mds_d = "rook-ceph-mds-" + active_mds
+        standby_mds_d = "rook-ceph-mds-" + standby_mds
+
+        def finalizer():
+            """Ensure both MDS deployments are scaled to 1"""
+            ensure_mds_deployments_scaled([active_mds_d, standby_mds_d])
+
+        request.addfinalizer(finalizer)
+
         log.info(
             "Setting extended attributes and file creation IO started in the background."
             " Script will look for CephXattrSetLatency  alert"
         )
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
-        active_mds = cluster.get_active_mds_info()["mds_daemon"]
-        standby_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
-        active_mds_d = "rook-ceph-mds-" + active_mds
-        standby_mds_d = "rook-ceph-mds-" + standby_mds
         active_mds_pod = cluster.get_active_mds_info()["active_pod"]
         standby_mds_pod = cluster.get_mds_standby_replay_info()["standby_replay_pod"]
         mds_dc_pods = [active_mds_d, standby_mds_d]
@@ -564,15 +568,13 @@ class TestMdsXattrAlerts(E2ETest):
 
         Args:
             nodes: Node fixture for performing node operations
-            request: pytest request for finalizer
+            request: pytest request for finalizer registration
 
         """
-        # Get the PVC object from fixture for custom cleanup
-        pvc_obj = set_xattr_with_high_cpu_usage
 
         def finalizer():
-            """Custom finalizer for PVC cleanup with timeout handling"""
-            cleanup_pvc_with_timeout_handling(pvc_obj)
+            """Teardown to ensure all nodes are up after test"""
+            nodes.restart_nodes_by_stop_and_start_teardown()
 
         request.addfinalizer(finalizer)
 
