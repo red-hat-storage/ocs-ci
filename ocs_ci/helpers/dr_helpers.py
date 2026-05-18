@@ -3095,20 +3095,23 @@ def create_ingress_cert_dr(
     for cluster in config.clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
-        with config.RunWithConfigContext(index):
-            # Skip proxy patches and MachineConfigPool waits for hosted (HCP) clusters
-            is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+        is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
 
-            logger.info(f"[{cluster_name}] Creating Ingress cert")
-            run_cmd(cmd=f"oc apply -f {ingress_file.name}")
+        if not is_hosted:
+            with config.RunWithConfigContext(index):
+                # Skip proxy patches and MachineConfigPool waits for hosted (HCP) clusters
+                is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
 
-            if patch_proxy and not is_hosted:
-                logger.info(f"[{cluster_name}] Proxy patch")
-                cmd = (
-                    f"oc patch proxy/cluster --type=merge "
-                    f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{cert_name}"}}}}}}\''
-                )
-                run_cmd(cmd=cmd)
+                logger.info(f"[{cluster_name}] Creating Ingress cert")
+                run_cmd(cmd=f"oc apply -f {ingress_file.name}")
+
+                if patch_proxy and not is_hosted:
+                    logger.info(f"[{cluster_name}] Proxy patch")
+                    cmd = (
+                        f"oc patch proxy/cluster --type=merge "
+                        f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{cert_name}"}}}}}}\''
+                    )
+                    run_cmd(cmd=cmd)
 
     for cluster in config.clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
