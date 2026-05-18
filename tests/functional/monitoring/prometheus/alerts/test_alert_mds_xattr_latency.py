@@ -198,52 +198,31 @@ def verify_alert_cleared(threading_lock):
     )
 
 
-def ensure_mds_deployments_scaled(deployment_names):
+def recover_mds_pods_if_not_running(nodes):
     """
-    Ensure MDS deployments are scaled to 1 replica and MDS daemons are active.
+    Check if MDS pods are running and restart nodes if they are not.
 
-    Checks if both MDS pods are running and MDS daemons are active. If not,
-    scales the deployments to 1 and waits for all MDS pods to reach Running
-    state and for MDS daemons to become active.
+    This function is used in test teardowns to ensure MDS pods are in a healthy
+    state before the next test runs.
 
     Args:
-        deployment_names: List of MDS deployment names to check/scale
+        nodes: nodes fixture for node operations
     """
+    log.info("Teardown: Checking if MDS pods are running")
     mds_pods = cluster.get_mds_pods()
-    if len(mds_pods) < 2:
-        log.info("Scaling MDS deployments to 1")
-        for deployment_name in deployment_names:
-            helpers.modify_deployment_replica_count(
-                deployment_name=deployment_name, replica_count=1
-            )
-        time.sleep(60)
-        mds_pods = cluster.get_mds_pods()
 
-    # Wait for all MDS pods to be Running
+    all_running = True
     for pd in mds_pods:
-        helpers.wait_for_resource_state(resource=pd, state=constants.STATUS_RUNNING)
-
-    # Wait for MDS daemons to become active
-    log.info("Waiting for MDS daemons to become active")
-    timeout = 500  # 5 minutes timeout
-    start_time = time.time()
-
-    while time.time() - start_time < timeout:
         try:
-            active_mds = cluster.get_active_mds_info()
-            standby_mds = cluster.get_mds_standby_replay_info()
+            helpers.wait_for_resource_state(
+                resource=pd, state=constants.STATUS_RUNNING, timeout=60
+            )
+        except Exception:
+            all_running = False
+            break
 
-            if active_mds and standby_mds:
-                log.info(
-                    f"MDS daemons are active: active={active_mds['mds_daemon']}, standby={standby_mds['mds_daemon']}"
-                )
-                break
-        except Exception as e:
-            log.debug(f"MDS daemons not yet active: {e}")
-
-        time.sleep(10)
-    else:
-        log.warning("Timeout waiting for MDS daemons to become active, but continuing")
+    if not all_running:
+        nodes.restart_nodes_by_stop_and_start_teardown()
 
 
 @blue_squad
@@ -429,7 +408,7 @@ class TestMdsXattrAlerts(E2ETest):
     @tier4c
     @pytest.mark.polarion_id("OCS-7736")
     def test_alert_after_active_mds_scaledown(
-        self, set_xattr_with_high_cpu_usage, threading_lock, request
+        self, set_xattr_with_high_cpu_usage, threading_lock, request, nodes
     ):
         """
         Test MDS xattr latency alert persistence after active MDS scale down and up.
@@ -451,6 +430,15 @@ class TestMdsXattrAlerts(E2ETest):
 
         """
 
+        def finalizer():
+            """
+            Teardown to ensure MDS pods are running.
+            If MDS pods are not running, restart nodes to recover.
+            """
+            recover_mds_pods_if_not_running(nodes)
+
+        request.addfinalizer(finalizer)
+
         log.info(
             "Setting extended attributes and file creation IO started in the background."
             " Script will look for CephXattrSetLatency  alert"
@@ -460,12 +448,6 @@ class TestMdsXattrAlerts(E2ETest):
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
         active_mds_pod = cluster.get_active_mds_info()["active_pod"]
         deployment_name = "rook-ceph-mds-" + active_mds
-
-        def finalizer():
-            """Ensure MDS deployment is scaled to 1"""
-            ensure_mds_deployments_scaled([deployment_name])
-
-        request.addfinalizer(finalizer)
 
         log.info(f"Scale down {deployment_name} to 0")
         helpers.modify_deployment_replica_count(
@@ -491,7 +473,7 @@ class TestMdsXattrAlerts(E2ETest):
     @tier2
     @pytest.mark.polarion_id("OCS-7737")
     def test_alert_with_both_mds_scaledown(
-        self, set_xattr_with_high_cpu_usage, threading_lock, request
+        self, set_xattr_with_high_cpu_usage, threading_lock, request, nodes
     ):
         """
         Test MDS xattr latency alert persistence after both active and standby MDS scale down and up.
@@ -516,17 +498,16 @@ class TestMdsXattrAlerts(E2ETest):
 
         Args:
             request: pytest request for finalizer registration
+            nodes: nodes fixture for node operations
 
         """
-        # Get MDS info first for teardown
-        active_mds = cluster.get_active_mds_info()["mds_daemon"]
-        standby_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
-        active_mds_d = "rook-ceph-mds-" + active_mds
-        standby_mds_d = "rook-ceph-mds-" + standby_mds
 
         def finalizer():
-            """Ensure both MDS deployments are scaled to 1"""
-            ensure_mds_deployments_scaled([active_mds_d, standby_mds_d])
+            """
+            Teardown to ensure MDS pods are running.
+            If MDS pods are not running, restart nodes to recover.
+            """
+            recover_mds_pods_if_not_running(nodes)
 
         request.addfinalizer(finalizer)
 
@@ -536,6 +517,10 @@ class TestMdsXattrAlerts(E2ETest):
         )
         assert MDSxattr_alert_values(threading_lock, timeout=1200)
 
+        active_mds = cluster.get_active_mds_info()["mds_daemon"]
+        standby_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
+        active_mds_d = "rook-ceph-mds-" + active_mds
+        standby_mds_d = "rook-ceph-mds-" + standby_mds
         active_mds_pod = cluster.get_active_mds_info()["active_pod"]
         standby_mds_pod = cluster.get_mds_standby_replay_info()["standby_replay_pod"]
         mds_dc_pods = [active_mds_d, standby_mds_d]
