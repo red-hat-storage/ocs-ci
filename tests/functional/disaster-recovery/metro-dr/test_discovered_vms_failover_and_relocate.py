@@ -202,7 +202,7 @@ class TestMDRCNVDiscoveredVM:
         checkhooks,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
-        node_restart_teardown,
+        node_restart_teardown,  # teardown-only: restarts nodes stopped during the test
     ):
         """
         Comprehensive test for discovered VM failover and relocate operations
@@ -247,7 +247,7 @@ class TestMDRCNVDiscoveredVM:
         logger.info("Deploying CNV VM as discovered application")
         cnv_workloads = discovered_apps_dr_workload_cnv(
             pvc_vm=1,
-            recipe=1 if recipe else 0,
+            recipe=recipe,
             checkhooks=checkhooks,
         )
 

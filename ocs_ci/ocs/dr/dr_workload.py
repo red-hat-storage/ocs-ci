@@ -1975,13 +1975,13 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             self.create_placement()
             if recipe:
                 log.info("Creating CNV workload with Ramen Recipe")
+                self.recipe_enabled = True
                 config.switch_to_cluster_by_name(self.preferred_primary_cluster)
                 for cluster in get_non_acm_cluster_config():
                     config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                     self.create_cnv_recipe(checkhooks=checkhooks)
                 config.switch_acm_ctx()
                 self.create_drpc_for_apps_with_recipe()
-                self.recipe_enabled = True
             else:
                 self.create_drpc()
             self.verify_workload_deployment()
@@ -2123,9 +2123,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         drpc_yaml_data = templating.load_yaml(self.drpc_recipe_yaml_file)
         drpc_yaml_data["spec"].setdefault("kubeObjectProtection", {})
         drpc_yaml_data["spec"]["kubeObjectProtection"].setdefault("kubeObjectSelector")
-        drpc_yaml_data["spec"].setdefault("protectedNamespaces", []).append(
-            self.workload_namespace
-        )
+        drpc_yaml_data["spec"]["protectedNamespaces"] = [self.workload_namespace]
         drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
         drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESPACE
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
@@ -2289,7 +2287,10 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             if self.recipe_enabled:
                 log.info(f"Deleting recipe from {cluster.ENV_DATA['cluster_name']}")
                 run_cmd(
-                    cmd=f"oc delete recipe --all -n {self.workload_namespace}",
+                    cmd=(
+                        f"oc delete recipe {self.workload_namespace} "
+                        f"-n {self.workload_namespace}"
+                    ),
                     ignore_error=True,
                 )
             if not skip_resource_deletion_verification:

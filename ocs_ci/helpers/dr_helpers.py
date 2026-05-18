@@ -2950,10 +2950,11 @@ def mdr_post_failover_check(namespace, timeout=1200):
 
     """
     vm_obj = ocp.OCP(kind=constants.VIRTUALMACHINE, namespace=namespace)
-    if vm_obj.get().get("items"):
+    vm_items = vm_obj.get().get("items", [])
+    if vm_items:
         vm_obj.wait_for_resource(
             condition=constants.STATUS_TERMINATING,
-            resource_count=1,
+            resource_count=len(vm_items),
             timeout=timeout,
         )
     logger.info("Waiting for all pods to be deleted")
