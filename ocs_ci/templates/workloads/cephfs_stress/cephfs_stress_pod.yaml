@@ -17,7 +17,9 @@ spec:
         # Start filesystem monitoring in background if enabled
         if [ "${ENABLE_FS_MONITORING:-true}" = "true" ]; then
           echo "Starting filesystem monitoring in background..."
-          python3 /script/cephfs_filesystem_monitor.py &
+          echo "BASE_DIR for monitoring: $BASE_DIR"
+          echo "OUTPUT_DIR for monitoring: $OUTPUT_DIR"
+          BASE_DIR="$BASE_DIR" OUTPUT_DIR="$OUTPUT_DIR" python3 /script/cephfs_filesystem_monitor.py &
           MONITOR_PID=$!
           echo "Filesystem monitor started with PID: $MONITOR_PID"
         fi
@@ -75,6 +77,13 @@ spec:
         # Filters transient issues (network hiccups, temporary slowness). Default: 2.
         # Increase to 3+ for more conservative detection, decrease to 1 for aggressive detection
         # (may cause false positives).
+
+      - name: MONITOR_FIND_LIMIT
+        value: "0"
+        # Maximum number of files to check with find command in current iteration monitoring.
+        # Set to 0 for unlimited (checks all files - use for millions of files).
+        # For large file counts, consider: 100000, 500000, or 1000000.
+        # Default: 1000 (good for quick validation, may miss issues with millions of files).
     volumeMounts:
     - mountPath: /mnt
       name: mypvc

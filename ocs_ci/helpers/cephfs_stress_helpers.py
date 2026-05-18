@@ -445,7 +445,7 @@ class CephFSStressTestManager:
         verifications_to_run = [
             check_ceph_health,
             verify_openshift_storage_ns_pods_in_running_state,
-            lambda: verify_no_filesystem_hangs(self.namespace, stress_manager=self),
+            verify_no_filesystem_hangs,
         ]
         try:
             for verification_func in verifications_to_run:
@@ -1067,8 +1067,10 @@ def check_for_filesystem_hangs(
                 continue
 
             try:
-                logger.info("Checking if hang_markers directory exists and has files")
-                hang_marker_dir = f"{output_dir}/hang_markers"
+                logger.info(
+                    f"Checking if hang_markers directory exists and has files in pod {pod_name}"
+                )
+                hang_marker_dir = f"{output_dir}/{pod_name}/hang_markers"
                 check_cmd = f"ls -la {hang_marker_dir} 2>/dev/null || echo 'NO_MARKERS'"
                 result = pod_obj.exec_sh_cmd_on_pod(command=check_cmd, timeout=30)
 
@@ -1268,7 +1270,7 @@ def collect_monitoring_logs(stress_job_obj, dir_name=None):
                     name=pod_name, namespace=stress_job_obj.namespace
                 )
                 output_dir = os.environ.get("OUTPUT_DIR", "/mnt/output")
-                monitoring_log_dir = f"{output_dir}/monitoring_logs"
+                monitoring_log_dir = f"{output_dir}/{pod_name}/monitoring_logs"
 
                 list_cmd = (
                     f"ls {monitoring_log_dir}/*.log 2>/dev/null || echo 'NO_LOGS'"
@@ -1310,13 +1312,12 @@ def collect_monitoring_logs(stress_job_obj, dir_name=None):
 
 
 @retry(CommandFailed, tries=3, delay=60, backoff=1)
-def verify_no_filesystem_hangs(namespace, stress_manager=None):
+def verify_no_filesystem_hangs(stress_manager=None):
     """
     Verification function to check for filesystem hangs detected by monitoring.
 
     Args:
-        namespace (str): Namespace to check
-        stress_manager: CephFSStressTestManager instance to check pause status
+        stress_manager: CephFSStressTestManager instance to check pause status and get namespace
 
     Returns:
         bool: True if no hangs detected, raises exception if hangs found
@@ -1337,6 +1338,12 @@ def verify_no_filesystem_hangs(namespace, stress_manager=None):
         "\n"
     )
 
+    # Get namespace from stress_manager if available, otherwise use default
+    namespace = (
+        stress_manager.namespace
+        if stress_manager and hasattr(stress_manager, "namespace")
+        else config.ENV_DATA["cluster_namespace"]
+    )
     hang_detected, hang_details = check_for_filesystem_hangs(namespace)
     if hang_detected:
         error_msg = (
