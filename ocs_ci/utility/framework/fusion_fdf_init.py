@@ -66,8 +66,8 @@ class Initializer(object):
             args (list): List of parsed args passed to CLI to update config with
 
         Raises:
-            FileNotFoundError: If the provided cluster_path is not found
-            ClusterNameNotProvidedError: If the cluster_name isn't provided or found
+            FileNotFoundError: If the provided cluster_path is not found (except for fdf-mirror)
+            ClusterNameNotProvidedError: If the cluster_name isn't provided or found (except for fdf-mirror)
 
         """
         framework.config.init_cluster_configs()
@@ -125,8 +125,19 @@ class Initializer(object):
         """
         logger.info("Parsing arguments")
         parser = argparse.ArgumentParser()
-        parser.add_argument("--cluster-name", help="Name of the OCP cluster")
-        parser.add_argument("--cluster-path", help="OCP cluster directory")
+
+        # For fdf-mirror, cluster-path is optional
+        if self.deployment_type == "fdf-mirror":
+            parser.add_argument(
+                "--cluster-name", help="Name of the OCP cluster (optional)"
+            )
+            parser.add_argument(
+                "--cluster-path", help="OCP cluster directory (optional)"
+            )
+        else:
+            parser.add_argument("--cluster-name", help="Name of the OCP cluster")
+            parser.add_argument("--cluster-path", help="OCP cluster directory")
+
         parser.add_argument(
             "--conf",
             action="append",
@@ -264,11 +275,20 @@ class Initializer(object):
         # General properties
         props = {}
         props["run_id"] = config.RUN.get("run_id")
-        props["cluster_path"] = config.RUN.get("cluster_dir_full_path")
+        props["cluster_path"] = config.RUN.get("cluster_dir_full_path", "N/A")
         props["logs_url"] = config.RUN.get("logs_url")
-        props["ocp_version"] = get_running_ocp_version(
-            kubeconfig=config.RUN["kubeconfig"]
-        )
+
+        # Only get OCP version if kubeconfig is available
+        if config.RUN.get("kubeconfig"):
+            try:
+                props["ocp_version"] = get_running_ocp_version(
+                    kubeconfig=config.RUN["kubeconfig"]
+                )
+            except Exception as e:
+                logger.warning(f"Could not get OCP version: {e}")
+                props["ocp_version"] = "N/A"
+        else:
+            props["ocp_version"] = "N/A"
 
         # ReportPortal properties
         props["rp_launch_description"] = reporting.get_rp_launch_description()
