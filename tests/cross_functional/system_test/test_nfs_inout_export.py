@@ -1,19 +1,25 @@
 import ipaddress
+from threading import Thread
 import pytest
 import logging
 import time
 import os
 import socket
+import threading
+import hashlib
 
 from subprocess import CompletedProcess
 from ocs_ci.utility import nfs_utils
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, node, platform_nodes
+from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     skipif_rosa_hcp,
@@ -308,6 +314,7 @@ class TestNfsExport(ManageTest):
     def test_cluster_inout_nfs_export(
         self,
         pod_factory,
+        request,
     ):
         """
         This test is to validate NFS export using a PVC mounted on an app pod (in-cluster)
@@ -428,8 +435,13 @@ class TestNfsExport(ManageTest):
 
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
-        pod_name = "test-pod-outcluster-0"
-        pvc_name = "test-pvc-outcluster-0"
+        # Generate unique names using timestamp to avoid conflicts between test runs
+        import random
+
+        unique_suffix = f"{int(time.time())}-{random.randint(1000, 9999)}"
+        pod_name = f"test-pod-outcluster-{unique_suffix}"
+        pvc_name = f"test-pvc-outcluster-{unique_suffix}"
+        log.info(f"Using unique names: pod={pod_name}, pvc={pvc_name}")
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
             sc_name=self.nfs_sc,
@@ -557,9 +569,58 @@ class TestNfsExport(ManageTest):
         assert retcode == 0, f"Mount verification failed for {test_folder_for_pod}"
         log.info(f"Successfully mounted NFS export at {test_folder_for_pod}")
 
-        import pdb
+        # Add finalizer for complete cleanup after all resources are created
+        def cleanup_all_resources():
+            """Cleanup all test resources in reverse order of creation"""
+            log.info("Running cleanup for all test resources...")
 
-        pdb.set_trace()
+            # 1. Unmount NFS
+            try:
+                log.info(f"Unmounting {test_folder_for_pod}")
+                nfs_utils.unmount(con, test_folder_for_pod)
+                con.exec_cmd(f"rm -rf {test_folder_for_pod}")
+                log.info("Waiting for NFS export to be fully released...")
+                time.sleep(10)
+            except Exception as e:
+                log.warning(f"Failed to unmount NFS: {e}")
+
+            # 2. Delete deployment
+            try:
+                log.info(f"Deleting deployment {pod_name}")
+                deployment_obj = ocp.OCP(
+                    kind=constants.DEPLOYMENT, namespace=self.namespace
+                )
+                if deployment_obj.is_exist(resource_name=pod_name):
+                    deployment_obj.delete(resource_name=pod_name)
+                    deployment_obj.wait_for_delete(resource_name=pod_name, timeout=180)
+                    log.info(f"Deployment {pod_name} deleted successfully")
+            except Exception as e:
+                log.warning(f"Failed to delete deployment: {e}")
+
+            # 3. Wait for pod termination
+            try:
+                log.info("Waiting for pod to be terminated...")
+                pod_obj.ocp.wait_for_delete(pod_obj.name, timeout=180)
+                log.info(f"Pod {pod_obj.name} terminated successfully")
+            except Exception as e:
+                log.warning(f"Failed to wait for pod deletion: {e}")
+
+            # 4. Delete PVC and PV
+            try:
+                pv_obj = nfs_pvc_obj.backed_pv_obj
+                log.info(f"Deleting PVC {nfs_pvc_obj.name}")
+                nfs_pvc_obj.delete(wait=True)
+                log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+
+                log.info("Checking if NFS PV is deleted")
+                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
+                log.info(f"PV {pv_obj.name} deleted successfully")
+            except Exception as e:
+                log.warning(f"Failed to delete PVC/PV: {e}")
+
+            log.info("Cleanup complete")
+
+        request.addfinalizer(cleanup_all_resources)
 
         # Verify able to read exported volume
         command = f"cat {test_folder_for_pod}/index.html"
@@ -595,39 +656,533 @@ class TestNfsExport(ManageTest):
         )
         assert result.rstrip() == "hello world" + """\n""" + "test_writing"
 
-        # Cleanup
-        log.info("Cleaning up resources")
+        # ========================================================================
+        # Scenario: NFS Server Pod Node Reboot During Active I/O
+        # ========================================================================
+        log.info("=" * 80)
+        log.info("Starting NFS Server Pod Node Reboot During Active I/O scenario")
+        log.info("=" * 80)
 
-        # Unmount
-        log.info(f"Unmounting {test_folder_for_pod}")
-        nfs_utils.unmount(con, test_folder_for_pod)
+        # Step 1: Start continuous read/write I/O from NFS mounted client
+        log.info("Step 1: Starting continuous I/O operations on NFS mount")
 
-        # Remove mount point directory
-        con.exec_cmd(f"rm -rf {test_folder_for_pod}")
+        # Define test file name as constant
+        IO_TEST_FILE_NAME = "io_test_single.txt"
+        test_file = f"{test_folder_for_pod}/{IO_TEST_FILE_NAME}"
 
-        # Wait a bit after unmounting to ensure NFS server releases the export
-        log.info("Waiting for NFS export to be fully released...")
-        time.sleep(10)
+        io_errors = []
+        io_stop_event = threading.Event()
+        io_completed = threading.Event()
 
-        # Deletion of Pods and PVCs
-        log.info("Deleting pod")
-        pod_obj.delete()
-        pod_obj.ocp.wait_for_delete(
-            pod_obj.name, 180
-        ), f"Pod {pod_obj.name} is not deleted"
+        def continuous_io_operations():
+            """
+            Perform continuous read/write operations on a single NFS file with checksum validation
+            """
+            iteration = 0
+            previous_checksum = None
 
-        pv_obj = nfs_pvc_obj.backed_pv_obj
-        log.info(f"pv object-----{pv_obj}")
+            try:
+                # Initialize the file with initial content
+                initial_data = f"IO test started at {time.time()}"
+                init_cmd = f'echo "{initial_data}" > {test_file}'
+                retcode, _, stderr = con.exec_cmd(init_cmd)
+                if retcode != 0:
+                    io_errors.append(f"Failed to initialize test file: {stderr}")
+                    log.error(f"Initialization error: {stderr}")
+                    return
 
+                # Get initial file checksum using md5sum
+                checksum_cmd = f"md5sum {test_file}"
+                retcode, stdout, stderr = con.exec_cmd(checksum_cmd, use_logger=False)
+                if retcode == 0:
+                    previous_checksum = stdout.split()[0]
+                    log.info(f"File initialized with checksum: {previous_checksum}")
+                else:
+                    log.warning("Failed to get initial checksum")
+
+                while not io_stop_event.is_set():
+                    iteration += 1
+                    test_data = f"IO test iteration {iteration} - {time.time()}"
+
+                    # Write operation - append to the file
+                    write_cmd = f'echo "{test_data}" >> {test_file}'
+                    retcode, _, stderr = con.exec_cmd(write_cmd)
+                    if retcode != 0:
+                        io_errors.append(
+                            f"Write failed at iteration {iteration}: {stderr}"
+                        )
+                        log.error(f"Write error: {stderr}")
+                        continue
+
+                    # Calculate current file checksum using md5sum
+                    checksum_cmd = f"md5sum {test_file}"
+                    retcode, stdout, stderr = con.exec_cmd(
+                        checksum_cmd, use_logger=False
+                    )
+                    if retcode != 0:
+                        io_errors.append(
+                            f"Checksum calculation failed at iteration {iteration}: {stderr}"
+                        )
+                        log.error(f"Checksum error: {stderr}")
+                        continue
+
+                    current_checksum = stdout.split()[0]
+
+                    # Verify checksum changed after write (data was actually written)
+                    if current_checksum == previous_checksum:
+                        io_errors.append(
+                            f"Checksum unchanged at iteration {iteration}: "
+                            f"file may not have been updated"
+                        )
+                        log.error(
+                            f"Data integrity error at iteration {iteration}: "
+                            f"checksum unchanged ({current_checksum}), write may have failed"
+                        )
+
+                    # Read the last line to verify content
+                    read_cmd = f"tail -n 1 {test_file}"
+                    retcode, stdout, stderr = con.exec_cmd(read_cmd, use_logger=False)
+                    if retcode != 0:
+                        io_errors.append(
+                            f"Read failed at iteration {iteration}: {stderr}"
+                        )
+                        log.error(f"Read error: {stderr}")
+                    elif stdout.strip() != test_data:
+                        io_errors.append(f"Data mismatch at iteration {iteration}")
+                        log.error(
+                            f"Data mismatch: expected '{test_data}', got '{stdout.strip()}'"
+                        )
+
+                    # Update previous checksum for next iteration
+                    previous_checksum = current_checksum
+
+                    # Periodically log file checksum
+                    if iteration % 10 == 0:
+                        log.info(
+                            f"Iteration {iteration}: File checksum - {current_checksum}"
+                        )
+
+                    # Small delay between iterations
+                    time.sleep(2)
+
+                    if iteration % 20 == 0:
+                        log.info(f"Completed {iteration} I/O iterations successfully")
+
+            except Exception as e:
+                io_errors.append(f"Exception during I/O: {str(e)}")
+                log.error(f"I/O thread exception: {e}")
+            finally:
+                io_completed.set()
+                log.info(f"I/O operations completed. Total iterations: {iteration}")
+
+                # Final file statistics
+                try:
+                    stat_cmd = f"wc -l {test_file}"
+                    retcode, stdout, _ = con.exec_cmd(stat_cmd, use_logger=False)
+                    if retcode == 0:
+                        line_count = stdout.split()[0]
+                        log.info(f"Final file statistics: {line_count} lines written")
+
+                    # Final checksum using md5sum
+                    final_checksum_cmd = f"md5sum {test_file}"
+                    retcode, stdout, _ = con.exec_cmd(
+                        final_checksum_cmd, use_logger=False
+                    )
+                    if retcode == 0:
+                        final_checksum = stdout.split()[0]
+                        log.info(f"Final file checksum: {final_checksum}")
+                except Exception as stat_error:
+                    log.warning(f"Failed to get final file statistics: {stat_error}")
+
+        # Start I/O in background thread
+        io_thread: Thread = threading.Thread(
+            target=continuous_io_operations, daemon=True
+        )
+        io_thread.start()
+        log.info("Continuous I/O thread started")
+
+        # Let I/O run for a bit before node reboot
+        time.sleep(30)
+        log.info("Initial I/O operations running successfully")
+
+        # Step 2: Identify and reboot node hosting NFS server pod
+        log.info("Step 2: Identifying node hosting NFS server pod")
+
+        # Get NFS server pods
+        nfs_server_pods = get_all_pods(
+            namespace=self.namespace, selector=["rook-ceph-nfs"], selector_label="app"
+        )
+
+        if not nfs_server_pods:
+            io_stop_event.set()
+            io_thread.join(timeout=30)
+            raise Exception("No NFS server pods found")
+
+        nfs_server_pod = nfs_server_pods[0]
+        log.info(f"Found NFS server pod: {nfs_server_pod.name}")
+
+        # Get node hosting the NFS server pod
+        nfs_node_name = nfs_server_pod.data["spec"]["nodeName"]
+        log.info(f"NFS server pod is running on node: {nfs_node_name}")
+
+        # Get node object
+        nfs_node_obj = get_node_objs(node_names=[nfs_node_name])[0]
+        log.info(f"Rebooting node: {nfs_node_name}")
+
+        # Perform node reboot using platform nodes
+        log.info("Initiating node reboot...")
+        factory = platform_nodes.PlatformNodesFactory()
+        nodes_platform = factory.get_nodes_platform()
+        nodes_platform.restart_nodes([nfs_node_obj], wait=True)
+        log.info(f"Node {nfs_node_name} reboot completed")
+
+        # Step 3: Wait for node and pods to recover
+        log.info("Step 3: Waiting for node to come back online")
+
+        # Wait for node to be ready
+        log.info("Waiting for node to be in Ready state...")
+        wait_for_nodes_status(
+            node_names=[nfs_node_name], status=constants.NODE_READY, timeout=900
+        )
+        log.info(f"Node {nfs_node_name} is back online and Ready")
+
+        # Wait for NFS server pod to be running again
+        log.info("Waiting for NFS server pod to be running...")
+        wait_for_pods_to_be_running(
+            pod_names=[nfs_server_pod.name], namespace=self.namespace, timeout=600
+        )
+        log.info("NFS server pod is running again")
+
+        # Verify NFS mount is still accessible
+        log.info("Verifying NFS mount accessibility...")
+        retcode, stdout, _ = con.exec_cmd(f"findmnt -M {test_folder_for_pod}")
+        assert retcode == 0, f"NFS mount not accessible after node reboot"
+        log.info("NFS mount is still accessible")
+
+        # Let I/O continue for a bit after recovery
+        log.info("Continuing I/O operations after node recovery...")
+        time.sleep(60)
+
+        # Stop I/O operations
+        log.info("Stopping I/O operations...")
+        io_stop_event.set()
+        io_thread.join(timeout=60)
+
+        # Check for I/O errors
+        log.info("Checking I/O results...")
+        if io_errors:
+            log.warning(f"I/O errors detected: {len(io_errors)} errors")
+            for error in io_errors[:10]:  # Log first 10 errors
+                log.warning(f"  - {error}")
+            # Note: Some transient errors during reboot might be acceptable
+            # Fail only if there are persistent errors after recovery
+            if len(io_errors) > 20:
+                raise AssertionError(f"Too many I/O errors detected: {len(io_errors)}")
+        else:
+            log.info("No I/O errors detected - all operations successful!")
+
+        # Verify data consistency
+        log.info("Verifying data consistency on NFS mount...")
+
+        # Verify the single test file exists and is readable
+        verify_cmd = f"test -f {test_file} && echo 'exists' || echo 'missing'"
+        retcode, stdout, _ = con.exec_cmd(verify_cmd)
+        file_exists = stdout.strip() == "exists"
+
+        if file_exists:
+            log.info(f"Test file {test_file} exists on NFS mount")
+
+            # Read and verify file content
+            retcode, stdout, _ = con.exec_cmd(f"cat {test_file}")
+            if retcode == 0:
+                line_count = len(stdout.strip().split("\n"))
+                log.info(
+                    f"Successfully read {test_file}: {line_count} lines, first 50 chars: {stdout.strip()[:50]}..."
+                )
+            else:
+                log.warning(f"Could not read {test_file}")
+        else:
+            log.error(f"Test file {test_file} not found on NFS mount")
+
+        # Verify data from pod perspective
+        log.info("Verifying data consistency from pod...")
+        pod_file_path = f"/mnt/{IO_TEST_FILE_NAME}"
+        pod_verify_cmd = f"test -f {pod_file_path} && wc -l {pod_file_path} || echo '0'"
+        result = pod_obj.exec_cmd_on_pod(
+            command=f"bash -c '{pod_verify_cmd}'", out_yaml_format=False
+        )
+        pod_line_count = (
+            int(result.strip().split()[0]) if result.strip().split()[0].isdigit() else 0
+        )
+        log.info(f"Pod sees {pod_line_count} lines in test file")
+
+        # Verify file exists from both perspectives
+        assert file_exists, f"Test file {test_file} not found on NFS mount"
+        assert pod_line_count > 0, f"Pod cannot see test file or file is empty"
+
+        log.info(
+            f"NFS node reboot test completed: {nfs_node_name} rebooted, {len(io_errors)} I/O errors, test file verified with {pod_line_count} lines"
+        )
+
+        # ========================================================================
+        # Scenario: NFS PVC Snapshot and Restore with Data Integrity Verification
+        # ========================================================================
+        log.info("=" * 80)
+        log.info("Starting NFS PVC Snapshot and Restore scenario")
+        log.info("=" * 80)
+
+        # Step 1: Capture file checksum from NFS mount
+        log.info("Step 1: Capturing file checksum from NFS mount")
+
+        # Calculate checksum of the single test file
+        checksum_cmd = f"md5sum {test_file}"
+        retcode, stdout, _ = con.exec_cmd(checksum_cmd)
+        assert retcode == 0, f"Failed to calculate file checksum: {stdout}"
+
+        original_file_checksum = stdout.split()[0]
+        log.info(f"Original file checksum: {original_file_checksum}")
+
+        # Get file line count for reference
+        count_cmd = f"wc -l {test_file}"
+        retcode, stdout, _ = con.exec_cmd(count_cmd)
+        original_line_count = int(stdout.split()[0]) if retcode == 0 else 0
+        log.info(f"Total lines in file: {original_line_count}")
+
+        # Step 2: Create snapshot of the NFS PVC
+        log.info("Step 2: Creating snapshot of NFS PVC")
+
+        snapshot_name = f"{pvc_name}-snapshot"
+        snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
+
+        # Get the NFS snapshot class (not CephFS)
+        # NFS has its own snapshot class: ocs-storagecluster-nfsplugin-snapclass
+        nfs_snapshotclass_name = "ocs-storagecluster-nfsplugin-snapclass"
+
+        log.info(
+            f"Creating snapshot: {snapshot_name} from NFS PVC: {pvc_name} using snapshot class: {nfs_snapshotclass_name}"
+        )
+        from ocs_ci.ocs.resources.pvc import create_pvc_snapshot
+
+        snapshot_obj = create_pvc_snapshot(
+            pvc_name=pvc_name,
+            snap_yaml=snap_yaml,
+            snap_name=snapshot_name,
+            namespace=self.namespace,
+            sc_name=nfs_snapshotclass_name,
+            wait=True,
+            timeout=300,
+        )
+
+        log.info(f"Snapshot {snapshot_name} created successfully")
+
+        # Add snapshot to cleanup
+        def cleanup_snapshot():
+            try:
+                log.info(f"Deleting snapshot {snapshot_name}")
+                snapshot_obj.delete()
+                snapshot_obj.ocp.wait_for_delete(
+                    resource_name=snapshot_name, timeout=180
+                )
+                log.info(f"Snapshot {snapshot_name} deleted successfully")
+            except Exception as e:
+                log.warning(f"Failed to delete snapshot: {e}")
+
+        request.addfinalizer(cleanup_snapshot)
+
+        # Step 3: Create new PVC from snapshot (restore)
+        log.info("Step 3: Creating new PVC from snapshot")
+
+        restored_pvc_name = f"{pvc_name}-restored"
+        restored_pvc_obj = pvc.create_restore_pvc(
+            sc_name=self.nfs_sc,
+            snap_name=snapshot_name,
+            namespace=self.namespace,
+            size="10Gi",
+            pvc_name=restored_pvc_name,
+            volume_mode="Filesystem",
+            restore_pvc_yaml=constants.CSI_CEPHFS_PVC_RESTORE_YAML,
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+
+        log.info(f"Restored PVC {restored_pvc_name} created from snapshot")
+
+        # Add restored PVC to cleanup
+        def cleanup_restored_pvc():
+            try:
+                log.info(f"Deleting restored PVC {restored_pvc_name}")
+                restored_pvc_obj.delete(wait=True)
+                log.info(f"Restored PVC {restored_pvc_name} deleted successfully")
+            except Exception as e:
+                log.warning(f"Failed to delete restored PVC: {e}")
+
+        request.addfinalizer(cleanup_restored_pvc)
+
+        # Step 4: Create new pod with restored PVC
+        log.info("Step 4: Creating new pod with restored PVC")
+
+        restored_pod_name = f"{pod_name}-restored"
+        restored_deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
+
+        # Configure deployment
+        restored_deployment_data["metadata"]["name"] = restored_pod_name
+        restored_deployment_data["metadata"]["labels"]["app"] = restored_pod_name
+        restored_deployment_data["spec"]["selector"]["matchLabels"][
+            "name"
+        ] = restored_pod_name
+        restored_deployment_data["spec"]["template"]["metadata"]["labels"][
+            "name"
+        ] = restored_pod_name
+        restored_deployment_data["spec"]["template"]["spec"]["volumes"][0][
+            "persistentVolumeClaim"
+        ]["claimName"] = restored_pvc_name
+
+        helpers.create_resource(**restored_deployment_data)
+        time.sleep(60)
+
+        assert self.pod_obj.wait_for_resource(
+            resource_count=1,
+            condition=constants.STATUS_RUNNING,
+            selector=f"name={restored_pod_name}",
+            dont_allow_other_resources=True,
+            timeout=120,
+        )
+
+        restored_pod_obj = pod.get_all_pods(
+            namespace=self.namespace,
+            selector=[restored_pod_name],
+            selector_label="name",
+        )[0]
+
+        log.info(f"Restored pod {restored_pod_obj.name} is running")
+
+        # Add restored deployment to cleanup
+        def cleanup_restored_deployment():
+            try:
+                log.info(f"Deleting restored deployment {restored_pod_name}")
+                deployment_obj = ocp.OCP(
+                    kind=constants.DEPLOYMENT, namespace=self.namespace
+                )
+                if deployment_obj.is_exist(resource_name=restored_pod_name):
+                    deployment_obj.delete(resource_name=restored_pod_name)
+                    deployment_obj.wait_for_delete(
+                        resource_name=restored_pod_name, timeout=180
+                    )
+                    log.info(
+                        f"Restored deployment {restored_pod_name} deleted successfully"
+                    )
+
+                log.info("Waiting for restored pod to be terminated...")
+                restored_pod_obj.ocp.wait_for_delete(restored_pod_obj.name, timeout=180)
+                log.info(
+                    f"Restored pod {restored_pod_obj.name} terminated successfully"
+                )
+            except Exception as e:
+                log.warning(f"Failed to delete restored deployment/pod: {e}")
+
+        request.addfinalizer(cleanup_restored_deployment)
+
+        # Step 5: Mount restored PVC on NFS client and verify data integrity
+        log.info(
+            "Step 5: Mounting restored PVC on NFS client for data integrity verification"
+        )
+
+        # Get NFS share details for restored PVC
+        fetch_restored_vol_name_cmd = (
+            "get pvc " + restored_pvc_name + " --output jsonpath='{.spec.volumeName}'"
+        )
+        restored_vol_name = self.pvc_obj.exec_oc_cmd(fetch_restored_vol_name_cmd)
+        log.info(
+            f"For restored PVC {restored_pvc_name} volume name is, {restored_vol_name}"
+        )
+
+        fetch_restored_pv_share_cmd = (
+            "get pv "
+            + restored_vol_name
+            + " --output jsonpath='{.spec.csi.volumeAttributes.share}'"
+        )
+        restored_share_details = self.pv_obj.exec_oc_cmd(fetch_restored_pv_share_cmd)
+        log.info(f"Restored share details is, {restored_share_details}")
+
+        # Create mount point for restored NFS export
+        restored_test_folder = f"{self.test_folder}-restored"
+        retcode, _, _ = con.exec_cmd(f"mkdir -p {restored_test_folder}")
+        assert retcode == 0, f"Failed to create mount point {restored_test_folder}"
+
+        # Mount restored NFS export
+        export_restored_nfs_cmd = (
+            "mount -t nfs4 -o proto=tcp "
+            + self.hostname_add
+            + ":"
+            + restored_share_details
+            + " "
+            + restored_test_folder
+        )
+
+        log.info(f"Mounting restored NFS export: {export_restored_nfs_cmd}")
+        retry(
+            (CommandFailed),
+            tries=28,
+            delay=10,
+        )(
+            con.exec_cmd
+        )(export_restored_nfs_cmd)
+
+        # Verify mount is successful
+        retcode, stdout, _ = con.exec_cmd(f"findmnt -M {restored_test_folder}")
+        assert retcode == 0, f"Mount verification failed for {restored_test_folder}"
+        log.info(f"Successfully mounted restored NFS export at {restored_test_folder}")
+
+        # Add restored mount to cleanup
+        def cleanup_restored_mount():
+            try:
+                log.info(f"Unmounting {restored_test_folder}")
+                nfs_utils.unmount(con, restored_test_folder)
+                con.exec_cmd(f"rm -rf {restored_test_folder}")
+                log.info(f"Restored mount {restored_test_folder} cleaned up")
+            except Exception as e:
+                log.warning(f"Failed to unmount restored NFS: {e}")
+
+        request.addfinalizer(cleanup_restored_mount)
+
+        # Calculate checksum from restored NFS mount on client
+        log.info("Calculating file checksum from restored NFS mount...")
+        restored_test_file = f"{restored_test_folder}/{IO_TEST_FILE_NAME}"
+        restored_checksum_cmd = f"md5sum {restored_test_file}"
+        retcode, stdout, _ = con.exec_cmd(restored_checksum_cmd)
+        assert retcode == 0, f"Failed to calculate restored file checksum: {stdout}"
+
+        restored_file_checksum = stdout.split()[0]
+        log.info(f"Restored file checksum: {restored_file_checksum}")
+
+        # Get line count in restored file
+        restored_count_cmd = f"wc -l {restored_test_file}"
+        retcode, stdout, _ = con.exec_cmd(restored_count_cmd)
+        restored_line_count = int(stdout.split()[0]) if retcode == 0 else 0
+        log.info(f"Total lines in restored file: {restored_line_count}")
         import pdb
 
         pdb.set_trace()
 
-        log.info("Deleting PVC")
-        nfs_pvc_obj.delete(wait=True)
-        log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
+        # Verify line counts match
+        assert (
+            original_line_count == restored_line_count
+        ), f"Line count mismatch! Original: {original_line_count}, Restored: {restored_line_count}"
 
-        log.info("Check nfs pv is deleted")
-        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
+        # Verify checksums match
+        assert original_file_checksum == restored_file_checksum, (
+            f"File checksum mismatch! Data integrity check failed.\n"
+            f"Original checksum: {original_file_checksum}\n"
+            f"Restored checksum: {restored_file_checksum}"
+        )
 
-        log.info("Cleanup complete")
+        log.info("=" * 80)
+        log.info("NFS Snapshot and Restore scenario completed successfully!")
+        log.info(f"Summary:")
+        log.info(f"  - Snapshot created: {snapshot_name}")
+        log.info(f"  - Restored PVC: {restored_pvc_name}")
+        log.info(f"  - Lines verified: {restored_line_count}")
+        log.info(f"  - Original checksum: {original_file_checksum}")
+        log.info(f"  - Restored checksum: {restored_file_checksum}")
+        log.info(f"  - Data integrity: VERIFIED ✓")
+        log.info("=" * 80)
+        log.info("Test completed successfully - cleanup will be handled by finalizer")
