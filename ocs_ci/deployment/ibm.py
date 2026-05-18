@@ -15,6 +15,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources.storage_cluster import patch_storageclass_ocs_external_label
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,7 @@ class IBMDeployment(Deployment):
         for sc in storageclasses["items"]:
             if sc["provisioner"].startswith("openshift-storage."):
                 sc_name = sc["metadata"]["name"]
+                patch_storageclass_ocs_external_label(sc_name)
                 ocp.OCP().exec_oc_cmd(f"delete storageclass {sc_name}")
         volumesnapclasses = ocp.OCP(kind="VolumeSnapshotClass").get(all_namespaces=True)
         for vsc in volumesnapclasses["items"]:

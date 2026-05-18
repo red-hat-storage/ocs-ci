@@ -155,6 +155,53 @@ def verify_osd_tree_schema(ct_pod, deviceset_pvcs):
     )
 
 
+def _storageclass_ocs_external_label_patch():
+    """Merge-patch body for ``storageclass.ocs.openshift.io/is-external``."""
+    return {
+        "metadata": {
+            "labels": {
+                constants.OCS_EXTERNAL_STORAGECLASS_LABEL: (
+                    constants.OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE
+                ),
+            }
+        }
+    }
+
+
+def patch_storageclass_ocs_external_label(resource_name):
+    """
+    Merge-patch ``storageclass.ocs.openshift.io/is-external: "true"`` on a
+    StorageClass if it exists.
+
+    Used immediately before deleting StorageClasses in external mode so teardown
+    matches ODF expectations. No-op when ``DEPLOYMENT["external_mode"]`` is false.
+    """
+    if not config.DEPLOYMENT.get("external_mode"):
+        return
+
+    sc_ocp = OCP(kind=constants.STORAGECLASS)
+    if not sc_ocp.is_exist(resource_name=resource_name):
+        log.warning(
+            f"StorageClass {resource_name} not found; skipping pre-delete external OCS label patch"
+        )
+        return
+    log.info(
+        f"Patching StorageClass {resource_name} before delete: "
+        f"{constants.OCS_EXTERNAL_STORAGECLASS_LABEL}="
+        f"{constants.OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE}"
+    )
+    try:
+        sc_ocp.patch(
+            resource_name=resource_name,
+            params=json.dumps(_storageclass_ocs_external_label_patch()),
+            format_type="merge",
+        )
+    except CommandFailed as err:
+        log.warning(
+            f"Pre-delete label patch failed for StorageClass {resource_name}: {err}"
+        )
+
+
 def ocs_install_verification(
     timeout=600,
     skip_osd_distribution_check=False,
