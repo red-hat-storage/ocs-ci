@@ -723,10 +723,28 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
                 logger.warning(f"Pod {pod_name} has no containerStatuses")
                 continue
 
-            restart_count = container_statuses[0].get("restartCount", 0)
-            if restart_count > 0:
-                logger.info(f"Pod {pod_name} has {restart_count} restart(s)")
-                pod_restarts.append(f"{pod_name} (restarts: {restart_count})")
+            # Check restart counts for all containers
+            total_restarts = 0
+            container_restart_details = []
+            for item in container_statuses:
+                container_name = item.get("name")
+                restart_count = item.get("restartCount", 0)
+                if restart_count > 0:
+                    total_restarts += restart_count
+                    container_restart_details.append(
+                        f"{container_name}:{restart_count}"
+                    )
+
+            if total_restarts > 0:
+                container_details = ", ".join(container_restart_details)
+                logger.info(
+                    f"Pod {pod_name} has {total_restarts} total restart(s) "
+                    f"across containers: {container_details}"
+                )
+                pod_restarts.append(
+                    f"{pod_name} (restarts: {total_restarts}, "
+                    f"details: {container_details})"
+                )
 
             # Check for OOMKilled containers
             for item in container_statuses:
@@ -1218,6 +1236,7 @@ def check_for_filesystem_hangs(
 
     except Exception as e:
         logger.error(f"Error checking for filesystem hangs: {e}")
+        raise CommandFailed(f"Failed to inspect pods for filesystem hangs: {e}")
 
     if hang_markers_found:
         logger.critical(
