@@ -1524,8 +1524,14 @@ def get_all_drpolicy():
     with config.RunWithAcmConfigContext():
         drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
         drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
+    # Build list of managed clusters for DR
+    # Include clusters with rbd_dr_scenario (RDR) or in metro-dr mode (MDR)
+    multicluster_mode = config.MULTICLUSTER.get("multicluster_mode")
     for cluster_name in config.clusters:
-        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+        if (
+            cluster_name.ENV_DATA.get("rbd_dr_scenario")
+            or multicluster_mode == constants.MDR_MODE
+        ):
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )
