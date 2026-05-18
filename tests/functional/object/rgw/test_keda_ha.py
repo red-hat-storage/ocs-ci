@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     rgw,
     skipif_disconnected_cluster,
+    skipif_external_mode,
     tier1,
 )
 from ocs_ci.ocs import constants
@@ -31,6 +32,7 @@ RGW_SCALE_TARGET_REF = {
 @rgw
 @red_squad
 @skipif_disconnected_cluster
+@skipif_external_mode  # Setting up KEDA on the external cluster is out of scope
 class TestKedaHA:
     """
     Test RGW's integration with the KEDA autoscaler
