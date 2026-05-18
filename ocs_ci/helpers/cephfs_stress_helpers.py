@@ -674,15 +674,15 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
     Validates that all the Pods in the openshift-storage namespace are healthy.
     Retries on CommandFailed, then raises PodStabilityError if verification fails after all retries.
 
-    It checks for two conditions:
-    1. Pods have not been restarted
-    2. Pods have not been OOMKilled
+    It checks for:
+    1. Pods with OOMKilled containers (fails the test)
+    2. Pods with restarts (informational only, logged as warning)
 
     Args:
         stress_manager: CephFSStressTestManager instance to check pause status
 
     Raises:
-        PodStabilityError: If any pod is found to have restarts or OOMKills after all retries
+        PodStabilityError: If any pod is found to have OOMKilled containers after all retries
 
     """
     # Check if verifications are paused (for in-progress checks)
@@ -714,17 +714,9 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
         oomkilled_pods = []
 
         for pod_obj in pod_objs:
-<<<<<<< HEAD
-            pod_name = pod_obj.get().get("metadata").get("name")
-            if not validate_pods_are_running_and_not_restarted(
-                pod_name=pod_name,
-                pod_restart_count=0,
-                namespace=config.ENV_DATA["cluster_namespace"],
-            ):
-                pod_restarts.append(pod_name)
-=======
+            # Fetch pod data once and reuse to avoid redundant API calls
             pod_data = pod_obj.get()
-            pod_name = pod_data.get("metadata").get("name")
+            pod_name = pod_data.get("metadata", {}).get("name")
 
             container_statuses = pod_data.get("status", {}).get("containerStatuses", [])
             if not container_statuses:
@@ -735,9 +727,9 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
             if restart_count > 0:
                 logger.info(f"Pod {pod_name} has {restart_count} restart(s)")
                 pod_restarts.append(f"{pod_name} (restarts: {restart_count})")
->>>>>>> cd5f8e867 (fixed pr check issues)
 
-            for item in pod_obj.get().get("status").get("containerStatuses"):
+            # Check for OOMKilled containers
+            for item in container_statuses:
                 container_name = item.get("name")
                 if not validate_pod_oomkilled(
                     pod_name=pod_name, container=container_name
@@ -760,20 +752,13 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
                 "Openshift-storage pods health check verification failed due to OOMKilled containers"
             )
 
-<<<<<<< HEAD
-        logger.info(
-            "All pods in the openshift-storage namespace are healthy (no OOMs)"
-        )
-
         # Explicitly clean up pod objects to prevent memory leaks
         del pod_objs
         del pod_restarts
         del oomkilled_pods
         gc.collect()
 
-=======
         logger.info("All pods in the openshift-storage namespace are healthy (no OOMs)")
->>>>>>> cd5f8e867 (fixed pr check issues)
         return True
 
     try:
