@@ -198,17 +198,23 @@ class TestNoobaaPriorityClass(MCGTest):
             actual == core_pc
         ), f"noobaa-core priorityClassName mismatch: expected={core_pc!r}, actual={actual!r}"
 
-        for ep_pod in get_noobaa_endpoint_pods():
+        endpoint_pods = get_noobaa_endpoint_pods()
+        assert (
+            endpoint_pods
+        ), "No NooBaa endpoint pods found for priorityClassName verification"
+        for ep_pod in endpoint_pods:
             actual = ep_pod.get()["spec"].get("priorityClassName")
             assert actual == endpoint_pc, (
                 f"noobaa-endpoint priorityClassName mismatch: "
                 f"expected={endpoint_pc!r}, actual={actual!r}"
             )
 
-        for pod_data in get_pods_having_label(
+        db_pods = get_pods_having_label(
             label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
             namespace=namespace,
-        ):
+        )
+        assert db_pods, "No NooBaa DB pods found for priorityClassName verification"
+        for pod_data in db_pods:
             db_pod = Pod(**pod_data)
             actual = db_pod.get()["spec"].get("priorityClassName")
             assert actual == db_pc, (
