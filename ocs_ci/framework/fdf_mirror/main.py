@@ -77,6 +77,3 @@ def main(argv=None):
     # Execute FDF mirroring
     exit_code = fdf_mirror()
     sys.exit(exit_code)
-
-
-# Made with Bob
