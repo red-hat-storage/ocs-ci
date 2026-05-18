@@ -1,0 +1,22 @@
+[[registry]]
+location="registry.redhat.io"
+[[registry.mirror]]
+location="cp.stg.icr.io/cp/df"
+mirror-by-digest-only = false
+pull-from-mirror = "all"
+
+[[registry]]
+location="icr.io/cpopen"
+[[registry.mirror]]
+location="cp.stg.icr.io/cp/df"
+mirror-by-digest-only = false
+pull-from-mirror = "all"
+short-name-mode = "permissive"
+
+[[registry]]
+location="cp.icr.io/cp/df/"
+[[registry.mirror]]
+location="cp.stg.icr.io/cp/df"
+mirror-by-digest-only = false
+pull-from-mirror = "all"
+short-name-mode = "permissive"
