@@ -5620,6 +5620,131 @@ def ip_from_subnet_offset(subnet: str, offset: int) -> str:
     return str(ip)
 
 
+def validate_multus_with_odf_cli():
+    """
+    Validate Multus network connectivity using odf-cli before ODF deployment.
+
+    Downloads the odf-cli binary, verifies NNCPs are configured, creates
+    a temporary ServiceAccount with cluster-admin privileges, runs
+    ``odf multus validation run``, and cleans up on success.
+
+    On failure the validation pods are left running for debugging and an
+    exception is raised to abort deployment.
+
+    Raises:
+        CommandFailed: If the validation command fails.
+        Exception: If NNCP verification or RBAC setup fails.
+    """
+    from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
+
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version < version.VERSION_4_15:
+        logger.warning(
+            f"ODF CLI not supported on {ocs_version}, skipping multus validation"
+        )
+        return
+
+    namespace = config.ENV_DATA.get("multus_public_net_namespace", "openshift-storage")
+
+    # Verify NNCPs are SuccessfullyConfigured
+    logger.info("Checking NNCP status before multus validation")
+    nncp_ocp = OCP(kind="nncp")
+    nncps = nncp_ocp.get().get("items", [])
+    if nncps:
+        for nncp in nncps:
+            name = nncp["metadata"]["name"]
+            conditions = nncp.get("status", {}).get("conditions", [])
+            degraded = any(
+                c.get("type") == "Degraded" and c.get("status") == "True"
+                for c in conditions
+            )
+            available = any(
+                c.get("type") == "Available" and c.get("status") == "True"
+                for c in conditions
+            )
+            if degraded:
+                raise Exception(
+                    f"NNCP {name} is Degraded, cannot proceed with multus validation"
+                )
+            if not available:
+                logger.warning(
+                    f"NNCP {name} is not yet Available, may still be progressing"
+                )
+        logger.info("All NNCPs are in acceptable state")
+    else:
+        logger.info("No NNCPs found, skipping NNCP status check")
+
+    # Download odf-cli
+    logger.info("Setting up odf-cli for multus validation")
+    runner = odf_cli_setup_helper()
+
+    # Create temp SA + RBAC if needed
+    created_sa = False
+    created_crb = False
+    sa_name = "rook-ceph-system"
+
+    try:
+        run_cmd(f"oc get sa {sa_name} -n {namespace}")
+        logger.info(f"ServiceAccount {sa_name} already exists in {namespace}")
+    except CommandFailed:
+        logger.info(f"Creating ServiceAccount {sa_name} in {namespace}")
+        run_cmd(f"oc create sa {sa_name} -n {namespace}")
+        created_sa = True
+
+    logger.info(f"Granting cluster-admin to {sa_name} in {namespace}")
+    run_cmd(
+        f"oc adm policy add-cluster-role-to-user cluster-admin"
+        f" system:serviceaccount:{namespace}:{sa_name}"
+    )
+    created_crb = True
+
+    # Build validation args from config
+    public_network = config.ENV_DATA.get("multus_public_net_name", "public-net")
+    cluster_network = None
+    if config.ENV_DATA.get("multus_create_cluster_net"):
+        cluster_network = config.ENV_DATA.get("multus_cluster_net_name", "cluster-net")
+
+    try:
+        logger.info("Running odf multus validation")
+        runner.run_multus_validation(
+            public_network=public_network,
+            cluster_network=cluster_network,
+            namespace=namespace,
+            timeout_minutes=5,
+        )
+        logger.info("ODF multus validation PASSED")
+
+        logger.info("Cleaning up multus validation resources")
+        runner.run_multus_validation_cleanup(namespace=namespace)
+
+    except Exception as ex:
+        logger.error(f"ODF multus validation FAILED: {ex}")
+        logger.error(
+            "Validation pods left running for debugging. "
+            f"Run: odf multus validation cleanup --namespace {namespace}"
+        )
+        raise
+
+    finally:
+        if created_crb:
+            try:
+                run_cmd(
+                    f"oc adm policy remove-cluster-role-from-user cluster-admin"
+                    f" system:serviceaccount:{namespace}:{sa_name}",
+                    ignore_error=True,
+                )
+            except Exception:
+                logger.warning("Failed to remove temp ClusterRoleBinding")
+        if created_sa:
+            try:
+                run_cmd(
+                    f"oc delete sa {sa_name} -n {namespace}",
+                    ignore_error=True,
+                )
+            except Exception:
+                logger.warning(f"Failed to remove temp ServiceAccount {sa_name}")
+
+
 def setup_multus_networks(patch_storagecluster=False):
     """
     Set up Multus networks for ODF deployment.
@@ -5822,6 +5947,14 @@ def setup_multus_networks(patch_storagecluster=False):
         )
         templating.dump_data_to_temp_yaml(cluster_net_data, cluster_net_yaml.name)
         run_cmd(f"oc create -f {cluster_net_yaml.name}")
+
+    # Validate multus networks with odf-cli before proceeding
+    if not config.ENV_DATA.get("multus_skip_odf_cli_validation", False):
+        validate_multus_with_odf_cli()
+    else:
+        logger.info(
+            "Skipping odf-cli multus validation (multus_skip_odf_cli_validation=True)"
+        )
 
     # Patch StorageCluster with multus network selectors if requested
     if patch_storagecluster:
