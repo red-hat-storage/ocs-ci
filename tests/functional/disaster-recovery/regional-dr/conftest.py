@@ -41,7 +41,7 @@ def pytest_collection_modifyitems(items):
                 items.remove(item)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=False)
 def check_subctl_cli():
     # Check whether subctl cli is present
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
@@ -54,7 +54,7 @@ def check_subctl_cli():
         submariner.download_binary()
 
 
-@pytest.fixture(autouse=True, scope="function")
+@pytest.fixture(autouse=False, scope="function")
 def rdr_health_check():
     """
     Verify cluster health on both managed clusters before each RDR test.
