@@ -126,7 +126,7 @@ if __name__ == "__main__":
                 futures = [executor.submit(toggle_author_xattr, file) for file in files]
                 for file, future in zip(files, futures):
                     _ = future.result()
-                log.info(".", end="", flush=True)
+                log.info(".")
     except KeyboardInterrupt:
         log.info("\nInterrupted by user. Shutting down gracefully...")
         # ThreadPoolExecutor context manager automatically calls shutdown(wait=True)
