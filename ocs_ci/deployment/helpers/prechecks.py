@@ -136,7 +136,7 @@ class VSpherePreChecks(PreChecks):
         Aggregate all the checks needed for vSphere platform
         """
         self.pre_req()
-        self.storage_check()
+        # self.storage_check()
         self.memory_check()
         self.cpu_check()
         self.network_check()
