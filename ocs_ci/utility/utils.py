@@ -3466,6 +3466,9 @@ def ceph_health_recover(
                 " This might be because of product bug, so please do not ignore this error and"
                 " analyze why this has happened!"
             )
+    raise CephHealthNotRecoveredException(
+        f"No known fix pattern matched for health status: {health_status}"
+    )
 
 
 def ceph_health_check(
