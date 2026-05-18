@@ -18,7 +18,13 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import external_mode_required
-from ocs_ci.framework.testlib import ManageTest, brown_squad, polarion_id, tier2
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    brown_squad,
+    ignore_leftovers,
+    polarion_id,
+    tier2,
+)
 from ocs_ci.helpers.helpers import (
     create_pvc,
     create_pod,
@@ -274,6 +280,7 @@ def _build_exporter_topology_params(topo_config, ext_cluster):
 
 @brown_squad
 @tier2
+@ignore_leftovers
 @external_mode_required
 class TestTopologyAwarenessExternal(ManageTest):
     """
@@ -381,7 +388,7 @@ class TestTopologyAwarenessExternal(ManageTest):
                 break
         assert sc_created, f"StorageClass {sc_name} was not created within timeout"
 
-    @polarion_id("OCS-XXXX")
+    @polarion_id("OCS-7930")
     def test_topology_sc_auto_created(self):
         """
         Verify that ODF auto-creates the non-resilient StorageClass with
@@ -419,7 +426,7 @@ class TestTopologyAwarenessExternal(ManageTest):
         )
         log.info(f"StorageClass {sc_name} validated successfully")
 
-    @polarion_id("OCS-XXXX")
+    @polarion_id("OCS-7931")
     def test_pvc_pending_without_pod(self, project_factory):
         """
         Verify that PVC with topology SC stays Pending when no pod
@@ -441,7 +448,7 @@ class TestTopologyAwarenessExternal(ManageTest):
         ), f"Expected PVC to be Pending, got {pvc.status}"
         log.info("PVC correctly stays Pending without a consuming pod")
 
-    @polarion_id("OCS-XXXX")
+    @polarion_id("OCS-7932")
     def test_single_pod_topology_placement(self, project_factory):
         """
         Verify that a single pod's PV is created in the correct topology
@@ -497,7 +504,7 @@ class TestTopologyAwarenessExternal(ManageTest):
         ), f"RBD image {image_uuid} not found in pool {pv_pool}"
         log.info(f"Data verified in pool {pv_pool}, image uuid {image_uuid}")
 
-    @polarion_id("OCS-XXXX")
+    @polarion_id("OCS-7933")
     def test_statefulset_spreads_across_pools(self, project_factory):
         """
         Verify that a 3-replica StatefulSet with topologySpreadConstraints
@@ -606,7 +613,7 @@ class TestTopologyAwarenessExternal(ManageTest):
         ), f"Expected 3 different pools, got {len(pools_used)}: {pools_used}"
         log.info(f"All 3 topology pools used: {pools_used}")
 
-    @polarion_id("OCS-XXXX")
+    @polarion_id("OCS-7934")
     def test_pvc_deletion_cleans_rbd_image(self, project_factory):
         """
         Verify that deleting a PVC removes the RBD image from the Ceph pool
