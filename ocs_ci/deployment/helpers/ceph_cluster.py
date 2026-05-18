@@ -209,7 +209,12 @@ def install_minimal_ceph_conf(wnode, host_node, namespace=None):
         f"Running install minimal ceph conf script on the worker node {wnode.name} "
         f"with fsid={ceph_fsid}, host_node_ip={host_node_ip}"
     )
-    out = node_obj.run_script(script_path=script_dest_path, args=args, timeout=300)
+    out = node_obj.run_script(
+        script_path=script_dest_path,
+        args=args,
+        timeout=300,
+        secrets=[ceph_key],
+    )
     logger.info("Script output:\n" + out)
     success_msg = "created successfully"
     return success_msg in out

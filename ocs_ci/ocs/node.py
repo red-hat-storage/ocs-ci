@@ -80,7 +80,7 @@ class Node(OCP):
         self._namespace = namespace or constants.DEFAULT_NAMESPACE
         self.use_root = use_root
 
-    def run_cmd(self, cmd, namespace=None, use_root=None, timeout=300):
+    def run_cmd(self, cmd, namespace=None, use_root=None, timeout=300, secrets=None):
         """
         Run command on the node
 
@@ -89,6 +89,7 @@ class Node(OCP):
             namespace (str): Namespace of the node. If None, default namespace will be used.
             use_root (bool): Whether to use root user or not for running the command.
             timeout (int): Timeout for the command execution (in seconds)
+            secrets (list): A list of secrets to be masked with asterisks in logs.
 
         Returns:
             str: Output of the command execution
@@ -107,6 +108,7 @@ class Node(OCP):
             namespace=namespace,
             use_root=use_root,
             timeout=timeout,
+            secrets=secrets,
         )
 
     def run_script(
@@ -116,6 +118,7 @@ class Node(OCP):
         namespace: str = None,
         use_root: bool = None,
         timeout: int = 600,
+        secrets: list = None,
     ):
         """
         Execute a shell script directly on a node (inside chroot /host)
@@ -127,6 +130,7 @@ class Node(OCP):
             namespace (str): Namespace for the debug pod.
             use_root (bool): Whether to use root user or not for running the command.
             timeout (int): Timeout for the command execution (in seconds).
+            secrets (list): A list of secrets to be masked with asterisks in logs.
 
         Returns:
             str: Output of the script execution.
@@ -141,7 +145,7 @@ class Node(OCP):
         )
         # Build the command — single element, no single quotes inside
         cmd = f"set -euo pipefail; " f"bash {script_path} {args} "
-        return self.run_cmd(cmd, namespace, use_root, timeout)
+        return self.run_cmd(cmd, namespace, use_root, timeout, secrets)
 
     def upload_script(
         self,
