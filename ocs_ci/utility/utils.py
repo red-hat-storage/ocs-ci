@@ -7265,8 +7265,8 @@ def is_release_branch(branch_name):
 def auto_configure_acm():
     """         
     Auto-configure ACM as released or unreleased based on OCP version                                                                                                                              
-    Args:
-    ocp_version_str (str): OCP version string (e.g., "4.22")                                                   
+    If explicitly configured by user, skips auto-configuration.                                                                      
+    Uses OCP version mappings with safe defaults (unreleased) for unknown versions.                                                  
     """
     # If explicitly configured by user, skip auto-configuration
     if config.ENV_DATA.get("acm_hub_unreleased") is not None:                                                                        
@@ -7274,20 +7274,19 @@ def auto_configure_acm():
         return 
     # Get OCP version                                                                                                                
     ocp_version = version_module.get_semantic_ocp_version_from_config()
-    ocp_version_str = f"{ocp_version.major}.{ocp_version.minor}" 
     # Look up in mapping, default to True (unreleased) for unknown versions
-    acm_unreleased = defaults.ocp_to_acm_unreleased_mapping.get(ocp_version_str, True)
+    acm_unreleased = defaults.ocp_to_acm_unreleased_mapping.get(f"{ocp_version}", True)
     config.ENV_DATA["acm_hub_unreleased"] = acm_unreleased
-    if ocp_version_str in defaults.ocp_to_acm_unreleased_mapping:
-        log.info(f"OCP {ocp_version_str} → ACM: {'UNRELEASED' if acm_unreleased else 'RELEASED'}")
+    if f"{ocp_version}" in defaults.ocp_to_acm_unreleased_mapping:
+        log.info(f"OCP {ocp_version} → ACM: {'UNRELEASED' if acm_unreleased else 'RELEASED'}")
     else:
-        log.info(f"OCP {ocp_version_str} not in mapping → ACM: UNRELEASED (safe default)")
+        log.info(f"OCP {ocp_version} not in mapping → ACM: UNRELEASED (safe default)")
 
 def auto_configure_submariner():
     """         
     Auto-configure Submariner as released or unreleased based on OCP version.
-    Args:
-    ocp_version_str (str): OCP version string (e.g., "4.22")
+    If explicitly configured by user, skips auto-configuration.                                                                      
+    Uses OCP version mappings with safe defaults (unreleased) for unknown versions.
     """                                                                                                                              
     # If explicitly configured by user, skip auto-configuration
     if config.ENV_DATA.get("submariner_release_type") is not None:                                                                   
@@ -7295,13 +7294,12 @@ def auto_configure_submariner():
         return
     # Get OCP version
     ocp_version = version_module.get_semantic_ocp_version_from_config()                                                              
-    ocp_version_str = f"{ocp_version.major}.{ocp_version.minor}"
     # Look up in mapping, default to True (unreleased) for unknown versions
-    submariner_unreleased = defaults.ocp_to_submariner_unreleased_mapping.get(ocp_version_str, True)
+    submariner_unreleased = defaults.ocp_to_submariner_unreleased_mapping.get(f"{ocp_version}", True)
     config.ENV_DATA["submariner_release_type"] = "unreleased" if submariner_unreleased else "released"
                                                                                                                                        
-    if ocp_version_str in defaults.ocp_to_submariner_unreleased_mapping:
-        log.info(f"OCP {ocp_version_str} → Submariner: {'UNRELEASED' if submariner_unreleased else 'RELEASED'}")                     
+    if f"{ocp_version}" in defaults.ocp_to_submariner_unreleased_mapping:
+        log.info(f"OCP {ocp_version} → Submariner: {'UNRELEASED' if submariner_unreleased else 'RELEASED'}")                     
     else:                                                                                                                            
-        log.info(f"OCP {ocp_version_str} not in mapping → Submariner: UNRELEASED (safe default)")
+        log.info(f"OCP {ocp_version} not in mapping → Submariner: UNRELEASED (safe default)")
     
