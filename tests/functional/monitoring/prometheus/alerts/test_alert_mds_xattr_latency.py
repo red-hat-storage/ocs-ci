@@ -200,10 +200,11 @@ def verify_alert_cleared(threading_lock):
 
 def ensure_mds_deployments_scaled(deployment_names):
     """
-    Ensure MDS deployments are scaled to 1 replica.
+    Ensure MDS deployments are scaled to 1 replica and MDS daemons are active.
 
-    Checks if both MDS pods are running. If not, scales the deployments to 1
-    and waits for all MDS pods to reach Running state.
+    Checks if both MDS pods are running and MDS daemons are active. If not,
+    scales the deployments to 1 and waits for all MDS pods to reach Running
+    state and for MDS daemons to become active.
 
     Args:
         deployment_names: List of MDS deployment names to check/scale
@@ -217,8 +218,32 @@ def ensure_mds_deployments_scaled(deployment_names):
             )
         time.sleep(60)
         mds_pods = cluster.get_mds_pods()
+
+    # Wait for all MDS pods to be Running
     for pd in mds_pods:
         helpers.wait_for_resource_state(resource=pd, state=constants.STATUS_RUNNING)
+
+    # Wait for MDS daemons to become active
+    log.info("Waiting for MDS daemons to become active")
+    timeout = 500  # 5 minutes timeout
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            active_mds = cluster.get_active_mds_info()
+            standby_mds = cluster.get_mds_standby_replay_info()
+
+            if active_mds and standby_mds:
+                log.info(
+                    f"MDS daemons are active: active={active_mds['mds_daemon']}, standby={standby_mds['mds_daemon']}"
+                )
+                break
+        except Exception as e:
+            log.debug(f"MDS daemons not yet active: {e}")
+
+        time.sleep(10)
+    else:
+        log.warning("Timeout waiting for MDS daemons to become active, but continuing")
 
 
 @blue_squad
