@@ -66,14 +66,21 @@ class Initializer(object):
             args (list): List of parsed args passed to CLI to update config with
 
         Raises:
-            FileNotFoundError: If the provided cluster_path is not found
-            ClusterNameNotProvidedError: If the cluster_name isn't provided or found
+            FileNotFoundError: If the provided cluster_path is not found (except for fdf-mirror)
+            ClusterNameNotProvidedError: If the cluster_name isn't provided or found (except for fdf-mirror)
 
         """
         framework.config.init_cluster_configs()
         load_config(args.conf)
         # Updating resource_checker to False since it's not needed for FDF deployment
         config.RUN["resource_checker"] = False
+
+        # For fdf-mirror, cluster_path is optional
+        if self.deployment_type == "fdf-mirror" and not args.cluster_path:
+            logger.info("Running fdf-mirror without cluster access")
+            config.REPORTING["report_path"] = args.report
+            return
+
         logger.debug("Verifying cluster_name and cluster_path")
         cluster_name = args.cluster_name
         cluster_path = os.path.expanduser(args.cluster_path)
@@ -125,8 +132,19 @@ class Initializer(object):
         """
         logger.info("Parsing arguments")
         parser = argparse.ArgumentParser()
-        parser.add_argument("--cluster-name", help="Name of the OCP cluster")
-        parser.add_argument("--cluster-path", help="OCP cluster directory")
+
+        # For fdf-mirror, cluster-path is optional
+        if self.deployment_type == "fdf-mirror":
+            parser.add_argument(
+                "--cluster-name", help="Name of the OCP cluster (optional)"
+            )
+            parser.add_argument(
+                "--cluster-path", help="OCP cluster directory (optional)"
+            )
+        else:
+            parser.add_argument("--cluster-name", help="Name of the OCP cluster")
+            parser.add_argument("--cluster-path", help="OCP cluster directory")
+
         parser.add_argument(
             "--conf",
             action="append",
@@ -264,11 +282,20 @@ class Initializer(object):
         # General properties
         props = {}
         props["run_id"] = config.RUN.get("run_id")
-        props["cluster_path"] = config.RUN.get("cluster_dir_full_path")
+        props["cluster_path"] = config.RUN.get("cluster_dir_full_path", "N/A")
         props["logs_url"] = config.RUN.get("logs_url")
-        props["ocp_version"] = get_running_ocp_version(
-            kubeconfig=config.RUN["kubeconfig"]
-        )
+
+        # Only get OCP version if kubeconfig is available
+        if config.RUN.get("kubeconfig"):
+            try:
+                props["ocp_version"] = get_running_ocp_version(
+                    kubeconfig=config.RUN["kubeconfig"]
+                )
+            except Exception as e:
+                logger.warning(f"Could not get OCP version: {e}")
+                props["ocp_version"] = "N/A"
+        else:
+            props["ocp_version"] = "N/A"
 
         # ReportPortal properties
         props["rp_launch_description"] = reporting.get_rp_launch_description()
