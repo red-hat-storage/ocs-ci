@@ -20,7 +20,8 @@ from ocs_ci.helpers.dr_helpers import (
     generate_rdr_mirror_images,
 )
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, ResourceNotFoundError,
+    CommandFailed,
+    ResourceNotFoundError,
     CephHealthException,
     CephHealthNotRecoveredException,
     CephHealthRecoveredException,
