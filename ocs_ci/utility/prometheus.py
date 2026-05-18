@@ -324,6 +324,90 @@ def validate_status(content):
         raise ValueError("content status is not success")
 
 
+def wait_for_alert_firing(
+    api,
+    alert_name,
+    timeout=600,
+    expected_severity=None,
+    expected_message_substr=None,
+    min_count=1,
+):
+    """
+    Wait for a Prometheus alert to reach the ``firing`` state and validate it.
+
+    Args:
+        api (PrometheusAPI): Prometheus API instance.
+        alert_name (str): Alert name to wait for.
+        timeout (int): Seconds to wait for the alert to fire.
+        expected_severity (str | None): If given, assert that
+            ``alert["labels"]["severity"]`` equals this value.
+        expected_message_substr (str | None): If given, assert that this
+            substring appears (case-insensitive) in
+            ``alert["annotations"]["message"]``.
+        min_count (int): Minimum number of firing alert instances to
+            wait for. Defaults to 1.
+
+    Returns:
+        list[dict]: All fired alert records (at least ``min_count``).
+
+    Raises:
+        AssertionError: If fewer than ``min_count`` alerts fire, or any
+            validation fails.
+    """
+    alerts = api.wait_for_alert(
+        name=alert_name,
+        state="firing",
+        timeout=timeout,
+        sleep=10,
+        min_count=min_count,
+    )
+    assert len(alerts) >= min_count, (
+        f"Expected at least {min_count} '{alert_name}' alert(s) to fire "
+        f"within {timeout}s, got {len(alerts)}"
+    )
+    alert = alerts[0]
+    if expected_severity is not None:
+        assert alert["labels"]["severity"] == expected_severity, (
+            f"Expected severity '{expected_severity}', "
+            f"got '{alert['labels']['severity']}'"
+        )
+    if expected_message_substr is not None:
+        assert (
+            expected_message_substr.lower() in alert["annotations"]["message"].lower()
+        ), (
+            f"Expected '{expected_message_substr}' in alert message: "
+            f"{alert['annotations']['message']}"
+        )
+    assert alert["annotations"].get("runbook_url") or alert["annotations"].get(
+        "description"
+    ), f"Alert '{alert_name}' is missing both runbook_url and description"
+    logger.info(
+        "Alert '%s' fired: %d instance(s), labels=%s message=%s",
+        alert_name,
+        len(alerts),
+        alert["labels"],
+        alert["annotations"].get("message"),
+    )
+    return alerts
+
+
+def wait_for_alert_cleared(api, alert_name, timeout=600):
+    """
+    Wait for a Prometheus alert to disappear (no longer firing or pending).
+
+    Args:
+        api (PrometheusAPI): Prometheus API instance.
+        alert_name (str): Alert name to wait for clearing.
+        timeout (int): Seconds to wait for the alert to clear.
+
+    Raises:
+        AssertionError: If the alert is still present after ``timeout``.
+    """
+    alerts = api.wait_for_alert(name=alert_name, timeout=timeout, sleep=10)
+    assert not alerts, f"Alert '{alert_name}' did not clear within {timeout}s"
+    logger.info("Alert '%s' cleared successfully", alert_name)
+
+
 class PrometheusAPI(object):
     """
     This is wrapper class for Prometheus API.
@@ -648,7 +732,7 @@ class PrometheusAPI(object):
         # return actual result of the query
         return content["data"]["result"]
 
-    def wait_for_alert(self, name, state=None, timeout=1200, sleep=5):
+    def wait_for_alert(self, name, state=None, timeout=1200, sleep=5, min_count=1):
         """
         Search for alerts that have requested name and state.
 
@@ -663,6 +747,9 @@ class PrometheusAPI(object):
             timeout (int): Number of seconds for how long the alert should
                 be searched
             sleep (int): Number of seconds to sleep in between alert search
+            min_count (int): Minimum number of matching alerts required
+                before breaking out of the polling loop (only applies when
+                ``state`` is provided). Defaults to 1.
 
         Returns:
             list: List of alert records
@@ -689,9 +776,9 @@ class PrometheusAPI(object):
                     ]
                     logger.info(
                         f"Checking for {name} alerts with state {state}... "
-                        f"{len(alerts)} found"
+                        f"{len(alerts)} found (need {min_count})"
                     )
-                    if len(alerts) > 0:
+                    if len(alerts) >= min_count:
                         break
                 else:
                     # search for missing alerts, search is completed when
