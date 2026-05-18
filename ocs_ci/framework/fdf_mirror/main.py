@@ -28,7 +28,10 @@ def main(argv=None):
     parsed_args = init.init_cli(args)
     init.init_config(parsed_args)
     init.init_logging()
-    init.set_cluster_connection()
+
+    # Set cluster connection only if cluster-path was provided
+    if parsed_args.cluster_path:
+        init.set_cluster_connection()
 
     # JUnit report custom properties
     suite_props = init.get_test_suite_props()
