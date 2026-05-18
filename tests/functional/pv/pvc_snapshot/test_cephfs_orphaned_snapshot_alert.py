@@ -4,7 +4,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import green_squad
-from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.odf_cephfs_snap import (
     create_provider_retain_cephfs_snapclass,
@@ -26,7 +26,6 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@tier2
 class TestCephFSOrphanedSnapshotAlert(ManageTest):
     """
     Verify that orphaning CephFS snapshots — by deleting their Kubernetes
@@ -268,6 +267,7 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
             snap_list_names, constants.CEPHFS_SNAPSHOT_STATE_BOUND
         )
 
+    @tier1
     def test_cephfs_orphaned_snapshot_alert(self):
         """
         Steps:

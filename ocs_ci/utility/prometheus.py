@@ -365,28 +365,33 @@ def wait_for_alert_firing(
         f"Expected at least {min_count} '{alert_name}' alert(s) to fire "
         f"within {timeout}s, got {len(alerts)}"
     )
-    alert = alerts[0]
-    if expected_severity is not None:
-        assert alert["labels"]["severity"] == expected_severity, (
-            f"Expected severity '{expected_severity}', "
-            f"got '{alert['labels']['severity']}'"
-        )
-    if expected_message_substr is not None:
-        assert (
-            expected_message_substr.lower() in alert["annotations"]["message"].lower()
+    for i, alert in enumerate(alerts):
+        if expected_severity is not None:
+            assert alert["labels"]["severity"] == expected_severity, (
+                f"Alert '{alert_name}' instance {i}: expected severity "
+                f"'{expected_severity}', "
+                f"got '{alert['labels']['severity']}'"
+            )
+        if expected_message_substr is not None:
+            assert expected_message_substr.lower() in (
+                alert["annotations"]["message"].lower()
+            ), (
+                f"Alert '{alert_name}' instance {i}: expected "
+                f"'{expected_message_substr}' in message: "
+                f"{alert['annotations']['message']}"
+            )
+        assert alert["annotations"].get("runbook_url") or alert["annotations"].get(
+            "description"
         ), (
-            f"Expected '{expected_message_substr}' in alert message: "
-            f"{alert['annotations']['message']}"
+            f"Alert '{alert_name}' instance {i} is missing both "
+            f"runbook_url and description"
         )
-    assert alert["annotations"].get("runbook_url") or alert["annotations"].get(
-        "description"
-    ), f"Alert '{alert_name}' is missing both runbook_url and description"
     logger.info(
         "Alert '%s' fired: %d instance(s), labels=%s message=%s",
         alert_name,
         len(alerts),
-        alert["labels"],
-        alert["annotations"].get("message"),
+        alerts[0]["labels"],
+        alerts[0]["annotations"].get("message"),
     )
     return alerts
 
