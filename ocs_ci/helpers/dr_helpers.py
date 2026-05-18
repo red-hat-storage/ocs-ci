@@ -1520,7 +1520,6 @@ def get_all_drpolicy():
     config.switch_acm_ctx()
     return_drpolicy_list = []
     current_managed_clusters_list = []
-    acm_hub_name = config.get_cluster_name_by_index(get_active_acm_index())
     with config.RunWithAcmConfigContext():
         drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
         drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
@@ -1529,13 +1528,13 @@ def get_all_drpolicy():
     # Exclude all ACM hubs (both active and passive) as they are not managed clusters
     multicluster_mode = config.MULTICLUSTER.get("multicluster_mode")
     acm_indexes = get_all_acm_indexes()
-    
+
     for cluster_name in config.clusters:
         cluster_index = cluster_name.MULTICLUSTER.get("multicluster_index")
         # Skip ACM hub clusters
         if cluster_index in acm_indexes:
             continue
-            
+
         if (
             cluster_name.ENV_DATA.get("rbd_dr_scenario")
             or multicluster_mode == constants.MDR_MODE
@@ -1543,7 +1542,7 @@ def get_all_drpolicy():
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )
-    
+
     dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     if dr_cluster_relations:
         current_managed_clusters_list = [
