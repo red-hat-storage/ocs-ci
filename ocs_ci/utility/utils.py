@@ -7226,92 +7226,82 @@ def create_kubeconfig(kubeconfig_path):
             "environment variables were not provided."
         )
 def get_current_git_branch():
-      """                                                                                                                                                                                                                                           
-      Get the current git branch name of ocs-ci repository.                                                                                                                                                                                         
+    """                                                                                                                                                                                                                                           
+    Get the current git branch name of ocs-ci repository.                                                                                                                                                                                         
                                                                                                                                                                                                                                                     
-      Returns:                                                                                                                                                                                                                                      
-          str: Branch name (e.g., 'master', 'release-4.18')                                                                                                                                                                                         
-      """                                                                                                                                                                                                                                           
-      try:        
-          # Try to get branch from git                                                                                                                                                                                                              
-          result = subprocess.run(                                                                                                                                                                                                                  
-              ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],                                                                                                                                                                                         
-              capture_output=True,                                                                                                                                                                                                                  
-              text=True,                                                                                                                                                                                                                            
-              check=True                                                                                                                                                                                                                            
-          )                                                                                                                                                                                                                                         
-          branch = result.stdout.strip()                                                                                                                                                                                                            
-          log.info(f"Detected ocs-ci git branch: {branch}")                                                                                                                                                                                      
-          return branch                                                                                                                                                                                                                             
-      except Exception as e:                                                                                                                                                                                                                        
-          log.warning(f"Could not detect git branch: {e}")                                                                                                                                                                                       
-          # Fallback: check environment variable set by Jenkins                                                                                                                                                                                     
-          branch = config.ENV_DATA.get('ocs_ci_branch', 'master')                                                                                                                                                                                   
-          log.info(f"Using branch from ENV_DATA: {branch}")                                                                                                                                                                                      
-          return branch
+    Returns:                                                                                                                                                                                                                                      
+        str: Branch name (e.g., 'master', 'release-4.18')                                                                                                                                                                                         
+    """                                                                                                                                                                                                                                           
+    try:        
+        # Try to get branch from git                                                                                                                                                                                                              
+        result = subprocess.run(                                                                                                                                                                                                                  
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],                                                                                                                                                                                         
+            capture_output=True,                                                                                                                                                                                                                  
+            text=True,                                                                                                                                                                                                                            
+            check=True                                                                                                                                                                                                                            
+        )                                                                                                                                                                                                                                         
+        branch = result.stdout.strip()                                                                                                                                                                                                            
+        log.info(f"Detected ocs-ci git branch: {branch}")                                                                                                                                                                                      
+        return branch                                                                                                                                                                                                                             
+    except Exception as e:                                                                                                                                                                                                                        
+        log.warning(f"Could not detect git branch: {e}")                                                                                                                                                                                       
+        # Fallback: check environment variable set by Jenkins                                                                                                                                                                                     
+        branch = config.ENV_DATA.get('ocs_ci_branch', 'master')                                                                                                                                                                                   
+        log.info(f"Using branch from ENV_DATA: {branch}")                                                                                                                                                                                      
+        return branch
 
 def is_release_branch(branch_name):                                                                                                                                                                                                               
-      """                                                                                                                                                                                                                                           
-      Check if the branch is a release branch.
+    """                                                                                                                                                                                                                                           
+    Check if the branch is a release branch.
                                                                                                                                                                                                                                                     
-      Args:                                                                                                                                                                                                                                         
-          branch_name (str): Git branch name                                                                                                                                                                                                        
+    Args:                                                                                                                                                                                                                                         
+        branch_name (str): Git branch name                                                                                                                                                                                                        
                                                                                                                                                                                                                                                     
-      Returns:                                                                                                                                                                                                                                      
-          bool: True if branch matches release-* pattern                                                                                                                                                                                            
-      """                                                                                                                                                                                                                                           
-      return re.match(r'^release-\d+\.\d+$', branch_name) is not None
+    Returns:                                                                                                                                                                                                                                      
+        bool: True if branch matches release-* pattern                                                                                                                                                                                            
+    """                                                                                                                                                                                                                                           
+    return re.match(r'^release-\d+\.\d+$', branch_name) is not None
 
-def auto_configure_acm_submariner():                                                                                                                                                                                                              
-      """                                                                                                                                                                                                                                           
-      Auto-configure ACM and Submariner as released or unreleased based on ocs-ci git branch.                                                                                                                                                       
-                                                                                                                                                                                                                                                    
-      Decision Logic:                                                                                                                                                                                                                               
-      - master branch → unreleased ACM + unreleased Submariner                                                                                                                                                                                      
-      - release-* branch → released ACM + released Submariner                                                                                                                                                                                       
-      - explicit parameters always take precedence                                                                                                                                                                                                  
-                                                                                                                                                                                                                                                    
-      This is called early in deployment to set defaults if not explicitly provided.                                                                                                                                                                
-      """                                                                                                                                                                                                                                           
-      # Get current branch                                                                                                                                                                                                                          
-      branch = get_current_git_branch()                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                    
-      # Determine if this is a release branch or master                                                                                                                                                                                             
-      is_release = is_release_branch(branch)                                                                                                                                                                                                        
-                                                                                                                                                                                                                                                    
-      # Check if already explicitly configured (from Jenkins parameters)                                                                                                                                                                            
-      acm_explicit = config.ENV_DATA.get("acm_hub_unreleased") is not None                                                                                                                                                                          
-      submariner_explicit = config.ENV_DATA.get("submariner_release_type") is not None                                                                                                                                                              
-                                                                                                                                                                                                                                                    
-      # Auto-configure ACM if not explicitly set                                                                                                                                                                                                    
-      if not acm_explicit:                                                                                                                                                                                                                          
-          if is_release:                                                                                                                                                                                                                            
-              config.ENV_DATA["acm_hub_unreleased"] = False                                                                                                                                                                                         
-              log.info(f"Branch '{branch}' is a release branch → ACM: RELEASED")                                                                                                                                                                 
-          else:                                                                                                                                                                                                                                     
-              config.ENV_DATA["acm_hub_unreleased"] = True                                                                                                                                                                                          
-              log.info(f"Branch '{branch}' is master → ACM: UNRELEASED")                                                                                                                                                                         
-      else:                                                                                                                                                                                                                                         
-          log.info(f"ACM explicitly configured: acm_hub_unreleased={config.ENV_DATA['acm_hub_unreleased']}")                                                                                                                                     
-                                                                                                                                                                                                                                                    
-      # Auto-configure Submariner if not explicitly set                                                                                                                                                                                             
-      if not submariner_explicit:                                                                                                                                                                                                                   
-          # Always use downstream source                                                                                                                                                                                                            
-          config.ENV_DATA["submariner_source"] = "downstream"                                                                                                                                                                                       
-                                                                                                                                                                                                                                                    
-          if is_release:                                                                                                                                                                                                                            
-              config.ENV_DATA["submariner_release_type"] = "released"                                                                                                                                                                               
-              log.info(f"Branch '{branch}' is a release branch → Submariner: RELEASED")                                                                                                                                                          
-          else:                                                                                                                                                                                                                                     
-              config.ENV_DATA["submariner_release_type"] = "unreleased"                                                                                                                                                                             
-              log.info(f"Branch '{branch}' is master → Submariner: UNRELEASED")                                                                                                                                                                  
-      else:                                                                                                                                                                                                                                         
-          log.info(f"Submariner explicitly configured: release_type={config.ENV_DATA['submariner_release_type']}")                                                                                                                               
-                                                                                                                                                                                                                                                    
-      # Log final configuration                                                                                                                                                                                                                     
-      log.info(                                                                                                                                                                                                                                  
-          f"DR Configuration: "                                                                                                                                                                                                                     
-          f"branch={branch}, "                                                                                                                                                                                                                      
-          f"ACM={'unreleased' if config.ENV_DATA.get('acm_hub_unreleased') else 'released'}, "                                                                                                                                                      
-          f"Submariner={config.ENV_DATA.get('submariner_release_type', 'released')}"                                                                                                                                                                
-      )
+def auto_configure_acm():
+    """         
+    Auto-configure ACM as released or unreleased based on OCP version                                                                                                                              
+    Args:
+    ocp_version_str (str): OCP version string (e.g., "4.22")                                                   
+    """
+    # If explicitly configured by user, skip auto-configuration
+    if config.ENV_DATA.get("acm_hub_unreleased") is not None:                                                                        
+        log.info(f"ACM explicitly configured: acm_hub_unreleased={config.ENV_DATA['acm_hub_unreleased']}")
+        return 
+    # Get OCP version                                                                                                                
+    ocp_version = version_module.get_semantic_ocp_version_from_config()
+    ocp_version_str = f"{ocp_version.major}.{ocp_version.minor}" 
+    # Look up in mapping, default to True (unreleased) for unknown versions
+    acm_unreleased = defaults.ocp_to_acm_unreleased_mapping.get(ocp_version_str, True)
+    config.ENV_DATA["acm_hub_unreleased"] = acm_unreleased
+    if ocp_version_str in defaults.ocp_to_acm_unreleased_mapping:
+        log.info(f"OCP {ocp_version_str} → ACM: {'UNRELEASED' if acm_unreleased else 'RELEASED'}")
+    else:
+        log.info(f"OCP {ocp_version_str} not in mapping → ACM: UNRELEASED (safe default)")
+
+def auto_configure_submariner():
+    """         
+    Auto-configure Submariner as released or unreleased based on OCP version.
+    Args:
+    ocp_version_str (str): OCP version string (e.g., "4.22")
+    """                                                                                                                              
+    # If explicitly configured by user, skip auto-configuration
+    if config.ENV_DATA.get("submariner_release_type") is not None:                                                                   
+        log.info(f"Submariner explicitly configured: release_type={config.ENV_DATA['submariner_release_type']}")
+        return
+    # Get OCP version
+    ocp_version = version_module.get_semantic_ocp_version_from_config()                                                              
+    ocp_version_str = f"{ocp_version.major}.{ocp_version.minor}"
+    # Look up in mapping, default to True (unreleased) for unknown versions
+    submariner_unreleased = defaults.ocp_to_submariner_unreleased_mapping.get(ocp_version_str, True)
+    config.ENV_DATA["submariner_release_type"] = "unreleased" if submariner_unreleased else "released"
+                                                                                                                                       
+    if ocp_version_str in defaults.ocp_to_submariner_unreleased_mapping:
+        log.info(f"OCP {ocp_version_str} → Submariner: {'UNRELEASED' if submariner_unreleased else 'RELEASED'}")                     
+    else:                                                                                                                            
+        log.info(f"OCP {ocp_version_str} not in mapping → Submariner: UNRELEASED (safe default)")
+    

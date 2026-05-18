@@ -195,5 +195,28 @@ API_SSL_CERT = os.path.join(constants.DATA_DIR, "api-cert.crt")
 API_SSL_KEY = os.path.join(constants.DATA_DIR, "api-cert.key")
 API_SSL_CA_CERT = os.path.join(constants.DATA_DIR, "ca.crt")
 
+ocp_to_acm_unreleased_mapping = {
+"4.21": False,
+"4.20": False,
+"4.19": False,
+"4.18": False,
+"4.17": False,
+"4.16": False,
+"4.15": False,
+"4.14": False,
+"4.22": True,
+}
+
+ocp_to_submariner_unreleased_mapping = {
+"4.21": False,
+"4.20": False,
+"4.19": False,
+"4.18": False,
+"4.17": False,
+"4.16": False,
+"4.15": False,
+"4.14": False,
+"4.22": True,
+}
 # Storage cluster related defaults
 DEVICE_TYPE = "SSD"
