@@ -381,13 +381,6 @@ def oc_create_namespacestore(
             "azureBlob": {
                 "targetBlobContainer": uls_name,
                 "clientId": get_attr_chain(cld_mgr, "azure_sts_client.client_id"),
-                "tenantId": get_attr_chain(cld_mgr, "azure_sts_client.tenant_id"),
-                "subscriptionId": get_attr_chain(
-                    cld_mgr, "azure_sts_client.subscription_id"
-                ),
-                "resourcegroupId": get_attr_chain(
-                    cld_mgr, "azure_sts_client.resource_group"
-                ),
                 "secret": {
                     "name": get_attr_chain(cld_mgr, "azure_sts_client.secret.name"),
                     "namespace": nss_data["metadata"]["namespace"],
