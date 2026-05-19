@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
     green_squad,
+    zstream_4_16_16,
 )
 from ocs_ci.ocs.cluster import (
     validate_compression,
@@ -25,6 +26,7 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2394")
+@zstream_4_16_16
 class TestCreate2ScAtOnceWithIo(ManageTest):
     """
     Create a new 2 Storage Class on a new rbd pool with

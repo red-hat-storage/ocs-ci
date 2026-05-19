@@ -684,3 +684,5 @@ skipif_kms_deployment = pytest.mark.skipif(
     config.DEPLOYMENT.get("kms_deployment") is True,
     reason="This test is not supported for KMS deployment.",
 )
+# z-stream marker
+zstream_4_16_16 = pytest.mark.zstream_4_16_16
