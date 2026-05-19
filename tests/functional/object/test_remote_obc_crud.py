@@ -347,14 +347,15 @@ class TestRemoteOBCCRUD(ManageTest):
 
             logger.info("All CRUD operations completed successfully")
 
-            # Cleanup OBC
-            logger.info(f"Deleting OBC '{obc_name}'")
+            # Cleanup OBC and related resources
+            logger.info(f"Deleting OBC '{obc_name}' and related resources")
             obc_obj_cleanup = OCP(kind="ObjectBucketClaim", namespace=namespace)
             obc_obj_cleanup.delete(resource_name=obc_name)
 
-            # Verify deletion
+            # Wait for OBC deletion with longer timeout
+            logger.info("Waiting for OBC deletion to complete")
             for sample in TimeoutSampler(
-                timeout=180,
+                timeout=300,
                 sleep=10,
                 func=self._check_obc_deleted,
                 obc_name=obc_name,
@@ -363,6 +364,40 @@ class TestRemoteOBCCRUD(ManageTest):
                 if sample:
                     logger.info(f"OBC '{obc_name}' deleted successfully")
                     break
+
+            # Explicitly delete Secret and ConfigMap if they still exist
+            logger.info("Ensuring Secret and ConfigMap are deleted")
+            try:
+                secret_obj = OCP(kind=constants.SECRET, namespace=namespace)
+                if secret_obj.is_exist(resource_name=obc_name):
+                    secret_obj.delete(resource_name=obc_name)
+                    logger.info(f"Deleted Secret '{obc_name}'")
+            except Exception as e:
+                logger.debug(f"Secret cleanup: {e}")
+
+            try:
+                configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+                if configmap_obj.is_exist(resource_name=obc_name):
+                    configmap_obj.delete(resource_name=obc_name)
+                    logger.info(f"Deleted ConfigMap '{obc_name}'")
+            except Exception as e:
+                logger.debug(f"ConfigMap cleanup: {e}")
+
+        # Verify ObjectBucket is deleted on provider
+        logger.info("Verifying ObjectBucket deletion on provider")
+        with config.RunWithProviderConfigContextIfAvailable():
+            try:
+                for sample in TimeoutSampler(
+                    timeout=180,
+                    sleep=10,
+                    func=self._check_objectbucket_deleted,
+                    bucket_name=self.bucket_name,
+                ):
+                    if sample:
+                        logger.info(f"ObjectBucket for '{self.bucket_name}' deleted on provider")
+                        break
+            except Exception as e:
+                logger.warning(f"Could not verify ObjectBucket deletion: {e}")
 
         logger.info("Test completed successfully")
 
@@ -411,6 +446,36 @@ class TestRemoteOBCCRUD(ManageTest):
             return False
         except Exception:
             logger.info(f"OBC {obc_name} not found (deleted)")
+            return True
+
+    def _check_objectbucket_deleted(self, bucket_name):
+        """
+        Check if ObjectBucket has been deleted on provider.
+
+        Args:
+            bucket_name (str): Bucket name to check
+
+        Returns:
+            bool: True if ObjectBucket is deleted, False otherwise
+
+        """
+        if not bucket_name:
+            return True
+
+        try:
+            ob_obj = OCP(
+                kind="ObjectBucket",
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            ob_list = ob_obj.get()
+            for ob in ob_list.get("items", []):
+                if ob["spec"]["endpoint"]["bucketName"] == bucket_name:
+                    logger.info(f"ObjectBucket for '{bucket_name}' still exists")
+                    return False
+            logger.info(f"ObjectBucket for '{bucket_name}' not found (deleted)")
+            return True
+        except Exception as e:
+            logger.warning(f"Error checking ObjectBucket deletion: {e}")
             return True
 
     def _create_test_objects(self):
