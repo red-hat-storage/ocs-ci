@@ -3615,20 +3615,99 @@ def get_deviceset_name_per_count():
     return {d.get("name"): d["count"] for d in device_sets}
 
 
-def get_storage_client():
+def wait_for_storagecluster_ready_with_health_check(
+    storage_cluster,
+    timeout=1000,
+    sleep=30,
+    fix_ceph_health=True,
+    update_jira=True,
+):
     """
-    Get the StorageClient OCP object for the configured storage client.
+    Wait for StorageCluster to reach Ready phase with periodic Ceph health checks.
+    This function is particularly useful for RDR deployments where slow ops issues
+    can prevent the cluster from reaching Ready state.
+
+    Args:
+        storage_cluster (StorageCluster): The StorageCluster object to monitor
+        timeout (int): Total timeout in seconds to wait for Ready phase (default: 1000)
+        sleep (int): Sleep interval between checks in seconds (default: 30)
+        fix_ceph_health (bool): If True, attempt to fix Ceph health issues like slow ops
+        update_jira (bool): If True, update Jira with details if known issue is hit
+
+    Raises:
+        ResourceWrongStatusException: If StorageCluster doesn't reach Ready within timeout
+        CephHealthException: If Ceph health issues cannot be recovered
 
     Returns:
-        ocs_ci.ocs.ocp.OCP: StorageClient OCP object with resource_name set
-            to the storage client name from config.
+        bool: True if StorageCluster reached Ready phase
+
     """
-    return ocp.OCP(
-        kind=constants.STORAGECLIENT,
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=(
-            config.cluster_ctx.ENV_DATA.get("storage_client_name")
-            or config.ENV_DATA.get("storage_client_name")
-            or constants.STORAGE_CLIENT_NAME
-        ),
+    from ocs_ci.utility.utils import ceph_health_check
+    from ocs_ci.ocs.exceptions import CephHealthException, CephHealthRecoveredException
+    import time
+
+    log.info(
+        f"Waiting for StorageCluster {storage_cluster.resource_name} to reach Ready "
+        f"phase with Ceph health monitoring (timeout={timeout}s, interval={sleep}s)"
+    )
+
+    start_time = time.time()
+    health_check_interval = max(60, sleep * 2)  # Check health every 60s minimum
+    last_health_check = 0
+
+    while time.time() - start_time < timeout:
+        # Check if StorageCluster is Ready
+        storage_cluster.reload_data()
+        if storage_cluster.check_phase("Ready"):
+            log.info(
+                f"StorageCluster {storage_cluster.resource_name} successfully "
+                "reached Ready phase"
+            )
+            return True
+
+        # Periodic Ceph health check with auto-fix
+        current_time = time.time()
+        if current_time - last_health_check >= health_check_interval:
+            log.info("Performing periodic Ceph health check...")
+            try:
+                ceph_health_check(
+                    namespace=storage_cluster.namespace,
+                    tries=3,
+                    delay=30,
+                    fix_ceph_health=fix_ceph_health,
+                    update_jira=update_jira,
+                    no_exception_if_jira_issue_updated=True,
+                )
+                log.info("Ceph health check passed")
+            except CephHealthRecoveredException as ex:
+                log.warning(
+                    "Ceph health issue was recovered (e.g., slow ops fixed): "
+                    f"{ex}. Continuing to wait for StorageCluster Ready phase..."
+                )
+            except CephHealthException as ex:
+                log.warning(
+                    f"Ceph health check failed but continuing: {ex}. "
+                    "StorageCluster phase check will determine overall status."
+                )
+            last_health_check = current_time
+
+        # Get current phase for logging
+        try:
+            current_phase = storage_cluster.data.get("status", {}).get(
+                "phase", "Unknown"
+            )
+            log.info(
+                f"StorageCluster phase: {current_phase}, "
+                f"elapsed: {int(current_time - start_time)}s/{timeout}s"
+            )
+        except Exception as e:
+            log.debug(f"Could not get current phase: {e}")
+
+        time.sleep(sleep)
+
+    # Timeout reached
+    elapsed = int(time.time() - start_time)
+    raise ResourceWrongStatusException(
+        f"StorageCluster {storage_cluster.resource_name} did not reach Ready phase "
+        f"within {timeout}s (elapsed: {elapsed}s)"
     )
