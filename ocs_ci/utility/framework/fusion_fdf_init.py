@@ -108,6 +108,8 @@ class Initializer(object):
                 load_config([cfg_file])
             if args.fdf_image_tag:
                 config.DEPLOYMENT["fdf_image_tag"] = args.fdf_image_tag
+            if args.live_deploy:
+                config.DEPLOYMENT["live_deployment"] = args.live_deploy
 
     def init_cli(self, args: list) -> list:
         """
@@ -150,6 +152,12 @@ class Initializer(object):
             )
             parser.add_argument(
                 "--fdf-image-tag", default=None, help="Image tag of FDF to install"
+            )
+            parser.add_argument(
+                "--live-deploy",
+                action="store_true",
+                default=False,
+                help="Deploy FDF from live registry (GA)",
             )
 
         parsed_args, _ = parser.parse_known_args(args)
