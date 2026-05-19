@@ -2146,6 +2146,13 @@ RBD_PROVISIONER_SECRET_419 = "rbd-provisioner"
 RBD_NODE_SECRET_419 = "rbd-node"
 CEPHFS_PROVISIONER_SECRET_419 = "cephfs-provisioner"
 CEPHFS_NODE_SECRET_419 = "cephfs-node"
+# CSI VolumeSnapshotClass parameter keys for snapshotter-list secret
+CSI_SNAPSHOTTER_LIST_SECRET_NAME_PARAM = (
+    "csi.storage.k8s.io/snapshotter-list-secret-name"
+)
+CSI_SNAPSHOTTER_LIST_SECRET_NAMESPACE_PARAM = (
+    "csi.storage.k8s.io/snapshotter-list-secret-namespace"
+)
 FUSION_AGENT_CONFIG_SECRET = "managed-fusion-agent-config"
 # OSU = ObjectStoreUser, shortened for compliance with flake8+black because of line length issues
 OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-{}-{}"

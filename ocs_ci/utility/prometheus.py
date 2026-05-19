@@ -324,6 +324,47 @@ def validate_status(content):
         raise ValueError("content status is not success")
 
 
+def _validate_alert_instance(
+    alert, alert_name, instance_index, expected_severity, expected_message_substr
+):
+    """
+    Assert that a single alert instance matches the expected criteria.
+
+    Args:
+        alert (dict): A single alert record from the Prometheus API.
+        alert_name (str): Alert name (used in assertion messages).
+        instance_index (int): Instance index (used in assertion messages).
+        expected_severity (str | None): If given, assert that
+            ``alert["labels"]["severity"]`` equals this value.
+        expected_message_substr (str | None): If given, assert that this
+            substring appears (case-insensitive) in
+            ``alert["annotations"]["message"]``.
+
+    Raises:
+        AssertionError: If any validation check fails.
+    """
+    if expected_severity is not None:
+        assert alert["labels"]["severity"] == expected_severity, (
+            f"Alert '{alert_name}' instance {instance_index}: expected severity "
+            f"'{expected_severity}', "
+            f"got '{alert['labels']['severity']}'"
+        )
+    if expected_message_substr is not None:
+        assert expected_message_substr.lower() in (
+            alert["annotations"]["message"].lower()
+        ), (
+            f"Alert '{alert_name}' instance {instance_index}: expected "
+            f"'{expected_message_substr}' in message: "
+            f"{alert['annotations']['message']}"
+        )
+    assert alert["annotations"].get("runbook_url") or alert["annotations"].get(
+        "description"
+    ), (
+        f"Alert '{alert_name}' instance {instance_index} is missing both "
+        f"runbook_url and description"
+    )
+
+
 def wait_for_alert_firing(
     api,
     alert_name,
@@ -365,26 +406,13 @@ def wait_for_alert_firing(
         f"Expected at least {min_count} '{alert_name}' alert(s) to fire "
         f"within {timeout}s, got {len(alerts)}"
     )
-    for i, alert in enumerate(alerts):
-        if expected_severity is not None:
-            assert alert["labels"]["severity"] == expected_severity, (
-                f"Alert '{alert_name}' instance {i}: expected severity "
-                f"'{expected_severity}', "
-                f"got '{alert['labels']['severity']}'"
-            )
-        if expected_message_substr is not None:
-            assert expected_message_substr.lower() in (
-                alert["annotations"]["message"].lower()
-            ), (
-                f"Alert '{alert_name}' instance {i}: expected "
-                f"'{expected_message_substr}' in message: "
-                f"{alert['annotations']['message']}"
-            )
-        assert alert["annotations"].get("runbook_url") or alert["annotations"].get(
-            "description"
-        ), (
-            f"Alert '{alert_name}' instance {i} is missing both "
-            f"runbook_url and description"
+    for instance_index, alert in enumerate(alerts):
+        _validate_alert_instance(
+            alert,
+            alert_name,
+            instance_index,
+            expected_severity,
+            expected_message_substr,
         )
     logger.info(
         "Alert '%s' fired: %d instance(s), labels=%s message=%s",

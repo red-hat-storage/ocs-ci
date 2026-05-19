@@ -27,11 +27,11 @@ def _create_standalone_retain_snapclass(snapclass_name):
     snapclass_data["metadata"]["name"] = snapclass_name
     snapclass_data["deletionPolicy"] = constants.RECLAIM_POLICY_RETAIN
     snapclass_data["parameters"][
-        "csi.storage.k8s.io/snapshotter-list-secret-name"
-    ] = "rook-csi-cephfs-provisioner"
+        constants.CSI_SNAPSHOTTER_LIST_SECRET_NAME_PARAM
+    ] = constants.CEPHFS_PROVISIONER_SECRET
     snapclass_data["parameters"][
-        "csi.storage.k8s.io/snapshotter-list-secret-namespace"
-    ] = "openshift-storage"
+        constants.CSI_SNAPSHOTTER_LIST_SECRET_NAMESPACE_PARAM
+    ] = config.ENV_DATA["cluster_namespace"]
     snapclass = ocs.OCS(**snapclass_data)
     assert snapclass.create(
         do_reload=True
@@ -80,11 +80,11 @@ def create_provider_retain_cephfs_snapclass(snapclass_name, storage_client_name)
         # addition to the snapshotter-secret params in the base template
         # (see DFBUGS-6539 QA verification notes).
         snapclass_data["parameters"][
-            "csi.storage.k8s.io/snapshotter-list-secret-name"
-        ] = "rook-csi-cephfs-provisioner"
+            constants.CSI_SNAPSHOTTER_LIST_SECRET_NAME_PARAM
+        ] = constants.CEPHFS_PROVISIONER_SECRET
         snapclass_data["parameters"][
-            "csi.storage.k8s.io/snapshotter-list-secret-namespace"
-        ] = "openshift-storage"
+            constants.CSI_SNAPSHOTTER_LIST_SECRET_NAMESPACE_PARAM
+        ] = config.ENV_DATA["cluster_namespace"]
         provider_snapclass = ocs.OCS(**snapclass_data)
         assert provider_snapclass.create(
             do_reload=True
