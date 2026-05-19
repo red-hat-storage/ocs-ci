@@ -194,13 +194,22 @@ def create_nfs_load_balancer_service(
     if "hostname" in host_details:
         hostname_add = host_details["hostname"]
         log.info("ingress hostname, %s", hostname_add)
-        return hostname_add
     elif "ip" in host_details:
-        host_ip = host_details["ip"]
-        log.info("ingress host ip, %s", host_ip)
-        return host_ip
+        hostname_add = host_details["ip"]
+        log.info(f"ingress host ip, {hostname_add}")
     else:
         log.error("host details unavailable")
+        return None
+
+    platform = config.ENV_DATA.get("platform", "").lower()
+    if platform == constants.IBMCLOUD_PLATFORM:
+        from ocs_ci.utility.ibmcloud import (
+            configure_nfs_lb_security_group,
+        )
+
+        configure_nfs_lb_security_group()
+
+    return hostname_add
 
 
 def update_etc_hosts_on_nfs_client(con, hostname):
@@ -294,6 +303,14 @@ def delete_nfs_load_balancer_service(
             "NFS LoadBalancer service %s does not exist, skipping delete", svc_name
         )
         return
+
+    platform = config.ENV_DATA.get("platform", "").lower()
+    if platform == constants.IBMCLOUD_PLATFORM:
+        from ocs_ci.utility.ibmcloud import (
+            remove_nfs_lb_security_group_rules,
+        )
+
+        remove_nfs_lb_security_group_rules()
 
     log.info("Deleting NFS LoadBalancer service %s", svc_name)
     storage_cluster_obj.exec_oc_cmd(f"delete service {svc_name}")
