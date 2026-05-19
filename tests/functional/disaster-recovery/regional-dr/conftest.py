@@ -58,7 +58,6 @@ def check_subctl_cli():
         submariner.download_binary()
 
 
-<<<<<<< HEAD
 @pytest.fixture(autouse=True, scope="function")
 def rdr_health_check():
     """
