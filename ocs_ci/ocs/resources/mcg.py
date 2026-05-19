@@ -829,7 +829,7 @@ class MCG:
                     )
                     .json()
                     .get("reply")
-                    .get("objects")
+                    .get("objects", [])
                 )
             except CommandFailed:
                 logger.warning("Transient RPC error listing objects, returning 0%")
@@ -851,7 +851,7 @@ class MCG:
                         )
                         .json()
                         .get("reply")
-                        .get("chunks")
+                        .get("chunks", [])
                     )
                 except CommandFailed:
                     logger.warning(
