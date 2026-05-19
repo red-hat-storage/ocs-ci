@@ -3,7 +3,6 @@ import random
 import string
 import secrets
 import json
-import boto3
 
 from ocs_ci.framework.pytest_customization.marks import tier2, red_squad, mcg
 from ocs_ci.framework.testlib import MCGTest
@@ -227,15 +226,7 @@ class TestIAMUsers(MCGTest):
 
         policy_name = "test_policy"
 
-        iam_client = boto3.client(
-            "iam",
-            endpoint_url=mcg_obj.iam_endpoint,
-            aws_access_key_id=mcg_obj.access_key_id,
-            aws_secret_access_key=mcg_obj.access_key,
-            verify=False,
-            region_name=mcg_obj.region or None,
-        )
-        iam_client.put_user_policy(
+        mcg_obj.iam_client.put_user_policy(
             UserName=user_name,
             PolicyName=policy_name,
             PolicyDocument=json.dumps(policy),
