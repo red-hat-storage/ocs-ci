@@ -23,7 +23,8 @@ from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
+from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.utils import (
     exec_cmd,
     get_ocp_version,
@@ -99,6 +100,15 @@ class MetalLBInstaller:
         Returns:
             bool: True if catalog source is created, False otherwise, error if not get Ready state
         """
+        # Check if OCP version is GAed - if so, skip catalog source creation
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        ocp_ga_version = get_ocp_ga_version(ocp_version)
+        if ocp_ga_version:
+            logger.info(
+                f"OCP version {ocp_version} is GAed, skipping qe-app-registry catalog source creation for MetalLB"
+            )
+            return True
+
         logger.info("Creating catalog source for MetalLB")
         # replace latest version with specific version
         catalog_source_data = templating.load_yaml(QE_APP_REGISTRY_SOURCE)
@@ -212,6 +222,12 @@ class MetalLBInstaller:
         subscription_data = templating.load_yaml(METALLB_SUBSCRIPTION_YAML)
         if self.namespace_lb != METALLB_DEFAULT_NAMESPACE:
             subscription_data.get("metadata").update({"namespace": self.namespace_lb})
+
+        # Use redhat-operators catalog source for GAed OCP versions
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        ocp_ga_version = get_ocp_ga_version(ocp_version)
+        if ocp_ga_version:
+            subscription_data["spec"]["source"] = constants.OPERATOR_CATALOG_SOURCE_NAME
 
         self.subscription_name = subscription_data.get("metadata").get("name")
 
@@ -686,6 +702,15 @@ class MetalLBInstaller:
         """
         Apply the ICSP to the cluster
         """
+        # Check if OCP version is GAed - if so, skip ICSP creation
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        ocp_ga_version = get_ocp_ga_version(ocp_version)
+        if ocp_ga_version:
+            logger.info(
+                f"OCP version {ocp_version} is GAed, skipping ICSP creation for MetalLB"
+            )
+            return True
+
         if self.icsp_brew_registry_exists():
             logger.info("ICSP Brew registry already exists")
             return
