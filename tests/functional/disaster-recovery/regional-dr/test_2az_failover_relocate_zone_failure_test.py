@@ -313,12 +313,14 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 )
 
                 # Initiate failover for this workload
+                # Use extended timeout for zone failure scenarios (1800 seconds = 30 minutes)
                 failover_params = {
                     "failover_cluster": wl_meta["secondary_cluster_name"],
                     "namespace": wl_meta["workload_namespace"],
                     "workload_placement_name": wl_meta["resource_name"],
                     "discovered_apps": wl_meta["is_discovered_app"],
                     "old_primary": wl_meta["old_primary"],
+                    "timeout": 1800,
                 }
                 if not wl_meta["is_discovered_app"]:
                     failover_params["workload_type"] = (

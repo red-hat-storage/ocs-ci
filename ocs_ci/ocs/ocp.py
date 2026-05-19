@@ -1483,6 +1483,20 @@ class OCP(object):
         self.check_name_is_specified()
         sampler = TimeoutSampler(timeout, sleep, func=self.check_phase, phase=phase)
         if not sampler.wait_for_func_status(True):
+            # Log detailed status information for debugging
+            try:
+                resource_data = self.get()
+                current_phase = resource_data.get("status", {}).get("phase", "Unknown")
+                conditions = resource_data.get("status", {}).get("conditions", [])
+                log.error(
+                    f"Resource {self.resource_name} failed to reach expected phase '{phase}'. "
+                    f"Current phase: {current_phase}. Status conditions: {conditions}"
+                )
+            except Exception as e:
+                log.warning(
+                    f"Could not retrieve detailed status for {self.resource_name}: {e}"
+                )
+
             raise ResourceWrongStatusException(
                 f"Resource: {self.resource_name} is not in expected phase: " f"{phase}"
             )
