@@ -94,14 +94,15 @@ def remove_minimal_ceph_cluster(host_node, namespace=None):
     return success_msg in out
 
 
-def clear_ceph_bluestore_signature_on_wnodes(wnodes, disk_name=None, namespace=None):
+def clear_ceph_bluestore_signature_on_wnodes(wnodes, disk_names=None, namespace=None):
     """
     Clears Ceph BlueStore signatures on the specified worker nodes.
 
     Args:
         wnodes (list): List of worker node objects where the Ceph BlueStore
             signatures will be cleared.
-        disk_name (str): Specific disk name to clear the signature from.
+        disk_names (dict): Map of node name to disk name to clear. When
+            absent, the disk is auto-detected per node.
         namespace (str): Namespace for the debug pod.
 
     Returns:
@@ -112,7 +113,9 @@ def clear_ceph_bluestore_signature_on_wnodes(wnodes, disk_name=None, namespace=N
 
     for wnode in wnodes:
         logger.info(f"Clearing Ceph BlueStore signature on worker node: {wnode.name}")
-        node_disk = disk_name or detect_simulation_disk_on_node(wnode, namespace)
+        node_disk = (disk_names or {}).get(
+            wnode.name
+        ) or detect_simulation_disk_on_node(wnode, namespace)
         if not node_disk:
             logger.warning(
                 f"Skipping Ceph BlueStore signature clearing on node {wnode.name} "
@@ -155,7 +158,9 @@ def install_minimal_ceph_cluster(wnode, namespace=None):
         f"Uploading install minimal ceph cluster script to the worker node {wnode.name}"
     )
     node_obj.upload_script(
-        script_src_path=script_src_path, script_dest_path=script_dest_path, timeout=300
+        script_src_path=script_src_path,
+        script_dest_path=script_dest_path,
+        timeout=300,
     )
     # Run the script on the node
     logger.info(
@@ -200,11 +205,13 @@ def install_minimal_ceph_conf(wnode, host_node, namespace=None):
         f"Uploading install minimal ceph conf script to the worker node {wnode.name}"
     )
     node_obj.upload_script(
-        script_src_path=script_src_path, script_dest_path=script_dest_path, timeout=300
+        script_src_path=script_src_path,
+        script_dest_path=script_dest_path,
+        timeout=300,
     )
 
     # Run the script on the node
-    args = f"{ceph_fsid} {ceph_key} {host_node_ip}"
+    args = [ceph_fsid, ceph_key, host_node_ip]
     logger.info(
         f"Running install minimal ceph conf script on the worker node {wnode.name} "
         f"with fsid={ceph_fsid}, host_node_ip={host_node_ip}"
@@ -250,7 +257,7 @@ def install_minimal_ceph_cluster_and_conf_on_wnodes(
         return False
     logger.info("Minimal Ceph cluster installed successfully on host node.")
 
-    for wnode in wnodes[1:]:
+    for wnode in [wn for wn in wnodes if wn.name != host_node.name]:
         logger.info(
             f"Installing minimal Ceph configuration on worker node: {wnode.name}"
         )
@@ -310,15 +317,18 @@ def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace=None):
         f"Uploading BlueStore simulation script to the worker node {wnode.name}"
     )
     node_obj.upload_script(
-        script_src_path=script_src_path, script_dest_path=script_dest_path, timeout=300
+        script_src_path=script_src_path,
+        script_dest_path=script_dest_path,
+        timeout=300,
     )
     # Run the script on the node
     logger.info(
         f"Running BlueStore simulation script on disk: {disk_name}. "
         f"This may take 1-2 minutes..."
     )
-    args = f"{disk_name}"
-    out = node_obj.run_script(script_path=script_dest_path, args=args, timeout=300)
+    out = node_obj.run_script(
+        script_path=script_dest_path, args=[disk_name], timeout=300
+    )
 
     logger.info("Script output:\n" + out)
     result = "BlueStore simulation complete" in out or (
@@ -335,7 +345,7 @@ def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace=None):
     return result
 
 
-def simulate_ceph_bluestore_on_wnodes(wnodes, namespace=None):
+def simulate_ceph_bluestore_on_wnodes(wnodes, namespace=None, disk_map=None):
     """
     Simulates Ceph BlueStore labels on the specified worker nodes.
 
@@ -347,6 +357,8 @@ def simulate_ceph_bluestore_on_wnodes(wnodes, namespace=None):
         wnodes (list): List of worker node objects where the BlueStore simulation
             should be performed.
         namespace (str): Namespace for the debug pod.
+        disk_map (dict): Map of node name to pre-detected disk name. When
+            provided, skips per-node disk detection.
 
     Returns:
         bool: True if the simulation succeeded on all nodes, False otherwise.
@@ -354,7 +366,10 @@ def simulate_ceph_bluestore_on_wnodes(wnodes, namespace=None):
     """
     for wnode in wnodes:
         logger.info(f"Simulating Ceph BlueStore on worker node: {wnode.name}")
-        result = simulate_ceph_bluestore_on_node_disk(wnode, namespace=namespace)
+        disk_name = (disk_map or {}).get(wnode.name)
+        result = simulate_ceph_bluestore_on_node_disk(
+            wnode, disk_name=disk_name, namespace=namespace
+        )
         if not result:
             logger.warning(
                 f"Failed to simulate Ceph BlueStore on worker node: {wnode.name}"
@@ -415,7 +430,16 @@ def simulate_full_ceph_bluestore_process_on_wnodes(
         else:
             add_disk_for_vsphere_platform()
 
-    # Step 2: Install minimal Ceph cluster and configuration
+    # Step 2: Detect disks once so the same device is used for simulation and cleanup
+    disk_map = {}
+    for wnode in wnodes:
+        disk = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+        if not disk:
+            logger.error(f"Disk detection failed on node {wnode.name}. Aborting.")
+            return False
+        disk_map[wnode.name] = disk
+
+    # Step 3: Install minimal Ceph cluster and configuration
     host_node = wnodes[0]
     result = install_minimal_ceph_cluster_and_conf_on_wnodes(
         wnodes, host_node, namespace
@@ -424,30 +448,37 @@ def simulate_full_ceph_bluestore_process_on_wnodes(
         logger.warning("Failed to install minimal Ceph cluster and configuration.")
         return False
 
-    # Step 3: Simulate BlueStore labels on all worker nodes
-    result = simulate_ceph_bluestore_on_wnodes(wnodes, namespace)
-    if not result:
-        logger.warning("Failed to simulate Ceph BlueStore on worker nodes.")
+    # Steps 4-6: simulation + cleanup (cleanup always runs when flags are set)
+    simulation_result = False
+    cleanup_ok = True
+    try:
+        # Step 4: Simulate BlueStore labels on all worker nodes
+        simulation_result = simulate_ceph_bluestore_on_wnodes(
+            wnodes, namespace, disk_map
+        )
+        if not simulation_result:
+            logger.warning("Failed to simulate Ceph BlueStore on worker nodes.")
+    finally:
+        # Step 5: Optionally remove the minimal Ceph cluster
+        if remove_ceph_cluster:
+            logger.info("Removing minimal Ceph cluster from host node.")
+            if not remove_minimal_ceph_cluster(host_node, namespace):
+                logger.warning("Failed to remove minimal Ceph cluster from host node.")
+                cleanup_ok = False
+
+        # Step 6: Optionally clear BlueStore signatures from disks
+        if clear_signatures:
+            logger.info("Clearing Ceph BlueStore signatures from worker node disks.")
+            if not clear_ceph_bluestore_signature_on_wnodes(
+                wnodes, disk_names=disk_map, namespace=namespace
+            ):
+                logger.warning(
+                    "Failed to clear Ceph BlueStore signatures from worker nodes."
+                )
+                cleanup_ok = False
+
+    if not simulation_result or not cleanup_ok:
         return False
-
-    # Step 4: Optionally remove the minimal Ceph cluster
-    if remove_ceph_cluster:
-        logger.info("Removing minimal Ceph cluster from host node.")
-        host_node = wnodes[0]
-        result = remove_minimal_ceph_cluster(host_node, namespace)
-        if not result:
-            logger.warning("Failed to remove minimal Ceph cluster from host node.")
-            return False
-
-    # Step 5: Optionally clear BlueStore signatures from disks
-    if clear_signatures:
-        logger.info("Clearing Ceph BlueStore signatures from worker node disks.")
-        result = clear_ceph_bluestore_signature_on_wnodes(wnodes, namespace=namespace)
-        if not result:
-            logger.warning(
-                "Failed to clear Ceph BlueStore signatures from worker nodes."
-            )
-            return False
 
     logger.info("Full Ceph BlueStore simulation process completed successfully.")
     return True
