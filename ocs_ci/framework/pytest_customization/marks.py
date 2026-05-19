@@ -277,6 +277,11 @@ stretchcluster_required = compose(
     stretchcluster_required_skipif, pytest.mark.stretchcluster_required
 )
 
+skipif_ec_pools_disabled = pytest.mark.skipif(
+    config.DEPLOYMENT.get("ec_default_pools") is not True,
+    reason="Test runs only on EC pools",
+)
+
 sts_deployment_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("sts_enabled") is False,
     reason="Test runs only on the AWS STS enabled cluster deployments",
