@@ -244,6 +244,7 @@ def failover(
     switch_ctx=None,
     discovered_apps=False,
     old_primary=None,
+    timeout=900,
 ):
     """
     Initiates Failover action to the specified cluster
@@ -256,6 +257,7 @@ def failover(
         switch_ctx (int): The cluster index by the cluster name
         discovered_apps (bool): True when cluster is failing over DiscoveredApps
         old_primary (str): Name of cluster where workload were running
+        timeout (int): Timeout in seconds to wait for failover completion (default: 900)
 
     """
     restore_index = config.cur_index
