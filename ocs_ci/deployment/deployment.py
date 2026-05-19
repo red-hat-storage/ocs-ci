@@ -126,6 +126,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     get_osd_count,
     StorageCluster,
     validate_serviceexport,
+    wait_for_storagecluster_ready_with_health_check,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -518,7 +519,15 @@ class Deployment(object):
                                 namespace=config.ENV_DATA["cluster_namespace"],
                             )
                             storage_cluster.reload_data()
-                            storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
+                            # Use health-aware wait for RDR to handle known issues
+                            # like slow ops (DFBUGS-2456)
+                            wait_for_storagecluster_ready_with_health_check(
+                                storage_cluster,
+                                timeout=1000,
+                                sleep=30,
+                                fix_ceph_health=True,
+                                update_jira=True,
+                            )
                             if (
                                 get_provider_service_type() != "NodePort"
                                 and cluster.ENV_DATA.get("cluster_type", "").lower()
