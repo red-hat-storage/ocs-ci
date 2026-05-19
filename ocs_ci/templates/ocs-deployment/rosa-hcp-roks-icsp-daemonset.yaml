@@ -1,0 +1,36 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: roks-icsp-ds
+  namespace: kube-system
+  labels:
+    app: roks-icsp
+spec:
+  selector:
+    matchLabels:
+      app: roks-icsp
+  template:
+    metadata:
+      labels:
+        app: roks-icsp
+    spec:
+      serviceAccountName: sa-roks-sync
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: roks-icsp
+          image: quay.io/cicdtest/roks-enabler:rosa
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          volumeMounts:
+            - name: host
+              mountPath: /host
+          resources: {}
+      volumes:
+        - name: host
+          hostPath:
+            path: /

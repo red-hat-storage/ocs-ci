@@ -2,6 +2,8 @@
 Utility functions that are used as a part of OCP or OCS deployments
 """
 
+import base64
+import json
 import logging
 import os
 import re
@@ -218,8 +220,17 @@ def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
     stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
     konflux_build = config.DEPLOYMENT.get("konflux_build")
     if stage_testing and konflux_build:
-        logger.info("Skipping applying IDMS rules from image for konflux stage testing")
-        return ""
+        if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+            logger.info(
+                "ROSA HCP + Konflux: extracting IDMS from catalog image for "
+                "filesystem-based mirror configuration on worker nodes"
+            )
+            apply = False
+        else:
+            logger.info(
+                "Skipping applying IDMS rules from image for konflux stage testing"
+            )
+            return ""
     idms_file_location = "/idms.yaml"
     idms_file_dest_dir = os.path.join(
         config.ENV_DATA["cluster_path"], f"idms-{config.RUN['run_id']}"
@@ -246,18 +257,389 @@ def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
         yaml.dump(idms_content, f)
 
     if apply and not config.DEPLOYMENT.get("disconnected"):
-        exec_cmd(f"oc apply -f {idms_file_dest_location}")
-        managed_ibmcloud = (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and config.ENV_DATA["deployment_type"] == "managed"
-        )
-        if not managed_ibmcloud:
-            num_nodes = (
-                config.ENV_DATA["worker_replicas"]
-                + config.ENV_DATA["master_replicas"]
-                + config.ENV_DATA.get("infra_replicas", 0)
+        if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+            with open(idms_file_dest_location) as f:
+                _idms = yaml.safe_load(f)
+            apply_idms_via_worker_filesystem(
+                _idms.get("spec", {}).get("imageDigestMirrors", [])
             )
-            timeout = 2800 if num_nodes > 6 else 1900
-            wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
+        else:
+            exec_cmd(f"oc apply -f {idms_file_dest_location}")
+            managed_ibmcloud = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            )
+            if not managed_ibmcloud:
+                num_nodes = (
+                    config.ENV_DATA["worker_replicas"]
+                    + config.ENV_DATA["master_replicas"]
+                    + config.ENV_DATA.get("infra_replicas", 0)
+                )
+                timeout = 2800 if num_nodes > 6 else 1900
+                wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
+
+    if (
+        stage_testing
+        and konflux_build
+        and config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+        and os.path.exists(idms_file_dest_location)
+    ):
+        with open(idms_file_dest_location) as f:
+            idms_content = yaml.safe_load(f)
+        image_digest_mirrors = idms_content.get("spec", {}).get(
+            "imageDigestMirrors", []
+        )
+        apply_idms_via_worker_filesystem(image_digest_mirrors)
 
     return idms_file_dest_location
+
+
+def deploy_roks_icsp_daemonset():
+    """
+    Deploy the roks-icsp privileged DaemonSet on ROSA HCP worker nodes.
+
+    The DaemonSet (quay.io/cicdtest/roks-enabler:rosa) mounts the host
+    filesystem at /host and is used to write CRI-O mirror configuration
+    directly to /host/etc/containers/registries.conf.d/ on each worker,
+    bypassing the ImageDigestMirrorSet API which is blocked on ROSA HCP
+    by ValidatingAdmissionPolicy.
+
+    Also creates a fake machineconfigs.machineconfiguration.openshift.io CRD
+    which is absent on ROSA HCP hosted clusters.
+
+    Source: https://github.com/xcliu-ca/rosa-icsp-gps/blob/main/enabler.sh
+    """
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    # Idempotent: skip if DaemonSet pods are already running
+    existing = get_pods_having_label(
+        label=constants.ROSA_HCP_DS_LABEL,
+        namespace=constants.ROSA_HCP_DS_NAMESPACE,
+    )
+    if existing:
+        logger.info(
+            f"roks-icsp DaemonSet already running "
+            f"({len(existing)} pod(s)) — skipping deployment"
+        )
+        return
+
+    logger.info("Deploying roks-icsp DaemonSet on ROSA HCP worker nodes")
+
+    sa_manifest = templating.load_yaml(constants.ROSA_HCP_ROKS_ICSP_SA_YAML)
+
+    exec_cmd(f"oc apply -f {constants.ROSA_HCP_ROKS_ICSP_SA_YAML}")
+    exec_cmd(
+        f"oc adm policy add-cluster-role-to-user cluster-admin "
+        f"system:serviceaccount:{constants.ROSA_HCP_DS_NAMESPACE}:"
+        f"{sa_manifest['metadata']['name']}"
+    )
+    exec_cmd(f"oc apply -f {constants.ROSA_HCP_ROKS_ICSP_DS_YAML}")
+    exec_cmd(f"oc apply -f {constants.ROSA_HCP_ROKS_ICSP_SVC_YAML}")
+
+    # Create fake MachineConfig CRD if absent (not present on ROSA HCP)
+    existing_crd = exec_cmd(
+        "oc get crd machineconfigs.machineconfiguration.openshift.io "
+        "--ignore-not-found -o name",
+        ignore_error=True,
+    )
+    if not existing_crd.stdout.strip():
+        logger.info("Creating fake MachineConfig CRD for ROSA HCP compatibility")
+        exec_cmd(f"oc apply -f {constants.ROSA_HCP_ROKS_ICSP_MC_CRD_YAML}")
+
+    # Wait for DaemonSet to roll out on all worker nodes
+    num_workers = config.ENV_DATA["worker_replicas"]
+    from ocs_ci.utility.utils import TimeoutSampler
+
+    for sample in TimeoutSampler(
+        timeout=180,
+        sleep=10,
+        func=get_pods_having_label,
+        label=constants.ROSA_HCP_DS_LABEL,
+        namespace=constants.ROSA_HCP_DS_NAMESPACE,
+    ):
+        running = [p for p in sample if p.get("status", {}).get("phase") == "Running"]
+        if len(running) >= num_workers:
+            logger.info(
+                f"roks-icsp DaemonSet ready: {len(running)}/{num_workers} pods running"
+            )
+            return
+
+
+def apply_idms_via_worker_filesystem(image_digest_mirrors, conf_filename=None):
+    """
+    Write CRI-O registry mirror configuration to worker nodes via a privileged
+    DaemonSet that mounts the host filesystem at /host.
+
+    Used on ROSA HCP where ImageDigestMirrorSet cannot be applied via oc apply
+    (blocked by ValidatingAdmissionPolicy).
+
+    Args:
+        image_digest_mirrors (list): list of dicts with 'source' and 'mirrors' keys,
+            matching the imageDigestMirrors schema from an ImageDigestMirrorSet.
+        conf_filename (str): filename to write inside registries.conf.d.
+            Defaults to ROSA_HCP_KONFLUX_MIRROR_CONF constant.
+    """
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+    from ocs_ci.ocs import ocp as ocp_module
+
+    if conf_filename is None:
+        conf_filename = constants.ROSA_HCP_KONFLUX_MIRROR_CONF
+
+    ds_pods = get_pods_having_label(
+        label=constants.ROSA_HCP_DS_LABEL,
+        namespace=constants.ROSA_HCP_DS_NAMESPACE,
+    )
+    if not ds_pods:
+        logger.warning(
+            f"No DaemonSet pods found with label '{constants.ROSA_HCP_DS_LABEL}' "
+            f"in namespace '{constants.ROSA_HCP_DS_NAMESPACE}'. "
+            "Cannot apply IDMS via worker filesystem."
+        )
+        return
+
+    # Build CRI-O TOML content from IDMS entries
+    toml_lines = []
+    for entry in image_digest_mirrors:
+        source = entry["source"]
+        mirrors = entry.get("mirrors", [])
+        toml_lines += [
+            "[[registry]]",
+            f'prefix = "{source}"',
+            f'location = "{source}"',
+            "blocked = false",
+            "",
+        ]
+        for mirror in mirrors:
+            toml_lines += [
+                "[[registry.mirror]]",
+                f'location = "{mirror}"',
+                "insecure = false",
+                "",
+            ]
+    toml_content = "\n".join(toml_lines)
+    encoded = base64.b64encode(toml_content.encode()).decode()
+    dest_path = f"{constants.ROSA_HCP_HOST_REGISTRIES_CONF_D}/{conf_filename}"
+
+    for pod in ds_pods:
+        pod_name = pod["metadata"]["name"]
+        exec_cmd(
+            f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+            f"-- bash -c \"echo '{encoded}' | base64 -d > {dest_path}\"",
+            secrets=[encoded],
+        )
+    logger.info(
+        f"Written mirror config ({len(image_digest_mirrors)} entries) "
+        f"to {dest_path} on {len(ds_pods)} worker node(s)"
+    )
+
+    # Build merged auth.json on OCS-CI side (DaemonSet container has no python3).
+    # CRI-O on ROSA HCP workers uses global_auth_file = kubelet/config.json
+    # (set in /etc/crio/crio.conf.d/00-default), NOT /etc/containers/auth.json.
+    # kubelet/config.json contains the OCM cluster pull-secret which lacks access
+    # to quay.io/rhceph-dev nightly images. We redirect CRI-O to use auth.json
+    # (which we control) by merging kubelet creds + mirror creds + a path-specific
+    # quay.io/rhceph-dev entry so it beats the generic quay.io:OCM from kubelet.
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+    with open(pull_secret_path) as f:
+        pull_secret = json.load(f)
+    # Use .get() defensively in case pull-secret is missing the "auths" key
+    ps_auths = pull_secret.get("auths", {})
+    mirror_registries = {
+        mirror.split("/")[0]
+        for entry in image_digest_mirrors
+        for mirror in entry.get("mirrors", [])
+    }
+    extra_auths = {
+        reg: creds for reg, creds in ps_auths.items() if reg in mirror_registries
+    }
+    # Path-specific entry: containers/image picks the most specific registry path
+    # match, so quay.io/rhceph-dev:ocsqe beats the generic quay.io:OCM token
+    # that kubelet provides when CRI-O pulls quay.io/rhceph-dev/* images.
+    quay_auth = ps_auths.get("quay.io")
+    if quay_auth:
+        extra_auths["quay.io/rhceph-dev"] = quay_auth
+
+    # Always write auth.json — even if extra_auths is empty, auth.json must
+    # contain at least the kubelet cluster credentials so that CRI-O (which we
+    # will redirect to this file) can still pull all other cluster images.
+    # Writing unconditionally also avoids the race where the redirect proceeds
+    # but auth.json is stale/empty from a previous failed run.
+    for pod in ds_pods:
+        pod_name = pod["metadata"]["name"]
+
+        # Read kubelet/config.json (what CRI-O currently uses as global_auth_file)
+        # so we preserve all cluster-level credentials in our merged auth.json.
+        # The stdout is pull-secret JSON; exec_cmd logs it at DEBUG only and
+        # truncate_large_base64() shortens the actual token values automatically.
+        kubelet_auths = {}
+        for attempt in range(1, 4):
+            try:
+                kubelet_raw = exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f'-- bash -c "cat {constants.ROSA_HCP_HOST_KUBELET_CONFIG}'
+                    f" 2>/dev/null || echo '{{}}'\"",
+                    ignore_error=True,
+                    silent=True,
+                )
+                kubelet_auths = json.loads(
+                    kubelet_raw.stdout.decode().strip() or "{}"
+                ).get("auths", {})
+                break
+            except ValueError as e:
+                # Malformed JSON from kubelet config — proceed with empty base
+                logger.warning(
+                    f"Could not parse kubelet config on {pod_name} (attempt {attempt}/3): {e}"
+                )
+                if attempt == 3:
+                    logger.warning(
+                        "Proceeding without cluster creds base for this worker"
+                    )
+                break
+            except Exception as e:
+                logger.warning(
+                    f"Attempt {attempt}/3 reading kubelet config on {pod_name}: {e}"
+                )
+                if attempt == 3:
+                    logger.warning(
+                        "Could not read kubelet config; proceeding without cluster creds base"
+                    )
+
+        # Merge: kubelet auths as base, overridden by mirror pull-secret creds.
+        # This preserves OCP infra image pull access while adding rhceph-dev.
+        merged = {"auths": {**kubelet_auths, **extra_auths}}
+        merged_b64 = base64.b64encode(json.dumps(merged).encode()).decode()
+
+        # Write via temp file + cp to avoid truncated-write if connection drops.
+        # merged_b64 is passed as a secret so it is masked in all log output.
+        for attempt in range(1, 4):
+            try:
+                exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f"-- bash -c \"echo '{merged_b64}' | base64 -d"
+                    f" > /tmp/auth-merged.json"
+                    f' && cp /tmp/auth-merged.json {constants.ROSA_HCP_HOST_AUTH_JSON}"',
+                    secrets=[merged_b64],
+                )
+                # Verify file is non-empty (byte count only — no credentials logged)
+                verify = exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f'-- bash -c "wc -c < {constants.ROSA_HCP_HOST_AUTH_JSON}"',
+                    ignore_error=True,
+                )
+                written = int(verify.stdout.decode().strip() or "0")
+                if written > 0:
+                    break
+                logger.warning(
+                    f"Attempt {attempt}/3: auth.json appears empty on {pod_name}, retrying"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Attempt {attempt}/3 writing auth.json on {pod_name}: {e}"
+                )
+                if attempt == 3:
+                    raise
+
+    logger.info(
+        f"Written merged auth.json (registries: {list(extra_auths.keys())}) "
+        f"to {constants.ROSA_HCP_HOST_AUTH_JSON} on {len(ds_pods)} worker node(s)"
+    )
+
+    # Redirect CRI-O global_auth_file from kubelet/config.json to auth.json.
+    # Check first (idempotent), apply sed, then verify. Retry on exec failure.
+    crio_old = "/var/lib/kubelet/config.json"
+    crio_new = "/etc/containers/auth.json"
+    for pod in ds_pods:
+        pod_name = pod["metadata"]["name"]
+        for attempt in range(1, 4):
+            try:
+                check = exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f"-- bash -c \"grep -q 'global_auth_file.*kubelet'"
+                    f" {constants.ROSA_HCP_CRIO_CONF_DROP_IN} 2>/dev/null"
+                    f' && echo yes || echo no"',
+                    ignore_error=True,
+                )
+                if check.stdout.decode().strip() != "yes":
+                    logger.info(
+                        f"CRI-O drop-in on {pod_name} already redirected or not found — skipping"
+                    )
+                    break
+                exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f'-- bash -c "sed -i'
+                    f' \'s|global_auth_file = \\"{crio_old}\\"'
+                    f'|global_auth_file = \\"{crio_new}\\"|g\''
+                    f' {constants.ROSA_HCP_CRIO_CONF_DROP_IN}"',
+                )
+                verify = exec_cmd(
+                    f"oc exec -n {constants.ROSA_HCP_DS_NAMESPACE} {pod_name} "
+                    f"-- bash -c \"grep 'global_auth_file'"
+                    f' {constants.ROSA_HCP_CRIO_CONF_DROP_IN} 2>/dev/null"',
+                    ignore_error=True,
+                )
+                result = verify.stdout.decode().strip()
+                if crio_new not in result:
+                    raise Exception(
+                        f"CRI-O drop-in still shows old path after sed: {result}"
+                    )
+                break
+            except Exception as e:
+                logger.warning(
+                    f"Attempt {attempt}/3 redirecting CRI-O drop-in on {pod_name}: {e}"
+                )
+                if attempt == 3:
+                    raise
+    logger.info(
+        f"Redirected CRI-O global_auth_file to {constants.ROSA_HCP_HOST_AUTH_JSON} "
+        f"on all worker nodes"
+    )
+
+    # Restart CRI-O on each worker (full restart required — reload does not
+    # re-read crio.conf.d drop-in files containing global_auth_file).
+    from ocs_ci.ocs.node import get_nodes
+
+    worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
+    for node in worker_nodes:
+        for attempt in range(1, 4):
+            try:
+                ocp_module.OCP().exec_oc_debug_cmd(
+                    node=node.name,
+                    cmd_list=["systemctl restart crio"],
+                )
+                logger.info(f"CRI-O restarted on {node.name}")
+                break
+            except Exception as e:
+                logger.warning(
+                    f"Attempt {attempt}/3 restarting CRI-O on {node.name}: {e}"
+                )
+                if attempt == 3:
+                    logger.error(
+                        f"Failed to restart CRI-O on {node.name} after 3 attempts. "
+                        "Image pulls from mirror registries may fail."
+                    )
+    logger.info("CRI-O restart complete on all worker nodes")
+
+
+def add_mc_partitioned_disk_on_workers_to_ocp_deployment(disk):
+    """
+    Add Machine Config for partitioned disk on worker nodes to OCP deployment
+
+    Args:
+        disk (str): path to root disk where the additional partition should be created common for all worker nodes
+
+    """
+    role = "worker"
+    logger.info(f"Creating and Adding Partitioned disk MC file for {role}")
+    with open(constants.PARTITIONED_DISK_MC) as file_stream:
+        part_disk_template_obj = yaml.safe_load(file_stream)
+
+    part_disk_template_obj["spec"]["config"]["storage"]["disks"][0]["device"] = disk
+
+    part_disk_template_str = yaml.safe_dump(part_disk_template_obj)
+    part_disk_file = os.path.join(
+        config.ENV_DATA["cluster_path"],
+        "openshift",
+        "98-osd-partition-worker.yaml",
+    )
+    with open(part_disk_file, "w") as f:
+        f.write(part_disk_template_str)
