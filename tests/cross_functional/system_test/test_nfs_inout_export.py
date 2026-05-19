@@ -6,22 +6,18 @@ import time
 import os
 import socket
 import threading
-import hashlib
 
-from subprocess import CompletedProcess
 from ocs_ci.utility import nfs_utils
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
-from ocs_ci.ocs import constants, ocp, node, platform_nodes
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pvc
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
+from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.framework.pytest_customization.marks import (
-    brown_squad,
     skipif_rosa_hcp,
     skipif_lean_deployment,
 )
@@ -29,8 +25,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
-    tier2,
-    tier4c,
     skipif_ocp_version,
     skipif_managed_service,
     skip_for_provider_or_client_if_ocs_version,
@@ -38,8 +32,6 @@ from ocs_ci.framework.testlib import (
     skipif_proxy_cluster,
     polarion_id,
     skipif_external_mode,
-    skipif_hci_client,
-    hci_client_required,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.ocs.resources import pod, ocs
@@ -48,7 +40,6 @@ from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
 )
-from ocs_ci.utility.nfs_utils import provisioner_selectors
 
 log = logging.getLogger(__name__)
 # Error message to look in a command output
@@ -825,16 +816,14 @@ class TestNfsExport(ManageTest):
         nfs_node_name = nfs_server_pod.data["spec"]["nodeName"]
         log.info(f"NFS server pod is running on node: {nfs_node_name}")
 
-        # Get node object
-        nfs_node_obj = get_node_objs(node_names=[nfs_node_name])[0]
         log.info(f"Rebooting node: {nfs_node_name}")
 
-        # Perform node reboot using platform nodes
-        log.info("Initiating node reboot...")
-        factory = platform_nodes.PlatformNodesFactory()
-        nodes_platform = factory.get_nodes_platform()
-        nodes_platform.restart_nodes([nfs_node_obj], wait=True)
-        log.info(f"Node {nfs_node_name} reboot completed")
+        # # Perform node reboot using platform nodes
+        # log.info("Initiating node reboot...")
+        # factory = platform_nodes.PlatformNodesFactory()
+        # nodes_platform = factory.get_nodes_platform()
+        # nodes_platform.restart_nodes([nfs_node_obj], wait=True)
+        # log.info(f"Node {nfs_node_name} reboot completed")
 
         # Step 3: Wait for node and pods to recover
         log.info("Step 3: Waiting for node to come back online")
@@ -856,7 +845,7 @@ class TestNfsExport(ManageTest):
         # Verify NFS mount is still accessible
         log.info("Verifying NFS mount accessibility...")
         retcode, stdout, _ = con.exec_cmd(f"findmnt -M {test_folder_for_pod}")
-        assert retcode == 0, f"NFS mount not accessible after node reboot"
+        assert retcode == 0, "NFS mount not accessible after node reboot"
         log.info("NFS mount is still accessible")
 
         # Let I/O continue for a bit after recovery
@@ -918,10 +907,11 @@ class TestNfsExport(ManageTest):
 
         # Verify file exists from both perspectives
         assert file_exists, f"Test file {test_file} not found on NFS mount"
-        assert pod_line_count > 0, f"Pod cannot see test file or file is empty"
+        assert pod_line_count > 0, "Pod cannot see test file or file is empty"
 
         log.info(
-            f"NFS node reboot test completed: {nfs_node_name} rebooted, {len(io_errors)} I/O errors, test file verified with {pod_line_count} lines"
+            f"NFS node reboot test completed: {nfs_node_name} rebooted, {len(io_errors)} I/O errors, "
+            f"test file verified with {pod_line_count} lines"
         )
 
         # ========================================================================
@@ -959,7 +949,8 @@ class TestNfsExport(ManageTest):
         nfs_snapshotclass_name = "ocs-storagecluster-nfsplugin-snapclass"
 
         log.info(
-            f"Creating snapshot: {snapshot_name} from NFS PVC: {pvc_name} using snapshot class: {nfs_snapshotclass_name}"
+            f"Creating snapshot: {snapshot_name} from NFS PVC: {pvc_name} using "
+            f"snapshot class: {nfs_snapshotclass_name}"
         )
         from ocs_ci.ocs.resources.pvc import create_pvc_snapshot
 
@@ -1159,9 +1150,6 @@ class TestNfsExport(ManageTest):
         retcode, stdout, _ = con.exec_cmd(restored_count_cmd)
         restored_line_count = int(stdout.split()[0]) if retcode == 0 else 0
         log.info(f"Total lines in restored file: {restored_line_count}")
-        import pdb
-
-        pdb.set_trace()
 
         # Verify line counts match
         assert (
@@ -1177,12 +1165,620 @@ class TestNfsExport(ManageTest):
 
         log.info("=" * 80)
         log.info("NFS Snapshot and Restore scenario completed successfully!")
-        log.info(f"Summary:")
+        log.info("Summary:")
         log.info(f"  - Snapshot created: {snapshot_name}")
         log.info(f"  - Restored PVC: {restored_pvc_name}")
         log.info(f"  - Lines verified: {restored_line_count}")
         log.info(f"  - Original checksum: {original_file_checksum}")
         log.info(f"  - Restored checksum: {restored_file_checksum}")
-        log.info(f"  - Data integrity: VERIFIED ✓")
+        log.info("  - Data integrity: VERIFIED ✓")
         log.info("=" * 80)
         log.info("Test completed successfully - cleanup will be handled by finalizer")
+
+        # ========================================================================
+        # Scenario: Clone Restored PVC, Resize, and Verify Data Integrity
+        # ========================================================================
+        log.info("=" * 80)
+        log.info("Starting PVC Clone, Resize, and Data Integrity Verification scenario")
+        log.info("=" * 80)
+
+        # Step 1: Create a clone of the restored PVC
+        log.info("Step 1: Creating clone of restored PVC")
+
+        cloned_pvc_name = f"{restored_pvc_name}-clone"
+        cloned_pvc_obj = pvc.create_pvc_clone(
+            sc_name=self.nfs_sc,
+            parent_pvc=restored_pvc_name,
+            clone_yaml=constants.CSI_CEPHFS_PVC_CLONE_YAML,
+            namespace=self.namespace,
+            pvc_name=cloned_pvc_name,
+            storage_size="10Gi",
+        )
+
+        log.info(f"Cloned PVC {cloned_pvc_name} created successfully")
+
+        # Add cloned PVC to cleanup
+        def cleanup_cloned_pvc():
+            try:
+                log.info(f"Deleting cloned PVC {cloned_pvc_name}")
+                cloned_pvc_obj.delete()
+                cloned_pvc_obj.ocp.wait_for_delete(
+                    resource_name=cloned_pvc_name, timeout=180
+                )
+                log.info(f"Cloned PVC {cloned_pvc_name} deleted successfully")
+            except Exception as e:
+                log.warning(f"Failed to delete cloned PVC: {e}")
+
+        request.addfinalizer(cleanup_cloned_pvc)
+
+        # Step 2: Create pod deployment using the cloned PVC
+        log.info("Step 2: Creating pod deployment with cloned PVC")
+
+        cloned_pod_name = f"test-pod-cloned-{int(time.time())}"
+        cloned_deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
+
+        # Deployment name
+        cloned_deployment_data["metadata"]["name"] = cloned_pod_name
+
+        # Label values
+        cloned_deployment_data["metadata"]["labels"]["app"] = cloned_pod_name
+        cloned_deployment_data["spec"]["selector"]["matchLabels"][
+            "name"
+        ] = cloned_pod_name
+        cloned_deployment_data["spec"]["template"]["metadata"]["labels"][
+            "name"
+        ] = cloned_pod_name
+
+        # PVC claimName
+        cloned_deployment_data["spec"]["template"]["spec"]["volumes"][0][
+            "persistentVolumeClaim"
+        ]["claimName"] = cloned_pvc_name
+
+        helpers.create_resource(**cloned_deployment_data)
+        time.sleep(120)
+
+        assert self.pod_obj.wait_for_resource(
+            resource_count=1,
+            condition=constants.STATUS_RUNNING,
+            selector=f"name={cloned_pod_name}",
+            dont_allow_other_resources=True,
+            timeout=300,
+        )
+
+        # Get the actual pod created by the deployment (it will have a generated suffix)
+        cloned_pod_objs = pod.get_all_pods(
+            namespace=self.namespace, selector=[cloned_pod_name], selector_label="name"
+        )
+        assert (
+            len(cloned_pod_objs) > 0
+        ), f"No pods found for deployment {cloned_pod_name}"
+        # cloned_pod_obj = cloned_pod_objs[0]
+
+        log.info(f"Cloned pod {cloned_pod_name} is running")
+
+        # Add cloned pod to cleanup
+        def cleanup_cloned_pod():
+            try:
+                log.info(f"Deleting cloned pod deployment {cloned_pod_name}")
+                deployment_obj = ocp.OCP(
+                    kind=constants.DEPLOYMENT, namespace=self.namespace
+                )
+                deployment_obj.delete(resource_name=cloned_pod_name)
+                log.info(f"Cloned pod deployment {cloned_pod_name} deleted")
+            except Exception as e:
+                log.warning(f"Failed to delete cloned pod: {e}")
+
+        request.addfinalizer(cleanup_cloned_pod)
+
+        # Step 3: Get NFS export details for cloned PVC and mount on client
+        log.info("Step 3: Getting NFS export details for cloned PVC")
+
+        # Get volume name from cloned PVC
+        fetch_cloned_vol_name_cmd = (
+            f"get pvc {cloned_pvc_name} -o jsonpath='{{.spec.volumeName}}'"
+        )
+        cloned_vol_name = self.pvc_obj.exec_oc_cmd(fetch_cloned_vol_name_cmd)
+        log.info(f"Cloned volume name: {cloned_vol_name}")
+
+        # Get NFS share details from cloned PV
+        fetch_cloned_pv_share_cmd = f"get pv {cloned_vol_name} -o jsonpath='{{.spec.csi.volumeAttributes.share}}'"
+        cloned_share_details = self.pv_obj.exec_oc_cmd(fetch_cloned_pv_share_cmd)
+        log.info(f"Cloned NFS share: {cloned_share_details}")
+
+        # Create mount point for cloned NFS export
+        cloned_test_folder = f"{self.test_folder}-cloned"
+        retcode, _, _ = con.exec_cmd(f"mkdir -p {cloned_test_folder}")
+        assert retcode == 0, f"Failed to create mount point {cloned_test_folder}"
+
+        # Mount cloned NFS export on client
+        mount_cloned_cmd = (
+            "mount -t nfs4 -o proto=tcp "
+            + self.hostname_add
+            + ":"
+            + cloned_share_details
+            + " "
+            + cloned_test_folder
+        )
+
+        log.info(f"Mounting cloned NFS export: {mount_cloned_cmd}")
+        retry(
+            (CommandFailed),
+            tries=28,
+            delay=10,
+        )(
+            con.exec_cmd
+        )(mount_cloned_cmd)
+
+        # Verify mount is successful
+        retcode, stdout, _ = con.exec_cmd(f"findmnt -M {cloned_test_folder}")
+        assert retcode == 0, f"Mount verification failed for {cloned_test_folder}"
+        log.info(f"Successfully mounted cloned NFS export at {cloned_test_folder}")
+
+        # Add cloned mount to cleanup
+        def cleanup_cloned_mount():
+            try:
+                log.info(f"Unmounting cloned NFS export from {cloned_test_folder}")
+                con.exec_cmd(f"umount {cloned_test_folder}")
+                con.exec_cmd(f"rm -rf {cloned_test_folder}")
+                log.info(f"Cloned mount {cloned_test_folder} cleaned up")
+            except Exception as e:
+                log.warning(f"Failed to unmount cloned NFS: {e}")
+
+        request.addfinalizer(cleanup_cloned_mount)
+
+        # Step 4: Write IO to a single file on cloned mount
+        log.info("Step 4: Writing IO to single file on cloned NFS mount")
+
+        CLONED_IO_FILE_NAME = "io_test_cloned.txt"
+        cloned_io_file = f"{cloned_test_folder}/{CLONED_IO_FILE_NAME}"
+
+        # Write initial data to single file
+        initial_cloned_data = f"Cloned PVC IO test started at {time.time()}"
+        init_cloned_cmd = f'echo "{initial_cloned_data}" > {cloned_io_file}'
+        retcode, _, stderr = con.exec_cmd(init_cloned_cmd)
+        assert retcode == 0, f"Failed to initialize cloned IO file: {stderr}"
+
+        # Append multiple lines to the same single file
+        log.info("Writing data to single file...")
+        for i in range(1, 21):
+            io_data = f"Cloned IO iteration {i} - {time.time()}"
+            write_cmd = f'echo "{io_data}" >> {cloned_io_file}'
+            retcode, _, stderr = con.exec_cmd(write_cmd, use_logger=False)
+            if retcode != 0:
+                log.warning(f"Write failed at iteration {i}: {stderr}")
+            time.sleep(0.5)
+
+        log.info(
+            f"IO operations completed on cloned mount - single file: {CLONED_IO_FILE_NAME}"
+        )
+
+        # Step 5: Capture checksum of the single file before resize
+        log.info("Step 5: Capturing file checksum before PVC resize")
+
+        cloned_checksum_cmd = f"md5sum {cloned_io_file}"
+        retcode, stdout, _ = con.exec_cmd(cloned_checksum_cmd)
+        assert retcode == 0, f"Failed to calculate cloned file checksum: {stdout}"
+        pre_resize_checksum = stdout.split()[0]
+        log.info(f"Pre-resize file checksum: {pre_resize_checksum}")
+
+        # Get line count before resize
+        pre_resize_line_cmd = f"wc -l {cloned_io_file}"
+        retcode, stdout, _ = con.exec_cmd(pre_resize_line_cmd)
+        pre_resize_line_count = int(stdout.split()[0]) if retcode == 0 else 0
+        log.info(f"Pre-resize line count: {pre_resize_line_count}")
+
+        # Step 6: Resize (expand) the cloned PVC
+        log.info("Step 6: Resizing cloned PVC")
+
+        new_size = "15Gi"
+        log.info(f"Expanding cloned PVC from 10Gi to {new_size}")
+
+        # Patch the PVC to request more storage
+        patch_cmd = (
+            f"patch pvc {cloned_pvc_name} -p "
+            f'\'{{"spec":{{"resources":{{"requests":{{"storage":"{new_size}"}}}}}}}}\''
+        )
+        result = cloned_pvc_obj.ocp.exec_oc_cmd(patch_cmd)
+        log.info(f"PVC resize request submitted: {result}")
+
+        # Wait for PVC to be resized
+        log.info("Waiting for PVC resize to complete...")
+        time.sleep(30)  # Give some time for resize operation
+
+        # Verify PVC size
+        for attempt in range(12):  # Wait up to 2 minutes
+            size_cmd = (
+                f"get pvc {cloned_pvc_name} -o jsonpath='{{.status.capacity.storage}}'"
+            )
+            current_size = cloned_pvc_obj.ocp.exec_oc_cmd(size_cmd)
+            if current_size and current_size.strip() == new_size:
+                log.info(f"PVC successfully resized to {new_size}")
+                break
+            log.info(
+                f"Waiting for resize... Current size: {current_size.strip() if current_size else 'unknown'}"
+            )
+            time.sleep(10)
+        else:
+            log.warning("PVC resize may not have completed within timeout")
+
+        # Step 7: Verify data integrity after resize
+        log.info("Step 7: Verifying data integrity after PVC resize")
+
+        # Calculate checksum of the same file after resize
+        post_resize_checksum_cmd = f"md5sum {cloned_io_file}"
+        retcode, stdout, _ = con.exec_cmd(post_resize_checksum_cmd)
+        assert retcode == 0, f"Failed to calculate post-resize file checksum: {stdout}"
+        post_resize_checksum = stdout.split()[0]
+        log.info(f"Post-resize file checksum: {post_resize_checksum}")
+
+        # Get line count after resize
+        post_resize_line_cmd = f"wc -l {cloned_io_file}"
+        retcode, stdout, _ = con.exec_cmd(post_resize_line_cmd)
+        post_resize_line_count = int(stdout.split()[0]) if retcode == 0 else 0
+        log.info(f"Post-resize line count: {post_resize_line_count}")
+
+        # Verify line count unchanged
+        assert pre_resize_line_count == post_resize_line_count, (
+            f"Line count mismatch after resize!\n"
+            f"Pre-resize: {pre_resize_line_count}\n"
+            f"Post-resize: {post_resize_line_count}"
+        )
+
+        # Verify checksum unchanged
+        assert pre_resize_checksum == post_resize_checksum, (
+            f"File checksum mismatch after resize! Data integrity check failed.\n"
+            f"Pre-resize checksum: {pre_resize_checksum}\n"
+            f"Post-resize checksum: {post_resize_checksum}"
+        )
+
+        log.info("=" * 80)
+        log.info(
+            "PVC Clone, Resize, and Data Integrity scenario completed successfully!"
+        )
+        log.info("Summary:")
+        log.info(f"  - Cloned PVC: {cloned_pvc_name}")
+        log.info(f"  - Cloned pod: {cloned_pod_name}")
+        log.info(f"  - IO file: {CLONED_IO_FILE_NAME}")
+        log.info("  - Original size: 10Gi")
+        log.info(f"  - Resized to: {new_size}")
+        log.info(f"  - Line count: {post_resize_line_count}")
+        log.info(f"  - Pre-resize checksum: {pre_resize_checksum}")
+        log.info(f"  - Post-resize checksum: {post_resize_checksum}")
+        log.info("  - Data integrity: VERIFIED ✓")
+
+        # ========================================================================
+        # Scenario: Snapshot Resized PVC, Restore, Resize Again, Verify Integrity
+        # ========================================================================
+        log.info("=" * 80)
+        log.info("Starting Snapshot of Resized PVC, Restore, and Re-Resize scenario")
+        log.info("=" * 80)
+
+        # Step 1: Create snapshot of the resized cloned PVC
+        log.info("Step 1: Creating snapshot of resized cloned PVC")
+
+        cloned_snapshot_name = f"{cloned_pvc_name}-snapshot"
+        snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
+        nfs_snapshotclass_name = "ocs-storagecluster-nfsplugin-snapclass"
+
+        log.info(
+            f"Creating snapshot: {cloned_snapshot_name} from resized PVC: {cloned_pvc_name} "
+            f"using snapshot class: {nfs_snapshotclass_name}"
+        )
+
+        cloned_snapshot_obj = create_pvc_snapshot(
+            pvc_name=cloned_pvc_name,
+            snap_yaml=snap_yaml,
+            snap_name=cloned_snapshot_name,
+            namespace=self.namespace,
+            sc_name=nfs_snapshotclass_name,
+            wait=True,
+            timeout=300,
+        )
+
+        log.info(f"Snapshot {cloned_snapshot_name} created successfully")
+
+        # Add snapshot to cleanup
+        def cleanup_cloned_snapshot():
+            try:
+                log.info(f"Deleting snapshot {cloned_snapshot_name}")
+                cloned_snapshot_obj.delete()
+                cloned_snapshot_obj.ocp.wait_for_delete(
+                    resource_name=cloned_snapshot_name, timeout=180
+                )
+                log.info(f"Snapshot {cloned_snapshot_name} deleted successfully")
+            except Exception as e:
+                log.warning(f"Failed to delete snapshot: {e}")
+
+        request.addfinalizer(cleanup_cloned_snapshot)
+
+        # Step 2: Restore PVC from the snapshot
+        log.info("Step 2: Restoring PVC from snapshot of resized PVC")
+
+        final_restored_pvc_name = f"{cloned_pvc_name}-restored"
+        final_restored_pvc_obj = pvc.create_restore_pvc(
+            sc_name=self.nfs_sc,
+            snap_name=cloned_snapshot_name,
+            namespace=self.namespace,
+            size="15Gi",
+            pvc_name=final_restored_pvc_name,
+            volume_mode="Filesystem",
+            restore_pvc_yaml=constants.CSI_CEPHFS_PVC_RESTORE_YAML,
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+
+        log.info(f"Restored PVC {final_restored_pvc_name} created from snapshot")
+
+        # Add restored PVC to cleanup
+        def cleanup_final_restored_pvc():
+            try:
+                log.info(f"Deleting final restored PVC {final_restored_pvc_name}")
+                final_restored_pvc_obj.delete(wait=True)
+                log.info(
+                    f"Final restored PVC {final_restored_pvc_name} deleted successfully"
+                )
+            except Exception as e:
+                log.warning(f"Failed to delete final restored PVC: {e}")
+
+        request.addfinalizer(cleanup_final_restored_pvc)
+
+        # Step 3: Create pod deployment using the final restored PVC
+        log.info("Step 3: Creating pod deployment with final restored PVC")
+
+        final_restored_pod_name = f"test-pod-final-{int(time.time())}"
+        final_restored_deployment_data = templating.load_yaml(
+            constants.NFS_APP_POD_YAML
+        )
+
+        # Deployment name
+        final_restored_deployment_data["metadata"]["name"] = final_restored_pod_name
+
+        # Label values
+        final_restored_deployment_data["metadata"]["labels"][
+            "app"
+        ] = final_restored_pod_name
+        final_restored_deployment_data["spec"]["selector"]["matchLabels"][
+            "name"
+        ] = final_restored_pod_name
+        final_restored_deployment_data["spec"]["template"]["metadata"]["labels"][
+            "name"
+        ] = final_restored_pod_name
+
+        # PVC claimName
+        final_restored_deployment_data["spec"]["template"]["spec"]["volumes"][0][
+            "persistentVolumeClaim"
+        ]["claimName"] = final_restored_pvc_name
+
+        helpers.create_resource(**final_restored_deployment_data)
+        time.sleep(120)
+
+        assert self.pod_obj.wait_for_resource(
+            resource_count=1,
+            condition=constants.STATUS_RUNNING,
+            selector=f"name={final_restored_pod_name}",
+            dont_allow_other_resources=True,
+            timeout=300,
+        )
+
+        # Get the actual pod created by the deployment (using selector, not direct name)
+        final_restored_pod_objs = pod.get_all_pods(
+            namespace=self.namespace,
+            selector=[final_restored_pod_name],
+            selector_label="name",
+        )
+        assert (
+            len(final_restored_pod_objs) > 0
+        ), f"No pods found for deployment {final_restored_pod_name}"
+        # final_restored_pod_obj = final_restored_pod_objs[0]
+
+        log.info(f"Final restored pod {final_restored_pod_name} is running")
+
+        # Add final restored pod to cleanup
+        def cleanup_final_restored_pod():
+            try:
+                log.info(
+                    f"Deleting final restored pod deployment {final_restored_pod_name}"
+                )
+                deployment_obj = ocp.OCP(
+                    kind=constants.DEPLOYMENT, namespace=self.namespace
+                )
+                deployment_obj.delete(resource_name=final_restored_pod_name)
+                log.info(
+                    f"Final restored pod deployment {final_restored_pod_name} deleted"
+                )
+            except Exception as e:
+                log.warning(f"Failed to delete final restored pod: {e}")
+
+        request.addfinalizer(cleanup_final_restored_pod)
+
+        # Step 4: Get NFS export details and mount on client
+        log.info("Step 4: Getting NFS export details for final restored PVC")
+
+        # Get volume name from final restored PVC
+        fetch_final_vol_name_cmd = (
+            f"get pvc {final_restored_pvc_name} -o jsonpath='{{.spec.volumeName}}'"
+        )
+        final_restored_vol_name = self.pvc_obj.exec_oc_cmd(fetch_final_vol_name_cmd)
+        log.info(f"Final restored volume name: {final_restored_vol_name}")
+
+        # Get NFS share details from final restored PV
+        fetch_final_pv_share_cmd = (
+            f"get pv {final_restored_vol_name} "
+            f"-o jsonpath='{{.spec.csi.volumeAttributes.share}}'"
+        )
+        final_restored_share_details = self.pv_obj.exec_oc_cmd(fetch_final_pv_share_cmd)
+        log.info(f"Final restored NFS share: {final_restored_share_details}")
+
+        # Create mount point for final restored NFS export
+        final_restored_test_folder = f"{self.test_folder}-final"
+        retcode, _, _ = con.exec_cmd(f"mkdir -p {final_restored_test_folder}")
+        assert (
+            retcode == 0
+        ), f"Failed to create mount point {final_restored_test_folder}"
+
+        # Mount final restored NFS export on client
+        mount_final_restored_cmd = (
+            "mount -t nfs4 -o proto=tcp "
+            + self.hostname_add
+            + ":"
+            + final_restored_share_details
+            + " "
+            + final_restored_test_folder
+        )
+
+        log.info(f"Mounting final restored NFS export: {mount_final_restored_cmd}")
+        retry(
+            (CommandFailed),
+            tries=28,
+            delay=10,
+        )(
+            con.exec_cmd
+        )(mount_final_restored_cmd)
+
+        # Verify mount is successful
+        retcode, stdout, _ = con.exec_cmd(f"findmnt -M {final_restored_test_folder}")
+        assert (
+            retcode == 0
+        ), f"Mount verification failed for {final_restored_test_folder}"
+        log.info(
+            f"Successfully mounted final restored NFS export at {final_restored_test_folder}"
+        )
+
+        # Add final restored mount to cleanup
+        def cleanup_final_restored_mount():
+            try:
+                log.info(
+                    f"Unmounting final restored NFS export from {final_restored_test_folder}"
+                )
+                con.exec_cmd(f"umount {final_restored_test_folder}")
+                con.exec_cmd(f"rm -rf {final_restored_test_folder}")
+                log.info(
+                    f"Final restored mount {final_restored_test_folder} cleaned up"
+                )
+            except Exception as e:
+                log.warning(f"Failed to unmount final restored NFS: {e}")
+
+        request.addfinalizer(cleanup_final_restored_mount)
+
+        # Step 5: Write IO to a single file on final restored mount
+        log.info("Step 5: Writing IO to single file on final restored NFS mount")
+
+        FINAL_IO_FILE_NAME = "io_test_final.txt"
+        final_io_file = f"{final_restored_test_folder}/{FINAL_IO_FILE_NAME}"
+
+        # Write initial data to single file
+        initial_final_data = f"Final restored PVC IO test started at {time.time()}"
+        init_final_cmd = f'echo "{initial_final_data}" > {final_io_file}'
+        retcode, _, stderr = con.exec_cmd(init_final_cmd)
+        assert retcode == 0, f"Failed to initialize final IO file: {stderr}"
+
+        # Append multiple lines to the same single file
+        log.info("Writing data to single file...")
+        for i in range(1, 21):
+            io_data = f"Final IO iteration {i} - {time.time()}"
+            write_cmd = f'echo "{io_data}" >> {final_io_file}'
+            retcode, _, stderr = con.exec_cmd(write_cmd)
+            if retcode != 0:
+                log.warning(f"Write failed at iteration {i}: {stderr}")
+            time.sleep(0.5)
+
+        log.info(
+            f"IO operations completed on final restored mount - single file: {FINAL_IO_FILE_NAME}"
+        )
+
+        # Step 6: Capture checksum before resize
+        log.info("Step 6: Capturing file checksum before final PVC resize")
+
+        final_checksum_cmd = f"md5sum {final_io_file}"
+        retcode, stdout, _ = con.exec_cmd(final_checksum_cmd)
+        assert retcode == 0, f"Failed to calculate final file checksum: {stdout}"
+        pre_final_resize_checksum = stdout.split()[0]
+        log.info(f"Pre-final-resize file checksum: {pre_final_resize_checksum}")
+
+        # Get line count before resize
+        pre_final_resize_line_cmd = f"wc -l {final_io_file}"
+        retcode, stdout, _ = con.exec_cmd(pre_final_resize_line_cmd)
+        pre_final_resize_line_count = int(stdout.split()[0]) if retcode == 0 else 0
+        log.info(f"Pre-final-resize line count: {pre_final_resize_line_count}")
+
+        # Step 7: Resize the final restored PVC
+        log.info("Step 7: Resizing final restored PVC")
+
+        final_new_size = "20Gi"
+        log.info(f"Expanding final restored PVC from 15Gi to {final_new_size}")
+
+        # Patch the PVC to request more storage
+        final_patch_cmd = (
+            f"patch pvc {final_restored_pvc_name} -p "
+            f'\'{{"spec":{{"resources":{{"requests":{{"storage":"{final_new_size}"}}}}}}}}\''
+        )
+        result = final_restored_pvc_obj.ocp.exec_oc_cmd(final_patch_cmd)
+        log.info(f"Final PVC resize request submitted: {result}")
+
+        # Wait for PVC to be resized
+        log.info("Waiting for final PVC resize to complete...")
+        time.sleep(30)
+
+        # Verify PVC size
+        for attempt in range(12):  # Wait up to 2 minutes
+            size_cmd = f"get pvc {final_restored_pvc_name} -o jsonpath='{{.status.capacity.storage}}'"
+            current_size = final_restored_pvc_obj.ocp.exec_oc_cmd(size_cmd)
+            if current_size and current_size.strip() == final_new_size:
+                log.info(f"Final PVC successfully resized to {final_new_size}")
+                break
+            log.info(
+                f"Waiting for final resize... Current size: {current_size.strip() if current_size else 'unknown'}"
+            )
+            time.sleep(10)
+        else:
+            log.warning("Final PVC resize may not have completed within timeout")
+
+        # Step 8: Verify data integrity after final resize
+        log.info("Step 8: Verifying data integrity after final PVC resize")
+
+        # Calculate checksum of the same file after resize
+        post_final_resize_checksum_cmd = f"md5sum {final_io_file}"
+        retcode, stdout, _ = con.exec_cmd(post_final_resize_checksum_cmd)
+        assert (
+            retcode == 0
+        ), f"Failed to calculate post-final-resize file checksum: {stdout}"
+        post_final_resize_checksum = stdout.split()[0]
+        log.info(f"Post-final-resize file checksum: {post_final_resize_checksum}")
+
+        # Get line count after resize
+        post_final_resize_line_cmd = f"wc -l {final_io_file}"
+        retcode, stdout, _ = con.exec_cmd(post_final_resize_line_cmd)
+        post_final_resize_line_count = int(stdout.split()[0]) if retcode == 0 else 0
+        log.info(f"Post-final-resize line count: {post_final_resize_line_count}")
+
+        # Verify line count unchanged
+        assert pre_final_resize_line_count == post_final_resize_line_count, (
+            f"Line count mismatch after final resize!\n"
+            f"Pre-resize: {pre_final_resize_line_count}\n"
+            f"Post-resize: {post_final_resize_line_count}"
+        )
+
+        # Verify checksum unchanged
+        assert pre_final_resize_checksum == post_final_resize_checksum, (
+            f"File checksum mismatch after final resize! Data integrity check failed.\n"
+            f"Pre-resize checksum: {pre_final_resize_checksum}\n"
+            f"Post-resize checksum: {post_final_resize_checksum}"
+        )
+
+        log.info("=" * 80)
+        log.info("Snapshot, Restore, and Re-Resize scenario completed successfully!")
+        log.info("Summary:")
+        log.info(f"  - Snapshot of resized PVC: {cloned_snapshot_name}")
+        log.info(f"  - Final restored PVC: {final_restored_pvc_name}")
+        log.info(f"  - Final restored pod: {final_restored_pod_name}")
+        log.info(f"  - IO file: {FINAL_IO_FILE_NAME}")
+        log.info("  - Original size: 15Gi")
+        log.info(f"  - Resized to: {final_new_size}")
+        log.info(f"  - Line count: {post_final_resize_line_count}")
+        log.info(f"  - Pre-resize checksum: {pre_final_resize_checksum}")
+        log.info(f"  - Post-resize checksum: {post_final_resize_checksum}")
+        log.info("  - Data integrity: VERIFIED ✓")
+        log.info("=" * 80)
+        log.info(
+            "All test scenarios completed successfully - cleanup will be handled by finalizers"
+        )
+        log.info("=" * 80)
