@@ -423,7 +423,7 @@ def pytest_configure(config):
 
         if not (config.getoption("--help") or config.getoption("collectonly")):
             process_cluster_cli_params(config)
-            auto_configure_acm()                                                          
+            auto_configure_acm()
             auto_configure_submariner()
             config_file = os.path.expanduser(
                 os.path.join(
