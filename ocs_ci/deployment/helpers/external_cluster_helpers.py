@@ -1115,7 +1115,7 @@ class ExternalCluster(object):
 
             try:
                 ocp_resource = OCP(kind=kind, namespace=namespace)
-                ocp_resource.create(yaml_file=tmp_path)
+                ocp_resource.apply(yaml_file=tmp_path)
                 key = "secrets" if kind == "Secret" else "configmaps"
                 created[key].append(name)
                 logger.info(f"Created {kind}: {name}")
