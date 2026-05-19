@@ -1,0 +1,6 @@
+---
+DEPLOYMENT:
+  fdf_pre_release: true
+  fdf_image_tag: v4.22
+  fdf_pre_release_registry: cp.stg.icr.io/cp/df
+  fdf_pre_release_image_digest: null
