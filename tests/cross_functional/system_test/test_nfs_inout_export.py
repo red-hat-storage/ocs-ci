@@ -32,6 +32,7 @@ from ocs_ci.framework.testlib import (
     skipif_proxy_cluster,
     polarion_id,
     skipif_external_mode,
+    skipif_hci_client,
 )
 from ocs_ci.utility import version as version_module
 from ocs_ci.ocs.resources import pod, ocs
@@ -51,6 +52,7 @@ ERRMSG = "Error in command"
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
 @skipif_managed_service
+@skipif_hci_client
 @skip_for_provider_or_client_if_ocs_version("<4.19")
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
@@ -300,6 +302,28 @@ class TestNfsExport(ManageTest):
                 nfs_utils.update_etc_hosts_on_nfs_client(con, hostname_add)
         return con
 
+    def _mount_nfs_with_retry(self, cmd, tries=28, delay=10):
+        """
+        Execute an NFS mount command on the client VM with retry.
+
+        Args:
+            cmd (str): Mount command to execute on the NFS client VM
+            tries (int): Number of retry attempts (default: 28)
+            delay (int): Delay in seconds between retries (default: 10)
+
+        Raises:
+            CommandFailed: If mount does not succeed within the retry limit
+        """
+
+        def _do_mount():
+            retcode, _, stderr = self.con.exec_cmd(cmd)
+            if retcode != 0:
+                raise CommandFailed(
+                    f"NFS mount command failed with retcode " f"{retcode}: {stderr}"
+                )
+
+        retry((CommandFailed), tries=tries, delay=delay)(_do_mount)()
+
     @tier1
     @polarion_id("OCS-4272")
     def test_cluster_inout_nfs_export(
@@ -320,89 +344,6 @@ class TestNfsExport(ManageTest):
 
         """
 
-        # import random
-        #
-        # for index in range(1):
-        #     # index = random.randint(1, 99999)
-        #     pod_name = "test-pod-incluster-" + str(index)
-        #     pvc_name = "test-pvc-incluster-" + str(index)
-        #     # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
-        #     nfs_pvc_obj = helpers.create_pvc(
-        #         sc_name=self.nfs_sc,
-        #         namespace=self.namespace,
-        #         size="1Gi",
-        #         do_reload=True,
-        #         access_mode=constants.ACCESS_MODE_RWO,
-        #         volume_mode="Filesystem",
-        #         pvc_name=pvc_name,
-        #     )
-        #
-        #     # # Create nginx pod with nfs pvcs mounted
-        #     # pod_obj = pod_factory(
-        #     #     interface=constants.CEPHFILESYSTEM,
-        #     #     pvc=nfs_pvc_obj,
-        #     #     status=constants.STATUS_RUNNING,
-        #     # )
-        #     #
-        #     # Create deployment for app pod
-        #     log.info("----creating deployment ---")
-        #     deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
-        #
-        #     # Deployment name
-        #     deployment_data["metadata"]["name"] = pod_name
-        #
-        #     # Label values (there are two places)
-        #     deployment_data["metadata"]["labels"]["app"] = pod_name
-        #
-        #     deployment_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
-        #
-        #     deployment_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
-        #
-        #     # PVC claimName
-        #     deployment_data["spec"]["template"]["spec"]["volumes"][0][
-        #         "persistentVolumeClaim"
-        #     ]["claimName"] = pvc_name
-        #
-        #     helpers.create_resource(**deployment_data)
-        #     time.sleep(60)
-        #
-        #     assert self.pod_obj.wait_for_resource(
-        #         resource_count=1,
-        #         condition=constants.STATUS_RUNNING,
-        #         selector=f"name={pod_name}",
-        #         dont_allow_other_resources=True,
-        #         timeout=120,
-        #     )
-        #     pod_obj = pod.get_all_pods(
-        #         namespace=self.namespace,
-        #         selector=[pod_name],
-        #         selector_label="name",
-        #     )[0]
-        #
-        #     file_name = pod_obj.name
-        #     # Run IO
-        #     pod_obj.run_io(
-        #         storage_type="fs",
-        #         size="1G",
-        #         fio_filename=file_name,
-        #         runtime=60,
-        #     )
-        #     log.info("IO started on all pods")
-        #
-        #     # Wait for IO completion
-        #     fio_result = pod_obj.get_fio_results()
-        #     log.info("IO completed on all pods")
-        #     err_count = fio_result.get("jobs")[0].get("error")
-        #     assert err_count == 0, (
-        #         f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
-        #     )
-        #     # Verify presence of the file
-        #     file_path = pod.get_file_path(pod_obj, file_name)
-        #     log.info(f"Actual file path on the pod {file_path}")
-        #     assert pod.check_file_existence(
-        #         pod_obj, file_path
-        #     ), f"File {file_name} doesn't exist"
-        #     log.info(f"File {file_name} exists in {pod_obj.name}")
         log.info("Starting outcluster case")
         # # Deletion of Pods and PVCs
         # log.info("Deleting pod")
@@ -547,13 +488,7 @@ class TestNfsExport(ManageTest):
         )
 
         log.info(f"Mounting NFS export: {export_nfs_external_cmd}")
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(
-            con.exec_cmd
-        )(export_nfs_external_cmd)
+        self._mount_nfs_with_retry(export_nfs_external_cmd)
 
         # Verify mount is successful
         retcode, stdout, _ = con.exec_cmd(f"findmnt -M {test_folder_for_pod}")
