@@ -523,6 +523,12 @@ class TestRemoteOBCCRUD(ManageTest):
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
 
+    @tier1
+    @red_squad
+    @mcg
+    @runs_on_provider
+    @hci_provider_and_client_required
+    @polarion_id("OCS-7940")
     def test_remote_obc_bucket_mirroring(self, project_factory):
         """
         Test bucket mirroring from Client with CRUD operations and data integrity.
