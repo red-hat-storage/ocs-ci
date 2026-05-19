@@ -5,6 +5,7 @@ This test validates topology-based replica-1 provisioning where each zone
 gets its own single-replica pool with a dedicated CRUSH rule.
 """
 
+import json
 import logging
 import pytest
 
@@ -96,37 +97,65 @@ class TestReplicaOneExternal(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    def _discover_zones_from_crush_tree(self) -> list[ZoneConfig]:
+        """
+        Auto-detect zones from the external cluster's CRUSH tree.
+
+        Queries 'ceph osd tree' and extracts host-type buckets.
+        Each host becomes a zone (zone-a, zone-b, ...).
+
+        Returns:
+            list[ZoneConfig]: Zone configurations derived from CRUSH hosts.
+
+        """
+        _, out, _ = self.ext_cluster.exec_external_ceph_cmd(
+            cmd="ceph osd tree --format json",
+            error_msg="Failed to get OSD tree from external cluster",
+            exception_class=CommandFailed,
+        )
+        osd_tree = json.loads(out)
+        hosts = [node["name"] for node in osd_tree["nodes"] if node["type"] == "host"]
+
+        if len(hosts) < 2:
+            pytest.skip(
+                f"Need at least 2 OSD hosts for replica-1 test, "
+                f"found {len(hosts)}: {hosts}"
+            )
+
+        zones = [
+            ZoneConfig(zone_name=f"zone-{chr(ord('a') + i)}", host_name=host)
+            for i, host in enumerate(hosts)
+        ]
+        log.info(f"Auto-detected {len(zones)} zones from CRUSH tree: {zones}")
+        return zones
+
     def _build_topology_config(self) -> TopologyReplica1Config:
         """
-        Build topology configuration from EXTERNAL_MODE config.
+        Build topology configuration from EXTERNAL_MODE config or CRUSH tree.
 
-        Reads replica1_zones from config.EXTERNAL_MODE and creates
-        ZoneConfig objects for each zone.
+        Reads replica1_zones from config.EXTERNAL_MODE if available.
+        Falls back to auto-detecting zones from the cluster's CRUSH tree.
 
         Returns:
             TopologyReplica1Config: Configuration for replica-1 setup.
 
-        Raises:
-            ValueError: If replica1_zones is not configured.
-
         """
         zones_config = config.EXTERNAL_MODE.get("replica1_zones", [])
-        if not zones_config:
-            raise ValueError(
-                "EXTERNAL_MODE['replica1_zones'] not configured. "
-                "Expected list of zones with zone_name and host_name."
-            )
+        if zones_config:
+            log.info(f"Using replica1_zones from config: {zones_config}")
+            zones = [
+                ZoneConfig(
+                    zone_name=z["zone_name"],
+                    host_name=z["host_name"],
+                    pool_name=z.get("pool_name", ""),
+                )
+                for z in zones_config
+            ]
+        else:
+            log.info("replica1_zones not configured, auto-detecting from CRUSH tree")
+            zones = self._discover_zones_from_crush_tree()
 
-        zones = [
-            ZoneConfig(
-                zone_name=z["zone_name"],
-                host_name=z["host_name"],
-                pool_name=z.get("pool_name", ""),
-            )
-            for z in zones_config
-        ]
-
-        log.info(f"Built topology config with {len(zones)} zones: {zones_config}")
+        log.info(f"Built topology config with {len(zones)} zones")
         return TopologyReplica1Config(zones=zones)
 
     def test_replica1_setup_and_verify(self):
