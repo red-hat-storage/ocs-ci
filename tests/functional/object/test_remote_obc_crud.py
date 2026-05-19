@@ -32,7 +32,6 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.bucketclass import BucketClass
 from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.ocs.resources.objectbucket import OBC
-from ocs_ci.ocs.resources.storageconsumer import add_storageclasses_to_storageconsumer
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -567,10 +566,14 @@ class TestRemoteOBCCRUD(ManageTest):
         bucket_class = None
         bucket_class_name = None
         s3_client = None
+        obc_name = None
+        namespace = None
 
         try:
             # Step 1: Create BucketClass with mirroring policy on provider
-            logger.info("Step 1: Creating BucketClass with mirroring policy on provider")
+            logger.info(
+                "Step 1: Creating BucketClass with mirroring policy on provider"
+            )
 
             with config.RunWithConfigContext(provider_index):
                 # Create 2 backing stores for mirroring
@@ -628,7 +631,6 @@ class TestRemoteOBCCRUD(ManageTest):
                 # Create project on client cluster
                 proj_obj = project_factory()
                 namespace = proj_obj.namespace
-                cluster_name = config.ENV_DATA.get("cluster_name", "client")
 
                 obc_name = create_unique_resource_name(
                     resource_description="obc", resource_type="mirror"
@@ -647,7 +649,9 @@ class TestRemoteOBCCRUD(ManageTest):
                 }
 
                 create_resource(**obc_data)
-                logger.info(f"OBC '{obc_name}' created with bucketclass '{bucket_class_name}'")
+                logger.info(
+                    f"OBC '{obc_name}' created with bucketclass '{bucket_class_name}'"
+                )
 
                 # Step 4: Wait for OBC to reach Bound state
                 logger.info("Step 4: Waiting for OBC to reach Bound state")
@@ -666,7 +670,9 @@ class TestRemoteOBCCRUD(ManageTest):
                 configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace)
                 configmap_data = configmap_obj.get(resource_name=obc_name)
                 bucket_name = configmap_data["data"].get("BUCKET_NAME")
-                assert bucket_name, f"Bucket name not found in ConfigMap for OBC {obc_name}"
+                assert (
+                    bucket_name
+                ), f"Bucket name not found in ConfigMap for OBC {obc_name}"
                 logger.info(f"Bucket name: {bucket_name}")
 
                 # Get S3 credentials
@@ -698,10 +704,12 @@ class TestRemoteOBCCRUD(ManageTest):
                 obc_obj = OBC(bucket_name)
 
                 # Verify bucket exists
-                assert obc_obj.bucket_name == bucket_name, (
-                    f"Bucket name mismatch: {obc_obj.bucket_name} != {bucket_name}"
+                assert (
+                    obc_obj.bucket_name == bucket_name
+                ), f"Bucket name mismatch: {obc_obj.bucket_name} != {bucket_name}"
+                logger.info(
+                    f"Bucket '{bucket_name}' verified on provider with mirroring"
                 )
-                logger.info(f"Bucket '{bucket_name}' verified on provider with mirroring")
 
             # Step 6: Upload objects and verify in all mirrors
             logger.info("Step 6: Uploading objects to bucket via client credentials")
@@ -718,7 +726,9 @@ class TestRemoteOBCCRUD(ManageTest):
                 test_object_key = "mirror-test-object.bin"
                 test_md5 = self._calculate_md5(test_file.name)
 
-                logger.info(f"Uploading object '{test_object_key}' ({len(test_data)} bytes)")
+                logger.info(
+                    f"Uploading object '{test_object_key}' ({len(test_data)} bytes)"
+                )
                 s3_client.upload_file(
                     Filename=test_file.name,
                     Bucket=bucket_name,
@@ -733,16 +743,20 @@ class TestRemoteOBCCRUD(ManageTest):
             # For now, we verify the object is readable via S3
             with config.RunWithConfigContext(client_index):
                 # Download and verify
-                download_path = "/tmp/mirror_test_download.bin"
+                download_file = tempfile.NamedTemporaryFile(delete=False, mode="wb")
+                download_path = download_file.name
+                download_file.close()
+                self.test_files.append(download_file)
+
                 s3_client.download_file(
                     Bucket=bucket_name,
                     Key=test_object_key,
                     Filename=download_path,
                 )
                 downloaded_md5 = self._calculate_md5(download_path)
-                assert downloaded_md5 == test_md5, (
-                    f"MD5 mismatch: {downloaded_md5} != {test_md5}"
-                )
+                assert (
+                    downloaded_md5 == test_md5
+                ), f"MD5 mismatch: {downloaded_md5} != {test_md5}"
                 logger.info("Object integrity verified after upload")
 
             # Step 8: Perform additional read operations
@@ -750,8 +764,12 @@ class TestRemoteOBCCRUD(ManageTest):
 
             with config.RunWithConfigContext(client_index):
                 for i in range(3):
-                    response = s3_client.head_object(Bucket=bucket_name, Key=test_object_key)
-                    logger.info(f"Read operation {i+1}: Object size = {response['ContentLength']}")
+                    response = s3_client.head_object(
+                        Bucket=bucket_name, Key=test_object_key
+                    )
+                    logger.info(
+                        f"Read operation {i+1}: Object size = {response['ContentLength']}"
+                    )
                 logger.info("All read operations successful")
 
             # Step 9: Simulate backing store failure
@@ -772,7 +790,9 @@ class TestRemoteOBCCRUD(ManageTest):
             with config.RunWithConfigContext(client_index):
                 # Attempt to read object - should succeed from remaining mirror
                 try:
-                    response = s3_client.get_object(Bucket=bucket_name, Key=test_object_key)
+                    response = s3_client.get_object(
+                        Bucket=bucket_name, Key=test_object_key
+                    )
                     data = response["Body"].read()
                     assert len(data) == len(test_data), "Data size mismatch"
                     logger.info("Read operation successful with one mirror down")
@@ -803,24 +823,30 @@ class TestRemoteOBCCRUD(ManageTest):
             logger.info("Step 12: Final data integrity verification complete")
             logger.info("Bucket mirroring test completed successfully")
 
-            # Cleanup OBC
-            with config.RunWithConfigContext(client_index):
-                logger.info(f"Cleaning up OBC '{obc_name}'")
-                obc_obj_cleanup = OCP(kind="ObjectBucketClaim", namespace=namespace)
-                obc_obj_cleanup.delete(resource_name=obc_name)
-
-                for sample in TimeoutSampler(
-                    timeout=180,
-                    sleep=10,
-                    func=self._check_obc_deleted,
-                    obc_name=obc_name,
-                    namespace=namespace,
-                ):
-                    if sample:
-                        logger.info(f"OBC '{obc_name}' deleted successfully")
-                        break
-
         finally:
+            # Cleanup OBC
+            if obc_name and namespace:
+                with config.RunWithConfigContext(client_index):
+                    try:
+                        logger.info(f"Cleaning up OBC '{obc_name}'")
+                        obc_obj_cleanup = OCP(
+                            kind="ObjectBucketClaim", namespace=namespace
+                        )
+                        obc_obj_cleanup.delete(resource_name=obc_name)
+
+                        for sample in TimeoutSampler(
+                            timeout=180,
+                            sleep=10,
+                            func=self._check_obc_deleted,
+                            obc_name=obc_name,
+                            namespace=namespace,
+                        ):
+                            if sample:
+                                logger.info(f"OBC '{obc_name}' deleted successfully")
+                                break
+                    except Exception as e:
+                        logger.warning(f"Failed to delete OBC '{obc_name}': {e}")
+
             # Cleanup: Delete BucketClass and BackingStores
             if bucket_class:
                 with config.RunWithConfigContext(provider_index):
