@@ -466,7 +466,8 @@ Configuration specific to external Ceph cluster
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 * `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
-* `rgw_cert_ca` - url pointing to CA certificate used to sign certificate for RGW with SSL
+* `rgw_cert_ca` - URL for the RGW signing CA when external Ceph is **below 19.0**, or as a **fallback** if cephadm CA fetch fails on 19.0+
+* For external Ceph **19.0 and newer**, ocs-ci runs ``ceph orch certmgr cert get cephadm_root_ca_cert`` via ``cephadm shell`` on the ``_admin`` node (``get_external_cluster_client("_admin")``, falling back to ``node1``) instead of using ``rgw_cert_ca``, unless that command fails
 * `use_rbd_namespace` - boolean parameter to use RBD namespace in pool
 * `rbd_namespace` - Name of RBD namespace to use in pool
 
