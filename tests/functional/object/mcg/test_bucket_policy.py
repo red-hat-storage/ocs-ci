@@ -927,14 +927,14 @@ class TestS3BucketPolicy(MCGTest):
             "statement_2": {
                 "Action": "s3:PutObject",
                 "Effect": "Allow",
-                "Principal": {"AWS": obc_obj.obc_account},
+                "Principal": {"AWS": obc_obj.id_for_policy_principal},
                 "Resource": [f'arn:aws:s3:::{obc_obj.bucket_name}/{"*"}'],
                 "Sid": "Statement-2",
             },
             "statement_3": {
                 "Action": "s3:DeleteObject",
                 "Effect": "Deny",
-                "Principal": {"AWS": [obc_obj.obc_account]},
+                "Principal": {"AWS": [obc_obj.id_for_policy_principal]},
                 "Resource": [f'arn:aws:s3:::{"*"}'],
                 "Sid": "Statement-3",
             },
