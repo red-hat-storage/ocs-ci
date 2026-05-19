@@ -11,6 +11,8 @@ import tempfile
 import uuid
 import os
 
+import yaml
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.ocs.ocp import OCP
@@ -1086,32 +1088,39 @@ class ExternalCluster(object):
             data = resource.get("data", {})
 
             if kind == "Secret":
-                secret_data = {
+                resource_data = {
                     "apiVersion": "v1",
                     "kind": "Secret",
                     "metadata": {"name": name, "namespace": namespace},
                     "type": "Opaque",
                     "stringData": data,
                 }
-                ocp_secret = OCP(kind="Secret", namespace=namespace)
-                ocp_secret.create(resource_data_path=None, body=secret_data)
-                created["secrets"].append(name)
-                logger.info(f"Created Secret: {name}")
-
             elif kind == "ConfigMap":
-                configmap_data = {
+                resource_data = {
                     "apiVersion": "v1",
                     "kind": "ConfigMap",
                     "metadata": {"name": name, "namespace": namespace},
                     "data": data,
                 }
-                ocp_cm = OCP(kind="ConfigMap", namespace=namespace)
-                ocp_cm.create(resource_data_path=None, body=configmap_data)
-                created["configmaps"].append(name)
-                logger.info(f"Created ConfigMap: {name}")
 
             else:
                 logger.debug(f"Skipping resource kind '{kind}': {name}")
+                continue
+
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".yaml", delete=False
+            ) as f:
+                yaml.dump(resource_data, f)
+                tmp_path = f.name
+
+            try:
+                ocp_resource = OCP(kind=kind, namespace=namespace)
+                ocp_resource.create(yaml_file=tmp_path)
+                key = "secrets" if kind == "Secret" else "configmaps"
+                created[key].append(name)
+                logger.info(f"Created {kind}: {name}")
+            finally:
+                os.remove(tmp_path)
 
         logger.info(
             f"Applied topology resources - Secrets: {created['secrets']}, "
