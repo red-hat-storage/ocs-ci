@@ -517,7 +517,7 @@ class AZURE:
             subscription_id (str): Azure subscription ID
 
         Returns:
-            dict: {"client_id": str, "resource_group": str}
+            str: The client ID of the created managed identity
 
         """
         mi_name = f"{cluster_name}-noobaa-mi"
@@ -570,7 +570,7 @@ class AZURE:
             )
 
         logger.info(f"Managed identity {mi_name} created with client ID {client_id}")
-        return {"client_id": client_id, "resource_group": resource_group}
+        return client_id
 
     def delete_noobaa_managed_identity(
         self, cluster_name, resource_group, subscription_id

@@ -1350,12 +1350,11 @@ class Deployment(object):
             logger.test_step("Create Azure managed identity for NooBaa STS")
             azure_util = AzureUtil()
             azure_util.az_login()
-            mi_data = azure_util.create_noobaa_managed_identity(
+            self.azure_noobaa_mi_client_id = azure_util.create_noobaa_managed_identity(
                 cluster_name=config.ENV_DATA["cluster_name"],
                 resource_group=config.ENV_DATA["cluster_name"],
                 subscription_id=config.AUTH["azure_auth"]["subscription_id"],
             )
-            self.azure_noobaa_mi_client_id = mi_data["client_id"]
         stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
         konflux_build = config.DEPLOYMENT.get("konflux_build")
         upgrade = config.UPGRADE.get("upgrade", False)
