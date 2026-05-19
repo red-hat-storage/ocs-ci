@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 class FusionDataFoundationDeployment:
     def __init__(self):
         self.pre_release = config.DEPLOYMENT.get("fdf_pre_release", False)
+        self.live_deployment = config.DEPLOYMENT.get("live_deployment", False)
         self.kubeconfig = config.RUN["kubeconfig"]
         self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
         self.storage_class = (
@@ -52,7 +53,7 @@ class FusionDataFoundationDeployment:
 
         self.ensure_lso_installed()
         logger.info("Installing IBM Fusion Data Foundation")
-        if self.pre_release:
+        if self.pre_release and not self.live_deployment:
             self.create_image_tag_mirror_set()
             self.create_image_digest_mirror_set()
             self.setup_fdf_pre_release_deployment()
