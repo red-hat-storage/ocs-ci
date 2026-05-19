@@ -828,7 +828,7 @@ class MCG:
                         "object_api", "list_objects", params={"bucket": bucket_name}
                     )
                     .json()
-                    .get("reply")
+                    .get("reply", {})
                     .get("objects", [])
                 )
             except CommandFailed:
@@ -850,7 +850,7 @@ class MCG:
                             },
                         )
                         .json()
-                        .get("reply")
+                        .get("reply", {})
                         .get("chunks", [])
                     )
                 except CommandFailed:
