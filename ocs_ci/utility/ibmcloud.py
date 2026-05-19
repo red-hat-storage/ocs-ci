@@ -1270,7 +1270,21 @@ def configure_ingress_load_balancer_security_group():
             namespace="openshift-ingress",
             resource_name="router-default",
         )
-        service_data = ocp_obj.get()
+
+        # Retry getting service data as it may not be immediately available
+        logger.debug(
+            "Attempting to retrieve router-default service data with retry logic"
+        )
+        service_data = None
+        try:
+            for sample in TimeoutSampler(timeout=900, sleep=30, func=ocp_obj.get):
+                if sample:
+                    service_data = sample
+                    logger.debug("Successfully retrieved router-default service data")
+                    break
+        except Exception as e:
+            logger.warning(f"Failed to retrieve router-default service data: {e}")
+            return
 
         # Extract load balancer hostname
         lb_ingress = (
