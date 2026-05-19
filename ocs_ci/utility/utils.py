@@ -7225,42 +7225,7 @@ def create_kubeconfig(kubeconfig_path):
             "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
             "environment variables were not provided."
         )
-def get_current_git_branch():
-    """                                                                                                                                                                                                                                           
-    Get the current git branch name of ocs-ci repository.                                                                                                                                                                                         
-                                                                                                                                                                                                                                                    
-    Returns:                                                                                                                                                                                                                                      
-        str: Branch name (e.g., 'master', 'release-4.18')                                                                                                                                                                                         
-    """                                                                                                                                                                                                                                           
-    try:        
-        # Try to get branch from git                                                                                                                                                                                                              
-        result = subprocess.run(                                                                                                                                                                                                                  
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],                                                                                                                                                                                         
-            capture_output=True,                                                                                                                                                                                                                  
-            text=True,                                                                                                                                                                                                                            
-            check=True                                                                                                                                                                                                                            
-        )                                                                                                                                                                                                                                         
-        branch = result.stdout.strip()                                                                                                                                                                                                            
-        log.info(f"Detected ocs-ci git branch: {branch}")                                                                                                                                                                                      
-        return branch                                                                                                                                                                                                                             
-    except Exception as e:                                                                                                                                                                                                                        
-        log.warning(f"Could not detect git branch: {e}")                                                                                                                                                                                       
-        # Fallback: check environment variable set by Jenkins                                                                                                                                                                                     
-        branch = config.ENV_DATA.get('ocs_ci_branch', 'master')                                                                                                                                                                                   
-        log.info(f"Using branch from ENV_DATA: {branch}")                                                                                                                                                                                      
-        return branch
 
-def is_release_branch(branch_name):                                                                                                                                                                                                               
-    """                                                                                                                                                                                                                                           
-    Check if the branch is a release branch.
-                                                                                                                                                                                                                                                    
-    Args:                                                                                                                                                                                                                                         
-        branch_name (str): Git branch name                                                                                                                                                                                                        
-                                                                                                                                                                                                                                                    
-    Returns:                                                                                                                                                                                                                                      
-        bool: True if branch matches release-* pattern                                                                                                                                                                                            
-    """                                                                                                                                                                                                                                           
-    return re.match(r'^release-\d+\.\d+$', branch_name) is not None
 
 def auto_configure_acm():
     """         

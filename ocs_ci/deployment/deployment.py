@@ -2594,10 +2594,6 @@ class Deployment(object):
         """                                                                                                                                                                                                                                           
         Deploy ACM hub cluster                                                                                                                                                                                                                        
         """                                                                                                                                                                                                                                           
-        # Auto-configure ACM and Submariner based on based on OCP version if not explicitly set
-        from ocs_ci.utility.utils import auto_configure_acm, auto_configure_submariner                                                                                                                                                                               
-        auto_configure_acm() 
-        auto_configure_submariner()                                                                                                                                                                                                              
                                                                                                                                                                                                                                                     
         if self.acm_operator_installed():                                                                                                                                                                                                             
             logger.info("ACM Operator is already installed")                                                                                                                                                                                          
