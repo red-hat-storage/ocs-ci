@@ -830,7 +830,7 @@ class MCG:
                     )
                     .json()
                     .get("reply")
-                    .get("objects")
+                    .get("objects", [])
                 )
             except Exception as e:
                 logger.warning(f"Failed to list objects for mirroring check: {e}")
@@ -850,7 +850,7 @@ class MCG:
                         )
                         .json()
                         .get("reply")
-                        .get("chunks")
+                        .get("chunks", [])
                     )
                 except Exception as e:
                     logger.warning(
