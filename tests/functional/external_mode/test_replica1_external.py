@@ -22,7 +22,6 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ZoneConfig,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterExporterRunFailed
-from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -53,8 +52,6 @@ class TestReplicaOneExternal(ManageTest):
         self.topology_config = self._build_topology_config()
         self.created_pools = []
         self.created_rules = []
-        self.created_secrets = []
-        self.created_configmaps = []
         self.setup_completed = False
 
         def finalizer():
@@ -74,24 +71,6 @@ class TestReplicaOneExternal(ManageTest):
                     self.ext_cluster.cleanup_zone_crush_rules(self.created_rules)
             except CommandFailed as e:
                 log.warning(f"CRUSH rule cleanup failed: {e}")
-
-            # Cleanup K8s resources (secrets and configmaps)
-            namespace = config.ENV_DATA["cluster_namespace"]
-            for secret_name in self.created_secrets:
-                try:
-                    log.info(f"Deleting Secret: {secret_name}")
-                    ocp_secret = OCP(kind="Secret", namespace=namespace)
-                    ocp_secret.delete(resource_name=secret_name)
-                except CommandFailed as e:
-                    log.warning(f"Secret cleanup failed for {secret_name}: {e}")
-
-            for cm_name in self.created_configmaps:
-                try:
-                    log.info(f"Deleting ConfigMap: {cm_name}")
-                    ocp_cm = OCP(kind="ConfigMap", namespace=namespace)
-                    ocp_cm.delete(resource_name=cm_name)
-                except CommandFailed as e:
-                    log.warning(f"ConfigMap cleanup failed for {cm_name}: {e}")
 
             log.info("External replica-1 teardown completed")
 
@@ -200,11 +179,9 @@ class TestReplicaOneExternal(ManageTest):
             # Step 6: Apply exported resources to ODF cluster
             log.info("Applying exported resources to ODF")
             applied = self.ext_cluster.apply_topology_export_resources(export_resources)
-            self.created_secrets = applied["secrets"]
-            self.created_configmaps = applied["configmaps"]
 
-            log.info(f"Applied secrets: {self.created_secrets}")
-            log.info(f"Applied configmaps: {self.created_configmaps}")
+            log.info(f"Applied secrets: {applied['secrets']}")
+            log.info(f"Applied configmaps: {applied['configmaps']}")
 
         except ExternalClusterExporterRunFailed as e:
             pytest.skip(f"Exporter script not available: {e}")
