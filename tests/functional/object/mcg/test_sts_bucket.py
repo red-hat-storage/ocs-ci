@@ -39,13 +39,41 @@ class TestSTSBucket:
                 marks=[tier2],
             ),
             pytest.param(
+                *[
+                    {
+                        "interface": "CLI",
+                        "backingstore_dict": {"azure-sts": [(1, None)]},
+                    },
+                ],
+                # TODO: assign polarion ID
+                marks=[tier1, polarion_id("OCS-XXXX")],
+            ),
+            pytest.param(
+                *[
+                    {
+                        "interface": "CLI",
+                        "namespace_policy_dict": {
+                            "type": "Single",
+                            "namespacestore_dict": {"azure-sts": [(1, None)]},
+                        },
+                    },
+                ],
+                # TODO: assign polarion ID
+                marks=[tier1, polarion_id("OCS-XXXX")],
+            ),
+            pytest.param(
                 *[None],
                 marks=[
                     tier1,
                 ],
             ),
         ],
-        ids=["AWS-STS-NEW", "AWS-STS-DEFAULT"],
+        ids=[
+            "AWS-STS-BS-CLI",
+            "AZURE-STS-BS-CLI",
+            "AZURE-STS-NSS-CLI",
+            "STS-DEFAULT",
+        ],
     )
     def test_sts_bucket_ops(
         self,
@@ -57,7 +85,7 @@ class TestSTSBucket:
     ):
         """
         Test full object round trip verification
-        on  AWS STS bucket
+        on an STS-backed bucket (AWS STS or Azure STS)
 
         """
 
