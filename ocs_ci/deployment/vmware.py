@@ -44,6 +44,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.node import (
+    get_node_internal_ips,
     get_node_ips,
     get_typed_worker_nodes,
     remove_nodes,
@@ -2196,6 +2197,11 @@ class VSPHEREAgentAI(VSPHEREBASE):
 
             with config.RunWithProviderConfigContextIfAvailable():
                 master_node_ips = get_node_ips(constants.MASTER_MACHINE)
+                if not master_node_ips:
+                    logger.info(
+                        "No ExternalIP found on master nodes, falling back to InternalIP"
+                    )
+                    master_node_ips = get_node_internal_ips(constants.MASTER_MACHINE)
 
             create_dns_records_api_int(master_node_ips)
 
