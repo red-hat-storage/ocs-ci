@@ -202,11 +202,12 @@ class Node(OCP):
             f"at '{script_dest_path}'"
         )
         # Build the shell command
+        quoted_dest = shlex.quote(script_dest_path)
         upload_cmd = (
             f"set -euo pipefail; "
-            f'echo "{script_b64}" | base64 -d > {script_dest_path} && '
-            f"chmod 755 {script_dest_path} && "
-            f'echo "Script written to {script_dest_path}" && ls -l {script_dest_path}'
+            f'echo "{script_b64}" | base64 -d > {quoted_dest} && '
+            f"chmod 755 {quoted_dest} && "
+            f"echo Script written to {quoted_dest} && ls -l {quoted_dest}"
         )
 
         # Execute the command on the node
