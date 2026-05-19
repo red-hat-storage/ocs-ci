@@ -6268,6 +6268,41 @@ def get_role_arn_from_sub():
         raise ClusterNotInSTSModeException
 
 
+def get_azure_sts_creds_from_sub():
+    """
+    Get Azure STS credentials (managed identity) from the ODF Subscription.
+
+    Returns:
+        dict: Keys are ``client_id``, ``tenant_id``,
+            ``subscription_id``, and ``resource_group``.
+
+    Raises:
+        ClusterNotInSTSModeException: If cluster not in STS mode
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    if not config.DEPLOYMENT.get("sts_enabled"):
+        raise ClusterNotInSTSModeException
+
+    env_key_map = {
+        "CLIENTID": "client_id",
+        "TENANTID": "tenant_id",
+        "SUBSCRIPTIONID": "subscription_id",
+        "RESOURCEGROUP": "resource_group",
+    }
+    odf_sub = OCP(
+        kind=constants.SUBSCRIPTION,
+        resource_name=constants.ODF_SUBSCRIPTION,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    creds = {}
+    for item in odf_sub.get()["spec"]["config"]["env"]:
+        if item["name"] in env_key_map:
+            creds[env_key_map[item["name"]]] = item["value"]
+    return creds
+
+
 def get_glibc_version():
     """
     Gets the GLIBC version.
