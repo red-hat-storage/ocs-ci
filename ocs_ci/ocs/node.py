@@ -1,6 +1,7 @@
 import copy
 import logging
 import re
+import shlex
 import time
 from prettytable import PrettyTable
 from collections import defaultdict
@@ -9,6 +10,8 @@ import random
 import json
 import unicodedata
 from ocs_ci.ocs.ocp import exec_cmd
+import base64
+import os
 import yaml
 
 from subprocess import TimeoutExpired
@@ -32,10 +35,19 @@ from ocs_ci.ocs import constants, exceptions, ocp, defaults
 from ocs_ci.ocs.resources.pvc import get_pvc_size
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    convert_device_size,
+    get_az_count,
+    mask_secrets,
+)
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version, run_cmd
+from ocs_ci.utility.utils import (
+    set_selinux_permissions,
+    get_ocp_version,
+    run_cmd,
+)
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     get_pv_size,
@@ -53,6 +65,153 @@ from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.utility.vsphere import VSPHERE
 
 log = logging.getLogger(__name__)
+
+
+class Node(OCP):
+    """
+    Node class inherits OCP class and contains all the methods related to
+    node operations
+    """
+
+    def __init__(self, resource_name=None, namespace=None, use_root=True, **kwargs):
+        """
+        Initializer for Node class
+
+        Args:
+            resource_name (str): Name of the node
+            namespace (str): Namespace of the node
+            use_root (bool): Whether to use root user or not for running commands
+
+        """
+        super(Node, self).__init__(
+            kind=constants.NODE, resource_name=resource_name, **kwargs
+        )
+
+        self._namespace = namespace or constants.DEFAULT_NAMESPACE
+        self.use_root = use_root
+
+    def run_cmd(self, cmd, namespace=None, use_root=None, timeout=300, secrets=None):
+        """
+        Run command on the node
+
+        Args:
+            cmd (str): Command to run.
+            namespace (str): Namespace of the node. If None, default namespace will be used.
+            use_root (bool): Whether to use root user or not for running the command.
+            timeout (int): Timeout for the command execution (in seconds)
+            secrets (list): A list of secrets to be masked with asterisks in logs.
+
+        Returns:
+            str: Output of the command execution
+
+        Raises:
+            CommandFailed: In case the command execution fails
+
+        """
+        namespace = namespace or self.namespace
+        use_root = use_root if use_root is not None else self.use_root
+
+        cmd_to_log = mask_secrets(cmd, secrets) if secrets else cmd
+        log.info(f"Running command '{cmd_to_log}' on node '{self.resource_name}'")
+        return self.exec_oc_debug_cmd(
+            node=self.resource_name,
+            cmd_list=[cmd],
+            namespace=namespace,
+            use_root=use_root,
+            timeout=timeout,
+            secrets=secrets,
+        )
+
+    def run_script(
+        self,
+        script_path: str,
+        args: list = None,
+        namespace: str = None,
+        use_root: bool = None,
+        timeout: int = 600,
+        secrets: list = None,
+    ):
+        """
+        Execute a shell script directly on a node (inside chroot /host)
+        using oc debug.
+
+        Args:
+            script_path (str): Full path to the script on the node.
+            args (list): Optional arguments to pass to the script.
+            namespace (str): Namespace for the debug pod.
+            use_root (bool): Whether to use root user or not for running the command.
+            timeout (int): Timeout for the command execution (in seconds).
+            secrets (list): A list of secrets to be masked with asterisks in logs.
+
+        Returns:
+            str: Output of the script execution.
+
+        Raises:
+            CommandFailed: In case the script execution fails.
+
+        """
+        safe_args = mask_secrets(list(args or []), secrets)
+        log.info(
+            f"Running the script {script_path} with the args '{safe_args}' "
+            f"on the worker node {self.resource_name}"
+        )
+        cmd = (
+            f"set -euo pipefail; " f"{shlex.join(['bash', script_path, *(args or [])])}"
+        )
+        return self.run_cmd(cmd, namespace, use_root, timeout, secrets)
+
+    def upload_script(
+        self,
+        script_src_path: str,
+        script_dest_path: str,
+        namespace: str = None,
+        use_root: bool = None,
+        timeout: int = 300,
+    ):
+        """
+        Upload a shell script to a node using base64 encoding via `oc debug`.
+
+        The script is read locally, base64-encoded, and decoded on the node
+        using `echo | base64 -d`.
+
+        Args:
+            script_src_path (str): Local path to the script.
+            script_dest_path (str): Destination path on the node.
+            namespace (str): Namespace for the debug pod.
+            use_root (bool): Whether to use root user or not for running the command.
+            timeout (int): Timeout for the oc debug command (in seconds).
+
+        Returns:
+            str: Output of the command execution.
+
+        Raises:
+            FileNotFoundError: If the local script file does not exist.
+            CommandFailed: In case the command execution fails.
+
+        """
+        if not os.path.exists(script_src_path):
+            raise FileNotFoundError(f"Script not found at {script_src_path}")
+
+        # Read and encode the script
+        with open(script_src_path, "rb") as f:
+            script_content = f.read()
+        script_b64 = base64.b64encode(script_content).decode("utf-8").replace("\n", "")
+
+        log.info(
+            f"Uploading script from '{script_src_path}' to node '{self.resource_name}' "
+            f"at '{script_dest_path}'"
+        )
+        # Build the shell command
+        quoted_dest = shlex.quote(script_dest_path)
+        upload_cmd = (
+            f"set -euo pipefail; "
+            f'echo "{script_b64}" | base64 -d > {quoted_dest} && '
+            f"chmod 755 {quoted_dest} && "
+            f"echo Script written to {quoted_dest} && ls -l {quoted_dest}"
+        )
+
+        # Execute the command on the node
+        return self.run_cmd(upload_cmd, namespace, use_root, timeout)
 
 
 def get_node_objs(node_names=None):
@@ -465,7 +624,8 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
                 )
             else:
                 node_obj.add_label(
-                    resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
+                    resource_name=new_spun_node,
+                    label=constants.OPERATOR_NODE_LABEL,
                 )
                 log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
 
@@ -516,7 +676,8 @@ def add_new_node_and_label_upi(
         node_obj = ocp.OCP(kind="node")
         for new_spun_node in new_spun_nodes:
             node_obj.add_label(
-                resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
+                resource_name=new_spun_node,
+                label=constants.OPERATOR_NODE_LABEL,
             )
             log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
     return new_spun_nodes
@@ -561,7 +722,8 @@ def add_new_nodes_and_label_them_rosa_hcp(
         node_obj = ocp.OCP(kind="node")
         for new_spun_node in new_spun_nodes:
             node_obj.add_label(
-                resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
+                resource_name=new_spun_node,
+                label=constants.OPERATOR_NODE_LABEL,
             )
             log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
     return new_spun_nodes
@@ -632,7 +794,11 @@ def get_node_resource_utilization_from_adm_top(
     if print_table:
         print_table_node_resource_utilization(
             utilization_dict=utilization_dict,
-            field_names=["Node Name", "CPU USAGE adm_top", "Memory USAGE adm_top"],
+            field_names=[
+                "Node Name",
+                "CPU USAGE adm_top",
+                "Memory USAGE adm_top",
+            ],
         )
     return utilization_dict
 
@@ -1252,7 +1418,9 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
 
     """
     from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
-    from ocs_ci.ocs.resources.storage_cluster import get_deviceset_sc_name_per_count
+    from ocs_ci.ocs.resources.storage_cluster import (
+        get_deviceset_sc_name_per_count,
+    )
 
     plt = PlatformNodesFactory()
     node_util = plt.get_nodes_platform()
@@ -1819,7 +1987,8 @@ def replace_old_node_in_lvd_and_lvs(old_node_name, new_node_name):
     )
 
     lvs_obj = OCP(
-        kind=constants.LOCAL_VOLUME_SET, namespace=defaults.LOCAL_STORAGE_NAMESPACE
+        kind=constants.LOCAL_VOLUME_SET,
+        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
     )
     lvs_items = lvs_obj.data["items"]
     lvs_names = [lvs_data["metadata"]["name"] for lvs_data in lvs_items]
@@ -1865,7 +2034,8 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=600):
 
     """
     pod.wait_for_pods_to_be_running(
-        pod_names=[osd_pod.name for osd_pod in pod.get_osd_pods()], timeout=timeout
+        pod_names=[osd_pod.name for osd_pod in pod.get_osd_pods()],
+        timeout=timeout,
     )
     try:
         for current_osd_node_names in TimeoutSampler(
@@ -3374,7 +3544,10 @@ def apply_node_affinity_for_noobaa_pod():
                     "nodeSelectorTerms": [
                         {
                             "matchExpressions": [
-                                {"key": "kubernetes.io/hostname", "operator": "Exists"}
+                                {
+                                    "key": "kubernetes.io/hostname",
+                                    "operator": "Exists",
+                                }
                             ]
                         }
                     ]
@@ -3511,7 +3684,15 @@ def get_worker_node_allocatable():
         dict: A dictionary where keys are worker node names and values are another
             dictionary containing 'cpu' (int, in millicores) and 'mem' (float, in GB).
     """
-    cmd = ["oc", "get", "nodes", "-l", "node-role.kubernetes.io/worker", "-o", "yaml"]
+    cmd = [
+        "oc",
+        "get",
+        "nodes",
+        "-l",
+        "node-role.kubernetes.io/worker",
+        "-o",
+        "yaml",
+    ]
     result = run_cmd(cmd)
     nodes = yaml.safe_load(result)
     alloc = {}
@@ -3694,7 +3875,9 @@ def check_cluster_resources(ram_gb=65, cpu_cores=6):
 
         # Sort namespaces by RAM usage
         sorted_ns = sorted(
-            breakdown["ram"].keys(), key=lambda x: breakdown["ram"][x], reverse=True
+            breakdown["ram"].keys(),
+            key=lambda x: breakdown["ram"][x],
+            reverse=True,
         )
         for ns in sorted_ns:
             ram_gb_used = breakdown["ram"][ns] / (1024 * 1024)
