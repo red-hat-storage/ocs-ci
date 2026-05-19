@@ -48,24 +48,14 @@ def set_xattr_with_high_cpu_usage(
     """
     Fixture to set up extended attributes with high CPU usage for MDS xattr latency alert testing.
 
-    This fixture performs the following operations:
-    1. Creates a PVC with CephFS interface and RWX access mode for setting extended attributes
-       on multiple files in the MDS server
-    2. Creates a deployment pod on the active MDS node with service account and SCC policy
-    3. Copies helper_scripts/check_xattr.py to the deployment pod
-    4. Executes the check_xattr.py script to set extended attributes on multiple directories
-    5. Creates a storage class with SELinux security context for CephFS stress testing
-    6. Creates additional PVC and CephFS stress job to increase CPU utilization in the cluster
-    7. Submits the CephFS stress job with specified parallelism and file creation parameters
-
     Args:
         request: pytest request object for finalizer registration
         pvc_factory: Factory fixture to create PVC objects
         deployment_pod_factory: Factory fixture to create deployment pod objects
         storageclass_factory: Factory fixture to create storage class objects
 
-    Yields:
-        None: This fixture sets up the environment and cleans up resources in finalizer
+    Returns:
+        PVC: The PVC object created for extended attribute operations
 
     """
     log.info("setting extended attributes value for multiple files in MDS server ")
