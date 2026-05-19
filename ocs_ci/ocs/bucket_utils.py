@@ -836,9 +836,6 @@ def oc_create_azure_sts_backingstore(cld_mgr, backingstore_name, uls_name, regio
         "azureBlob": {
             "targetBlobContainer": uls_name,
             "clientId": cld_mgr.azure_sts_client.client_id,
-            "tenantId": cld_mgr.azure_sts_client.tenant_id,
-            "subscriptionId": cld_mgr.azure_sts_client.subscription_id,
-            "resourcegroupId": cld_mgr.azure_sts_client.resource_group,
             "secret": {
                 "name": cld_mgr.azure_sts_client.secret.name,
                 "namespace": bs_data["metadata"]["namespace"],
