@@ -28,6 +28,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import oc_create_pv_backingstore
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.bucketclass import BucketClass
 from ocs_ci.ocs.resources.backingstore import BackingStore
@@ -394,7 +395,9 @@ class TestRemoteOBCCRUD(ManageTest):
                     bucket_name=self.bucket_name,
                 ):
                     if sample:
-                        logger.info(f"ObjectBucket for '{self.bucket_name}' deleted on provider")
+                        logger.info(
+                            f"ObjectBucket for '{self.bucket_name}' deleted on provider"
+                        )
                         break
             except Exception as e:
                 logger.warning(f"Could not verify ObjectBucket deletion: {e}")
@@ -647,21 +650,24 @@ class TestRemoteOBCCRUD(ManageTest):
                     bs_name = create_unique_resource_name(
                         resource_description="bs", resource_type=f"mirror-{i}"
                     )
+                    # Create the actual backing store resource
+                    oc_create_pv_backingstore(
+                        backingstore_name=bs_name,
+                        vol_num=1,
+                        size=10,
+                        storage_class=constants.DEFAULT_STORAGECLASS_RBD,
+                    )
+                    # Create BackingStore object for tracking and cleanup
                     backing_store = BackingStore(
                         name=bs_name,
                         method="oc",
                         mcg_obj=None,
-                        type="pv-pool",
+                        type="pv",
                         vol_num=1,
                         vol_size=10,
                     )
                     backing_stores.append(backing_store)
                     logger.info(f"Created backing store: {bs_name}")
-
-                # Wait for backing stores to be ready
-                logger.info("Waiting for backing stores to be ready")
-                for bs in backing_stores:
-                    bs.verify_health(timeout=300)
 
                 # Create BucketClass with mirroring policy
                 bucket_class_name = create_unique_resource_name(
