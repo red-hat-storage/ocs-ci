@@ -7,8 +7,10 @@ including bucket creation, S3 CRUD operations, and data integrity verification.
 
 import base64
 import boto3
+from botocore.exceptions import ClientError
 import hashlib
 import logging
+import os
 import pytest
 import tempfile
 import urllib3
@@ -29,10 +31,12 @@ from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import oc_create_pv_backingstore
+from ocs_ci.ocs.managedservice import get_consumer_names
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.bucketclass import BucketClass
 from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.ocs.resources.objectbucket import OBC
+from ocs_ci.ocs.resources.storageconsumer import add_storageclasses_to_storageconsumer
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -75,6 +79,14 @@ class TestRemoteOBCCRUD(ManageTest):
                     test_file.close()
                 except Exception as e:
                     logger.warning(f"Failed to close test file: {e}")
+
+                # Unlink the temp file from disk
+                try:
+                    if hasattr(test_file, "name") and os.path.exists(test_file.name):
+                        os.unlink(test_file.name)
+                        logger.debug(f"Deleted temp file: {test_file.name}")
+                except Exception as e:
+                    logger.warning(f"Failed to unlink test file: {e}")
 
             # Switch back to current context if needed
             try:
@@ -151,6 +163,10 @@ class TestRemoteOBCCRUD(ManageTest):
                 if sample:
                     logger.info(f"OBC '{obc_name}' reached Bound state")
                     break
+            else:
+                pytest.fail(
+                    f"OBC '{obc_name}' did not reach Bound state within 300 seconds"
+                )
 
             # Step 5: Verify ConfigMap and Secret are created on Client
             logger.info("Verifying ConfigMap and Secret creation")
@@ -636,6 +652,7 @@ class TestRemoteOBCCRUD(ManageTest):
         s3_client = None
         obc_name = None
         namespace = None
+        custom_sc_name = None
 
         try:
             # Step 1: Create BucketClass with mirroring policy on provider
@@ -685,10 +702,74 @@ class TestRemoteOBCCRUD(ManageTest):
             # Step 2: Distribute BucketClass to client via StorageClass
             logger.info("Step 2: Distributing BucketClass to client via StorageClass")
 
-            # Note: In a real implementation, you would create a custom StorageClass
-            # that references the BucketClass and distribute it via StorageConsumer.
-            # For this test, we'll use the approach of adding the storageclass to
-            # the StorageConsumer CR (similar to noobaa SC distribution)
+            custom_sc_name = None
+            with config.RunWithConfigContext(provider_index):
+                # Create a custom StorageClass with bucketclass parameter
+                custom_sc_name = create_unique_resource_name(
+                    resource_description="sc", resource_type="mirror-bc"
+                )
+                custom_sc_data = {
+                    "apiVersion": "storage.k8s.io/v1",
+                    "kind": "StorageClass",
+                    "metadata": {"name": custom_sc_name},
+                    "provisioner": "openshift-storage.noobaa.io",
+                    "parameters": {"bucketclass": bucket_class_name},
+                    "reclaimPolicy": "Delete",
+                }
+                create_resource(**custom_sc_data)
+                logger.info(
+                    f"Created custom StorageClass '{custom_sc_name}' "
+                    f"with bucketclass '{bucket_class_name}'"
+                )
+
+                # Add custom StorageClass to StorageConsumer
+                consumer_names = get_consumer_names()
+                if not consumer_names:
+                    pytest.fail("No StorageConsumer found on provider")
+
+                for consumer_name in consumer_names:
+                    logger.info(
+                        f"Adding StorageClass '{custom_sc_name}' to "
+                        f"StorageConsumer '{consumer_name}'"
+                    )
+                    success, added_scs, current_scs = (
+                        add_storageclasses_to_storageconsumer(
+                            consumer_name, custom_sc_name
+                        )
+                    )
+                    if success:
+                        logger.info(
+                            f"Successfully added StorageClass to StorageConsumer. "
+                            f"Current SCs: {current_scs}"
+                        )
+                    else:
+                        pytest.fail(
+                            f"Failed to add StorageClass '{custom_sc_name}' to "
+                            f"StorageConsumer '{consumer_name}'"
+                        )
+
+            # Wait for custom StorageClass to appear on client
+            logger.info(
+                f"Waiting for StorageClass '{custom_sc_name}' to appear on client cluster"
+            )
+            with config.RunWithConfigContext(client_index):
+                sc_obj = OCP(kind="StorageClass")
+                for sample in TimeoutSampler(
+                    timeout=180,
+                    sleep=10,
+                    func=sc_obj.is_exist,
+                    resource_name=custom_sc_name,
+                ):
+                    if sample:
+                        logger.info(
+                            f"StorageClass '{custom_sc_name}' is now available on client"
+                        )
+                        break
+                else:
+                    pytest.fail(
+                        f"StorageClass '{custom_sc_name}' did not appear on client "
+                        "within 180 seconds"
+                    )
 
             # Step 3: Create OBC on client using mirroring BucketClass
             logger.info("Step 3: Creating OBC on client cluster")
@@ -707,21 +788,21 @@ class TestRemoteOBCCRUD(ManageTest):
                     resource_description="obc", resource_type="mirror"
                 )
 
-                # Create OBC with bucketclass specified
+                # Create OBC using custom StorageClass (which has bucketclass parameter)
                 obc_data = {
                     "apiVersion": "objectbucket.io/v1alpha1",
                     "kind": "ObjectBucketClaim",
                     "metadata": {"name": obc_name, "namespace": namespace},
                     "spec": {
                         "generateBucketName": obc_name,
-                        "storageClassName": constants.NOOBAA_SC,
-                        "additionalConfig": {"bucketclass": bucket_class_name},
+                        "storageClassName": custom_sc_name,
                     },
                 }
 
                 create_resource(**obc_data)
                 logger.info(
-                    f"OBC '{obc_name}' created with bucketclass '{bucket_class_name}'"
+                    f"OBC '{obc_name}' created using StorageClass '{custom_sc_name}' "
+                    f"(with bucketclass '{bucket_class_name}')"
                 )
 
                 # Step 4: Wait for OBC to reach Bound state
@@ -736,6 +817,10 @@ class TestRemoteOBCCRUD(ManageTest):
                     if sample:
                         logger.info(f"OBC '{obc_name}' reached Bound state")
                         break
+                else:
+                    pytest.fail(
+                        f"OBC '{obc_name}' did not reach Bound state within 300 seconds"
+                    )
 
                 # Get bucket name from ConfigMap
                 configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace)
@@ -810,8 +895,15 @@ class TestRemoteOBCCRUD(ManageTest):
             # Step 7: Verify objects exist in all mirror backing stores on provider
             logger.info("Step 7: Verifying objects exist in all mirror backing stores")
 
-            # Note: Verification of objects in backing stores requires NooBaa internal APIs
-            # For now, we verify the object is readable via S3
+            # TODO: Implement actual verification of object placement across mirror backing stores
+            # This requires NooBaa internal APIs to:
+            # 1. Query each backing store's chunk store
+            # 2. Verify the object chunks exist in all configured mirrors
+            # 3. Validate chunk hashes match across mirrors
+            # For now, we verify basic S3 read functionality as a proxy
+            logger.warning(
+                "Skipping detailed mirror placement verification - testing S3 read instead"
+            )
             with config.RunWithConfigContext(client_index):
                 # Download and verify
                 download_file = tempfile.NamedTemporaryFile(delete=False, mode="wb")
@@ -846,32 +938,27 @@ class TestRemoteOBCCRUD(ManageTest):
             # Step 9: Simulate backing store failure
             logger.info("Step 9: Simulating failure of one backing store")
 
-            with config.RunWithConfigContext(provider_index):
-                # Scale down one backing store's PV pool to simulate failure
-                # This is a simplified simulation - in production you would
-                # use actual failure scenarios
-                logger.info("Simulating backing store failure (scaling down first BS)")
-                # Note: Actual failure simulation would require scaling PVs or
-                # network disruption. For test purposes, we verify resilience.
-                logger.info("Backing store failure simulated")
+            # TODO: Implement actual backing store failure simulation
+            # Options include:
+            # 1. Scale down the backing store's StatefulSet to 0 replicas
+            # 2. Apply network policy to block backing store pod traffic
+            # 3. Delete the backing store's PVCs temporarily
+            # Then verify reads continue from the remaining mirror
+            # For now, we skip actual failure injection and test normal mirrored reads
+            logger.warning(
+                "Skipping backing store failure simulation - "
+                "testing normal read operations instead"
+            )
 
-            # Step 10: Verify reads continue from remaining mirror
-            logger.info("Step 10: Verifying reads continue with one mirror down")
+            # Step 10: Verify reads continue (without actual failure, just normal read)
+            logger.info("Step 10: Verifying read operations (no actual mirror failure)")
 
             with config.RunWithConfigContext(client_index):
-                # Attempt to read object - should succeed from remaining mirror
-                try:
-                    response = s3_client.get_object(
-                        Bucket=bucket_name, Key=test_object_key
-                    )
-                    data = response["Body"].read()
-                    assert len(data) == len(test_data), "Data size mismatch"
-                    logger.info("Read operation successful with one mirror down")
-                except Exception as e:
-                    logger.error(f"Read failed with one mirror down: {e}")
-                    raise AssertionError(
-                        "Mirroring should allow reads to continue with one mirror down"
-                    )
+                # Read object to verify normal mirrored bucket functionality
+                response = s3_client.get_object(Bucket=bucket_name, Key=test_object_key)
+                data = response["Body"].read()
+                assert len(data) == len(test_data), "Data size mismatch"
+                logger.info("Read operation successful on mirrored bucket")
 
             # Step 11: Delete object and verify deletion propagates
             logger.info("Step 11: Deleting object and verifying propagation")
@@ -918,7 +1005,19 @@ class TestRemoteOBCCRUD(ManageTest):
                     except Exception as e:
                         logger.warning(f"Failed to delete OBC '{obc_name}': {e}")
 
-            # Cleanup: Delete BucketClass and BackingStores
+            # Cleanup: Delete custom StorageClass, BucketClass and BackingStores
+            if custom_sc_name:
+                with config.RunWithConfigContext(provider_index):
+                    try:
+                        logger.info(
+                            f"Cleaning up custom StorageClass '{custom_sc_name}'"
+                        )
+                        sc_obj = OCP(kind="StorageClass")
+                        sc_obj.delete(resource_name=custom_sc_name)
+                        logger.info(f"Custom StorageClass '{custom_sc_name}' deleted")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete custom StorageClass: {e}")
+
             if bucket_class:
                 with config.RunWithConfigContext(provider_index):
                     try:
