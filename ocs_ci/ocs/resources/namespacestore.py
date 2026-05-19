@@ -265,6 +265,13 @@ def cli_create_namespacestore(
             f"--private-key-json-file {constants.GOOGLE_CREDS_JSON_PATH} "
             f"--target-bucket {uls_name}"
         ),
+        constants.AZURE_STS_PLATFORM: lambda: (
+            f"azure-sts-blob {nss_name} "
+            f"--target-blob-container {uls_name} "
+            f"--tenant-id {get_attr_chain(cld_mgr, 'azure_sts_client.tenant_id')} "
+            f"--client-id {get_attr_chain(cld_mgr, 'azure_sts_client.client_id')} "
+            f"--account-name {get_attr_chain(cld_mgr, 'azure_sts_client.account_name')}"
+        ),
         constants.NAMESPACE_FILESYSTEM: lambda: (
             f"nsfs {nss_name} "
             f"--pvc-name {uls_name} "
@@ -365,6 +372,24 @@ def oc_create_namespacestore(
                 "endpoint": get_attr_chain(cld_mgr, "ibmcos_client.endpoint"),
                 "secret": {
                     "name": get_attr_chain(cld_mgr, "ibmcos_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
+            },
+        },
+        constants.AZURE_STS_PLATFORM: lambda: {
+            "type": "azure-blob",
+            "azureBlob": {
+                "targetBlobContainer": uls_name,
+                "clientId": get_attr_chain(cld_mgr, "azure_sts_client.client_id"),
+                "tenantId": get_attr_chain(cld_mgr, "azure_sts_client.tenant_id"),
+                "subscriptionId": get_attr_chain(
+                    cld_mgr, "azure_sts_client.subscription_id"
+                ),
+                "resourcegroupId": get_attr_chain(
+                    cld_mgr, "azure_sts_client.resource_group"
+                ),
+                "secret": {
+                    "name": get_attr_chain(cld_mgr, "azure_sts_client.secret.name"),
                     "namespace": nss_data["metadata"]["namespace"],
                 },
             },
