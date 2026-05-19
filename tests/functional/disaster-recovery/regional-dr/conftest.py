@@ -1,4 +1,5 @@
 import logging
+import platform
 import pytest
 import time
 
@@ -41,10 +42,12 @@ def pytest_collection_modifyitems(items):
                 items.remove(item)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True, scope="session")
 def check_subctl_cli():
-    # Check whether subctl cli is present
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+    if platform.system() == "Darwin":
+        log.warning("subctl binary is not available for macOS, skipping download")
         return
     try:
         run_cmd("./bin/subctl")
