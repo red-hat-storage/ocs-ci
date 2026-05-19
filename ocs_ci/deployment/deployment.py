@@ -18,6 +18,7 @@ import yaml
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 
 from ocs_ci.deployment.helpers import storage_class
+from ocs_ci.utility.azure_utils import AZURE as AzureUtil
 from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -215,6 +216,7 @@ class Deployment(object):
 
     def __init__(self):
         self.sts_role_arn = None
+        self.azure_noobaa_mi_client_id = None
         storage_class.set_custom_storage_class_path()
         logger.info(
             f"Deployment platform {self.platform} initiated with storage class: {self.storage_class}"
@@ -1235,15 +1237,19 @@ class Deployment(object):
             if "config" not in subscription_yaml_data["spec"]:
                 subscription_yaml_data["spec"]["config"] = {}
             azure_auth_data = config.AUTH["azure_auth"]
+            mi_client_id = (
+                self.azure_noobaa_mi_client_id or azure_auth_data["client_id"]
+            )
             azure_sub_data = [
-                {"name": "CLIENTID", "value": azure_auth_data["client_id"]},
+                {"name": "CLIENTID", "value": mi_client_id},
                 {"name": "TENANTID", "value": azure_auth_data["tenant_id"]},
                 {"name": "SUBSCRIPTIONID", "value": azure_auth_data["subscription_id"]},
+                {"name": "RESOURCEGROUP", "value": config.ENV_DATA["cluster_name"]},
             ]
             if "env" not in subscription_yaml_data["spec"]["config"]:
                 subscription_yaml_data["spec"]["config"]["env"] = azure_sub_data
             else:
-                subscription_yaml_data["spec"]["config"]["env"].append(azure_sub_data)
+                subscription_yaml_data["spec"]["config"]["env"].extend(azure_sub_data)
 
         subscription_yaml_data["metadata"]["namespace"] = self.namespace
         subscription_manifest = tempfile.NamedTemporaryFile(
@@ -1343,6 +1349,19 @@ class Deployment(object):
             log_step("Create STS role and attach AmazonS3FullAccess Policy")
             role_data = create_and_attach_sts_role()
             self.sts_role_arn = role_data["Role"]["Arn"]
+        azure_sts_deployment = (
+            config.DEPLOYMENT.get("sts_enabled")
+            and platform == constants.AZURE_PLATFORM
+        )
+        if azure_sts_deployment:
+            logger.test_step("Create Azure managed identity for NooBaa STS")
+            azure_util = AzureUtil()
+            azure_util.az_login()
+            self.azure_noobaa_mi_client_id = azure_util.create_noobaa_managed_identity(
+                cluster_name=config.ENV_DATA["cluster_name"],
+                resource_group=config.ENV_DATA["cluster_name"],
+                subscription_id=config.AUTH["azure_auth"]["subscription_id"],
+            )
         stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
         konflux_build = config.DEPLOYMENT.get("konflux_build")
         upgrade = config.UPGRADE.get("upgrade", False)
