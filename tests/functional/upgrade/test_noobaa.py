@@ -53,6 +53,7 @@ def test_fill_bucket(
     DOWNLOADED_OBJS = retrieve_test_objects_to_pod(
         awscli_pod_session, LOCAL_TESTOBJS_DIR_PATH
     )
+    assert DOWNLOADED_OBJS, "No objects downloaded in pre-upgrade phase"
 
     logger.info("Uploading all pod objects to MCG bucket")
 
@@ -104,6 +105,9 @@ def test_noobaa_postupgrade(
     backingstore2 = created_backingstores[1]
     mcg_bucket_path = f"s3://{bucket.name}"
 
+    assert (
+        DOWNLOADED_OBJS
+    ), "No pre-upgrade objects available for post-upgrade integrity validation"
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
         assert verify_s3_object_integrity(
