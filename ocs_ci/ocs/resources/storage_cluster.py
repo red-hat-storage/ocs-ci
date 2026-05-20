@@ -3606,3 +3606,22 @@ def get_deviceset_name_per_count():
     """
     device_sets = get_all_device_sets()
     return {d.get("name"): d["count"] for d in device_sets}
+
+
+def get_storage_client():
+    """
+    Get the StorageClient OCP object for the configured storage client.
+
+    Returns:
+        ocs_ci.ocs.ocp.OCP: StorageClient OCP object with resource_name set
+            to the storage client name from config.
+    """
+    return ocp.OCP(
+        kind=constants.STORAGECLIENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=(
+            config.cluster_ctx.ENV_DATA.get("storage_client_name")
+            or config.ENV_DATA.get("storage_client_name")
+            or constants.STORAGE_CLIENT_NAME
+        ),
+    )
