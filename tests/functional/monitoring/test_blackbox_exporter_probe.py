@@ -64,6 +64,11 @@ class TestBlackboxExporterProbe(ManageTest):
         pod_ips = {}
         for pod in pods["items"]:
             pod_name = pod["metadata"]["name"]
+            pod_phase = pod.get("status", {}).get("phase")
+            deletion_timestamp = pod.get("metadata", {}).get("deletionTimestamp")
+            if pod_phase != "Running" or deletion_timestamp:
+                logger.debug(f"Skipping pod {pod_name}")
+                continue
             pod_ip = pod.get("status", {}).get("podIP")
             if pod_ip:
                 pod_ips[pod_name] = pod_ip
