@@ -30,11 +30,8 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import oc_create_pv_backingstore
 from ocs_ci.ocs.managedservice import get_consumer_names
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.bucketclass import BucketClass
-from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.storageconsumer import add_storageclasses_to_storageconsumer
 from ocs_ci.utility.utils import TimeoutSampler
@@ -632,7 +629,7 @@ class TestRemoteOBCCRUD(ManageTest):
         return sha256_hash.hexdigest()
 
     @polarion_id("OCS-7940")
-    def test_remote_obc_bucket_mirroring(self, project_factory):
+    def test_remote_obc_bucket_mirroring(self, project_factory, bucket_class_factory):
         """
         Test bucket mirroring from Client with CRUD operations and data integrity.
 
@@ -666,9 +663,7 @@ class TestRemoteOBCCRUD(ManageTest):
         client_index = client_indices[0]
         provider_index = config.get_provider_index()
 
-        backing_stores = []
         bucket_class = None
-        bucket_class_name = None
         s3_client = None
         obc_name = None
         namespace = None
@@ -680,45 +675,20 @@ class TestRemoteOBCCRUD(ManageTest):
                 "Step 1: Creating BucketClass with mirroring policy on provider"
             )
 
-            with config.RunWithConfigContext(provider_index):
-                # Create 2 backing stores for mirroring
-                logger.info("Creating 2 backing stores for mirroring")
-                for i in range(2):
-                    bs_name = create_unique_resource_name(
-                        resource_description="bs", resource_type=f"mirror-{i}"
-                    )
-                    # Create the actual backing store resource
-                    # Note: NooBaa requires minimum 16Gi volume size
-                    oc_create_pv_backingstore(
-                        backingstore_name=bs_name,
-                        vol_num=1,
-                        size=20,
-                        storage_class=constants.DEFAULT_STORAGECLASS_RBD,
-                    )
-                    # Create BackingStore object for tracking and cleanup
-                    backing_store = BackingStore(
-                        name=bs_name,
-                        method="oc",
-                        mcg_obj=None,
-                        type="pv",
-                        vol_num=1,
-                        vol_size=20,
-                    )
-                    backing_stores.append(backing_store)
-                    logger.info(f"Created backing store: {bs_name}")
-
-                # Create BucketClass with mirroring policy
-                bucket_class_name = create_unique_resource_name(
-                    resource_description="bc", resource_type="mirror"
-                )
-                logger.info(f"Creating mirroring BucketClass: {bucket_class_name}")
-
-                bucket_class = BucketClass(
-                    name=bucket_class_name,
-                    placement_policy="Mirror",
-                    backingstores=[bs.name for bs in backing_stores],
-                )
-                logger.info(f"BucketClass '{bucket_class_name}' created with mirroring")
+            bucket_class = bucket_class_factory(
+                {
+                    "interface": "OC",
+                    "placement_policy": "Mirror",
+                    "backingstore_dict": {
+                        "pv": [
+                            (1, 20, constants.DEFAULT_STORAGECLASS_RBD),
+                            (1, 20, constants.DEFAULT_STORAGECLASS_RBD),
+                        ]
+                    },
+                }
+            )
+            bucket_class_name = bucket_class.name
+            logger.info(f"BucketClass '{bucket_class_name}' created with mirroring")
 
             # Step 2: Distribute BucketClass to client via StorageClass
             logger.info("Step 2: Distributing BucketClass to client via StorageClass")
@@ -1039,18 +1009,4 @@ class TestRemoteOBCCRUD(ManageTest):
                     except Exception as e:
                         logger.warning(f"Failed to delete custom StorageClass: {e}")
 
-            if bucket_class:
-                with config.RunWithConfigContext(provider_index):
-                    try:
-                        logger.info(f"Cleaning up BucketClass '{bucket_class_name}'")
-                        bucket_class.delete()
-                    except Exception as e:
-                        logger.warning(f"Failed to delete BucketClass: {e}")
-
-            for bs in backing_stores:
-                with config.RunWithConfigContext(provider_index):
-                    try:
-                        logger.info(f"Cleaning up backing store '{bs.name}'")
-                        bs.delete()
-                    except Exception as e:
-                        logger.warning(f"Failed to delete backing store {bs.name}: {e}")
+            # bucket_class_factory handles cleanup of BucketClass and backing stores automatically
