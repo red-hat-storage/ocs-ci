@@ -344,3 +344,51 @@ def create_drs_nad(cluster_name):
     with config.RunWithProviderConfigContextIfAvailable():
         nad_obj = OCS(**nad_yaml)
         nad_obj.apply(**nad_yaml)
+
+
+def get_pod_ips(pod_selector, namespace):
+    """
+    Get pod IPs for pods matching the selector in a given namespace.
+    Only returns IPs for pods that are in Running state and not terminating.
+
+    Args:
+        pod_selector (str): Label selector to filter pods (e.g., "app=rook-ceph-osd")
+        namespace (str): Namespace to search for pods
+    Returns:
+        dict: Dictionary mapping pod names to their IP addresses
+    """
+    from ocs_ci.ocs import constants
+
+    logger.info(
+        f"Getting pod IPs for selector: {pod_selector} in namespace: {namespace}"
+    )
+    pod_ocp = OCP(kind=constants.POD, namespace=namespace)
+    pods = pod_ocp.get(selector=pod_selector)
+
+    if not pods or "items" not in pods:
+        logger.warning(f"No pods found with selector: {pod_selector}")
+        return {}
+
+    pod_ips = {}
+    for pod in pods["items"]:
+        pod_name = pod["metadata"]["name"]
+
+        pod_phase = pod.get("status", {}).get("phase")
+        deletion_timestamp = pod.get("metadata", {}).get("deletionTimestamp")
+
+        if pod_phase != "Running" or deletion_timestamp:
+            logger.debug(
+                f"Skipping pod {pod_name} - phase: {pod_phase}, "
+                f"terminating: {bool(deletion_timestamp)}"
+            )
+            continue
+
+        pod_ip = pod.get("status", {}).get("podIP")
+        if pod_ip:
+            pod_ips[pod_name] = pod_ip
+            logger.info(f"Pod: {pod_name}, IP: {pod_ip}")
+        else:
+            logger.warning(f"No IP found for pod: {pod_name}")
+
+    logger.info(f"Found {len(pod_ips)} pod IPs for selector: {pod_selector}")
+    return pod_ips

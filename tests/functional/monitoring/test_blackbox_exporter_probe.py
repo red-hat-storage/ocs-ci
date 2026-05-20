@@ -10,7 +10,8 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import ManageTest, skipif_mcg_only
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.probe import Probe
+from ocs_ci.utility.networking import get_pod_ips
 
 logger = logging.getLogger(__name__)
 
@@ -22,95 +23,6 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_ocs_version("<4.22")
 class TestBlackboxExporterProbe(ManageTest):
-
-    def get_probe_config(self, probe_name="odf-blackbox-exporter"):
-        """
-        Get the probe configuration for odf-blackbox-exporter.
-        Args:
-            probe_name (str): Name of the probe resource. Default is "odf-blackbox-exporter"
-        Returns:
-            dict: Probe configuration as a dictionary
-        """
-        logger.info(f"Fetching probe configuration for: {probe_name}")
-        probe_ocp = OCP(
-            kind="Probe",
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-            resource_name=probe_name,
-        )
-        probe_config = probe_ocp.get()
-        logger.info(f"Successfully retrieved probe config for {probe_name}")
-        logger.debug(f"Probe config: {probe_config}")
-        return probe_config
-
-    def get_pod_ips(self, pod_selector):
-        """
-        Get pod IPs for pods matching the selector.
-        Args:
-            pod_selector (str): Label selector to filter pods (e.g., "app=rook-ceph-osd")
-        Returns:
-            dict: Dictionary mapping pod names to their IP addresses
-        Example:
-            {'rook-ceph-osd-0-xxx': '10.0.0.1', 'rook-ceph-osd-1-xxx': '10.0.0.2'}
-        """
-        logger.info(f"Getting pod IPs for selector: {pod_selector}")
-        pod_ocp = OCP(
-            kind=constants.POD,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-        )
-        pods = pod_ocp.get(selector=pod_selector)
-        if not pods or "items" not in pods:
-            logger.warning(f"No pods found with selector: {pod_selector}")
-            return {}
-        pod_ips = {}
-        for pod in pods["items"]:
-            pod_name = pod["metadata"]["name"]
-            pod_phase = pod.get("status", {}).get("phase")
-            deletion_timestamp = pod.get("metadata", {}).get("deletionTimestamp")
-            if pod_phase != "Running" or deletion_timestamp:
-                logger.debug(f"Skipping pod {pod_name}")
-                continue
-            pod_ip = pod.get("status", {}).get("podIP")
-            if pod_ip:
-                pod_ips[pod_name] = pod_ip
-                logger.info(f"Pod: {pod_name}, IP: {pod_ip}")
-            else:
-                logger.warning(f"No IP found for pod: {pod_name}")
-        logger.info(f"Found {len(pod_ips)} pod IPs for selector: {pod_selector}")
-        return pod_ips
-
-    def get_ips_from_blackbox_probe(self, probe_config):
-        """
-        Extract target IPs from the blackbox exporter probe configuration.
-        Args:
-            probe_config (dict): Probe configuration dictionary
-        Returns:
-            list: List of IP addresses configured in the probe
-        """
-        logger.info("Extracting IPs from blackbox probe configuration")
-        probe_ips = []
-        try:
-            spec = probe_config.get("spec", {})
-            targets = spec.get("targets", {})
-            static_config = targets.get("staticConfig", {})
-            static_ips = static_config.get("static", [])
-
-            if static_ips:
-                probe_ips = static_ips
-                logger.info(f"Found {len(probe_ips)} IPs in probe static config")
-                for ip in probe_ips:
-                    logger.debug(f"Probe target IP: {ip}")
-            else:
-                logger.warning("No static IPs found in probe configuration")
-                logger.debug(f"Probe config structure: {probe_config}")
-
-        except Exception as e:
-            logger.info(f"Probe config structure: {probe_config}")
-            logger.error(f"Error extracting IPs from probe config: {e}")
-            raise RuntimeError(
-                f"Failed to extract IPs from probe configuration: {e}"
-            ) from e
-        logger.info(f"Extracted {len(probe_ips)} IPs from probe configuration")
-        return probe_ips
 
     @tier2
     @polarion_id("OCS-7941")
@@ -127,21 +39,26 @@ class TestBlackboxExporterProbe(ManageTest):
         """
         logger.info("Starting test: Verify blackbox probe contains OSD and MON IPs")
 
-        probe_config = self.get_probe_config("odf-blackbox-exporter")
+        probe = Probe()
+        probe_config = probe.get_probe_config("odf-blackbox-exporter")
         assert probe_config, "Failed to get probe configuration"
 
         logger.info("Getting OSD pod IPs...")
-        osd_ips = self.get_pod_ips(constants.OSD_APP_LABEL)
+        osd_ips = get_pod_ips(
+            constants.OSD_APP_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
         assert osd_ips, "No OSD pods found or no IPs available"
         logger.info(f"Found {len(osd_ips)} OSD pods with IPs")
 
         logger.info("Getting MON pod IPs...")
-        mon_ips = self.get_pod_ips(constants.MON_APP_LABEL)
+        mon_ips = get_pod_ips(
+            constants.MON_APP_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
         assert mon_ips, "No MON pods found or no IPs available"
         logger.info(f"Found {len(mon_ips)} MON pods with IPs")
 
         logger.info("Extracting IPs from probe configuration...")
-        probe_ips = self.get_ips_from_blackbox_probe(probe_config)
+        probe_ips = probe.get_static_targets(probe_config)
         assert probe_ips, "No IPs found in probe configuration"
         logger.info(f"Found {len(probe_ips)} IPs in probe configuration")
 
