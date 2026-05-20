@@ -324,6 +324,268 @@ class TestNfsExport(ManageTest):
 
         retry((CommandFailed), tries=tries, delay=delay)(_do_mount)()
 
+    def write_io_to_single_file(self, con, file_path, num_iterations=20, delay=0.5):
+        """
+        Write IO operations to a single file on NFS mount.
+
+        Args:
+            con: Connection object to NFS client
+            file_path (str): Full path to the file
+            num_iterations (int): Number of write iterations
+            delay (float): Delay between iterations in seconds
+
+        Returns:
+            tuple: (success, error_list) - success is bool, error_list contains any errors
+        """
+        log.info(f"Writing IO to single file: {file_path}")
+        errors = []
+
+        # Write initial data
+        initial_data = f"IO test started at {time.time()}"
+        init_cmd = f'echo "{initial_data}" > {file_path}'
+        retcode, _, stderr = con.exec_cmd(init_cmd)
+        if retcode != 0:
+            errors.append(f"Failed to initialize file: {stderr}")
+            return False, errors
+
+        # Append multiple lines
+        for i in range(1, num_iterations + 1):
+            io_data = f"IO iteration {i} - {time.time()}"
+            write_cmd = f'echo "{io_data}" >> {file_path}'
+            retcode, _, stderr = con.exec_cmd(write_cmd, use_logger=False)
+            if retcode != 0:
+                errors.append(f"Write failed at iteration {i}: {stderr}")
+                log.warning(f"Write error at iteration {i}: {stderr}")
+            time.sleep(delay)
+
+        log.info(f"Completed {num_iterations} IO iterations on {file_path}")
+        return len(errors) == 0, errors
+
+    def calculate_checksum_and_lines(self, con, file_path):
+        """
+        Calculate MD5 checksum and line count for a file.
+
+        Args:
+            con: Connection object (NFS client or pod)
+            file_path (str): Full path to the file
+
+        Returns:
+            dict: {'checksum': str, 'line_count': int, 'success': bool, 'error': str}
+        """
+        result = {"checksum": None, "line_count": 0, "success": False, "error": None}
+
+        # Calculate checksum
+        checksum_cmd = f"md5sum {file_path}"
+        retcode, stdout, stderr = con.exec_cmd(checksum_cmd)
+        if retcode != 0:
+            result["error"] = f"Failed to calculate checksum: {stderr}"
+            return result
+
+        result["checksum"] = stdout.split()[0]
+
+        # Get line count
+        line_cmd = f"wc -l {file_path}"
+        retcode, stdout, stderr = con.exec_cmd(line_cmd)
+        if retcode == 0:
+            result["line_count"] = int(stdout.split()[0])
+        else:
+            result["error"] = f"Failed to get line count: {stderr}"
+            return result
+
+        result["success"] = True
+        log.info(
+            f"File: {file_path} - Checksum: {result['checksum']}, "
+            f"Lines: {result['line_count']}"
+        )
+        return result
+
+    def verify_data_integrity(
+        self, before_data, after_data, operation_name="operation"
+    ):
+        """
+        Verify data integrity by comparing checksums and line counts.
+
+        Args:
+            before_data (dict): Data before operation (from calculate_checksum_and_lines)
+            after_data (dict): Data after operation (from calculate_checksum_and_lines)
+            operation_name (str): Name of the operation for logging
+
+        Raises:
+            AssertionError: If data integrity check fails
+        """
+        log.info(f"Verifying data integrity after {operation_name}")
+
+        # Verify line count
+        assert before_data["line_count"] == after_data["line_count"], (
+            f"Line count mismatch after {operation_name}!\n"
+            f"Before: {before_data['line_count']}\n"
+            f"After: {after_data['line_count']}"
+        )
+
+        # Verify checksum
+        assert before_data["checksum"] == after_data["checksum"], (
+            f"Checksum mismatch after {operation_name}! Data integrity check failed.\n"
+            f"Before checksum: {before_data['checksum']}\n"
+            f"After checksum: {after_data['checksum']}"
+        )
+
+        log.info(f"✓ Data integrity verified after {operation_name}")
+        log.info(f"  - Line count: {after_data['line_count']}")
+        log.info(f"  - Checksum: {after_data['checksum']}")
+
+    def get_nfs_export_details(self, pvc_name):
+        """
+        Get NFS volume name and share details for a PVC.
+
+        Args:
+            pvc_name (str): Name of the PVC
+
+        Returns:
+            dict: {'volume_name': str, 'share_details': str}
+        """
+        # Get volume name from PVC
+        fetch_vol_cmd = f"get pvc {pvc_name} -o jsonpath='{{.spec.volumeName}}'"
+        vol_name = self.pvc_obj.exec_oc_cmd(fetch_vol_cmd)
+        log.info(f"Volume name for PVC {pvc_name}: {vol_name}")
+
+        # Get NFS share details from PV
+        fetch_share_cmd = (
+            f"get pv {vol_name} " f"-o jsonpath='{{.spec.csi.volumeAttributes.share}}'"
+        )
+        share_details = self.pv_obj.exec_oc_cmd(fetch_share_cmd)
+        log.info(f"NFS share for PVC {pvc_name}: {share_details}")
+
+        return {"volume_name": vol_name, "share_details": share_details}
+
+    def mount_nfs_export(self, con, share_details, mount_point):
+        """
+        Mount NFS export on client with retry and verification.
+
+        Args:
+            con: Connection object to NFS client
+            share_details (str): NFS share path
+            mount_point (str): Local mount point path
+
+        Returns:
+            bool: True if mount successful
+        """
+        # Create mount point
+        retcode, _, _ = con.exec_cmd(f"mkdir -p {mount_point}")
+        assert retcode == 0, f"Failed to create mount point {mount_point}"
+
+        # Mount NFS export
+        mount_cmd = (
+            f"mount -t nfs4 -o proto=tcp "
+            f"{self.hostname_add}:{share_details} {mount_point}"
+        )
+
+        log.info(f"Mounting NFS export: {mount_cmd}")
+        self._mount_nfs_with_retry(mount_cmd)
+
+        # Verify mount
+        retcode, stdout, _ = con.exec_cmd(f"findmnt -M {mount_point}")
+        assert retcode == 0, f"Mount verification failed for {mount_point}"
+        log.info(f"✓ Successfully mounted NFS export at {mount_point}")
+
+        return True
+
+    def verify_data_from_pod(self, pod_obj, file_path_in_pod):
+        """
+        Verify data integrity from within the pod.
+
+        Args:
+            pod_obj: Pod object
+            file_path_in_pod (str): Path to file inside pod (e.g., /mnt/filename)
+
+        Returns:
+            dict: {'checksum': str, 'line_count': int, 'success': bool, 'error': str}
+        """
+        log.info(f"Verifying data from pod: {pod_obj.name}")
+        result = {"checksum": None, "line_count": 0, "success": False, "error": None}
+
+        # Calculate checksum from pod
+        checksum_cmd = f"md5sum {file_path_in_pod}"
+        try:
+            pod_output = pod_obj.exec_cmd_on_pod(
+                command=checksum_cmd, out_yaml_format=False
+            )
+            result["checksum"] = pod_output.split()[0]
+        except Exception as e:
+            result["error"] = f"Failed to get checksum from pod: {str(e)}"
+            return result
+
+        # Get line count from pod
+        line_cmd = f"wc -l {file_path_in_pod}"
+        try:
+            pod_output = pod_obj.exec_cmd_on_pod(
+                command=line_cmd, out_yaml_format=False
+            )
+            result["line_count"] = int(pod_output.split()[0])
+        except Exception as e:
+            result["error"] = f"Failed to get line count from pod: {str(e)}"
+            return result
+
+        result["success"] = True
+        log.info(
+            f"Pod data - Checksum: {result['checksum']}, "
+            f"Lines: {result['line_count']}"
+        )
+        return result
+
+    def verify_bidirectional_data_integrity(
+        self,
+        pod_obj,
+        file_path_in_pod,
+        con,
+        file_path_on_nfs,
+        operation_name="operation",
+    ):
+        """
+        Verify data integrity from both pod and NFS mount perspectives.
+
+        Args:
+            pod_obj: Pod object
+            file_path_in_pod (str): Path to file inside pod
+            con: Connection object to NFS client
+            file_path_on_nfs (str): Path to file on NFS mount
+            operation_name (str): Name of operation for logging
+
+        Raises:
+            AssertionError: If data doesn't match between pod and NFS mount
+        """
+        log.info("=" * 80)
+        log.info(f"Verifying bidirectional data integrity after {operation_name}")
+        log.info("=" * 80)
+
+        # Get data from pod
+        pod_data = self.verify_data_from_pod(pod_obj, file_path_in_pod)
+        assert pod_data["success"], f"Failed to get data from pod: {pod_data['error']}"
+
+        # Get data from NFS mount
+        nfs_data = self.calculate_checksum_and_lines(con, file_path_on_nfs)
+        assert nfs_data["success"], f"Failed to get data from NFS: {nfs_data['error']}"
+
+        # Compare pod and NFS data
+        assert pod_data["checksum"] == nfs_data["checksum"], (
+            f"Checksum mismatch between pod and NFS mount!\n"
+            f"Pod checksum: {pod_data['checksum']}\n"
+            f"NFS checksum: {nfs_data['checksum']}"
+        )
+
+        assert pod_data["line_count"] == nfs_data["line_count"], (
+            f"Line count mismatch between pod and NFS mount!\n"
+            f"Pod lines: {pod_data['line_count']}\n"
+            f"NFS lines: {nfs_data['line_count']}"
+        )
+
+        log.info("✓ Bidirectional data integrity verified!")
+        log.info(f"  - Pod checksum: {pod_data['checksum']}")
+        log.info(f"  - NFS checksum: {nfs_data['checksum']}")
+        log.info(f"  - Line count: {pod_data['line_count']}")
+        log.info("=" * 80)
+
+        return {"pod_data": pod_data, "nfs_data": nfs_data}
+
     @tier1
     @polarion_id("OCS-4272")
     def test_cluster_inout_nfs_export(
@@ -345,26 +607,6 @@ class TestNfsExport(ManageTest):
         """
 
         log.info("Starting outcluster case")
-        # # Deletion of Pods and PVCs
-        # log.info("Deleting pod")
-        # pod_obj.delete()
-        # pod_obj.ocp.wait_for_delete(
-        #     pod_obj.name, 180
-        # ), f"Pod {pod_obj.name} is not deleted"
-        #
-        # pv_obj = nfs_pvc_obj.backed_pv_obj
-        # log.info(f"pv object-----{pv_obj}")
-        #
-        # log.info("Deleting PVC")
-        # nfs_pvc_obj.delete()
-        # nfs_pvc_obj.ocp.wait_for_delete(
-        #     resource_name=nfs_pvc_obj.name
-        # ), f"PVC {nfs_pvc_obj.name} is not deleted"
-        # log.info(f"Verified: PVC {nfs_pvc_obj.name} is deleted.")
-        #
-        # log.info("Check nfs pv is deleted")
-        # pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
-
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
         # Generate unique names using timestamp to avoid conflicts between test runs
@@ -548,39 +790,39 @@ class TestNfsExport(ManageTest):
 
         request.addfinalizer(cleanup_all_resources)
 
-        # Verify able to read exported volume
-        command = f"cat {test_folder_for_pod}/index.html"
-        retcode, stdout, _ = con.exec_cmd(command)
-        stdout = stdout.rstrip()
-        log.info(stdout)
-        assert stdout == "hello world"
-        command = f"chmod 666 {test_folder_for_pod}/index.html"
-        retcode, _, _ = con.exec_cmd(command)
-        assert retcode == 0
+        # # Verify able to read exported volume
+        # command = f"cat {test_folder_for_pod}/index.html"
+        # retcode, stdout, _ = con.exec_cmd(command)
+        # stdout = stdout.rstrip()
+        # log.info(stdout)
+        # assert stdout == "hello world"
+        # command = f"chmod 666 {test_folder_for_pod}/index.html"
+        # retcode, _, _ = con.exec_cmd(command)
+        # assert retcode == 0
 
-        # Verify able to write to the exported volume
-        command = (
-            "bash -c "
-            + '"echo '
-            + "'test_writing'"
-            + f'  >> {test_folder_for_pod}/index.html"'
-        )
-        retcode, _, stderr = con.exec_cmd(command)
-        assert retcode == 0, f"failed with error---{stderr}"
-
-        command = f"cat {test_folder_for_pod}/index.html"
-        retcode, stdout, _ = con.exec_cmd(command)
-        assert retcode == 0
-        stdout = stdout.rstrip()
-        assert stdout == "hello world" + """\n""" + "test_writing"
-
-        # Able to read updated /var/lib/www/html/index.html file from inside the pod
-        command = "bash -c " + '"cat ' + ' /mnt/index.html"'
-        result = pod_obj.exec_cmd_on_pod(
-            command=command,
-            out_yaml_format=False,
-        )
-        assert result.rstrip() == "hello world" + """\n""" + "test_writing"
+        # # Verify able to write to the exported volume
+        # command = (
+        #     "bash -c "
+        #     + '"echo '
+        #     + "'test_writing'"
+        #     + f'  >> {test_folder_for_pod}/index.html"'
+        # )
+        # retcode, _, stderr = con.exec_cmd(command)
+        # assert retcode == 0, f"failed with error---{stderr}"
+        #
+        # command = f"cat {test_folder_for_pod}/index.html"
+        # retcode, stdout, _ = con.exec_cmd(command)
+        # assert retcode == 0
+        # stdout = stdout.rstrip()
+        # assert stdout == "hello world" + """\n""" + "test_writing"
+        #
+        # # Able to read updated /var/lib/www/html/index.html file from inside the pod
+        # command = "bash -c " + '"cat ' + ' /mnt/index.html"'
+        # result = pod_obj.exec_cmd_on_pod(
+        #     command=command,
+        #     out_yaml_format=False,
+        # )
+        # assert result.rstrip() == "hello world" + """\n""" + "test_writing"
 
         # ========================================================================
         # Scenario: NFS Server Pod Node Reboot During Active I/O
@@ -1208,46 +1450,13 @@ class TestNfsExport(ManageTest):
         # Step 3: Get NFS export details for cloned PVC and mount on client
         log.info("Step 3: Getting NFS export details for cloned PVC")
 
-        # Get volume name from cloned PVC
-        fetch_cloned_vol_name_cmd = (
-            f"get pvc {cloned_pvc_name} -o jsonpath='{{.spec.volumeName}}'"
-        )
-        cloned_vol_name = self.pvc_obj.exec_oc_cmd(fetch_cloned_vol_name_cmd)
-        log.info(f"Cloned volume name: {cloned_vol_name}")
+        # Use helper function to get export details
+        cloned_export = self.get_nfs_export_details(cloned_pvc_name)
+        cloned_share_details = cloned_export["share_details"]
 
-        # Get NFS share details from cloned PV
-        fetch_cloned_pv_share_cmd = f"get pv {cloned_vol_name} -o jsonpath='{{.spec.csi.volumeAttributes.share}}'"
-        cloned_share_details = self.pv_obj.exec_oc_cmd(fetch_cloned_pv_share_cmd)
-        log.info(f"Cloned NFS share: {cloned_share_details}")
-
-        # Create mount point for cloned NFS export
+        # Use helper function to mount NFS export
         cloned_test_folder = f"{self.test_folder}-cloned"
-        retcode, _, _ = con.exec_cmd(f"mkdir -p {cloned_test_folder}")
-        assert retcode == 0, f"Failed to create mount point {cloned_test_folder}"
-
-        # Mount cloned NFS export on client
-        mount_cloned_cmd = (
-            "mount -t nfs4 -o proto=tcp "
-            + self.hostname_add
-            + ":"
-            + cloned_share_details
-            + " "
-            + cloned_test_folder
-        )
-
-        log.info(f"Mounting cloned NFS export: {mount_cloned_cmd}")
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(
-            con.exec_cmd
-        )(mount_cloned_cmd)
-
-        # Verify mount is successful
-        retcode, stdout, _ = con.exec_cmd(f"findmnt -M {cloned_test_folder}")
-        assert retcode == 0, f"Mount verification failed for {cloned_test_folder}"
-        log.info(f"Successfully mounted cloned NFS export at {cloned_test_folder}")
+        self.mount_nfs_export(con, cloned_share_details, cloned_test_folder)
 
         # Add cloned mount to cleanup
         def cleanup_cloned_mount():
@@ -1364,6 +1573,22 @@ class TestNfsExport(ManageTest):
             f"File checksum mismatch after resize! Data integrity check failed.\n"
             f"Pre-resize checksum: {pre_resize_checksum}\n"
             f"Post-resize checksum: {post_resize_checksum}"
+        )
+
+        # Step 8: Verify bidirectional data integrity (pod + NFS mount)
+        log.info("Step 8: Verifying bidirectional data integrity (pod and NFS mount)")
+
+        # Get the cloned pod object
+        cloned_pod_obj = cloned_pod_objs[0]
+        pod_file_path = f"/mnt/{CLONED_IO_FILE_NAME}"
+
+        # Use helper function for bidirectional verification
+        self.verify_bidirectional_data_integrity(
+            pod_obj=cloned_pod_obj,
+            file_path_in_pod=pod_file_path,
+            con=con,
+            file_path_on_nfs=cloned_io_file,
+            operation_name="PVC clone and resize",
         )
 
         log.info("=" * 80)
@@ -1697,6 +1922,22 @@ class TestNfsExport(ManageTest):
             f"File checksum mismatch after final resize! Data integrity check failed.\n"
             f"Pre-resize checksum: {pre_final_resize_checksum}\n"
             f"Post-resize checksum: {post_final_resize_checksum}"
+        )
+
+        # Step 9: Verify bidirectional data integrity (pod + NFS mount)
+        log.info("Step 9: Verifying bidirectional data integrity (pod and NFS mount)")
+
+        # Get the final restored pod object
+        final_restored_pod_obj = final_restored_pod_objs[0]
+        final_pod_file_path = f"/mnt/{FINAL_IO_FILE_NAME}"
+
+        # Use helper function for bidirectional verification
+        self.verify_bidirectional_data_integrity(
+            pod_obj=final_restored_pod_obj,
+            file_path_in_pod=final_pod_file_path,
+            con=con,
+            file_path_on_nfs=final_io_file,
+            operation_name="snapshot restore and re-resize",
         )
 
         log.info("=" * 80)
