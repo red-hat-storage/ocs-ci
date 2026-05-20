@@ -73,7 +73,10 @@ class MCG:
         noobaa_user,
         noobaa_password,
         data_to_mask,
-    ) = (None,) * 12
+        s3vectors_client,
+        vectors_endpoint,
+        vectors_internal_endpoint,
+    ) = (None,) * 15
 
     def __init__(self, *args, **kwargs):
         """
@@ -157,6 +160,24 @@ class MCG:
                 .get("serviceMgmt")
                 .get("externalDNS")[0]
             ) + "/rpc"
+
+            # serviceVectors is for S3 Vectors operations
+            service_vectors = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceVectors")
+            )
+            if service_vectors:
+                self.vectors_endpoint = service_vectors.get("externalDNS")[0]
+                self.vectors_internal_endpoint = service_vectors.get("internalDNS")[0]
+                logger.info(f"S3 Vectors endpoint: {self.vectors_endpoint}")
+            else:
+                logger.info(
+                    "serviceVectors not found in NooBaa services - S3 Vectors endpoint will not be available"
+                )
+                self.vectors_endpoint = None
+                self.vectors_internal_endpoint = None
 
             # serviceIam is not available on some platforms (e.g., Azure ARO)
             service_iam = (
@@ -651,15 +672,19 @@ class MCG:
         placement_policy,
         namespace_policy,
         replication_policy,
+        vector_policy=None,
     ):
         """
         Creates a new NooBaa bucket class using a template YAML
+
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
             placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
             replication_policy (dict): The replication policy dictionary
+            vector_policy (dict): The vector policy for vector buckets with
+                resource and vectorDBType fields
 
         Returns:
             OCS: The bucket class resource
@@ -711,6 +736,12 @@ class MCG:
                     else json.dumps({"rules": replication_policy})
                 ),
             )
+
+        if vector_policy:
+            bc_data["spec"]["vectorPolicy"] = {
+                "resource": vector_policy["resource"],
+                "vectorDBType": vector_policy["vectorDBType"],
+            }
 
         return create_resource(**bc_data)
 
@@ -1265,6 +1296,18 @@ class MCG:
         )
 
         self.s3_client = self.s3_resource.meta.client
+
+        self.s3vectors_client = None
+        if self.vectors_endpoint:
+            self.s3vectors_client = boto3.client(
+                "s3vectors",
+                region_name=self.region,
+                verify=retrieve_verification_mode(),
+                endpoint_url=self.vectors_endpoint,
+                aws_access_key_id=self.access_key_id,
+                aws_secret_access_key=self.access_key,
+                config=retry_cfg,
+            )
 
     def reset_admin_pw(self, new_password):
         """

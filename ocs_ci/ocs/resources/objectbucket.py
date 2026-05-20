@@ -626,6 +626,67 @@ class MCGOCBucket(OCBucket):
         create_resource(**obc_data)
 
 
+class VectorOCBucket(OCBucket):
+    """
+    Implementation of an MCG Vector bucket using the OC CLI
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        obc_data = templating.load_yaml(constants.VECTOR_OBC_YAML)
+        if self.name is None:
+            self.name = create_unique_resource_name("vector-oc", "obc")
+        obc_data["metadata"]["name"] = self.name
+        obc_data["spec"]["bucketName"] = self.name
+        obc_data["spec"]["storageClassName"] = f"{self.namespace}.noobaa.io"
+        obc_data["metadata"]["namespace"] = self.namespace
+
+        # Ensure additionalConfig exists
+        obc_data.setdefault("spec", {}).setdefault("additionalConfig", {})
+
+        # Always set bucketType to vector
+        obc_data["spec"]["additionalConfig"]["bucketType"] = "vector"
+
+        # Add bucketclass if specified
+        if self.bucketclass:
+            obc_data["spec"]["additionalConfig"]["bucketclass"] = self.bucketclass.name
+
+        create_resource(**obc_data)
+
+    def verify_health(self, timeout=180, interval=5):
+        """
+        Verify that the vector bucket reached a healthy state.
+        Vector buckets don't appear in regular S3 listings, so we skip S3 verification.
+
+        Args:
+            timeout (int): Timeout for the check, in seconds
+            interval (int): Interval to wait between checks, in seconds
+
+        """
+        logger.info(f"Waiting for {self.name} to be healthy")
+        try:
+            for health_check in TimeoutSampler(
+                timeout, interval, self.internal_verify_health
+            ):
+                if not health_check:
+                    logger.info(f"{self.name} is unhealthy. Rechecking.")
+                else:
+                    logger.info(f"{self.name} is healthy")
+                    break
+        except TimeoutExpiredError:
+            logger.error(
+                f"{self.name} did not reach a healthy state within {timeout} seconds."
+            )
+            obc_obj = OCP(kind="obc", namespace=self.namespace, resource_name=self.name)
+            obc_yaml = obc_obj.get()
+            obc_description = obc_obj.describe(resource_name=self.name)
+            raise UnhealthyBucket(
+                f"{self.name} did not reach a healthy state within {timeout} seconds.\n"
+                f"OBC YAML:\n{json.dumps(obc_yaml, indent=2)}\n\n"
+                f"OBC description:\n{obc_description}"
+            )
+
+
 class RGWOCBucket(OCBucket):
     """
     Implementation of an RGW bucket using the S3 API
@@ -743,4 +804,5 @@ BUCKET_MAP = {
     "cli": MCGCLIBucket,
     "rgw-oc": RGWOCBucket,
     "mcg-namespace": MCGNamespaceBucket,
+    "vector-oc": VectorOCBucket,
 }
