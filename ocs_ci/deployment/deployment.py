@@ -4628,35 +4628,108 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
     def thanos_secret(self):
         """
-        Create thanos secret yaml by using Noobaa or AWS bucket (AWS bucket is used in this function)
+        Create thanos secret yaml by using Noobaa/ODF bucket or AWS bucket
 
+        If config.ENV_DATA.get('use_odf_bucket_for_thanos') is True,
+        it will use ODF ObjectBucketClaim from secondary site using OBC class.
+        Otherwise, it uses AWS S3 bucket (default behavior).
         """
+        from ocs_ci.ocs.resources.objectbucket import OBC, MCGOCBucket
+
         acm_indexes = get_all_acm_indexes()
-        self.meta_obj.get_meta_access_secret_keys()
         thanos_secret_data = templating.load_yaml(constants.THANOS_PATH)
-        thanos_bucket_name = (
-            f"dr-thanos-bucket-{config.clusters[0].ENV_DATA['cluster_name']}"
-        )
-        self.create_s3_bucket(
-            self.meta_obj.access_key,
-            self.meta_obj.secret_key,
-            thanos_bucket_name,
-        )
+
+        # Check if product_type is fdf to use ODF bucket
+        use_odf_bucket = config.ENV_DATA.get("product_type") == "fdf"
+
+        if use_odf_bucket:
+            logger.info("Using ODF ObjectBucketClaim for Thanos storage")
+
+            primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
+            config.switch_to_cluster_by_name(primary_cluster_name)
+
+            try:
+                # Get bucket name from config or use default
+                thanos_bucket_name = "thanos-bucket-obc"
+
+                # Create OBC using built-in class
+                logger.info(f"Creating ObjectBucketClaim: {thanos_bucket_name}")
+                mcg_bucket = MCGOCBucket(name=thanos_bucket_name)
+
+                # Wait for OBC to be bound using built-in status check
+                logger.info("Waiting for ObjectBucketClaim to be bound...")
+                for attempt in range(30):
+                    if mcg_bucket.status == constants.HEALTHY_OBC:
+                        logger.info("ObjectBucketClaim is bound and healthy")
+                        break
+                    time.sleep(10)
+                else:
+                    raise TimeoutError("ObjectBucketClaim did not become bound in time")
+
+                # Use OBC class to retrieve bucket credentials and details
+                obc_obj = OBC(thanos_bucket_name)
+
+                bucket_name = obc_obj.bucket_name
+                # Remove port suffix from endpoint if present (e.g., :443)
+                endpoint = obc_obj.s3_external_endpoint
+                if endpoint and ":" in endpoint:
+                    # Split by :// first to preserve protocol
+                    if "://" in endpoint:
+                        protocol, rest = endpoint.split("://", 1)
+                        # Remove port from the rest
+                        host = rest.split(":")[0]
+                        endpoint = f"{protocol}://{host}"
+                    else:
+                        # No protocol, just remove port
+                        endpoint = endpoint.split(":")[0]
+
+                access_key = obc_obj.access_key_id
+                secret_key = obc_obj.access_key
+
+                logger.info(
+                    f"Retrieved ODF bucket credentials: {bucket_name} @ {endpoint}"
+                )
+
+            finally:
+                # Switch back to original context
+                config.switch_acm_ctx()
+
+        else:
+            # Default AWS S3 bucket behavior
+            logger.info("Using AWS S3 bucket for Thanos storage")
+            self.meta_obj.get_meta_access_secret_keys()
+            thanos_bucket_name = (
+                f"dr-thanos-bucket-{config.clusters[0].ENV_DATA['cluster_name']}"
+            )
+            self.create_s3_bucket(
+                self.meta_obj.access_key,
+                self.meta_obj.secret_key,
+                thanos_bucket_name,
+            )
+            bucket_name = thanos_bucket_name
+            endpoint = "s3.amazonaws.com"
+            access_key = self.meta_obj.access_key
+            secret_key = self.meta_obj.secret_key
+
+        # Configure thanos secret with the selected bucket
         logger.info(f"ACM indexes {acm_indexes}")
         navigate_thanos_yaml = thanos_secret_data["stringData"]["thanos.yaml"]
         navigate_thanos_yaml = yaml.safe_load(navigate_thanos_yaml)
-        navigate_thanos_yaml["config"]["bucket"] = thanos_bucket_name
-        navigate_thanos_yaml["config"]["endpoint"] = "s3.amazonaws.com"
-        navigate_thanos_yaml["config"]["access_key"] = self.meta_obj.access_key
-        navigate_thanos_yaml["config"]["secret_key"] = self.meta_obj.secret_key
-        thanos_secret_data["stringData"]["thanos.yaml"] = str(navigate_thanos_yaml)
+        navigate_thanos_yaml["config"]["bucket"] = bucket_name
+        navigate_thanos_yaml["config"]["endpoint"] = endpoint
+        navigate_thanos_yaml["config"]["access_key"] = access_key
+        navigate_thanos_yaml["config"]["secret_key"] = secret_key
+        thanos_secret_data["stringData"]["thanos.yaml"] = yaml.dump(
+            navigate_thanos_yaml
+        )
+
         thanos_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="thanos", delete=False
         )
         templating.dump_data_to_temp_yaml(thanos_secret_data, thanos_data_yaml.name)
 
         logger.info(
-            "Creating thanos.yaml needed for ACM observability after passing required params"
+            f"Creating thanos-object-storage secret with {'ODF' if use_odf_bucket else 'AWS'} bucket"
         )
         exec_cmd(f"oc create -f {thanos_data_yaml.name}")
 
