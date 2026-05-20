@@ -281,10 +281,9 @@ class ObjectBucket(ABC):
                 else:
                     logger.info(f"{self.name} still exists. Retrying...")
         except TimeoutExpiredError:
-            logger.error(f"{self.name} was not deleted within {timeout} seconds.")
-            raise TimeoutExpiredError(
-                f"{self.name} was not deleted within {timeout} seconds."
-            )
+            msg = f"{self.name} was not deleted within {timeout} seconds."
+            logger.error(msg)
+            raise TimeoutExpiredError(msg) from None
 
     def verify_health(self, timeout=800, interval=5, **kwargs):
         """
