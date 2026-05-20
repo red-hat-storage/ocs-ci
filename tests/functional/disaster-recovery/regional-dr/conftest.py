@@ -4,6 +4,7 @@ import pytest
 import time
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants
 from ocs_ci.deployment import acm
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
@@ -104,6 +105,12 @@ def rdr_health_check():
                 pytest.skip(f"Mirroring health is not OK on {cluster_name}")
     finally:
         config.switch_ctx(restore_index)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def get_virtctl():
+    with config.RunWithProviderConfigContextIfAvailable():
+        get_virtctl_tool()
 
 
 @pytest.fixture()
