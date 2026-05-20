@@ -82,6 +82,7 @@ class CephFSStressTestManager:
         self.created_resources = []
         self.background_checks_thread = None
         self.checks_paused = False
+        self.standby_pod = None
         # Reuse PrometheusAPI instance to prevent memory leaks from creating new instances
         self.prometheus_api = PrometheusAPI(threading_lock=self.verification_lock)
 
@@ -108,8 +109,10 @@ class CephFSStressTestManager:
             pvc_name=pvc_obj.name,
             namespace=self.namespace,
             pod_name="standby-cephfs-stress-pod",
+            volumemounts=[{"name": "mypvc", "mountPath": "/mnt"}],
         )
         self.created_resources.append(standby_pod_obj)
+        self.standby_pod = standby_pod_obj
 
         return pvc_obj, standby_pod_obj
 
@@ -544,16 +547,15 @@ class CephFSStressTestManager:
         logger.info("--- Starting Test Teardown ---")
         self.stop_background_checks()
 
-        # Collect output directory from all stress job pods
-        logger.info("Collecting output directory from stress job pods...")
-        for resource in self.created_resources:
-            if hasattr(resource, "kind") and resource.kind == "Job":
-                try:
-                    collect_stress_job_output_directory(resource)
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to collect output directory from {resource.name}: {e}"
-                    )
+        # Collect output directory using standby pod (guaranteed to be running)
+        if self.standby_pod:
+            logger.info("Collecting output directory from shared CephFS mount...")
+            try:
+                collect_stress_job_output_directory(self.standby_pod)
+            except Exception as e:
+                logger.warning(f"Failed to collect output directory: {e}")
+        else:
+            logger.warning("No standby pod available for output collection")
 
         if self.verification_failures:
             logger.error(
@@ -1052,13 +1054,16 @@ def collect_stress_job_pod_logs(stress_job_obj, dir_name=None):
         logger.error(f"Failed to collect stress job pod logs: {e}")
 
 
-def collect_stress_job_output_directory(stress_job_obj, dir_name=None):
+def collect_stress_job_output_directory(standby_pod_obj, dir_name=None):
     """
-    Collect entire output directory from stress job pods and store in ocs-ci log directory.
+    Collect entire output directory from shared CephFS mount and store in ocs-ci log directory.
     This collects all files including monitoring logs, hang markers, and test artifacts.
 
+    Uses the standby pod (which is always running) to access the shared CephFS mount,
+    avoiding issues with completed job pods that can't execute commands.
+
     Args:
-        stress_job_obj: Stress job object whose output directory needs to be collected
+        standby_pod_obj: Standby pod object that mounts the shared PVC (must be running)
         dir_name (str): Optional subdirectory name. By default files are stored in
             ocs-ci-logs-<run_id>/<test_name>/stress_output directory.
             When dir_name is provided, files are stored in
@@ -1072,30 +1077,17 @@ def collect_stress_job_output_directory(stress_job_obj, dir_name=None):
         Path(destination_dir).mkdir(parents=True, exist_ok=True)
 
     logger.info(
-        f"Collecting output directory from stress job {stress_job_obj.name} to {destination_dir}"
+        f"Collecting output directory from shared CephFS mount to {destination_dir}"
     )
 
     try:
-        stress_job_pods = get_job_pods(
-            job_name=stress_job_obj.name, namespace=stress_job_obj.namespace
+        logger.info(
+            f"Using standby pod {standby_pod_obj.name} for collection (always running)"
         )
-
-        if not stress_job_pods:
-            logger.warning(f"No pods found for stress job {stress_job_obj.name}")
-            return
-
-        stress_job_pod = stress_job_pods[0]
-        pod_name = stress_job_pod.get("metadata", {}).get("name")
-
-        if not pod_name:
-            logger.warning("Pod name not found in stress job pod metadata")
-            return
+        pod_obj = standby_pod_obj
 
         try:
-            logger.info(f"Collecting shared output directory from pod {pod_name}")
-            pod_obj = pod_module.get_pod_obj(
-                name=pod_name, namespace=stress_job_obj.namespace
-            )
+            logger.info(f"Collecting shared output directory from pod {pod_obj.name}")
 
             output_dir = os.environ.get("OUTPUT_DIR", "/mnt/output")
 
@@ -1104,21 +1096,42 @@ def collect_stress_job_output_directory(stress_job_obj, dir_name=None):
 
             if "NOT_EXISTS" in result:
                 logger.warning(
-                    f"Output directory {output_dir} not found in pod {pod_name}"
+                    f"Output directory {output_dir} not found in pod {pod_obj.name}"
                 )
                 return
 
+            # First, count total files
+            logger.info(f"Counting files in {output_dir}")
+            count_cmd = f"find {output_dir} -type f 2>/dev/null | wc -l"
+            file_count_result = pod_obj.exec_sh_cmd_on_pod(
+                command=count_cmd, timeout=120
+            )
+            total_files = (
+                int(file_count_result.strip())
+                if file_count_result.strip().isdigit()
+                else 0
+            )
+            logger.info(f"Total files found: {total_files}")
+
             logger.info(f"Collecting directory structure from {output_dir}")
-            tree_cmd = f"find {output_dir} -type f 2>/dev/null | head -1000"
-            file_list = pod_obj.exec_sh_cmd_on_pod(command=tree_cmd, timeout=60)
+            tree_cmd = f"find {output_dir} -type f 2>/dev/null"
+            file_list = pod_obj.exec_sh_cmd_on_pod(command=tree_cmd, timeout=300)
 
             if file_list and file_list.strip():
                 files = file_list.strip().split("\n")
-                logger.info(f"Found {len(files)} files to collect from shared mount")
+                actual_files = len(files)
+                logger.info(f"Collecting {actual_files} files from shared mount")
 
-                for file_path in files[
-                    :1000
-                ]:  # Limit to 1000 files to avoid overwhelming
+                if actual_files != total_files:
+                    logger.warning(
+                        f"File count mismatch: expected {total_files}, got {actual_files}. "
+                        "Some files may have been created/deleted during collection."
+                    )
+
+                collected_count = 0
+                failed_count = 0
+
+                for file_path in files:
                     if not file_path or not file_path.startswith(output_dir):
                         continue
 
@@ -1142,16 +1155,24 @@ def collect_stress_job_output_directory(stress_job_obj, dir_name=None):
                             f.write(file_content if file_content else "")
 
                         logger.debug(f"Collected: {rel_path}")
+                        collected_count += 1
 
                     except Exception as e:
                         logger.warning(f"Failed to collect file {file_path}: {e}")
+                        failed_count += 1
 
-                logger.info(f"Output directory collected to {destination_dir}")
+                logger.info(
+                    f"Collection complete: {collected_count} files collected, "
+                    f"{failed_count} files failed out of {actual_files} total files. "
+                    f"Output saved to {destination_dir}"
+                )
             else:
                 logger.info("No files found in output directory")
 
         except Exception as e:
-            logger.error(f"Failed to collect output directory from pod {pod_name}: {e}")
+            logger.error(
+                f"Failed to collect output directory from pod {pod_obj.name}: {e}"
+            )
 
     except Exception as e:
         logger.error(f"Failed to collect stress job output directory: {e}")
