@@ -38,8 +38,10 @@ class Probe(OCS):
             dict: Probe configuration as a dictionary
         """
         if namespace is None:
-            namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
-
+            namespace = (
+                getattr(self, "namespace", None)
+                or constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
         logger.info(f"Fetching probe configuration for: {probe_name}")
         probe_ocp = OCP(
             kind="Probe",
