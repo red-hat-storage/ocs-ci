@@ -66,6 +66,11 @@ from ocs_ci.ocs.bucket_utils import (
     update_replication_policy,
     put_bucket_versioning_via_awscli,
 )
+from ocs_ci.ocs.vector_utils import (
+    list_indexes,
+    delete_index,
+    create_s3vectors_client,
+)
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine, VMCloner
 from ocs_ci.ocs.dr.dr_workload import (
     BusyBox,
@@ -126,7 +131,7 @@ from ocs_ci.ocs.resources.cloud_uls import (
 )
 from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
-from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
+from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP, OBC
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
@@ -3623,6 +3628,248 @@ def bucket_factory_fixture(
     request.addfinalizer(bucket_cleanup)
 
     return _create_buckets
+
+
+@pytest.fixture()
+def vector_bucket_factory(
+    request, bucket_class_factory, namespace_store_factory, mcg_obj
+):
+    """
+    Returns an MCG vector bucket factory.
+    Creates vector buckets with bucketType: vector in additionalConfig.
+    Automatically creates filesystem-backed namespacestore (nsfs) and vectorPolicy bucketclass.
+    If MCG object not found returns None.
+
+    Prerequisites (auto-created):
+        - Filesystem-backed namespacestore (nsfs with 50Gi PVC by default)
+        - Bucketclass with vectorPolicy (resource: nsfs, vectorDBType: lance)
+
+    Examples:
+        >>> # Create vector bucket with defaults (50Gi PVC)
+        >>> vector_buckets = vector_bucket_factory(amount=1)
+        >>>
+        >>> # Create with custom PVC size
+        >>> vector_buckets = vector_bucket_factory(amount=1, pvc_size="100Gi")
+        >>>
+        >>> # Create with existing bucketclass
+        >>> vector_buckets = vector_bucket_factory(amount=1, bucketclass=my_bc)
+    """
+    if mcg_obj:
+        return vector_bucket_factory_fixture(
+            request, bucket_class_factory, namespace_store_factory, mcg_obj
+        )
+    else:
+        return None
+
+
+@pytest.fixture(scope="session")
+def vector_bucket_factory_session(
+    request,
+    bucket_class_factory_session,
+    namespace_store_factory_session,
+    mcg_obj_session,
+):
+    """
+    Returns a session-scoped MCG vector bucket factory.
+    Automatically creates filesystem-backed namespacestore (nsfs) and vectorPolicy bucketclass.
+    If session-scoped MCG object not found returns None.
+
+    Prerequisites (auto-created):
+        - Filesystem-backed namespacestore (nsfs with 50Gi PVC by default)
+        - Bucketclass with vectorPolicy (resource: nsfs, vectorDBType: lance)
+    """
+    if mcg_obj_session:
+        return vector_bucket_factory_fixture(
+            request,
+            bucket_class_factory_session,
+            namespace_store_factory_session,
+            mcg_obj_session,
+        )
+    else:
+        return None
+
+
+def vector_bucket_factory_fixture(
+    request,
+    bucket_class_factory=None,
+    namespace_store_factory=None,
+    mcg_obj=None,
+    cluster_context=ocsci_config.RunWithProviderConfigContextIfAvailable,
+):
+    """
+    Create a vector bucket factory. Calling this fixture creates new vector bucket(s).
+    Vector buckets are created using the OC interface with bucketType: vector.
+    Automatically creates filesystem-backed namespacestore with vectorPolicy bucketclass.
+
+    Args:
+        bucket_class_factory: creates a new Bucket Class
+        namespace_store_factory: creates a new Namespace Store
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
+        cluster_context (object): context object in which the bucket will be created
+
+    Returns:
+        func: Factory method for creating vector buckets
+    """
+    from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
+
+    created_buckets = []
+    created_namespacestores = []
+    created_bucketclasses = []
+
+    def _create_vector_buckets(
+        amount=1,
+        interface="vector-oc",
+        verify_health=True,
+        bucketclass=None,
+        replication_policy=None,
+        pvc_size="50Gi",
+        sub_path="nsfs",
+        *args,
+        **kwargs,
+    ):
+        """
+        Creates and deletes all vector buckets that were created as part of the test.
+        Automatically creates filesystem-backed namespacestore and vectorPolicy bucketclass.
+
+        Args:
+            amount (int): The amount of vector buckets to create
+            interface (str): Interface to use (default: vector-oc)
+            verify_health (bool): Whether to verify bucket health post-creation
+            bucketclass (dict|BucketClass): Bucketclass to use. If None, creates one with vectorPolicy
+            replication_policy (str): Replication policy JSON string
+            pvc_size (str|int): Size of PVC for filesystem namespacestore in Gi (default: "50Gi")
+                Can be a number (50) or string ("50" or "50Gi")
+            sub_path (str): subPath for nsfs namespacestore (default: nsfs)
+
+        Returns:
+            list: A list of vector bucket objects
+        """
+        with cluster_context():
+            # Force interface to vector-oc for vector buckets
+            if interface.lower() != "vector-oc":
+                log.warning(
+                    f"Vector buckets must use 'vector-oc' interface. "
+                    f"Overriding interface '{interface}' to 'vector-oc'"
+                )
+                interface = "vector-oc"
+
+            if isinstance(bucketclass, dict):
+                interface = "vector-oc"  # Always use vector-oc
+
+            current_call_created_buckets = []
+
+            if interface.lower() not in BUCKET_MAP:
+                raise RuntimeError(
+                    f"Invalid interface type received: {interface}. "
+                    f'Available types: {", ".join(BUCKET_MAP.keys())}'
+                )
+
+            # Auto-create nsfs namespacestore and vectorPolicy bucketclass if not provided
+            bucketclass_obj = bucketclass
+            if bucketclass is None:
+                # Create filesystem-backed namespacestore
+                # Remove "Gi" suffix from pvc_size if present (template_pvc adds it)
+                size_value = (
+                    pvc_size.replace("Gi", "")
+                    if isinstance(pvc_size, str)
+                    else pvc_size
+                )
+                log.info(
+                    f"Creating filesystem-backed namespacestore for vector bucket (PVC size: {pvc_size})"
+                )
+                nss_list = namespace_store_factory(
+                    "oc", {"nsfs": [(1, size_value, sub_path)]}
+                )
+                namespacestore = nss_list[0]
+                created_namespacestores.append(namespacestore)
+                log.info(f"Created namespacestore: {namespacestore.name}")
+
+                # Create bucketclass with vectorPolicy
+                log.info(
+                    f"Creating bucketclass with vectorPolicy for namespacestore: {namespacestore.name}"
+                )
+                bucketclass_obj = bucket_class_factory(
+                    {
+                        "interface": "OC",
+                        "vector_policy": {
+                            "resource": namespacestore.name,
+                            "vector_db_type": "lance",
+                        },
+                    }
+                )
+                created_bucketclasses.append(bucketclass_obj)
+                log.info(f"Created bucketclass: {bucketclass_obj.name}")
+            elif isinstance(bucketclass, dict):
+                bucketclass_obj = bucket_class_factory(bucketclass)
+            elif not isinstance(bucketclass, BucketClass):
+                bucketclass_obj = bucketclass
+
+            for _ in range(amount):
+                bucket_name = helpers.create_unique_resource_name(
+                    resource_description="vector-bucket",
+                    resource_type=interface.lower(),
+                )
+                created_bucket = BUCKET_MAP[interface.lower()](
+                    bucket_name,
+                    mcg=mcg_obj,
+                    bucketclass=bucketclass_obj,
+                    replication_policy=replication_policy,
+                    *args,
+                    **kwargs,
+                )
+                current_call_created_buckets.append(created_bucket)
+                created_buckets.append(created_bucket)
+                health_timeout = kwargs.get("timeout", 180)
+                health_kwargs = {k: v for k, v in kwargs.items() if k != "timeout"}
+                if verify_health:
+                    created_bucket.verify_health(
+                        timeout=health_timeout,
+                        **health_kwargs,
+                    )
+
+        return current_call_created_buckets
+
+    def vector_bucket_cleanup():
+        with cluster_context():
+            for bucket in created_buckets:
+                log.info(f"Cleaning up vector bucket {bucket.name}")
+                try:
+                    # Try to get OBC to check if bucket still exists
+                    obc_obj = OBC(bucket.name)
+                    s3vectors_client = create_s3vectors_client(mcg_obj, obc_obj)
+
+                    # Try to list and delete remaining indexes
+                    try:
+                        indices_response = list_indexes(
+                            s3vectors_client, vectorBucketName=bucket.name
+                        )
+                        remaining_indices = indices_response.get("indexes", [])
+                        if remaining_indices:
+                            for index in remaining_indices:
+                                try:
+                                    delete_index(
+                                        s3vectors_client,
+                                        vectorBucketName=bucket.name,
+                                        indexName=index["indexName"],
+                                    )
+                                except Exception as e:
+                                    log.warning(
+                                        f"Failed to delete index {index['indexName']}: {e}"
+                                    )
+                    except Exception as e:
+                        log.warning(
+                            f"Failed to list/delete indexes for {bucket.name}: {e}"
+                        )
+
+                    # Try to delete the bucket
+                    bucket.delete()
+                except Exception as e:
+                    # Bucket might already be deleted or OBC not found
+                    log.warning(f"Cleanup failed for {bucket.name}: {e}")
+
+    request.addfinalizer(vector_bucket_cleanup)
+
+    return _create_vector_buckets
 
 
 @pytest.fixture(scope="class")
