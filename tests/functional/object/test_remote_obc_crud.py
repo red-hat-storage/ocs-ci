@@ -44,6 +44,15 @@ logger = logging.getLogger(__name__)
 # Enable remote OBC for this module
 pytestmark = pytest.mark.usefixtures("remote_obc_setup_session")
 
+# Test constants
+OBC_BIND_TIMEOUT = 300
+OBC_DELETE_TIMEOUT = 300
+OBJECTBUCKET_DELETE_TIMEOUT = 300
+BACKING_STORE_SIZE_GB = 20  # NooBaa requires minimum 16Gi
+SMALL_FILE_SIZE = 512 * 1024  # 512KB
+MEDIUM_FILE_SIZE = 25 * 1024 * 1024  # 25MB
+LARGE_FILE_SIZE = 110 * 1024 * 1024  # 110MB
+
 
 @tier1
 @red_squad
@@ -132,96 +141,52 @@ class TestRemoteOBCCRUD(ManageTest):
             namespace = proj_obj.namespace
             cluster_name = config.ENV_DATA.get("cluster_name", "client")
 
+            # Create OBC on client cluster
             logger.info(f"Creating OBC on client cluster {cluster_name}")
             obc_name = create_unique_resource_name(
                 resource_description="obc", resource_type="remote-crud"
             )
-
-            obc_data = {
-                "apiVersion": "objectbucket.io/v1alpha1",
-                "kind": "ObjectBucketClaim",
-                "metadata": {"name": obc_name, "namespace": namespace},
-                "spec": {
-                    "generateBucketName": obc_name,
-                    "storageClassName": constants.NOOBAA_SC,
-                },
-            }
-
-            create_resource(**obc_data)
+            self._create_obc(namespace, obc_name, constants.NOOBAA_SC)
             self.obcs_to_cleanup.append((client_index, obc_name, namespace))
-            logger.info(f"OBC '{obc_name}' created")
 
             # Step 4: Wait for OBC to reach Bound state
-            logger.info(f"Waiting for OBC '{obc_name}' to reach Bound state")
-            for sample in TimeoutSampler(
-                timeout=300,
-                sleep=10,
-                func=self._check_obc_phase,
-                obc_name=obc_name,
-                namespace=namespace,
-            ):
-                if sample:
-                    logger.info(f"OBC '{obc_name}' reached Bound state")
-                    break
-            else:
-                pytest.fail(
-                    f"OBC '{obc_name}' did not reach Bound state within 300 seconds"
-                )
+            self._wait_for_obc_bound(obc_name, namespace)
 
-            # Step 5: Verify ConfigMap and Secret are created on Client
+            # Step 5 & 6: Verify resources and extract S3 credentials
             logger.info("Verifying ConfigMap and Secret creation")
-
-            # Verify ConfigMap exists
             configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+            secret_obj = OCP(kind=constants.SECRET, namespace=namespace)
             assert configmap_obj.is_exist(
                 resource_name=obc_name
             ), f"ConfigMap {obc_name} not found"
-
-            # Verify Secret exists
-            secret_obj = OCP(kind=constants.SECRET, namespace=namespace)
             assert secret_obj.is_exist(
                 resource_name=obc_name
             ), f"Secret {obc_name} not found"
 
-            # Step 6: Extract S3 credentials from ConfigMap and Secret
+            # Extract S3 credentials
             logger.info("Extracting S3 credentials from Secret and ConfigMap")
-
-            # Get ConfigMap data to retrieve bucket name and endpoint
             configmap_data = configmap_obj.get(resource_name=obc_name)
-
-            # For remote OBC on client clusters, bucket name is in ConfigMap, not in spec
-            self.bucket_name = configmap_data["data"].get("BUCKET_NAME")
-            assert (
-                self.bucket_name
-            ), f"Bucket name not found in ConfigMap for OBC {obc_name}"
-            logger.info(f"Retrieved bucket name from ConfigMap: {self.bucket_name}")
-
-            # Get credentials from Secret
             secret_data = secret_obj.get(resource_name=obc_name)
 
+            self.bucket_name = configmap_data["data"].get("BUCKET_NAME")
+            s3_endpoint = configmap_data["data"]["BUCKET_HOST"]
             access_key_id = base64.b64decode(
                 secret_data["data"]["AWS_ACCESS_KEY_ID"]
             ).decode("utf-8")
-            access_key = base64.b64decode(
+            secret_key = base64.b64decode(
                 secret_data["data"]["AWS_SECRET_ACCESS_KEY"]
             ).decode("utf-8")
 
-            # Get endpoint from ConfigMap
-            s3_endpoint = configmap_data["data"]["BUCKET_HOST"]
+            assert (
+                self.bucket_name
+            ), f"Bucket name not found in ConfigMap for OBC {obc_name}"
+            logger.info(f"Bucket: {self.bucket_name}, Endpoint: {s3_endpoint}")
 
-            assert access_key_id, f"Access key ID not found for OBC {obc_name}"
-            assert access_key, f"Secret key not found for OBC {obc_name}"
-            assert s3_endpoint, f"S3 endpoint not found for OBC {obc_name}"
-
-            logger.info("S3 credentials extracted successfully")
-            logger.info(f"Bucket name: {self.bucket_name}")
-            logger.info(f"S3 endpoint: {s3_endpoint}")
-
-            # Create S3 client for CRUD operations
+            # Create S3 client
             s3_client = boto3.client(
                 "s3",
                 aws_access_key_id=access_key_id,
-                aws_secret_access_key=access_key,
+                aws_secret_access_key=secret_key,
                 endpoint_url=f"https://{s3_endpoint}",
                 verify=False,
             )
@@ -364,15 +329,15 @@ class TestRemoteOBCCRUD(ManageTest):
 
             logger.info("All CRUD operations completed successfully")
 
-            # Cleanup OBC and related resources
-            logger.info(f"Deleting OBC '{obc_name}' and related resources")
+            # Cleanup OBC
+            logger.info(f"Deleting OBC '{obc_name}'")
             obc_obj_cleanup = OCP(kind="ObjectBucketClaim", namespace=namespace)
             obc_obj_cleanup.delete(resource_name=obc_name)
 
-            # Wait for OBC deletion with longer timeout
+            # Wait for OBC deletion
             logger.info("Waiting for OBC deletion to complete")
             for sample in TimeoutSampler(
-                timeout=300,
+                timeout=OBC_DELETE_TIMEOUT,
                 sleep=10,
                 func=self._check_obc_deleted,
                 obc_name=obc_name,
@@ -382,58 +347,46 @@ class TestRemoteOBCCRUD(ManageTest):
                     logger.info(f"OBC '{obc_name}' deleted successfully")
                     break
 
-            # Explicitly delete Secret and ConfigMap if they still exist
-            logger.info("Ensuring Secret and ConfigMap are deleted")
-            try:
-                secret_obj = OCP(kind=constants.SECRET, namespace=namespace)
-                if secret_obj.is_exist(resource_name=obc_name):
-                    secret_obj.delete(resource_name=obc_name)
-                    logger.info(f"Deleted Secret '{obc_name}'")
-            except Exception as e:
-                logger.debug(f"Secret cleanup: {e}")
+            # Cleanup Secret and ConfigMap if they still exist
+            for kind in [constants.SECRET, constants.CONFIGMAP]:
+                try:
+                    resource_obj = OCP(kind=kind, namespace=namespace)
+                    if resource_obj.is_exist(resource_name=obc_name):
+                        resource_obj.delete(resource_name=obc_name)
+                        logger.info(f"Deleted {kind} '{obc_name}'")
+                except Exception as e:
+                    logger.debug(f"{kind} cleanup: {e}")
 
-            try:
-                configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace)
-                if configmap_obj.is_exist(resource_name=obc_name):
-                    configmap_obj.delete(resource_name=obc_name)
-                    logger.info(f"Deleted ConfigMap '{obc_name}'")
-            except Exception as e:
-                logger.debug(f"ConfigMap cleanup: {e}")
-
-        # Verify and force delete ObjectBucket on provider if needed
+        # Verify ObjectBucket deleted on provider
         logger.info("Verifying ObjectBucket deletion on provider")
         with config.RunWithProviderConfigContextIfAvailable():
-            try:
-                for sample in TimeoutSampler(
-                    timeout=300,
-                    sleep=10,
-                    func=self._check_objectbucket_deleted,
-                    bucket_name=self.bucket_name,
-                ):
-                    if sample:
-                        logger.info(
-                            f"ObjectBucket for '{self.bucket_name}' deleted on provider"
-                        )
+            for sample in TimeoutSampler(
+                timeout=OBJECTBUCKET_DELETE_TIMEOUT,
+                sleep=10,
+                func=self._check_objectbucket_deleted,
+                bucket_name=self.bucket_name,
+            ):
+                if sample:
+                    logger.info(
+                        f"ObjectBucket for '{self.bucket_name}' deleted on provider"
+                    )
+                    break
+            else:
+                # Force delete if still exists
+                logger.warning(
+                    f"ObjectBucket for '{self.bucket_name}' still exists, attempting force delete"
+                )
+                ob_obj = OCP(
+                    kind="ObjectBucket",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                )
+                ob_list = ob_obj.get()
+                for ob in ob_list.get("items", []):
+                    if ob["spec"]["endpoint"]["bucketName"] == self.bucket_name:
+                        ob_name = ob["metadata"]["name"]
+                        logger.info(f"Force deleting ObjectBucket '{ob_name}'")
+                        ob_obj.delete(resource_name=ob_name)
                         break
-                else:
-                    # ObjectBucket still exists after timeout - force delete
-                    logger.warning(
-                        f"ObjectBucket for '{self.bucket_name}' still exists, "
-                        "attempting force delete"
-                    )
-                    ob_obj = OCP(
-                        kind="ObjectBucket",
-                        namespace=config.ENV_DATA["cluster_namespace"],
-                    )
-                    ob_list = ob_obj.get()
-                    for ob in ob_list.get("items", []):
-                        if ob["spec"]["endpoint"]["bucketName"] == self.bucket_name:
-                            ob_name = ob["metadata"]["name"]
-                            logger.info(f"Force deleting ObjectBucket '{ob_name}'")
-                            ob_obj.delete(resource_name=ob_name)
-                            break
-            except Exception as e:
-                logger.warning(f"Could not verify ObjectBucket deletion: {e}")
 
         # Verify namespace is clean before test ends
         with config.RunWithConfigContext(client_index):
@@ -539,74 +492,104 @@ class TestRemoteOBCCRUD(ManageTest):
             logger.warning(f"Error checking ObjectBucket deletion: {e}")
             return True
 
+    def _create_obc(self, namespace, obc_name, storage_class_name):
+        """
+        Create an OBC resource.
+
+        Args:
+            namespace (str): Namespace for the OBC
+            obc_name (str): Name of the OBC
+            storage_class_name (str): StorageClass name to use
+
+        """
+        obc_data = {
+            "apiVersion": "objectbucket.io/v1alpha1",
+            "kind": "ObjectBucketClaim",
+            "metadata": {"name": obc_name, "namespace": namespace},
+            "spec": {
+                "generateBucketName": obc_name,
+                "storageClassName": storage_class_name,
+            },
+        }
+        create_resource(**obc_data)
+        logger.info(f"OBC '{obc_name}' created in namespace '{namespace}'")
+
+    def _wait_for_obc_bound(self, obc_name, namespace, timeout=OBC_BIND_TIMEOUT):
+        """
+        Wait for OBC to reach Bound state.
+
+        Args:
+            obc_name (str): Name of the OBC
+            namespace (str): Namespace of the OBC
+            timeout (int): Timeout in seconds
+
+        """
+        logger.info(f"Waiting for OBC '{obc_name}' to reach Bound state")
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=10,
+            func=self._check_obc_phase,
+            obc_name=obc_name,
+            namespace=namespace,
+        ):
+            if sample:
+                logger.info(f"OBC '{obc_name}' reached Bound state")
+                return
+        else:
+            pytest.fail(
+                f"OBC '{obc_name}' did not reach Bound state within {timeout} seconds"
+            )
+
+    def _create_test_file(self, size, fill_char):
+        """
+        Create a single test file with given size.
+
+        Args:
+            size (int): File size in bytes
+            fill_char (bytes): Character to fill the file with
+
+        Returns:
+            tempfile.NamedTemporaryFile: Created temp file
+
+        """
+        temp_file = tempfile.NamedTemporaryFile(delete=False, mode="wb")
+        chunk_size = 1024 * 1024  # 1MB chunks
+        chunks = size // chunk_size
+        remainder = size % chunk_size
+
+        for _ in range(chunks):
+            temp_file.write(fill_char * chunk_size)
+        if remainder:
+            temp_file.write(fill_char * remainder)
+
+        temp_file.flush()
+        temp_file.close()
+        self.test_files.append(temp_file)
+        return temp_file
+
     def _create_test_objects(self):
         """
         Create test objects of various sizes with known checksums.
 
         Returns:
             dict: Dictionary mapping object names to their metadata
-                {
-                    "object_name": {
-                        "size": <bytes>,
-                        "file_path": <path>,
-                        "md5": <checksum>,
-                        "sha256": <checksum>
-                    }
-                }
 
         """
+        test_specs = [
+            ("small_object.bin", SMALL_FILE_SIZE, b"a"),
+            ("medium_object.bin", MEDIUM_FILE_SIZE, b"b"),
+            ("large_object.bin", LARGE_FILE_SIZE, b"c"),
+        ]
+
         test_objects = {}
-
-        # Small object (<1MB)
-        small_size = 512 * 1024  # 512KB
-        small_file = tempfile.NamedTemporaryFile(delete=False, mode="wb")
-        small_data = b"a" * small_size
-        small_file.write(small_data)
-        small_file.flush()
-        small_file.close()
-        self.test_files.append(small_file)
-
-        test_objects["small_object.bin"] = {
-            "size": small_size,
-            "file_path": small_file.name,
-            "md5": self._calculate_md5(small_file.name),
-            "sha256": self._calculate_sha256(small_file.name),
-        }
-
-        # Medium object (10-50MB)
-        medium_size = 25 * 1024 * 1024  # 25MB
-        medium_file = tempfile.NamedTemporaryFile(delete=False, mode="wb")
-        # Write in chunks to avoid memory issues
-        chunk_size = 1024 * 1024  # 1MB chunks
-        for _ in range(medium_size // chunk_size):
-            medium_file.write(b"b" * chunk_size)
-        medium_file.flush()
-        medium_file.close()
-        self.test_files.append(medium_file)
-
-        test_objects["medium_object.bin"] = {
-            "size": medium_size,
-            "file_path": medium_file.name,
-            "md5": self._calculate_md5(medium_file.name),
-            "sha256": self._calculate_sha256(medium_file.name),
-        }
-
-        # Large object (100MB+)
-        large_size = 110 * 1024 * 1024  # 110MB
-        large_file = tempfile.NamedTemporaryFile(delete=False, mode="wb")
-        # Write in chunks
-        for _ in range(large_size // chunk_size):
-            large_file.write(b"c" * chunk_size)
-        large_file.flush()
-        large_file.close()
-        self.test_files.append(large_file)
-
-        test_objects["large_object.bin"] = {
-            "size": large_size,
-            "file_path": large_file.name,
-            "md5": self._calculate_md5(large_file.name),
-            "sha256": self._calculate_sha256(large_file.name),
-        }
+        for name, size, fill_char in test_specs:
+            temp_file = self._create_test_file(size, fill_char)
+            test_objects[name] = {
+                "size": size,
+                "file_path": temp_file.name,
+                "md5": self._calculate_md5(temp_file.name),
+                "sha256": self._calculate_sha256(temp_file.name),
+            }
 
         logger.info(f"Created {len(test_objects)} test objects")
         for name, data in test_objects.items():
