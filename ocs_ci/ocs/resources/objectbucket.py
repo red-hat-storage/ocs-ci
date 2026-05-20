@@ -263,7 +263,7 @@ class ObjectBucket(ABC):
         logger.info(f"{self.name} status is {status_var}")
         return status_var
 
-    def verify_deletion(self, timeout=60, interval=5):
+    def verify_deletion(self, timeout=180, interval=5):
         """
         Super method used for logging the deletion verification
         process and then calls the appropriate implementatation
@@ -282,7 +282,9 @@ class ObjectBucket(ABC):
                     logger.info(f"{self.name} still exists. Retrying...")
         except TimeoutExpiredError:
             logger.error(f"{self.name} was not deleted within {timeout} seconds.")
-            assert False, f"{self.name} was not deleted within {timeout} seconds."
+            raise TimeoutExpiredError(
+                f"{self.name} was not deleted within {timeout} seconds."
+            )
 
     def verify_health(self, timeout=800, interval=5, **kwargs):
         """
