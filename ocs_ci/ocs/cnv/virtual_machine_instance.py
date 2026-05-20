@@ -11,7 +11,6 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -174,6 +173,47 @@ class VirtualMachineInstance:
             timeout=600, sleep=10, func=self.get_vmi_pause_condition
         ):
             if not sample or (condition and sample.get("reason") == condition):
+                return
+
+    def is_guest_agent_connected(self):
+        """
+        Check if the QEMU guest agent is connected in the VMI.
+
+        Returns:
+            bool: True if the guest agent is connected, False otherwise.
+
+        """
+        conditions = self.get().get("status", {}).get("conditions", [])
+        for condition in conditions:
+            if (
+                condition.get("type") == "AgentConnected"
+                and condition.get("status") == "True"
+            ):
+                return True
+        return False
+
+    def wait_for_guest_agent_connected(self, timeout=600):
+        """
+        Wait for the QEMU guest agent to connect in the VMI.
+
+        Args:
+            timeout (int): Timeout value in seconds.
+
+        """
+        logger.info(
+            "Waiting for guest agent to connect for VMI: %s",
+            self._vmi_name,
+        )
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=15,
+            func=self.is_guest_agent_connected,
+        ):
+            if sample:
+                logger.info(
+                    "Guest agent connected for VMI: %s",
+                    self._vmi_name,
+                )
                 return
 
     def wait_for_vmi_delete(self, timeout=600):
