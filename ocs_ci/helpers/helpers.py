@@ -5620,6 +5620,38 @@ def ip_from_subnet_offset(subnet: str, offset: int) -> str:
     return str(ip)
 
 
+def _check_all_nncps_available(nncp_ocp):
+    """
+    Check whether every NNCP is Available and none is Degraded.
+
+    Returns:
+        bool: True when all NNCPs are Available, False if still progressing.
+
+    Raises:
+        Exception: If any NNCP is Degraded.
+    """
+    nncps = nncp_ocp.get().get("items", [])
+    for nncp in nncps:
+        name = nncp["metadata"]["name"]
+        conditions = nncp.get("status", {}).get("conditions", [])
+        degraded = any(
+            c.get("type") == "Degraded" and c.get("status") == "True"
+            for c in conditions
+        )
+        available = any(
+            c.get("type") == "Available" and c.get("status") == "True"
+            for c in conditions
+        )
+        if degraded:
+            raise Exception(
+                f"NNCP {name} is Degraded, cannot proceed with multus validation"
+            )
+        if not available:
+            logger.info(f"NNCP {name} is not yet Available, waiting...")
+            return False
+    return True
+
+
 def validate_multus_with_odf_cli():
     """
     Validate Multus network connectivity using odf-cli before ODF deployment.
@@ -5644,33 +5676,29 @@ def validate_multus_with_odf_cli():
         )
         return
 
+    if not config.ENV_DATA.get("multus_create_public_net"):
+        logger.warning(
+            "No public network configured (multus_create_public_net is not set). "
+            "odf-cli multus validation requires a public network, skipping."
+        )
+        return
+
     namespace = config.ENV_DATA.get("multus_public_net_namespace", "openshift-storage")
 
-    # Verify NNCPs are SuccessfullyConfigured
-    logger.info("Checking NNCP status before multus validation")
+    # Wait for all NNCPs to be SuccessfullyConfigured
+    logger.info("Waiting for all NNCPs to be Available before multus validation")
     nncp_ocp = OCP(kind="nncp")
     nncps = nncp_ocp.get().get("items", [])
     if nncps:
-        for nncp in nncps:
-            name = nncp["metadata"]["name"]
-            conditions = nncp.get("status", {}).get("conditions", [])
-            degraded = any(
-                c.get("type") == "Degraded" and c.get("status") == "True"
-                for c in conditions
-            )
-            available = any(
-                c.get("type") == "Available" and c.get("status") == "True"
-                for c in conditions
-            )
-            if degraded:
-                raise Exception(
-                    f"NNCP {name} is Degraded, cannot proceed with multus validation"
-                )
-            if not available:
-                logger.warning(
-                    f"NNCP {name} is not yet Available, may still be progressing"
-                )
-        logger.info("All NNCPs are in acceptable state")
+        for sample in TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=_check_all_nncps_available,
+            nncp_ocp=nncp_ocp,
+        ):
+            if sample:
+                break
+        logger.info("All NNCPs are Available")
     else:
         logger.info("No NNCPs found, skipping NNCP status check")
 
@@ -5678,10 +5706,11 @@ def validate_multus_with_odf_cli():
     logger.info("Setting up odf-cli for multus validation")
     runner = odf_cli_setup_helper()
 
-    # Create temp SA + RBAC if needed
+    # Create temp SA + RBAC if needed — only touch what we create
     created_sa = False
     created_crb = False
     sa_name = "rook-ceph-system"
+    sa_subject = f"system:serviceaccount:{namespace}:{sa_name}"
 
     try:
         run_cmd(f"oc get sa {sa_name} -n {namespace}")
@@ -5691,12 +5720,29 @@ def validate_multus_with_odf_cli():
         run_cmd(f"oc create sa {sa_name} -n {namespace}")
         created_sa = True
 
-    logger.info(f"Granting cluster-admin to {sa_name} in {namespace}")
-    run_cmd(
-        f"oc adm policy add-cluster-role-to-user cluster-admin"
-        f" system:serviceaccount:{namespace}:{sa_name}"
-    )
-    created_crb = True
+    # Only grant cluster-admin if the SA doesn't already have it
+    try:
+        out = run_cmd("oc get clusterrolebinding -o json", silent=True)
+        import json as json_mod
+
+        existing_crbs = json_mod.loads(out)
+        has_cluster_admin = any(
+            subj.get("kind") == "ServiceAccount"
+            and subj.get("name") == sa_name
+            and subj.get("namespace") == namespace
+            for crb in existing_crbs.get("items", [])
+            if crb.get("roleRef", {}).get("name") == "cluster-admin"
+            for subj in crb.get("subjects", [])
+        )
+    except Exception:
+        has_cluster_admin = False
+
+    if has_cluster_admin:
+        logger.info(f"{sa_name} already has cluster-admin, skipping RBAC grant")
+    else:
+        logger.info(f"Granting cluster-admin to {sa_name} in {namespace}")
+        run_cmd(f"oc adm policy add-cluster-role-to-user cluster-admin {sa_subject}")
+        created_crb = True
 
     # Build validation args from config
     public_network = config.ENV_DATA.get("multus_public_net_name", "public-net")
@@ -5769,9 +5815,11 @@ def setup_multus_networks(patch_storagecluster=False):
     create_public_net = config.ENV_DATA.get("multus_create_public_net")
     create_cluster_net = config.ENV_DATA.get("multus_create_cluster_net")
 
-    # Deploy NMState operator if needed for public network on OCS >= 4.16
-    if create_public_net and ocs_version >= version.VERSION_4_16:
-        logger.info("Deploying NMState operator for multus public network")
+    # Deploy NMState operator if needed for multus networks on OCS >= 4.16
+    if (
+        create_public_net or create_cluster_net
+    ) and ocs_version >= version.VERSION_4_16:
+        logger.info("Deploying NMState operator for multus networks")
         nmstate_operator = NMStateOperator(
             create_catalog=True,
         )

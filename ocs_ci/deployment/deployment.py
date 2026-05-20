@@ -892,6 +892,18 @@ class Deployment(object):
         Args:
             log_cli_level (str): log level for installer (default: DEBUG)
         """
+        # Validate multus flag mutual exclusivity before any deployment
+        if config.ENV_DATA.get("is_multus_enabled") and config.ENV_DATA.get(
+            "multus_after_odf_install"
+        ):
+            msg = (
+                "is_multus_enabled and multus_after_odf_install cannot both be set. "
+                "Use is_multus_enabled for pre-ODF multus setup or "
+                "multus_after_odf_install for post-ODF multus setup."
+            )
+            logger.error(msg)
+            raise UnexpectedDeploymentConfiguration(msg)
+
         self.do_deploy_ocp(log_cli_level)
 
         if config.ENV_DATA.get("workaround_mark_disks_as_ssd"):
@@ -1353,18 +1365,6 @@ class Deployment(object):
             config.DEPLOYMENT.get("sts_enabled")
             and platform in constants.AWS_STS_PLATFORMS
         )
-
-        # Validate multus flag mutual exclusivity
-        if config.ENV_DATA.get("is_multus_enabled") and config.ENV_DATA.get(
-            "multus_after_odf_install"
-        ):
-            msg = (
-                "is_multus_enabled and multus_after_odf_install cannot both be set. "
-                "Use is_multus_enabled for pre-ODF multus setup or "
-                "multus_after_odf_install for post-ODF multus setup."
-            )
-            logger.error(msg)
-            raise UnexpectedDeploymentConfiguration(msg)
 
         if ui_deployment and ui_deployment_conditions():
             log_step("Start ODF deployment with UI")
