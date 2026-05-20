@@ -606,11 +606,6 @@ class TestRemoteOBCCRUD(ManageTest):
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
 
-    @tier1
-    @red_squad
-    @mcg
-    @runs_on_provider
-    @hci_provider_and_client_required
     @polarion_id("OCS-7940")
     def test_remote_obc_bucket_mirroring(self, project_factory):
         """
@@ -668,10 +663,11 @@ class TestRemoteOBCCRUD(ManageTest):
                         resource_description="bs", resource_type=f"mirror-{i}"
                     )
                     # Create the actual backing store resource
+                    # Note: NooBaa requires minimum 16Gi volume size
                     oc_create_pv_backingstore(
                         backingstore_name=bs_name,
                         vol_num=1,
-                        size=10,
+                        size=20,
                         storage_class=constants.DEFAULT_STORAGECLASS_RBD,
                     )
                     # Create BackingStore object for tracking and cleanup
@@ -681,7 +677,7 @@ class TestRemoteOBCCRUD(ManageTest):
                         mcg_obj=None,
                         type="pv",
                         vol_num=1,
-                        vol_size=10,
+                        vol_size=20,
                     )
                     backing_stores.append(backing_store)
                     logger.info(f"Created backing store: {bs_name}")
@@ -971,7 +967,7 @@ class TestRemoteOBCCRUD(ManageTest):
                 try:
                     s3_client.head_object(Bucket=bucket_name, Key=test_object_key)
                     raise AssertionError("Object still exists after deletion")
-                except s3_client.exceptions.ClientError as e:
+                except ClientError as e:
                     if e.response["Error"]["Code"] == "404":
                         logger.info("Object deletion verified (404 as expected)")
                     else:
