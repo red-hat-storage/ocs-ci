@@ -4459,6 +4459,10 @@ def mirror_image(image, cluster_config=None):
             mirror_base = f"{mirror_registry}/{mirror_registry_path}"
 
         mirrored_image = mirror_base + re.sub(r"^[^/]*", "", orig_image_full)
+        # remove the sha256 hash from the mirrored image (if present) and replace it by temporary custom tag:
+        if "@sha256" in mirrored_image:
+            mirrored_image = mirrored_image.split("@")[0]
+            mirrored_image += f":odf-qe-temp-tag-{get_random_str(10)}"
         # mirror the image
         log.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
