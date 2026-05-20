@@ -42,9 +42,9 @@ class TestBlackboxExporterProbe(ManageTest):
         logger.debug(f"Probe config: {probe_config}")
         return probe_config
 
-    def get_pod_ips_from_network_annotations(self, pod_selector):
+    def get_pod_ips(self, pod_selector):
         """
-        Get pod IPs from network annotations for pods matching the selector.
+        Get pod IPs for pods matching the selector.
         Args:
             pod_selector (str): Label selector to filter pods (e.g., "app=rook-ceph-osd")
         Returns:
@@ -99,9 +99,11 @@ class TestBlackboxExporterProbe(ManageTest):
                 logger.debug(f"Probe config structure: {probe_config}")
 
         except Exception as e:
-            logger.error(f"Error extracting IPs from probe config: {e}")
             logger.info(f"Probe config structure: {probe_config}")
-
+            logger.error(f"Error extracting IPs from probe config: {e}")
+            raise RuntimeError(
+                f"Failed to extract IPs from probe configuration: {e}"
+            ) from e
         logger.info(f"Extracted {len(probe_ips)} IPs from probe configuration")
         return probe_ips
 
@@ -113,8 +115,8 @@ class TestBlackboxExporterProbe(ManageTest):
 
         Test Steps:
         1. Get the odf-blackbox-exporter probe configuration
-        2. Get IPs from network annotations for OSD pods
-        3. Get IPs from network annotations for MON pods
+        2. Get IPs for OSD pods
+        3. Get IPs for MON pods
         4. Extract IPs from the blackbox probe configuration
         5. Verify that all OSD and MON pod IPs are present in the probe configuration
         """
@@ -124,12 +126,12 @@ class TestBlackboxExporterProbe(ManageTest):
         assert probe_config, "Failed to get probe configuration"
 
         logger.info("Getting OSD pod IPs...")
-        osd_ips = self.get_pod_ips_from_network_annotations(constants.OSD_APP_LABEL)
+        osd_ips = self.get_pod_ips(constants.OSD_APP_LABEL)
         assert osd_ips, "No OSD pods found or no IPs available"
         logger.info(f"Found {len(osd_ips)} OSD pods with IPs")
 
         logger.info("Getting MON pod IPs...")
-        mon_ips = self.get_pod_ips_from_network_annotations(constants.MON_APP_LABEL)
+        mon_ips = self.get_pod_ips(constants.MON_APP_LABEL)
         assert mon_ips, "No MON pods found or no IPs available"
         logger.info(f"Found {len(mon_ips)} MON pods with IPs")
 
