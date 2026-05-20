@@ -10,8 +10,6 @@ Jira: RHSTOR-5525
 
 import json
 import logging
-import os
-import tempfile
 import time
 
 import pytest
@@ -35,6 +33,9 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     get_external_cluster_instance,
+    patch_external_cluster_secret,
+    restore_external_cluster_secret,
+    save_external_cluster_secret,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -46,7 +47,7 @@ from ocs_ci.ocs.resources.pod import (
     get_operator_pods,
     get_pod_node,
 )
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -132,77 +133,6 @@ def _get_pv_pool(pvc_obj):
     """
     pv_data = pvc_obj.backed_pv_obj.get()
     return pv_data["spec"]["csi"]["volumeAttributes"]["pool"]
-
-
-def _save_external_cluster_secret():
-    """
-    Save the current external cluster secret data for later restoration.
-
-    Returns:
-        str: The base64-encoded external_cluster_details value.
-
-    """
-    ns = config.ENV_DATA["cluster_namespace"]
-    secret_ocp = OCP(kind="Secret", namespace=ns)
-    secret_data = secret_ocp.get(resource_name="rook-ceph-external-cluster-details")
-    return secret_data["data"]["external_cluster_details"]
-
-
-def _patch_external_cluster_secret(exporter_json_output):
-    """
-    Patch the external cluster secret with new exporter output.
-
-    Follows the pattern from ocs_ci/ocs/ocs_upgrade.py:1136-1152.
-
-    Args:
-        exporter_json_output (str): Raw JSON output from the exporter script.
-
-    """
-    ns = config.ENV_DATA["cluster_namespace"]
-    with tempfile.NamedTemporaryFile(
-        mode="w", prefix="external-cluster-details-", suffix=".json", delete=False
-    ) as fd:
-        fd.write(exporter_json_output)
-        tmp_path = fd.name
-
-    try:
-        cmd = (
-            f"oc set data secret/rook-ceph-external-cluster-details -n {ns} "
-            f"--from-file=external_cluster_details={tmp_path}"
-        )
-        exec_cmd(cmd)
-        log.info(
-            "Patched rook-ceph-external-cluster-details secret with topology config"
-        )
-    finally:
-        os.unlink(tmp_path)
-
-
-def _restore_external_cluster_secret(original_b64_value):
-    """
-    Restore the external cluster secret to its original value.
-
-    Args:
-        original_b64_value (str): The original base64-encoded value.
-
-    """
-    ns = config.ENV_DATA["cluster_namespace"]
-    secret_ocp = OCP(kind="Secret", namespace=ns)
-    params = json.dumps(
-        [
-            {
-                "op": "replace",
-                "path": "/data/external_cluster_details",
-                "value": original_b64_value,
-            }
-        ]
-    )
-    secret_ocp.patch(
-        resource_name="rook-ceph-external-cluster-details",
-        params=params,
-        format_type="json",
-    )
-    log.info("Restored rook-ceph-external-cluster-details secret to original value")
 
 
 def _restart_operators_and_wait():
@@ -319,7 +249,7 @@ class TestTopologyAwarenessExternal(ManageTest):
         )
 
         # Save original secret for cleanup
-        original_secret = _save_external_cluster_secret()
+        original_secret = save_external_cluster_secret()
 
         # Register finalizer BEFORE any mutating operations so cleanup
         # runs even if setup fails partway through (e.g., SSH timeout
@@ -327,7 +257,7 @@ class TestTopologyAwarenessExternal(ManageTest):
         def finalizer():
             log.info("Topology test cleanup: restoring original configuration")
 
-            _restore_external_cluster_secret(original_secret)
+            restore_external_cluster_secret(original_secret)
             _restart_operators_and_wait()
 
             sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_NON_RESILIENT_RBD
@@ -366,7 +296,7 @@ class TestTopologyAwarenessExternal(ManageTest):
         log.info("Exporter script completed successfully")
 
         # Patch secret and restart operators
-        _patch_external_cluster_secret(exporter_output)
+        patch_external_cluster_secret(exporter_output)
         _restart_operators_and_wait()
 
         # Wait for topology SC to be auto-created by the operator.

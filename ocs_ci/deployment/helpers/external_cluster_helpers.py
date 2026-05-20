@@ -41,6 +41,7 @@ from ocs_ci.utility.utils import (
     encode,
     decode,
     download_file,
+    exec_cmd,
     wait_for_machineconfigpool_status,
     create_config_ini_file,
 )
@@ -1128,6 +1129,74 @@ class ExternalCluster(object):
             created_pools.append(pool_name)
 
         return created_pools
+
+
+def save_external_cluster_secret():
+    """
+    Save the current external cluster secret data for later restoration.
+
+    Returns:
+        str: The base64-encoded external_cluster_details value.
+
+    """
+    ns = config.ENV_DATA["cluster_namespace"]
+    secret_ocp = OCP(kind="Secret", namespace=ns)
+    secret_data = secret_ocp.get(resource_name="rook-ceph-external-cluster-details")
+    return secret_data["data"]["external_cluster_details"]
+
+
+def patch_external_cluster_secret(exporter_json_output):
+    """
+    Patch the rook-ceph-external-cluster-details secret with new exporter output.
+
+    Args:
+        exporter_json_output (str): Raw JSON output from the exporter script.
+
+    """
+    ns = config.ENV_DATA["cluster_namespace"]
+    with tempfile.NamedTemporaryFile(
+        mode="w", prefix="external-cluster-details-", suffix=".json", delete=False
+    ) as fd:
+        fd.write(exporter_json_output)
+        tmp_path = fd.name
+
+    try:
+        cmd = (
+            f"oc set data secret/rook-ceph-external-cluster-details -n {ns} "
+            f"--from-file=external_cluster_details={tmp_path}"
+        )
+        exec_cmd(cmd)
+        logger.info("Patched rook-ceph-external-cluster-details secret")
+    finally:
+        os.unlink(tmp_path)
+
+
+def restore_external_cluster_secret(original_b64_value):
+    """
+    Restore the external cluster secret to its original value.
+
+    Args:
+        original_b64_value (str): The original base64-encoded value
+            from save_external_cluster_secret().
+
+    """
+    ns = config.ENV_DATA["cluster_namespace"]
+    secret_ocp = OCP(kind="Secret", namespace=ns)
+    params = json.dumps(
+        [
+            {
+                "op": "replace",
+                "path": "/data/external_cluster_details",
+                "value": original_b64_value,
+            }
+        ]
+    )
+    secret_ocp.patch(
+        resource_name="rook-ceph-external-cluster-details",
+        params=params,
+        format_type="json",
+    )
+    logger.info("Restored rook-ceph-external-cluster-details secret")
 
 
 def get_exporter_script_from_configmap():
