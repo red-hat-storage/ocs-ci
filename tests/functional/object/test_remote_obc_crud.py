@@ -386,6 +386,29 @@ class TestRemoteOBCCRUD(ManageTest):
                         ob_name = ob["metadata"]["name"]
                         logger.info(f"Force deleting ObjectBucket '{ob_name}'")
                         ob_obj.delete(resource_name=ob_name)
+
+                        # Wait for ObjectBucket deletion after force delete
+                        logger.info(
+                            f"Waiting for ObjectBucket '{ob_name}' deletion after force delete"
+                        )
+                        for sample in TimeoutSampler(
+                            timeout=OBJECTBUCKET_DELETE_TIMEOUT,
+                            sleep=10,
+                            func=self._check_objectbucket_deleted,
+                            bucket_name=self.bucket_name,
+                        ):
+                            if sample:
+                                logger.info(
+                                    f"ObjectBucket '{ob_name}' deleted successfully after force delete"
+                                )
+                                break
+                        else:
+                            logger.error(
+                                f"ObjectBucket '{ob_name}' still exists after force delete timeout"
+                            )
+                            pytest.fail(
+                                f"Failed to delete ObjectBucket '{ob_name}' on provider even after force delete"
+                            )
                         break
 
         # Verify namespace is clean before test ends
