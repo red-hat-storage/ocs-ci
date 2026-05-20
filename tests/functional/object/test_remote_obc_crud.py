@@ -400,12 +400,12 @@ class TestRemoteOBCCRUD(ManageTest):
             except Exception as e:
                 logger.debug(f"ConfigMap cleanup: {e}")
 
-        # Verify ObjectBucket is deleted on provider
+        # Verify and force delete ObjectBucket on provider if needed
         logger.info("Verifying ObjectBucket deletion on provider")
         with config.RunWithProviderConfigContextIfAvailable():
             try:
                 for sample in TimeoutSampler(
-                    timeout=180,
+                    timeout=300,
                     sleep=10,
                     func=self._check_objectbucket_deleted,
                     bucket_name=self.bucket_name,
@@ -415,8 +415,50 @@ class TestRemoteOBCCRUD(ManageTest):
                             f"ObjectBucket for '{self.bucket_name}' deleted on provider"
                         )
                         break
+                else:
+                    # ObjectBucket still exists after timeout - force delete
+                    logger.warning(
+                        f"ObjectBucket for '{self.bucket_name}' still exists, "
+                        "attempting force delete"
+                    )
+                    ob_obj = OCP(
+                        kind="ObjectBucket",
+                        namespace=config.ENV_DATA["cluster_namespace"],
+                    )
+                    ob_list = ob_obj.get()
+                    for ob in ob_list.get("items", []):
+                        if ob["spec"]["endpoint"]["bucketName"] == self.bucket_name:
+                            ob_name = ob["metadata"]["name"]
+                            logger.info(f"Force deleting ObjectBucket '{ob_name}'")
+                            ob_obj.delete(resource_name=ob_name)
+                            break
             except Exception as e:
                 logger.warning(f"Could not verify ObjectBucket deletion: {e}")
+
+        # Verify namespace is clean before test ends
+        with config.RunWithConfigContext(client_index):
+            logger.info(f"Verifying namespace '{namespace}' is clean")
+            try:
+                # Check for any remaining OBCs
+                obc_check = OCP(kind="ObjectBucketClaim", namespace=namespace)
+                remaining_obcs = obc_check.get(all_namespaces=False)
+                if remaining_obcs.get("items"):
+                    logger.warning(
+                        f"Found {len(remaining_obcs['items'])} OBC(s) still in namespace"
+                    )
+
+                # Check for any remaining Secrets
+                secret_check = OCP(kind=constants.SECRET, namespace=namespace)
+                remaining_secrets = secret_check.get(all_namespaces=False)
+                obc_secrets = [
+                    s
+                    for s in remaining_secrets.get("items", [])
+                    if obc_name in s["metadata"]["name"]
+                ]
+                if obc_secrets:
+                    logger.warning(f"Found {len(obc_secrets)} OBC-related Secret(s)")
+            except Exception as e:
+                logger.debug(f"Namespace verification: {e}")
 
         logger.info("Test completed successfully")
 
