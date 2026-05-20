@@ -33,7 +33,10 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.managedservice import get_consumer_names
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import OBC
-from ocs_ci.ocs.resources.storageconsumer import add_storageclasses_to_storageconsumer
+from ocs_ci.ocs.resources.storageconsumer import (
+    add_storageclasses_to_storageconsumer,
+    StorageConsumer,
+)
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -668,6 +671,7 @@ class TestRemoteOBCCRUD(ManageTest):
         obc_name = None
         namespace = None
         custom_sc_name = None
+        target_consumer = None
 
         try:
             # Step 1: Create BucketClass with mirroring policy on provider
@@ -713,31 +717,61 @@ class TestRemoteOBCCRUD(ManageTest):
                     f"with bucketclass '{bucket_class_name}'"
                 )
 
-                # Add custom StorageClass to StorageConsumer
+                # Add custom StorageClass to StorageConsumer for the test client
+                # Get the client cluster name to match with StorageConsumer
+                client_cluster_name = None
+                with config.RunWithConfigContext(client_index):
+                    client_cluster_name = config.ENV_DATA.get("cluster_name")
+
+                if not client_cluster_name:
+                    pytest.fail(
+                        f"Could not determine cluster name for client index {client_index}"
+                    )
+
+                logger.info(
+                    f"Looking for StorageConsumer for client cluster '{client_cluster_name}'"
+                )
+
                 consumer_names = get_consumer_names()
                 if not consumer_names:
                     pytest.fail("No StorageConsumer found on provider")
 
+                # Find the StorageConsumer that matches the client cluster
                 for consumer_name in consumer_names:
-                    logger.info(
-                        f"Adding StorageClass '{custom_sc_name}' to "
-                        f"StorageConsumer '{consumer_name}'"
-                    )
-                    success, added_scs, current_scs = (
-                        add_storageclasses_to_storageconsumer(
-                            consumer_name, custom_sc_name
-                        )
-                    )
-                    if success:
+                    # Skip internal consumer
+                    if consumer_name == "internal":
                         logger.info(
-                            f"Successfully added StorageClass to StorageConsumer. "
-                            f"Current SCs: {current_scs}"
+                            f"Skipping internal StorageConsumer '{consumer_name}'"
                         )
-                    else:
-                        pytest.fail(
-                            f"Failed to add StorageClass '{custom_sc_name}' to "
-                            f"StorageConsumer '{consumer_name}'"
-                        )
+                        continue
+                    # Match consumer to client cluster (e.g., consumer-c2-422-2 matches c2-422-2)
+                    if client_cluster_name in consumer_name:
+                        target_consumer = consumer_name
+                        break
+
+                if not target_consumer:
+                    pytest.fail(
+                        f"No StorageConsumer found for client cluster '{client_cluster_name}'. "
+                        f"Available consumers: {consumer_names}"
+                    )
+
+                logger.info(
+                    f"Adding StorageClass '{custom_sc_name}' to "
+                    f"StorageConsumer '{target_consumer}' for client '{client_cluster_name}'"
+                )
+                success, added_scs, current_scs = add_storageclasses_to_storageconsumer(
+                    target_consumer, custom_sc_name
+                )
+                if success:
+                    logger.info(
+                        f"Successfully added StorageClass to StorageConsumer '{target_consumer}'. "
+                        f"Current SCs: {current_scs}"
+                    )
+                else:
+                    pytest.fail(
+                        f"Failed to add StorageClass '{custom_sc_name}' to "
+                        f"StorageConsumer '{target_consumer}'"
+                    )
 
             # Wait for custom StorageClass to appear on client
             logger.info(
@@ -996,9 +1030,47 @@ class TestRemoteOBCCRUD(ManageTest):
                     except Exception as e:
                         logger.warning(f"Failed to delete OBC '{obc_name}': {e}")
 
-            # Cleanup: Delete custom StorageClass, BucketClass and BackingStores
-            if custom_sc_name:
+            # Cleanup: Remove custom StorageClass from StorageConsumer, then delete it
+            if custom_sc_name and target_consumer:
                 with config.RunWithConfigContext(provider_index):
+                    try:
+                        logger.info(
+                            f"Removing StorageClass '{custom_sc_name}' from "
+                            f"StorageConsumer '{target_consumer}'"
+                        )
+                        # Create StorageConsumer object
+                        consumer = StorageConsumer(
+                            target_consumer,
+                            config.ENV_DATA["cluster_namespace"],
+                            provider_index,
+                        )
+
+                        # Get current storage classes and remove the custom one
+                        current_scs = consumer.get_storage_classes()
+                        logger.info(
+                            f"Current storage classes in '{target_consumer}': {current_scs}"
+                        )
+
+                        if custom_sc_name in current_scs:
+                            updated_scs = [
+                                sc for sc in current_scs if sc != custom_sc_name
+                            ]
+                            consumer.set_storage_classes(updated_scs)
+                            logger.info(
+                                f"Removed StorageClass '{custom_sc_name}' from "
+                                f"StorageConsumer '{target_consumer}'. "
+                                f"Remaining SCs: {updated_scs}"
+                            )
+                        else:
+                            logger.info(
+                                f"StorageClass '{custom_sc_name}' not found in "
+                                f"StorageConsumer '{target_consumer}'"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to remove StorageClass from StorageConsumer: {e}"
+                        )
+
                     try:
                         logger.info(
                             f"Cleaning up custom StorageClass '{custom_sc_name}'"
