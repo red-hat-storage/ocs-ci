@@ -538,11 +538,23 @@ class CephFSStressTestManager:
 
     def teardown(self):
         """
-        Stops background checks and deletes created resources.
+        Stops background checks, collects output directory, and deletes created resources.
 
         """
         logger.info("--- Starting Test Teardown ---")
         self.stop_background_checks()
+
+        # Collect output directory from all stress job pods
+        logger.info("Collecting output directory from stress job pods...")
+        for resource in self.created_resources:
+            if hasattr(resource, "kind") and resource.kind == "Job":
+                try:
+                    collect_stress_job_output_directory(resource)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to collect output directory from {resource.name}: {e}"
+                    )
+
         if self.verification_failures:
             logger.error(
                 f"Test finished with {len(self.verification_failures)} background failures."
@@ -1040,21 +1052,121 @@ def collect_stress_job_pod_logs(stress_job_obj, dir_name=None):
         logger.error(f"Failed to collect stress job pod logs: {e}")
 
 
-def check_for_filesystem_hangs(
-    namespace, output_dir="/mnt/output", preserve_diagnostics=True
-):
+def collect_stress_job_output_directory(stress_job_obj, dir_name=None):
+    """
+    Collect entire output directory from stress job pods and store in ocs-ci log directory.
+    This collects all files including monitoring logs, hang markers, and test artifacts.
+
+    Args:
+        stress_job_obj: Stress job object whose output directory needs to be collected
+        dir_name (str): Optional subdirectory name. By default files are stored in
+            ocs-ci-logs-<run_id>/<test_name>/stress_output directory.
+            When dir_name is provided, files are stored in
+            ocs-ci-logs-<run_id>/<test_name>/stress_output/<dir_name>
+
+    """
+    tmp_path = Path(ocsci_log_path())
+    base_output_dir = os.path.join(tmp_path, get_current_test_name(), "stress_output")
+    destination_dir = f"{base_output_dir}/{dir_name}" if dir_name else base_output_dir
+    if not os.path.isdir(destination_dir):
+        Path(destination_dir).mkdir(parents=True, exist_ok=True)
+
+    logger.info(
+        f"Collecting output directory from stress job {stress_job_obj.name} to {destination_dir}"
+    )
+
+    try:
+        stress_job_pods = get_job_pods(
+            job_name=stress_job_obj.name, namespace=stress_job_obj.namespace
+        )
+
+        if not stress_job_pods:
+            logger.warning(f"No pods found for stress job {stress_job_obj.name}")
+            return
+
+        stress_job_pod = stress_job_pods[0]
+        pod_name = stress_job_pod.get("metadata", {}).get("name")
+
+        if not pod_name:
+            logger.warning("Pod name not found in stress job pod metadata")
+            return
+
+        try:
+            logger.info(f"Collecting shared output directory from pod {pod_name}")
+            pod_obj = pod_module.get_pod_obj(
+                name=pod_name, namespace=stress_job_obj.namespace
+            )
+
+            output_dir = os.environ.get("OUTPUT_DIR", "/mnt/output")
+
+            check_cmd = f"test -d {output_dir} && echo 'EXISTS' || echo 'NOT_EXISTS'"
+            result = pod_obj.exec_sh_cmd_on_pod(command=check_cmd, timeout=30)
+
+            if "NOT_EXISTS" in result:
+                logger.warning(
+                    f"Output directory {output_dir} not found in pod {pod_name}"
+                )
+                return
+
+            logger.info(f"Collecting directory structure from {output_dir}")
+            tree_cmd = f"find {output_dir} -type f 2>/dev/null | head -1000"
+            file_list = pod_obj.exec_sh_cmd_on_pod(command=tree_cmd, timeout=60)
+
+            if file_list and file_list.strip():
+                files = file_list.strip().split("\n")
+                logger.info(f"Found {len(files)} files to collect from shared mount")
+
+                for file_path in files[
+                    :1000
+                ]:  # Limit to 1000 files to avoid overwhelming
+                    if not file_path or not file_path.startswith(output_dir):
+                        continue
+
+                    try:
+                        # Get relative path
+                        rel_path = file_path.replace(f"{output_dir}/", "")
+                        local_file_path = os.path.join(destination_dir, rel_path)
+
+                        # Create parent directories if needed
+                        local_file_dir = os.path.dirname(local_file_path)
+                        if not os.path.isdir(local_file_dir):
+                            Path(local_file_dir).mkdir(parents=True, exist_ok=True)
+
+                        # Copy file content
+                        cat_cmd = f"cat {file_path}"
+                        file_content = pod_obj.exec_sh_cmd_on_pod(
+                            command=cat_cmd, timeout=60
+                        )
+
+                        with open(local_file_path, "w") as f:
+                            f.write(file_content if file_content else "")
+
+                        logger.debug(f"Collected: {rel_path}")
+
+                    except Exception as e:
+                        logger.warning(f"Failed to collect file {file_path}: {e}")
+
+                logger.info(f"Output directory collected to {destination_dir}")
+            else:
+                logger.info("No files found in output directory")
+
+        except Exception as e:
+            logger.error(f"Failed to collect output directory from pod {pod_name}: {e}")
+
+    except Exception as e:
+        logger.error(f"Failed to collect stress job output directory: {e}")
+
+
+def check_for_filesystem_hangs(namespace, output_dir="/mnt/output"):
     """
     Check for filesystem hang markers created by the monitoring script.
 
     This function checks all pods in the given namespace for hang marker files
-    that indicate the filesystem monitoring detected a genuine hang. When hangs
-    are detected, it automatically preserves all diagnostic information to the
-    local test results directory BEFORE the test fails and cluster teardown begins.
+    that indicate the filesystem monitoring detected a genuine hang.
 
     Args:
         namespace (str): Namespace to check for hang markers
         output_dir (str): Output directory path where hang markers are stored
-        preserve_diagnostics (bool): If True, save all diagnostic data locally before test fails
 
     Returns:
         tuple: (hang_detected: bool, hang_details: list of dicts)
@@ -1065,15 +1177,6 @@ def check_for_filesystem_hangs(
     """
     logger.info("Checking for filesystem hang markers...")
     hang_markers_found = []
-
-    if preserve_diagnostics:
-        tmp_path = Path(ocsci_log_path())
-        diagnostics_dir = os.path.join(
-            tmp_path, get_current_test_name(), "hang_diagnostics"
-        )
-        if not os.path.isdir(diagnostics_dir):
-            Path(diagnostics_dir).mkdir(parents=True, exist_ok=True)
-        logger.info(f"Diagnostics will be preserved to: {diagnostics_dir}")
 
     try:
         all_pods = pod_module.get_all_pods(namespace=namespace)
@@ -1121,114 +1224,10 @@ def check_for_filesystem_hangs(
                                     f"  Details: {hang_info.get('details')}"
                                 )
 
-                                logger.info(
-                                    "PRESERVING DIAGNOSTICS LOCALLY before test fails"
-                                )
-                                if preserve_diagnostics:
-                                    marker_filename = os.path.basename(marker_file)
-                                    local_marker_path = os.path.join(
-                                        diagnostics_dir, f"{pod_name}_{marker_filename}"
-                                    )
-                                    with open(local_marker_path, "w") as f:
-                                        json.dump(hang_info, f, indent=2)
-                                    logger.info(
-                                        f"Preserved hang marker to: {local_marker_path}"
-                                    )
-
                             except Exception as e:
                                 logger.warning(
                                     f"Failed to parse hang marker {marker_file}: {e}"
                                 )
-
-                    if preserve_diagnostics and hang_markers_found:
-                        logger.info(
-                            f"Preserving monitoring logs from pod {pod_name}..."
-                        )
-                        try:
-                            monitoring_log_dir = f"{output_dir}/monitoring_logs"
-                            list_logs_cmd = f"ls {monitoring_log_dir}/*.log 2>/dev/null || echo 'NO_LOGS'"
-                            logs_result = pod_obj.exec_sh_cmd_on_pod(
-                                command=list_logs_cmd, timeout=30
-                            )
-
-                            if "NO_LOGS" not in logs_result:
-                                log_files = logs_result.strip().split("\n")
-                                for log_file in log_files:
-                                    if log_file and log_file.endswith(".log"):
-                                        try:
-                                            cat_log_cmd = f"cat {log_file}"
-                                            log_content = pod_obj.exec_sh_cmd_on_pod(
-                                                command=cat_log_cmd, timeout=60
-                                            )
-                                            log_filename = os.path.basename(log_file)
-                                            local_log_path = os.path.join(
-                                                diagnostics_dir,
-                                                f"{pod_name}_{log_filename}",
-                                            )
-                                            with open(local_log_path, "w") as f:
-                                                f.write(log_content)
-                                            logger.info(
-                                                f"Preserved monitoring log to: {local_log_path}"
-                                            )
-                                        except Exception as e:
-                                            logger.warning(
-                                                f"Failed to preserve log {log_file}: {e}"
-                                            )
-                        except Exception as e:
-                            logger.warning(f"Failed to preserve monitoring logs: {e}")
-
-                    if preserve_diagnostics and hang_markers_found:
-                        logger.info(
-                            f"Collecting real-time diagnostics from pod {pod_name}..."
-                        )
-                        realtime_diagnostics = {}
-
-                        diagnostic_commands = {
-                            "current_processes": "ps aux",
-                            "processes_d_state": 'ps aux | grep " D " || echo "No D state processes"',
-                            "mount_info": "mount | grep ceph",
-                            "df_output": "df -h",
-                            "dmesg_recent": "dmesg | tail -100",
-                            "dmesg_ceph": "dmesg | grep -i ceph | tail -50",
-                            "pod_logs": (
-                                f"kubectl logs {pod_name} -n {namespace} "
-                                f'--tail=200 2>/dev/null || echo "Logs not available"'
-                            ),
-                        }
-
-                        for diag_name, diag_cmd in diagnostic_commands.items():
-                            try:
-                                if diag_name == "pod_logs":
-                                    try:
-                                        ocp_obj = ocp.OCP(
-                                            kind=constants.POD, namespace=namespace
-                                        )
-                                        logs = ocp_obj.exec_oc_cmd(
-                                            f"logs {pod_name} --tail=200",
-                                            out_yaml_format=False,
-                                            timeout=30,
-                                        )
-                                        realtime_diagnostics[diag_name] = logs
-                                    except Exception as log_error:
-                                        realtime_diagnostics[diag_name] = (
-                                            f"Error getting logs: {log_error}"
-                                        )
-                                else:
-                                    diag_output = pod_obj.exec_sh_cmd_on_pod(
-                                        command=diag_cmd, timeout=30
-                                    )
-                                    realtime_diagnostics[diag_name] = diag_output
-                            except Exception as e:
-                                realtime_diagnostics[diag_name] = f"Error: {e}"
-
-                        realtime_diag_file = os.path.join(
-                            diagnostics_dir, f"{pod_name}_realtime_diagnostics.json"
-                        )
-                        with open(realtime_diag_file, "w") as f:
-                            json.dump(realtime_diagnostics, f, indent=2)
-                        logger.info(
-                            f"Preserved real-time diagnostics to: {realtime_diag_file}"
-                        )
 
             except Exception as e:
                 logger.debug(f"Could not check pod {pod_name} for hang markers: {e}")
@@ -1241,7 +1240,6 @@ def check_for_filesystem_hangs(
     if hang_markers_found:
         logger.critical(
             f"FILESYSTEM HANG DETECTED: {len(hang_markers_found)} hang marker(s) found\n"
-            f"All diagnostic information has been preserved to: {diagnostics_dir if preserve_diagnostics else 'N/A'}"
         )
         return True, hang_markers_found
     else:
