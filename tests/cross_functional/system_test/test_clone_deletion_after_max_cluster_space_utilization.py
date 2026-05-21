@@ -183,12 +183,16 @@ class TestCloneDeletion(E2ETest):
             else:
                 logger.info("Alerts not found yet. Creating extra clones...")
                 # Continue creating more clones (e.g., in batches of 2)
-                self.create_clones(2, start_num=len(self.clones_list))
+                self.create_clones(
+                    2, pvc_clone_factory, start_num=len(self.clones_list)
+                )
                 attempt += 1
 
         if attempt == max_attempts:
             logger.error("Maximum attempts reached. Expected alerts were not detected.")
-            raise TimeoutExpiredError
+            raise TimeoutExpiredError(
+                "Expected alerts were not detected after maximum attempts"
+            )
 
         # Make the cluster out of full by increasing the full ratio.
         logger.info("Change Ceph full_ratio from from 85% to 95%")
