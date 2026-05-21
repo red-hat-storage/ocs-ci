@@ -38,13 +38,14 @@ from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_
 logger = logging.getLogger(__name__)
 
 
-def setup_local_storage(storageclass):
+def setup_local_storage(storageclass, add_new_disks=True):
     """
     Setup the necessary resources for enabling local storage.
 
     Args:
         storageclass (string): storageClassName value to be used in
             LocalVolume CR based on LOCAL_VOLUME_YAML
+        add_new_disks (bool): whether to add new disks to nodes after LSO installation
 
     """
     # Get the worker nodes
@@ -61,7 +62,8 @@ def setup_local_storage(storageclass):
     platform = config.ENV_DATA.get("platform").lower()
     lso_type = config.DEPLOYMENT.get("type")
 
-    add_disks_lso()
+    if add_new_disks:
+        add_disks_lso()
 
     if (ocp_version >= version.VERSION_4_6) and (ocs_version >= version.VERSION_4_6):
         # Pull local volume discovery yaml data

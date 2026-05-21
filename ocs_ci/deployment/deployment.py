@@ -18,6 +18,7 @@ import yaml
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 
 from ocs_ci.deployment.helpers import storage_class
+from ocs_ci.utility.azure_utils import AZURE as AzureUtil
 from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -215,6 +216,7 @@ class Deployment(object):
 
     def __init__(self):
         self.sts_role_arn = None
+        self.azure_noobaa_mi_client_id = None
         storage_class.set_custom_storage_class_path()
         logger.info(
             f"Deployment platform {self.platform} initiated with storage class: {self.storage_class}"
@@ -454,7 +456,7 @@ class Deployment(object):
             dr_cluster_names = []
             dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
             if dr_cluster_relations:
-                dr_cluster_names = dr_cluster_relations[0]
+                dr_cluster_names = dr_cluster_relations[0].copy()
                 for index, dr_cluster in enumerate(dr_cluster_names):
                     if is_hosted_cluster(dr_cluster):
                         dr_cluster_names[index] = (
@@ -1235,15 +1237,19 @@ class Deployment(object):
             if "config" not in subscription_yaml_data["spec"]:
                 subscription_yaml_data["spec"]["config"] = {}
             azure_auth_data = config.AUTH["azure_auth"]
+            mi_client_id = (
+                self.azure_noobaa_mi_client_id or azure_auth_data["client_id"]
+            )
             azure_sub_data = [
-                {"name": "CLIENTID", "value": azure_auth_data["client_id"]},
+                {"name": "CLIENTID", "value": mi_client_id},
                 {"name": "TENANTID", "value": azure_auth_data["tenant_id"]},
                 {"name": "SUBSCRIPTIONID", "value": azure_auth_data["subscription_id"]},
+                {"name": "RESOURCEGROUP", "value": config.ENV_DATA["cluster_name"]},
             ]
             if "env" not in subscription_yaml_data["spec"]["config"]:
                 subscription_yaml_data["spec"]["config"]["env"] = azure_sub_data
             else:
-                subscription_yaml_data["spec"]["config"]["env"].append(azure_sub_data)
+                subscription_yaml_data["spec"]["config"]["env"].extend(azure_sub_data)
 
         subscription_yaml_data["metadata"]["namespace"] = self.namespace
         subscription_manifest = tempfile.NamedTemporaryFile(
@@ -1343,6 +1349,19 @@ class Deployment(object):
             log_step("Create STS role and attach AmazonS3FullAccess Policy")
             role_data = create_and_attach_sts_role()
             self.sts_role_arn = role_data["Role"]["Arn"]
+        azure_sts_deployment = (
+            config.DEPLOYMENT.get("sts_enabled")
+            and platform == constants.AZURE_PLATFORM
+        )
+        if azure_sts_deployment:
+            logger.test_step("Create Azure managed identity for NooBaa STS")
+            azure_util = AzureUtil()
+            azure_util.az_login()
+            self.azure_noobaa_mi_client_id = azure_util.create_noobaa_managed_identity(
+                cluster_name=config.ENV_DATA["cluster_name"],
+                resource_group=config.ENV_DATA["cluster_name"],
+                subscription_id=config.AUTH["azure_auth"]["subscription_id"],
+            )
         stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
         konflux_build = config.DEPLOYMENT.get("konflux_build")
         upgrade = config.UPGRADE.get("upgrade", False)
@@ -1378,6 +1397,19 @@ class Deployment(object):
                     timeout=2100,
                 )
 
+        add_new_disks_for_lso = True
+        # Simulate bluestore label on Baremetal or vSphere LSO worker nodes before deploying OCS
+        simulate_bluestore_label = config.ENV_DATA.get(
+            "simulate_bluestore_label", False
+        )
+        if simulate_bluestore_label:
+            from ocs_ci.deployment.helpers.ceph_cluster import (
+                simulate_full_ceph_bluestore_process_on_wnodes,
+            )
+
+            simulate_full_ceph_bluestore_process_on_wnodes()
+            add_new_disks_for_lso = False
+
         # with Hub/Spoke deployments LSO on IBM BareMetal is a mandatory requirement, it is installed on Dependency
         # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
         # hence perform_lso_standalone_deployment must be False if we want to deploy LSO with ODF operator and do not
@@ -1389,7 +1421,10 @@ class Deployment(object):
             )
             if not lso_deployed:
                 log_step("Deploy and setup Local Storage Operator")
-                setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+                setup_local_storage(
+                    storageclass=constants.DEFAULT_STORAGECLASS_LSO,
+                    add_new_disks=add_new_disks_for_lso,
+                )
 
         log_step("Creating namespace and operator group")
         # patch OLM YAML with the namespace
@@ -3055,6 +3090,14 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     else:
         catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
         cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
+
+    # workaround for https://github.com/red-hat-storage/ocs-ci/issues/15085
+    # Remove extractContent for disconnected deployments to avoid init container issues
+    # in air-gapped environments while keeping memoryTarget to prevent OOM
+    if config.DEPLOYMENT.get("disconnected"):
+        if "grpcPodConfig" in catalog_source_data.get("spec", {}):
+            catalog_source_data["spec"]["grpcPodConfig"].pop("extractContent", None)
+
     managed_ibmcloud = (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
         and config.ENV_DATA["deployment_type"] == "managed"
@@ -3613,6 +3656,96 @@ class MultiClusterDROperatorsDeploy(object):
             namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
         )
         dr_hub_csv.wait_for_phase("Succeeded")
+
+    def apply_custom_ramen_image(self):
+        """
+        Replace the downstream Ramen operator image on hub and managed
+        clusters when UPGRADE.custom_ramen_image config is set.
+
+        Activated by passing conf/ocsci/custom_ramen_image.yaml via
+        --ocsci-conf. The YAML value can be true (uses the default
+        upstream image) or a specific image URL string.
+
+        Must be called after configure_mirror_peer() (so managed cluster
+        CSVs exist) and before deploy_dr_policy().
+
+        """
+        custom_ramen_image = config.UPGRADE.get("custom_ramen_image")
+        if not custom_ramen_image:
+            return
+
+        upstream_image = (
+            custom_ramen_image
+            if isinstance(custom_ramen_image, str)
+            else constants.RAMEN_UPSTREAM_IMAGE
+        )
+        logger.info(
+            f"[custom_ramen_image] Patching Ramen operator with "
+            f"upstream image: {upstream_image}"
+        )
+
+        logger.info("[custom_ramen_image] Patching hub CSV on ACM cluster")
+        config.switch_acm_ctx()
+        self._patch_ramen_csv(
+            constants.ACM_ODR_HUB_OPERATOR_RESOURCE,
+            constants.OPENSHIFT_OPERATORS,
+            upstream_image,
+        )
+
+        managed_clusters = get_non_acm_cluster_config()
+        for cluster in managed_clusters:
+            cluster_name = cluster.ENV_DATA.get(
+                "cluster_name", f"index-{cluster.MULTICLUSTER['multicluster_index']}"
+            )
+            logger.info(
+                f"[custom_ramen_image] Patching CSV on "
+                f"managed cluster: {cluster_name}"
+            )
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            self._patch_ramen_csv(
+                "odr-cluster-operator",
+                constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+                upstream_image,
+            )
+
+        config.switch_acm_ctx()
+        logger.info(
+            "[custom_ramen_image] Successfully patched Ramen image "
+            f"on hub + {len(managed_clusters)} managed cluster(s)"
+        )
+
+    def _patch_ramen_csv(self, csv_prefix, namespace, new_image):
+        """
+        Patch the manager container image in a Ramen operator CSV.
+
+        Args:
+            csv_prefix (str): CSV name prefix (e.g. "odr-hub-operator")
+            namespace (str): Namespace of the CSV
+            new_image (str): Replacement image URL
+
+        """
+        from ocs_ci.ocs.resources.csv import get_csv_name_start_with_prefix
+
+        csv_name = get_csv_name_start_with_prefix(csv_prefix, namespace)
+        if not csv_name:
+            logger.error(
+                f"CSV with prefix '{csv_prefix}' not found in {namespace}, "
+                f"skipping image patch"
+            )
+            return
+
+        patch = json.dumps(
+            [
+                {
+                    "op": "replace",
+                    "path": "/spec/install/spec/deployments/0"
+                    "/spec/template/spec/containers/0/image",
+                    "value": new_image,
+                }
+            ]
+        )
+        run_cmd(f"oc patch csv {csv_name} -n {namespace} --type='json' -p='{patch}'")
+        logger.info(f"Patched CSV {csv_name} with {new_image}")
 
     def deploy_dr_policy(self):
         # Create DR policy on ACM hub cluster
@@ -4186,6 +4319,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.configure_mirror_peer()
             rbddops.deploy()
 
+        self.apply_custom_ramen_image()
+
         multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
         if not multicluster_observability.get()["items"]:
             # TODO: Check whether this need to be enabled for each pair of RDR clusters
@@ -4398,6 +4533,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             enable_mco_console_plugin()
         # Configure mirror peer
         self.configure_mirror_peer()
+        self.apply_custom_ramen_image()
         # Deploy dr policy
         self.deploy_dr_policy()
         update_volsync_channel()

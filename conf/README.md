@@ -397,6 +397,7 @@ higher priority).
       * `infra_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "HighlyAvailable"
       * `disable_default_sources` - If set to true, default sources will be disabled on the hosted cluster
       * `auto_repair` - If set to true, auto repair of the nodes will be enabled on the hosted cluster
+      * `hcp_image` - The OCP image url to be used for the hcp cluster. The parameter hcp_image will take precedence over the parameter ocp_version to identify the image if both are given.
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
 * `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
@@ -427,6 +428,7 @@ higher priority).
 * `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
 * `configure_acm_to_import_mce` - If set to true while installing ACM, the configuration to discover and import MCE clusters will be done
 * `skip_disks_cleanup` - If set to true, skips disks cleanup on BareMetal and LSO cluster deployments.
+* `simulate_bluestore_label` - If set to true, simulates Ceph OSD BlueStore metadata on OSD disks before deploying a new ODF cluster. Used to test whether Ceph correctly detects existing BlueStore metadata. Intended for use only with LSO deployments (Default: false)
 * `wipe_devices_from_other_clusters` - If set to true, automatically wipes devices with old Ceph metadata during ODF deployment. This prevents conflicts when reusing disks that were previously part of a different Ceph cluster.
 * `product_type` - Differentiate between ODF or FDF deployments. Set via --product-type CLI option. Default value is 'odf'
 * `enable_infrastructure_management_for_agent` - To enable central infrastructure management service while installing dependencies for hosted cluster. This is used to create agent based hosted cluster.
@@ -448,6 +450,7 @@ higher priority).
 * `iscsi_target_password`- The password for the iSCSI target authentication.
 * `iscsi_target_iqn`- The iSCSI Qualified Name (IQN) identifying the iSCSI target.
 * `iscsi_setup` - Configure iscsi or not (Default: false). Necessory for FDF backed by SAN storage.
+* `enable_efi_secure_boot`  - (bool) Enable EFI Secure boot for vSphere UPI deployment (default: False)
 
 #### UPGRADE
 
@@ -466,6 +469,9 @@ example: <brew_registry_url>/rh-osbs/iib:565330
 * `upgrade_cnv_version` - cnv version to which we have to upgrade
 * `upgrade_metallb_version` - metallb version to which we have to upgrade
 * `upgrade_lso_version` - lso version to which want to upgrade
+* `custom_ramen_image` - Replace the downstream Ramen image for DR testing.
+    Set to true to use the default upstream image (quay.io/ramendr/ramen-operator:canary),
+    or set to a specific image URL to use that instead.
 
 #### AUTH
 
@@ -529,7 +535,8 @@ Configuration specific to external Ceph cluster
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 * `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
-* `rgw_cert_ca` - url pointing to CA certificate used to sign certificate for RGW with SSL
+* `rgw_cert_ca` - URL for the RGW signing CA when external Ceph is **below 19.0**, or as a **fallback** if cephadm CA fetch fails on 19.0+
+* For external Ceph **19.0 and newer**, ocs-ci runs ``ceph orch certmgr cert get cephadm_root_ca_cert`` via ``cephadm shell`` on the ``_admin`` node (``get_external_cluster_client("_admin")``, falling back to ``node1``) instead of using ``rgw_cert_ca``, unless that command fails
 * `use_rbd_namespace` - boolean parameter to use RBD namespace in pool
 * `rbd_namespace` - Name of RBD namespace to use in pool
 

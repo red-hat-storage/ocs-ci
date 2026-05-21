@@ -31,6 +31,8 @@ from ocs_ci.ocs.constants import (
     RGW_APP_LABEL,
     OPERATOR_LABEL,
     NOOBAA_APP_LABEL,
+    RBD_NODEPLUGIN_LABEL,
+    CEPHFS_NODEPLUGIN_LABEL,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnctlRunner
@@ -38,6 +40,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
     CephHealthHelper,
     ValidationHelper,
     krknctl_random_test_exit_criteria,
+    vsphere_creds_for_krkn_from_ocs_config,
 )
 
 log = logging.getLogger(__name__)
@@ -81,12 +84,17 @@ KRKNCTL_PLAN_SCENARIO_KEYS = (
     "application-outages",
     "application-outages-egress-only",
     "application-outages-ingress-only",
+    "application-outages-mds",
+    "application-outages-noobaa",
+    "application-outages-operator",
     "application-outages-osd",
     "application-outages-rgw",
     "container-scenarios",
     "container-scenarios-mds",
+    "container-scenarios-mgr",
     "container-scenarios-mon",
     "container-scenarios-osd",
+    "container-scenarios-rgw",
     "kubevirt-outage",
     "network-chaos",
     "network-chaos-egress-loss",
@@ -106,17 +114,28 @@ KRKNCTL_PLAN_SCENARIO_KEYS = (
     "pod-network-chaos-ingress-only",
     "pod-network-filter",
     "pod-scenarios",
+    "pod-scenarios-cephfs-plugin",
     "pod-scenarios-mgr",
+    "pod-scenarios-mds",
     "pod-scenarios-mon",
     "pod-scenarios-multi-disruption",
     "pod-scenarios-noobaa",
+    "pod-scenarios-operator",
     "pod-scenarios-rbd-plugin",
+    "pod-scenarios-rgw",
     "service-disruption-scenarios",
     "service-disruption-scenarios-rook",
     "syn-flood",
+    "syn-flood-mds",
     "syn-flood-mgr",
+    "syn-flood-noobaa",
+    "syn-flood-rgw",
     "time-scenarios",
+    "time-scenarios-mds",
+    "time-scenarios-mgr",
+    "time-scenarios-noobaa",
     "time-scenarios-osd",
+    "time-scenarios-rgw",
 )
 
 ROOT_SCENARIO_KEY = "root"
@@ -230,36 +249,10 @@ def _apply_vsphere_node_scenario_auth_from_config(template_vars):
     Only runs when ``cloud_type`` is VMware (``KRKN_CLOUD_VMWARE``). Does not overwrite
     keys already set (caller applies env overrides after this).
     """
-    from ocs_ci.framework import config
-
     if template_vars.get("cloud_type") != KRKN_CLOUD_VMWARE:
         return
 
-    vm_auth = {}
-    for key in ("vmware", "vsphere"):
-        block = config.AUTH.get(key)
-        if isinstance(block, dict):
-            vm_auth.update(block)
-
-    env_data = config.ENV_DATA or {}
-
-    server = (
-        vm_auth.get("vsphere_server")
-        or vm_auth.get("vsphere_ip")
-        or vm_auth.get("server")
-        or env_data.get("vsphere_server")
-    )
-    user = (
-        vm_auth.get("vsphere_user")
-        or vm_auth.get("username")
-        or env_data.get("vsphere_user")
-    )
-    password = (
-        vm_auth.get("vsphere_password")
-        or vm_auth.get("password")
-        or env_data.get("vsphere_password")
-    )
-
+    server, user, password = vsphere_creds_for_krkn_from_ocs_config()
     if server:
         template_vars.setdefault("vsphere_ip", server)
     if user:
@@ -670,6 +663,7 @@ class PlanGenerator:
         namespace="openshift-storage",
         include_scenarios=None,
         exclude_scenarios=None,
+        exclude_scenario_bases_exact=None,
         scenario_overrides=None,
         use_random_selectors=True,
         label_selectors=None,
@@ -680,6 +674,9 @@ class PlanGenerator:
             include_scenarios  # None or list; takes precedence over exclude
         )
         self.exclude_scenarios = exclude_scenarios or []
+        # Plan keys "base" before _<suffix>); match == only (no prefix variants), e.g.
+        # "service-disruption-scenarios" drops that node but not "service-disruption-scenarios-rook".
+        self.exclude_scenario_bases_exact = exclude_scenario_bases_exact or []
         self.scenario_overrides = scenario_overrides or {}
         self.use_random_selectors = use_random_selectors
         self.label_selectors = label_selectors  # list of pod label strings; expands app-outage/pod/container only
@@ -724,12 +721,33 @@ class PlanGenerator:
             label_selector = self.template_vars.get("label_selector", "")
             workers = self.template_vars.get("workers", "1")
 
+        # Component-specific labels must not use global `pod_label` (same as
+        # label_selector / random Ceph pick); named blocks in plan.json.j2 now use
+        # literal selectors per scenario so random globals do not override them.
+        # Generic pod-scenarios / multi-disruption OSD label is also literal; overrides
+        # remain available via scenario_overrides / template_vars for custom plans.
         context = {
             "suffix": self._suffix,
             "namespace": self.namespace,
             "pod_selector": pod_selector,
             "label_selector": label_selector,
             "pod_label": label_selector,
+            "noobaa_pod_label": self.template_vars.get(
+                "noobaa_pod_label", NOOBAA_APP_LABEL
+            ),
+            "mon_pod_label": self.template_vars.get("mon_pod_label", MON_APP_LABEL),
+            "mgr_pod_label": self.template_vars.get("mgr_pod_label", MGR_APP_LABEL),
+            "rbd_plugin_pod_label": self.template_vars.get(
+                "rbd_plugin_pod_label", RBD_NODEPLUGIN_LABEL
+            ),
+            "mds_pod_label": self.template_vars.get("mds_pod_label", MDS_APP_LABEL),
+            "rgw_pod_label": self.template_vars.get("rgw_pod_label", RGW_APP_LABEL),
+            "operator_pod_label": self.template_vars.get(
+                "operator_pod_label", OPERATOR_LABEL
+            ),
+            "cephfs_plugin_pod_label": self.template_vars.get(
+                "cephfs_plugin_pod_label", CEPHFS_NODEPLUGIN_LABEL
+            ),
             "workers": workers,
             "worker_instance_count": worker_instance_count,
         }
@@ -775,12 +793,14 @@ class PlanGenerator:
             json.dump(plan_data, f, indent=2)
 
         log.info(
-            "Generated krknctl plan: %s (namespace=%s, suffix=%s, include=%s, exclude=%s)",
+            "Generated krknctl plan: %s (namespace=%s, suffix=%s, include=%s, "
+            "exclude=%s, exclude_bases_exact=%s)",
             self.plan_path,
             self.namespace,
             self._suffix,
             self.include_scenarios,
             self.exclude_scenarios,
+            self.exclude_scenario_bases_exact,
         )
         return os.path.abspath(self.plan_path)
 
@@ -898,10 +918,32 @@ class PlanGenerator:
 
     def _remove_excluded(self, plan_data):
         """
-        Drop excluded scenario nodes. A template base name like ``network-chaos`` also
-        removes hyphenated variants (``network-chaos-ingress-latency``, etc.) so exclude
-        lists match krkn-hub scenario families in plan.json.j2.
+        Drop excluded scenario nodes.
+
+        ``exclude_scenario_bases_exact``: plan key base must match exactly (no
+        ``base.startswith(ex + "-")``), e.g. remove ``service-disruption-scenarios``
+        (namespace + ``LABEL_SELECTOR: ""`` in plan.json.j2) but keep
+        ``service-disruption-scenarios-rook``.
+
+        ``exclude_scenarios``: a base like ``network-chaos`` also removes hyphenated
+        variants (``network-chaos-ingress-latency``, etc.) so exclude lists match
+        krkn-hub scenario families in plan.json.j2.
         """
+        exact_set = set(self.exclude_scenario_bases_exact)
+        for k in list(plan_data.keys()):
+            if k.startswith("_"):
+                continue
+            base = k.rsplit("_", 1)[0] if "_" in k else k
+            for ex in exact_set:
+                if base == ex:
+                    del plan_data[k]
+                    log.debug(
+                        "Excluded scenario from plan: %s (exact base, matched %s)",
+                        k,
+                        ex,
+                    )
+                    break
+
         excluded_set = set(self.exclude_scenarios)
         for k in list(plan_data.keys()):
             if k.startswith("_"):
@@ -950,6 +992,7 @@ def generate_plan_file(
     namespace="openshift-storage",
     include_scenarios=None,
     exclude_scenarios=None,
+    exclude_scenario_bases_exact=None,
     scenario_overrides=None,
     use_random_selectors=True,
     **template_vars,
@@ -960,12 +1003,14 @@ def generate_plan_file(
     Uses PlanGenerator: parses template, fills parameters, writes file.
     When include_scenarios is set, only those scenarios (plus root if listed) are kept;
     otherwise exclude_scenarios is used to remove scenarios.
+    ``exclude_scenario_bases_exact`` removes only exact plan key bases (see PlanGenerator).
     Returns the plan file path.
     """
     generator = PlanGenerator(
         namespace=namespace,
         include_scenarios=include_scenarios,
         exclude_scenarios=exclude_scenarios,
+        exclude_scenario_bases_exact=exclude_scenario_bases_exact,
         scenario_overrides=scenario_overrides,
         use_random_selectors=use_random_selectors,
         **template_vars,
@@ -977,6 +1022,7 @@ def generate_random_plan_file(
     namespace="openshift-storage",
     include_scenarios=None,
     exclude_scenarios=None,
+    exclude_scenario_bases_exact=None,
     scenario_overrides=None,
     **kwargs,
 ):
@@ -990,6 +1036,7 @@ def generate_random_plan_file(
         namespace=namespace,
         include_scenarios=include_scenarios,
         exclude_scenarios=exclude_scenarios,
+        exclude_scenario_bases_exact=exclude_scenario_bases_exact,
         scenario_overrides=scenario_overrides,
         use_random_selectors=True,
         **kwargs,

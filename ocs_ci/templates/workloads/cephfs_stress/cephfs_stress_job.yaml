@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: cephfs-stress
-        image: quay.io/ocsci/cephfs-stress-pod:latest
+        image: quay.io/ocsci/cephfs-stress-pod:optimized-v1.0
         imagePullPolicy: Always
         command: ["/bin/sh", "-c"]
         args:
@@ -25,7 +25,48 @@ spec:
             mkdir -p $OUTPUT_DIR
             echo "Base Dir:   $BASE_DIR"
             echo "Output Dir: $OUTPUT_DIR"
+
+            # Start filesystem monitoring in background if enabled
+            if [ "${ENABLE_FS_MONITORING:-true}" = "true" ]; then
+              echo "Starting filesystem monitoring in background..."
+              echo "BASE_DIR for monitoring: $BASE_DIR"
+              echo "OUTPUT_DIR for monitoring: $OUTPUT_DIR"
+              BASE_DIR="$BASE_DIR" OUTPUT_DIR="$OUTPUT_DIR" python3 /script/cephfs_filesystem_monitor.py &
+              MONITOR_PID=$!
+              echo "Filesystem monitor started with PID: $MONITOR_PID"
+
+              # Give monitor time to start and verify it's running
+              sleep 5
+              if ! kill -0 $MONITOR_PID 2>/dev/null; then
+                echo "ERROR: Filesystem monitor (PID $MONITOR_PID) died shortly after startup"
+                exit 1
+              fi
+              echo "Filesystem monitor is running"
+            fi
+
             python3 /script/cephfs_stress_script.py
+            STRESS_EXIT_CODE=$?
+
+            # Check monitor status if it was started
+            if [ "${ENABLE_FS_MONITORING:-true}" = "true" ] && [ -n "$MONITOR_PID" ]; then
+              if kill -0 $MONITOR_PID 2>/dev/null; then
+                echo "Stopping filesystem monitor (PID $MONITOR_PID)..."
+                kill -TERM $MONITOR_PID
+                wait $MONITOR_PID
+                MONITOR_EXIT_CODE=$?
+                echo "Filesystem monitor exited with code: $MONITOR_EXIT_CODE"
+
+                # If monitor detected a hang (exit code 2), fail the job
+                if [ $MONITOR_EXIT_CODE -eq 2 ]; then
+                  echo "ERROR: Filesystem hang detected by monitor"
+                  exit 2
+                fi
+              else
+                echo "WARNING: Filesystem monitor (PID $MONITOR_PID) is not running"
+              fi
+            fi
+
+            exit $STRESS_EXIT_CODE
         env:
           - name: BASE_DIR         # directory used by smallfile to perform file and directory operations (e.g., append, stat, chmod, ls-l, etc.)
             value: "/mnt"
@@ -41,6 +82,50 @@ spec:
             value: "/mnt/output"
           - name: THREADS
             value: "8"
+          # Filesystem Monitoring Configuration
+          - name: ENABLE_FS_MONITORING
+            value: "true"
+            # Enable/disable filesystem monitoring. Set to "true" to run continuous ls -lRf, find+stat commands
+            # in background to detect CephFS hangs during stress tests. Set to "false" to disable.
+
+          - name: MONITOR_TIMEOUT
+            value: "3600"
+            # Timeout in seconds for monitoring commands (ls -lRf, find+stat). Commands exceeding
+            # this duration are considered hung.
+
+          - name: MONITOR_FULL_FS_ENABLED
+            value: "false"
+            # Enable/disable full filesystem monitoring (scans entire mount point)
+
+          - name: MONITOR_SAMPLE_INTERVAL
+            value: "300"
+            # Interval in seconds between sampled directory monitoring runs. Randomly samples
+            # MONITOR_SAMPLE_SIZE directories and runs ls -lRf on them. Default: 300s (5 min).
+            # Provides cross-validation across different parts of the filesystem.
+
+          - name: MONITOR_CURRENT_INTERVAL
+            value: "180"
+            # Interval in seconds between current iteration monitoring runs. Monitors the actively
+            # written directory (current iteration).
+
+          - name: MONITOR_SAMPLE_SIZE
+            value: "20"
+            # Number of random directories to sample during each sampled monitoring run. Higher values
+            # provide better coverage but take longer.
+
+          - name: HANG_DETECTION_CONSECUTIVE_FAILURES
+            value: "2"
+            # Number of consecutive command timeouts required before declaring a genuine hang.
+            # Filters transient issues (network hiccups, temporary slowness). Default: 2.
+            # Increase to 3+ for more conservative detection, decrease to 1 for aggressive detection
+            # (may cause false positives).
+
+          - name: MONITOR_FIND_LIMIT
+            value: "0"
+            # Maximum number of files to check with find command in current iteration monitoring.
+            # Set to 0 for unlimited (checks all files - use for millions of files).
+            # For large file counts, consider: 100000, 500000, or 1000000.
+            # Default: 1000 (good for quick validation, may miss issues with millions of files).
         volumeMounts:
         - mountPath: /mnt
           name: mypvc

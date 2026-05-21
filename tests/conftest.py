@@ -27,6 +27,9 @@ from collections import namedtuple
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    try_embed_rgw_ca_pem_in_mcg_cli_resources,
+)
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hub_spoke import (
     destroy_aws_hcp_clusters,
@@ -3255,18 +3258,22 @@ def nb_stress_cli_pod_fixture(request, scope_name):
         s3cli_label_k, s3cli_label_v = constants.STRESS_CLI_APP_LABEL.split("=")
         service_ca_data["metadata"]["labels"] = {s3cli_label_k: s3cli_label_v}
 
+        log.info(
+            "Creating the Stress CLI StatefulSet manifest (before service-ca ConfigMap)"
+        )
+        stress_cli_sts_dict = templating.load_yaml(constants.STRESS_CLI_STS_YAML)
+        stress_cli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
+            "name"
+        ] = service_ca_configmap_name
+        stress_cli_sts_dict["metadata"]["namespace"] = namespace
+        try_embed_rgw_ca_pem_in_mcg_cli_resources(service_ca_data, stress_cli_sts_dict)
+
         log.info("Trying to create the Stress CLI service CA")
         service_ca_configmap = create_resource(**service_ca_data)
         OCP(namespace=namespace, kind="ConfigMap").wait_for_resource(
             resource_name=service_ca_configmap.name, column="DATA", condition="1"
         )
 
-        log.info("Creating the Stress CLI StatefulSet")
-        stress_cli_sts_dict = templating.load_yaml(constants.STRESS_CLI_STS_YAML)
-        stress_cli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
-            "name"
-        ] = service_ca_configmap_name
-        stress_cli_sts_dict["metadata"]["namespace"] = namespace
         update_container_with_mirrored_image(stress_cli_sts_dict)
         update_container_with_proxy_env(stress_cli_sts_dict)
         stress_cli_sts_obj = create_resource(**stress_cli_sts_dict)
@@ -3296,10 +3303,20 @@ def nb_stress_cli_pod_fixture(request, scope_name):
                 "rgw_secure"
             ):
                 log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
-                pod_obj.exec_cmd_on_pod(
-                    f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> "
-                    f"{constants.AWSCLI_CA_BUNDLE_PATH}'"
-                )
+                if ocsci_config.EXTERNAL_MODE.get("embedded_external_rgw_ca_pem"):
+                    pod_obj.exec_cmd_on_pod(
+                        f"bash -c 'cat {constants.EXTERNAL_RGW_CA_CONTAINER_PATH} >> "
+                        f"{constants.AWSCLI_CA_BUNDLE_PATH}'"
+                    )
+                elif ocsci_config.EXTERNAL_MODE.get("rgw_cert_ca"):
+                    pod_obj.exec_cmd_on_pod(
+                        f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> "
+                        f"{constants.AWSCLI_CA_BUNDLE_PATH}'"
+                    )
+                else:
+                    log.warning(
+                        "rgw_secure is set but neither embedded RGW CA nor rgw_cert_ca URL is available"
+                    )
 
     def cleanup():
         """
@@ -9404,6 +9421,17 @@ def override_default_backingstore_session(
     )
 
 
+@pytest.fixture(scope="session")
+def override_default_backingstore_session_no_teardown(
+    mcg_obj_session,
+    backingstore_factory_session,
+    allow_default_backingstore_override,
+):
+    return override_default_backingstore_fixture(
+        None, mcg_obj_session, backingstore_factory_session
+    )
+
+
 @pytest.fixture(scope="function")
 def override_default_backingstore(
     request, mcg_obj_session, backingstore_factory, allow_default_backingstore_override
@@ -9483,7 +9511,8 @@ def override_default_backingstore_fixture(
             constants.DEFAULT_NOOBAA_BACKINGSTORE
         )
 
-    request.addfinalizer(finalizer)
+    if request is not None:
+        request.addfinalizer(finalizer)
     return _override_nb_default_backingstore_implementation
 
 
