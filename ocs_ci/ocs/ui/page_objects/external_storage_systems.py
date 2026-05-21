@@ -7,6 +7,9 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs.exceptions import UnexpectedNameException, UnexpectedStatusException
+from ocs_ci.utility.utils import exec_cmd
+from selenium.common.exceptions import TimeoutException
 
 
 class ExternalSystems(ResourceList):
@@ -72,9 +75,9 @@ class ExternalSystems(ResourceList):
         system_name,
         endpoint,
         port,
-        username,
-        password,
         filesystem_name,
+        username=None,
+        password=None,
     ):
         """
         Connect IBM Scale as External system
@@ -87,6 +90,12 @@ class ExternalSystems(ResourceList):
             password (str): password
             filesystem_name (str): name of the filesystem
         """
+        if not username:
+            username = f"{system_name}_user"
+            password = f"{system_name}_passw0rd"
+            create_user_cmd = f"ssh root@{endpoint} -i ~/.ssh/openshift-dev.pem"
+            " /usr/lpp/mmfs/gui/cli/mkuser {username} -p {password} -g CsiAdmin,ContainerOperator"
+            exec_cmd(create_user_cmd)
         self.connect_external_system()
         logger.info("Choose Scale option")
         self.do_click(locator=self.external_systems["connect_scale"])
@@ -130,10 +139,18 @@ class ExternalSystems(ResourceList):
             logger.info(f"{scale_name} not found on External Systems page")
             return False
 
-    def disconnect_scale(self, scale_name):
+    def disconnect_scale(
+        self, scale_name, delete_user=False, endpoint=None, username=None
+    ):
         """
         Removing a connection to scale is going to be possible in UI
         but now it's only done via CLI
+
+        Args:
+            scale_name (str): scale connection name
+            delete_user (bool): True if scale user needs to be deleted, False otherwise
+            endpoint (str): Scale management endpoint
+            username (str): username
         """
         logger.info(f"Deleting connection to {scale_name}")
         delete_cmd = "delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale"
@@ -142,6 +159,9 @@ class ExternalSystems(ResourceList):
             f"delete secret {scale_name}-user-details-secret -n ibm-spectrum-scale"
         )
         ocp.OCP().exec_oc_cmd(delete_secret_cmd)
+        if delete_user:
+            delete_cmd = f"ssh root@{endpoint} -i ~/.ssh/openshift-dev.pem /usr/lpp/mmfs/gui/cli/rmuser {username}"
+            exec_cmd(delete_cmd)
 
     def scale_status_ok(self, scale_name):
         """
@@ -177,6 +197,9 @@ class ExternalSystems(ResourceList):
         Args:
             scale_name (str): name of the scale cluster
             filesystem_name (str): name of the additional filesystem
+
+        Returns:
+            str: alert text if found, None if no alert
         """
         logger.info(f"Filtering connections to find {scale_name}")
         self.do_clear(self.external_systems["filter"])
@@ -188,6 +211,14 @@ class ExternalSystems(ResourceList):
             self.external_systems["filesystem_name_input"], filesystem_name
         )
         self.do_click(locator=self.external_systems["add_button"])
+        try:
+            self.wait_for_element_to_be_present(
+                locator=self.external_systems["fs_alert"]
+            )
+            return self.get_element_text(locator=self.external_systems["fs_alert"])
+        except TimeoutException:
+            logger.info("No alert after filesystem creation")
+            return None
 
     def delete_scale_filesystem(self, scale_name, filesystem_name):
         """
@@ -213,6 +244,100 @@ class ExternalSystems(ResourceList):
         self.do_click(locator=self.external_systems["delete_filesystem"])
         self.do_click(locator=self.external_systems["confirm_delete"])
         logger.info("Deletion confirmed")
+
+    def check_filesystem_details(self, scale_name, filesystem_name, status="Connected"):
+        """
+        Check filesystem details on the Filesystems card of Scale dashboard
+
+        Args:
+            scale_name (str): name of the scale cluster
+            filesystem_name (str): name of the  filesystem
+            status (str): the expected status of the filesystem
+        """
+        logger.info(f"Filtering connections to find {scale_name}")
+        self.do_clear(self.external_systems["filter"])
+        wait_for_element_to_be_clickable(self.external_systems["filter"])
+        self.do_send_keys(self.external_systems["filter"], scale_name)
+        logger.info(f"Clicking on {scale_name} to go to Scale dashboard")
+        wait_for_element_to_be_clickable(self.external_systems["scale_dashboard_link"])
+        self.do_click(self.external_systems["scale_dashboard_link"])
+        logger.info(
+            f"Checking the name of the filesystem is {scale_name}-{filesystem_name}"
+        )
+        filesystem_name_on_card = self.get_element_text(
+            format_locator(self.external_systems["filesystem_link"], filesystem_name)
+        )
+        if filesystem_name_on_card != f"{scale_name}-{filesystem_name}":
+            self.do_click(
+                locator=self.page_nav["external_systems_page"],
+            )
+            raise UnexpectedNameException(
+                f"Expected name: {scale_name}-{filesystem_name}."
+                f" Name found on the card: {filesystem_name_on_card}"
+            )
+        filesystem_status_on_card = self.get_element_text(
+            format_locator(self.external_systems["filesystem_status"], filesystem_name)
+        )
+        if filesystem_status_on_card != status:
+            self.do_click(
+                locator=self.page_nav["external_systems_page"],
+            )
+            raise UnexpectedStatusException(
+                f"Expected status: {status}. Status found on the card: {filesystem_status_on_card}"
+            )
+        self.do_click(
+            locator=self.page_nav["external_systems_page"],
+        )
+
+    def get_scale_version_from_dashboard(self, scale_name):
+        """
+        Get scale version from the dashboard
+
+        Args:
+            scale_name (str): name of the scale cluster
+
+        Returns:
+            str: scale version found on the scale dashboard
+
+        """
+        logger.info(f"Filtering connections to find {scale_name}")
+        self.do_clear(self.external_systems["filter"])
+        wait_for_element_to_be_clickable(self.external_systems["filter"])
+        self.do_send_keys(self.external_systems["filter"], scale_name)
+        logger.info(f"Clicking on {scale_name} to go to Scale dashboard")
+        wait_for_element_to_be_clickable(self.external_systems["scale_dashboard_link"])
+        self.do_click(self.external_systems["scale_dashboard_link"])
+        scale_version_ui = self.get_element_text(
+            locator=self.external_systems["scale_version"]
+        )
+        logger.info(f"Scale version on the dashboard is {scale_version_ui}")
+        self.do_click(
+            locator=self.page_nav["external_systems_page"],
+        )
+        return scale_version_ui
+
+    def get_scale_version_from_remotecluster(self, scale_name):
+        """
+        Get scale version from the remotecluster CR
+
+        Args:
+            scale_name (str): name of the scale cluster
+
+        Returns:
+            str: scale version found in the remotecluster CR
+
+        """
+        remotecluster_obj = ocp.OCP(
+            kind="remotecluster",
+            namespace="ibm-spectrum-scale",
+            resource_name=scale_name,
+        )
+        scale_version_from_remotecluster = (
+            remotecluster_obj.get().get("status").get("guiVersion")
+        )
+        scale_version_cli = scale_version_from_remotecluster.split("-")[0]
+        logger.info(f"Scale version in Remotecluster is {scale_version_cli}")
+        return scale_version_cli
 
 
 class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):

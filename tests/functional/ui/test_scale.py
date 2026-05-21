@@ -54,6 +54,28 @@ class TestScaleConnection(object):
         # checking status temporarily disabled
         # until https://issues.redhat.com/browse/DFBUGS-4352 is fixed
         # assert external_systems.scale_status_ok(SCALE_CONNECTION_NAME)
+        external_systems.check_filesystem_details(
+            scale_name=SCALE_CONNECTION_NAME,
+            filesystem_name=FILESYSTEM_1,
+            status="Connected",
+        )
+
+    @ui
+    @skipif_ibm_cloud_managed
+    @tier2
+    @skipif_ocs_version("<4.22")
+    @black_squad
+    def test_scale_version(self, setup_ui_class):
+        """
+        Test that scale version on the dashboard is the same as in Scale cluster
+        """
+        scale_connect_obj = PageNavigator()
+        external_systems = scale_connect_obj.nav_external_systems_page()
+        scale_version_ui = external_systems.get_scale_version_from_dashboard()
+        scale_version_cli = external_systems.get_scale_version_from_remotecluster()
+        assert scale_version_ui == scale_version_cli(
+            f"Scale version on the dashboard is {scale_version_cli} while in remotecluster it's {scale_version_cli}"
+        )
 
     @ui
     @skipif_ibm_cloud_managed
@@ -71,9 +93,19 @@ class TestScaleConnection(object):
         external_systems.connect_scale_filesystem(
             scale_name=SCALE_CONNECTION_NAME, filesystem_name=FILESYSTEM_2
         )
+        external_systems.check_filesystem_details(
+            scale_name=SCALE_CONNECTION_NAME,
+            filesystem_name=FILESYSTEM_2,
+            status="Connected",
+        )
+        # try to connect a filesystem with the same name, verify alert message
+        alert_message = external_systems.connect_scale_filesystem(
+            scale_name=SCALE_CONNECTION_NAME, filesystem_name=FILESYSTEM_2
+        )
         external_systems.delete_scale_filesystem(
             scale_name=SCALE_CONNECTION_NAME, filesystem_name=FILESYSTEM_2
         )
+        assert "already exists" in alert_message
 
     @ui
     @skipif_ibm_cloud_managed

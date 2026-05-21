@@ -826,6 +826,18 @@ class PodStabilityError(Exception):
     pass
 
 
+class UnexpectedNameException(Exception):
+    """Raised when resource has unexpected name on the dashboard"""
+
+    pass
+
+
+class UnexpectedStatusException(Exception):
+    """Raised when resource has unexpected status on the dashboard"""
+
+    pass
+
+
 class TemporaryPodsDuringDeployment(Exception):
     """
     Raised when temporary pods (like canary pods) are detected during deployment.
