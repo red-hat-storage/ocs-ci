@@ -189,15 +189,22 @@ def verify_alert_cleared(threading_lock):
     )
 
 
-def recover_mds_pods_if_not_running(nodes):
+def recover_mds_pods_if_not_running():
     """
-    Check MDS deployments and scale up if any are at 0 replicas.
+    Recover MDS deployments and verify pods are running.
 
-    This function is used in test teardowns to ensure MDS deployments are scaled
-    to 1 replica if they were scaled down during the test.
+    This function is used in test teardowns to:
+    1. Check all MDS deployments
+    2. Scale up any deployments that are at 0 replicas to 1
+    3. Verify all MDS pods reach Running state after scaling
 
-    Args:
-        nodes: nodes fixture for node operations
+    If scaling or pod verification fails, the test will fail with AssertionError.
+
+    Raises:
+        AssertionError: If deployment scaling fails or pods don't reach Running state
+
+    Returns:
+        None
     """
     log.info("Teardown: Checking MDS deployments and scaling if needed")
 
@@ -469,10 +476,9 @@ class TestMdsXattrAlerts(E2ETest):
 
         def finalizer():
             """
-            Teardown to ensure MDS pods are running.
-            If MDS pods are not running, restart nodes to recover.
+            Teardown to ensure MDS deployments are scaled up and pods are running.
             """
-            recover_mds_pods_if_not_running(nodes)
+            recover_mds_pods_if_not_running()
 
         request.addfinalizer(finalizer)
 
@@ -541,10 +547,9 @@ class TestMdsXattrAlerts(E2ETest):
 
         def finalizer():
             """
-            Teardown to ensure MDS pods are running.
-            If MDS pods are not running, restart nodes to recover.
+            Teardown to ensure MDS deployments are scaled up and pods are running.
             """
-            recover_mds_pods_if_not_running(nodes)
+            recover_mds_pods_if_not_running()
 
         request.addfinalizer(finalizer)
 
