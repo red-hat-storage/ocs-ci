@@ -196,7 +196,7 @@ def test_blackbox_pod_after_upgrade():
             pod_name = pod["metadata"]["name"]
             labels = pod["metadata"].get("labels", {})
             assert (
-                labels.get("app.kubernetes.io/name") == "odf-blackbox-exporter"
+                labels.get("app") == "odf-blackbox-exporter"
             ), f"Unexpected pod label on {pod_name}"
 
         log.info("Blackbox exporter pod exists after upgrade")
