@@ -17,6 +17,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import run_cmd, download_with_retries
 from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 from ocs_ci.krkn_chaos.krkn_helpers import CephHealthHelper
+from ocs_ci.krkn_chaos.krkn_config_generator import ensure_krkn_resiliency_support_files
 from ocs_ci.ocs import constants
 
 from contextlib import suppress
@@ -178,6 +179,8 @@ def krkn_setup():
     log.info("  - Krkn directory: %s", KRKN_DIR)
     log.info("  - Krkn venv: %s", krkn_venv)
     log.info("  - Krkn run script: %s", krkn_run_script)
+
+    ensure_krkn_resiliency_support_files()
 
 
 @pytest.fixture(scope="session")

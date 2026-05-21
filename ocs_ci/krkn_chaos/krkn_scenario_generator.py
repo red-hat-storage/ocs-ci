@@ -1,6 +1,59 @@
 import os
 from jinja2 import Environment, FileSystemLoader
-from ocs_ci.ocs.constants import KRKN_SCENARIO_TEMPLATE
+from ocs_ci.ocs.constants import (
+    KRKN_SCENARIO_TEMPLATE,
+    CSI_CEPHFSPLUGIN_LABEL_419,
+    CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
+    CSI_RBDPLUGIN_LABEL_419,
+    CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
+    MDS_APP_LABEL,
+    MON_APP_LABEL,
+    MGR_APP_LABEL,
+    NOOBAA_CORE_POD_LABEL,
+    NOOBAA_ENDPOINT_POD_LABEL,
+    OSD_APP_LABEL,
+    RGW_APP_LABEL,
+)
+
+
+# Signal name to number mapping for container kill scenarios
+SIGNAL_MAP = {
+    "SIGTERM": 15,
+    "SIGKILL": 9,
+    "SIGINT": 2,
+    "SIGHUP": 1,
+}
+
+
+def convert_signal_to_number(signal):
+    """Convert signal name to signal number.
+
+    Args:
+        signal (str or int): Signal name (e.g., "SIGKILL", "SIGTERM") or number (e.g., 9, "9", 15)
+
+    Returns:
+        int: Signal number as integer
+
+    Examples:
+        >>> convert_signal_to_number("SIGKILL")
+        9
+        >>> convert_signal_to_number("SIGTERM")
+        15
+        >>> convert_signal_to_number("9")
+        9
+        >>> convert_signal_to_number(9)
+        9
+    """
+    # If it's already an integer, return as-is
+    if isinstance(signal, int):
+        return signal
+    # If it's a string representing a number, convert to int
+    if isinstance(signal, str) and signal.isdigit():
+        return int(signal)
+    # Convert signal name to number
+    if isinstance(signal, str):
+        return SIGNAL_MAP.get(signal.upper(), signal)
+    return signal
 
 
 class TemplateWriter:
@@ -727,88 +780,128 @@ class ContainerScenarios:
                 # Build default scenarios directly
                 # OSD is placed at the end to ensure it executes last in container kill scenarios
                 default_namespace = namespace or "openshift-storage"
+                # Convert signal name to number
+                kill_signal_number = convert_signal_to_number(kill_signal)
+                default_recovery_time = wait_duration // 2
                 scenarios = [
                     {
                         "name": f"nodeplugin_{kill_signal.lower()}_kill",
                         "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "label_selector": CSI_CEPHFSPLUGIN_LABEL_419,
+                        "container_name": "csi-cephfsplugin",
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
+                        "expected_recovery_time": default_recovery_time,
                         "description": "CephFS Node Plugin",
                     },
                     {
                         "name": f"mgr_{kill_signal.lower()}_kill",
                         "namespace": default_namespace,
-                        "label_selector": "app=rook-ceph-mgr",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "label_selector": MGR_APP_LABEL,
+                        "container_name": "mgr",
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
+                        "expected_recovery_time": default_recovery_time,
                         "description": "MGR",
                     },
                     {
                         "name": f"rbd_nodeplugin_{kill_signal.lower()}_kill",
                         "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.rbd.csi.ceph.com-nodeplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "label_selector": CSI_RBDPLUGIN_LABEL_419,
+                        "container_name": "csi-rbdplugin",
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
+                        "expected_recovery_time": default_recovery_time,
                         "description": "RBD Node Plugin",
                     },
                     {
                         "name": f"rgw_{kill_signal.lower()}_kill",
                         "namespace": default_namespace,
-                        "label_selector": "app=rook-ceph-rgw",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "label_selector": RGW_APP_LABEL,
+                        "container_name": "rgw",
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
+                        "expected_recovery_time": default_recovery_time,
                         "description": "RGW (RADOS Gateway)",
                     },
                     {
-                        "name": f"noobaa_{kill_signal.lower()}_kill",
+                        "name": f"noobaa_core_{kill_signal.lower()}_kill",
                         "namespace": default_namespace,
-                        "label_selector": "app=noobaa",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "label_selector": NOOBAA_CORE_POD_LABEL,
+                        "container_name": "noobaa-core",
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "NooBaa",
+                        "expected_recovery_time": default_recovery_time,
+                        "description": "NooBaa Core",
+                    },
+                    {
+                        "name": f"noobaa_endpoint_{kill_signal.lower()}_kill",
+                        "namespace": default_namespace,
+                        "label_selector": NOOBAA_ENDPOINT_POD_LABEL,
+                        "container_name": "noobaa-endpoint",
+                        "kill_signal": kill_signal_number,
+                        "count": instance_count,
+                        "expected_recovery_time": default_recovery_time,
+                        "description": "NooBaa Endpoint",
                     },
                     {
                         "name": f"cephfs_ctrlplugin_{kill_signal.lower()}_kill",
                         "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "label_selector": CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
+                        "container_name": "csi-cephfsplugin",
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
+                        "expected_recovery_time": default_recovery_time,
                         "description": "CephFS Control Plugin",
                     },
                     {
                         "name": f"rbd_ctrlplugin_{kill_signal.lower()}_kill",
                         "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "label_selector": CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
+                        "container_name": "csi-rbdplugin",
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
+                        "expected_recovery_time": default_recovery_time,
                         "description": "RBD Control Plugin",
+                    },
+                    {
+                        "name": f"mon_{kill_signal.lower()}_kill",
+                        "namespace": default_namespace,
+                        "label_selector": MON_APP_LABEL,
+                        "container_name": "mon",
+                        "kill_signal": kill_signal_number,
+                        "count": 1,
+                        "expected_recovery_time": default_recovery_time,
+                        "description": "MON",
+                    },
+                    {
+                        "name": f"mds_{kill_signal.lower()}_kill",
+                        "namespace": default_namespace,
+                        "label_selector": MDS_APP_LABEL,
+                        "container_name": "mds",
+                        "kill_signal": kill_signal_number,
+                        "count": instance_count,
+                        "expected_recovery_time": default_recovery_time,
+                        "description": "MDS",
                     },
                     {
                         "name": f"osd_{kill_signal.lower()}_kill",
                         "namespace": default_namespace,
-                        "label_selector": "app=rook-ceph-osd",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
+                        "label_selector": OSD_APP_LABEL,
+                        "container_name": "osd",
+                        "kill_signal": kill_signal_number,
                         "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
+                        "expected_recovery_time": 300,
                         "description": "OSD",
                     },
                 ]
+            else:
+                # Convert kill_signal to number in each provided scenario
+                for scenario in scenarios:
+                    if "kill_signal" in scenario:
+                        scenario["kill_signal"] = convert_signal_to_number(
+                            scenario["kill_signal"]
+                        )
 
             config = {"scenarios": scenarios}
             return ContainerScenarios._create_container_scenario(
@@ -826,10 +919,13 @@ class ContainerScenarios:
                     "Either pod_name or label_selector must be provided for single scenario"
                 )
 
+            # Convert signal name to number
+            kill_signal_number = convert_signal_to_number(kill_signal)
+
             config = {
                 "namespace": namespace,
                 "container_name": container_name,
-                "kill_signal": kill_signal,
+                "kill_signal": kill_signal_number,
                 "instance_count": instance_count,
                 "wait_duration": wait_duration,
                 **_get_pod_selector_config(pod_name, label_selector),

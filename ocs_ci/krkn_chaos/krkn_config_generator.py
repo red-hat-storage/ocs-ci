@@ -1,11 +1,49 @@
 import os
 import logging
+import shutil
+
 from ocs_ci.framework import config
-from ocs_ci.ocs.constants import KRKN_GLOBAL_CONFIG_TEMPLATE
+from ocs_ci.ocs.constants import (
+    KRKN_DIR,
+    KRKN_GLOBAL_CONFIG_TEMPLATE,
+    KRKN_SCENARIO_TEMPLATE_DIR,
+)
 from ocs_ci.krkn_chaos.krkn_scenario_generator import TemplateWriter
 from ocs_ci.krkn_chaos.krkn_port_manager import KrknPortManager
 
 log = logging.getLogger(__name__)
+
+KRKN_BUNDLED_CONFIG_SRC = os.path.join(
+    KRKN_SCENARIO_TEMPLATE_DIR, "krkn_bundled_config"
+)
+
+
+def ensure_krkn_resiliency_support_files():
+    """
+    Copy bundled Krkn support files into the Krkn clone under config/.
+
+    Krkn resolves ``performance_monitoring.alert_profile`` (default
+    ``config/alerts.yaml``) relative to the process working directory. KrKnRunner
+    uses the Krkn clone root as cwd so these paths resolve correctly.
+    """
+    if not os.path.isdir(KRKN_DIR):
+        log.warning(
+            "Krkn directory missing at %s; skipping resiliency support file sync",
+            KRKN_DIR,
+        )
+        return
+    dest_dir = os.path.join(KRKN_DIR, "config")
+    os.makedirs(dest_dir, exist_ok=True)
+    alerts_src = os.path.join(KRKN_BUNDLED_CONFIG_SRC, "alerts.yaml")
+    alerts_dst = os.path.join(dest_dir, "alerts.yaml")
+    if not os.path.isfile(alerts_src):
+        log.error(
+            "Bundled Krkn alerts.yaml not found at %s; Krkn may fail resiliency init",
+            alerts_src,
+        )
+        return
+    shutil.copy2(alerts_src, alerts_dst)
+    log.debug("Synced bundled Krkn alerts profile to %s", alerts_dst)
 
 
 class KrknConfigGenerator:
@@ -437,6 +475,8 @@ class KrknConfigGenerator:
         Returns:
             str: Full path of the generated config file.
         """
+        ensure_krkn_resiliency_support_files()
+
         self.global_config = os.path.join(location, "krkn_global_config.yaml")
 
         # Use Jinja2 template to generate the config

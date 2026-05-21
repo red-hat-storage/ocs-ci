@@ -10,6 +10,7 @@ import yaml
 
 from ocs_ci.ocs.constants import (
     HCI_VSPHERE,
+    KRKN_DIR,
     KRKN_OUTPUT_DIR,
     KRKN_RUN_CMD,
     KRKNCTL,
@@ -606,6 +607,7 @@ class KrKnRunner:
                     stderr=subprocess.PIPE,
                     text=True,
                     env=env,
+                    cwd=KRKN_DIR,
                 )
 
                 # CRITICAL FIX: Add timeout to prevent infinite blocking

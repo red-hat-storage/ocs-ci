@@ -5,10 +5,10 @@ This module provides comprehensive tests for NooBaa container disruption using t
 engineering tool with different kill signals (SIGKILL, SIGTERM, SIGHUP, SIGINT, SIGQUIT).
 
 Target Components:
-- NooBaa Core (noobaa-core): Main S3 service container
-- NooBaa Database (noobaa-db-pg): PostgreSQL database containers
+- NooBaa Core (noobaa-core label): primary service StatefulSet pod
+- NooBaa Endpoint (noobaa-s3 label): S3 endpoint Deployment pods
+- NooBaa Database (noobaa-db / CNPG): PostgreSQL database containers
 - NooBaa Operator (noobaa-operator): Operator managing NooBaa lifecycle
-- NooBaa Endpoint (noobaa-s3): S3 endpoint service containers
 
 Kill Signals:
 - SIGKILL (9): Immediate termination, no cleanup
@@ -135,11 +135,15 @@ class TestKrKnNooBaaContainerChaos:
                 f"Creating NooBaa container kill configuration with {kill_signal} signal"
             )
 
-            # Define NooBaa-specific components for container kill
+            # NooBaa core and endpoint (explicit labels + primary containers; avoid app=noobaa)
             noobaa_components = [
                 {
-                    "name": "noobaa",
-                    "description": "NooBaa (All Components)",
+                    "name": "noobaa-core",
+                    "description": "NooBaa Core",
+                },
+                {
+                    "name": "noobaa-endpoint",
+                    "description": "NooBaa Endpoint",
                 },
             ]
 
@@ -150,7 +154,6 @@ class TestKrKnNooBaaContainerChaos:
                 kill_signal=kill_signal,
                 count=1,  # Kill 1 container at a time
                 expected_recovery_time=120,
-                container_name="",  # Leave blank to target all containers in the pod
                 components=noobaa_components,
             )
 
@@ -319,18 +322,25 @@ class TestKrKnNooBaaContainerChaos:
         """
         scenario_dir = krkn_scenario_directory
 
-        # Map component names to their label selectors
+        # Map component names to pod label selectors and primary workload containers
         component_labels = {
             "noobaa-core": constants.NOOBAA_CORE_POD_LABEL,
             "noobaa-db": constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
             "noobaa-operator": constants.NOOBAA_OPERATOR_POD_LABEL,
             "noobaa-endpoint": constants.NOOBAA_ENDPOINT_POD_LABEL,
         }
+        component_primary_containers = {
+            "noobaa-core": "noobaa-core",
+            "noobaa-db": "postgres",
+            "noobaa-operator": "noobaa-operator",
+            "noobaa-endpoint": "noobaa-endpoint",
+        }
 
         if component not in component_labels:
             raise ValueError(f"Unknown component: {component}")
 
         label_selector = component_labels[component]
+        primary_container = component_primary_containers[component]
 
         # Use helper function for standardized test start logging
         log_test_start(
@@ -371,7 +381,7 @@ class TestKrKnNooBaaContainerChaos:
                 "name": f"{component.replace('-', '_')}_{kill_signal.lower()}_kill",
                 "namespace": "openshift-storage",
                 "label_selector": label_selector,
-                "container_name": "",  # Target all containers in the pod
+                "container_name": primary_container,
                 "kill_signal": kill_signal,
                 "count": 1,
                 "expected_recovery_time": 120,
@@ -581,7 +591,8 @@ class TestKrKnNooBaaContainerChaos:
 
                 # NooBaa components to test
                 noobaa_components = [
-                    {"name": "noobaa", "description": "NooBaa (All Components)"},
+                    {"name": "noobaa-core", "description": "NooBaa Core"},
+                    {"name": "noobaa-endpoint", "description": "NooBaa Endpoint"},
                 ]
 
                 # Build scenarios for this signal
@@ -590,7 +601,6 @@ class TestKrKnNooBaaContainerChaos:
                     kill_signal=signal,
                     count=1,
                     expected_recovery_time=120,
-                    container_name="",
                     components=noobaa_components,
                 )
 
