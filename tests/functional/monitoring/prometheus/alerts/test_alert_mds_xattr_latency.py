@@ -22,6 +22,7 @@ from ocs_ci.ocs.resources.pod import (
     delete_pods,
     get_prometheus_pods,
     get_pods_having_label,
+    get_mds_pods,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.node import wait_for_nodes_status
@@ -190,29 +191,44 @@ def verify_alert_cleared(threading_lock):
 
 def recover_mds_pods_if_not_running(nodes):
     """
-    Check if MDS pods are running and restart nodes if they are not.
+    Check MDS deployments and scale up if any are at 0 replicas.
 
-    This function is used in test teardowns to ensure MDS pods are in a healthy
-    state before the next test runs.
+    This function is used in test teardowns to ensure MDS deployments are scaled
+    to 1 replica if they were scaled down during the test.
 
     Args:
         nodes: nodes fixture for node operations
     """
-    log.info("Teardown: Checking if MDS pods are running")
-    mds_pods = cluster.get_mds_pods()
+    log.info("Teardown: Checking MDS deployments and scaling if needed")
 
-    all_running = True
-    for pd in mds_pods:
-        try:
-            helpers.wait_for_resource_state(
-                resource=pd, state=constants.STATUS_RUNNING, timeout=60
+    # Get all MDS deployments
+    mds_deployments = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.MDS_APP_LABEL,
+    ).get()
+
+    if not mds_deployments or "items" not in mds_deployments:
+        log.warning("No MDS deployments found")
+        return
+
+    # Check each deployment and scale up if needed
+    scaled_any = False
+    for deployment in mds_deployments["items"]:
+        deployment_name = deployment["metadata"]["name"]
+        replicas = deployment["spec"]["replicas"]
+
+        log.info(f"MDS deployment {deployment_name} has {replicas} replica(s)")
+
+        if replicas == 0:
+            log.info(f"Scaling up MDS deployment {deployment_name} from 0 to 1")
+            helpers.modify_deployment_replica_count(
+                deployment_name=deployment_name, replica_count=1
             )
-        except Exception:
-            all_running = False
-            break
+            scaled_any = True
 
-    if not all_running:
-        nodes.restart_nodes_by_stop_and_start_teardown()
+    if not scaled_any:
+        log.info("No MDS deployments needed scaling")
 
 
 @blue_squad
@@ -452,7 +468,7 @@ class TestMdsXattrAlerts(E2ETest):
             " Script will be in sleep for 60 seconds to make sure mds scale up completed."
         )
         time.sleep(60)
-        mds_pods = cluster.get_mds_pods()
+        mds_pods = get_mds_pods()
         for pd in mds_pods:
             helpers.wait_for_resource_state(resource=pd, state=constants.STATUS_RUNNING)
 
@@ -537,7 +553,7 @@ class TestMdsXattrAlerts(E2ETest):
         )
         time.sleep(60)
 
-        mds_pods = cluster.get_mds_pods()
+        mds_pods = get_mds_pods()
         for pd in mds_pods:
             helpers.wait_for_resource_state(resource=pd, state=constants.STATUS_RUNNING)
 
