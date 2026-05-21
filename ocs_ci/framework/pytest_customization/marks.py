@@ -44,6 +44,9 @@ from ocs_ci.ocs.constants import (
     DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
     ORDER_OCP_ON_KUBEVIRT_UPGRADE,
     ORDER_MCE_UPGRADE,
+    ORDER_BEFORE_FDF_UPGRADE,
+    ORDER_FDF_UPGRADE,
+    ORDER_AFTER_FDF_UPGRADE,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -147,6 +150,9 @@ order_ocp_on_kubevirt_upgrade = pytest.mark.order(ORDER_OCP_ON_KUBEVIRT_UPGRADE)
 order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
+order_pre_fdf_upgrade  = pytest.mark.order(ORDER_BEFORE_FDF_UPGRADE)
+order_fdf_upgrade      = pytest.mark.order(ORDER_FDF_UPGRADE)
+order_post_fdf_upgrade = pytest.mark.order(ORDER_AFTER_FDF_UPGRADE)
 ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
 
 # multicluster orchestrator
@@ -161,6 +167,10 @@ acm_upgrade = compose(order_acm_upgrade, pytest.mark.acm_upgrade)
 mce_upgrade = compose(order_mce_upgrade, pytest.mark.mce_upgrade)
 
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
+
+pre_fdf_upgrade  = compose(order_pre_fdf_upgrade,  pytest.mark.pre_fdf_upgrade)
+fdf_upgrade      = compose(order_fdf_upgrade,       pytest.mark.fdf_upgrade)
+post_fdf_upgrade = compose(order_post_fdf_upgrade,  pytest.mark.post_fdf_upgrade)
 
 # provider operator upgrade
 provider_operator_upgrade = compose(
@@ -197,6 +207,9 @@ upgrade_marks = [
     post_upgrade,
     post_ocp_upgrade,
     post_ocs_upgrade,
+    pre_fdf_upgrade,
+    fdf_upgrade,
+    post_fdf_upgrade,
 ]
 
 # mark the test class with marker below to ignore leftover check
