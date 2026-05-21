@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_mcg_only
 @skipif_hci_provider_and_client
-def test_workload_with_checksum(workload_storageutilization_checksum_rbd):
+def deprecated_test_workload_with_checksum(workload_storageutilization_checksum_rbd):
     """
     Purpose of this test is to have checksum workload fixture executed.
     """
@@ -71,7 +71,7 @@ def test_workload_with_checksum(workload_storageutilization_checksum_rbd):
 @tier2
 @skipif_managed_service
 @skipif_hci_provider_and_client
-def test_workload_with_checksum_verify(
+def deprecated_test_workload_with_checksum_verify(
     tmp_path,
     project,
     fio_pvc_dict,
