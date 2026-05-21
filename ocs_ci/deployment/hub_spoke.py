@@ -1248,6 +1248,17 @@ class HostedClients(HyperShiftBase):
             for cluster_name in cluster_names:
                 create_drs_nad(cluster_name)
 
+            # Re-verify hosted clusters after MachineConfig-induced node reboots
+            log_step(
+                "Re-verify hosted OCP clusters after data replication separation setup"
+            )
+            logger.info(
+                "Waiting for hosted clusters to recover after networking changes"
+            )
+            hosted_ocp_verification_passed = (
+                self.verify_hosted_ocp_clusters_from_provider()
+            )
+
         # stage 3.6: Setup VPC peering, routing, and security groups for AWS HCP clusters
         # This must be done before ODF deployment to ensure network connectivity
         log_step(
