@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources.pv import get_pv_size
 from ocs_ci.ocs.resources.storage_cluster import (
     get_storage_size,
     get_device_class,
+    get_all_device_sets,
     verify_storage_device_class,
     verify_device_class_in_osd_tree,
     resize_osd,
@@ -240,9 +241,17 @@ def check_ceph_state_post_resize_osd():
     logger.info("Check the Ceph device classes and osd tree")
     device_class = get_device_class()
     ct_pod = get_ceph_tools_pod()
+    multiple_device_classes = len(get_all_device_sets()) > 1
     try:
-        verify_storage_device_class(device_class)
-        verify_device_class_in_osd_tree(ct_pod, device_class)
+        verify_storage_device_class(
+            device_class,
+            check_multiple_deviceclasses=multiple_device_classes,
+        )
+        verify_device_class_in_osd_tree(
+            ct_pod,
+            device_class,
+            check_multiple_deviceclasses=multiple_device_classes,
+        )
     except AssertionError as ex:
         raise CephHealthException(ex)
     if not check_ceph_osd_tree():
