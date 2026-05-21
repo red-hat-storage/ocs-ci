@@ -367,6 +367,7 @@ def workload_fio_storageutilization(
     target_percentage=None,
     target_size=None,
     with_checksum=False,
+    retain_pv=False,
     keep_fio_data=False,
     minimal_time=480,
     throw_skip=True,
@@ -408,9 +409,11 @@ def workload_fio_storageutilization(
         target_size (int): target size of the PVC for fio to use, eg. 10 means
             a request for fio to write 10GiB of data
         with_checksum (bool): if true, sha1 checksum of the data written by
-            fio is stored on the volume, and reclaim policy of the volume is
-            changed to ``Retain`` so that the volume is not removed during test
-            teardown for later verification runs
+            fio is stored on the volume
+        retain_pv (bool): if true, reclaim policy of the volume is changed to
+            ``Retain`` and the volume is labeled so that it is not removed
+            during test teardown for later verification runs. Only effective
+            when with_checksum is True.
         keep_fio_data (bool): If true, keep the fio data after the fio
             storage utilization is completed. Else if false, deletes the fio data.
         minimal_time (int): Minimal number of seconds to monitor a system.
@@ -449,31 +452,33 @@ def workload_fio_storageutilization(
     # ceph cluster during high utilization levels (for expected values, consult
     # BZ 1775432 and check that there is no more recent BZ or JIRA in this
     # area)
-    ceph_full_ratios = [
-        "full_ratio",
-        "backfillfull_ratio",
-        "nearfull_ratio",
-    ]
-    ct_pod = pod.get_ceph_tools_pod()
-    # As noted in ceph docs:
-    # https://docs.ceph.com/docs/nautilus/rados/configuration/mon-config-ref/
-    # we need to look for full ratio values in OSDMap of the cluster:
-    # > These settings only apply during cluster creation. Afterwards they need
-    # > to be changed in the OSDMap using ceph osd set-nearfull-ratio and ceph
-    # > osd set-full-ratio
-    logger.info("inspecting values of ceph *full ratios in osd map")
-    osd_dump_dict = ct_pod.exec_ceph_cmd("ceph osd dump")
-    for ceph_ratio in ceph_full_ratios:
-        ratio_value = osd_dump_dict.get(ceph_ratio)
-        if ratio_value is not None:
-            logger.info(f"{ceph_ratio} is {ratio_value}")
-        else:
-            logger.warning(f"{ceph_ratio} not found in osd map")
+    # These operations need to run on the provider cluster
+    with config.RunWithProviderConfigContextIfAvailable():
+        ceph_full_ratios = [
+            "full_ratio",
+            "backfillfull_ratio",
+            "nearfull_ratio",
+        ]
+        ct_pod = pod.get_ceph_tools_pod()
+        # As noted in ceph docs:
+        # https://docs.ceph.com/docs/nautilus/rados/configuration/mon-config-ref/
+        # we need to look for full ratio values in OSDMap of the cluster:
+        # > These settings only apply during cluster creation. Afterwards they need
+        # > to be changed in the OSDMap using ceph osd set-nearfull-ratio and ceph
+        # > osd set-full-ratio
+        logger.info("inspecting values of ceph *full ratios in osd map")
+        osd_dump_dict = ct_pod.exec_ceph_cmd("ceph osd dump")
+        for ceph_ratio in ceph_full_ratios:
+            ratio_value = osd_dump_dict.get(ceph_ratio)
+            if ratio_value is not None:
+                logger.info(f"{ceph_ratio} is {ratio_value}")
+            else:
+                logger.warning(f"{ceph_ratio} not found in osd map")
 
-    if target_size is not None:
-        pvc_size = target_size
-    else:
-        pvc_size = get_storageutilization_size(target_percentage, ceph_pool_name)
+        if target_size is not None:
+            pvc_size = target_size
+        else:
+            pvc_size = get_storageutilization_size(target_percentage, ceph_pool_name)
 
     # If we are trying to utilize particular percentage of total OCS capacity
     # and current usage is already higher, the test will be skipped, because
@@ -573,13 +578,17 @@ def workload_fio_storageutilization(
         return measured_op
 
     # measure MAX AVAIL value just before reclamaion of data written by fio
-    _, max_avail_before_delete = get_ceph_storage_stats(ceph_pool_name)
+    # This needs to run on provider cluster
+    with config.RunWithProviderConfigContextIfAvailable():
+        _, max_avail_before_delete = get_ceph_storage_stats(ceph_pool_name)
 
     def is_storage_reclaimed():
         """
         Check whether data created by the Job were actually deleted.
         """
-        _, max_avail = get_ceph_storage_stats(ceph_pool_name)
+        # This needs to run on provider cluster
+        with config.RunWithProviderConfigContextIfAvailable():
+            _, max_avail = get_ceph_storage_stats(ceph_pool_name)
         reclaimed_size = round((max_avail - max_avail_before_delete) / 2**30)
         logger.info(
             "%d Gi of %d Gi (PVC size) seems already reclaimed",
@@ -593,7 +602,7 @@ def workload_fio_storageutilization(
             logger.info("Storage for the PVC was not yet reclaimed enough.")
         return result
 
-    if with_checksum:
+    if with_checksum and retain_pv:
         # Let's get the name of the PV via the PVC.
         ocp_pvc = ocp.OCP(kind=constants.PVC, namespace=project.namespace)
         pvc_data = ocp_pvc.get()
@@ -625,9 +634,9 @@ def workload_fio_storageutilization(
         label = f"fixture={fixture_name}"
         ocp_pv.add_label(pv_name, label)
     else:
-        # Without checksum, we just need to make sure that data were deleted
-        # and wait for this to happen to avoid conflicts with tests executed
-        # right after this one.
+        # Without checksum or when not retaining PV, we just need to make
+        # sure that data were deleted and wait for this to happen to avoid
+        # conflicts with tests executed right after this one.
         if not keep_fio_data:
             delete_fio_data(fio_job_file, is_storage_reclaimed)
         else:
