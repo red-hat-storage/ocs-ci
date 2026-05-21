@@ -822,31 +822,43 @@ class MCG:
         """
 
         def _get_mirroring_percentage():
-            results = []
-            obj_list = (
-                self.send_rpc_query(
-                    "object_api", "list_objects", params={"bucket": bucket_name}
-                )
-                .json()
-                .get("reply")
-                .get("objects")
-            )
-
-            for written_object in obj_list:
-                object_chunks = (
+            try:
+                obj_list = (
                     self.send_rpc_query(
-                        "object_api",
-                        "read_object_mapping",
-                        params={
-                            "bucket": bucket_name,
-                            "key": written_object.get("key"),
-                            "obj_id": written_object.get("obj_id"),
-                        },
+                        "object_api", "list_objects", params={"bucket": bucket_name}
                     )
                     .json()
-                    .get("reply")
-                    .get("chunks")
+                    .get("reply", {})
+                    .get("objects", [])
                 )
+            except CommandFailed:
+                logger.warning("Transient RPC error listing objects, returning 0%")
+                return 0
+
+            results = []
+            for written_object in obj_list:
+                obj_key = written_object.get("key")
+                try:
+                    object_chunks = (
+                        self.send_rpc_query(
+                            "object_api",
+                            "read_object_mapping",
+                            params={
+                                "bucket": bucket_name,
+                                "key": obj_key,
+                                "obj_id": written_object.get("obj_id"),
+                            },
+                        )
+                        .json()
+                        .get("reply", {})
+                        .get("chunks", [])
+                    )
+                except CommandFailed:
+                    logger.warning(
+                        f"Transient RPC error reading object mapping for "
+                        f"'{obj_key}', skipping this object"
+                    )
+                    continue
 
                 for object_chunk in object_chunks:
                     mirror_blocks = object_chunk.get("frags")[0].get("blocks")
@@ -858,8 +870,9 @@ class MCG:
                         results.append(True)
                     else:
                         results.append(False)
-            current_percentage = (results.count(True) / len(results)) * 100
-            return current_percentage
+            if not results:
+                return 0
+            return (results.count(True) / len(results)) * 100
 
         mirror_percentage = _get_mirroring_percentage()
         logger.info(f"{mirror_percentage}% mirroring is done.")
