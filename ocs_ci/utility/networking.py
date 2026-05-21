@@ -354,10 +354,10 @@ def get_pod_ips(pod_selector, namespace):
     Args:
         pod_selector (str): Label selector to filter pods (e.g., "app=rook-ceph-osd")
         namespace (str): Namespace to search for pods
+
     Returns:
         dict: Dictionary mapping pod names to their IP addresses
     """
-    from ocs_ci.ocs import constants
 
     logger.info(
         f"Getting pod IPs for selector: {pod_selector} in namespace: {namespace}"

@@ -34,6 +34,7 @@ class Probe(OCS):
             probe_name (str): Name of the probe resource
             namespace (str, optional): Namespace of the probe.
                 Defaults to openshift-storage if not provided.
+
         Returns:
             dict: Probe configuration as a dictionary
         """
@@ -59,8 +60,10 @@ class Probe(OCS):
 
         Args:
             probe_config (dict): Probe configuration dictionary
+
         Returns:
             list: List of IP addresses configured as static targets in the probe
+
         Raises:
             RuntimeError: If unable to extract IPs from probe configuration
         """
