@@ -70,6 +70,7 @@ from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import (
     get_ocs_version_from_csv,
     get_semantic_version,
+    get_semantic_running_odf_version,
     VERSION_4_11,
     get_semantic_ocp_running_version,
 )
@@ -280,9 +281,15 @@ def ocs_install_verification(
         and not config.DEPLOYMENT.get("mcg_only_deployment", False)
         and (odf_running_version >= version.VERSION_4_21)
     ):
+        odf_semantic_version = get_semantic_running_odf_version()
+        blackbox_label = (
+            constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
+            if odf_semantic_version >= get_semantic_version("4.22.0-78")
+            else constants.BLACKBOX_POD_LABEL
+        )
         resources_dict.update(
             {
-                constants.BLACKBOX_POD_LABEL: 1,
+                blackbox_label: 1,
             }
         )
     # From 4.19.0-69, we have noobaa-db-pg-cluster-1 and noobaa-db-pg-cluster-2 pods
