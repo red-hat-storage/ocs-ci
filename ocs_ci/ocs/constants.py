@@ -1627,6 +1627,7 @@ ALERT_ODF_NODE_MTU_LESS_THAN_9000 = "ODFNodeMTULessThan9000"
 ALERT_CEPHFS_ORPHANED_SNAPSHOT = "CephFSOrphanedSnapshot"
 CEPHFS_SNAPSHOT_STATE_ORPHANED = "orphaned"
 CEPHFS_SNAPSHOT_STATE_BOUND = "bound"
+ALERT_MDSXATTR = "CephXattrSetLatency"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -3683,6 +3684,9 @@ METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
 # helper script to perform file creation IO on app pod to fill MDS cpu
 FILE_CREATOR_IO = os.path.join(
     TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
+)
+EXTENDED_ATTRIBUTES = os.path.join(
+    TEMPLATE_WORKLOAD_DIR, "helper_scripts/check_xattr.py"
 )
 
 # workaround: marking disks as ssd
