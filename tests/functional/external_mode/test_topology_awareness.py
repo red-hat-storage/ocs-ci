@@ -443,6 +443,7 @@ class TestTopologyAwarenessExternal(ManageTest):
         proj = project_factory()
         ns = proj.namespace
         sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_NON_RESILIENT_RBD
+        replica_count = len(self.pool_names)
 
         sts_name = "topo-sts"
         sts_yaml = {
@@ -451,7 +452,7 @@ class TestTopologyAwarenessExternal(ManageTest):
             "metadata": {"name": sts_name, "namespace": ns},
             "spec": {
                 "serviceName": sts_name,
-                "replicas": 3,
+                "replicas": replica_count,
                 "selector": {"matchLabels": {"app": sts_name}},
                 "template": {
                     "metadata": {"labels": {"app": sts_name}},
@@ -490,11 +491,11 @@ class TestTopologyAwarenessExternal(ManageTest):
         }
 
         create_resource(**sts_yaml)
-        log.info(f"Created StatefulSet {sts_name} with 3 replicas")
+        log.info(f"Created StatefulSet {sts_name} with {replica_count} replicas")
 
         # Wait for all pods to be Running
         pod_ocp = OCP(kind=constants.POD, namespace=ns)
-        for i in range(3):
+        for i in range(replica_count):
             pod_name = f"{sts_name}-{i}"
             log.info(f"Waiting for pod {pod_name}")
             pod_ocp.wait_for_resource(
@@ -506,7 +507,7 @@ class TestTopologyAwarenessExternal(ManageTest):
         # Verify each pod's PV is in the correct pool
         pools_used = set()
         pvc_ocp = OCP(kind=constants.PVC, namespace=ns)
-        for i in range(3):
+        for i in range(replica_count):
             pod_name = f"{sts_name}-{i}"
             pvc_name = f"data-{sts_name}-{i}"
 
@@ -537,11 +538,11 @@ class TestTopologyAwarenessExternal(ManageTest):
             pools_used.add(pv_pool)
             log.info(f"Pod {pod_name}: node={node_hostname}, pool={pv_pool} - CORRECT")
 
-        # All 3 pools should be used
-        assert (
-            len(pools_used) == 3
-        ), f"Expected 3 different pools, got {len(pools_used)}: {pools_used}"
-        log.info(f"All 3 topology pools used: {pools_used}")
+        assert len(pools_used) == replica_count, (
+            f"Expected {replica_count} different pools, "
+            f"got {len(pools_used)}: {pools_used}"
+        )
+        log.info(f"All {replica_count} topology pools used: {pools_used}")
 
     @polarion_id("OCS-7934")
     def test_pvc_deletion_cleans_rbd_image(self, project_factory):
