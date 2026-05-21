@@ -4,6 +4,7 @@ Helper functions specific for DR
 
 import json
 import logging
+import os
 import tempfile
 import time
 from datetime import datetime
@@ -58,8 +59,10 @@ from ocs_ci.utility.utils import (
     CommandFailed,
     run_cmd,
     exec_cmd,
+    create_directory_path,
     is_cluster_y_version_upgraded,
 )
+from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
     find_cephblockpoolradosnamespace,
@@ -3061,4 +3064,51 @@ def validate_protection_label(kind, namespace, protection_name=None):
 
     logger.info(
         f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
+    )
+
+
+def run_odf_dr_test(action="run"):
+    """
+    Run ``odf dr test <action>`` and store the output in the log directory
+    following the must-gather path convention.
+
+    The output is stored at:
+        ``<log_dir>/dr_test_<action>_<run_id>/<cluster_name>/out/test-subscr/``
+
+    Args:
+        action (str): The dr test subcommand to execute. Either "run" or "clean".
+
+    Raises:
+        RuntimeError: If the ODF CLI binary cannot be initialized.
+        CommandFailed: If the ``odf dr test`` command fails.
+        AssertionError: If action is "run" and the output directory is empty.
+
+    """
+    odf_cli_runner = odf_cli_setup_helper()
+
+    output_dir = os.path.join(
+        os.path.expanduser(config.RUN["log_dir"]),
+        f"dr_test_{action}_{config.RUN['run_id']}",
+        config.ENV_DATA["cluster_name"],
+        "out",
+        "test-subscr",
+    )
+    create_directory_path(output_dir)
+
+    logger.info(f"Running ODF DR test {action}, output will be stored at: {output_dir}")
+    result = odf_cli_runner.run_command(f" dr test {action} -o {output_dir}")
+
+    cmd_output = result.stdout.decode()
+    assert "Validation Successful" in cmd_output, (
+        f"ODF DR test {action} did not report 'Validation Successful'. "
+        f"Output: {cmd_output}"
+    )
+
+    output_contents = os.listdir(output_dir)
+    assert (
+        len(output_contents) > 0
+    ), f"DR test {action} output directory is empty: {output_dir}"
+    logger.info(
+        f"ODF DR test {action} completed successfully. "
+        f"Output files: {output_contents}"
     )
