@@ -16,12 +16,11 @@ from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster, is_ms_provider_clust
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
-    skipif_hci_provider_and_client,
     skipif_bmpsi,
     skipif_external_mode,
     skipif_ms_consumer,
-    skipif_hci_client,
     brown_squad,
+    runs_on_provider,
     skipif_ibm_cloud_managed,
 )
 from ocs_ci.helpers.helpers import (
@@ -193,8 +192,8 @@ def delete_and_create_osd_node(osd_node_name):
 @ignore_leftovers
 @ipi_deployment_required
 @skipif_managed_service
-@skipif_hci_provider_and_client
 @skipif_bmpsi
+@runs_on_provider
 @skipif_external_mode
 class TestNodeReplacementWithIO(ManageTest):
     """
@@ -273,7 +272,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @skipif_bmpsi
 @skipif_external_mode
 @skipif_ms_consumer
-@skipif_hci_client
+@runs_on_provider
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive
@@ -329,7 +328,7 @@ class TestNodeReplacement(ManageTest):
 @pytest.mark.polarion_id("OCS-2535")
 @skipif_external_mode
 @skipif_managed_service
-@skipif_hci_provider_and_client
+@runs_on_provider
 class TestNodeReplacementTwice(ManageTest):
     """
     Node replacement twice:
