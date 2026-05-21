@@ -639,8 +639,9 @@ def process_cluster_cli_params(config):
         cluster_path, ocsci_config.RUN["kubeconfig_location"]
     )
     if not os.path.isfile(kubeconfig_path) and not (
-        get_cli_param(config, "deploy", default=False)
-        or get_cli_param(config, "teardown", default=False)
+        # TODO: Improve the condition for deploy if OCP cluster is not present
+        # get_cli_param(config, "deploy", default=False)
+        get_cli_param(config, "teardown", default=False)
         or get_cli_param(config, "kubeconfig")
     ):
         create_kubeconfig(kubeconfig_path)
