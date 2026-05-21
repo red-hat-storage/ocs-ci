@@ -479,6 +479,7 @@ def create_drs_nad(cluster_name):
                 f"{nad_config[:100]}..."  # Log first 100 chars
             )
 
+
 def get_pod_ips(pod_selector, namespace):
     """
     Get pod IPs for pods matching the selector in a given namespace.
