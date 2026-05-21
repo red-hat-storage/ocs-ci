@@ -113,7 +113,7 @@ class TestNoobaaUnderStress:
 
             # Iterate and stress the cluster with object upload
             # and other IO operations
-            total_iterations = 1
+            total_iterations = 2
             if test_type == "breakpoint":
                 # In case of breakpoint test we increment the multiplier first and
                 # then decrement the multiplier
