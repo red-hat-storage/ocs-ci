@@ -1246,8 +1246,12 @@ def check_for_filesystem_hangs(namespace, output_dir="/mnt/output"):
                                 )
 
                             except Exception as e:
-                                logger.warning(
+                                logger.error(
                                     f"Failed to parse hang marker {marker_file}: {e}"
+                                )
+                                raise CommandFailed(
+                                    f"Failed to parse hang marker file {marker_file}. "
+                                    f"This may indicate a real hang or transient file issue: {e}"
                                 )
 
             except Exception as e:
