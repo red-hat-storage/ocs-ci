@@ -29,7 +29,7 @@ class FillPoolJob(object):
     def create(
         self,
         name=None,
-        block_size="1M",
+        block_size="4M",
         cpu_request="100m",
         mem_request="128Mi",
         cpu_limit="500m",
@@ -91,7 +91,8 @@ class FillPoolJob(object):
         # Insure to handle the case of "No space left on device" error gracefully
         dd_cmd = (
             f'echo "Filling PVC with {fill_mode} data..."; '
-            f"dd if={input_source} of=/mnt/fill/testfile bs=${{BLOCK_SIZE:-{block_size}}} 2>/tmp/dd_err; "
+            f"dd if={input_source} of=/mnt/fill/testfile bs=${{BLOCK_SIZE:-{block_size}}} "
+            f"oflag=direct 2>/tmp/dd_err; "
             f"EXIT_STATUS=$?; "
             f"if [ $EXIT_STATUS -ne 0 ] && grep -q 'No space left on device' /tmp/dd_err; then "
             f"  cat /tmp/dd_err; echo 'Capacity reached. Exiting successfully.'; exit 0; "
