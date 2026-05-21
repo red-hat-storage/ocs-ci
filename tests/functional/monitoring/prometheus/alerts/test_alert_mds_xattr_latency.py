@@ -218,17 +218,48 @@ def recover_mds_pods_if_not_running(nodes):
         deployment_name = deployment["metadata"]["name"]
         replicas = deployment["spec"]["replicas"]
 
-        log.info(f"MDS deployment {deployment_name} has {replicas} replica(s)")
-
         if replicas == 0:
-            log.info(f"Scaling up MDS deployment {deployment_name} from 0 to 1")
-            helpers.modify_deployment_replica_count(
-                deployment_name=deployment_name, replica_count=1
+            try:
+                helpers.modify_deployment_replica_count(
+                    deployment_name=deployment_name, replica_count=1
+                )
+                scaled_any = True
+                log.info(f"Successfully scaled {deployment_name} to 1 replica")
+            except Exception as e:
+                log.error(f"Failed to scale MDS deployment {deployment_name}: {e}")
+                raise AssertionError(
+                    f"Teardown failed: Could not scale MDS deployment {deployment_name} from 0 to 1"
+                )
+        else:
+            log.info(
+                f"MDS deployment {deployment_name} already has {replicas} replica(s), no scaling needed"
             )
-            scaled_any = True
 
     if not scaled_any:
         log.info("No MDS deployments needed scaling")
+
+    # Verify MDS pods are running after scaling
+    if scaled_any:
+        log.info("Waiting for MDS pods to be in Running state after scaling")
+        time.sleep(30)  # Give pods time to start
+
+        mds_pods = get_mds_pods()
+        if not mds_pods:
+            raise AssertionError("No MDS pods found after scaling deployments")
+
+        log.info(f"Found {len(mds_pods)} MDS pod(s), verifying they are running")
+        for mds_pod in mds_pods:
+            try:
+                helpers.wait_for_resource_state(
+                    resource=mds_pod, state=constants.STATUS_RUNNING, timeout=120
+                )
+            except Exception as e:
+                log.error(f"MDS pod {mds_pod.name} failed to reach Running state: {e}")
+                raise AssertionError(
+                    f"Teardown failed: MDS pod {mds_pod.name} did not reach Running state after scaling"
+                )
+
+        log.info("All MDS pods are running successfully")
 
 
 @blue_squad
