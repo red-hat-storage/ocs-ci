@@ -1034,19 +1034,25 @@ def run_must_gather(
     return mg_output
 
 
-def collect_ceph_external(path):
+def collect_ceph_external(path, namespace=None, skip_setup_toolbox=False):
     """
     Collect ceph commands via cli tool on External mode cluster
 
     Args:
         path(str): The destination for saving the ceph files [output ceph commands]
+        namespace(str): The namespace to collect logs from. If not provided,
+            uses cluster_namespace from config
+        skip_setup_toolbox(bool): If True, skip setting up ceph toolbox. Useful when
+            toolbox is expected to already exist or in multi-storagecluster mode
 
     """
     try:
+        namespace = namespace or ocsci_config.ENV_DATA["cluster_namespace"]
         # In case it fails in deployment sooner than we create the toolbox pod
-        # we need to make sure the toolbox pod is created
-        setup_ceph_toolbox()
-        log.info(f"Collecting external ceph logs to: {path}")
+        # we need to make sure the toolbox pod is created (unless explicitly skipped)
+        if not skip_setup_toolbox:
+            setup_ceph_toolbox()
+        log.info(f"Collecting external ceph logs from namespace {namespace} to: {path}")
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
@@ -1056,12 +1062,13 @@ def collect_ceph_external(path):
         os.makedirs(path, exist_ok=True)
         run_cmd(
             f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path} "
-            f"{ocsci_config.ENV_DATA['cluster_namespace']}",
+            f"{namespace}",
             timeout=600,
         )
     except Exception as ex:
-        log.info(
-            f"Failed to execute the ceph commands script due to the error {str(ex)}"
+        log.warning(
+            f"Failed to collect external ceph logs from namespace {namespace}. "
+            f"Error: {str(ex)}"
         )
 
 
@@ -1307,6 +1314,25 @@ def _collect_ocs_logs(
                 log_dir_path, f"external_ceph_logs_{timestamp}"
             )
             collect_ceph_external(path=external_ceph_log_dir_path)
+        # Collect logs from external RHCS cluster in multi-storagecluster mode
+        if config.DEPLOYMENT.get("multi_storagecluster") and not ocsci_config.RUN.get(
+            "is_ocp_deployment_failed"
+        ):
+            external_namespace = config.ENV_DATA.get(
+                "external_storage_cluster_namespace",
+                constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
+            )
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            multi_storagecluster_external_ceph_log_dir_path = os.path.join(
+                log_dir_path, f"multi_storagecluster_external_ceph_logs_{timestamp}"
+            )
+            log.info(
+                f"Collecting external RHCS logs for multi-storagecluster from namespace {external_namespace}"
+            )
+            collect_ceph_external(
+                path=multi_storagecluster_external_ceph_log_dir_path,
+                namespace=external_namespace,
+            )
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, "ocp_must_gather")
         ocp_service_log_dir_path = os.path.join(
