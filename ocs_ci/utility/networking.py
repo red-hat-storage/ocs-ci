@@ -11,6 +11,7 @@ import re
 
 from ocs_ci.framework import config
 from ocs_ci.utility.templating import load_yaml
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP
@@ -416,8 +417,12 @@ def create_drs_nad(cluster_name):
 
     Args:
         cluster_name (str): cluster name used to construct the namespace on provider cluster
+
+    Raises:
+        TimeoutError: If NAD creation verification times out
     """
     namespace = f"clusters-{cluster_name}"
+    nad_name = "storage"  # From template
 
     # Check if namespace exists, create if it doesn't
     ocp_ns = OCP(kind="namespace")
@@ -430,6 +435,44 @@ def create_drs_nad(cluster_name):
     nad_path = os.path.join(constants.TEMPLATE_DEPLOYMENT_DIR, "drs_nad.yaml")
     nad_yaml = load_yaml(nad_path)
     nad_yaml["metadata"]["namespace"] = namespace
+
     with config.RunWithProviderConfigContextIfAvailable():
         nad_obj = OCS(**nad_yaml)
         nad_obj.apply(**nad_yaml)
+
+        logger.info(
+            f"Verifying NetworkAttachmentDefinition '{nad_name}' "
+            f"creation in namespace '{namespace}'"
+        )
+
+        # Verify NAD exists with timeout
+        nad_ocp = OCP(kind="NetworkAttachmentDefinition", namespace=namespace)
+
+        for sample in TimeoutSampler(
+            timeout=120, sleep=5, func=nad_ocp.is_exist, resource_name=nad_name
+        ):
+            if sample:
+                logger.info(
+                    f"NetworkAttachmentDefinition '{nad_name}' "
+                    f"successfully created in namespace '{namespace}'"
+                )
+                break
+        else:
+            raise TimeoutError(
+                f"Timeout waiting for NetworkAttachmentDefinition '{nad_name}' "
+                f"to be created in namespace '{namespace}'"
+            )
+
+        # Verify NAD configuration
+        nad_data = nad_ocp.get(resource_name=nad_name)
+        nad_config = nad_data.get("spec", {}).get("config")
+
+        if not nad_config:
+            logger.warning(
+                f"NetworkAttachmentDefinition '{nad_name}' has no config specification"
+            )
+        else:
+            logger.info(
+                f"NetworkAttachmentDefinition '{nad_name}' verified with config: "
+                f"{nad_config[:100]}..."  # Log first 100 chars
+            )
