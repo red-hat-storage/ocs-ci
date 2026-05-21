@@ -524,7 +524,8 @@ generic_locators = {
     "searchbar-select-label": ("//button[@id='LABEL-link']", By.XPATH),
     "searchbar_input": (
         "//input[@data-test-id='item-filter'] | "
-        "//input[@placeholder='Search by name...']",
+        "//input[@placeholder='Search by name...'] | "
+        "//input[@placeholder='Filter by Name']",
         By.XPATH,
     ),
     "resource_from_list_by_name": (
