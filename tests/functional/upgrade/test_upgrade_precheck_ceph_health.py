@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     tier2,
     runs_on_provider,
+    ignore_leftovers,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.utility.utils import run_ceph_health_cmd
@@ -117,6 +118,7 @@ def verify_odf_not_upgradeable_runbook_link(alerts):
 @skipif_mcg_only
 @tier2
 @runs_on_provider
+@ignore_leftovers
 class TestODFUpgradePrecheckConditions(ManageTest):
     """
     Test class for ODF upgrade pre-check conditions like
