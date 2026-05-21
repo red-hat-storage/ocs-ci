@@ -78,6 +78,15 @@ class FusionDataFoundationDeployment:
             self.create_image_digest_mirror_set()
             self.setup_fdf_pre_release_deployment()
 
+        if self.lso_enabled:
+            self.ensure_lso_installed()
+            # Perform disk cleanup after LSO is installed but before any disk operations
+            if config.ENV_DATA.get("skip_disks_cleanup", False):
+                logger.info("Skipping disks cleanup")
+            else:
+                logger.info("Performing disk cleanup for LSO")
+                cleanup_nodes_for_lso_install()
+
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
         self.ensure_install_plan_approval()
@@ -251,14 +260,6 @@ class FusionDataFoundationDeployment:
             resource_name=storage_namespace,
             label="openshift.io/cluster-monitoring=true",
         )
-        if self.lso_enabled:
-            self.ensure_lso_installed()
-            # Perform disk cleanup after LSO is installed but before any disk operations
-            if config.ENV_DATA.get("skip_disks_cleanup", False):
-                logger.info("Skipping disks cleanup")
-            else:
-                logger.info("Performing disk cleanup for LSO")
-                cleanup_nodes_for_lso_install()
         self.patch_catalogsource()
 
         fusion_version = config.ENV_DATA["fusion_version"].replace("v", "")
