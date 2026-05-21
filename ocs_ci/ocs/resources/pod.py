@@ -594,10 +594,15 @@ class Pod(OCS):
         if isinstance(packages, list):
             packages = " ".join(packages)
 
-        # Detect OS inside pod
-        os_release = self.exec_cmd_on_pod(
-            "cat /etc/os-release || true", out_yaml_format=False
-        )
+        # Detect OS inside pod. Use try/except instead of shell '|| true' so
+        # the command works on any container image regardless of shell availability
+        # (oc rsh does not invoke a shell, so || would be passed as a literal arg).
+        try:
+            os_release = self.exec_cmd_on_pod(
+                "cat /etc/os-release", out_yaml_format=False
+            )
+        except CommandFailed:
+            os_release = ""
 
         os_release_lower = os_release.lower() if os_release else ""
 
