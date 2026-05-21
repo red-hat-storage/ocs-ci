@@ -14,7 +14,7 @@ from selenium.common.exceptions import (
 
 
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs import exceptions
+from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
 from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 from ocs_ci.utility import version
@@ -447,7 +447,13 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             logger.exception("Error navigating to previous page")
             return False
 
-    def delete_bucket_ui(self, delete_via, expect_fail, resource_name):
+    def delete_bucket_ui(
+        self,
+        delete_via: str,
+        expect_fail: bool,
+        resource_name: str,
+        provider: str = constants.S3_PROVIDER_NOOBAA,
+    ):
         """
         Delete an Object Bucket via the UI
 
@@ -455,9 +461,12 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             delete_via (str): delete via 'OB/Actions' or via 'three dots'
             expect_fail (bool): verify if OB removal fails with proper PopUp message
             resource_name (str): Object Bucket Claim's name. The resource with its suffix will be deleted
+            provider (str): Storage provider - constants.S3_PROVIDER_NOOBAA or
+                constants.S3_PROVIDER_RGW_INTERNAL.
+
         """
         logger.info(f"Attempting to delete bucket: {resource_name}")
-        self.navigate_buckets_page()
+        self.navigate_buckets_page(provider=provider)
 
         logger.info(f"Searching for bucket: {resource_name}")
         self.do_send_keys(self.generic_locators["search_resource_field"], resource_name)
@@ -608,16 +617,22 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         file_input.send_keys(folder_path)
         time.sleep(wait_time)
 
-    def navigate_to_bucket(self, bucket_name: str) -> None:
+    def navigate_to_bucket(
+        self, bucket_name: str, provider: str = constants.S3_PROVIDER_NOOBAA
+    ) -> None:
         """
         Navigate to object storage and select the specific test bucket by name.
 
         Args:
             bucket_name (str): Name of the bucket to navigate to.
+            provider (str): Storage provider - constants.S3_PROVIDER_NOOBAA or
+                constants.S3_PROVIDER_RGW_INTERNAL.
+
         """
-        self.nav_object_storage_page()
+        obj_storage = self.nav_object_storage_page()
+        if provider != constants.S3_PROVIDER_NOOBAA:
+            obj_storage.select_storage_provider(provider)
         logger.info(f"Navigating to bucket: {bucket_name}")
-        logger.info(f"Looking for bucket link with text: {bucket_name}")
         bucket_link_locator = f"//tr//a[contains(text(), '{bucket_name}')]"
         self.do_click((bucket_link_locator, By.XPATH))
         logger.info(f"Successfully navigated into bucket: {bucket_name}")
