@@ -27,7 +27,7 @@ dependencies = [
     "flaky==3.7.0",
     "funcy==1.14",
     "gevent==23.9.1",
-    "gitpython==3.1.41",
+    "gitpython==3.1.47",
     "google-api-core==2.25.0",
     "google-api-python-client==2.171.0",
     "google-auth==2.38.0",  # pragma: allowlist secret
