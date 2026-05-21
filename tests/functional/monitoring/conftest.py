@@ -24,7 +24,7 @@ from ocs_ci.ocs.resources.pod import get_mon_pods, get_osd_pods
 from ocs_ci.utility.kms import get_kms_endpoint, set_kms_endpoint
 from ocs_ci.utility.pagerduty import get_pagerduty_service_id
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, exec_cmd
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.utility.workloadfixture import measure_operation, is_measurement_done
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -1169,10 +1169,8 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
     with config.RunWithFirstConsumerConfigContextIfAvailable():
         client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
         logger.info(f"Client cluster key: {client_cluster}")
-        cluster_id = exec_cmd(
-            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
-        ).stdout.decode("utf-8")
-        client_name = f"storageconsumer-{cluster_id}"
+        cluster_name = config.cluster_ctx.ENV_DATA.get("cluster_name")
+        client_name = f"{constants.STORAGECONSUMER_NAME_PREFIX}{cluster_name}"
     client = storageconsumer.StorageConsumer(
         client_name, consumer_context=client_cluster
     )
@@ -1181,17 +1179,29 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
 
     def change_client_version():
         """
-        Stop heartbeat and change value of ocs version in storage client resource
-        for 3 minutes.
+        Stop heartbeat, wait for it to be missed, then change value of ocs version
+        in storage client resource. This ensures both StorageClientHeartbeatMissed
+        and StorageClientIncompatibleOperatorVersion alerts are triggered.
 
         """
         nonlocal client
-        # run_time of operation
-        run_time = 60 * 7
+        # First, stop heartbeat and wait for it to be missed
         client.stop_heartbeat()
+        # Wait for heartbeat critical alert to fire (300s + margin)
+        heartbeat_wait_time = 60 * 6  # 6 minutes
+        logger.info(
+            f"Waiting {heartbeat_wait_time} seconds for heartbeat to be missed"
+        )
+        time.sleep(heartbeat_wait_time)
+
+        # Now change the version to trigger incompatible version alert
         client.set_ocs_version("4.13.0")
-        logger.info(f"Waiting for {run_time} seconds")
-        time.sleep(run_time)
+        # Wait additional time to ensure all alerts are captured
+        additional_wait_time = 60 * 3  # 3 minutes
+        logger.info(
+            f"Waiting additional {additional_wait_time} seconds with incompatible version"
+        )
+        time.sleep(additional_wait_time)
         return
 
     def teardown():
