@@ -1,0 +1,11 @@
+# Requirements for AI-Powered Code Review
+# Install with: pip install -r ci/requirements-ai-review.txt
+
+# Core dependencies
+pyyaml>=6.0
+
+# Claude API integration
+anthropic>=0.39.0
+
+# Note: GitHub CLI (gh) is also required for GitHub integration
+# Install from: https://cli.github.com/
