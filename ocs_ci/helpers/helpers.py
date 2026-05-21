@@ -1749,6 +1749,82 @@ def set_image_lookup(image_name):
 
 def get_provision_time(interface, pvc_name, status="start"):
     """
+    Extract timestamp for PVC events from CSI provisioner logs.
+    Supports both old 'Provisioning' and new 'Started'/'Succeeded' formats.
+    Progressive fallback: start with last 1000 lines, expand up to 5000.
+    """
+
+    # Define the operation based on status
+    operation = "started"
+    if status.lower() == "end":
+        operation = "succeeded"
+
+    this_year = str(datetime.datetime.now().year)
+
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    logger.info("podnames")
+    logger.info(pod_name[0])
+    logger.info(pod_name[1])
+
+    # Get logs from both provisioner pods
+    logs1 = pod.get_pod_logs(pod_name[0], "csi-provisioner").split("\n")
+    logs2 = pod.get_pod_logs(pod_name[1], "csi-provisioner").split("\n")
+    logs = logs1 + logs2
+    logger.info(f"total logs loaded: {len(logs)}")
+
+    def find_events(name):
+        patterns = [
+            f'"Provisioning".*{pvc_name}',
+            f'"Started".*PVC="[^"]*{pvc_name}"',
+            f'"Succeeded".*PVC="[^"]*{pvc_name}"'
+        ]
+        # progressive fallback
+        for n in range(1000, 5001, 1000):
+            recent = logs[-n:][::-1]
+            matches = [line for line in recent if any(re.search(p, line, re.IGNORECASE) for p in patterns)]
+            if matches:
+                results = []
+                for line in matches:
+                    try:
+                        mon_day = " ".join(line.split(" ")[0:2])
+                        results.append(f"{this_year} {mon_day}")
+                    except Exception:
+                        continue
+                return results
+        return []
+
+    # Handle single PVC
+    if isinstance(pvc_name, str):
+        events = find_events(pvc_name)
+        if not events:
+            logger.warning(f"No matching log line found for PVC {pvc_name}")
+            return None
+        stat = events[0]
+
+    # Handle list of PVCs
+    elif isinstance(pvc_name, list):
+        all_stats = []
+        for pvc in pvc_name:
+            events = find_events(pvc.name)
+            all_stats.extend(events)
+
+        if not all_stats:
+            logger.warning("No matching log lines found for any PVCs")
+            return None
+
+        all_stats = sorted(all_stats)
+        if status.lower() == "end":
+            stat = all_stats[-1]  # latest
+        elif status.lower() == "start":
+            stat = all_stats[0]  # earliest
+
+    return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
+
+
+'''
+def get_provision_time(interface, pvc_name, status="start"):
+    """
     Get the starting/ending creation time of a PVC based on provisioner logs
 
     Args:
@@ -1769,32 +1845,53 @@ def get_provision_time(interface, pvc_name, status="start"):
     this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
+    logger.info("podnames")
+    logger.info(pod_name[0])
+    logger.info(pod_name[1])
     # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], "csi-provisioner")
-    logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
+    logs1 = pod.get_pod_logs(pod_name[0], "csi-provisioner").split("\n")
+    logs2 = pod.get_pod_logs(pod_name[1], "csi-provisioner").split("\n")
 
-    logs = logs.split("\n")
+    logs1 = logs1[-5000:]
+    logs2 = logs2[-5000:]
+    logs = logs1 + logs2
+    logger.info(f"length of logs{len(logs)}")
+
     # Extract the time for the one PVC provisioning
     if isinstance(pvc_name, str):
-        stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
-        mon_day = " ".join(stat[0].split(" ")[0:2])
-        stat = f"{this_year} {mon_day}"
+        for i in logs:
+            logger.info(f"iiii{i}")
+        matches = [
+            i for i in logs
+            if (re.search(f"provision.*{pvc_name}.*{operation}", i, re.IGNORECASE)
+                or re.search(f'"Started".*PVC="{pvc_name}".*StorageClass=', i)
+                or re.search(f'"Succeeded".*PVC="{pvc_name}".*StorageClass=', i))
+        ]
+        if matches:
+            mon_day = " ".join(matches[0].split(" ")[0:2])
+            stat = f"{this_year} {mon_day}"
     # Extract the time for the list of PVCs provisioning
     if isinstance(pvc_name, list):
         all_stats = []
         for i in range(0, len(pvc_name)):
             name = pvc_name[i].name
-            stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
-            mon_day = " ".join(stat[0].split(" ")[0:2])
-            stat = f"{this_year} {mon_day}"
-            all_stats.append(stat)
+            matches = [
+                i for i in logs
+                if (re.search(f"provision.*{pvc_name}.*{operation}", i, re.IGNORECASE)
+                    or re.search(f'"Started".*PVC="{pvc_name}".*StorageClass=', i)
+                    or re.search(f'"Succeeded".*PVC="{pvc_name}".*StorageClass=', i))
+            ]
+            if matches:
+                mon_day = " ".join(matches[0].split(" ")[0:2])
+                stat = f"{this_year} {mon_day}"
+                all_stats.append(stat)
         all_stats = sorted(all_stats)
         if status.lower() == "end":
             stat = all_stats[-1]  # return the highest time
         elif status.lower() == "start":
             stat = all_stats[0]  # return the lowest time
     return datetime.datetime.strptime(stat, DATE_TIME_FORMAT)
-
+'''
 
 def get_start_creation_time(interface, pvc_name):
     """
@@ -1935,7 +2032,7 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
 
     return pvc_dict
 
-
+'''
 def measure_pv_deletion_time_bulk(
     interface, pv_name_list, wait_time=60, return_log_times=False
 ):
@@ -2026,7 +2123,64 @@ def measure_pv_deletion_time_bulk(
             pv_dict[pv_name] = (start_tm, end_tm)
 
     return pv_dict
+    
+'''
 
+def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60, return_log_times=False):
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    time.sleep(wait_time)
+
+    loop_counter = 0
+    this_year = str(datetime.datetime.now().year)
+
+    while True:
+        logs1 = pod.get_pod_logs(pod_name[0], "csi-provisioner").splitlines()
+        logs2 = pod.get_pod_logs(pod_name[1], "csi-provisioner").splitlines()
+        logs = logs1 + logs2
+
+        pv_start = {}
+        pv_end = {}
+
+        for line in logs:
+            for pv in pv_name_list:
+                if pv not in pv_start and re.search(
+                    rf'"shouldDelete is true".*PV="{re.escape(pv)}"', line
+                ):
+                    pv_start[pv] = line
+
+                if re.search(
+                    rf'Volume deleted.*PV="{re.escape(pv)}"', line
+                ):
+                    pv_end[pv] = line
+
+        missing = [pv for pv in pv_name_list if pv not in pv_start or pv not in pv_end]
+
+        if missing:
+            logger.info(f"PV count without CSI delete log data {len(missing)}")
+            time.sleep(wait_time)
+            loop_counter += 1
+            if loop_counter >= 6:
+                raise UnexpectedBehaviour(f"No PV deletion data in CSI logs for {missing}")
+        else:
+            break
+
+    pv_dict = {}
+
+    for pv in pv_name_list:
+        # Extract start time
+        mon_day = " ".join(pv_start[pv].split(" ")[0:2])
+        start_tm = f"{this_year} {mon_day}"
+        start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
+
+        # Extract end time
+        mon_day = " ".join(pv_end[pv].split(" ")[0:2])
+        end_tm = f"{this_year} {mon_day}"
+        end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
+
+        total = end_time - start_time
+        pv_dict[pv] = (start_tm, end_tm) if return_log_times else total.total_seconds()
+
+    return pv_dict
 
 def get_start_deletion_time(interface, pv_name):
     """
