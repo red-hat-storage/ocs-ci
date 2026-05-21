@@ -19,6 +19,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     CommandFailed,
+    TimeoutExpiredError,
 )
 
 
@@ -290,7 +291,7 @@ def create_drs_machine_config():
     this function will skip creation and return early.
 
     After creating the MachineConfig, this function waits for all worker nodes
-    to be updated. The timeout is calculated as 9 minutes per worker node.
+    to be updated. The timeout is calculated as 15 minutes per worker node.
     """
     from ocs_ci.ocs.resources.machineconfig import machineconfig_exists
 
@@ -448,20 +449,21 @@ def create_drs_nad(cluster_name):
         # Verify NAD exists with timeout
         nad_ocp = OCP(kind="NetworkAttachmentDefinition", namespace=namespace)
 
-        for sample in TimeoutSampler(
-            timeout=120, sleep=5, func=nad_ocp.is_exist, resource_name=nad_name
-        ):
-            if sample:
-                logger.info(
-                    f"NetworkAttachmentDefinition '{nad_name}' "
-                    f"successfully created in namespace '{namespace}'"
-                )
-                break
-        else:
+        try:
+            for sample in TimeoutSampler(
+                timeout=120, sleep=5, func=nad_ocp.is_exist, resource_name=nad_name
+            ):
+                if sample:
+                    logger.info(
+                        f"NetworkAttachmentDefinition '{nad_name}' "
+                        f"successfully created in namespace '{namespace}'"
+                    )
+                    break
+        except TimeoutExpiredError as e:
             raise TimeoutError(
                 f"Timeout waiting for NetworkAttachmentDefinition '{nad_name}' "
                 f"to be created in namespace '{namespace}'"
-            )
+            ) from e
 
         # Verify NAD configuration
         nad_data = nad_ocp.get(resource_name=nad_name)
