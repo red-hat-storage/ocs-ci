@@ -60,6 +60,11 @@ def mirror_fdf_catalog_via_oc_mirror(
     """
     logger.info(f"Mirroring FDF catalog: {catalog_image}")
 
+    # Set mirror_registry in config if provided
+    if mirror_registry:
+        config.DEPLOYMENT["mirror_registry"] = mirror_registry
+        logger.info(f"Set mirror_registry in config: {mirror_registry}")
+
     # Call the generic function with FDF-specific parameters
     return mirror_index_image_via_oc_mirror(
         index_image=catalog_image,
