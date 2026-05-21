@@ -308,7 +308,7 @@ class TestResizeOSD(ManageTest):
 
     @tier2
     @black_squad
-    @pytest.mark.order("last")
+    @pytest.mark.order("last-1")
     @polarion_id("OCS-5800")
     @ui
     @skipif_ibm_cloud_managed
