@@ -10776,18 +10776,20 @@ def setup_nfs(request, setup_rbac):
         nfs_client_prov_dep_data = templating.load_yaml(
             constants.NFS_DEPLOYMENT_YAML_DIR
         )
-        nfs_client_prov_dep_data["spec"]["template"]["spec"]["containers"][0]["env"][1][
-            "value"
-        ] = nfs_server
-        nfs_client_prov_dep_data["spec"]["template"]["spec"]["containers"][0]["env"][2][
-            "value"
-        ] = nfs_mount
-        nfs_client_prov_dep_data["spec"]["template"]["spec"]["volumes"][0]["nfs"][
-            "server"
-        ] = nfs_server
-        nfs_client_prov_dep_data["spec"]["template"]["spec"]["volumes"][0]["nfs"][
-            "path"
-        ] = nfs_mount
+        container = nfs_client_prov_dep_data["spec"]["template"]["spec"]["containers"][
+            0
+        ]
+        env_by_name = {e.get("name"): e for e in container.get("env", [])}
+        env_by_name["NFS_SERVER"]["value"] = nfs_server
+        env_by_name["NFS_PATH"]["value"] = nfs_mount
+
+        nfs_volume = next(
+            v
+            for v in nfs_client_prov_dep_data["spec"]["template"]["spec"]["volumes"]
+            if v.get("name") == "nfs-client-root"
+        )
+        nfs_volume["nfs"]["server"] = nfs_server
+        nfs_volume["nfs"]["path"] = nfs_mount
         log.info("Creating NFS client provisioner deployment")
         create_resource(**nfs_client_prov_dep_data)
         nfs_client_dep_obj = OCS(**nfs_client_prov_dep_data)
