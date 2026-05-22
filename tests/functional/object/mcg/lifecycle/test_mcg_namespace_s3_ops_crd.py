@@ -467,7 +467,7 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         )[0]
         ns_bucket = ns_buc.name
         namespace_res = ns_buc.bucketclass.namespacestores[0].uls_name
-        aws_s3_client = cld_mgr.aws_client.s3_client
+        aws_s3_client = cld_mgr.aws_client.client.meta.client
 
         # Put, Get bucket versioning and verify
         logger.info(f"Enabling bucket versioning on resource bucket: {namespace_res}")
