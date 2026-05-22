@@ -275,10 +275,53 @@ class Operator:
         """
         pass
 
+    def operatorgroup_exists(self):
+        """
+        Check if an OperatorGroup already exists in the namespace.
+
+        This is important for platforms like Fusion Data Foundation where
+        the platform controller (e.g., OdfManager) may create and manage
+        the OperatorGroup automatically.
+
+        Returns:
+            bool: True if at least one OperatorGroup exists, False otherwise
+
+        Raises:
+            CommandFailed: If checking for existing OperatorGroups fails
+        """
+        ocp = OCP(kind="operatorgroup", namespace=self.namespace)
+        try:
+            count = len(ocp.get().get("items", []))
+            if count > 0:
+                logger.info(
+                    "Found %s existing OperatorGroup(s) in namespace %s",
+                    count,
+                    self.namespace,
+                )
+            return count > 0
+        except CommandFailed as e:
+            logger.warning(
+                "Failed to check for existing OperatorGroup in %s: %s",
+                self.namespace,
+                e,
+            )
+            raise
+
     def create_operatorgroup(self):
         """
-        Create an OperatorGroup for the operator
+        Create an OperatorGroup for the operator.
+
+        If an OperatorGroup already exists in the namespace, skip creation
+        to avoid OLM errors (TooManyOperatorGroups). This handles cases where
+        platform operators (e.g., Fusion OdfManager) create OperatorGroups.
         """
+        if self.operatorgroup_exists():
+            logger.info(
+                "OperatorGroup already exists in namespace %s, skipping creation",
+                self.namespace,
+            )
+            return
+
         operatorgroup_data = templating.load_yaml(
             os.path.join(OPERATORS_TEMPLATES_DIR, "operatorgroup.yaml")
         )
