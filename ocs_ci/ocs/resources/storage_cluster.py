@@ -7,6 +7,7 @@ import ipaddress
 import logging
 import re
 import tempfile
+import time
 import json
 
 from jsonschema import validate
@@ -3615,6 +3616,25 @@ def get_deviceset_name_per_count():
     return {d.get("name"): d["count"] for d in device_sets}
 
 
+def get_storage_client():
+    """
+    Get the StorageClient OCP object for the configured storage client.
+
+    Returns:
+        ocs_ci.ocs.ocp.OCP: StorageClient OCP object with resource_name set
+            to the storage client name from config.
+    """
+    return ocp.OCP(
+        kind=constants.STORAGECLIENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=(
+            config.cluster_ctx.ENV_DATA.get("storage_client_name")
+            or config.ENV_DATA.get("storage_client_name")
+            or constants.STORAGE_CLIENT_NAME
+        ),
+    )
+
+
 def wait_for_storagecluster_ready_with_health_check(
     storage_cluster,
     timeout=1000,
@@ -3627,6 +3647,10 @@ def wait_for_storagecluster_ready_with_health_check(
     This function is particularly useful for RDR deployments where slow ops issues
     can prevent the cluster from reaching Ready state.
 
+    The health check uses per-issue recovery attempt tracking (max 2 attempts per issue).
+    Jira is updated only on first occurrence of each specific issue with occurrence count.
+    After max attempts, the same issue will fail immediately without additional recovery.
+
     Args:
         storage_cluster (StorageCluster): The StorageCluster object to monitor
         timeout (int): Total timeout in seconds to wait for Ready phase (default: 1000)
@@ -3636,7 +3660,8 @@ def wait_for_storagecluster_ready_with_health_check(
 
     Raises:
         ResourceWrongStatusException: If StorageCluster doesn't reach Ready within timeout
-        CephHealthException: If Ceph health issues cannot be recovered
+        CephHealthException: If Ceph health issues cannot be recovered or same issue
+            persists after max recovery attempts
 
     Returns:
         bool: True if StorageCluster reached Ready phase
@@ -3644,7 +3669,6 @@ def wait_for_storagecluster_ready_with_health_check(
     """
     from ocs_ci.utility.utils import ceph_health_check
     from ocs_ci.ocs.exceptions import CephHealthException, CephHealthRecoveredException
-    import time
 
     log.info(
         f"Waiting for StorageCluster {storage_cluster.resource_name} to reach Ready "
