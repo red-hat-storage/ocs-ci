@@ -10780,14 +10780,28 @@ def setup_nfs(request, setup_rbac):
             0
         ]
         env_by_name = {e.get("name"): e for e in container.get("env", [])}
+        missing_env = [k for k in ("NFS_SERVER", "NFS_PATH") if k not in env_by_name]
+        if missing_env:
+            raise ValueError(
+                f"NFS deployment template missing env vars: {', '.join(missing_env)}"
+            )
         env_by_name["NFS_SERVER"]["value"] = nfs_server
         env_by_name["NFS_PATH"]["value"] = nfs_mount
 
         nfs_volume = next(
-            v
-            for v in nfs_client_prov_dep_data["spec"]["template"]["spec"]["volumes"]
-            if v.get("name") == "nfs-client-root"
+            (
+                v
+                for v in nfs_client_prov_dep_data["spec"]["template"]["spec"]["volumes"]
+                if v.get("name") == "nfs-client-root"
+            ),
+            None,
         )
+        if nfs_volume is None:
+            raise ValueError("NFS deployment template missing volume 'nfs-client-root'")
+        if "nfs" not in nfs_volume:
+            raise ValueError(
+                "NFS deployment template volume 'nfs-client-root' is missing 'nfs' section"
+            )
         nfs_volume["nfs"]["server"] = nfs_server
         nfs_volume["nfs"]["path"] = nfs_mount
         log.info("Creating NFS client provisioner deployment")
