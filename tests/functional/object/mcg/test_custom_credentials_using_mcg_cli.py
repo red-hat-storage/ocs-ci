@@ -1,4 +1,5 @@
 import logging
+import os
 import shlex
 import string
 import random
@@ -44,7 +45,7 @@ def ensure_mcg_cli():
         return retriever.local_cli_path, "noobaa"
     else:
         cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
-        if not Path(cli_path).exists():
+        if not (Path(cli_path).is_file() and os.access(cli_path, os.X_OK)):
             retrieve_cli_binary(cli_type="mcg")
         return cli_path, ""
 
