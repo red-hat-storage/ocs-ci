@@ -1,0 +1,5 @@
+workspace/
+artifacts/
+memory/workflow_state.db
+memory/issue-history/
+memory/embeddings/

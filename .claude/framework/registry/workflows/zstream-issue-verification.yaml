@@ -1,0 +1,71 @@
+id: zstream-issue-verification
+name: DFBUGS Z-stream ON_QA verification
+description: |
+  Autonomous verification of DFBUGS issues in ON_QA for a target ODF z-stream.
+
+params:
+  odf_version:
+    required: true
+    example: "4.19"
+  jira_status:
+    default: ON_QA
+  jira_project:
+    default: DFBUGS
+  cluster_profile:
+    default: default
+  parallel_issues:
+    default: 1
+    description: Future — run N issues concurrently (keep 1 for safety initially)
+
+phases:
+  - id: preflight
+    steps:
+      - hook: .claude/hooks/pre-execution/check_workspace.sh
+      - script: .claude/framework/orchestrator/preflight_mcp.sh
+
+  - id: discovery
+    agent: jira-discovery
+    outputs:
+      - discovery/issues.json
+
+  - id: per_issue
+    foreach: discovery/issues.json#issue_keys
+    pipeline:
+      - agent: jira-analysis
+        on_skip: continue
+      - agent: cluster-compat
+        on_skip: continue
+      - agent: repro-extraction
+        branches:
+          insufficient_info: jira_need_info
+      - agent: script-generation
+      - hook: .claude/hooks/safety/validate_script.sh
+        args: ["$JIRA_AGENT_WORKSPACE/artifacts/{issue_key}/verify.sh"]
+      - agent: verification-execution
+      - agent: infra-diagnosis
+        when: execution.failed
+      - agent: github-automation
+        when: automation_candidate
+      - agent: reporting
+      - hook: .claude/hooks/post-execution/sync_memory.sh
+        args: ["{issue_key}"]
+
+  - id: finalize
+    agent: reporting
+    outputs:
+      - reports/summary.md
+      - reports/metrics.json
+
+jira_need_info:
+  label: Need Info
+  transition: Assigned
+
+outcomes:
+  verified:
+    transition: VERIFIED
+  reproduced:
+    label: FailedQA
+    transition: Assigned
+
+policy: .claude/configs/policies/safety.yaml
+cluster: .claude/configs/clusters/default.yaml

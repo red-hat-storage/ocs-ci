@@ -1,0 +1,53 @@
+# Safety policies for DFBUGS verification agents.
+# Enforced by hooks/safety/validate_script.sh
+
+forbidden_command_patterns:
+  - 'rm\s+-[a-zA-Z]*rf?\s+(/|~|\$HOME|\*)'
+  - 'oc\s+delete\s+ns\s+openshift-storage'
+  - 'oc\s+delete\s+namespace\s+openshift-storage'
+  - 'ceph\s+osd\s+purge'
+  - 'ceph\s+osd\s+destroy'
+  - 'mkfs\.'
+  - 'fdisk\s+'
+  - 'parted\s+'
+  - 'dd\s+if='
+  - 'chmod\s+777'
+  - 'curl[^|;\n]*\|\s*(/bin/)?(sh|bash|zsh)'
+  - 'wget[^|;\n]*\|\s*(/bin/)?(sh|bash|zsh)'
+
+blocked_labels_skip:
+  - skip-ocsci-agent
+
+need_info:
+  label: Need Info
+  transition: Assigned
+
+verification_outcomes:
+  reproduced:
+    label: FailedQA
+    transition: Assigned
+  verified:
+    transition: VERIFIED
+  insufficient_info:
+    label: Need Info
+    transition: Assigned
+
+human_escalation:
+  min_confidence: 0.65
+  escalate_when:
+    - destructive_operation_requested
+    - ambiguous_reproduction_steps
+    - infra_failure_unclear
+    - jira_transition_blocked
+
+github:
+  repo: red-hat-storage/ocs-ci
+  labels:
+    - automation backlog
+    - QE
+    - ODF
+  duplicate_search: true
+
+notifications:
+  enabled: false
+  channels: []

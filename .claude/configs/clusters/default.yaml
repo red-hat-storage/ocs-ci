@@ -1,0 +1,17 @@
+# Active cluster profile for verification runs.
+# Override via CLUSTER_PROFILE env or --cluster-profile flag.
+
+name: default
+kubeconfig_env: KUBECONFIG
+
+requirements:
+  openshift_version_min: "4.14"
+  odf_version_match: true   # must match workflow odf_version
+  providers: [aws, vsphere, baremetal, ibm, gcp, azure]
+  topologies: [compact, standard]
+  deployment_modes: [internal, external]
+
+checks:
+  - ceph_health
+  - odf_operator_ready
+  - api_responsive

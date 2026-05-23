@@ -1,0 +1,84 @@
+# Agent catalog — source of truth for reusable Claude subagents.
+# Add an entry here, create the .md under path, reference from any workflow.
+
+agents:
+  orchestrator-coordinator:
+    path: .claude/agents/orchestrator-coordinator.md
+    model: sonnet
+    description: Dispatch specialists, aggregate reports, manage workflow state.
+    tags: [orchestrator]
+    workflows: [zstream-issue-verification]
+
+  jira-discovery:
+    path: .claude/agents/jira-discovery.md
+    model: haiku
+    description: Discover DFBUGS issue keys by ODF version and JIRA status (read-only).
+    tags: [discovery, jira, readonly]
+    workflows: [zstream-issue-verification]
+
+  jira-analysis:
+    path: .claude/agents/jira-analysis.md
+    model: haiku
+    skills: [.claude/skills/jira/SKILL.md]
+    tags: [jira, analysis]
+    workflows: [zstream-issue-verification]
+
+  cluster-compat:
+    path: .claude/agents/cluster-compat.md
+    model: haiku
+    skills: [.claude/skills/oc/SKILL.md]
+    tags: [cluster]
+    workflows: [zstream-issue-verification]
+
+  repro-extraction:
+    path: .claude/agents/repro-extraction.md
+    model: sonnet
+    skills: [.claude/skills/jira/SKILL.md]
+    tags: [repro]
+    workflows: [zstream-issue-verification]
+
+  script-generation:
+    path: .claude/agents/script-generation.md
+    model: sonnet
+    skills:
+      - .claude/skills/ocs-ci-verify-script/SKILL.md
+      - .claude/skills/update-logging/SKILL.md
+    tags: [script]
+    workflows: [zstream-issue-verification]
+
+  verification-execution:
+    path: .claude/agents/verification-execution.md
+    model: sonnet
+    skills:
+      - .claude/skills/oc/SKILL.md
+      - .claude/skills/log-analysis/SKILL.md
+    tags: [verify, execution]
+    workflows: [zstream-issue-verification]
+
+  infra-diagnosis:
+    path: .claude/agents/infra-diagnosis.md
+    model: sonnet
+    skills: [.claude/skills/log-analysis/SKILL.md]
+    tags: [infra, diagnosis]
+    workflows: [zstream-issue-verification]
+
+  github-automation:
+    path: .claude/agents/github-automation.md
+    model: haiku
+    skills: [.claude/skills/github/SKILL.md]
+    tags: [github, automation]
+    workflows: [zstream-issue-verification]
+
+  reporting:
+    path: .claude/agents/reporting.md
+    model: haiku
+    skills: [.claude/skills/reporting/SKILL.md]
+    tags: [report]
+    workflows: [zstream-issue-verification]
+
+  jira-verify-worker:
+    path: .claude/agents/jira-verify-worker.md
+    model: sonnet
+    description: End-to-end single-issue verification (monolithic shortcut).
+    tags: [verify, worker]
+    workflows: [zstream-issue-verification]
