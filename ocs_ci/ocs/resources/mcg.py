@@ -791,7 +791,7 @@ class MCG:
                 f"with policy {namespace_policy_type} is not supported"
             )
 
-    def check_if_mirroring_is_done(self, bucket_name, timeout=300):
+    def check_if_mirroring_is_done(self, bucket_name, timeout=900):
         """
         Check whether all object chunks in a bucket
         are mirrored across all backing stores.
@@ -845,26 +845,20 @@ class MCG:
             current_percentage = (results.count(True) / len(results)) * 100
             return current_percentage
 
-        mirror_percentage = _get_mirroring_percentage()
-        logger.info(f"{mirror_percentage}% mirroring is done.")
-        previous_percentage = 0
-        while mirror_percentage < 100:
-            previous_percentage = mirror_percentage
-            try:
-                for mirror_percentage in TimeoutSampler(
-                    timeout, 5, _get_mirroring_percentage
-                ):
-                    if previous_percentage == mirror_percentage:
-                        logger.warning("The mirroring process is stuck.")
-                    else:
-                        break
-            except TimeoutExpiredError:
-                logger.error(
-                    f"The mirroring process is stuck from last {timeout} seconds."
-                )
-                assert False
-            mirror_percentage = _get_mirroring_percentage()
-        logger.info("All objects mirrored successfully.")
+        try:
+            for mirror_percentage in TimeoutSampler(
+                timeout, 30, _get_mirroring_percentage
+            ):
+                logger.info(f"Mirroring is {mirror_percentage}% done.")
+                if mirror_percentage >= 100:
+                    logger.info("All objects mirrored successfully.")
+                    return
+        except TimeoutExpiredError:
+            logger.error(
+                f"Mirroring did not complete within {timeout}s. "
+                f"Last percentage: {mirror_percentage}%"
+            )
+            assert False, f"Mirroring stuck at {mirror_percentage}% after {timeout}s"
 
     def check_backingstore_state(self, backingstore_name, desired_state, timeout=600):
         """
