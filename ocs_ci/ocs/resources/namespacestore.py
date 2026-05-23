@@ -147,14 +147,12 @@ class NamespaceStore:
             bool: Based on whether the namespace store is healthy or not
 
         """
-        return (
-            OCP(
-                kind="namespacestore",
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=self.name,
-            ).get()["status"]["phase"]
-            == constants.STATUS_READY
-        )
+        nss_data = OCP(
+            kind="namespacestore",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=self.name,
+        ).get()
+        return nss_data.get("status", {}).get("phase") == constants.STATUS_READY
 
     def verify_health(self, timeout=180, interval=5):
         """
@@ -180,6 +178,19 @@ class NamespaceStore:
                 else:
                     log.info(f"{self.name} is unhealthy. Rechecking.")
         except TimeoutExpiredError:
+            try:
+                nss_data = OCP(
+                    kind="namespacestore",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    resource_name=self.name,
+                ).get()
+                phase = nss_data.get("status", {}).get("phase", "N/A")
+                conditions = nss_data.get("status", {}).get("conditions", [])
+                log.error(
+                    f"{self.name} stuck in phase '{phase}', conditions: {conditions}"
+                )
+            except Exception:
+                log.error(f"Failed to retrieve status for {self.name}")
             log.error(
                 f"{self.name} did not reach a healthy state within {timeout} seconds."
             )
