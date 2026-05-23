@@ -5,7 +5,6 @@ import os
 import pandas as pd
 import random
 import secrets
-import socket
 import string
 import time
 import tempfile
@@ -10771,12 +10770,28 @@ def setup_nfs(request, setup_rbac):
                 f"NFS config not set: nb_nfs_server={nfs_server}, nb_nfs_mount={nfs_mount}"
             )
 
+        log.info(f"Checking DNS resolution of NFS server '{nfs_server}' from cluster")
         try:
-            socket.getaddrinfo(nfs_server, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-        except socket.gaierror:
-            pytest.skip(
-                f"NFS server '{nfs_server}' is not DNS-resolvable from this cluster; "
-                f"skipping NFS test"
+            node_name = (
+                exec_cmd("oc get nodes -o jsonpath='{.items[0].metadata.name}'")
+                .stdout.decode()
+                .strip()
+                .strip("'")
+            )
+            result = exec_cmd(
+                f"oc debug node/{node_name} --to-namespace=default "
+                f"-- chroot /host getent hosts {nfs_server}",
+                ignore_error=True,
+            )
+            if not result.stdout or not result.stdout.decode().strip():
+                pytest.skip(
+                    f"NFS server '{nfs_server}' is not DNS-resolvable from "
+                    f"cluster node {node_name}; skipping NFS test"
+                )
+        except Exception:
+            log.warning(
+                f"Could not verify DNS resolution of '{nfs_server}' from cluster, "
+                f"proceeding with test"
             )
 
         log.info(
