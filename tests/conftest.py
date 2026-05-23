@@ -5,6 +5,7 @@ import os
 import pandas as pd
 import random
 import secrets
+import socket
 import string
 import time
 import tempfile
@@ -10768,6 +10769,14 @@ def setup_nfs(request, setup_rbac):
         if not nfs_server or not nfs_mount:
             raise ValueError(
                 f"NFS config not set: nb_nfs_server={nfs_server}, nb_nfs_mount={nfs_mount}"
+            )
+
+        try:
+            socket.getaddrinfo(nfs_server, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        except socket.gaierror:
+            pytest.skip(
+                f"NFS server '{nfs_server}' is not DNS-resolvable from this cluster; "
+                f"skipping NFS test"
             )
 
         log.info(
