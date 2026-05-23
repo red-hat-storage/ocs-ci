@@ -807,30 +807,42 @@ class MCG:
 
         def _get_mirroring_percentage():
             results = []
-            obj_list = (
-                self.send_rpc_query(
-                    "object_api", "list_objects", params={"bucket": bucket_name}
-                )
-                .json()
-                .get("reply")
-                .get("objects")
-            )
-
-            for written_object in obj_list:
-                object_chunks = (
+            try:
+                obj_list = (
                     self.send_rpc_query(
-                        "object_api",
-                        "read_object_mapping",
-                        params={
-                            "bucket": bucket_name,
-                            "key": written_object.get("key"),
-                            "obj_id": written_object.get("obj_id"),
-                        },
+                        "object_api", "list_objects", params={"bucket": bucket_name}
                     )
                     .json()
                     .get("reply")
-                    .get("chunks")
+                    .get("objects")
                 )
+            except Exception as e:
+                logger.warning(f"Failed to list objects for mirroring check: {e}")
+                return 0.0
+
+            for written_object in obj_list:
+                try:
+                    object_chunks = (
+                        self.send_rpc_query(
+                            "object_api",
+                            "read_object_mapping",
+                            params={
+                                "bucket": bucket_name,
+                                "key": written_object.get("key"),
+                                "obj_id": written_object.get("obj_id"),
+                            },
+                        )
+                        .json()
+                        .get("reply")
+                        .get("chunks")
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to read object mapping for "
+                        f"{written_object.get('key')}: {e}"
+                    )
+                    results.append(False)
+                    continue
 
                 for object_chunk in object_chunks:
                     mirror_blocks = object_chunk.get("frags")[0].get("blocks")
