@@ -147,12 +147,16 @@ class NamespaceStore:
             bool: Based on whether the namespace store is healthy or not
 
         """
-        nss_data = OCP(
-            kind="namespacestore",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=self.name,
-        ).get()
-        return nss_data.get("status", {}).get("phase") == constants.STATUS_READY
+        try:
+            nss_data = OCP(
+                kind="namespacestore",
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=self.name,
+            ).get()
+            return nss_data.get("status", {}).get("phase") == constants.STATUS_READY
+        except CommandFailed:
+            log.info(f"Namespacestore {self.name} not found or not accessible yet")
+            return False
 
     def verify_health(self, timeout=360, interval=5):
         """
@@ -190,7 +194,7 @@ class NamespaceStore:
                     f"{self.name} stuck in phase '{phase}', conditions: {conditions}"
                 )
             except Exception:
-                log.error(f"Failed to retrieve status for {self.name}")
+                log.exception(f"Failed to retrieve status for {self.name}")
             log.error(
                 f"{self.name} did not reach a healthy state within {timeout} seconds."
             )
