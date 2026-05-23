@@ -6,6 +6,7 @@ agents:
     path: .claude/agents/orchestrator-coordinator.md
     model: sonnet
     description: Dispatch specialists, aggregate reports, manage workflow state.
+    skills: [.claude/skills/dry-run/SKILL.md]
     tags: [orchestrator]
     workflows: [zstream-issue-verification]
 
@@ -55,6 +56,17 @@ agents:
     tags: [verify, execution]
     workflows: [zstream-issue-verification]
 
+  cluster-health-detection:
+    path: .claude/agents/cluster-health-detection.md
+    model: sonnet
+    description: Post-verification cluster health scan and unknown product bug detection.
+    skills:
+      - .claude/skills/cluster-health/SKILL.md
+      - .claude/skills/log-analysis/SKILL.md
+      - .claude/skills/oc/SKILL.md
+    tags: [cluster, health, regression]
+    workflows: [zstream-issue-verification]
+
   infra-diagnosis:
     path: .claude/agents/infra-diagnosis.md
     model: sonnet
@@ -80,5 +92,6 @@ agents:
     path: .claude/agents/jira-verify-worker.md
     model: sonnet
     description: End-to-end single-issue verification (monolithic shortcut).
+    skills: [.claude/skills/dry-run/SKILL.md]
     tags: [verify, worker]
     workflows: [zstream-issue-verification]

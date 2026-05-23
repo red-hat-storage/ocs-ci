@@ -3,3 +3,5 @@ artifacts/
 memory/workflow_state.db
 memory/issue-history/
 memory/embeddings/
+memory/anomaly-signatures/
+**/cluster-health/must-gather/

@@ -29,6 +29,7 @@ def upsert_issue(
     confidence: float | None = None,
     workflow_id: str | None = None,
     odf_version: str | None = None,
+    run_id: str | None = None,
     notes: str | None = None,
 ) -> None:
     fields: dict[str, Any] = {"issue_id": issue_id}
@@ -42,6 +43,7 @@ def upsert_issue(
         ("confidence", confidence),
         ("workflow_id", workflow_id),
         ("odf_version", odf_version),
+        ("run_id", run_id),
         ("notes", notes),
     ):
         if val is not None:

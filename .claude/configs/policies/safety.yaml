@@ -48,6 +48,35 @@ github:
     - ODF
   duplicate_search: true
 
+dry_run:
+  env_var: DFBUGS_DRY_RUN
+  workspace_marker: .dry-run
+  run_config_key: dry_run
+  allowed:
+    - jira_issue_get
+    - jira_search
+    - github_search
+    - oc_commands
+    - pytest_execution
+    - cluster_health_collect
+    - local_artifacts
+    - sqlite_memory
+  blocked:
+    - jira_comment_add
+    - jira_workflow_transition
+    - jira_label_add
+    - jira_attachment_add
+    - github_issue_create
+    - github_issue_update
+  draft_outputs:
+    jira: artifacts/{issue_key}/planned-actions/jira.json
+    github: artifacts/{issue_key}/planned-actions/github-issue-draft.md
+
+cluster_health:
+  always_run_after_execution: true
+  block_verified_on_critical: true
+  must_gather_auto_trigger: false
+
 notifications:
   enabled: false
   channels: []

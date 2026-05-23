@@ -1,5 +1,6 @@
 id: zstream-issue-verification
 name: DFBUGS Z-stream ON_QA verification
+coordinator_agent: orchestrator-coordinator
 description: |
   Autonomous verification of DFBUGS issues in ON_QA for a target ODF z-stream.
 
@@ -16,6 +17,11 @@ params:
   parallel_issues:
     default: 1
     description: Future — run N issues concurrently (keep 1 for safety initially)
+  dry_run:
+    default: false
+    description: |
+      When true, run full workload (scripts, cluster, reports) but skip all
+      JIRA and GitHub mutations. Set via run.sh --dry-run or DFBUGS_DRY_RUN=1.
 
 phases:
   - id: preflight
@@ -42,8 +48,11 @@ phases:
       - hook: .claude/hooks/safety/validate_script.sh
         args: ["$JIRA_AGENT_WORKSPACE/artifacts/{issue_key}/verify.sh"]
       - agent: verification-execution
+      - hook: .claude/hooks/post-execution/cluster_health_collect.sh
+        args: ["{issue_key}"]
+      - agent: cluster-health-detection
       - agent: infra-diagnosis
-        when: execution.failed
+        when: execution.failed or cluster_health.degraded
       - agent: github-automation
         when: automation_candidate
       - agent: reporting

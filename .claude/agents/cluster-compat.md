@@ -27,6 +27,7 @@ You are the **cluster compatibility** agent.
 }
 ```
 
-4. If compatible, write `artifacts/{KEY}/cluster-fit.json` with snapshot fields.
+4. If compatible, write `artifacts/{KEY}/cluster-fit.json` and copy a baseline to
+   `artifacts/{KEY}/cluster-health/pre-snapshot.json` (for post-run drift detection).
 
 Read skill: `.claude/skills/oc/SKILL.md`

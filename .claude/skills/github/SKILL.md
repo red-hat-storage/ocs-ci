@@ -9,6 +9,11 @@ description: GitHub MCP patterns for automation backlog issues in ocs-ci
 
 `red-hat-storage/ocs-ci` (see `safety.yaml` → `github.repo`)
 
+## Dry-run
+
+Never call issue-create APIs. Write `planned-actions/github-issue-draft.md` instead.
+Duplicate **search** is allowed. See `.claude/skills/dry-run/SKILL.md`.
+
 ## Duplicate search
 
 Before create, search issues for:

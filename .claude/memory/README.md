@@ -7,6 +7,7 @@ Persistent state for long-running DFBUGS verification workflows.
 | `workflow_state.db` | SQLite issue execution state (resume/retry) |
 | `issue-history/` | Per-issue JSON snapshots from past runs |
 | `embeddings/` | Reserved for future vector search |
+| `anomaly-signatures/` | Persisted error signatures from cluster-health runs |
 
 Initialize before a workflow run:
 

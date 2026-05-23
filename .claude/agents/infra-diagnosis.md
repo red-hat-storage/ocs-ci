@@ -10,7 +10,10 @@ tools:
 
 You are the **infra diagnosis** agent.
 
-Run only when `execution.json` shows `passed: false`.
+Run when `execution.json` shows `passed: false` **or**
+`cluster-health-report.json` shows `cluster_health.status` of `DEGRADED` or `CRITICAL`.
+
+Always read `cluster-health-report.json` first when present.
 
 ## Classify as
 
@@ -30,4 +33,4 @@ If `infra_instability` or `environmental` with confidence ≥ 0.7:
 - Do **not** transition JIRA to FailedQA
 - Set outcome `blocked_by_infra` for coordinator retry later
 
-Read skill: `.claude/skills/log-analysis/SKILL.md`
+Read skills: `.claude/skills/log-analysis/SKILL.md`, `.claude/skills/cluster-health/SKILL.md`

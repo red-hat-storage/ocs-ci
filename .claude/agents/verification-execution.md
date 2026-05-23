@@ -36,6 +36,11 @@ pytest reproduce.py -v 2>&1 | tee logs/pytest.log
 - Ceph health, node health, API checks
 - Optional must-gather path in `evidence/` (only if workflow allows)
 
+## Handoff
+
+After writing `execution.json`, the coordinator runs `cluster_health_collect.sh`
+then dispatches `cluster-health-detection` — do not mark the issue verified yet.
+
 ## Output
 
 `artifacts/{KEY}/execution.json`:

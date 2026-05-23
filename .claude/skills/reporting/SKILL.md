@@ -37,3 +37,11 @@ $JIRA_AGENT_WORKSPACE/reports/
 ## summary.md
 
 Executive summary for QE leads: scope, cluster, outcomes, automation backlog links.
+
+## Cluster health section
+
+Per issue, summarize from `cluster-health-report.json`:
+
+- `cluster_health.status`, score, critical/warning counts
+- `potential_bugs` with confidence ≥ 0.7
+- Link to `artifacts/{KEY}/cluster-health/anomaly-report.md`

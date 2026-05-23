@@ -12,4 +12,8 @@ if [[ -z "${KUBECONFIG:-}" ]]; then
   echo "check_workspace: warning — KUBECONFIG not set" >&2
 fi
 
+if "$ROOT/.claude/framework/lib/is_dry_run.sh"; then
+  echo "check_workspace: DRY-RUN active — JIRA/GitHub writes disabled" >&2
+fi
+
 echo "check_workspace: ok ($WS)"

@@ -12,6 +12,12 @@ You are the **reporting** agent.
 
 ## Per-issue
 
+Include a **Cluster health** section from `artifacts/{KEY}/cluster-health-report.json`
+and `cluster-health/anomaly-report.md` when present.
+
+If dry-run, add a **Dry-run** section listing `planned-actions/` drafts per issue and
+note that no external systems were modified.
+
 Append to `$JIRA_AGENT_WORKSPACE/reports/`:
 
 - `verified.md`, `failures.md`, `skipped.md` (sections per KEY)

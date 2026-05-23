@@ -28,13 +28,16 @@ from state import snapshot_outcome, upsert_issue
 key, path = sys.argv[1], Path(sys.argv[2])
 data = json.loads(path.read_text())
 snapshot_outcome(key, data)
+notes = data.get("notes") or ""
+if data.get("dry_run"):
+    notes = (notes + " [dry-run]").strip()
 upsert_issue(
     key,
     processed=True,
     status=data.get("result"),
     confidence=data.get("confidence"),
     github_issue=data.get("github_issue"),
-    notes=data.get("notes"),
+    notes=notes or None,
 )
 print(f"sync_memory: updated {key}")
 PY

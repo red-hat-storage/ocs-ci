@@ -35,9 +35,10 @@ missing_info: []
 
 If steps are insufficient (`confidence` &lt; 0.5 or `missing_info` non-empty):
 
-1. Apply JIRA label `Need Info` (per `safety.yaml`)
-2. Mention assignee in comment with specific questions
-3. Transition to `Assigned`
-4. Set outcome `insufficient_info` — do not generate scripts
+1. Apply JIRA label `Need Info` (per `safety.yaml`) — **live only**
+2. Mention assignee in comment with specific questions — **live only**
+3. Transition to `Assigned` — **live only**
+4. In **dry-run**, write the above to `planned-actions/jira.json` instead
+5. Set outcome `insufficient_info` — do not generate scripts
 
-Read skill: `.claude/skills/jira/SKILL.md`
+Read skills: `.claude/skills/jira/SKILL.md`, `.claude/skills/dry-run/SKILL.md`

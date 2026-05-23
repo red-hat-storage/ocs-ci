@@ -1,0 +1,40 @@
+# Known error signatures for cluster-health-detection correlation.
+# regex: case-insensitive pattern; classification: Critical|Major|Minor|Infra|Noise
+
+signatures:
+  - regex: 'MON_DOWN|mon is down'
+    classification: Critical
+    component: rook-ceph-mon
+    dfbugs_key: null
+    notes: Monitor quorum issue
+
+  - regex: 'OSD_DOWN|osds down'
+    classification: Major
+    component: ceph-osd
+    dfbugs_key: null
+
+  - regex: 'CrashLoopBackOff'
+    classification: Major
+    component: pod
+    dfbugs_key: null
+
+  - regex: 'noobaa.*(error|fail)'
+    classification: Major
+    component: noobaa
+    dfbugs_key: null
+
+  - regex: 'ProvisioningFailed|FailedMount'
+    classification: Major
+    component: csi
+    dfbugs_key: null
+
+  - regex: 'connection refused.*kubernetes.default'
+    classification: Infra
+    component: api
+    dfbugs_key: null
+
+  - regex: 'leader election lost'
+    classification: Noise
+    component: operator
+    dfbugs_key: null
+    notes: Transient during rollout

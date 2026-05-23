@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS issue_state (
     confidence REAL,
     workflow_id TEXT,
     odf_version TEXT,
+    run_id TEXT,
     notes TEXT,
     updated_at TEXT DEFAULT (datetime('now'))
 );
