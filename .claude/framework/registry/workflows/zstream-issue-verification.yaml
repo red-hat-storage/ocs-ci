@@ -7,7 +7,8 @@ description: |
 params:
   odf_version:
     required: true
-    example: "4.19"
+    description: Target ODF z-stream from run.sh positional argument (varies per run)
+    example: "<odf-version>"
   jira_status:
     default: ON_QA
   jira_project:

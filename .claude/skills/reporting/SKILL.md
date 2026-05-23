@@ -5,6 +5,15 @@ description: Report formats for DFBUGS z-stream verification runs
 
 # Reporting
 
+## ODF version (do not hardcode)
+
+```bash
+eval "$(.claude/framework/lib/load_run_context.sh)"
+```
+
+Use `$ODF_VERSION` in `metrics.json`, `summary.md`, and all report headers.
+See `.claude/skills/run-context/SKILL.md`.
+
 ## Directory layout
 
 ```
@@ -20,7 +29,10 @@ $JIRA_AGENT_WORKSPACE/reports/
 
 ```json
 {
-  "odf_version": "4.19",
+  "workflow_id": "zstream-issue-verification",
+  "run_id": "<from active-run.json>",
+  "odf_version": "<from active-run.json — CLI argument, varies per run>",
+  "dry_run": false,
   "started_at": "",
   "finished_at": "",
   "counts": {

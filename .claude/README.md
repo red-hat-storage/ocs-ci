@@ -16,33 +16,28 @@ Claude Code–native QE orchestration for validating **DFBUGS** issues in **ON_Q
 
 ## Quick start
 
+Replace `<odf-version>` with your target z-stream (e.g. `4.18`, `4.19`, `4.20`).
+
 ```bash
-# 1. Workspace + memory
 export JIRA_AGENT_WORKSPACE="${JIRA_AGENT_WORKSPACE:-$PWD/.claude/workspace}"
-.claude/framework/orchestrator/init_workspace.sh
 
-# 2. MCP preflight (JIRA + GitHub)
-.claude/framework/orchestrator/preflight_mcp.sh
-
-# 3. Render coordinator prompt for Claude Code
-python3 .claude/framework/orchestrator/render_prompt.py \
-  --workflow zstream-issue-verification \
-  --odf-version 4.19 \
-  --out "$JIRA_AGENT_WORKSPACE/workflow-zstream-prompt.md"
-
-# 4. In Claude Code: run the orchestrator agent with that prompt
-#    Or use slash command: /zstream-verify
-
-# Explicit workflow (recommended when multiple orchestrators exist):
-.claude/framework/orchestrator/run.sh --workflow zstream-issue-verification 4.19
+# Bootstrap workflow + prompt (ODF version is the last positional argument)
+.claude/framework/orchestrator/run.sh --workflow zstream-issue-verification <odf-version>
 
 # Dry-run (full workload, no JIRA/GitHub writes):
-.claude/framework/orchestrator/run.sh --workflow zstream-issue-verification --dry-run 4.19
+.claude/framework/orchestrator/run.sh --workflow zstream-issue-verification <odf-version> --dry-run
 
-# Which workflow is prepared in the workspace?
+# Load ODF_VERSION for scripts / agents
+eval "$(.claude/framework/lib/load_run_context.sh)"
+echo "Verifying ODF $ODF_VERSION"
+
+# Status / list workflows
 .claude/framework/orchestrator/status.sh
 .claude/framework/orchestrator/run.sh --list-workflows
 ```
+
+In Claude Code: run **orchestrator-coordinator** with the prompt path printed by `run.sh`.
+Run context skill: `.claude/skills/run-context/SKILL.md`
 
 **Important:** `run.sh` only bootstraps the workspace and coordinator prompt.
 The workflow runs when you start the **orchestrator-coordinator** agent in Claude Code

@@ -25,9 +25,9 @@ options:
   -h, --help        This help
 
 examples:
-  run.sh 4.19
-  run.sh --workflow zstream-issue-verification --dry-run 4.19
-  run.sh --workflow zstream-issue-verification 4.19 --dry-run
+  run.sh <odf-version>
+  run.sh --workflow zstream-issue-verification <odf-version>
+  run.sh --workflow zstream-issue-verification <odf-version> --dry-run
   run.sh --list-workflows
   run.sh --status
 
@@ -81,7 +81,7 @@ if [[ -z "$ODF_VERSION" ]]; then
   exit 1
 fi
 if [[ "$ODF_VERSION" == --* ]]; then
-  echo "error: missing ODF version (e.g. 4.19)" >&2
+  echo "error: missing ODF version (positional <odf-version>, e.g. 4.18 or 4.19)" >&2
   usage >&2
   exit 1
 fi
@@ -130,6 +130,9 @@ echo ""
 echo "How to confirm which workflow is active later:"
 echo "  .claude/framework/orchestrator/status.sh"
 echo "  cat \$JIRA_AGENT_WORKSPACE/active-run.json"
+echo ""
+echo "Load run context in agent shells:"
+echo "  eval \"\$(.claude/framework/lib/load_run_context.sh)\""
 echo ""
 echo "Next: In Claude Code, run agent '${COORDINATOR}' with the prompt file above."
 echo "      That agent executes the workflow pipeline — run.sh only prepares it."

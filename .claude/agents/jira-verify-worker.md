@@ -12,6 +12,10 @@ tools:
 
 You are the **single-issue verification worker**.
 
+```bash
+eval "$(.claude/framework/lib/load_run_context.sh)"
+```
+
 For issue `{KEY}`, run the pipeline in order without re-dispatching subagents:
 
 1. jira-analysis → 2. cluster-compat → 3. repro-extraction → 4. script-generation

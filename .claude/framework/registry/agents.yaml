@@ -6,7 +6,9 @@ agents:
     path: .claude/agents/orchestrator-coordinator.md
     model: sonnet
     description: Dispatch specialists, aggregate reports, manage workflow state.
-    skills: [.claude/skills/dry-run/SKILL.md]
+    skills:
+      - .claude/skills/dry-run/SKILL.md
+      - .claude/skills/run-context/SKILL.md
     tags: [orchestrator]
     workflows: [zstream-issue-verification]
 
@@ -14,6 +16,7 @@ agents:
     path: .claude/agents/jira-discovery.md
     model: haiku
     description: Discover DFBUGS issue keys by ODF version and JIRA status (read-only).
+    skills: [.claude/skills/run-context/SKILL.md]
     tags: [discovery, jira, readonly]
     workflows: [zstream-issue-verification]
 
@@ -84,7 +87,9 @@ agents:
   reporting:
     path: .claude/agents/reporting.md
     model: haiku
-    skills: [.claude/skills/reporting/SKILL.md]
+    skills:
+      - .claude/skills/reporting/SKILL.md
+      - .claude/skills/run-context/SKILL.md
     tags: [report]
     workflows: [zstream-issue-verification]
 

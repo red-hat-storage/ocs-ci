@@ -10,6 +10,15 @@ tools:
 
 You are the **reporting** agent.
 
+## Run context
+
+```bash
+eval "$(.claude/framework/lib/load_run_context.sh)"
+```
+
+Use `$ODF_VERSION`, `$WORKFLOW_ID`, `$RUN_ID`, and dry-run state in all reports.
+Read `.claude/skills/run-context/SKILL.md` and `.claude/skills/reporting/SKILL.md`.
+
 ## Per-issue
 
 Include a **Cluster health** section from `artifacts/{KEY}/cluster-health-report.json`

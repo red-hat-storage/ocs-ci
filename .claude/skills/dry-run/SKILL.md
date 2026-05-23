@@ -8,9 +8,10 @@ description: Dry-run mode — execute workload without JIRA or GitHub mutations
 ## Enable
 
 ```bash
-.claude/framework/orchestrator/run.sh --dry-run 4.19
+.claude/framework/orchestrator/run.sh --workflow zstream-issue-verification <odf-version> --dry-run
 # or
 export DFBUGS_DRY_RUN=1
+eval "$(.claude/framework/lib/load_run_context.sh)"
 ```
 
 Marker: `$JIRA_AGENT_WORKSPACE/.dry-run` and `run-config.json` → `"dry_run": true`.

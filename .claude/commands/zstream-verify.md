@@ -1,11 +1,12 @@
 ---
 description: Run DFBUGS z-stream ON_QA verification for an ODF release
-argument-hint: "[--dry-run] ODF_VERSION (e.g. 4.19)"
+argument-hint: "[--dry-run] <odf-version>"
 ---
 
 Run autonomous DFBUGS verification.
 
-Parse `$ARGUMENTS` for optional `--dry-run` before the ODF version (e.g. `--dry-run 4.19`).
+Parse `$ARGUMENTS` for optional `--dry-run` and the target **ODF z-stream** (e.g. `4.18`, `4.19`).
+Never hardcode the version — it is passed through to `active-run.json`.
 
 1. Execute:
 

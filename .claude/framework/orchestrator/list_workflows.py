@@ -37,7 +37,9 @@ def main() -> None:
         print(f"    File:  {wf['file']}")
         print()
     print("Run example:")
-    print(f"  .claude/framework/orchestrator/run.sh --workflow {DEFAULT_WORKFLOW} 4.19")
+    print(
+        f"  .claude/framework/orchestrator/run.sh --workflow {DEFAULT_WORKFLOW} <odf-version>"
+    )
 
 
 if __name__ == "__main__":

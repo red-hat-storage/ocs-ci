@@ -23,6 +23,16 @@ If `$JIRA_AGENT_WORKSPACE/.dry-run` exists or `run-config.json` has `"dry_run": 
 
 Read `.claude/skills/dry-run/SKILL.md`.
 
+## Run context (required first step)
+
+```bash
+export JIRA_AGENT_WORKSPACE="${JIRA_AGENT_WORKSPACE:-$PWD/.claude/workspace}"
+eval "$(.claude/framework/lib/load_run_context.sh)"
+```
+
+Use `$ODF_VERSION` everywhere — it is the CLI argument from `run.sh`, not a fixed default.
+Read `.claude/skills/run-context/SKILL.md`.
+
 ## Responsibilities
 
 1. Read `$JIRA_AGENT_WORKSPACE/active-run.json` to confirm `workflow_id`, then open
@@ -30,11 +40,12 @@ Read `.claude/skills/dry-run/SKILL.md`.
 2. Execute workflow phases in order (see `.claude/framework/registry/workflows/`).
 3. Invoke subagents by **registry id** — never invent agent names.
 4. Track state via `.claude/memory/state.py` (`upsert_issue` after each issue).
-5. Write final report under `$JIRA_AGENT_WORKSPACE/reports/` and `report-odf-{version}.json`.
+5. Write final report under `$JIRA_AGENT_WORKSPACE/reports/` and
+   `reports/report-odf-${ODF_VERSION}.json` (use loaded `$ODF_VERSION`).
 
 ## Discovery phase
 
-1. Run `.claude/jira-repro/discovery/search_jql.py` with target ODF z-stream and status `ON_QA`.
+1. Delegate to `jira-discovery` (uses `$ODF_VERSION` from run context).
 2. For each key not already `processed` in SQLite, run the per-issue pipeline.
 
 ## Per-issue pipeline (delegate to specialists)

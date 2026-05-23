@@ -53,11 +53,23 @@ def search(jql_str: str) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--odf-version", required=True)
+    parser.add_argument(
+        "--odf-version",
+        default=os.environ.get("ODF_VERSION", ""),
+        help="Target ODF z-stream (or set ODF_VERSION from load_run_context.sh)",
+    )
     parser.add_argument("--status", default="ON_QA")
     parser.add_argument("--project", default="DFBUGS")
     parser.add_argument("--out", type=str, default="")
     args = parser.parse_args()
+
+    if not args.odf_version:
+        print(
+            "search_jql: pass --odf-version or export ODF_VERSION "
+            '(eval "$(.claude/framework/lib/load_run_context.sh)")',
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     keys = search(jql(args.odf_version, args.status, args.project))
     payload = {

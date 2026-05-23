@@ -26,6 +26,14 @@ def main() -> None:
     args = parser.parse_args()
 
     wf = load_workflow(args.workflow)
+    params = wf.get("params", {})
+    jira_status = params.get("jira_status", "ON_QA")
+    if isinstance(jira_status, dict):
+        jira_status = jira_status.get("default", "ON_QA")
+    jira_project = params.get("jira_project", "DFBUGS")
+    if isinstance(jira_project, dict):
+        jira_project = jira_project.get("default", "DFBUGS")
+
     run_id = (
         datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         + "-"
@@ -41,6 +49,8 @@ def main() -> None:
         "workflow_id": wf["id"],
         "workflow_name": wf.get("name", wf["id"]),
         "odf_version": args.odf_version,
+        "jira_status": jira_status,
+        "jira_project": jira_project,
         "dry_run": args.dry_run,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "coordinator_agent": wf.get("coordinator_agent", "orchestrator-coordinator"),
