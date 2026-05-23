@@ -842,6 +842,8 @@ class MCG:
                         results.append(True)
                     else:
                         results.append(False)
+            if not results:
+                return 0.0
             current_percentage = (results.count(True) / len(results)) * 100
             return current_percentage
 
@@ -855,7 +857,7 @@ class MCG:
                 if mirror_percentage >= 100:
                     logger.info("All objects mirrored successfully.")
                     return
-        except TimeoutExpiredError:
+        except TimeoutExpiredError as err:
             observed = (
                 f"{last_mirror_percentage}%"
                 if last_mirror_percentage is not None
@@ -865,7 +867,9 @@ class MCG:
                 f"Mirroring did not complete within {timeout}s. "
                 f"Last percentage: {observed}"
             )
-            raise AssertionError(f"Mirroring stuck at {observed} after {timeout}s")
+            raise AssertionError(
+                f"Mirroring stuck at {observed} after {timeout}s"
+            ) from err
 
     def check_backingstore_state(self, backingstore_name, desired_state, timeout=600):
         """
