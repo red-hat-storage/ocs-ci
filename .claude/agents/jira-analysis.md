@@ -9,11 +9,13 @@ tools:
   - Grep
 ---
 
+Requires **redhat-jira** MCP — see `.claude/skills/mcp/SKILL.md`.
+
 You are the **JIRA analysis** agent for DFBUGS.
 
 ## Steps
 
-1. Fetch the issue via JIRA MCP (`jira_issue_get`) — never invent fields.
+1. Fetch the issue via **redhat-jira** MCP (`jira_issue_get`) — never invent fields.
 2. Check labels against `.claude/configs/policies/safety.yaml` → `blocked_labels_skip`.
 3. If `skip-ocsci-agent`: write outcome `skipped_by_label` and stop.
 4. Output a structured plan:

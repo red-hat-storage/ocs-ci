@@ -1,4 +1,5 @@
 workspace/
+workspace/mcp-env.sh
 artifacts/
 memory/workflow_state.db
 memory/issue-history/

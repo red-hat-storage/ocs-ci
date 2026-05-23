@@ -9,6 +9,7 @@ DEFAULT_WORKFLOW="zstream-issue-verification"
 DRY_RUN=0
 WORKFLOW="$DEFAULT_WORKFLOW"
 LIST=0
+RUN_DISCOVER=0
 
 usage() {
   cat <<EOF
@@ -20,6 +21,7 @@ This script prepares files only; the coordinator agent runs inside Claude Code.
 options:
   --workflow <id>   Workflow from registry (default: $DEFAULT_WORKFLOW)
   --dry-run         Full workload; skip JIRA/GitHub writes
+  --discover        After bootstrap, run JIRA discovery (writes discovery/issues.json)
   --list-workflows  List available workflow ids and exit
   --status          Show active workspace workflow and exit
   -h, --help        This help
@@ -43,6 +45,7 @@ POSITIONAL=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
+    --discover) RUN_DISCOVER=1; shift ;;
     --workflow)
       WORKFLOW="${2:?--workflow requires an id}"
       shift 2
@@ -102,12 +105,30 @@ RUN_ID="$(echo "$RUN_META" | python3 -c "import json,sys; print(json.load(sys.st
 PROMPT="$(echo "$RUN_META" | python3 -c "import json,sys; print(json.load(sys.stdin)['prompt_path'])")"
 COORDINATOR="$(echo "$RUN_META" | python3 -c "import json,sys; print(json.load(sys.stdin)['coordinator_agent'])")"
 
+"$ROOT/.claude/framework/lib/init_run_log.sh"
+"$ROOT/.claude/framework/lib/log_run.sh" INFO "bootstrap: workflow=$WORKFLOW_ID odf=$ODF_VERSION dry_run=$DRY_RUN run_id=$RUN_ID"
+
 "$DIR/preflight_mcp.sh"
 
 python3 "$DIR/render_prompt.py" --workflow "$WORKFLOW_ID" \
   --odf-version "$ODF_VERSION" \
   $([[ "$DRY_RUN" -eq 1 ]] && echo --dry-run) \
   --out "$PROMPT"
+
+DISC_FILE="$JIRA_AGENT_WORKSPACE/discovery/issues.json"
+if [[ "$RUN_DISCOVER" -eq 1 ]]; then
+  "$DIR/discover.sh"
+elif [[ -f "$DISC_FILE" ]]; then
+  DISC_COUNT="$(python3 -c "import json; print(len(json.load(open('$DISC_FILE')).get('issue_keys',[])))" 2>/dev/null || echo 0)"
+  "$ROOT/.claude/framework/lib/log_run.sh" INFO \
+    "discovery: existing issues.json has $DISC_COUNT key(s) (re-run: discover.sh or run.sh --discover)"
+else
+  "$ROOT/.claude/framework/lib/log_run.sh" WARN \
+    "discovery: not run yet — run: .claude/framework/orchestrator/discover.sh"
+fi
+
+"$ROOT/.claude/framework/lib/log_run.sh" WARN \
+  "execution paused: run next: .claude/framework/orchestrator/execute_issue.sh DFBUGS-XXXX (or orchestrator-coordinator in Claude Code)"
 
 echo ""
 echo "================================================================================"
@@ -134,5 +155,16 @@ echo ""
 echo "Load run context in agent shells:"
 echo "  eval \"\$(.claude/framework/lib/load_run_context.sh)\""
 echo ""
-echo "Next: In Claude Code, run agent '${COORDINATOR}' with the prompt file above."
-echo "      That agent executes the workflow pipeline — run.sh only prepares it."
+echo "Live logs (run in another terminal while agents execute):"
+echo "  .claude/framework/orchestrator/watch.sh"
+echo "  .claude/framework/orchestrator/watch.sh --all"
+echo "  Log file: \$JIRA_AGENT_WORKSPACE/logs/run.log"
+echo ""
+echo "Next step (required — nothing runs automatically after this):"
+echo "  1) Per issue (terminal): .claude/framework/orchestrator/execute_issue.sh DFBUGS-XXXX"
+echo "  2) Full workflow: Claude Code agent '${COORDINATOR}' + prompt file above"
+echo "     Or in Cursor: execute_issue.sh per key, or ask agent to follow the prompt."
+echo ""
+echo "Tip: bootstrap + discovery in one step:"
+echo "  run.sh --discover --dry-run $ODF_VERSION"
+echo "  execute_issue.sh DFBUGS-3742   # after discovery lists keys"

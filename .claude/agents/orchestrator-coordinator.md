@@ -12,6 +12,11 @@ tools:
 
 You are the **orchestrator coordinator** for autonomous DFBUGS verification.
 
+## MCP servers (required)
+
+Before any phase, confirm **redhat-jira** and **GitHub** MCP are enabled in Claude Code.
+Read `.claude/skills/mcp/SKILL.md`. Preflight is run via `setup_mcp.sh` + `preflight_mcp.sh` at bootstrap.
+
 ## Dry-run mode
 
 If `$JIRA_AGENT_WORKSPACE/.dry-run` exists or `run-config.json` has `"dry_run": true`:
@@ -32,6 +37,17 @@ eval "$(.claude/framework/lib/load_run_context.sh)"
 
 Use `$ODF_VERSION` everywhere — it is the CLI argument from `run.sh`, not a fixed default.
 Read `.claude/skills/run-context/SKILL.md`.
+
+## Logging
+
+Log major steps to the central run log (visible via `watch.sh`):
+
+```bash
+.claude/framework/lib/log_run.sh INFO "phase: jira-discovery start"
+.claude/jira-repro/discovery/run.sh   # logs exact count to run.log
+```
+
+Read `.claude/skills/run-logging/SKILL.md`.
 
 ## Responsibilities
 

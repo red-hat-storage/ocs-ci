@@ -25,6 +25,10 @@ while IFS= read -r line; do
 done < <(grep -E "^\s+-" "$POLICY" | head -20)
 
 if [[ "$BLOCKED" -eq 1 ]]; then
+  ROOT="${CLAUDE_PROJECT_DIR:-.}"
+  "$ROOT/.claude/framework/lib/log_run.sh" ERROR "validate_script: blocked $SCRIPT" 2>/dev/null || true
   exit 2
 fi
+ROOT="${CLAUDE_PROJECT_DIR:-.}"
+"$ROOT/.claude/framework/lib/log_run.sh" INFO "validate_script: passed $SCRIPT" 2>/dev/null || true
 exit 0

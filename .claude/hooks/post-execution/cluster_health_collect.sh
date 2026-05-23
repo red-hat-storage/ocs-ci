@@ -13,5 +13,7 @@ fi
 
 ARTIFACT="$WS/artifacts/$KEY"
 mkdir -p "$ARTIFACT/cluster-health"
+"$ROOT/.claude/framework/lib/log_run.sh" INFO "cluster_health_collect: start $KEY"
 "$ROOT/.claude/jira-repro/cluster-health/collect.sh" "$ARTIFACT"
+"$ROOT/.claude/framework/lib/log_run.sh" INFO "cluster_health_collect: done $KEY"
 echo "cluster_health_collect: done for $KEY"

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "redhat-jira": {
+      "command": "uvx",
+      "args": ["atlassian-jira-mcp"],
+      "env": {
+        "JIRA_MCP_URL": "https://redhat.atlassian.net",
+        "JIRA_MCP_TOKEN": "${JIRA_MCP_TOKEN}",
+        "JIRA_MCP_EMAIL": "your-email@redhat.com"
+      }
+    },
+    "github": {
+      "comment": "Enable GitHub MCP in your IDE — see Cursor/Claude Code GitHub integration docs"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+# MCP servers required before zstream-issue-verification runs.
+# Install config from: .claude/configs/mcp/claude-code-mcp.example.json
+
+required_servers:
+  redhat-jira:
+    description: Red Hat Jira Cloud (DFBUGS read/write in Claude Code)
+    package: atlassian-jira-mcp
+    command: uvx
+    env_required:
+      - JIRA_MCP_URL
+      - JIRA_MCP_EMAIL
+      - JIRA_MCP_TOKEN
+    tools_used:
+      - jira_issue_get
+      - jira_search          # or jira_jql_search — match your MCP package
+      - jira_comment_add
+      - jira_workflow_get_transitions
+      - jira_workflow_transition
+
+  github:
+    description: GitHub automation backlog (ocs-ci repo)
+    note: Enable GitHub MCP in Claude Code / Cursor (user-github)
+    tools_used:
+      - search_issues
+      - create_issue
+
+# REST fallback for terminal discovery (discover.sh) — synced from MCP env by setup_mcp.sh
+rest_env_map:
+  JIRA_URL: JIRA_MCP_URL
+  JIRA_EMAIL: JIRA_MCP_EMAIL
+  JIRA_API_TOKEN: JIRA_MCP_TOKEN
+
+default_jira_url: https://redhat.atlassian.net

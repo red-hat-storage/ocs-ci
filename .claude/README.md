@@ -18,9 +18,20 @@ Claude Code–native QE orchestration for validating **DFBUGS** issues in **ON_Q
 
 Replace `<odf-version>` with your target z-stream (e.g. `4.18`, `4.19`, `4.20`).
 
-```bash
-export JIRA_AGENT_WORKSPACE="${JIRA_AGENT_WORKSPACE:-$PWD/.claude/workspace}"
+### 0. MCP servers (required before workflow)
 
+Add **redhat-jira** and **GitHub** to Claude Code — see `.claude/configs/mcp/claude-code-mcp.example.json`
+and `.claude/skills/mcp/SKILL.md`.
+
+```bash
+export JIRA_MCP_URL=https://redhat.atlassian.net
+export JIRA_MCP_EMAIL=you@redhat.com
+export JIRA_MCP_TOKEN="$TOKEN"   # Atlassian API token
+
+export JIRA_AGENT_WORKSPACE="${JIRA_AGENT_WORKSPACE:-$PWD/.claude/workspace}"
+```
+
+```bash
 # Bootstrap workflow + prompt (ODF version is the last positional argument)
 .claude/framework/orchestrator/run.sh --workflow zstream-issue-verification <odf-version>
 
@@ -38,6 +49,37 @@ echo "Verifying ODF $ODF_VERSION"
 
 In Claude Code: run **orchestrator-coordinator** with the prompt path printed by `run.sh`.
 Run context skill: `.claude/skills/run-context/SKILL.md`
+
+### Live logs and progress (second terminal)
+
+```bash
+.claude/framework/orchestrator/watch.sh --status  # issue count, phase, discovery done?
+.claude/framework/orchestrator/watch.sh           # tail workspace/logs/run.log
+.claude/framework/orchestrator/watch.sh --all     # + artifact pytest/cluster logs
+```
+
+Run discovery only (tests JIRA + writes `discovery/issues.json`):
+
+```bash
+# Uses mcp-env.sh from setup_mcp (same token as JIRA_MCP_*)
+.claude/framework/orchestrator/discover.sh
+
+# Debug search errors / JQL:
+python3 .claude/jira-repro/discovery/search_jql.py --odf-version 4.20 -v
+```
+
+JQL config: `.claude/configs/jira-discovery.yaml`
+
+`watch.sh` shows **bootstrap** until the pipeline runs. After discovery:
+
+```bash
+.claude/framework/orchestrator/execute_issue.sh DFBUGS-3742
+```
+
+Or start the orchestrator agent in Claude Code (see below). If `Discovery: NOT RUN`,
+run `discover.sh` first.
+
+Log file: `$JIRA_AGENT_WORKSPACE/logs/run.log` — see `.claude/skills/run-logging/SKILL.md`
 
 **Important:** `run.sh` only bootstraps the workspace and coordinator prompt.
 The workflow runs when you start the **orchestrator-coordinator** agent in Claude Code

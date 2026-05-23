@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 WS="${JIRA_AGENT_WORKSPACE:-$ROOT/.claude/workspace}"
 
-mkdir -p "$WS"/{artifacts,outcomes,reports,discovery}
+mkdir -p "$WS"/{artifacts,outcomes,reports,discovery,logs}
 python3 "$ROOT/.claude/memory/init_state.py" >/dev/null
 
 if [[ -z "${KUBECONFIG:-}" ]]; then
@@ -25,4 +25,5 @@ else
   echo "check_workspace: warning — no active-run.json; run orchestrator/run.sh first" >&2
 fi
 
-echo "check_workspace: ok ($WS)"
+"$ROOT/.claude/framework/lib/log_run.sh" INFO "check_workspace: ok"
+echo "check_workspace: ok ($WS) — tail logs: .claude/framework/orchestrator/watch.sh"

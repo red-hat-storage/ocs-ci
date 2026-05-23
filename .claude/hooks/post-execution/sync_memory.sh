@@ -41,3 +41,5 @@ upsert_issue(
 )
 print(f"sync_memory: updated {key}")
 PY
+
+"$ROOT/.claude/framework/lib/log_run.sh" INFO "sync_memory: completed $KEY status=$(python3 -c "import json; print(json.load(open('$OUTCOME')).get('result',''))" 2>/dev/null || echo ?)"

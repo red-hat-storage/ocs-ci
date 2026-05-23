@@ -48,6 +48,7 @@ def shell_exports(ctx: dict) -> str:
     ]
     if ctx.get("dry_run"):
         lines.append("export DFBUGS_DRY_RUN=1")
+        lines.append("export DRY_RUN=1")
     return "\n".join(lines) + "\n"
 
 

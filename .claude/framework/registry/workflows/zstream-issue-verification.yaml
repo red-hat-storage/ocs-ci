@@ -28,6 +28,7 @@ phases:
   - id: preflight
     steps:
       - hook: .claude/hooks/pre-execution/check_workspace.sh
+      - script: .claude/framework/orchestrator/setup_mcp.sh
       - script: .claude/framework/orchestrator/preflight_mcp.sh
 
   - id: discovery

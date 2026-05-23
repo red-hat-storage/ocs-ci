@@ -1,0 +1,31 @@
+# JIRA discovery for DFBUGS z-stream verification.
+# CLI version (run.sh arg) maps to Target Release: 4.19 -> odf-4.19.z
+
+default_url: https://redhat.atlassian.net
+api_preference: [3, 2]
+
+target_release:
+  jql_field: "Target Release"
+  # CLI 4.19 -> JIRA value odf-4.19.z (see release_match.cli_to_target_release_value)
+  value_format: "odf-{zstream}.z"
+
+jql_templates:
+  # Primary — matches Red Hat DFBUGS convention
+  primary: |
+    project = {project} AND "Target Release" = {target_release}
+    AND status = "{status}" ORDER BY created DESC
+  # Without project filter (same as user-provided JQL shape)
+  target_release_only: |
+    "Target Release" = {target_release} AND status = "{status}"
+    ORDER BY created DESC
+  # Loose fallback if exact value differs slightly
+  target_release_contains: |
+    project = {project} AND status = "{status}"
+    AND "Target Release" ~ "{target_release}" ORDER BY created DESC
+
+allow_unfiltered_fallback: false
+
+defaults:
+  project: DFBUGS
+  status: ON_QA
+  max_results: 100

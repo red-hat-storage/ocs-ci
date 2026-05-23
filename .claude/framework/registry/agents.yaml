@@ -9,6 +9,7 @@ agents:
     skills:
       - .claude/skills/dry-run/SKILL.md
       - .claude/skills/run-context/SKILL.md
+      - .claude/skills/mcp/SKILL.md
     tags: [orchestrator]
     workflows: [zstream-issue-verification]
 
