@@ -53,7 +53,8 @@ python3 "$ROOT/.claude/jira-repro/build_repro_context.py" \
 # --- verification prompt ---
 if [[ -f "$ROOT/.claude/jira-repro/render_verification_prompt.py" ]]; then
   python3 "$ROOT/.claude/jira-repro/render_verification_prompt.py" \
-    --issue "$KEY" --art "$ART" --odf-version "${ODF_VERSION:-}"
+    --issue "$KEY" --art "$ART" --odf-version "${ODF_VERSION:-}" \
+    --out "$ART/verification-generation-prompt.md"
 fi
 
 log INFO "execute_issue: data-prep complete $KEY"
