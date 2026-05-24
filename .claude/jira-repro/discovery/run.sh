@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Discover JIRA issues; write discovery/issues.json and log exact count.
+# Discover JIRA issues via MCP; write discovery/issues.json.
+# This script is a legacy REST fallback — prefer the jira-discovery agent via Claude Code.
+# If JIRA REST credentials are not set, exit with an error instead of returning 0 issues.
 set -euo pipefail
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
@@ -8,11 +10,21 @@ OUT="$WS/discovery/issues.json"
 
 export JIRA_AGENT_WORKSPACE="$WS"
 eval "$(python3 "$ROOT/.claude/framework/lib/load_run_context.py" --shell 2>/dev/null)" || true
-# REST discovery uses same credentials as redhat-jira MCP
 [[ -f "$WS/mcp-env.sh" ]] && source "$WS/mcp-env.sh"
 
 if [[ -z "${ODF_VERSION:-}" ]]; then
   echo "discover: load ODF_VERSION failed — run orchestrator/run.sh first" >&2
+  exit 1
+fi
+
+# --- Require JIRA credentials or fail fast ---
+if [[ -z "${JIRA_URL:-}" || -z "${JIRA_EMAIL:-}" || -z "${JIRA_API_TOKEN:-}" ]]; then
+  "$ROOT/.claude/framework/lib/log_run.sh" ERROR \
+    "jira-discovery: JIRA REST credentials not set. Use Claude Code with JIRA MCP instead."
+  echo "" >&2
+  echo "ERROR: JIRA REST credentials not configured." >&2
+  echo "This workflow requires Claude Code with the redhat-jira MCP server." >&2
+  echo "Run inside Claude Code:  /zstream-verify --dry-run $ODF_VERSION" >&2
   exit 1
 fi
 
@@ -39,14 +51,9 @@ if [[ -n "$DISC_ERR" && "$COUNT" -eq 0 ]]; then
   "$ROOT/.claude/framework/lib/log_run.sh" WARN "jira-discovery: $DISC_ERR"
   MSG="Discovery: $DISC_ERR"
 elif [[ "$COUNT" -eq 0 ]]; then
-  if [[ -z "${JIRA_URL:-}" || -z "${JIRA_EMAIL:-}" || -z "${JIRA_API_TOKEN:-}" ]]; then
-    "$ROOT/.claude/framework/lib/log_run.sh" WARN "jira-discovery: found 0 issues — set JIRA_URL JIRA_EMAIL JIRA_API_TOKEN"
-    MSG="0 issues — JIRA API creds missing"
-  else
-    JQL_USED="$(python3 -c "import json; print(json.load(open('$OUT')).get('jql_used','') or '')" 2>/dev/null || true)"
-    "$ROOT/.claude/framework/lib/log_run.sh" WARN "jira-discovery: 0 issues for ODF $ODF_VERSION — JQL: $JQL_USED"
-    MSG="0 issues — empty JQL (try: search_jql.py -v --print-jql; edit configs/jira-discovery.yaml)"
-  fi
+  JQL_USED="$(python3 -c "import json; print(json.load(open('$OUT')).get('jql_used','') or '')" 2>/dev/null || true)"
+  "$ROOT/.claude/framework/lib/log_run.sh" WARN "jira-discovery: 0 issues for version $ODF_VERSION — JQL: $JQL_USED"
+  MSG="0 issues — empty JQL result (try: search_jql.py -v --print-jql; edit configs/jira-discovery.yaml)"
 else
   "$ROOT/.claude/framework/lib/log_run.sh" INFO "jira-discovery: found $COUNT issue(s) matching Target Release=$FILTER (excluded $EXCLUDED mismatches) — $OUT"
   MSG="Discovery complete: $COUNT issue(s) for Target Release $FILTER"

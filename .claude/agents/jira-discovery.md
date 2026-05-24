@@ -9,7 +9,8 @@ tools:
 
 You are the **JIRA discovery** agent.
 
-**Requires redhat-jira MCP** — see `.claude/skills/mcp/SKILL.md`.
+**Requires redhat-jira MCP** — if MCP is unavailable, **stop and report the error**.
+Do not fall back to REST API. See `.claude/skills/mcp/SKILL.md`.
 
 ## Steps
 
@@ -17,7 +18,6 @@ You are the **JIRA discovery** agent.
 
 ```bash
 eval "$(.claude/framework/lib/load_run_context.sh)"
-[[ -f "$JIRA_AGENT_WORKSPACE/mcp-env.sh" ]] && source "$JIRA_AGENT_WORKSPACE/mcp-env.sh"
 ```
 
 2. Build JQL (CLI version maps to Target Release, e.g. `4.19` → `odf-4.19.z`):
@@ -33,32 +33,32 @@ Example JQL (z-stream workflow):
 project = $JIRA_PROJECT AND "Target Release" = odf-$ODF_VERSION.z AND status = "$JIRA_STATUS" ORDER BY created DESC
 ```
 
-3. **Preferred:** Search via **redhat-jira MCP** (JQL from step 2). Parse issue keys from results.
+3. Search via **redhat-jira MCP** (`jira_search_jql`) using the JQL from step 2.
+   Parse issue keys from results.
 
    **Filter:** Keep only issues whose **Target Release** matches the CLI version
    (e.g. CLI `4.19` → JIRA `odf-4.19.z`). Drop mismatches even if JQL returned them.
 
-4. **Fallback:** If MCP unavailable in this session:
+   If MCP is not available, **fail immediately** with:
+   ```
+   ERROR: redhat-jira MCP server is required. Run this workflow inside Claude Code.
+   ```
 
-```bash
-.claude/jira-repro/discovery/run.sh
-```
-
-5. Write `$JIRA_AGENT_WORKSPACE/discovery/issues.json`:
+4. Write `$JIRA_AGENT_WORKSPACE/discovery/issues.json`:
 
 ```json
 {
   "odf_version": "<same as $ODF_VERSION>",
   "status": "<same as $JIRA_STATUS>",
   "issue_keys": ["PROJ-1234"],
-  "discovery_method": "mcp|rest"
+  "discovery_method": "mcp"
 }
 ```
 
-6. Log exact count:
+5. Log exact count:
 
 ```bash
-.claude/framework/lib/log_run.sh INFO "jira-discovery: found <N> issue(s) via <mcp|rest>"
+.claude/framework/lib/log_run.sh INFO "jira-discovery: found <N> issue(s) via mcp"
 ```
 
 Never log placeholder "found N issues". Do not modify JIRA (read-only).
