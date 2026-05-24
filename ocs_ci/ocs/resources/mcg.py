@@ -834,7 +834,7 @@ class MCG:
                 )
             except Exception as e:
                 logger.warning(f"Failed to list objects for mirroring check: {e}")
-                return 0.0
+                raise
 
             for written_object in obj_list:
                 try:
@@ -875,28 +875,32 @@ class MCG:
             current_percentage = (results.count(True) / len(results)) * 100
             return current_percentage
 
-        last_mirror_percentage = None
+        max_mirror_percentage = None
         try:
             for mirror_percentage in TimeoutSampler(
                 timeout, 30, _get_mirroring_percentage
             ):
-                last_mirror_percentage = mirror_percentage
+                if (
+                    max_mirror_percentage is None
+                    or mirror_percentage > max_mirror_percentage
+                ):
+                    max_mirror_percentage = mirror_percentage
                 logger.info(f"Mirroring is {mirror_percentage}% done.")
                 if mirror_percentage >= 100:
                     logger.info("All objects mirrored successfully.")
                     return
         except TimeoutExpiredError as err:
             observed = (
-                f"{last_mirror_percentage}%"
-                if last_mirror_percentage is not None
+                f"{max_mirror_percentage}%"
+                if max_mirror_percentage is not None
                 else "unknown"
             )
             logger.error(
                 f"Mirroring did not complete within {timeout}s. "
-                f"Last percentage: {observed}"
+                f"Max percentage reached: {observed}"
             )
             raise AssertionError(
-                f"Mirroring stuck at {observed} after {timeout}s"
+                f"Mirroring reached {observed} but did not complete after {timeout}s"
             ) from err
 
     def check_backingstore_state(self, backingstore_name, desired_state, timeout=600):
