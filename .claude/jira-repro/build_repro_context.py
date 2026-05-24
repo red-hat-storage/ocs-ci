@@ -13,12 +13,24 @@ import json
 from pathlib import Path
 from typing import Any
 
+import yaml as _yaml
+
 from jira_client import adf_to_text as adf_text
 from build_repro_steps import (
     extract_fix_snippet,
     extract_jira_context,
     extract_numbered_steps,
 )
+
+_POLICY_PATH = Path(__file__).resolve().parents[1] / "configs" / "policies" / "safety.yaml"
+
+
+def _blocked_labels() -> list[str]:
+    if _POLICY_PATH.is_file():
+        with _POLICY_PATH.open() as f:
+            policy = _yaml.safe_load(f) or {}
+        return policy.get("blocked_labels_skip", [])
+    return ["skip-ocsci-agent"]
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +43,7 @@ def enrich(raw: dict, *, issue_key: str) -> dict:
     desc = fields.get("description")
     text = adf_text(desc) if isinstance(desc, dict) else str(desc or "")
     labels = fields.get("labels") or []
-    blocked = "skip-ocsci-agent" in labels
+    blocked = any(lbl in labels for lbl in _blocked_labels())
     ctx = extract_jira_context(raw)
     fix = extract_fix_snippet(text)
 

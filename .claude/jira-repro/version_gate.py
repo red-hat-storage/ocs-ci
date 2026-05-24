@@ -58,6 +58,8 @@ def version_gte(installed: tuple[int, ...], required: tuple[int, ...]) -> bool:
 def extract_jira_product_build_versions(
     raw: dict | None,
     analysis: dict | None = None,
+    *,
+    prod_build_field: str = _PROD_BUILD_FIELD,
 ) -> list[str]:
     """Collect product/ODF build versions mentioned in JIRA (not Target Release z-stream)."""
     found: list[str] = []
@@ -66,7 +68,7 @@ def extract_jira_product_build_versions(
         fields = raw.get("fields") or {}
 
         # Check Prod Build Version field first
-        prod = fields.get(_PROD_BUILD_FIELD)
+        prod = fields.get(prod_build_field)
         if isinstance(prod, str) and prod.strip():
             found.append(prod.strip())
         elif prod:

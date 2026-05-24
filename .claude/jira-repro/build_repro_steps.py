@@ -69,7 +69,9 @@ def extract_numbered_steps(description: str) -> list[dict]:
     return steps
 
 
-def extract_jira_context(raw: dict | None) -> dict[str, Any]:
+def extract_jira_context(
+    raw: dict | None, *, target_release_field: str = "customfield_10886",
+) -> dict[str, Any]:
     ctx: dict[str, Any] = {
         "linked_issues": [],
         "comment_snippets": [],
@@ -113,7 +115,7 @@ def extract_jira_context(raw: dict | None) -> dict[str, Any]:
     for av in fields.get("versions") or []:
         if av.get("name"):
             ctx["affects_versions"].append(av["name"])
-    tr = fields.get("customfield_10886")
+    tr = fields.get(target_release_field)
     if isinstance(tr, dict) and tr.get("name"):
         ctx["target_release"] = tr["name"]
     for comp in fields.get("components") or []:

@@ -1,6 +1,6 @@
 ---
 name: jira-discovery
-description: Discover DFBUGS issue keys by ODF version and JIRA status (read-only).
+description: Discover issue keys from JIRA by version and status (read-only).
 model: haiku
 tools:
   - Bash
@@ -27,10 +27,10 @@ python3 .claude/jira-repro/discovery/search_jql.py --print-jql \
   --odf-version "$ODF_VERSION" --status "${JIRA_STATUS:-ON_QA}"
 ```
 
-Example JQL:
+Example JQL (z-stream workflow):
 
 ```text
-project = DFBUGS AND "Target Release" = odf-4.19.z AND status = "ON_QA" ORDER BY created DESC
+project = $JIRA_PROJECT AND "Target Release" = odf-$ODF_VERSION.z AND status = "$JIRA_STATUS" ORDER BY created DESC
 ```
 
 3. **Preferred:** Search via **redhat-jira MCP** (JQL from step 2). Parse issue keys from results.
@@ -50,7 +50,7 @@ project = DFBUGS AND "Target Release" = odf-4.19.z AND status = "ON_QA" ORDER BY
 {
   "odf_version": "<same as $ODF_VERSION>",
   "status": "<same as $JIRA_STATUS>",
-  "issue_keys": ["DFBUGS-1234"],
+  "issue_keys": ["PROJ-1234"],
   "discovery_method": "mcp|rest"
 }
 ```

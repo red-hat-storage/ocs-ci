@@ -15,9 +15,9 @@ def _workspace() -> Path | None:
 
 
 def is_dry_run(workspace: Path | None = None) -> bool:
-    env = os.environ.get("DFBUGS_DRY_RUN", "").strip().lower()
-    if env in TRUTHY:
-        return True
+    for var in ("DRY_RUN", "DFBUGS_DRY_RUN"):
+        if os.environ.get(var, "").strip().lower() in TRUTHY:
+            return True
     ws = workspace or _workspace()
     if ws and (ws / ".dry-run").is_file():
         return True
@@ -35,7 +35,8 @@ def is_dry_run(workspace: Path | None = None) -> bool:
 
 def enable_dry_run(workspace: Path) -> None:
     """Mark workspace as dry-run (called by orchestrator bootstrap)."""
-    os.environ["DFBUGS_DRY_RUN"] = "1"
+    os.environ["DRY_RUN"] = "1"
+    os.environ["DFBUGS_DRY_RUN"] = "1"  # backwards compat
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / ".dry-run").write_text("enabled\n")
     cfg_path = workspace / "run-config.json"
@@ -50,6 +51,7 @@ def enable_dry_run(workspace: Path) -> None:
 
 
 def disable_dry_run(workspace: Path) -> None:
+    os.environ.pop("DRY_RUN", None)
     os.environ.pop("DFBUGS_DRY_RUN", None)
     marker = workspace / ".dry-run"
     if marker.is_file():

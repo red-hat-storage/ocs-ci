@@ -19,6 +19,19 @@ def workspace_path() -> Path:
     return ROOT / ".claude" / "workspace"
 
 
+def _workflow_defaults(workflow_id: str) -> dict:
+    """Load default param values from the workflow YAML, if available."""
+    try:
+        from workflow_registry import load_workflow, workflow_param
+        wf = load_workflow(workflow_id)
+        return {
+            "jira_status": workflow_param(wf, "jira_status"),
+            "jira_project": workflow_param(wf, "jira_project"),
+        }
+    except Exception:
+        return {}
+
+
 def load_context(workspace: Path | None = None) -> dict:
     ws = workspace or workspace_path()
     for name in ("active-run.json", "run-config.json"):
@@ -26,15 +39,19 @@ def load_context(workspace: Path | None = None) -> dict:
         if path.is_file():
             data = json.loads(path.read_text())
             data["_source"] = str(path)
-            data.setdefault("jira_status", "ON_QA")
-            data.setdefault("jira_project", "DFBUGS")
+            wf_id = data.get("workflow_id", "")
+            if wf_id:
+                wf_defaults = _workflow_defaults(wf_id)
+                for key, val in wf_defaults.items():
+                    if val is not None:
+                        data.setdefault(key, val)
             if not data.get("odf_version"):
                 raise ValueError(
-                    f"{path} missing odf_version — re-run run.sh with <odf-version>"
+                    f"{path} missing odf_version — re-run run.sh with <version>"
                 )
             return data
     raise FileNotFoundError(
-        f"No active-run.json in {ws}. Bootstrap: .claude/framework/orchestrator/run.sh <odf-version>"
+        f"No active-run.json in {ws}. Bootstrap: .claude/framework/orchestrator/run.sh <version>"
     )
 
 
@@ -43,8 +60,8 @@ def shell_exports(ctx: dict) -> str:
         f'export ODF_VERSION="{ctx["odf_version"]}"',
         f'export WORKFLOW_ID="{ctx.get("workflow_id", "")}"',
         f'export RUN_ID="{ctx.get("run_id", "")}"',
-        f'export JIRA_STATUS="{ctx.get("jira_status", "ON_QA")}"',
-        f'export JIRA_PROJECT="{ctx.get("jira_project", "DFBUGS")}"',
+        f'export JIRA_STATUS="{ctx.get("jira_status", "")}"',
+        f'export JIRA_PROJECT="{ctx.get("jira_project", "")}"',
     ]
     if ctx.get("dry_run"):
         lines.append("export DFBUGS_DRY_RUN=1")

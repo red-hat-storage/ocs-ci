@@ -13,35 +13,60 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 REGISTRY = ROOT / ".claude" / "framework" / "registry"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from workflow_registry import load_workflow  # noqa: E402
+from workflow_registry import (  # noqa: E402
+    DEFAULT_WORKFLOW,
+    load_workflow,
+    workflow_param,
+)
 
 
-def _param(workflow: dict, key: str, default: str) -> str:
-    val = workflow.get("params", {}).get(key, default)
-    if isinstance(val, dict):
-        return str(val.get("default", default))
-    return str(val)
+def _find_pipeline(workflow: dict) -> list[dict]:
+    """Find the ``per_issue`` phase pipeline by id, not by index."""
+    for phase in workflow.get("phases", []):
+        if phase.get("id") == "per_issue":
+            return phase.get("pipeline", [])
+    return []
 
 
-def render(workflow: dict, odf_version: str, *, dry_run: bool = False) -> str:
+def _collect_step_names(workflow: dict) -> list[str]:
+    """Collect all agent/hook names from every phase for DRY-RUN listing."""
+    names: list[str] = []
+    for phase in workflow.get("phases", []):
+        if phase.get("agent"):
+            names.append(phase["agent"])
+        for step in phase.get("pipeline", []):
+            if step.get("agent"):
+                names.append(step["agent"])
+            elif step.get("hook"):
+                names.append(Path(step["hook"]).stem)
+    return names
+
+
+def render(workflow: dict, version: str, *, dry_run: bool = False) -> str:
     agents_path = REGISTRY / "agents.yaml"
     with agents_path.open() as f:
         agents = yaml.safe_load(f)["agents"]
 
-    pipeline = workflow["phases"][2]["pipeline"]
+    pipeline = _find_pipeline(workflow)
     wf_id = workflow.get("id", "unknown")
+    jira_status = workflow_param(workflow, "jira_status", "")
     lines = [
         f"# Workflow: {workflow['name']}",
         "",
         f"**Workflow ID:** `{wf_id}`",
         f"**Registry:** `.claude/framework/registry/workflows/{wf_id}.yaml`",
-        f"**ODF version:** {odf_version}",
-        f"**JIRA status:** {_param(workflow, 'jira_status', 'ON_QA')}",
-        f"**Mode:** {'DRY-RUN (no JIRA/GitHub writes)' if dry_run else 'LIVE'}",
-        "",
-        "You are the orchestrator-coordinator. Run discovery, then for each issue:",
-        "",
+        f"**Version:** {version}",
     ]
+    if jira_status:
+        lines.append(f"**JIRA status:** {jira_status}")
+    lines.extend(
+        [
+            f"**Mode:** {'DRY-RUN (no JIRA/GitHub writes)' if dry_run else 'LIVE'}",
+            "",
+            "You are the orchestrator-coordinator. Run discovery, then for each issue:",
+            "",
+        ]
+    )
     for step in pipeline:
         agent = step.get("agent")
         if not agent:
@@ -51,15 +76,15 @@ def render(workflow: dict, odf_version: str, *, dry_run: bool = False) -> str:
         desc = agents.get(agent, {}).get("description", agent)
         lines.append(f"- `{agent}` — {desc}")
     if dry_run:
+        step_names = _collect_step_names(workflow)
         lines.extend(
             [
                 "",
                 "## DRY-RUN rules",
                 "",
-                "- **Run:** discovery, analysis, cluster-compat, repro, scripts, safety hook,",
-                "  verification-execution, cluster-health, infra-diagnosis, local reporting.",
-                "- **Skip:** `jira_comment_add`, `jira_workflow_transition`, label changes,",
-                "  `github` issue create/update. Write drafts under `artifacts/{KEY}/planned-actions/`.",
+                f"- **Run:** {', '.join(step_names) or 'all pipeline steps'}.",
+                "- **Skip:** JIRA/GitHub write operations (comments, transitions, labels,",
+                "  issue create/update). Write drafts under `artifacts/{KEY}/planned-actions/`.",
                 "- Set `dry_run: true` on every `outcomes/{KEY}.json`.",
             ]
         )
@@ -75,7 +100,7 @@ def render(workflow: dict, odf_version: str, *, dry_run: bool = False) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--workflow", default="zstream-issue-verification")
+    parser.add_argument("--workflow", default=DEFAULT_WORKFLOW)
     parser.add_argument("--odf-version", required=True)
     parser.add_argument("--out", type=Path)
     parser.add_argument(

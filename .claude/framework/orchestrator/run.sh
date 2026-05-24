@@ -4,7 +4,7 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
-DEFAULT_WORKFLOW="zstream-issue-verification"
+DEFAULT_WORKFLOW="$(python3 "$DIR/../lib/workflow_registry.py" 2>/dev/null || echo zstream-issue-verification)"
 
 DRY_RUN=0
 WORKFLOW="$DEFAULT_WORKFLOW"
@@ -14,7 +14,7 @@ RUN_EXECUTE=0
 
 usage() {
   cat <<EOF
-usage: run.sh [options] <odf-version>
+usage: run.sh [options] <version>
 
 Bootstrap a registered verification workflow.
 
@@ -31,14 +31,14 @@ options:
   -h, --help        This help
 
 examples:
-  run.sh <odf-version>
-  run.sh --workflow zstream-issue-verification <odf-version>
-  run.sh --workflow zstream-issue-verification <odf-version> --dry-run
+  run.sh <version>
+  run.sh --workflow zstream-issue-verification <version>
+  run.sh --workflow zstream-issue-verification <version> --dry-run
   run.sh --discover --execute --dry-run 4.19   # bootstrap + discovery + all issues
   run.sh --list-workflows
   run.sh --status
 
-Options may appear before or after the ODF version.
+Options may appear before or after the version.
 
 after bootstrap, check:
   .claude/framework/orchestrator/status.sh
@@ -79,7 +79,7 @@ if [[ "$LIST" -eq 1 ]]; then
 fi
 
 if [[ ${#POSITIONAL[@]} -gt 1 ]]; then
-  echo "error: expected one ODF version, got: ${POSITIONAL[*]}" >&2
+  echo "error: expected one version, got: ${POSITIONAL[*]}" >&2
   usage >&2
   exit 1
 fi
@@ -90,7 +90,7 @@ if [[ -z "$ODF_VERSION" ]]; then
   exit 1
 fi
 if [[ "$ODF_VERSION" == --* ]]; then
-  echo "error: missing ODF version (positional <odf-version>, e.g. 4.18 or 4.19)" >&2
+  echo "error: missing version (positional <version>, e.g. 4.18 or 4.19)" >&2
   usage >&2
   exit 1
 fi
@@ -201,11 +201,11 @@ echo "  .claude/framework/orchestrator/watch.sh --all"
 echo "  Log file: \$JIRA_AGENT_WORKSPACE/logs/run.log"
 echo ""
 echo "Next step (required — nothing runs automatically after this):"
-echo "  1) Per issue (terminal): .claude/framework/orchestrator/execute_issue.sh DFBUGS-XXXX"
+echo "  1) Per issue (terminal): .claude/framework/orchestrator/execute_issue.sh <ISSUE-KEY>"
 echo "  2) Full workflow: Claude Code agent '${COORDINATOR}' + prompt file above"
 echo "     Or in Cursor: execute_issue.sh per key, or ask agent to follow the prompt."
 echo ""
 echo "Full terminal workflow (one command):"
 echo "  run.sh --discover --execute --dry-run $ODF_VERSION"
 echo ""
-echo "Then: open artifacts/DFBUGS-XXXX/verification-generation-prompt.md in Claude to generate tests"
+echo "Then: open artifacts/<ISSUE-KEY>/verification-generation-prompt.md in Claude to generate tests"

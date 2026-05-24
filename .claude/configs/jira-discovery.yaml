@@ -1,4 +1,6 @@
-# JIRA discovery for DFBUGS z-stream verification.
+# JIRA discovery configuration.
+# Defaults target DFBUGS z-stream; workflows can use their own config.
+# Chain: workflow YAML → set_run_config.py → active-run.json → load_run_context.py → env vars → discovery script.
 # CLI version (run.sh arg) maps to Target Release: 4.19 -> odf-4.19.z
 
 default_url: https://redhat.atlassian.net

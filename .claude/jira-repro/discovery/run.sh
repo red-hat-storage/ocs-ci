@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Discover ON_QA DFBUGS issues; write discovery/issues.json and log exact count.
+# Discover JIRA issues; write discovery/issues.json and log exact count.
 set -euo pipefail
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
@@ -16,7 +16,7 @@ if [[ -z "${ODF_VERSION:-}" ]]; then
   exit 1
 fi
 
-"$ROOT/.claude/framework/lib/log_run.sh" INFO "jira-discovery: starting ODF=$ODF_VERSION status=${JIRA_STATUS:-ON_QA}"
+"$ROOT/.claude/framework/lib/log_run.sh" INFO "jira-discovery: starting version=$ODF_VERSION status=${JIRA_STATUS:-ON_QA} workflow=${WORKFLOW_ID:-}"
 python3 "$ROOT/.claude/framework/lib/run_status.py" set --phase discovery --message "JIRA discovery in progress" 2>/dev/null || true
 
 mkdir -p "$WS/discovery"

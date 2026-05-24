@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepare verification data for one DFBUGS issue.
+# Prepare verification data for one JIRA issue.
 # Does NOT run the full pipeline — use the jira-verify-worker agent for that.
 set -euo pipefail
 
@@ -9,7 +9,7 @@ WS="${JIRA_AGENT_WORKSPACE:-$ROOT/.claude/workspace}"
 KEY="${1:-}"
 
 usage() {
-  echo "usage: execute_issue.sh DFBUGS-XXXX" >&2
+  echo "usage: execute_issue.sh <ISSUE-KEY>" >&2
   echo "Requires: run.sh bootstrap first; source workspace/mcp-env.sh for JIRA." >&2
   exit 1
 }
@@ -21,7 +21,7 @@ log() { "$ROOT/.claude/framework/lib/log_run.sh" "$@"; }
 
 # --- workspace validation ---
 if [[ ! -f "$WS/active-run.json" ]]; then
-  echo "execute_issue: run .claude/framework/orchestrator/run.sh <odf-version> first" >&2
+  echo "execute_issue: run .claude/framework/orchestrator/run.sh <version> first" >&2
   exit 1
 fi
 

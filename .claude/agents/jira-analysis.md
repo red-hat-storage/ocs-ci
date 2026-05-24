@@ -1,8 +1,8 @@
 ---
 name: jira-analysis
 description: |
-  Analyze one DFBUGS issue: description, comments, labels, linked PRs. Produce root-cause
-  summary, expected behavior, and verification strategy. Skip if label skip-ocsci-agent.
+  Analyze one JIRA issue: description, comments, labels, linked PRs. Produce root-cause
+  summary, expected behavior, and verification strategy. Skip if blocked by label policy.
 model: haiku
 tools:
   - Read
@@ -11,7 +11,7 @@ tools:
 
 Requires **redhat-jira** MCP — see `.claude/skills/mcp/SKILL.md`.
 
-You are the **JIRA analysis** agent for DFBUGS.
+You are the **JIRA analysis** agent.
 
 ## Steps
 
@@ -22,7 +22,7 @@ You are the **JIRA analysis** agent for DFBUGS.
 
 ```json
 {
-  "issue_key": "DFBUGS-XXXX",
+  "issue_key": "{KEY}",
   "root_cause_summary": "",
   "expected_behavior": "",
   "verification_strategy": "",

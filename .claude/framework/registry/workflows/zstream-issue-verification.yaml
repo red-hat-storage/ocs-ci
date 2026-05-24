@@ -1,8 +1,18 @@
 id: zstream-issue-verification
+default: true
 name: DFBUGS Z-stream ON_QA verification
 coordinator_agent: orchestrator-coordinator
 description: |
   Autonomous verification of DFBUGS issues in ON_QA for a target ODF z-stream.
+
+defaults:
+  skip_label: skip-ocsci-agent
+  version_positional_label: "ODF version"
+  dry_run_env_var: DFBUGS_DRY_RUN
+
+custom_fields:
+  target_release: customfield_10886
+  prod_build_version: customfield_10566
 
 params:
   odf_version:

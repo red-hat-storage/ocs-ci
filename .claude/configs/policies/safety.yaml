@@ -1,5 +1,6 @@
-# Safety policies for DFBUGS verification agents.
+# Safety policies for verification agents.
 # Enforced by hooks/safety/validate_script.sh
+# Workflows can override verification_outcomes via their own outcomes: section.
 
 forbidden_command_patterns:
   - 'rm\s+-[a-zA-Z]*rf?\s+(/|~|\$HOME|\*)'
@@ -49,7 +50,7 @@ github:
   duplicate_search: true
 
 dry_run:
-  env_var: DFBUGS_DRY_RUN
+  env_var: DRY_RUN
   workspace_marker: .dry-run
   run_config_key: dry_run
   allowed:

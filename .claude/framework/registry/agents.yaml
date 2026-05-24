@@ -1,5 +1,6 @@
 # Agent catalog — source of truth for reusable Claude subagents.
 # Add an entry here, create the .md under path, reference from any workflow.
+# workflows: [all] means the agent is reusable across any workflow.
 
 agents:
   orchestrator-coordinator:
@@ -10,12 +11,12 @@ agents:
       - .claude/skills/dry-run/SKILL.md
       - .claude/skills/mcp/SKILL.md
     tags: [orchestrator]
-    workflows: [zstream-issue-verification]
+    workflows: [all]
 
   jira-discovery:
     path: .claude/agents/jira-discovery.md
     model: haiku
-    description: Discover DFBUGS issue keys by ODF version and JIRA status (read-only).
+    description: Discover issue keys from JIRA by version and status (read-only).
     skills: [.claude/skills/mcp/SKILL.md]
     tags: [discovery, jira, readonly]
     workflows: [zstream-issue-verification]
@@ -32,7 +33,7 @@ agents:
     model: haiku
     skills: [.claude/skills/oc/SKILL.md]
     tags: [cluster]
-    workflows: [zstream-issue-verification]
+    workflows: [all]
 
   repro-extraction:
     path: .claude/agents/repro-extraction.md
@@ -48,7 +49,7 @@ agents:
       - .claude/skills/ocs-ci-verify-script/SKILL.md
       - .claude/skills/update-logging/SKILL.md
     tags: [script]
-    workflows: [zstream-issue-verification]
+    workflows: [all]
 
   verification-execution:
     path: .claude/agents/verification-execution.md
@@ -56,7 +57,7 @@ agents:
     skills:
       - .claude/skills/oc/SKILL.md
     tags: [verify, execution]
-    workflows: [zstream-issue-verification]
+    workflows: [all]
 
   cluster-health-detection:
     path: .claude/agents/cluster-health-detection.md
@@ -66,28 +67,28 @@ agents:
       - .claude/skills/cluster-health/SKILL.md
       - .claude/skills/oc/SKILL.md
     tags: [cluster, health, regression]
-    workflows: [zstream-issue-verification]
+    workflows: [all]
 
   infra-diagnosis:
     path: .claude/agents/infra-diagnosis.md
     model: sonnet
     skills: [.claude/skills/cluster-health/SKILL.md]
     tags: [infra, diagnosis]
-    workflows: [zstream-issue-verification]
+    workflows: [all]
 
   github-automation:
     path: .claude/agents/github-automation.md
     model: haiku
     skills: [.claude/skills/github/SKILL.md]
     tags: [github, automation]
-    workflows: [zstream-issue-verification]
+    workflows: [all]
 
   reporting:
     path: .claude/agents/reporting.md
     model: haiku
     skills: []
     tags: [report]
-    workflows: [zstream-issue-verification]
+    workflows: [all]
 
   jira-verify-worker:
     path: .claude/agents/jira-verify-worker.md

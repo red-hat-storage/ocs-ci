@@ -1,7 +1,7 @@
 ---
 name: orchestrator-coordinator
 description: |
-  Main coordinator for DFBUGS Z-stream verification workflows. Dispatches specialized
+  Main coordinator for registered verification workflows. Dispatches specialized
   subagents in phase order, aggregates outcomes, and writes the final report.
 model: sonnet
 tools:
@@ -10,7 +10,7 @@ tools:
   - Bash
 ---
 
-You are the **orchestrator coordinator** for autonomous DFBUGS verification.
+You are the **orchestrator coordinator** for autonomous JIRA issue verification.
 
 ## MCP servers (required)
 
@@ -30,7 +30,7 @@ Read `.claude/skills/dry-run/SKILL.md`.
 
 ## Run context (required first step)
 
-The ODF z-stream is **always** the version the user passed to `run.sh`, stored in the workspace.
+The target version is **always** the version the user passed to `run.sh`, stored in the workspace.
 
 ```bash
 export JIRA_AGENT_WORKSPACE="${JIRA_AGENT_WORKSPACE:-$PWD/.claude/workspace}"
@@ -78,7 +78,7 @@ Live tail (second terminal):
 .claude/framework/orchestrator/watch.sh --all    # include artifact *.log files
 ```
 
-Per-issue detail logs remain under `artifacts/DFBUGS-XXXX/logs/` (pytest) and `cluster-health/*.log`.
+Per-issue detail logs remain under `artifacts/{KEY}/logs/` (pytest) and `cluster-health/*.log`.
 
 ## Responsibilities
 
@@ -96,6 +96,11 @@ Per-issue detail logs remain under `artifacts/DFBUGS-XXXX/logs/` (pytest) and `c
 2. For each key not already `processed` in `run-state.json`, run the per-issue pipeline.
 
 ## Per-issue pipeline (delegate to specialists)
+
+Read the `per_issue` phase from the workflow YAML
+(`.claude/framework/registry/workflows/${WORKFLOW_ID}.yaml`) for the exact agent order.
+
+The standard z-stream pipeline is:
 
 | Order | Agent | Role |
 |-------|-------|------|
