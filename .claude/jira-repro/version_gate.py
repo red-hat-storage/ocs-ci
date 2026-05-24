@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-_CLAUDE_ROOT = Path(__file__).resolve().parents[2]  # .../ocs-ci/.claude
+_CLAUDE_ROOT = Path(__file__).resolve().parents[1]  # .../ocs-ci/.claude
 import sys
 
 if str(_CLAUDE_ROOT / "jira-repro") not in sys.path:
@@ -30,11 +30,6 @@ _COMPONENTS_VERSION_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
-_VERSION_TOKEN_RE = re.compile(
-    r"\b(?:odf[- ]?)?(\d+\.\d+(?:\.\d+)?)(?:[-.](\d+))?\b",
-    re.IGNORECASE,
-)
-
 
 def parse_build_version(version_str: str) -> tuple[int, ...] | None:
     """Parse ODF/CSV style versions into comparable integer tuple."""
@@ -42,21 +37,14 @@ def parse_build_version(version_str: str) -> tuple[int, ...] | None:
         return None
     s = str(version_str).strip().lower()
     s = s.removeprefix("odf-").removesuffix(".z")
-    m = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?(?:[-.](\d+))?", s)
-    if not m:
+    parts = re.findall(r'\d+', s)
+    if len(parts) < 2:
         return None
-    parts = [int(m.group(i) or 0) for i in range(1, 5)]
-    return tuple(parts)
-
-
-def _version_label(v: tuple[int, ...]) -> str:
-    if len(v) >= 3 and v[2]:
-        base = f"{v[0]}.{v[1]}.{v[2]}"
-    else:
-        base = f"{v[0]}.{v[1]}"
-    if len(v) >= 4 and v[3]:
-        return f"{base}-{v[3]}"
-    return base
+    # Pad to 4 elements (major, minor, patch, build) for consistent comparison
+    ints = [int(p) for p in parts[:4]]
+    while len(ints) < 4:
+        ints.append(0)
+    return tuple(ints)
 
 
 def version_gte(installed: tuple[int, ...], required: tuple[int, ...]) -> bool:
@@ -73,41 +61,55 @@ def extract_jira_product_build_versions(
 ) -> list[str]:
     """Collect product/ODF build versions mentioned in JIRA (not Target Release z-stream)."""
     found: list[str] = []
-    desc = (analysis or {}).get("description_excerpt") or ""
 
     if raw:
         fields = raw.get("fields") or {}
+
+        # Check Prod Build Version field first
         prod = fields.get(_PROD_BUILD_FIELD)
         if isinstance(prod, str) and prod.strip():
             found.append(prod.strip())
         elif prod:
             found.append(str(prod))
+        if found:
+            return _dedup(found)
 
-        d = fields.get("description")
-        if isinstance(d, dict):
-            from build_repro_steps import adf_text
-
-            desc = adf_text(d) or desc
-        elif isinstance(d, str):
-            desc = d or desc
-
+        # Check affects-versions
         for av in fields.get("versions") or []:
             name = (av or {}).get("name", "")
             if name and re.search(r"\d+\.\d+", name):
                 found.append(name)
+        if found:
+            return _dedup(found)
 
+        # Extract description text
+        d = fields.get("description")
+        if isinstance(d, dict):
+            from build_repro_steps import adf_text
+            desc = adf_text(d) or ""
+        elif isinstance(d, str):
+            desc = d
+        else:
+            desc = ""
+    else:
+        desc = (analysis or {}).get("description_excerpt") or ""
+
+    # Single regex scan on description for version patterns
     m = _COMPONENTS_VERSION_RE.search(desc)
     if m:
         found.append(m.group(1))
 
-    # Explicit "ODF 4.xx" / "ODF-4.xx" in description (avoid bare z-stream-only tokens)
     for m in re.finditer(r"ODF[,\s]+(\d+\.\d+(?:\.\d+)?)", desc, re.IGNORECASE):
         found.append(m.group(1))
 
-    # De-dupe preserving order
+    return _dedup(found)
+
+
+def _dedup(items: list[str]) -> list[str]:
+    """De-duplicate preserving order."""
     seen: set[str] = set()
     out: list[str] = []
-    for v in found:
+    for v in items:
         key = v.lower()
         if key not in seen:
             seen.add(key)
@@ -139,9 +141,7 @@ def evaluate_build_version_gate(
             "jira_product_build_versions": [],
             "jira_required_minimum": None,
             "cluster_installed": cluster_installed,
-            "cluster_installed_parsed": (
-                _version_label(installed_t) if installed_t else None
-            ),
+            "cluster_installed_parsed": str(installed_t) if installed_t else None,
         }
 
     if not installed_t:
@@ -150,22 +150,20 @@ def evaluate_build_version_gate(
             "proceed": False,
             "reason": "cluster ODF version could not be parsed",
             "jira_product_build_versions": labels,
-            "jira_required_minimum": _version_label(max(parsed_jira)),
+            "jira_required_minimum": str(max(parsed_jira)),
             "cluster_installed": cluster_installed,
             "cluster_installed_parsed": None,
         }
 
     required_t = max(parsed_jira)
-    required_label = _version_label(required_t)
-    installed_label = _version_label(installed_t)
     ok = version_gte(installed_t, required_t)
 
     if ok:
-        reason = f"cluster build {installed_label} >= JIRA minimum product build {required_label}"
+        reason = f"cluster build {installed_t} >= JIRA minimum product build {required_t}"
     else:
         reason = (
-            f"cluster build {installed_label} is lower than JIRA product build "
-            f"{required_label} — verification blocked"
+            f"cluster build {installed_t} is lower than JIRA product build "
+            f"{required_t} — verification blocked"
         )
 
     return {
@@ -173,9 +171,9 @@ def evaluate_build_version_gate(
         "proceed": ok,
         "reason": reason,
         "jira_product_build_versions": labels,
-        "jira_required_minimum": required_label,
+        "jira_required_minimum": str(required_t),
         "cluster_installed": cluster_installed,
-        "cluster_installed_parsed": installed_label,
+        "cluster_installed_parsed": str(installed_t),
         "version_mismatch": not ok,
     }
 

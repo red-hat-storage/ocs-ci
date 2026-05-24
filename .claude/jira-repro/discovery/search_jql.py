@@ -25,6 +25,9 @@ except ImportError as exc:
     print(f"search_jql: missing dependency: {exc}", file=sys.stderr)
     sys.exit(1)
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from jira_client import auth_headers, make_session
+
 from release_match import (
     cli_to_target_release_value,
     field_to_text,
@@ -81,31 +84,6 @@ def build_jql(
         .replace("\n", " ")
         .strip()
     )
-
-
-def auth_headers() -> tuple[dict[str, str], requests.auth.AuthBase | None]:
-    mode = os.environ.get("JIRA_AUTH", "basic").lower()
-    email = os.environ.get("JIRA_EMAIL", "")
-    token = os.environ.get("JIRA_API_TOKEN", "")
-    if mode == "bearer":
-        return {"Authorization": f"Bearer {token}", "Accept": "application/json"}, None
-    return {"Accept": "application/json"}, (email, token)
-
-
-def make_session() -> requests.Session | None:
-    base = os.environ.get("JIRA_URL", "").rstrip("/")
-    email = os.environ.get("JIRA_EMAIL", "")
-    token = os.environ.get("JIRA_API_TOKEN", "")
-    if not all([base, token]) or (
-        os.environ.get("JIRA_AUTH", "basic") == "basic" and not email
-    ):
-        return None
-    headers, auth = auth_headers()
-    session = requests.Session()
-    session.headers.update(headers)
-    if auth:
-        session.auth = auth
-    return session
 
 
 def resolve_field_id(
@@ -239,9 +217,10 @@ def run_search(
     verbose: bool = False,
 ) -> tuple[list[dict[str, Any]], str | None]:
     base = os.environ.get("JIRA_URL", "").rstrip("/")
-    session = make_session()
-    if not session:
-        return [], "JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN must be set"
+    try:
+        session = make_session()
+    except SystemExit:
+        return [], "JIRA credentials not set"
 
     cfg = load_config()
     pref = os.environ.get("JIRA_API_VERSION", "")
@@ -516,9 +495,6 @@ def main() -> None:
             print(f"search_jql: hint — {result['hint']}", file=sys.stderr)
         sys.exit(1)
 
-    if not make_session():
-        print("search_jql: ERROR — JIRA credentials not set", file=sys.stderr)
-        sys.exit(1)
 
 
 if __name__ == "__main__":

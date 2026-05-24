@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "jira-repro"))
 from version_gate import (  # noqa: E402
     evaluate_build_version_gate,
     extract_jira_product_build_versions,

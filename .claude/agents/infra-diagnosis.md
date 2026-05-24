@@ -33,4 +33,6 @@ If `infra_instability` or `environmental` with confidence ≥ 0.7:
 - Do **not** transition JIRA to FailedQA
 - Set outcome `blocked_by_infra` for coordinator retry later
 
-Read skills: `.claude/skills/log-analysis/SKILL.md`, `.claude/skills/cluster-health/SKILL.md`
+Read skill: `.claude/skills/cluster-health/SKILL.md`
+
+For log analysis patterns, see the "Log analysis patterns" section in `agents/cluster-health-detection.md`.

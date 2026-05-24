@@ -1,5 +1,12 @@
 # Known error signatures for cluster-health-detection correlation.
+# Single source of truth for both static patterns and runtime-learned signatures.
+#
 # regex: case-insensitive pattern; classification: Critical|Major|Minor|Infra|Noise
+#
+# To persist a new signature discovered at runtime, append an entry to
+# the 'signatures' list below.  Previously this was done via the now-removed
+# .claude/memory/anomaly_signatures.py helper; all new signatures should be
+# added directly to this file instead.
 
 signatures:
   - regex: 'MON_DOWN|mon is down'

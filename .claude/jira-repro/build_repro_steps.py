@@ -14,22 +14,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from jira_client import adf_to_text as adf_text
+
 __all__ = [
-    "adf_text",
     "extract_jira_context",
     "extract_numbered_steps",
     "extract_fix_snippet",
 ]
-
-
-def adf_text(node: Any) -> str:
-    if isinstance(node, dict):
-        if node.get("type") == "text":
-            return str(node.get("text", ""))
-        return "".join(adf_text(c) for c in node.get("content") or [])
-    if isinstance(node, list):
-        return "".join(adf_text(x) for x in node)
-    return ""
 
 
 FIX_SNIPPET_RE = re.compile(

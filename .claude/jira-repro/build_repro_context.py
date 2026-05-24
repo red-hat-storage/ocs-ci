@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Extract JIRA facts for AI-driven repro/script generation (no hardcoded scenarios)."""
+"""Extract JIRA facts for AI-driven repro/script generation (no hardcoded scenarios).
+
+This module owns two phases:
+  1. enrich()        — jira-raw.json  →  analysis.json
+  2. build_context() — analysis.json + jira-raw.json  →  repro-context.json
+"""
 
 from __future__ import annotations
 
@@ -8,12 +13,52 @@ import json
 from pathlib import Path
 from typing import Any
 
+from jira_client import adf_to_text as adf_text
 from build_repro_steps import (
-    adf_text,
     extract_fix_snippet,
     extract_jira_context,
     extract_numbered_steps,
 )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 — enrich (was enrich_analysis.py)
+# ---------------------------------------------------------------------------
+
+def enrich(raw: dict, *, issue_key: str) -> dict:
+    """Build an ``analysis.json`` dict from a raw JIRA issue payload."""
+    fields = raw.get("fields") or {}
+    desc = fields.get("description")
+    text = adf_text(desc) if isinstance(desc, dict) else str(desc or "")
+    labels = fields.get("labels") or []
+    blocked = "skip-ocsci-agent" in labels
+    ctx = extract_jira_context(raw)
+    fix = extract_fix_snippet(text)
+
+    return {
+        "issue_key": issue_key,
+        "summary": fields.get("summary"),
+        "status": (fields.get("status") or {}).get("name"),
+        "labels": labels,
+        "description_excerpt": text[:8000],
+        "fix_snippets": [fix] if fix else [],
+        "jira_target_release": ctx.get("target_release"),
+        "jira_components": ctx.get("components", []),
+        "linked_issues": ctx.get("linked_issues", []),
+        "feasible": not blocked,
+        "skipped_by_label": blocked,
+        "confidence": 0.0 if blocked else 0.5,
+        "ai_generation_required": True,
+        "root_cause_summary": None,
+        "expected_behavior": None,
+        "verification_strategy": None,
+        "note": "Interpretation and test plan come from Claude via verification-generation-prompt.md",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — build_context
+# ---------------------------------------------------------------------------
 
 
 def build_context(
@@ -68,20 +113,40 @@ def main() -> None:
     parser.add_argument("--issue", required=True)
     parser.add_argument("--art", type=Path, required=True)
     parser.add_argument("--odf-version", default="")
+    parser.add_argument(
+        "--enrich-only",
+        action="store_true",
+        help="Run only the enrich phase (produce analysis.json) and exit.",
+    )
     args = parser.parse_args()
 
     art = args.art
-    analysis = json.loads((art / "analysis.json").read_text())
+    issue_key = args.issue.upper()
+    analysis_path = art / "analysis.json"
+
+    # --- Phase 1: enrich (if needed or requested) -------------------------
     raw = (
         json.loads((art / "jira-raw.json").read_text())
         if (art / "jira-raw.json").is_file()
         else None
     )
 
+    if not analysis_path.is_file() or args.enrich_only:
+        if raw is None:
+            raise SystemExit("jira-raw.json not found — cannot enrich")
+        plan = enrich(raw, issue_key=issue_key)
+        analysis_path.write_text(json.dumps(plan, indent=2) + "\n")
+        print("skipped" if plan.get("skipped_by_label") else "ok")
+        if args.enrich_only:
+            return
+
+    # --- Phase 2: build_context -------------------------------------------
+    analysis = json.loads(analysis_path.read_text())
+
     ctx = build_context(
         analysis,
         raw,
-        issue_key=args.issue.upper(),
+        issue_key=issue_key,
         odf_target=args.odf_version or analysis.get("odf_version", ""),
     )
     out = art / "repro-context.json"

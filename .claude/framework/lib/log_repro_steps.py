@@ -5,147 +5,33 @@ from __future__ import annotations
 
 import argparse
 import os
-import re
 import subprocess
+import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-
-
-def workspace_path() -> Path:
-    ws = os.environ.get("JIRA_AGENT_WORKSPACE", "").strip()
-    return Path(ws) if ws else ROOT / ".claude" / "workspace"
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "jira-repro"))
+from paths import ROOT, workspace_path
 
 
 def parse_repro_yaml(text: str) -> dict:
-    """Minimal parser for repro-steps.yaml (no PyYAML required)."""
+    """Parse repro-steps.yaml using PyYAML."""
+    import yaml
+
+    raw = yaml.safe_load(text) or {}
     data: dict = {
         "steps": [],
         "verification_checks": [],
         "prerequisites": [],
         "pass_criteria": [],
-        "confidence": None,
+        "confidence": raw.get("confidence"),
         "missing_info": [],
-        "issue_key": None,
-        "source": None,
+        "issue_key": raw.get("issue_key"),
+        "source": raw.get("source"),
     }
-    step: dict | None = None
-    details_lines: list[str] = []
-    in_details_block = False
-    current_list: str | None = None
-
-    def flush_step() -> None:
-        nonlocal step, details_lines, in_details_block
-        if step is not None:
-            if details_lines:
-                step["details"] = "\n".join(details_lines).strip()
-            target = (
-                data["verification_checks"]
-                if current_list == "verification_checks"
-                else data["steps"]
-            )
-            target.append(step)
-        step = None
-        details_lines = []
-        in_details_block = False
-
-    def flush_list_item(text: str) -> None:
-        if current_list == "prerequisites":
-            data["prerequisites"].append(text.strip())
-        elif current_list == "pass_criteria":
-            data["pass_criteria"].append(text.strip())
-
-    for raw in text.splitlines():
-        line = raw.rstrip()
-
-        if re.match(r"^issue_key:", line):
-            flush_step()
-            data["issue_key"] = line.split(":", 1)[1].strip()
-            current_list = None
-            continue
-        if re.match(r"^source:", line):
-            data["source"] = line.split(":", 1)[1].strip()
-            continue
-        if re.match(r"^prerequisites:", line):
-            flush_step()
-            current_list = "prerequisites"
-            continue
-        if re.match(r"^steps:", line):
-            flush_step()
-            current_list = "steps"
-            continue
-        if re.match(r"^verification_checks:", line):
-            flush_step()
-            current_list = "verification_checks"
-            continue
-        if re.match(r"^pass_criteria:", line):
-            flush_step()
-            current_list = "pass_criteria"
-            continue
-        if re.match(r"^confidence:", line):
-            flush_step()
-            current_list = None
-            data["confidence"] = line.split(":", 1)[1].strip()
-            continue
-        if re.match(r"^missing_info:", line):
-            flush_step()
-            current_list = "missing_info"
-            continue
-        if re.match(r"^jira_context:", line):
-            flush_step()
-            current_list = None
-            continue
-
-        if current_list == "missing_info":
-            m = re.match(r"^\s+-\s+(.+)$", line)
-            if m:
-                data["missing_info"].append(m.group(1).strip())
-            continue
-
-        if current_list in ("prerequisites", "pass_criteria"):
-            m = re.match(r"^\s+-\s+\|\s*$", line)
-            if m:
-                in_details_block = True
-                details_lines = []
-                continue
-            m = re.match(r"^\s+-\s+(.+)$", line)
-            if m:
-                if in_details_block:
-                    flush_list_item("\n".join(details_lines))
-                    details_lines = []
-                    in_details_block = False
-                flush_list_item(m.group(1))
-                continue
-            if in_details_block:
-                details_lines.append(line.strip())
-                continue
-
-        m = re.match(r"^\s*-\s+action:\s*(.+)$", line)
-        if m:
-            flush_step()
-            step = {"action": m.group(1).strip()}
-            continue
-        m = re.match(r"^\s*kind:\s*(.+)$", line)
-        if m and step is not None:
-            step["kind"] = m.group(1).strip()
-            continue
-        m = re.match(r"^\s*details:\s*\|\s*$", line)
-        if m and step is not None:
-            in_details_block = True
-            continue
-        m = re.match(r"^\s*details:\s*(.+)$", line)
-        if m and step is not None:
-            step["details"] = m.group(1).strip()
-            in_details_block = False
-            continue
-        if in_details_block and step is not None:
-            details_lines.append(line.strip())
-            continue
-
-    flush_step()
-    if in_details_block and current_list in ("prerequisites", "pass_criteria"):
-        flush_list_item("\n".join(details_lines))
-
+    for key in ("steps", "verification_checks", "prerequisites", "pass_criteria", "missing_info"):
+        val = raw.get(key)
+        if isinstance(val, list):
+            data[key] = val
     return data
 
 

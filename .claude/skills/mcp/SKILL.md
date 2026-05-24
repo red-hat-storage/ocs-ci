@@ -69,4 +69,4 @@ Use MCP tools exposed by **redhat-jira** (prefix may appear as `mcp__redhat-jira
 - Read: `jira_issue_get`, JQL search tool
 - Write (live only): `jira_comment_add`, `jira_workflow_transition`
 
-Catalog: `.claude/configs/mcp/required.yaml`
+Config example: `.claude/configs/mcp/claude-code-mcp.example.json`

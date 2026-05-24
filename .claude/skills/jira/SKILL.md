@@ -20,7 +20,7 @@ CLI ODF version maps to **Target Release** for JQL, e.g. `4.19` → `odf-4.19.z`
 export JIRA_URL=https://issues.redhat.com
 export JIRA_EMAIL=you@redhat.com
 export JIRA_API_TOKEN=your-pat
-.claude/framework/orchestrator/discover.sh
+.claude/jira-repro/discovery/run.sh
 ```
 
 Debug JQL / API errors:

@@ -30,24 +30,55 @@ Read `.claude/skills/dry-run/SKILL.md`.
 
 ## Run context (required first step)
 
+The ODF z-stream is **always** the version the user passed to `run.sh`, stored in the workspace.
+
 ```bash
 export JIRA_AGENT_WORKSPACE="${JIRA_AGENT_WORKSPACE:-$PWD/.claude/workspace}"
 eval "$(.claude/framework/lib/load_run_context.sh)"
+# Provides: ODF_VERSION, WORKFLOW_ID, RUN_ID, JIRA_STATUS, JIRA_PROJECT, DFBUGS_DRY_RUN (if dry-run)
 ```
 
+Or read JSON:
+
+```bash
+python3 .claude/framework/lib/load_run_context.py
+python3 .claude/framework/lib/load_run_context.py --field odf_version
+```
+
+Source files: `$JIRA_AGENT_WORKSPACE/active-run.json` (preferred), `$JIRA_AGENT_WORKSPACE/run-config.json` (fallback).
+
 Use `$ODF_VERSION` everywhere — it is the CLI argument from `run.sh`, not a fixed default.
-Read `.claude/skills/run-context/SKILL.md`.
+Never hardcode versions like `4.19` in scripts, reports, or JQL.
 
 ## Logging
 
-Log major steps to the central run log (visible via `watch.sh`):
+Central log file: `$JIRA_AGENT_WORKSPACE/logs/run.log`
+
+Log major steps (agents and hooks):
 
 ```bash
 .claude/framework/lib/log_run.sh INFO "phase: jira-discovery start"
-.claude/jira-repro/discovery/run.sh   # logs exact count to run.log
+.claude/framework/lib/log_run.sh WARN "cluster-compat: ODF mismatch"
+.claude/framework/lib/log_run.sh ERROR "verification-execution: pytest failed"
 ```
 
-Read `.claude/skills/run-logging/SKILL.md`.
+Levels: `INFO`, `WARN`, `ERROR`, `DEBUG`
+
+Progress dashboard:
+
+```bash
+.claude/framework/orchestrator/watch.sh --status
+# Shows: phase, discovery issue count, outcomes/artifacts counts
+```
+
+Live tail (second terminal):
+
+```bash
+.claude/framework/orchestrator/watch.sh
+.claude/framework/orchestrator/watch.sh --all    # include artifact *.log files
+```
+
+Per-issue detail logs remain under `artifacts/DFBUGS-XXXX/logs/` (pytest) and `cluster-health/*.log`.
 
 ## Responsibilities
 
@@ -55,14 +86,14 @@ Read `.claude/skills/run-logging/SKILL.md`.
    the `prompt_path` from that file (e.g. `workflow-zstream-issue-verification-prompt.md`).
 2. Execute workflow phases in order (see `.claude/framework/registry/workflows/`).
 3. Invoke subagents by **registry id** — never invent agent names.
-4. Track state via `.claude/memory/state.py` (`upsert_issue` after each issue).
+4. Track state via `framework/lib/run_state.py` (`mark_issue` after each issue).
 5. Write final report under `$JIRA_AGENT_WORKSPACE/reports/` and
    `reports/report-odf-${ODF_VERSION}.json` (use loaded `$ODF_VERSION`).
 
 ## Discovery phase
 
 1. Delegate to `jira-discovery` (uses `$ODF_VERSION` from run context).
-2. For each key not already `processed` in SQLite, run the per-issue pipeline.
+2. For each key not already `processed` in `run-state.json`, run the per-issue pipeline.
 
 ## Per-issue pipeline (delegate to specialists)
 

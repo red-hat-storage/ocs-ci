@@ -61,8 +61,7 @@ Classify each finding:
 
 Cross-reference against:
 
-- `.claude/configs/signatures/known-issues.yaml`
-- `.claude/memory/anomaly-signatures/` (historical)
+- `.claude/configs/signatures/known-issues.yaml` (single source for all known signatures)
 - JIRA MCP search for matching DFBUGS keys
 - GitHub duplicate search for automation backlog
 
@@ -87,7 +86,7 @@ Write under `$JIRA_AGENT_WORKSPACE/artifacts/{KEY}/`:
 
 - `cluster-health-report.json` — machine-readable (schema below)
 - `cluster-health/anomaly-report.md` — human summary
-- Persist new signatures: `.claude/memory/anomaly_signatures.py` via hook output
+- Persist new signatures: append entries to `.claude/configs/signatures/known-issues.yaml`
 
 ### cluster-health-report.json schema
 
@@ -118,6 +117,20 @@ Critical/Major and confidence ≥ 0.65:
 - Flag `regression_detected: true` in outcome (coordinator must not mark VERIFIED blindly)
 - Recommend must-gather path only when policy allows (never destructive ops)
 
+## Log analysis patterns
+
+Use these patterns when scanning `artifacts/{KEY}/logs/*.log`, `execution.json`, pod logs, and `oc get events`:
+
+| Signal | Likely class |
+|--------|----------------|
+| `connection refused` to API | infra / API |
+| `No space left on device` | infra / disk |
+| `MON_DOWN`, `OSD_DOWN` | product or infra (check timing) |
+| Assertion in reproduce.py | product if matches JIRA symptom |
+| Wrong image tag / CSV version | cluster_misconfig |
+
+Structure findings as bullets for JIRA comments and `diagnosis.json`.
+
 ## Downstream
 
 - **infra-diagnosis** consumes this report for failure classification
@@ -126,5 +139,4 @@ Critical/Major and confidence ≥ 0.65:
 Read skills:
 
 - `.claude/skills/cluster-health/SKILL.md`
-- `.claude/skills/log-analysis/SKILL.md`
 - `.claude/skills/oc/SKILL.md`

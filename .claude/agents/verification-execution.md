@@ -55,4 +55,6 @@ then dispatches `cluster-health-detection` — do not mark the issue verified ye
 }
 ```
 
-Read skills: `.claude/skills/oc/SKILL.md`, `.claude/skills/log-analysis/SKILL.md`
+Read skill: `.claude/skills/oc/SKILL.md`
+
+For log analysis patterns, see the "Log analysis patterns" section in `agents/cluster-health-detection.md`.

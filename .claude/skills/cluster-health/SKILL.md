@@ -57,8 +57,13 @@ only in namespaces/resources touched by the verify script.
 
 ## Persist learning
 
-```bash
-python3 .claude/memory/anomaly_signatures.py record --signature "..." --component rook-ceph-mon
+Append new entries directly to `.claude/configs/signatures/known-issues.yaml`:
+
+```yaml
+  - regex: '<pattern>'
+    classification: Major
+    component: rook-ceph-mon
+    dfbugs_key: null
 ```
 
 ## Must-gather

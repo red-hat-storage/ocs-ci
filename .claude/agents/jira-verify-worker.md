@@ -40,7 +40,13 @@ Respect `human_escalation.min_confidence` — do not transition if below thresho
 Write final `$JIRA_AGENT_WORKSPACE/outcomes/{KEY}.json` and call:
 
 ```bash
-python3 -c "from pathlib import Path; import sys; sys.path.insert(0, str(Path('.claude/memory').resolve())); from state import upsert_issue, snapshot_outcome; ..."
+python3 -c "
+import sys; sys.path.insert(0, '.claude/framework/lib')
+from run_state import mark_issue
+from pathlib import Path
+ws = Path('.claude/workspace')
+mark_issue(ws, '{KEY}', processed=True, status='verified', confidence=0.85)
+"
 ```
 
 Skills: `.claude/skills/jira/SKILL.md`, `.claude/skills/ocs-ci-verify-script/SKILL.md`,

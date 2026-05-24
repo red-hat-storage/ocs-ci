@@ -43,4 +43,4 @@ fi
 "$ROOT/.claude/framework/lib/log_run.sh" INFO "run.log initialized run_id=${RUN_ID:-unknown}"
 
 python3 "$ROOT/.claude/framework/lib/run_status.py" set --phase bootstrapped \
-  --message "Bootstrap complete — run discover.sh or start orchestrator-coordinator" 2>/dev/null || true
+  --message "Bootstrap complete — run jira-repro/discovery/run.sh or start orchestrator-coordinator" 2>/dev/null || true

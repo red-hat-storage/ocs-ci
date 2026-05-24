@@ -75,7 +75,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$LIST" -eq 1 ]]; then
-  exec "$DIR/list_workflows.sh"
+  exec python3 "$DIR/list_workflows.py"
 fi
 
 if [[ ${#POSITIONAL[@]} -gt 1 ]]; then
@@ -123,14 +123,15 @@ python3 "$DIR/render_prompt.py" --workflow "$WORKFLOW_ID" \
 
 DISC_FILE="$JIRA_AGENT_WORKSPACE/discovery/issues.json"
 if [[ "$RUN_DISCOVER" -eq 1 ]]; then
-  "$DIR/discover.sh"
+  "$ROOT/.claude/jira-repro/discovery/run.sh"
+  python3 "$ROOT/.claude/framework/lib/run_status.py" show
 elif [[ -f "$DISC_FILE" ]]; then
   DISC_COUNT="$(python3 -c "import json; print(len(json.load(open('$DISC_FILE')).get('issue_keys',[])))" 2>/dev/null || echo 0)"
   "$ROOT/.claude/framework/lib/log_run.sh" INFO \
-    "discovery: existing issues.json has $DISC_COUNT key(s) (re-run: discover.sh or run.sh --discover)"
+    "discovery: existing issues.json has $DISC_COUNT key(s) (re-run: jira-repro/discovery/run.sh or run.sh --discover)"
 else
   "$ROOT/.claude/framework/lib/log_run.sh" WARN \
-    "discovery: not run yet — run: .claude/framework/orchestrator/discover.sh"
+    "discovery: not run yet — run: .claude/jira-repro/discovery/run.sh"
 fi
 
 if [[ "$RUN_EXECUTE" -eq 0 ]]; then
@@ -141,7 +142,7 @@ fi
 # --- optional: run per-issue pipeline for all discovered keys ---
 if [[ "$RUN_EXECUTE" -eq 1 ]]; then
   if [[ ! -f "$DISC_FILE" ]]; then
-    echo "error: --execute requires discovery/issues.json — use --discover or run discover.sh first" >&2
+    echo "error: --execute requires discovery/issues.json — use --discover or run jira-repro/discovery/run.sh first" >&2
     exit 1
   fi
   ISSUE_KEYS="$(

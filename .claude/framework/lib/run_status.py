@@ -5,16 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-
-
-def workspace_path() -> Path:
-    ws = os.environ.get("JIRA_AGENT_WORKSPACE", "").strip()
-    return Path(ws) if ws else ROOT / ".claude" / "workspace"
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "jira-repro"))
+from paths import ROOT, workspace_path
 
 
 def status_path(workspace: Path | None = None) -> Path:
@@ -97,7 +93,7 @@ def print_summary(workspace: Path | None = None) -> None:
                 print(f"Issue keys:  {preview}")
             elif not err:
                 print(
-                    "Issue keys:  (none — try: discover.sh with -v or edit configs/jira-discovery.yaml)"
+                    "Issue keys:  (none — try: jira-repro/discovery/run.sh or edit configs/jira-discovery.yaml)"
                 )
     else:
         print("Discovery:   NOT RUN (missing discovery/issues.json)")

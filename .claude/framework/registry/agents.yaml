@@ -8,7 +8,6 @@ agents:
     description: Dispatch specialists, aggregate reports, manage workflow state.
     skills:
       - .claude/skills/dry-run/SKILL.md
-      - .claude/skills/run-context/SKILL.md
       - .claude/skills/mcp/SKILL.md
     tags: [orchestrator]
     workflows: [zstream-issue-verification]
@@ -17,7 +16,7 @@ agents:
     path: .claude/agents/jira-discovery.md
     model: haiku
     description: Discover DFBUGS issue keys by ODF version and JIRA status (read-only).
-    skills: [.claude/skills/run-context/SKILL.md]
+    skills: [.claude/skills/mcp/SKILL.md]
     tags: [discovery, jira, readonly]
     workflows: [zstream-issue-verification]
 
@@ -56,7 +55,6 @@ agents:
     model: sonnet
     skills:
       - .claude/skills/oc/SKILL.md
-      - .claude/skills/log-analysis/SKILL.md
     tags: [verify, execution]
     workflows: [zstream-issue-verification]
 
@@ -66,7 +64,6 @@ agents:
     description: Post-verification cluster health scan and unknown product bug detection.
     skills:
       - .claude/skills/cluster-health/SKILL.md
-      - .claude/skills/log-analysis/SKILL.md
       - .claude/skills/oc/SKILL.md
     tags: [cluster, health, regression]
     workflows: [zstream-issue-verification]
@@ -74,7 +71,7 @@ agents:
   infra-diagnosis:
     path: .claude/agents/infra-diagnosis.md
     model: sonnet
-    skills: [.claude/skills/log-analysis/SKILL.md]
+    skills: [.claude/skills/cluster-health/SKILL.md]
     tags: [infra, diagnosis]
     workflows: [zstream-issue-verification]
 
@@ -88,9 +85,7 @@ agents:
   reporting:
     path: .claude/agents/reporting.md
     model: haiku
-    skills:
-      - .claude/skills/reporting/SKILL.md
-      - .claude/skills/run-context/SKILL.md
+    skills: []
     tags: [report]
     workflows: [zstream-issue-verification]
 

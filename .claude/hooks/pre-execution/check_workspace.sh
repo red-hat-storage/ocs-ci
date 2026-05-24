@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Ensure JIRA_AGENT_WORKSPACE exists and memory DB is initialized.
+# Ensure JIRA_AGENT_WORKSPACE exists with required directories.
 set -euo pipefail
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 WS="${JIRA_AGENT_WORKSPACE:-$ROOT/.claude/workspace}"
 
 mkdir -p "$WS"/{artifacts,outcomes,reports,discovery,logs}
-python3 "$ROOT/.claude/memory/init_state.py" >/dev/null
 
 if [[ -z "${KUBECONFIG:-}" ]]; then
   echo "check_workspace: warning — KUBECONFIG not set" >&2

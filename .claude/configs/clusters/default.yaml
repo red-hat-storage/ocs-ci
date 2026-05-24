@@ -8,7 +8,7 @@ requirements:
   openshift_version_min: "4.14"
   odf_version_match: true   # must match workflow odf_version
   # If JIRA mentions product build (e.g. 4.20 in description), cluster ODF CSV must be >= that version
-  build_version_gate: true  # .claude/framework/lib/version_gate.py
+  build_version_gate: true  # .claude/jira-repro/version_gate.py
   providers: [aws, vsphere, baremetal, ibm, gcp, azure]
   topologies: [compact, standard]
   deployment_modes: [internal, external]

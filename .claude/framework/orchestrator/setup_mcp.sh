@@ -6,7 +6,6 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 WS="${JIRA_AGENT_WORKSPACE:-$ROOT/.claude/workspace}"
 EXAMPLE="$ROOT/.claude/configs/mcp/claude-code-mcp.example.json"
-REQUIRED="$ROOT/.claude/configs/mcp/required.yaml"
 
 mkdir -p "$WS"
 

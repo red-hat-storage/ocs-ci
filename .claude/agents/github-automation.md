@@ -30,6 +30,6 @@ Set `outcome.github_issue` to `null` and `github_issue_draft` to the draft path.
    - Path to generated scripts in artifacts
    - Cluster requirements from `cluster-fit.json`
 4. Apply labels: `automation backlog`, `QE`, `ODF`
-5. Record URL in outcome `github_issue` and `upsert_issue`.
+5. Record URL in outcome `github_issue` and `mark_issue` (via `framework/lib/run_state.py`).
 
 Read skills: `.claude/skills/github/SKILL.md`, `.claude/skills/dry-run/SKILL.md`

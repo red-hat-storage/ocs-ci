@@ -33,4 +33,6 @@ You are the **cluster compatibility** agent.
 5. If compatible, write `artifacts/{KEY}/cluster-fit.json` and copy a baseline to
    `artifacts/{KEY}/cluster-health/pre-snapshot.json` (for post-run drift detection).
 
-Read skills: `.claude/skills/oc/SKILL.md`, `.claude/skills/run-context/SKILL.md`
+Read skill: `.claude/skills/oc/SKILL.md`
+
+For run context details, see the "Run context" section in `agents/orchestrator-coordinator.md`.

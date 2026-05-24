@@ -63,4 +63,6 @@ project = DFBUGS AND "Target Release" = odf-4.19.z AND status = "ON_QA" ORDER BY
 
 Never log placeholder "found N issues". Do not modify JIRA (read-only).
 
-Read skills: `.claude/skills/run-context/SKILL.md`, `.claude/skills/mcp/SKILL.md`
+Read skill: `.claude/skills/mcp/SKILL.md`
+
+For run context details, see the "Run context" section in `agents/orchestrator-coordinator.md`.

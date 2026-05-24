@@ -17,7 +17,7 @@ eval "$(.claude/framework/lib/load_run_context.sh)"
 ```
 
 Use `$ODF_VERSION`, `$WORKFLOW_ID`, `$RUN_ID`, and dry-run state in all reports.
-Read `.claude/skills/run-context/SKILL.md` and `.claude/skills/reporting/SKILL.md`.
+Never hardcode versions; `$ODF_VERSION` comes from the CLI argument stored in `active-run.json`.
 
 ## Per-issue
 
@@ -39,6 +39,48 @@ Append to `$JIRA_AGENT_WORKSPACE/reports/`:
 - ODF z-stream, cluster profile, duration
 - Counts: verified / failed / skipped / need-info / infra-blocked
 - Links to artifacts and GitHub issues
-- Confidence and retry counts from SQLite
+- Confidence and retry counts from run state
 
-Read skill: `.claude/skills/reporting/SKILL.md`
+## Report directory layout
+
+```
+$JIRA_AGENT_WORKSPACE/reports/
+├── summary.md
+├── failures.md
+├── skipped.md
+├── verified.md
+└── metrics.json
+```
+
+## metrics.json schema
+
+```json
+{
+  "workflow_id": "zstream-issue-verification",
+  "run_id": "<from active-run.json>",
+  "odf_version": "<from active-run.json -- CLI argument, varies per run>",
+  "dry_run": false,
+  "started_at": "",
+  "finished_at": "",
+  "counts": {
+    "verified": 0,
+    "failed": 0,
+    "skipped": 0,
+    "need_info": 0,
+    "infra_blocked": 0
+  },
+  "issues": []
+}
+```
+
+## summary.md format
+
+Executive summary for QE leads: scope, cluster, outcomes, automation backlog links.
+
+## Cluster health section
+
+Per issue, summarize from `cluster-health-report.json`:
+
+- `cluster_health.status`, score, critical/warning counts
+- `potential_bugs` with confidence >= 0.7
+- Link to `artifacts/{KEY}/cluster-health/anomaly-report.md`

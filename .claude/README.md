@@ -48,7 +48,7 @@ echo "Verifying ODF $ODF_VERSION"
 ```
 
 In Claude Code: run **orchestrator-coordinator** with the prompt path printed by `run.sh`.
-Run context skill: `.claude/skills/run-context/SKILL.md`
+Run context: see "Run context" section in `agents/orchestrator-coordinator.md`
 
 ### Live logs and progress (second terminal)
 
@@ -62,7 +62,7 @@ Run discovery only (tests JIRA + writes `discovery/issues.json`):
 
 ```bash
 # Uses mcp-env.sh from setup_mcp (same token as JIRA_MCP_*)
-.claude/framework/orchestrator/discover.sh
+.claude/jira-repro/discovery/run.sh
 
 # Debug search errors / JQL:
 python3 .claude/jira-repro/discovery/search_jql.py --odf-version 4.20 -v
@@ -79,9 +79,9 @@ JQL config: `.claude/configs/jira-discovery.yaml`
 ```
 
 Or start the orchestrator agent in Claude Code (see below). If `Discovery: NOT RUN`,
-run `discover.sh` first.
+run `jira-repro/discovery/run.sh` first.
 
-Log file: `$JIRA_AGENT_WORKSPACE/logs/run.log` — see `.claude/skills/run-logging/SKILL.md`
+Log file: `$JIRA_AGENT_WORKSPACE/logs/run.log` — see "Logging" section in `agents/orchestrator-coordinator.md`
 
 **Important:** `run.sh` only bootstraps the workspace and coordinator prompt.
 The workflow runs when you start the **orchestrator-coordinator** agent in Claude Code
