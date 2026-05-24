@@ -87,6 +87,9 @@ class TestMultiRegion(MCGTest):
     @tier4a
     @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
+    @pytest.mark.skip(
+        reason="DFBUGS-6945: noobaa-core-0 OOMKilled breaks RPC operations"
+    )
     def test_multiregion_mirror(
         self,
         cld_mgr,
