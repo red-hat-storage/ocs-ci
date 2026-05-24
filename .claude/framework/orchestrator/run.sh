@@ -149,21 +149,21 @@ if [[ "$RUN_EXECUTE" -eq 1 ]]; then
     python3 -c "import json; print(' '.join(json.load(open('$DISC_FILE')).get('issue_keys',[])))"
   )"
   if [[ -z "$ISSUE_KEYS" ]]; then
-    echo "error: discovery/issues.json has no issue_keys" >&2
-    exit 1
+    "$ROOT/.claude/framework/lib/log_run.sh" WARN "execute: discovery returned 0 issues — nothing to execute"
+  else
+    # shellcheck disable=SC2086
+    KEY_COUNT=$(echo "$ISSUE_KEYS" | wc -w | tr -d ' ')
+    "$ROOT/.claude/framework/lib/log_run.sh" INFO \
+      "execute: running pipeline for $KEY_COUNT issue(s): $ISSUE_KEYS"
+    eval "$(python3 "$ROOT/.claude/framework/lib/load_run_context.py" --shell 2>/dev/null)" || true
+    # shellcheck disable=SC2086
+    for KEY in $ISSUE_KEYS; do
+      "$DIR/execute_issue.sh" "$KEY" || {
+        "$ROOT/.claude/framework/lib/log_run.sh" ERROR "execute: $KEY failed (continuing)"
+      }
+    done
+    "$ROOT/.claude/framework/lib/log_run.sh" INFO "execute: finished $KEY_COUNT issue(s)"
   fi
-  # shellcheck disable=SC2086
-  KEY_COUNT=$(echo "$ISSUE_KEYS" | wc -w | tr -d ' ')
-  "$ROOT/.claude/framework/lib/log_run.sh" INFO \
-    "execute: running pipeline for $KEY_COUNT issue(s): $ISSUE_KEYS"
-  eval "$(python3 "$ROOT/.claude/framework/lib/load_run_context.py" --shell 2>/dev/null)" || true
-  # shellcheck disable=SC2086
-  for KEY in $ISSUE_KEYS; do
-    "$DIR/execute_issue.sh" "$KEY" || {
-      "$ROOT/.claude/framework/lib/log_run.sh" ERROR "execute: $KEY failed (continuing)"
-    }
-  done
-  "$ROOT/.claude/framework/lib/log_run.sh" INFO "execute: finished $KEY_COUNT issue(s)"
 fi
 
 echo ""

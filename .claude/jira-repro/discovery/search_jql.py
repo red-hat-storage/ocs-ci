@@ -338,7 +338,21 @@ def discover(
 
     target_release_jira = cli_to_target_release_value(odf_version)
 
-    session = make_session()
+    try:
+        session = make_session()
+    except SystemExit:
+        return {
+            "odf_version": odf_version,
+            "target_release_jira": target_release_jira,
+            "target_release_filter": target_release_jira,
+            "status": status,
+            "project": project,
+            "issue_keys": [],
+            "jql_used": None,
+            "template_used": None,
+            "tried": [],
+            "error": "JIRA REST credentials not set (use MCP server or export JIRA_API_TOKEN + JIRA_EMAIL)",
+        }
     base = os.environ.get("JIRA_URL", "").rstrip("/")
     release_field_id = None
     if session and base:
@@ -490,10 +504,9 @@ def main() -> None:
     print(text)
 
     if result.get("error") and not result.get("issue_keys"):
-        print(f"search_jql: ERROR — {result['error']}", file=sys.stderr)
+        print(f"search_jql: WARNING — {result['error']}", file=sys.stderr)
         if result.get("hint"):
             print(f"search_jql: hint — {result['hint']}", file=sys.stderr)
-        sys.exit(1)
 
 
 

@@ -36,8 +36,8 @@ EXCLUDED="$(python3 -c "import json; print(json.load(open('$OUT')).get('excluded
 FILTER="$(python3 -c "import json; print(json.load(open('$OUT')).get('target_release_filter',''))" 2>/dev/null || true)"
 
 if [[ -n "$DISC_ERR" && "$COUNT" -eq 0 ]]; then
-  "$ROOT/.claude/framework/lib/log_run.sh" ERROR "jira-discovery failed: $DISC_ERR"
-  MSG="Discovery failed: $DISC_ERR"
+  "$ROOT/.claude/framework/lib/log_run.sh" WARN "jira-discovery: $DISC_ERR"
+  MSG="Discovery: $DISC_ERR"
 elif [[ "$COUNT" -eq 0 ]]; then
   if [[ -z "${JIRA_URL:-}" || -z "${JIRA_EMAIL:-}" || -z "${JIRA_API_TOKEN:-}" ]]; then
     "$ROOT/.claude/framework/lib/log_run.sh" WARN "jira-discovery: found 0 issues — set JIRA_URL JIRA_EMAIL JIRA_API_TOKEN"

@@ -13,7 +13,7 @@ echo "  - github       (GitHub MCP for automation backlog)"
 echo "preflight_mcp: config example → $EXAMPLE"
 echo "preflight_mcp: KUBECONFIG=${KUBECONFIG:-<unset>}"
 
-# Run setup (validates token/email, writes mcp-env.sh)
+# Run setup (validates token/email, writes mcp-env.sh and mcp-ready.json)
 "$DIR/setup_mcp.sh"
 
 if [[ ! -f "$WS/mcp-ready.json" ]]; then
@@ -24,11 +24,17 @@ fi
 if [[ -f "$WS/mcp-env.sh" ]]; then
   # shellcheck disable=SC1091
   source "$WS/mcp-env.sh"
-  echo "preflight_mcp: JIRA_URL=$JIRA_URL (REST fallback for discover.sh)"
+fi
+
+REST_OK="$(python3 -c "import json; print(json.load(open('$WS/mcp-ready.json')).get('rest_fallback', False))" 2>/dev/null || echo False)"
+if [[ "$REST_OK" == "True" ]]; then
+  echo "preflight_mcp: REST fallback available (JIRA_URL=${JIRA_URL:-unset})"
+else
+  echo "preflight_mcp: REST fallback unavailable — MCP server is the primary JIRA path"
 fi
 
 command -v uvx >/dev/null 2>&1 || echo "preflight_mcp: warning — uvx not in PATH (needed to run redhat-jira MCP)" >&2
 command -v oc >/dev/null 2>&1 || echo "preflight_mcp: warning — oc not in PATH" >&2
 command -v python3 >/dev/null 2>&1 || { echo "preflight_mcp: python3 required" >&2; exit 1; }
 
-echo "preflight_mcp: OK — MCP env ready; ensure redhat-jira + github are enabled in Claude Code UI"
+echo "preflight_mcp: OK — ensure redhat-jira + github MCP servers are enabled in Claude Code"
