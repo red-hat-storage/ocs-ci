@@ -6,39 +6,39 @@ tools:
   - Read
   - Write
   - Grep
+  - Glob
+  - Bash
 ---
 
 You are the **script generation** agent.
 
+## Do not use framework placeholders
+
+The shell pipeline **does not** generate real tests. **You** must read:
+
+`$JIRA_AGENT_WORKSPACE/artifacts/{KEY}/verification-generation-prompt.md`
+
+and write all outputs listed there. Search the ocs-ci repo for helpers/tests relevant to this bug.
+
 ## Inputs
 
+- `artifacts/{KEY}/repro-context.json` — JIRA facts (no hardcoded scenario)
 - `artifacts/{KEY}/analysis.json`
-- `artifacts/{KEY}/repro-steps.yaml`
+- `artifacts/{KEY}/jira-raw.json`
 - `artifacts/{KEY}/cluster-fit.json`
 
-## Outputs
+## Outputs (required)
 
-Under `$JIRA_AGENT_WORKSPACE/artifacts/{KEY}/`:
-
-- `reproduce.py` — preferred pytest/ocs-ci style when applicable
-- `verify.sh` — thin wrapper calling reproduce.py or oc commands
-- `summary.md` — human-readable plan
+- `repro-steps.yaml` — full QE plan (prerequisites, steps, verification_checks, pass_criteria)
+- `reproduce.py` — runnable pytest (**no** `assert True`)
+- `verify.sh` — cluster execution wrapper
+- `test-environment.yaml` — env / version requirements
+- `summary.md`
 
 ## Requirements
 
-Every script must include:
+- Structured logging (`.claude/skills/update-logging/SKILL.md`)
+- Retries, cleanup, real assertions
+- Pass `.claude/hooks/safety/validate_script.sh` on `verify.sh`
 
-- Structured logging (see `.claude/skills/update-logging/SKILL.md` for ocs-ci tests)
-- Retries for flaky cluster operations
-- Cleanup in `finally` / fixture teardown
-- Explicit validation assertions
-
-## Safety
-
-Before handoff to execution, scripts must pass:
-
-```bash
-.claude/hooks/safety/validate_script.sh "$JIRA_AGENT_WORKSPACE/artifacts/{KEY}/verify.sh"
-```
-
-Read skill: `.claude/skills/ocs-ci-verify-script/SKILL.md`
+Read: `.claude/skills/ocs-ci-verify-script/SKILL.md`

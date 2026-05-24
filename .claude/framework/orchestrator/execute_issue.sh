@@ -37,44 +37,7 @@ python3 "$ROOT/.claude/framework/lib/run_status.py" set --phase "issue:$KEY" --m
 # --- jira-analysis ---
 log INFO "phase: jira-analysis start $KEY"
 python3 "$ROOT/.claude/jira-repro/fetch_issue.py" "$KEY" --out "$ART/jira-raw.json"
-python3 - "$KEY" "$ART" <<'PY'
-import json, sys
-from pathlib import Path
-
-key, art = sys.argv[1], Path(sys.argv[2])
-raw = json.loads((art / "jira-raw.json").read_text())
-fields = raw.get("fields") or {}
-
-def adf_text(node):
-    if isinstance(node, dict):
-        if node.get("type") == "text":
-            return node.get("text", "")
-        return "".join(adf_text(c) for c in node.get("content") or [])
-    if isinstance(node, list):
-        return "".join(adf_text(x) for x in node)
-    return ""
-
-desc = fields.get("description")
-text = adf_text(desc) if isinstance(desc, dict) else str(desc or "")
-labels = fields.get("labels") or []
-blocked = "skip-ocsci-agent" in labels
-plan = {
-    "issue_key": key,
-    "summary": fields.get("summary"),
-    "status": (fields.get("status") or {}).get("name"),
-    "labels": labels,
-    "root_cause_summary": "md_blow fails with NO_SUCH_KEY when filling NooBaa DB without loading root keys first.",
-    "expected_behavior": "md_blow completes DB fill without NO_SUCH_KEY after master_key_manager.load_root_keys_from_mount() runs.",
-    "verification_strategy": "Run md_blow workload on cluster with ODF 4.19; confirm no NO_SUCH_KEY in noobaa-core logs.",
-    "feasible": not blocked,
-    "skipped_by_label": blocked,
-    "missing_info": [],
-    "confidence": 0.75 if not blocked else 0.0,
-    "description_excerpt": text[:4000],
-}
-(art / "analysis.json").write_text(json.dumps(plan, indent=2) + "\n")
-print("skipped" if blocked else "ok")
-PY
+python3 "$ROOT/.claude/jira-repro/enrich_analysis.py" "$KEY" --art "$ART"
 
 if grep -q '"skipped_by_label": true' "$ART/analysis.json" 2>/dev/null; then
   log WARN "jira-analysis: $KEY skipped (skip-ocsci-agent)"
@@ -133,40 +96,48 @@ if [[ "$CLUSTER_OK" -eq 0 ]]; then
 else
   log INFO "cluster-compat: cluster OK user=$(oc whoami 2>/dev/null || echo '?') odf_csv=${ODF_VER:-?}"
 fi
-log INFO "phase: cluster-compat done $KEY compatible=$CLUSTER_OK"
-
-# --- repro-extraction ---
-log INFO "phase: repro-extraction start $KEY"
-python3 "$ROOT/.claude/jira-repro/build_repro_steps.py" --issue "$KEY" --art "$ART"
-python3 "$ROOT/.claude/framework/lib/log_repro_steps.py" --issue "$KEY" --file "$ART/repro-steps.yaml"
-log INFO "phase: repro-extraction done $KEY"
-
-# --- script-generation ---
-log INFO "phase: script-generation start $KEY"
-sed "s/DFBUGS-XXXX/$KEY/g" "$ROOT/.claude/jira-repro/templates/verify.py" >"$ART/reproduce.py"
-cat >"$ART/verify.sh" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$DIR"
-mkdir -p logs evidence
-# Requires cluster: uses ocs-ci MdBlow when implemented
-if [[ -z "${KUBECONFIG:-}" ]]; then
-  echo "verify.sh: KUBECONFIG not set — skipping cluster execution" | tee logs/skipped.log
-  exit 2
+VERIFY_PROCEED=0
+BUILD_VERSION_OK=1
+if [[ "$CLUSTER_OK" -eq 1 && -n "${ODF_VER:-}" ]]; then
+  if python3 "$ROOT/.claude/framework/lib/version_gate.py" \
+    --art "$ART" \
+    --cluster-version "$ODF_VER" \
+    --cluster-reachable 1 2>"$ART/logs/version-gate.stderr"; then
+    VERIFY_PROCEED=1
+    log INFO "cluster-compat: build version gate passed (cluster >= JIRA product build)"
+  else
+    BUILD_VERSION_OK=0
+    VERIFY_PROCEED=0
+    GATE_REASON="$(python3 -c "import json; print(json.load(open('$ART/cluster-fit.json')).get('build_version_check',{}).get('reason','version mismatch'))" 2>/dev/null || echo 'version mismatch')"
+    log WARN "cluster-compat: build version gate FAILED — $GATE_REASON"
+  fi
+elif [[ "$CLUSTER_OK" -eq 1 ]]; then
+  VERIFY_PROCEED=1
 fi
-# Avoid ocs-ci pytest.ini addopts (e.g. --show-progress) when running a single artifact test
-PYTEST_ADDOPTS= pytest -c /dev/null -o addopts= reproduce.py -v 2>&1 | tee logs/pytest.log
-SH
-chmod +x "$ART/verify.sh"
-cat >"$ART/summary.md" <<MD
-# $KEY verification
+log INFO "phase: cluster-compat done $KEY compatible=$CLUSTER_OK verify_proceed=$VERIFY_PROCEED"
 
-Backport 4.19: md_blow must call \`load_root_keys_from_mount()\` before filling NooBaa DB.
+# --- repro context (facts for AI) ---
+log INFO "phase: repro-extraction start $KEY"
+python3 "$ROOT/.claude/jira-repro/build_repro_context.py" \
+  --issue "$KEY" --art "$ART" --odf-version "${ODF_VERSION:-}"
 
-See \`repro-steps.yaml\` and ocs-ci \`ocs_ci/ocs/md_blow.py\`.
-MD
-log INFO "phase: script-generation done $KEY"
+# --- script-generation (Claude generates repro-steps + tests) ---
+log INFO "phase: script-generation start $KEY"
+mkdir -p "$ART/logs"
+chmod +x "$ROOT/.claude/jira-repro/generate_verification.sh"
+DFBUGS_DRY_RUN="${DRY_RUN:-${DFBUGS_DRY_RUN:-0}}" \
+  "$ROOT/.claude/jira-repro/generate_verification.sh" "$ART"
+
+if ! python3 "$ROOT/.claude/jira-repro/check_script_generated.py" --art "$ART" 2>/dev/null; then
+  log WARN "script-generation: reproduce.py not ready — run Claude on $ART/verification-generation-prompt.md"
+  SCRIPT_READY=0
+else
+  SCRIPT_READY=1
+  if [[ -f "$ART/repro-steps.yaml" ]]; then
+    python3 "$ROOT/.claude/framework/lib/log_repro_steps.py" --issue "$KEY" --file "$ART/repro-steps.yaml"
+  fi
+fi
+log INFO "phase: script-generation done $KEY ready=$SCRIPT_READY"
 
 # --- safety hook ---
 log INFO "phase: safety validate_script $KEY"
@@ -176,13 +147,20 @@ log INFO "phase: safety validate_script $KEY"
 log INFO "phase: verification-execution start $KEY"
 PASSED=false
 EXEC_NOTE="skipped_no_cluster"
-if [[ "$CLUSTER_OK" -eq 1 ]]; then
+if [[ "${SCRIPT_READY:-0}" -eq 0 ]]; then
+  EXEC_NOTE="script_not_generated_by_ai"
+  echo "verification skipped: run Claude on $ART/verification-generation-prompt.md" >"$ART/logs/execution-skipped.log"
+elif [[ "${VERIFY_PROCEED:-0}" -eq 1 ]]; then
   if "$ROOT/.claude/jira-repro/verify/run.sh" "$ART"; then
     PASSED=true
     EXEC_NOTE="pytest_completed"
   else
     EXEC_NOTE="pytest_failed"
   fi
+elif [[ "${BUILD_VERSION_OK:-1}" -eq 0 ]]; then
+  EXEC_NOTE="skipped_build_version_mismatch"
+  GATE_REASON="$(python3 -c "import json; g=json.load(open('$ART/cluster-fit.json')).get('build_version_check',{}); print(g.get('reason',''))" 2>/dev/null || true)"
+  echo "verification skipped: build version mismatch — ${GATE_REASON}" >"$ART/logs/execution-skipped.log"
 else
   echo "execution skipped: no cluster" >"$ART/logs/execution-skipped.log"
 fi
@@ -204,7 +182,7 @@ log INFO "phase: verification-execution done $KEY note=$EXEC_NOTE"
 
 # --- cluster-health (best effort) ---
 log INFO "phase: cluster-health start $KEY"
-if [[ -x "$ROOT/.claude/jira-repro/cluster-health/collect.sh" ]] && [[ "$CLUSTER_OK" -eq 1 ]]; then
+if [[ -x "$ROOT/.claude/jira-repro/cluster-health/collect.sh" ]] && [[ "${VERIFY_PROCEED:-0}" -eq 1 ]]; then
   "$ROOT/.claude/jira-repro/cluster-health/collect.sh" "$ART" 2>/dev/null || true
 fi
 echo '{"status":"SKIPPED","regression_detected":false,"note":"no cluster or collect skipped"}' \
@@ -220,7 +198,7 @@ if [[ "$DRY" -eq 1 ]] || [[ "${DRY_RUN:-0}" == "1" ]]; then
   "issue_key": "$KEY",
   "dry_run": true,
   "intended_actions": [
-    {"action": "comment", "body": "QE dry-run: md_blow verification plan generated; cluster execution pending."},
+    {"action": "comment", "body": "QE dry-run: verification artifacts generated; see workspace artifacts."},
     {"action": "transition", "name": "VERIFIED", "when": "execution passed and cluster health OK"}
   ]
 }
@@ -230,19 +208,35 @@ fi
 
 # --- outcome ---
 RESULT="needs_cluster_execution"
-[[ "$PASSED" == true ]] && RESULT="verified"
-python3 - "$KEY" "$WS" "$RESULT" "$EXEC_NOTE" <<'PY'
+if [[ "${SCRIPT_READY:-0}" -eq 0 ]]; then
+  RESULT="awaiting_ai_script_generation"
+elif [[ "${BUILD_VERSION_OK:-1}" -eq 0 ]]; then
+  RESULT="skipped_build_version_mismatch"
+elif [[ "$PASSED" == true ]]; then
+  RESULT="verified"
+fi
+python3 - "$KEY" "$WS" "$ART" "$RESULT" "$EXEC_NOTE" <<'PY'
 import json, sys
 from pathlib import Path
-key, ws, result, note = sys.argv[1:5]
+key, ws, art, result, note = sys.argv[1:6]
 dry = (Path(ws) / ".dry-run").is_file()
+fit_path = Path(art) / "cluster-fit.json"
+gate = {}
+if fit_path.is_file():
+    gate = json.loads(fit_path.read_text()).get("build_version_check") or {}
 out = {
     "issue_key": key,
     "dry_run": dry,
     "result": result,
     "execution_note": note,
     "confidence": 0.75,
+    "build_version_check": gate,
 }
+if gate.get("version_mismatch"):
+    out["status_note"] = (
+        f"Verification not run: cluster ODF {gate.get('cluster_installed_parsed')} "
+        f"is lower than JIRA product build {gate.get('jira_required_minimum')}."
+    )
 Path(ws, "outcomes", f"{key}.json").write_text(json.dumps(out, indent=2) + "\n")
 PY
 

@@ -10,18 +10,22 @@ DRY_RUN=0
 WORKFLOW="$DEFAULT_WORKFLOW"
 LIST=0
 RUN_DISCOVER=0
+RUN_EXECUTE=0
 
 usage() {
   cat <<EOF
 usage: run.sh [options] <odf-version>
 
-Bootstrap a registered verification workflow for Claude Code orchestration.
-This script prepares files only; the coordinator agent runs inside Claude Code.
+Bootstrap a registered verification workflow.
+
+By default this ONLY prepares the workspace (like make init). Use --discover and/or
+--execute to run more of the pipeline from the terminal without Claude Code coordinator.
 
 options:
   --workflow <id>   Workflow from registry (default: $DEFAULT_WORKFLOW)
   --dry-run         Full workload; skip JIRA/GitHub writes
-  --discover        After bootstrap, run JIRA discovery (writes discovery/issues.json)
+  --discover        Run JIRA discovery (writes discovery/issues.json)
+  --execute         After bootstrap/discover, run execute_issue.sh for each discovered key
   --list-workflows  List available workflow ids and exit
   --status          Show active workspace workflow and exit
   -h, --help        This help
@@ -30,6 +34,7 @@ examples:
   run.sh <odf-version>
   run.sh --workflow zstream-issue-verification <odf-version>
   run.sh --workflow zstream-issue-verification <odf-version> --dry-run
+  run.sh --discover --execute --dry-run 4.19   # bootstrap + discovery + all issues
   run.sh --list-workflows
   run.sh --status
 
@@ -46,6 +51,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --discover) RUN_DISCOVER=1; shift ;;
+    --execute) RUN_EXECUTE=1; shift ;;
     --workflow)
       WORKFLOW="${2:?--workflow requires an id}"
       shift 2
@@ -127,12 +133,45 @@ else
     "discovery: not run yet — run: .claude/framework/orchestrator/discover.sh"
 fi
 
-"$ROOT/.claude/framework/lib/log_run.sh" WARN \
-  "execution paused: run next: .claude/framework/orchestrator/execute_issue.sh DFBUGS-XXXX (or orchestrator-coordinator in Claude Code)"
+if [[ "$RUN_EXECUTE" -eq 0 ]]; then
+  "$ROOT/.claude/framework/lib/log_run.sh" WARN \
+    "execution paused: add --execute to run issues, or execute_issue.sh per key, or use coordinator in Claude Code"
+fi
+
+# --- optional: run per-issue pipeline for all discovered keys ---
+if [[ "$RUN_EXECUTE" -eq 1 ]]; then
+  if [[ ! -f "$DISC_FILE" ]]; then
+    echo "error: --execute requires discovery/issues.json — use --discover or run discover.sh first" >&2
+    exit 1
+  fi
+  ISSUE_KEYS="$(
+    python3 -c "import json; print(' '.join(json.load(open('$DISC_FILE')).get('issue_keys',[])))"
+  )"
+  if [[ -z "$ISSUE_KEYS" ]]; then
+    echo "error: discovery/issues.json has no issue_keys" >&2
+    exit 1
+  fi
+  # shellcheck disable=SC2086
+  KEY_COUNT=$(echo "$ISSUE_KEYS" | wc -w | tr -d ' ')
+  "$ROOT/.claude/framework/lib/log_run.sh" INFO \
+    "execute: running pipeline for $KEY_COUNT issue(s): $ISSUE_KEYS"
+  eval "$(python3 "$ROOT/.claude/framework/lib/load_run_context.py" --shell 2>/dev/null)" || true
+  # shellcheck disable=SC2086
+  for KEY in $ISSUE_KEYS; do
+    "$DIR/execute_issue.sh" "$KEY" || {
+      "$ROOT/.claude/framework/lib/log_run.sh" ERROR "execute: $KEY failed (continuing)"
+    }
+  done
+  "$ROOT/.claude/framework/lib/log_run.sh" INFO "execute: finished $KEY_COUNT issue(s)"
+fi
 
 echo ""
 echo "================================================================================"
-echo " ORCHESTRATOR BOOTSTRAP COMPLETE (execution not started yet)"
+if [[ "$RUN_EXECUTE" -eq 1 ]]; then
+  echo " ORCHESTRATOR RUN COMPLETE (bootstrap + execute_issue for discovered keys)"
+else
+  echo " ORCHESTRATOR BOOTSTRAP COMPLETE (execution not started — use --execute)"
+fi
 echo "================================================================================"
 echo " Workflow:     $WORKFLOW_ID"
 echo " Name:         $WORKFLOW_NAME"
@@ -165,6 +204,7 @@ echo "  1) Per issue (terminal): .claude/framework/orchestrator/execute_issue.sh
 echo "  2) Full workflow: Claude Code agent '${COORDINATOR}' + prompt file above"
 echo "     Or in Cursor: execute_issue.sh per key, or ask agent to follow the prompt."
 echo ""
-echo "Tip: bootstrap + discovery in one step:"
-echo "  run.sh --discover --dry-run $ODF_VERSION"
-echo "  execute_issue.sh DFBUGS-3742   # after discovery lists keys"
+echo "Full terminal workflow (one command):"
+echo "  run.sh --discover --execute --dry-run $ODF_VERSION"
+echo ""
+echo "Then: open artifacts/DFBUGS-XXXX/verification-generation-prompt.md in Claude to generate tests"

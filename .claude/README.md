@@ -32,11 +32,11 @@ export JIRA_AGENT_WORKSPACE="${JIRA_AGENT_WORKSPACE:-$PWD/.claude/workspace}"
 ```
 
 ```bash
-# Bootstrap workflow + prompt (ODF version is the last positional argument)
-.claude/framework/orchestrator/run.sh --workflow zstream-issue-verification <odf-version>
-
-# Dry-run (full workload, no JIRA/GitHub writes):
+# Bootstrap only (stops after setup; does NOT run per-issue pipeline):
 .claude/framework/orchestrator/run.sh --workflow zstream-issue-verification <odf-version> --dry-run
+
+# Full terminal pipeline: bootstrap + JIRA discovery + execute_issue for each key:
+.claude/framework/orchestrator/run.sh --discover --execute --dry-run 4.19
 
 # Load ODF_VERSION for scripts / agents
 eval "$(.claude/framework/lib/load_run_context.sh)"
@@ -74,6 +74,8 @@ JQL config: `.claude/configs/jira-discovery.yaml`
 
 ```bash
 .claude/framework/orchestrator/execute_issue.sh DFBUGS-3742
+# Then in Cursor/Claude Code: open artifacts/DFBUGS-3742/verification-generation-prompt.md
+# and generate reproduce.py + repro-steps.yaml (no hardcoded templates).
 ```
 
 Or start the orchestrator agent in Claude Code (see below). If `Discovery: NOT RUN`,

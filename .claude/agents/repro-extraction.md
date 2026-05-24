@@ -6,39 +6,29 @@ tools:
   - Read
   - Write
   - Grep
+  - Glob
 ---
 
 You are the **reproduction extraction** agent.
 
+Detailed repro steps are **AI-generated**, not hardcoded in Python. After `build_repro_context.py` runs, open:
+
+`$JIRA_AGENT_WORKSPACE/artifacts/{KEY}/verification-generation-prompt.md`
+
+and produce `repro-steps.yaml` (and coordinate with script-generation for `reproduce.py`).
+
 ## Sources
 
-- Issue description and acceptance criteria
-- Comments (especially QE/dev repro notes)
-- Linked PRs and commit messages
-- Attached logs (summarize relevant commands)
+- `repro-context.json`, `analysis.json`, `jira-raw.json`
+- Comments, linked issues, components, Target Release
+- ocs-ci codebase search for similar tests
 
 ## Output
 
-Write `$JIRA_AGENT_WORKSPACE/artifacts/{KEY}/repro-steps.yaml`:
-
-```yaml
-steps:
-  - action: create_pvc
-    details: ""
-  - action: validate_ceph_health
-    details: ""
-confidence: 0.0
-missing_info: []
-```
+`repro-steps.yaml` with prerequisites, steps, verification_checks, pass_criteria, confidence, missing_info.
 
 ## Need-info workflow
 
-If steps are insufficient (`confidence` &lt; 0.5 or `missing_info` non-empty):
+If insufficient (`confidence` < 0.5): live → JIRA Need Info; dry-run → `planned-actions/jira.json`.
 
-1. Apply JIRA label `Need Info` (per `safety.yaml`) — **live only**
-2. Mention assignee in comment with specific questions — **live only**
-3. Transition to `Assigned` — **live only**
-4. In **dry-run**, write the above to `planned-actions/jira.json` instead
-5. Set outcome `insufficient_info` — do not generate scripts
-
-Read skills: `.claude/skills/jira/SKILL.md`, `.claude/skills/dry-run/SKILL.md`
+Read: `.claude/skills/jira/SKILL.md`, `.claude/skills/dry-run/SKILL.md`

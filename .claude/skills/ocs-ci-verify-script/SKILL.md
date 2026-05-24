@@ -3,27 +3,40 @@ name: ocs-ci-verify-script
 description: Generate pytest verification scripts compatible with ocs-ci conventions
 ---
 
-# ocs-ci verification scripts
+# ocs-ci verification scripts (AI-generated)
+
+## Important
+
+**Claude generates tests** — the framework does not embed issue-specific scenarios in Python.
+
+After `execute_issue.sh` or the coordinator reaches script-generation:
+
+1. Open `artifacts/{KEY}/verification-generation-prompt.md`
+2. Search ocs-ci for relevant tests/helpers (`Grep`, codebase search)
+3. Write `reproduce.py`, `verify.sh`, `repro-steps.yaml`, `test-environment.yaml`
+
+`reproduce.py` must **not** contain `assert True` or TODO-only stubs.
 
 ## Layout
 
-Place tests under `artifacts/{KEY}/reproduce.py` or map to `tests/` if promoting to ocs-ci.
+`artifacts/{KEY}/reproduce.py` — pytest run on cluster via `verify.sh`
 
 ## Conventions
 
-- Use `logging` module; follow `docs/logging_guide.md`
-- Prefer existing helpers from `ocs_ci` when running inside ocs-ci venv
-- Mark destructive tests with explicit guard and coordinator approval
+- `logging`, retries, cleanup
+- Prefer `ocs_ci` helpers when running with repo root on `PYTHONPATH`
+- Run from ocs-ci root or set `PYTHONPATH` in `verify.sh`
 
-## Template
-
-Start from `.claude/jira-repro/templates/verify.py`.
-
-## Run
+## Validate
 
 ```bash
-# From ocs-ci repo root with venv active
-pytest .claude/workspace/artifacts/DFBUGS-XXXX/reproduce.py -v
+python3 .claude/jira-repro/check_script_generated.py --art .claude/workspace/artifacts/DFBUGS-XXXX
+.claude/hooks/safety/validate_script.sh .claude/workspace/artifacts/DFBUGS-XXXX/verify.sh
 ```
 
-Include fixtures for namespace/PVC cleanup.
+## Optional auto-invoke
+
+```bash
+export DFBUGS_AUTO_GENERATE=1   # requires `claude` CLI
+.claude/framework/orchestrator/execute_issue.sh DFBUGS-XXXX
+```

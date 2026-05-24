@@ -16,6 +16,8 @@ You are the **cluster compatibility** agent.
 3. Verify via `oc` / cluster metadata:
    - OpenShift version
    - ODF version vs `$ODF_VERSION` from active run
+   - **Build version gate** (automated in `execute_issue.sh` via `version_gate.py`):
+     if JIRA mentions a **product build** version (description “version of all relevant components”, Affects Version, Prod build version field), **cluster ODF CSV must be >= that version**. If cluster is lower, set `verify_proceed: false` and outcome `skipped_build_version_mismatch`.
    - cloud provider, topology, internal/external mode, storage backend
 4. If incompatible, write `$JIRA_AGENT_WORKSPACE/outcomes/{KEY}.json`:
 
