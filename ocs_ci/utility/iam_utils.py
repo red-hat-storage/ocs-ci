@@ -11,7 +11,16 @@ def get_base_iam_command(mcg_obj):
 
     Returns:
         str: base iam command
+
+    Raises:
+        ValueError: If IAM endpoint is not available (e.g., on Azure ARO)
+
     """
+    if not mcg_obj.iam_endpoint:
+        raise ValueError(
+            "IAM endpoint is not available on this platform. "
+            "IAM operations are not supported."
+        )
 
     return (
         f'sh -c "'

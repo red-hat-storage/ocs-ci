@@ -619,6 +619,106 @@ def default_ceph_block_pool():
     return cbp_name if cbp_name else constants.DEFAULT_BLOCKPOOL
 
 
+def get_data_pool_name(interface_type=constants.CEPHBLOCKPOOL, sc_obj=None):
+    """
+    Return the name of the pool where actual block data is written.
+
+    On standard (replicated) deployments the StorageClass has a single
+    ``pool`` parameter that serves both as the RBD metadata pool and the
+    data pool, so this function returns the same value as
+    ``default_ceph_block_pool()``.
+
+    On Erasure-Coded deployments the StorageClass exposes two parameters:
+      * ``pool``     – the replicated metadata pool (stores RBD image headers)
+      * ``dataPool`` – the EC pool where all actual object data is written
+
+    For size-tracking purposes (``fetch_used_size``) we must monitor
+    ``dataPool`` on EC clusters; monitoring the metadata pool would always
+    show negligible growth regardless of how much data is written.
+
+    Args:
+        interface_type (str): Interface type constant (default CEPHBLOCKPOOL).
+        sc_obj: Optional StorageClass OCP object. When provided, it is used
+            directly instead of resolving the default StorageClass for
+            ``interface_type``. Useful for callers that already have a
+            specific SC object (e.g. a custom pool created by a test).
+
+    Returns:
+        str: Name of the pool that receives the actual written data.
+    """
+    if sc_obj is None:
+        sc_obj = default_storage_class(interface_type)
+    params = sc_obj.get().get("parameters", {})
+    data_pool = params.get("dataPool")
+    if data_pool:
+        logger.info(
+            f"EC deployment detected: using dataPool '{data_pool}' for data size tracking"
+        )
+        return data_pool
+    pool = params.get("pool") or constants.DEFAULT_BLOCKPOOL
+    logger.info(f"Replicated deployment: using pool '{pool}' for data size tracking")
+    return pool
+
+
+def get_pool_size_factor(pool_name):
+    """
+    Return the raw-storage multiplier for a given Ceph pool.
+
+    When data is written to a pool, the pool's raw ``size_bytes`` (as
+    reported by ``rados df``) grows by ``logical_bytes * factor``.
+
+    * **Replicated pool** – factor equals the replica count (``size``).
+      E.g. size=3 → factor=3.
+
+    * **Erasure-Coded pool** – factor equals ``(k + m) / k`` where *k* is
+      ``spec.erasureCoded.dataChunks`` and *m* is
+      ``spec.erasureCoded.codingChunks`` from the ``CephBlockPool`` CR.
+      E.g. k=2, m=1 → factor=1.5.
+
+    The factor is derived from the ``CephBlockPool`` CR without running any
+    Ceph commands, so no toolbox pod is required.
+
+    Args:
+        pool_name (str): Name of the CephBlockPool resource.
+
+    Returns:
+        float: Raw-storage multiplier for expected-size calculations.
+    """
+    pool_ocp = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=pool_name,
+    )
+    pool_cr = pool_ocp.get()
+    ec_spec = pool_cr.get("spec", {}).get("erasureCoded", {})
+    k = ec_spec.get("dataChunks", 0)
+    m = ec_spec.get("codingChunks", 0)
+
+    if k > 0:
+        factor = (k + m) / k
+        logger.info(
+            f"Pool '{pool_name}' is EC (k={k}, m={m}): "
+            f"raw-storage factor = (k+m)/k = {factor}"
+        )
+        return factor
+
+    # Replicated pool – read size from CR spec first, fall back to ceph cmd
+    rep_size = pool_cr.get("spec", {}).get("replicated", {}).get("size", 0)
+    if rep_size:
+        logger.info(
+            f"Pool '{pool_name}' is replicated (size={rep_size}): "
+            f"raw-storage factor = {rep_size}"
+        )
+        return float(rep_size)
+
+    # Last resort: query via toolbox
+    ct_pod = pod.get_ceph_tools_pod()
+    size_info = ct_pod.exec_ceph_cmd(ceph_cmd=f"ceph osd pool get {pool_name} size")
+    factor = float(size_info["size"])
+    logger.info(f"Pool '{pool_name}' replicated size from ceph = {factor}")
+    return factor
+
+
 def create_ceph_block_pool(
     pool_name=None,
     replica=3,
@@ -2381,41 +2481,6 @@ def remove_scc_policy(sa_name, namespace):
         logger.info(out)
 
 
-def craft_s3_command(cmd, mcg_obj=None, api=False, max_attempts=8):
-    """
-    Crafts the AWS CLI S3 command including the
-    login credentials and command to be ran
-
-    Args:
-        mcg_obj: An MCG object containing the MCG S3 connection credentials
-        cmd: The AWSCLI command to run
-        api: True if the call is for s3api, false if s3
-        max_attempts: The maximum number of AWSCLI retry attempts
-                     max_attempts=8 means a maximum of one minute
-                     additional waiting time in case of failure
-
-    Returns:
-        str: The crafted command, ready to be executed on the pod
-
-    """
-    api = "api" if api else ""
-    if mcg_obj:
-        base_command = (
-            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
-            f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
-            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-            f"AWS_MAX_ATTEMPTS={max_attempts} "
-            f"AWS_DEFAULT_REGION={mcg_obj.region} "
-            f"aws s3{api} "
-            f"--endpoint={mcg_obj.s3_internal_endpoint} "
-        )
-        string_wrapper = '"'
-    else:
-        base_command = f"aws s3{api} --no-sign-request "
-        string_wrapper = ""
-    return f"{base_command}{cmd}{string_wrapper}"
-
-
 def get_current_test_name():
     """
     A function to return the current test name in a parsed manner
@@ -3809,7 +3874,7 @@ def run_cmd_verify_cli_output(
 
 
 def check_rbd_image_used_size(
-    pvc_objs, usage_to_compare, rbd_pool=constants.DEFAULT_BLOCKPOOL, expect_match=True
+    pvc_objs, usage_to_compare, rbd_pool=None, expect_match=True
 ):
     """
     Check if RBD image used size of the PVCs are matching with the given value
@@ -3817,7 +3882,11 @@ def check_rbd_image_used_size(
     Args:
         pvc_objs (list): List of PVC objects
         usage_to_compare (str): Value of image used size to be compared with actual value. eg: "5GiB"
-        rbd_pool (str): Name of the pool
+        rbd_pool (str): Name of the RBD metadata pool (``parameters.pool`` from the
+            StorageClass). On EC clusters this is the replicated metadata pool
+            (e.g. ``replicated-metadata-pool``), **not** the EC data pool.
+            When ``None`` the value is resolved automatically from the default
+            RBD StorageClass via ``default_ceph_block_pool()``.
         expect_match (bool): True to verify the used size is equal to 'usage_to_compare' value.
             False to verify the used size is not equal to 'usage_to_compare' value.
 
@@ -3825,6 +3894,8 @@ def check_rbd_image_used_size(
         bool: True if the verification is success for all the PVCs, False otherwise
 
     """
+    if rbd_pool is None:
+        rbd_pool = default_ceph_block_pool()
     ct_pod = pod.get_ceph_tools_pod()
     no_match_list = []
     for pvc_obj in pvc_objs:
@@ -6035,7 +6106,10 @@ def get_rbd_image_info(rbd_pool, rbd_image_name):
     Get RBD image information. (e.g provisioned size, used size, image ,   )
 
     Args:
-        rbd_pool(str) : pool name
+        rbd_pool(str) : RBD **metadata** pool name (i.e. ``parameters.pool``
+            from the StorageClass, **not** ``parameters.dataPool``). On EC
+            clusters this is the replicated metadata pool
+            (e.g. ``replicated-metadata-pool``).
         rbd_image_name(str) : name of rbd image
 
     Returns:
@@ -6679,79 +6753,26 @@ def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
 
 def set_schedule_precedence(precedence):
     """
-    Create or update the 'csi-addons-config' ConfigMap with the given
-    schedule-precedence ('storageclass' or 'pvc') and restart the CSI Addons
-    controller manager so the change is picked up.
+    Set the schedule-precedence key in the 'csi-addons-config' ConfigMap
+    and restart the CSI Addons controller manager.
 
-    Handles both cases: ConfigMap exists / does not exist.
-    Uses valid JSON for merge patch to avoid decoding errors.
+    Delegates to the generic update_csi_addons_config() helper.
+
+    Args:
+        precedence (str): Must be 'storageclass' or 'pvc'.
+
+    Raises:
+        ValueError: If precedence is not 'storageclass' or 'pvc'.
+
     """
-    import yaml
+    from ocs_ci.ocs.resources.csi_addons import update_csi_addons_config
 
     if precedence not in ("storageclass", "pvc"):
         raise ValueError(
             f"Invalid precedence value: {precedence}. Must be 'storageclass' or 'pvc'."
         )
 
-    configmap_name = getattr(
-        constants, "CSI_ADDONS_CONFIGMAP_NAME", "csi-addons-config"
-    )
-    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
-
-    cm_ocp = OCP(kind=constants.CONFIGMAP, namespace=namespace)
-
-    # Manifest used when CM does not exist
-    cm_manifest = {
-        "apiVersion": "v1",
-        "kind": "ConfigMap",
-        "metadata": {"name": configmap_name, "namespace": namespace},
-        "data": {"schedule-precedence": precedence},
-    }
-
-    if cm_ocp.is_exist(configmap_name):
-        # UPDATE PATH: use valid JSON for merge patch (K8s expects JSON here)
-        patch_payload = json.dumps({"data": {"schedule-precedence": precedence}})
-        logger.info(
-            "Patching ConfigMap '%s' in ns '%s' to schedule-precedence=%s",
-            configmap_name,
-            namespace,
-            precedence,
-        )
-        # NOTE: wrap JSON in single quotes so shlex keeps it as one arg
-        cm_ocp.exec_oc_cmd(
-            f"patch configmap {configmap_name} -p '{patch_payload}' --type=merge",
-            out_yaml_format=False,
-        )
-    else:
-        # CREATE PATH: write manifest to temp file and apply
-        logger.info(
-            "Creating ConfigMap '%s' in ns '%s' with schedule-precedence=%s",
-            configmap_name,
-            namespace,
-            precedence,
-        )
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".yaml") as fp:
-            yaml.safe_dump(cm_manifest, fp, sort_keys=False)
-            tmp_path = fp.name
-        try:
-            cm_ocp.exec_oc_cmd(f"apply -f {tmp_path}", out_yaml_format=False)
-        finally:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
-
-    logger.info(
-        "ConfigMap '%s' set to schedule-precedence=%s", configmap_name, precedence
-    )
-
-    # Restart CSI Addons controller manager pods so the new value is read
-    logger.info("Restarting CSI Addons controller manager pods...")
-    pod.restart_pods_having_label(
-        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
-        namespace=namespace,
-    )
-    logger.info("CSI Addons controller manager pods restarted.")
+    update_csi_addons_config("schedule-precedence", precedence)
 
 
 def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj):
@@ -6941,12 +6962,31 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
     for storageconsumer_dict in storageconsumer_obj.get()["items"]:
         if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
             storageconsumer = storageconsumer_dict["metadata"]["name"]
+            # TODO: Use configmap with name storageconsumer_dict["status"]["resourceNameMappingConfigMap"]["name"] to
+            #  identify the radosnamespace and then use it to find the cephblockpoolradosnamespace CR. This is not
+            #  applicable for internal storageconsumer because the configmap will not have the exact name of
+            #  radosnamespace
             break
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        cephblockpool_rns_names = [
+            cephbprns_data["metadata"]["name"]
+            for cephbprns_data in ocp.OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            ).get()["items"]
+        ]
+    if storageconsumer == constants.INTERNAL_STORAGE_CONSUMER_NAME:
+        cephbpradosns = list(
+            filter(lambda x: "-builtin-implicit" in x, cephblockpool_rns_names)
+        )[0]
+    else:
+        cephbpradosns = list(
+            filter(lambda x: f"-{storageconsumer}" in x, cephblockpool_rns_names)
+        )[0]
     logger.info(
         f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
     )
-
-    cephbpradosns = storageconsumer
 
     # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clusters have it,
     # but StorageRequest is not reconciled. StorageConsumer exists in storage hub cluster and in consumer clusters
@@ -7033,6 +7073,31 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
             "cephfs-subvolumegroup"
         )
     return cephbfssubvolumegroup
+
+
+def find_radosnamespace(storageclient_uid=None):
+    """
+    Find the radosnamespace related to a storageclient if present
+
+    Args:
+        storageclient_id(string): The uid of the storageclient for which the lradosnamespace has to be identified
+
+    Returns:
+        str: The name of the radosnamespace, if present
+
+    """
+    cephblockpoolradosnamespace = find_cephblockpoolradosnamespace(
+        storageclient_uid=storageclient_uid
+    )
+    if "-builtin-implicit" not in cephblockpoolradosnamespace:
+        with config.RunWithProviderConfigContextIfAvailable():
+            cbp_rns = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=cephblockpoolradosnamespace,
+            )
+            radosnamespace = cbp_rns.get()["spec"]["name"]
+        return radosnamespace
 
 
 def remove_port_from_url(url):
@@ -7317,12 +7382,8 @@ def get_schedule_precedance_value_from_csi_addons_configmap(
     """
     Return the schedule precedence from the 'csi-addons-config' ConfigMap.
 
-    If the ConfigMap (or key) doesn't exist, return the default ('storageclass').
-
-    The ConfigMap has the following structure:
-    - name: csi-addons-config
-    - namespace: openshift-storage (or cluster_namespace)
-    - data.schedule-precedence: 'storageclass' or 'pvc'
+    Delegates to the generic get_csi_addons_config_value() helper,
+    then validates the returned value is 'storageclass' or 'pvc'.
 
     Args:
         default (str): Default value to return if ConfigMap doesn't exist.
@@ -7330,46 +7391,22 @@ def get_schedule_precedance_value_from_csi_addons_configmap(
 
     Returns:
         str: The schedule precedence value ('storageclass' or 'pvc').
+
     """
-    cm_name = getattr(constants, "CSI_ADDONS_CONFIGMAP_NAME", "csi-addons-config")
-    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+    from ocs_ci.ocs.resources.csi_addons import get_csi_addons_config_value
 
-    cm_ocp = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+    value = get_csi_addons_config_value("schedule-precedence", default=default)
+    value = value.strip().lower()
 
-    try:
-        if not cm_ocp.is_exist(cm_name):
-            logger.info(
-                "ConfigMap '%s' not found in namespace '%s'; using default '%s'.",
-                cm_name,
-                namespace,
-                default,
-            )
-            return default
+    if value in ("storageclass", "pvc"):
+        return value
 
-        cm = cm_ocp.get(resource_name=cm_name)
-        value = cm.get("data", {}).get("schedule-precedence", "").strip().lower()
-
-        if value in ("storageclass", "pvc"):
-            logger.info("Schedule precedence from ConfigMap: %s", value)
-            return value
-
-        logger.warning(
-            "ConfigMap '%s' has missing/invalid 'schedule-precedence' (got '%s'); using default '%s'.",
-            cm_name,
-            value,
-            default,
-        )
-        return default
-
-    except CommandFailed as e:
-        logger.warning(
-            "Failed to read ConfigMap '%s' in ns '%s' (%s); using default '%s'.",
-            cm_name,
-            namespace,
-            e,
-            default,
-        )
-        return default
+    logger.warning(
+        "Invalid 'schedule-precedence' value '%s'; using default '%s'.",
+        value,
+        default,
+    )
+    return default
 
 
 def verify_socket_on_node(node_name, host_path, socket_name):

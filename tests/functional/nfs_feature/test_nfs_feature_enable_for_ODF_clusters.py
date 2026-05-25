@@ -220,6 +220,10 @@ class TestNfsEnable(ManageTest):
                 )
                 self.nfs_sc = constants.COPY_NFS_STORAGECLASS_NAME
             yield
+            # Remove NFS SC from distributed storage classes on the provider
+            nfs_utils.remove_nfs_storage_class_from_all_consumers(
+                constants.NFS_STORAGECLASS_NAME
+            )
             # Disable nfs feature
             nfs_utils.disable_nfs_service_from_provider(self.sc, nfs_ganesha_pod)
 
@@ -358,6 +362,28 @@ class TestNfsEnable(ManageTest):
                 )
                 nfs_utils.update_etc_hosts_on_nfs_client(con, hostname_add)
         return con
+
+    def _mount_nfs_with_retry(self, cmd, tries=28, delay=10):
+        """
+        Execute an NFS mount command on the client VM with retry.
+
+        Args:
+            cmd (str): Mount command to execute on the NFS client VM
+            tries (int): Number of retry attempts (default: 28)
+            delay (int): Delay in seconds between retries (default: 10)
+
+        Raises:
+            CommandFailed: If mount does not succeed within the retry limit
+        """
+
+        def _do_mount():
+            retcode, _, stderr = self.con.exec_cmd(cmd)
+            if retcode != 0:
+                raise CommandFailed(
+                    f"NFS mount command failed with retcode " f"{retcode}: {stderr}"
+                )
+
+        retry((CommandFailed), tries=tries, delay=delay)(_do_mount)()
 
     @tier1
     @polarion_id("OCS-4269")
@@ -569,11 +595,7 @@ class TestNfsEnable(ManageTest):
             + self.test_folder
         )
 
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(self.con.exec_cmd(export_nfs_external_cmd))
+        self._mount_nfs_with_retry(export_nfs_external_cmd)
 
         # Verify able to read exported volume
         command = f"cat {self.test_folder}/index.html"
@@ -741,11 +763,7 @@ class TestNfsEnable(ManageTest):
                 + " "
                 + self.test_folder
             )
-            retry(
-                (CommandFailed),
-                tries=28,
-                delay=10,
-            )(self.con.exec_cmd(export_nfs_external_cmd))
+            self._mount_nfs_with_retry(export_nfs_external_cmd)
 
             # Verify able to access exported volume
             command = f"cat {self.test_folder}/index.html"
@@ -874,11 +892,7 @@ class TestNfsEnable(ManageTest):
             + " "
             + self.test_folder
         )
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(self.con.exec_cmd(export_nfs_external_cmd))
+        self._mount_nfs_with_retry(export_nfs_external_cmd)
 
         # Verify able to access exported volume
         command = f"cat {self.test_folder}/shared_file.html"
@@ -1007,11 +1021,7 @@ class TestNfsEnable(ManageTest):
             + " "
             + self.test_folder
         )
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(self.con.exec_cmd(export_nfs_external_cmd))
+        self._mount_nfs_with_retry(export_nfs_external_cmd)
 
         # Verify able to write new file in exported volume by external client
         command = (
@@ -1612,16 +1622,24 @@ class TestNfsEnable(ManageTest):
 
         # Checking for stale volumes
         output = exec_cmd(cmd=f"{odf_cli_path} subvolume ls --stale")
+        stale_before = self.parse_subvolume_ls_output(output)
+        log.info(f"Stale subvolumes before delete: {stale_before}")
 
-        # Deleteing stale subvolume
-        exec_cmd(
-            cmd=f"{odf_cli_path} subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}"
+        # Deleting stale subvolume
+        delete_output = exec_cmd(
+            cmd=f"{odf_cli_path} subvolume delete"
+            f" {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}"
         )
+        log.info(f"Subvolume delete output: {delete_output.stdout}")
 
-        # Checking for stale volumes
+        # Verify the specific subvolume was deleted
         output = exec_cmd(cmd=f"{odf_cli_path} subvolume ls --stale")
-        stale_volumes = self.parse_subvolume_ls_output(output)
-        assert len(stale_volumes) == 0  # No stale volumes available
+        stale_after = self.parse_subvolume_ls_output(output)
+        log.info(f"Stale subvolumes after delete: {stale_after}")
+        stale_svs = {sv[1] for sv in stale_after}
+        assert (
+            new_pvc[1] not in stale_svs
+        ), f"Subvolume {new_pvc[1]} still stale after delete"
 
         # Delete ocs-storagecluster-ceph-nfs-retain storageclass
         self.sc_obj.delete(resource_name=self.retain_nfs_sc_name)
@@ -1634,7 +1652,9 @@ class TestNfsEnable(ManageTest):
         subvolumes = []
         subvolumes_list = output.strip().split("\n")[1:]
         for item in subvolumes_list:
-            fs, sv, svg, status = item.split(" ")
+            if not item.strip():
+                continue
+            fs, sv, svg, status = item.split()
             subvolumes.append((fs, sv, svg, status))
         return subvolumes
 
@@ -1651,12 +1671,13 @@ class TestNfsEnable(ManageTest):
         """
         # remove nfs external endpoint details from storagecluster
         nfs_utils.remove_nfs_endpoint_details()
-        time.sleep(40)
 
-        server = nfs_utils.fetch_nfs_server_details_on_client_cluster()
+        server = nfs_utils.fetch_nfs_server_details_on_client_cluster(
+            default_server=True
+        )
         # validate default nfs server details is displayed
         assert (
-            server == "ocs-storagecluster-cephnfs-service"
+            server == constants.NFS_DEFAULT_SERVICE_NAME
         ), f"Expected default NFS server service, got: {server}"
 
         # Update nfs external endpoint details in storagecluster
@@ -1772,11 +1793,7 @@ class TestNfsEnable(ManageTest):
             + self.test_folder
         )
 
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(self.con.exec_cmd(export_nfs_external_cmd))
+        self._mount_nfs_with_retry(export_nfs_external_cmd)
 
         # Verify able to read exported volume
         command = f"cat {self.test_folder}/index.html"

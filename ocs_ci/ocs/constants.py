@@ -201,6 +201,7 @@ CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 CEPHOBJECTSTORE = "CephObjectStore"
 LVM_SC = "lvms-vg1"
 NOOBAA_SC = "openshift-storage.noobaa.io"
+ROSA_NOOBAA_SC = "odf-storage.noobaa.io"
 LOCALSTORAGE_SC = "localblock"
 DEPLOYMENT = "Deployment"
 STORAGECLASS = "StorageClass"
@@ -241,6 +242,7 @@ NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
 DRPC = "DRPlacementControl"
 DRCLUSTER = "DRCluster"
+DRCLUSTERCONFIG = "DRClusterConfig"
 DRPOLICY = "DRPolicy"
 ACTION_FENCE = "Fenced"
 ACTION_UNFENCE = "Unfenced"
@@ -266,6 +268,7 @@ STORAGECLIENTS = "storageclients.ocs.openshift.io"
 MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
 CEPH_CLUSTER = "CephCluster"
 EXTERNAL_CEPHCLUSTER_NAME = "ocs-external-storagecluster-cephcluster"
+EXTERNAL_RGW_SC_NAME = "ocs-external-storagecluster-ceph-rgw"
 CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
 REPLICA1_STORAGECLASS = "ocs-storagecluster-ceph-non-resilient-rbd"
 ENDPOINTS = "Endpoints"
@@ -1458,6 +1461,7 @@ DR_AWS_S3_PROFILE_YAML = os.path.join(
 )
 DR_RAMEN_HUB_OPERATOR_CONFIG = "ramen-hub-operator-config"
 DR_RAMEN_CLUSTER_OPERATOR_CONFIG = "ramen-dr-cluster-operator-config"
+RAMEN_UPSTREAM_IMAGE = "quay.io/ramendr/ramen-operator:canary"
 ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
 DR_RESTORE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "restore.yaml")
 RDR_MODE = "regional-dr"
@@ -1505,6 +1509,7 @@ DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocs-workloads"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
 DRPOLICY_STATUS = "Validated"
+DRPOLICY_SUCCESS_REASONS = frozenset({"Succeeded", "Validated"})
 RDR_REPLICATION_POLICY = "async"
 RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL = "app=ramen-dr-cluster"
 RDR_OSD_MODE_GREENFIELD = "greenfield"
@@ -1620,6 +1625,9 @@ ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES = "ODFNodeLatencyHighOnNonOSDNodes"
 ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION = "ODFNodeNICBandwidthSaturation"
 ALERT_ODF_NODE_MTU_LESS_THAN_9000 = "ODFNodeMTULessThan9000"
 ALERT_HIGHRBDCLONESNAPSHOTCOUNT = "HighRBDCloneSnapshotCount"
+ALERT_CEPHFS_ORPHANED_SNAPSHOT = "CephFSOrphanedSnapshot"
+CEPHFS_SNAPSHOT_STATE_ORPHANED = "orphaned"
+CEPHFS_SNAPSHOT_STATE_BOUND = "bound"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -1779,6 +1787,7 @@ AZURE_WITH_LOGS_PLATFORM = "azure-with-logs"
 GCP_PLATFORM = "gcp"
 VSPHERE_PLATFORM = "vsphere"
 BAREMETAL_PLATFORM = "baremetal"
+FYRE_PLATFORM = "fyre"
 IBM_POWER_PLATFORM = "powervs"
 IBM_CLOUD_BAREMETAL_PLATFORM = "ibm_cloud_baremetal"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
@@ -1792,6 +1801,25 @@ ROSA_PLATFORM = "rosa"
 FUSIONAAS_PLATFORM = "fusion_aas"
 ROSA_HCP_PLATFORM = "rosa_hcp"
 ROSA_PLATFORMS = [ROSA_PLATFORM, ROSA_HCP_PLATFORM]
+ROSA_HCP_DS_NAMESPACE = "kube-system"
+ROSA_HCP_DS_LABEL = "app=roks-icsp"
+ROSA_HCP_HOST_REGISTRIES_CONF_D = "/host/etc/containers/registries.conf.d"
+ROSA_HCP_HOST_AUTH_JSON = "/host/etc/containers/auth.json"
+ROSA_HCP_HOST_KUBELET_CONFIG = "/host/var/lib/kubelet/config.json"
+ROSA_HCP_CRIO_CONF_DROP_IN = "/host/etc/crio/crio.conf.d/00-default"
+ROSA_HCP_KONFLUX_MIRROR_CONF = "020-konflux-mirror.conf"
+ROSA_HCP_ROKS_ICSP_SA_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-serviceaccount.yaml"
+)
+ROSA_HCP_ROKS_ICSP_DS_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-daemonset.yaml"
+)
+ROSA_HCP_ROKS_ICSP_SVC_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-service.yaml"
+)
+ROSA_HCP_ROKS_ICSP_MC_CRD_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-machineconfig-crd.yaml"
+)
 HCI_BAREMETAL = "hci_baremetal"
 HCI_VSPHERE = "hci_vsphere"
 HCP_AWS = "hcp_aws"
@@ -2119,6 +2147,13 @@ RBD_PROVISIONER_SECRET_419 = "rbd-provisioner"
 RBD_NODE_SECRET_419 = "rbd-node"
 CEPHFS_PROVISIONER_SECRET_419 = "cephfs-provisioner"
 CEPHFS_NODE_SECRET_419 = "cephfs-node"
+# CSI VolumeSnapshotClass parameter keys for snapshotter-list secret
+CSI_SNAPSHOTTER_LIST_SECRET_NAME_PARAM = (
+    "csi.storage.k8s.io/snapshotter-list-secret-name"
+)
+CSI_SNAPSHOTTER_LIST_SECRET_NAMESPACE_PARAM = (
+    "csi.storage.k8s.io/snapshotter-list-secret-namespace"
+)
 FUSION_AGENT_CONFIG_SECRET = "managed-fusion-agent-config"
 # OSU = ObjectStoreUser, shortened for compliance with flake8+black because of line length issues
 OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-{}-{}"
@@ -2330,9 +2365,6 @@ CEPHMONSTORE_TOOL_CMD = "ceph-monstore-tool"
 # local storage
 LOCAL_STORAGE_NAMESPACE = "openshift-local-storage"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
-LOCAL_STORAGE_OPERATOR = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "local-storage-operator.yaml"
-)
 LOCAL_VOLUME_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "local-volume.yaml")
 LOCAL_STORAGE_OPTIONAL_OPERATORS = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-storage-optional-operators.yaml"
@@ -2391,6 +2423,8 @@ SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_MONITORS = "servicemonitors"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
 AWSCLI_CA_BUNDLE_PATH = "/tmp/ca-bundle.crt"
+EXTERNAL_RGW_CA_CM_KEY = "rgw-external-ca.pem"
+EXTERNAL_RGW_CA_CONTAINER_PATH = f"/cert/{EXTERNAL_RGW_CA_CM_KEY}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 JAVAS3_POD_NAME = "java-s3"
 SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
@@ -2578,12 +2612,15 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.21"] = (
     DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"]
 )
 
+# the list is gathered via following command (run it on one line!)
+# opm-rhel9 render quay.io/rhceph-dev/ocs-registry:4.22.0-65.konflux -o json |
+#   jq 'select(.name=="odf-dependencies.v4.22.0-65.stable") | .properties[] |
+#   select(.type=="olm.package.required") | .value.packageName'
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "4.22"
 ] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] + [
-    # disabling mirroring of ceph-volsync-plugin-operator because of
-    # https://redhat.atlassian.net/browse/DFBUGS-6114
-    # "ceph-volsync-plugin-operator",
+    "ceph-volsync-plugin-operator",
+    "ocs-tls-profiles",
 ]
 
 # PSI-openstack constants
@@ -3719,6 +3756,7 @@ NFS_CSI_PLUGIN_PROVISIONER_LABEL = "app=csi-nfsplugin-provisioner"
 NFS_CSI_PLUGIN_LABEL = "app=csi-nfsplugin"
 NFS_CSI_CTRLPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-ctrlplugin"
 NFS_CSI_NODEPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-nodeplugin"
+NFS_DEFAULT_SERVICE_NAME = "ocs-storagecluster-cephnfs-service"
 DAEMONSET_CSI_CEPHFS = "openshift-storage.cephfs.csi.ceph.com-nodeplugin"
 DAEMONSET_CSI_RBD = "openshift-storage.rbd.csi.ceph.com-nodeplugin"
 DAEMONSET_CSI_RBD_CSI_ADDONS = (
@@ -3829,8 +3867,6 @@ RBD_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
 HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"
 CEPHFS_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
 
-HYPERSHIFT_ADDON_DISCOVERYPREFIX = "dr"
-
 # Fill pool job and PVC Yaml files
 FILL_POOL_JOB_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_job.yaml")
 FILL_POOL_PVC_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_pvc.yaml")
@@ -3854,6 +3890,7 @@ MON_STATUS_DOWN = "down"
 
 # ODF 4.21 health overview resources
 BLACKBOX_POD_LABEL = "app.kubernetes.io/name=odf-blackbox-exporter"
+BLACKBOX_POD_LABEL_422_AND_ABOVE = "app=odf-blackbox-exporter"
 
 # ODF 4.21 health overview mock alerts dir
 HEALTHALERTS_DIR = os.path.join(TEMPLATE_DIR, "health_overview_alerts")

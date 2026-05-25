@@ -38,13 +38,14 @@ from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_
 logger = logging.getLogger(__name__)
 
 
-def setup_local_storage(storageclass):
+def setup_local_storage(storageclass, add_new_disks=True):
     """
     Setup the necessary resources for enabling local storage.
 
     Args:
         storageclass (string): storageClassName value to be used in
             LocalVolume CR based on LOCAL_VOLUME_YAML
+        add_new_disks (bool): whether to add new disks to nodes after LSO installation
 
     """
     # Get the worker nodes
@@ -61,7 +62,8 @@ def setup_local_storage(storageclass):
     platform = config.ENV_DATA.get("platform").lower()
     lso_type = config.DEPLOYMENT.get("type")
 
-    add_disks_lso()
+    if add_new_disks:
+        add_disks_lso()
 
     if (ocp_version >= version.VERSION_4_6) and (ocs_version >= version.VERSION_4_6):
         # Pull local volume discovery yaml data
@@ -449,30 +451,8 @@ def add_disk_for_vsphere_platform():
             vsphere_base.add_rdm_disks()
 
         if lso_type == constants.VMDK:
-            ssd_disk = True
-            if config.ENV_DATA.get("hdd_disks"):
-                ssd_disk = False
             logger.info(f"LSO Deployment type: {constants.VMDK}")
-            device_size = config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
-            provision_type = config.DEPLOYMENT.get(
-                "provision_type", constants.VM_DISK_TYPE
-            )
-
-            vsphere_base.attach_disk(
-                device_size,
-                provision_type,
-                ssd=ssd_disk,
-            )
-            if config.DEPLOYMENT.get("deploy_multiple_device_classes"):
-                logger.info("Attaching additional disks for the second device class")
-                second_device_size = config.ENV_DATA.get(
-                    "second_device_size", device_size
-                )
-                vsphere_base.attach_disk(
-                    second_device_size,
-                    provision_type,
-                    ssd=ssd_disk,
-                )
+            vsphere_base.add_vmdk_disks()
 
         if lso_type == constants.DIRECTPATH:
             logger.info(f"LSO Deployment type: {constants.DIRECTPATH}")

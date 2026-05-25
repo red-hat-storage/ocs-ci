@@ -27,6 +27,9 @@ from collections import namedtuple
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    try_embed_rgw_ca_pem_in_mcg_cli_resources,
+)
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hub_spoke import (
     destroy_aws_hcp_clusters,
@@ -156,7 +159,7 @@ from ocs_ci.ocs.version import (
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
     aws,
-    deployment_openshift_logging as ocp_logging_obj,
+    deployment_openshift_logging,
     ibmcloud,
     kms as KMS,
     pagerduty,
@@ -246,8 +249,6 @@ from ocs_ci.helpers.cnv_helpers import (
 )
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.utility.utils import exec_cmd
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.utility.iscsi_config import iscsi_teardown
 from ocs_ci.utility.iam_utils import (
     generate_random_iam_path,
@@ -3257,18 +3258,22 @@ def nb_stress_cli_pod_fixture(request, scope_name):
         s3cli_label_k, s3cli_label_v = constants.STRESS_CLI_APP_LABEL.split("=")
         service_ca_data["metadata"]["labels"] = {s3cli_label_k: s3cli_label_v}
 
+        log.info(
+            "Creating the Stress CLI StatefulSet manifest (before service-ca ConfigMap)"
+        )
+        stress_cli_sts_dict = templating.load_yaml(constants.STRESS_CLI_STS_YAML)
+        stress_cli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
+            "name"
+        ] = service_ca_configmap_name
+        stress_cli_sts_dict["metadata"]["namespace"] = namespace
+        try_embed_rgw_ca_pem_in_mcg_cli_resources(service_ca_data, stress_cli_sts_dict)
+
         log.info("Trying to create the Stress CLI service CA")
         service_ca_configmap = create_resource(**service_ca_data)
         OCP(namespace=namespace, kind="ConfigMap").wait_for_resource(
             resource_name=service_ca_configmap.name, column="DATA", condition="1"
         )
 
-        log.info("Creating the Stress CLI StatefulSet")
-        stress_cli_sts_dict = templating.load_yaml(constants.STRESS_CLI_STS_YAML)
-        stress_cli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
-            "name"
-        ] = service_ca_configmap_name
-        stress_cli_sts_dict["metadata"]["namespace"] = namespace
         update_container_with_mirrored_image(stress_cli_sts_dict)
         update_container_with_proxy_env(stress_cli_sts_dict)
         stress_cli_sts_obj = create_resource(**stress_cli_sts_dict)
@@ -3298,10 +3303,20 @@ def nb_stress_cli_pod_fixture(request, scope_name):
                 "rgw_secure"
             ):
                 log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
-                pod_obj.exec_cmd_on_pod(
-                    f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> "
-                    f"{constants.AWSCLI_CA_BUNDLE_PATH}'"
-                )
+                if ocsci_config.EXTERNAL_MODE.get("embedded_external_rgw_ca_pem"):
+                    pod_obj.exec_cmd_on_pod(
+                        f"bash -c 'cat {constants.EXTERNAL_RGW_CA_CONTAINER_PATH} >> "
+                        f"{constants.AWSCLI_CA_BUNDLE_PATH}'"
+                    )
+                elif ocsci_config.EXTERNAL_MODE.get("rgw_cert_ca"):
+                    pod_obj.exec_cmd_on_pod(
+                        f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> "
+                        f"{constants.AWSCLI_CA_BUNDLE_PATH}'"
+                    )
+                else:
+                    log.warning(
+                        "rgw_secure is set but neither embedded RGW CA nor rgw_cert_ca URL is available"
+                    )
 
     def cleanup():
         """
@@ -3860,144 +3875,7 @@ def install_logging(request):
 
     request.addfinalizer(finalizer)
 
-    sub = ocp.OCP(
-        kind=constants.SUBSCRIPTION,
-        namespace=constants.OPENSHIFT_LOGGING_NAMESPACE,
-    )
-    logging_sub = sub.get().get("items")
-    if logging_sub:
-        log.info("Logging is already configured, Skipping Installation")
-        return
-
-    log.info("Configuring Openshift-logging")
-
-    # Gets OCP version to align logging version to OCP version
-    package_manifest = PackageManifest(
-        resource_name=constants.CLUSTERLOGGING_SUBSCRIPTION,
-        selector="catalog=redhat-operators",
-    )
-    logging_channel = package_manifest.get_default_channel()
-
-    # Creates namespace openshift-operators-redhat
-    ocp_logging_obj.create_namespace(
-        yaml_file=constants.EO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    # Creates an operator-group for lokistack
-    assert ocp_logging_obj.create_lokistack_operator_group(
-        yaml_file=constants.EO_OG_YAML,
-        resource_name="openshift-operators-redhat",
-        skip_resource_exists=rosa_hcp_depl,
-    )
-    # Creates subscription for lokistack operator
-    subscription_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SUB_YAML)
-    subscription_yaml["spec"]["channel"] = logging_channel
-    helpers.create_resource(**subscription_yaml)
-    assert ocp_logging_obj.get_lokistack_subscription()
-
-    # Creates a namespace openshift-logging
-    ocp_logging_obj.create_namespace(
-        yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    # Create RGW obc
-    obc_yaml = templating.load_yaml(constants.LOKI_OPERATOR_OBC_YAML)
-
-    if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
-        obc_yaml["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
-    else:
-        obc_yaml["spec"]["storageClassName"] = constants.NOOBAA_SC
-
-    helpers.create_resource(**obc_yaml)
-
-    ocp_logging_obj.get_obc()
-
-    # Creating secret
-    sample = TimeoutSampler(
-        timeout=180,
-        sleep=20,
-        func=run_cmd_verify_cli_output,
-        cmd=(
-            f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get configmap"
-            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_PORT}}'"
-        ),
-    )
-    if not sample.wait_for_func_status(result=True):
-        raise Exception("Failed to get configmap")
-
-    configmap_obj = ocp.OCP(
-        kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
-    )
-    cm_dict = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
-
-    access_key_cmd = (
-        f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
-        f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_ACCESS_KEY_ID}}'"
-    )
-    access_key = exec_cmd(access_key_cmd)
-    decoded1 = base64.b64decode(access_key.stdout).decode("utf-8")
-
-    secret_key_cmd = (
-        f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get secret"
-        f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.AWS_SECRET_ACCESS_KEY}}'"
-    )
-    secret_key = exec_cmd(secret_key_cmd)
-    decoded2 = base64.b64decode(secret_key.stdout).decode("utf-8")
-
-    secret_yaml = templating.load_yaml(constants.LOKI_OPERATOR_SECRET_YAML)
-    secret_yaml["stringData"]["access_key_id"] = decoded1
-    secret_yaml["stringData"]["access_key_secret"] = decoded2
-    secret_yaml["stringData"]["bucketnames"] = cm_dict["data"]["BUCKET_NAME"]
-    endpoint = cm_dict["data"]["BUCKET_HOST"]
-    secret_yaml["stringData"]["endpoint"] = f"https://{endpoint}:80"
-    helpers.create_resource(**secret_yaml)
-    assert ocp_logging_obj.get_secret_to_lokistack()
-
-    # creates lokistack
-    # sleeping for few seconds to avoid following error
-    # Internal error occurred: failed calling webhook
-    ocp_logging_obj.create_lokistack(
-        yaml_file=constants.LOKISTACK_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    log.info("Loki operator is installed successfuly")
-
-    # Creates an operator-group for cluster-logging
-    ocp_logging_obj.create_clusterlogging_operator_group(
-        yaml_file=constants.CL_OG_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    # Creates subscription for cluster-logging
-    cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription["spec"]["channel"] = logging_channel
-    helpers.create_resource(**cl_subscription)
-    assert ocp_logging_obj.get_clusterlogging_subscription()
-
-    # creates a service account to be used by the log collector
-    ocp_logging_obj.setup_sa_permissions()
-
-    # Creates ClusterLogForwarder
-    ocp_logging_obj.create_clusterlogforwarder(
-        yaml_file=constants.CLF_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    log.info("Openshift Logging operator is installed successfully")
-
-    # Creates namespace for openshift-cluster-observability-operator
-    ocp_logging_obj.create_namespace(
-        yaml_file=constants.CO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
-    )
-    # Creates OperatorGroup for openshift-cluster-observability-operator
-    ocp_logging_obj.create_clusterobservability_operator_group(
-        yaml_file=constants.CO_OG_YAML,
-        resource_name=constants.CLUSTER_OBSERVABILITY_OPERATOR,
-        skip_resource_exists=rosa_hcp_depl,
-    )
-    # Creates subscription for openshift-cluster-observability-operator
-    co_subscription_yaml = templating.load_yaml(constants.CO_SUB_YAML)
-    helpers.create_resource(**co_subscription_yaml)
-    assert ocp_logging_obj.get_cluster_observability_subscription()
-
-    # Creates UI Plugin for openshift-cluster-observability-operator
-    ocp_logging_obj.create_UI_Plugin(
-        yaml_file=constants.CO_UI_PLUGIN_YAML, resource_name="logging"
-    )
-    log.info("Cluster Observability operator is installed successfully with UIPlugin")
+    deployment_openshift_logging.install_logging(skip_resource_exists=rosa_hcp_depl)
 
 
 @pytest.fixture
@@ -9543,6 +9421,17 @@ def override_default_backingstore_session(
     )
 
 
+@pytest.fixture(scope="session")
+def override_default_backingstore_session_no_teardown(
+    mcg_obj_session,
+    backingstore_factory_session,
+    allow_default_backingstore_override,
+):
+    return override_default_backingstore_fixture(
+        None, mcg_obj_session, backingstore_factory_session
+    )
+
+
 @pytest.fixture(scope="function")
 def override_default_backingstore(
     request, mcg_obj_session, backingstore_factory, allow_default_backingstore_override
@@ -9622,7 +9511,8 @@ def override_default_backingstore_fixture(
             constants.DEFAULT_NOOBAA_BACKINGSTORE
         )
 
-    request.addfinalizer(finalizer)
+    if request is not None:
+        request.addfinalizer(finalizer)
     return _override_nb_default_backingstore_implementation
 
 
@@ -11956,3 +11846,19 @@ def iam_users_factory_fixture(request, mcg_obj, awscli_pod_session):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture()
+def skip_on_hci_provider_client():
+    """
+    Skip the test at runtime when running on Fusion HCI provider+client
+    setup. Uses a fixture instead of pytest.mark.skipif to avoid the
+    eager-evaluation issue where config.clusters is not yet populated at
+    module import time.
+    """
+    if (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        and config.hci_provider_exist()
+        and config.hci_client_exist()
+    ):
+        pytest.skip("Test will not run on Fusion HCI provider and Client clusters")

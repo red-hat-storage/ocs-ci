@@ -74,6 +74,21 @@ class OBC(object):
         )
         self.ob_name = obc_resource.get("spec").get(obn_str)
         self.bucket_name = obc_resource.get("spec").get("bucketName")
+
+        # Get ConfigMap early to check for bucket_name if not set in spec
+        obc_configmap = OCP(
+            namespace=self.namespace, kind="ConfigMap", resource_name=self.obc_name
+        ).get()
+        obc_configmap_data = obc_configmap.get("data")
+
+        # For remote OBC on client clusters, bucket_name may not be in spec
+        # In that case, retrieve it from the ConfigMap
+        if not self.bucket_name:
+            self.bucket_name = obc_configmap_data.get("BUCKET_NAME")
+            logger.info(
+                f"Bucket name not found in spec, retrieved from ConfigMap: {self.bucket_name}"
+            )
+
         ob_obj = OCP(
             namespace=self.namespace, kind="ObjectBucket", resource_name=self.ob_name
         ).get()
@@ -83,11 +98,6 @@ class OBC(object):
         secret_obc_obj = OCP(
             kind="secret", namespace=self.namespace, resource_name=self.obc_name
         ).get()
-
-        obc_configmap = OCP(
-            namespace=self.namespace, kind="ConfigMap", resource_name=self.obc_name
-        ).get()
-        obc_configmap_data = obc_configmap.get("data")
 
         obc_provisioner = (
             obc_resource.get("metadata").get("labels").get("bucket-provisioner")

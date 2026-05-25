@@ -368,6 +368,74 @@ deployment_4_21 = {
     ),
 }
 
+deployment_4_22 = {
+    # Perspective switcher for ACM hub cluster (PF v6)
+    "perspective_switcher_toggle": (
+        'button[data-test-id="perspective-switcher-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_core_platform": (
+        "//h2[normalize-space()='Core platform']"
+        "/ancestor::button[contains(@class, 'pf-v6-c-menu__item')]",
+        By.XPATH,
+    ),
+    # PF v6 sidebar navigation locators
+    "operators_tab": (
+        "//*[contains(@class, 'nav__link') and " "normalize-space()='Operators']",
+        By.XPATH,
+    ),
+    "installed_operators_tab": (
+        "//*[contains(@class, 'nav__link') and "
+        "normalize-space()='Installed Operators']",
+        By.XPATH,
+    ),
+    # MCO operator locators for rebranding validation
+    "mco_operator_row": (
+        "//a[@data-test-operator-row='DF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "mco_operator_row_old_name": (
+        "//a[@data-test-operator-row='ODF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "operator_display_name": (
+        "//h1[contains(@class, 'co-clusterserviceversion-details__name')]",
+        By.XPATH,
+    ),
+    "operator_provider": (
+        "//span[contains(text(), 'Provided by')]/following-sibling::span",
+        By.XPATH,
+    ),
+    "operator_description": (
+        "//h5[normalize-space()='Description']/following-sibling::p",
+        By.XPATH,
+    ),
+    "operator_installed_status": (
+        "//span[contains(@class, 'co-icon-and-text')][contains(text(), 'Installed')]",
+        By.XPATH,
+    ),
+    "operator_capability_basic_install": (
+        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
+        "//dt[text()='Capability Level']/following-sibling::dd"
+        "//span[contains(text(), 'Basic Install')]",
+        By.XPATH,
+    ),
+    "operator_capability_seamless_upgrades": (
+        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
+        "//dt[text()='Capability Level']/following-sibling::dd"
+        "//span[contains(text(), 'Seamless Upgrades')]",
+        By.XPATH,
+    ),
+    "operator_channel": (
+        "//dt[text()='Channel']/following-sibling::dd",
+        By.XPATH,
+    ),
+    "operator_installed_version": (
+        "//dt[text()='Installed Version']/following-sibling::dd",
+        By.XPATH,
+    ),
+}
+
 generic_locators = {
     "project_selector": (
         "//span[contains(@class, 'c-menu-toggle__text') and contains(text(), 'Project:')]",
@@ -416,8 +484,14 @@ generic_locators = {
         By.CSS_SELECTOR,
     ),
     "confirm_dilog_input": ("//input[@placeholder='{}']", By.XPATH),
-    "confirm_delete_resource": ("//button[contains(text(), 'Delete')]", By.XPATH),
-    "cancel_delete_resource": ("//button[contains(text(), 'Cancel')]", By.XPATH),
+    "confirm_delete_resource": (
+        "//button[contains(normalize-space(), 'Delete')]",
+        By.XPATH,
+    ),
+    "cancel_delete_resource": (
+        "//button[contains(normalize-space(), 'Cancel')]",
+        By.XPATH,
+    ),
     "close_dialog": ("button[aria-label='Close']", By.XPATH),
     "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
     "ocs_operator": ('//h1[text()="OpenShift Container Storage"]', By.XPATH),
@@ -450,7 +524,8 @@ generic_locators = {
     "searchbar-select-label": ("//button[@id='LABEL-link']", By.XPATH),
     "searchbar_input": (
         "//input[@data-test-id='item-filter'] | "
-        "//input[@placeholder='Search by name...']",
+        "//input[@placeholder='Search by name...'] | "
+        "//input[@placeholder='Filter by Name']",
         By.XPATH,
     ),
     "resource_from_list_by_name": (
@@ -675,11 +750,18 @@ pvc = {
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "clone_pvc": ("button[data-test-action='Clone PVC']", By.CSS_SELECTOR),
     "clone_name_input": ("//input[@aria-label='Clone PVC']", By.XPATH),
+    "clone-btn": (
+        'button[form="clone-pvc-form"], button[data-test="confirm-action"], #confirm-action',
+        By.CSS_SELECTOR,
+    ),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
     "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
     "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
-    "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
+    "expand-btn": (
+        'button[form="expand-pvc-form"], button[data-test="confirm-action"], #confirm-action',
+        By.CSS_SELECTOR,
+    ),
     "pvc-status": (
         "dd[data-test-id='pvc-status'] span[data-test='status-text']",
         By.CSS_SELECTOR,
@@ -1522,6 +1604,18 @@ acm_configuration_4_21 = {
     ),
 }
 
+acm_configuration_4_22 = {
+    # OCP 4.22 uses PF6 UI: local cluster view shows "Core platform" h2 in the sidebar nav
+    "local-cluster_dropdown": (
+        "//h2[text()='local-cluster'] | "
+        "//span[contains(@class, 'c-menu-toggle__text') "
+        "and text()='local-cluster']/.. | "
+        "//h2[normalize-space()='Fleet Management'] | "
+        "//h2[normalize-space()='Core platform']",
+        By.XPATH,
+    ),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -1866,7 +1960,7 @@ validation = {
         By.CSS_SELECTOR,
     ),
     "input_value_validator_icon": (
-        "//button[@aria-label='Validation']/child::*[contains(@class, 'c-icon')]",
+        "//button[@aria-label='Validation']",
         By.XPATH,
     ),
     "input_validation_popup_container": (
@@ -2379,6 +2473,32 @@ validation_4_21 = {
     "issue_table_rows_locator": ("//table//tbody//tr", By.XPATH),
 }
 
+validation_4_22 = {
+    # OCP 4.22 uses PF6 UI. The "Requested capacity" dropdown button changed
+    # from a div with c-select to a button with c-menu-toggle.
+    "req_capacity_dropdown_selected": (
+        "//div[@id='breakdown-card-title']/following-sibling::*//*[contains(@class, 'c-select__toggle-text')] | "
+        "//button[contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')]"
+        "//span[contains(@class, 'c-menu-toggle__text')]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_btn_one": (
+        "//button[contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')] | "
+        "//div[contains(@class, 'select') and contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_list_option": (
+        "//button[contains(@class, 'c-select__menu-item') and contains(text(), '{0}')] | "
+        "//button[contains(@class, 'c-menu__item')]"
+        "[.//span[contains(@class, 'menu__item-text') and text()='{0}']]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_namespace_input_select": (
+        "//button[@id='{0}-link'] | //li[@id='{0}-link']",
+        By.XPATH,
+    ),
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": (
@@ -2442,7 +2562,7 @@ topology = {
         By.XPATH,
     ),
     "close_sidebar": ("//button[@aria-label='Close']//*[name()='svg']", By.XPATH),
-    "back_btn": ("//div[@class='odf-topology__back-button']", By.XPATH),
+    "back_btn": ("//button[contains(@class, 'odf-topology__back-button')]", By.XPATH),
     "alerts_sidebar_tab": ("//span[normalize-space()='Alerts']", By.XPATH),
     "number_of_alerts": (
         "//span[normalize-space()='{}']/preceding-sibling::*//*[@data-test='status-text']",
@@ -3213,6 +3333,7 @@ locators = {
             **deployment_4_17,
             **deployment_4_19,
             **deployment_4_21,
+            **deployment_4_22,
         },
         "obc": {**obc, **obc_4_21},
         "pvc": {
@@ -3239,6 +3360,7 @@ locators = {
             **acm_page_nav_420,
             **acm_configuration_4_20,
             **acm_configuration_4_21,
+            **acm_configuration_4_22,
         },
         "validation": {
             **validation,
@@ -3253,6 +3375,7 @@ locators = {
             **validation_4_18,
             **validation_4_20,
             **validation_4_21,
+            **validation_4_22,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},

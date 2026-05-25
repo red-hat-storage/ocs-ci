@@ -621,6 +621,7 @@ def configure_custom_api_cert(skip_tls_verify=False, wait_for_machineconfigpool=
         sleep=60,
         func=ocp.verify_cluster_operator_status,
         cluster_operator=constants.OPENSHIFT_API_CLUSTER_OPERATOR,
+        skip_tls_verify=skip_tls_verify,
     ):
         if sampler:
             logger.info(f"{constants.OPENSHIFT_API_CLUSTER_OPERATOR} status is valid")
@@ -759,6 +760,286 @@ def init_arg_parser():
     args = parser.parse_args()
 
     return args
+
+
+def configure_certs_arg_parser():
+    """
+    Init argument parser for configure-ssl-certs command.
+
+    Returns:
+        object: Parsed arguments
+
+    """
+    parser = argparse.ArgumentParser(
+        description="Configure custom SSL certificates for OpenShift cluster",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Configure both ingress and API with Let's Encrypt (auto-detect cluster info)
+  configure-ssl-certs --provider letsencrypt
+
+  # Configure only ingress with OCS QE CA
+  configure-ssl-certs --ingress --provider ocs-qe-ca \\
+    --signing-service-url https://example.com
+
+  # Configure with explicit cluster info and cluster path
+  configure-ssl-certs --provider letsencrypt \\
+    --cluster-name my-cluster --base-domain example.com \\
+    --cluster-path /path/to/cluster-dir
+
+  # Configure with custom kubeconfig
+  configure-ssl-certs --provider ocs-qe-ca \\
+    --signing-service-url https://example.com:8443 \\
+    --kubeconfig /path/to/kubeconfig
+        """,
+    )
+    parser.add_argument(
+        "--ingress",
+        action="store_true",
+        help="Configure custom SSL certificate for ingress",
+    )
+    parser.add_argument(
+        "--api",
+        action="store_true",
+        help="Configure custom SSL certificate for API",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=["ocs-qe-ca", "letsencrypt"],
+        default="ocs-qe-ca",
+        help="Certificate provider to use: ocs-qe-ca or letsencrypt (default: ocs-qe-ca)",
+    )
+    parser.add_argument(
+        "--signing-service-url",
+        help="URL of the OCS QE automatic certificate signing service (required for ocs-qe-ca provider)",
+    )
+    parser.add_argument(
+        "--dns-plugin",
+        default="dns-route53",
+        help="Certbot DNS plugin to use (required for letsencrypt provider, default: dns-route53)",
+    )
+    parser.add_argument(
+        "--cluster-name",
+        help="OpenShift cluster name (auto-detected if not provided)",
+    )
+    parser.add_argument(
+        "--base-domain",
+        help="OpenShift base domain (auto-detected if not provided)",
+    )
+    parser.add_argument(
+        "--skip-tls-verify",
+        action="store_true",
+        help="Skip TLS verification when communicating with the cluster",
+    )
+    parser.add_argument(
+        "--kubeconfig",
+        help="Path to kubeconfig file (uses KUBECONFIG env var or default if not provided)",
+    )
+    parser.add_argument(
+        "--cluster-path",
+        help="Path to cluster directory containing auth/kubeconfig (creates temp dir if not provided)",
+    )
+    args = parser.parse_args()
+
+    # If neither --ingress nor --api is specified, configure both
+    if not args.ingress and not args.api:
+        args.ingress = True
+        args.api = True
+
+    # Validate provider-specific requirements
+    if args.provider == "ocs-qe-ca" and not args.signing_service_url:
+        parser.error(
+            "--signing-service-url is required when using --provider ocs-qe-ca"
+        )
+
+    return args
+
+
+def get_cluster_info_from_cluster(skip_tls_verify=False):
+    """
+    Auto-detect cluster name and base domain from the running OpenShift cluster.
+
+    Args:
+        skip_tls_verify (bool): Skip TLS verification
+
+    Returns:
+        tuple: (cluster_name, base_domain)
+
+    Raises:
+        Exception: If unable to extract cluster information
+
+    """
+    ignore_tls = "--insecure-skip-tls-verify " if skip_tls_verify else ""
+
+    # Get the apps domain from ingress configuration
+    # Format: *.apps.cluster-name.base-domain
+    cmd = f"oc get ingress.config cluster {ignore_tls}" "-o jsonpath='{.spec.domain}'"
+    result = exec_cmd(cmd)
+    apps_domain = result.stdout.decode("utf-8").strip().strip("'")
+
+    if not apps_domain or "apps" not in apps_domain:
+        raise exceptions.ConfigurationError(
+            f"Failed to extract apps domain from cluster. Got: {apps_domain}"
+        )
+
+    # Extract cluster_name and base_domain from apps domain
+    # Expected format: *.apps.cluster-name.base-domain
+    # or: apps.cluster-name.base-domain
+    apps_domain = apps_domain.lstrip("*.")
+    if apps_domain.startswith("apps."):
+        apps_domain = apps_domain[5:]  # Remove 'apps.' prefix
+
+    # Split to get cluster_name and base_domain
+    parts = apps_domain.split(".", 1)
+    if len(parts) != 2:
+        raise exceptions.ConfigurationError(
+            f"Unable to parse cluster_name and base_domain from apps domain: {apps_domain}"
+        )
+
+    cluster_name = parts[0]
+    base_domain = parts[1]
+
+    logger.info(f"Auto-detected cluster_name: {cluster_name}")
+    logger.info(f"Auto-detected base_domain: {base_domain}")
+
+    return cluster_name, base_domain
+
+
+def configure_certs_main():
+    """
+    Main function for configure-ssl-certs command.
+    Configures custom SSL certificates for ingress and/or API.
+    """
+    args = configure_certs_arg_parser()
+
+    # Initialize logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
+    # Handle cluster-path: create temp dir if not provided
+    if args.cluster_path:
+        cluster_path = os.path.abspath(args.cluster_path)
+        if not os.path.exists(cluster_path):
+            raise exceptions.ConfigurationError(
+                f"Cluster path '{cluster_path}' does not exist"
+            )
+        logger.info(f"Using cluster path: {cluster_path}")
+    else:
+        cluster_path = tempfile.mkdtemp(prefix="configure-ssl-certs-", dir="/tmp")
+        logger.info(f"Created temporary cluster path: {cluster_path}")
+
+    # Handle kubeconfig
+    kubeconfig_path = None
+    if args.kubeconfig:
+        kubeconfig_path = os.path.abspath(args.kubeconfig)
+        if not os.path.exists(kubeconfig_path):
+            raise exceptions.ConfigurationError(
+                f"Kubeconfig file '{kubeconfig_path}' does not exist"
+            )
+        os.environ["KUBECONFIG"] = kubeconfig_path
+        logger.info(f"Using kubeconfig: {kubeconfig_path}")
+    elif args.cluster_path:
+        # Check for auth/kubeconfig in cluster_path
+        default_kubeconfig = os.path.join(cluster_path, "auth", "kubeconfig")
+        if os.path.exists(default_kubeconfig):
+            kubeconfig_path = default_kubeconfig
+            os.environ["KUBECONFIG"] = kubeconfig_path
+            logger.info(f"Found and using kubeconfig: {kubeconfig_path}")
+        else:
+            logger.info(
+                f"No kubeconfig found at {default_kubeconfig}, using default from KUBECONFIG env var"
+            )
+
+    # Get or detect cluster information
+    if args.cluster_name and args.base_domain:
+        cluster_name = args.cluster_name
+        base_domain = args.base_domain
+        logger.info(f"Using provided cluster_name: {cluster_name}")
+        logger.info(f"Using provided base_domain: {base_domain}")
+    else:
+        logger.info("Auto-detecting cluster name and base domain from cluster...")
+        try:
+            cluster_name, base_domain = get_cluster_info_from_cluster(
+                skip_tls_verify=args.skip_tls_verify
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to auto-detect cluster information: {e}\n"
+                "Please provide --cluster-name and --base-domain explicitly."
+            )
+            raise
+
+    # Initialize config object
+    if not hasattr(config, "ENV_DATA"):
+        config.ENV_DATA = {}
+    if not hasattr(config, "DEPLOYMENT"):
+        config.DEPLOYMENT = {}
+    if not hasattr(config, "RUN"):
+        config.RUN = {}
+
+    # Set cluster information in config
+    config.ENV_DATA["cluster_name"] = cluster_name
+    config.ENV_DATA["base_domain"] = base_domain
+    config.ENV_DATA["cluster_path"] = cluster_path
+
+    # Set kubeconfig location (relative to cluster_path)
+    if kubeconfig_path and kubeconfig_path.startswith(cluster_path):
+        # Make it relative to cluster_path
+        config.RUN["kubeconfig_location"] = os.path.relpath(
+            kubeconfig_path, cluster_path
+        )
+    else:
+        # Use default location
+        config.RUN["kubeconfig_location"] = defaults.KUBECONFIG_LOCATION
+
+    # Set certificate provider and related configuration
+    config.DEPLOYMENT["custom_ssl_cert_provider"] = args.provider
+
+    if args.provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA:
+        config.DEPLOYMENT["cert_signing_service_url"] = args.signing_service_url
+        logger.info(f"Using OCS QE CA signing service: {args.signing_service_url}")
+    elif args.provider == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT:
+        config.DEPLOYMENT["certbot_dns_plugin"] = args.dns_plugin
+        logger.info(f"Using Let's Encrypt with DNS plugin: {args.dns_plugin}")
+
+    # Set default certificate paths in cluster_path if not already configured
+    config.DEPLOYMENT.setdefault(
+        "ingress_ssl_key", os.path.join(cluster_path, "ingress-cert.key")
+    )
+    config.DEPLOYMENT.setdefault(
+        "ingress_ssl_cert", os.path.join(cluster_path, "ingress-cert.crt")
+    )
+    config.DEPLOYMENT.setdefault(
+        "ingress_ssl_ca_cert", os.path.join(cluster_path, "ca.crt")
+    )
+    config.DEPLOYMENT.setdefault(
+        "api_ssl_key", os.path.join(cluster_path, "api-cert.key")
+    )
+    config.DEPLOYMENT.setdefault(
+        "api_ssl_cert", os.path.join(cluster_path, "api-cert.crt")
+    )
+    config.DEPLOYMENT.setdefault(
+        "api_ssl_ca_cert", os.path.join(cluster_path, "ca.crt")
+    )
+
+    # Configure certificates based on user selection
+    if args.ingress and args.api:
+        logger.info("Configuring custom SSL certificates for both ingress and API")
+        configure_ingress_and_api_certificates(skip_tls_verify=args.skip_tls_verify)
+    elif args.ingress:
+        logger.info("Configuring custom SSL certificate for ingress only")
+        configure_custom_ingress_cert(
+            skip_tls_verify=args.skip_tls_verify, wait_for_machineconfigpool=True
+        )
+    elif args.api:
+        logger.info("Configuring custom SSL certificate for API only")
+        configure_custom_api_cert(
+            skip_tls_verify=args.skip_tls_verify, wait_for_machineconfigpool=True
+        )
+
+    logger.info("Custom SSL certificate configuration completed successfully")
 
 
 def main():

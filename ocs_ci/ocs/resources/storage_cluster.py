@@ -70,6 +70,7 @@ from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import (
     get_ocs_version_from_csv,
     get_semantic_version,
+    get_semantic_running_odf_version,
     VERSION_4_11,
     get_semantic_ocp_running_version,
 )
@@ -273,9 +274,15 @@ def ocs_install_verification(
         and not config.DEPLOYMENT.get("mcg_only_deployment", False)
         and (odf_running_version >= version.VERSION_4_21)
     ):
+        odf_semantic_version = get_semantic_running_odf_version()
+        blackbox_label = (
+            constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
+            if odf_semantic_version >= get_semantic_version("4.22.0-78")
+            else constants.BLACKBOX_POD_LABEL
+        )
         resources_dict.update(
             {
-                constants.BLACKBOX_POD_LABEL: 1,
+                blackbox_label: 1,
             }
         )
     # From 4.19.0-69, we have noobaa-db-pg-cluster-1 and noobaa-db-pg-cluster-2 pods
@@ -3606,3 +3613,22 @@ def get_deviceset_name_per_count():
     """
     device_sets = get_all_device_sets()
     return {d.get("name"): d["count"] for d in device_sets}
+
+
+def get_storage_client():
+    """
+    Get the StorageClient OCP object for the configured storage client.
+
+    Returns:
+        ocs_ci.ocs.ocp.OCP: StorageClient OCP object with resource_name set
+            to the storage client name from config.
+    """
+    return ocp.OCP(
+        kind=constants.STORAGECLIENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=(
+            config.cluster_ctx.ENV_DATA.get("storage_client_name")
+            or config.ENV_DATA.get("storage_client_name")
+            or constants.STORAGE_CLIENT_NAME
+        ),
+    )

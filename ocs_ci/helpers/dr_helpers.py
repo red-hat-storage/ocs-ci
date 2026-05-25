@@ -30,7 +30,7 @@ from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_ceph_tools_pod,
-    get_pods_having_label,
+    get_odf_external_snapshotter_leader,
     wait_for_matching_pattern_in_pod_logs,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
@@ -65,6 +65,7 @@ from ocs_ci.helpers.helpers import (
     find_cephblockpoolradosnamespace,
     find_cephfilesystemsubvolumegroup,
     create_unique_resource_name,
+    find_radosnamespace,
 )
 from ocs_ci.helpers import helpers
 
@@ -384,14 +385,59 @@ def relocate(
     config.switch_ctx(restore_index)
 
 
+def check_rbd_mirror_running(namespace=None):
+    """
+    Check if the rbd-mirror daemon deployment is running with at least one ready replica.
+    Ceph HEALTH_OK does not reflect rbd-mirror daemon absence, so this explicit
+    check is needed to catch silent failures before tests run.
+
+    Args:
+        namespace (str): Namespace to check in.
+            Defaults to config.ENV_DATA['cluster_namespace'].
+
+    Returns:
+        bool: True if rbd-mirror deployment has ready replicas
+
+    Raises:
+        UnexpectedDeploymentConfiguration: If the rbd-mirror deployment is
+            not found or not running
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    dep_ocp = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    try:
+        dep_data = dep_ocp.get(resource_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT)
+    except CommandFailed:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} deployment not found in {namespace}"
+        )
+    spec_replicas = dep_data.get("spec", {}).get("replicas") or 0
+    ready_replicas = dep_data.get("status", {}).get("readyReplicas") or 0
+    if spec_replicas < 1 or ready_replicas < 1:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is not running: "
+            f"spec.replicas={spec_replicas}, status.readyReplicas={ready_replicas}"
+        )
+    logger.info(
+        f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is running: "
+        f"replicas={spec_replicas}, readyReplicas={ready_replicas}"
+    )
+    return True
+
+
 def check_mirroring_status_ok(
-    replaying_images=None, cephblockpoolradosns=None, storageclient_uid=None
+    replaying_images=None,
+    replaying_groups=None,
+    cephblockpoolradosns=None,
+    storageclient_uid=None,
 ):
     """
-    Check if mirroring status has health OK and expected number of replaying images
+    Check if mirroring status has health OK and expected number of replaying images and groups.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
         cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
         storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
             Applicable for provider - client configuration.
@@ -415,8 +461,20 @@ def check_mirroring_status_ok(
         if not cephbpradosns:
             raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
 
-        if "ocs-storagecluster-cephblockpool" not in cephbpradosns:
-            cephbpradosns = "ocs-storagecluster-cephblockpool-" + cephbpradosns
+        if (
+            "ocs-storagecluster-cephblockpool" not in cephbpradosns
+            and "replicated-metadata-pool" not in cephbpradosns
+        ):
+            cephblockpool_rns_names = [
+                cephbprns_data["metadata"]["name"]
+                for cephbprns_data in ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).get()["items"]
+            ]
+            cephbpradosns = list(
+                filter(lambda x: f"-{cephbpradosns}" in x, cephblockpool_rns_names)
+            )[0]
 
         logger.info(f"Got cephblockpoolradosnamespace {cephbpradosns}")
 
@@ -429,7 +487,17 @@ def check_mirroring_status_ok(
         )
     else:
         if ocs_version >= version.VERSION_4_19:
-            cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
+            # The name of builtin-implicit cephblockpoolradosnamespace is different in EC cluster and non EC cluster
+            cephblockpool_rns_names = [
+                cephbprns_data["metadata"]["name"]
+                for cephbprns_data in ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).get()["items"]
+            ]
+            cephbpradosns = list(
+                filter(lambda x: "-builtin-implicit" in x, cephblockpool_rns_names)
+            )[0]
             cbp_obj = ocp.OCP(
                 kind=constants.CEPHBLOCKPOOLRADOSNS,
                 namespace=config.ENV_DATA["cluster_namespace"],
@@ -487,16 +555,32 @@ def check_mirroring_status_ok(
                 )
             return False
 
+    if is_cg_enabled():
+        if replaying_groups is not None:
+            current_replaying_groups = mirroring_status.get("group_states", {}).get(
+                "replaying"
+            )
+            if current_replaying_groups != replaying_groups:
+                logger.warning(
+                    f"Unexpected replaying groups. Current: {current_replaying_groups}, "
+                    f"expected: {replaying_groups}"
+                )
+                return False
+
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
+def wait_for_mirroring_status_ok(
+    replaying_images=None, replaying_groups=None, timeout=900
+):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
-    images for each of the ODF cluster
+    images and groups for each of the ODF cluster.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
         timeout (int): time in seconds to wait for mirroring status reach OK
 
     Returns:
@@ -522,6 +606,7 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
             sleep=5,
             func=check_mirroring_status_ok,
             replaying_images=replaying_images,
+            replaying_groups=replaying_groups,
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
@@ -1356,7 +1441,7 @@ def verify_backend_volume_deletion(
         cephbpradosns = (
             cephblockpoolradosns
             or config.ENV_DATA.get("radosnamespace_name", None)
-            or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
+            or find_radosnamespace(storageclient_uid=storageclient_uid)
         )
 
         if not cephbpradosns:
@@ -1435,15 +1520,29 @@ def get_all_drpolicy():
     config.switch_acm_ctx()
     return_drpolicy_list = []
     current_managed_clusters_list = []
-    acm_hub_name = config.get_cluster_name_by_index(get_active_acm_index())
     with config.RunWithAcmConfigContext():
         drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
         drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
+    # Build list of managed clusters for DR
+    # Include clusters with rbd_dr_scenario (RDR) or in metro-dr mode (MDR)
+    # Exclude all ACM hubs (both active and passive) as they are not managed clusters
+    multicluster_mode = config.MULTICLUSTER.get("multicluster_mode")
+    acm_indexes = get_all_acm_indexes()
+
     for cluster_name in config.clusters:
-        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+        cluster_index = cluster_name.MULTICLUSTER.get("multicluster_index")
+        # Skip ACM hub clusters
+        if cluster_index in acm_indexes:
+            continue
+
+        if (
+            cluster_name.ENV_DATA.get("rbd_dr_scenario")
+            or multicluster_mode == constants.MDR_MODE
+        ):
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )
+
     dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     if dr_cluster_relations:
         current_managed_clusters_list = [
@@ -1451,8 +1550,6 @@ def get_all_drpolicy():
             for item in dr_cluster_relations[0]
             if is_hosted_cluster(cluster_name=item)
         ]
-    else:
-        current_managed_clusters_list.remove(acm_hub_name)
 
     for drpolicy in drpolicy_list:
 
@@ -1628,7 +1725,14 @@ def verify_last_group_sync_time(
                 "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
             )
     else:
-        last_group_sync_time = drpc_obj.get_last_group_sync_time()
+        logger.info("Waiting for lastGroupSyncTime to be set")
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
+                break
+            logger.info("lastGroupSyncTime not yet set, retrying...")
 
     # Verify lastGroupSyncTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
@@ -1668,12 +1772,71 @@ def get_all_drclusters():
     return drclusters
 
 
-def get_managed_cluster_node_ips():
+def ordered_unique_cidrs(cidrs):
     """
-    Gets node ips of individual managed clusters for enabling fencing on MDR DRCluster configuration
+    Preserve order while removing duplicates
+    """
+    seen = set()
+    ordered = []
+    for cidr in cidrs:
+        if not cidr or cidr in seen:
+            continue
+        seen.add(cidr)
+        ordered.append(cidr)
+    return ordered
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
+def get_fencing_cidrs_from_drclusterconfig(cluster_name):
+    """
+    Read fencing CIDRs from DRClusterConfig.status.storageAccessDetails on the
+    current (managed) cluster context (ODF 4.21+ / Ramen).
+
+    Prefers the DRClusterConfig named like the managed cluster, then RBD CSI
+    provisioner entries, with sensible fallbacks.
+
+    Args:
+        cluster_name (str): Managed cluster name (matches DRCluster / DRClusterConfig name on hub)
 
     Returns:
-        cluster (list): Returns list of managed cluster, indexes and their node IPs
+        list: CIDR strings for hub DRCluster.spec.cidrs
+
+    Raises:
+        UnexpectedBehaviour: If CIDRs are not yet published or cannot be determined
+    """
+    drc_ocp = ocp.OCP(kind=constants.DRCLUSTERCONFIG)
+    items = (drc_ocp.get(silent=True) or {}).get("items") or []
+    if not items:
+        raise UnexpectedBehaviour(
+            "No DRClusterConfig resources found on managed cluster"
+        )
+    configs = [i for i in items if i.get("metadata", {}).get("name") == cluster_name]
+
+    cidrs = []
+    for item in configs:
+        details = (item.get("status") or {}).get("storageAccessDetails") or []
+        for detail in details:
+            detail_cidrs = detail.get("cidrs") or []
+            cidrs.extend(detail_cidrs)
+
+    cidrs = ordered_unique_cidrs(cidrs)
+    if not cidrs:
+        raise UnexpectedBehaviour(
+            f"DRClusterConfig on cluster {cluster_name} has no status.storageAccessDetails.cidrs yet"
+        )
+    logger.info(
+        f"Collected {len(cidrs)} fencing CIDR(s) from DRClusterConfig for {cluster_name}"
+    )
+
+    return cidrs
+
+
+def get_managed_cluster_node_ips():
+    """
+    Gets node ips of individual managed clusters for enabling fencing from each managed cluster's DRClusterConfig
+
+    Returns:
+        list: [[managed_cluster_name, multicluster_index, [cidr, ...]], ...]
 
     """
     primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
@@ -1690,16 +1853,10 @@ def get_managed_cluster_node_ips():
     ]
     for cluster in cluster_data:
         config.switch_ctx(cluster[1])
-        logger.info(f"Getting node IPs on managed cluster: {cluster[0]}")
-        node_obj = ocp.OCP(kind=constants.NODE).get()
-        external_ips = []
-        for node in node_obj.get("items"):
-            addresses = node.get("status").get("addresses")
-            for address in addresses:
-                if address.get("type") == "ExternalIP":
-                    external_ips.append(address.get("address"))
-        external_ips_with_cidr = [f"{ip}/32" for ip in external_ips]
-        cluster.append(external_ips_with_cidr)
+        logger.info(
+            f"Reading fencing CIDRs from DRClusterConfig on managed cluster {cluster[0]}"
+        )
+        cluster.append(get_fencing_cidrs_from_drclusterconfig(cluster[0]))
     return cluster_data
 
 
@@ -1727,32 +1884,60 @@ def enable_fence(drcluster_name, switch_ctx=None):
     config.switch_ctx(restore_index)
 
 
+@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
+def verify_drcluster_validated_on_hub(drcluster_name, switch_ctx=None):
+    """
+    Wait until hub DRCluster reports a successful validation condition.
+
+    Ramen surfaces hub reconciliation via status.conditions (reason/type
+    Validated or legacy Succeeded).
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    dr_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    data = dr_obj.get()
+    conditions = (data.get("status") or {}).get("conditions") or []
+    for cond in conditions:
+        if cond.get("status") != "True":
+            continue
+        reason = cond.get("reason") or ""
+        ctype = cond.get("type") or ""
+        if reason in constants.DRPOLICY_SUCCESS_REASONS:
+            logger.info(f"DRCluster {drcluster_name} validation OK ({reason or ctype})")
+            config.switch_ctx(restore_index)
+            return True
+        if ctype.lower() == "validated":
+            logger.info(f"DRCluster {drcluster_name} validation OK (type={ctype})")
+            config.switch_ctx(restore_index)
+            return True
+    config.switch_ctx(restore_index)
+    raise UnexpectedBehaviour(
+        f"DRCluster {drcluster_name} not validated yet; conditions={conditions}"
+    )
+
+
 def configure_drcluster_for_fencing():
     """
     Configures DRClusters for enabling fencing
 
     """
     old_ctx = config.cur_index
-    cluster_ip_list = get_managed_cluster_node_ips()
+    cluster_rows = get_managed_cluster_node_ips()
     config.switch_acm_ctx()
-    for cluster in cluster_ip_list:
+    for cluster in cluster_rows:
+        drcluster_name = cluster[0]
         fence_ip_data = json.dumps({"spec": {"cidrs": cluster[2]}})
         fence_ip_cmd = (
-            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_ip_data}'"
+            f"oc patch drcluster {drcluster_name} --type merge -p '{fence_ip_data}'"
         )
-        logger.info(f"Patching DRCluster: {cluster[0]} to add node IP addresses")
+        logger.info(
+            f"Patching hub DRCluster {drcluster_name} with CIDRs from managed-cluster DRClusterConfig"
+        )
         run_cmd(fence_ip_cmd)
 
-        fence_annotation_data = """{"metadata": {"annotations": {
-        "drcluster.ramendr.openshift.io/storage-clusterid": "openshift-storage",
-        "drcluster.ramendr.openshift.io/storage-driver": "openshift-storage.rbd.csi.ceph.com",
-        "drcluster.ramendr.openshift.io/storage-secret-name": "rook-csi-rbd-provisioner",
-        "drcluster.ramendr.openshift.io/storage-secret-namespace": "openshift-storage" } } }"""
-        fencing_annotation_cmd = (
-            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_annotation_data}'"
-        )
-        logger.info(f"Patching DRCluster: {cluster[0]} to add fencing annotations")
-        run_cmd(fencing_annotation_cmd)
+    verify_drpolicy_cli()
+    for cluster in cluster_rows:
+        verify_drcluster_validated_on_hub(cluster[0])
 
     config.switch_ctx(old_ctx)
 
@@ -1939,17 +2124,27 @@ def verify_drpolicy_cli(switch_ctx=None):
     restore_index = config.cur_index
     config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
-    status = drpolicy_obj.get().get("items")[0].get("status").get("conditions")[0]
-    if status.get("reason") == "Succeeded":
-        logger.info("DRPolicy validation succeeded")
+    drpolicy_items = drpolicy_obj.get().get("items") or []
+    if not drpolicy_items:
         config.switch_ctx(restore_index)
-        return True
-    else:
-        logger.warning(f"DRPolicy is not in succeeded or validated state: {status}")
-        config.switch_ctx(restore_index)
-        raise UnexpectedBehaviour(
-            f"DRPolicy is not in succeeded or validated state: {status}"
-        )
+        raise UnexpectedBehaviour("No DRPolicy resources found on hub")
+    conditions = drpolicy_items[0].get("status", {}).get("conditions") or []
+    for cond in conditions:
+        if cond.get("status") != "True":
+            continue
+        reason = cond.get("reason") or ""
+        if reason in constants.DRPOLICY_SUCCESS_REASONS:
+            logger.info(f"DRPolicy validation succeeded (reason={reason})")
+            config.switch_ctx(restore_index)
+            return True
+    logger.warning(
+        f"DRPolicy is not in succeeded or validated state; conditions={conditions}"
+    )
+    config.switch_ctx(restore_index)
+    raise UnexpectedBehaviour(
+        "DRPolicy is not in succeeded or validated state "
+        f"(expected reason in {sorted(constants.DRPOLICY_SUCCESS_REASONS)})"
+    )
 
 
 @retry(UnexpectedBehaviour, tries=25, delay=5, backoff=5)
@@ -2568,6 +2763,11 @@ def get_cluster_set_name(switch_ctx=None):
             for item in dr_cluster_relations[0]
         ]
 
+    # The list current_managed_clusters_list is required for RDR, not mandatory for MDR
+    current_managed_clusters_list = current_managed_clusters_list or [
+        mng_cluster["metadata"]["name"] for mng_cluster in managed_clusters
+    ]
+
     # ignore local-cluster here
     for i in managed_clusters:
         if (
@@ -2806,9 +3006,7 @@ def validate_volumegroupsnapshot(vgs_namespace):
 
     """
     namespace = config.ENV_DATA["cluster_namespace"]
-    odf_external_snapshotter_pod = get_pods_having_label(
-        constants.ODF_EXTERNAL_SNAPSHOTTER, namespace
-    )
+    odf_external_snapshotter_leader = get_odf_external_snapshotter_leader(namespace)
     vgs_name = get_vgs_name(vgs_namespace)
     expected_output_lst = (
         f"{vgs_name} was successfully created by the CSI driver",
@@ -2817,26 +3015,16 @@ def validate_volumegroupsnapshot(vgs_namespace):
     try:
         for expected_val in expected_output_lst:
             wait_for_matching_pattern_in_pod_logs(
-                pod_name=odf_external_snapshotter_pod[0]["metadata"]["name"],
+                pod_name=odf_external_snapshotter_leader.name,
                 pattern=expected_val,
                 namespace=namespace,
                 timeout=300,
                 sleep=5,
             )
     except TimeoutExpiredError:
-        if len(odf_external_snapshotter_pod) > 1:
-            for expected_val in expected_output_lst:
-                wait_for_matching_pattern_in_pod_logs(
-                    pod_name=odf_external_snapshotter_pod[1]["metadata"]["name"],
-                    pattern=expected_val,
-                    namespace=namespace,
-                    timeout=300,
-                    sleep=5,
-                )
-        else:
-            raise UnexpectedBehaviour(
-                f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
-            )
+        raise UnexpectedBehaviour(
+            f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
+        )
 
 
 def is_cg_cephfs_enabled():

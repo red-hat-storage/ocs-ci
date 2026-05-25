@@ -2240,7 +2240,13 @@ class AWS(object):
             )
             logger.info(f"Deleted OIDC provider: {oidc_provider_arn}")
         except Exception as e:
-            logger.error(f"Error deleting OIDC provider: {e}")
+            if "NoSuchEntity" in str(e):
+                logger.warning(
+                    f"OIDC provider {oidc_provider_arn} not found — "
+                    "likely already deleted by rosa delete oidc-config"
+                )
+            else:
+                logger.error(f"Error deleting OIDC provider: {e}")
 
     def cleanup_oidc_providers_by_prefix(self, url_prefix):
         """
@@ -2927,9 +2933,16 @@ def create_and_attach_sts_role():
     return role_data
 
 
-def delete_sts_iam_roles():
+def delete_sts_iam_roles(oidc_endpoint_url=None):
     """
     Delete IAM roles for the cluster.
+
+    Args:
+        oidc_endpoint_url (str): Optional OIDC endpoint URL (serviceAccountIssuer)
+            pre-fetched while the cluster API was still reachable. When provided,
+            the cluster API is not contacted. When None, the function attempts to
+            retrieve the URL from the live cluster; if the cluster is already
+            unreachable the OIDC provider deletion is skipped with a warning.
     """
     logger.info("Deleting STS IAM Roles")
     cluster_path = config.ENV_DATA["cluster_path"]
@@ -2955,11 +2968,22 @@ def delete_sts_iam_roles():
                 role_name, instance_profile["InstanceProfileName"]
             )
         aws.delete_iam_role(role_name)
-    auth_cluster = exec_cmd("oc get authentication cluster -o json")
-    auth_cluster_dict = json.loads(auth_cluster.stdout)
-    oidc_provider_name = auth_cluster_dict["spec"]["serviceAccountIssuer"].replace(
-        "https://", ""
-    )
+
+    if oidc_endpoint_url is None:
+        auth_cluster = exec_cmd(
+            "oc get authentication cluster -o json", ignore_error=True
+        )
+        if auth_cluster.returncode != 0:
+            logger.warning(
+                "Could not retrieve authentication cluster info — cluster API is "
+                "unreachable and no oidc_endpoint_url was pre-fetched. "
+                "Skipping OIDC provider deletion."
+            )
+            return
+        auth_cluster_dict = json.loads(auth_cluster.stdout)
+        oidc_endpoint_url = auth_cluster_dict["spec"]["serviceAccountIssuer"]
+
+    oidc_provider_name = oidc_endpoint_url.replace("https://", "")
     aws.delete_oidc_provider(provider_name=oidc_provider_name)
 
 

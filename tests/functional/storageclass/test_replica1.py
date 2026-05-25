@@ -19,13 +19,14 @@ from ocs_ci.ocs.resources.storage_cluster import (
 from ocs_ci.ocs.constants import (
     CEPHBLOCKPOOL,
     ACCESS_MODE_RWO,
+    HOSTNAME_LABEL,
+    LOCALSTORAGE_SC,
     POD,
     STATUS_READY,
     REPLICA1_STORAGECLASS,
     STATUS_RUNNING,
     VOLUME_MODE_BLOCK,
     DEFALUT_DEVICE_CLASS,
-    VSPHERE_PLATFORM,
     RACK_LABEL,
     ZONE_LABEL,
 )
@@ -46,6 +47,7 @@ from ocs_ci.ocs.replica_one import (
     get_device_class_from_ceph,
     get_all_osd_names_by_device_class,
     get_failure_domains,
+    get_failure_domains_from_storagecluster,
     get_failures_domain_name,
 )
 from ocs_ci.ocs.resources.pvc import get_pvcs_using_storageclass
@@ -67,10 +69,19 @@ def _get_node_selector_for_failure_domain(
     Returns:
         dict[str, str] | None: Hard node selector if workers found, None otherwise.
     """
-    if config.ENV_DATA["platform"].lower() == VSPHERE_PLATFORM:
-        label_key = RACK_LABEL
-    else:
-        label_key = ZONE_LABEL
+    fd_type_to_label = {
+        "host": HOSTNAME_LABEL,
+        "rack": RACK_LABEL,
+        "zone": ZONE_LABEL,
+    }
+    sc_info = get_failure_domains_from_storagecluster()
+    fd_type = sc_info.get("type")
+    label_key = fd_type_to_label.get(fd_type)
+    if label_key is None:
+        pytest.fail(
+            f"Unknown failure domain type '{fd_type}' — "
+            f"expected one of: {list(fd_type_to_label.keys())}"
+        )
 
     worker_names = get_worker_nodes()
     workers = get_node_objs(worker_names)
@@ -157,6 +168,28 @@ class TestReplicaOne:
         self.created_pods = []
 
         log.info("Setup function called")
+
+        if config.DEPLOYMENT.get("local_storage"):
+            failure_domains = get_failure_domains()
+            pv_obj = OCP(kind="PersistentVolume")
+            available_pvs = [
+                pv
+                for pv in pv_obj.get()["items"]
+                if pv["status"]["phase"] == "Available"
+                and pv["spec"].get("storageClassName") == LOCALSTORAGE_SC
+            ]
+            log.info(
+                f"LSO cluster: {len(available_pvs)} available PVs in "
+                f"{LOCALSTORAGE_SC}, need {len(failure_domains)} for replica-1"
+            )
+            if len(available_pvs) < len(failure_domains):
+                pytest.skip(
+                    f"Replica-1 requires {len(failure_domains)} extra PVs "
+                    f"(one per failure domain) but only "
+                    f"{len(available_pvs)} available in {LOCALSTORAGE_SC} "
+                    f"(DFBUGS-6355)"
+                )
+
         storage_cluster = StorageCluster(
             resource_name=config.ENV_DATA["storage_cluster_name"],
             namespace=config.ENV_DATA["cluster_namespace"],

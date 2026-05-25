@@ -12,12 +12,14 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
+    skipif_mcg_only,
     post_upgrade,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +94,7 @@ def save_original_state(request):
 @pytest.mark.usefixtures("save_original_state")
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@skipif_mcg_only  # Workaround for https://github.com/red-hat-storage/ocs-ci/issues/14813
 @post_upgrade
 class TestBlockExternalAccess(MCGTest):
     @pytest.fixture(scope="class", autouse=True)
@@ -290,6 +293,24 @@ class TestBlockExternalAccess(MCGTest):
         assert (
             disable_routes == val
         ), f"Disable routes is expected to be {val}, is {disable_routes}"
+
+        # Wait for the disableRoutes value to propagate to noobaa CR if the change was made on storagecluster
+        if is_storage_cluster:
+            noobaa_obj = ocp.OCP(
+                resource_name=constants.NOOBAA_RESOURCE_NAME,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind=constants.NOOBAA_RESOURCE_NAME,
+            )
+            logger.info(f"Waiting for disableRoutes={val} to propagate to noobaa CR")
+            for noobaa_data in TimeoutSampler(
+                timeout=120, sleep=5, func=noobaa_obj.get
+            ):
+                noobaa_disable_routes = noobaa_data.get("spec", {}).get(
+                    "disableRoutes", False
+                )
+                if noobaa_disable_routes == val:
+                    logger.info("disableRoutes successfully propagated to noobaa CR")
+                    break
 
     def delete_multiCloudGateway_section_from_storagecluster(self):
         """

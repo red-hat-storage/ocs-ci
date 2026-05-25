@@ -206,6 +206,7 @@ class BaseUI:
         enable_screenshot=False,
         copy_dom=False,
         avoid_stale=False,
+        use_fallback=True,
     ):
         """
         Click on Button/link on OpenShift Console
@@ -217,6 +218,7 @@ class BaseUI:
         avoid_stale (bool): if got StaleElementReferenceException, caused by reference to stale, cached element,
         refresh the page once and try click again
         * don't use when refreshed page expected to be different from initial page, or loose input values
+        use_fallback (bool): if True, attempt AI locator fallback on TimeoutException
         """
 
         def _do_click(_locator, _timeout=30, _enable_screenshot=False, _copy_dom=False):
@@ -244,15 +246,16 @@ class BaseUI:
                 self.take_screenshot(f"{type(self).__name__}-{date_time}")
                 self.copy_dom(f"{type(self).__name__}-{date_time}")
                 logger.error(e)
-                new_locator = self.locator_fallback.attempt_fallback(
-                    locator, "click", stack_trace=traceback.format_exc()
-                )
-                if new_locator:
-                    element = WebDriverWait(self.driver, timeout).until(
-                        ec.element_to_be_clickable((new_locator[1], new_locator[0]))
+                if use_fallback:
+                    new_locator = self.locator_fallback.attempt_fallback(
+                        locator, "click", stack_trace=traceback.format_exc()
                     )
-                    element.click()
-                    return
+                    if new_locator:
+                        element = WebDriverWait(self.driver, timeout).until(
+                            ec.element_to_be_clickable((new_locator[1], new_locator[0]))
+                        )
+                        element.click()
+                        return
                 raise TimeoutException(
                     f"Failed to find the element ({locator[1]},{locator[0]})"
                 )
@@ -273,6 +276,24 @@ class BaseUI:
             self.copy_dom()
             time.sleep(5)
             _do_click(locator, timeout, enable_screenshot, copy_dom)
+
+    def click_with_script(self, locator):
+        """
+        Click a web element using JavaScript dispatchEvent instead of Selenium's
+        native coordinate-based click. Use as a fallback when ElementClickInterceptedException
+        occurs because an overlay covers the element's click coordinates (e.g. SVG nodes
+        in the ODF Topology view that are positioned outside the scrollable content area).
+
+        Args:
+            locator (tuple): (selector string, By type) identifying the element to click.
+        """
+        element = self.driver.find_element(locator[1], locator[0])
+        self.driver.execute_script(
+            "arguments[0].dispatchEvent("
+            "new MouseEvent('click', {bubbles: true, cancelable: true, view: window})"
+            ")",
+            element,
+        )
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
@@ -1097,6 +1118,11 @@ class SeleniumDriver(WebDriver):
                 chrome_options.add_argument("--headless=new")
                 chrome_options.add_argument("--window-size=1920,1400")
                 chrome_options.add_argument("--force-device-scale-factor=1")
+                # Required for Chrome 137+ stability in CI/containerized environments
+                chrome_options.add_argument("--disable-dev-shm-usage")
+                chrome_options.add_argument("--no-sandbox")
+                chrome_options.add_argument("--disable-gpu")
+                chrome_options.add_argument("--disable-software-rasterizer")
 
             # use proxy server, if required
             if (
@@ -1164,6 +1190,21 @@ class SeleniumDriver(WebDriver):
                 service=chrome_service,
                 options=chrome_options,
             )
+
+            # Chrome 137+ workaround: --window-size argument is ignored in headless mode
+            # Set window size explicitly via Selenium API after driver creation
+            if headless:
+                initial_size = driver.get_window_size()
+                logger.info(
+                    f"Initial window size: {initial_size['width']}x{initial_size['height']}"
+                )
+                driver.set_window_size(1920, 1400)
+                time.sleep(0.5)  # Give Chrome time to resize
+                actual_size = driver.get_window_size()
+                logger.info(
+                    f"Window size after set_window_size: {actual_size['width']}x{actual_size['height']}"
+                )
+
         else:
             raise ValueError(f"No Support on {browser}")
         return driver
@@ -1232,7 +1273,9 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
     login_loc = locators_for_current_ocp_version()["login"]
     page_nav_loc = locators_for_current_ocp_version()["page"]
     driver = SeleniumDriver()
-    driver.maximize_window()
+    # Skip maximize_window in headless mode - it resets window size and doesn't work properly
+    if not ocsci_config.UI_SELENIUM.get("headless"):
+        driver.maximize_window()
     driver.implicitly_wait(10)
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
