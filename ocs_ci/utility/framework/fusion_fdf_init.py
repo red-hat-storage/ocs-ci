@@ -71,7 +71,9 @@ class Initializer(object):
 
         """
         framework.config.init_cluster_configs()
-        load_config(args.conf)
+        # Merge both --ocsci-conf and --conf arguments
+        config_files = args.ocsci_conf + args.conf
+        load_config(config_files)
         # Updating resource_checker to False since it's not needed for FDF deployment
         config.RUN["resource_checker"] = False
         logger.debug("Verifying cluster_name and cluster_path")
@@ -128,10 +130,16 @@ class Initializer(object):
         parser.add_argument("--cluster-name", help="Name of the OCP cluster")
         parser.add_argument("--cluster-path", help="OCP cluster directory")
         parser.add_argument(
-            "--conf",
+            "--ocsci-conf",
             action="append",
             default=[],
             help="Path to config file. Repeatable.",
+        )
+        parser.add_argument(
+            "--conf",
+            action="append",
+            default=[],
+            help="Path to config file (alias for --ocsci-conf). Repeatable.",
         )
         parser.add_argument(
             "--report", default=None, help="Filepath for generated junit report"
