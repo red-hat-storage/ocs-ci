@@ -62,15 +62,24 @@ python -m ocs_ci.framework.fdf_mirror.main \
   --configure-registries
 ```
 
+**With Config File:**
+```bash
+python -m ocs_ci.framework.fdf_mirror.main \
+  --catalog-image cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20 \
+  --cluster-path ~/current-cluster-dir/openshift-cluster-dir \
+  --ocsci-conf /path/to/config.yaml \
+  --configure-registries
+```
+
 **Required Arguments:**
 - `--catalog-image`: FDF catalog image to mirror (required)
-- `--mirror-registry`: Target mirror registry URL (required)
+- `--mirror-registry`: Target mirror registry URL (required if not in config)
 - `--cluster-path`: Path to OCP cluster directory containing auth/kubeconfig (required)
 
 **Optional Arguments:**
 - `--cluster-name`: Name of the OCP cluster (optional if metadata.json exists in cluster-path)
 - `--configure-registries`: Configure /etc/containers/registries.conf for internal images
-- `--conf`: Path to config file (optional, only if overriding mirror registry credentials)
+- `--ocsci-conf` or `--conf`: Path to config file (optional, can be used to provide mirror_registry and credentials). Both arguments are supported and can be used interchangeably or together.
 - `--report`: Path for JUnit report output
 
 ### Python API
