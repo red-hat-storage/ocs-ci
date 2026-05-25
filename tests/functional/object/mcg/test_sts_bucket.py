@@ -47,8 +47,7 @@ class TestSTSBucket:
                         "backingstore_dict": {"azure-sts": [(1, None)]},
                     },
                 ],
-                # TODO: assign polarion ID
-                marks=[tier1, azure_platform_required, polarion_id("OCS-XXXX")],
+                marks=[tier1, azure_platform_required, polarion_id("OCS-7949")],
             ),
             pytest.param(
                 *[
@@ -60,8 +59,7 @@ class TestSTSBucket:
                         },
                     },
                 ],
-                # TODO: assign polarion ID
-                marks=[tier1, azure_platform_required, polarion_id("OCS-XXXX")],
+                marks=[tier1, azure_platform_required, polarion_id("OCS-7950")],
             ),
             pytest.param(
                 *[None],

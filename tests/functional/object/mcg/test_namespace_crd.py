@@ -127,12 +127,11 @@ class TestNamespace(MCGTest):
                         "namespacestore_dict": {"azure-sts": [(1, None)]},
                     },
                 },
-                # TODO: assign polarion ID
                 marks=[
                     tier1,
                     sts_deployment_required,
                     azure_platform_required,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7948"),
                 ],
             ),
             pytest.param(
