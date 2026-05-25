@@ -8,6 +8,7 @@ Upstream PR: https://github.com/csi-addons/kubernetes-csi-addons/pull/949
 """
 
 import logging
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -43,14 +44,12 @@ CRONJOB_CREATION_TIMEOUT = 180
 JOB_CREATION_TIMEOUT = 360
 MIN_STAGGER_SPREAD_SECONDS = 5
 FIVE_MIN_SCHEDULE = "*/5 * * * *"
-TEN_MIN_SCHEDULE = "*/10 * * * *"
 CUSTOM_STAGGER_WINDOW_HOURS = "1"
 INVALID_STAGGER_WINDOW = "abc"
 NUM_PVCS_LARGE = 10
 SECOND_ROUND_TIMEOUT = 720
 OFFSET_TOLERANCE_SECONDS = 10
 JOB_IMMEDIATE_THRESHOLD_SECONDS = 120
-CUSTOM_WINDOW_SECONDS = 360
 SUSPEND_WAIT_SECONDS = 210
 LARGE_SCALE_JOB_TIMEOUT = 600
 
@@ -895,8 +894,6 @@ class TestStaggeredCronjobScheduling(ManageTest):
             5. Wait for the next Job and assert it was created promptly.
 
         """
-        import time
-
         pvc_objs, cronjob_map = self._create_pvcs_and_wait_for_cronjobs(
             storageclass_factory,
             multi_pvc_factory,
