@@ -31,6 +31,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility.version import (
     get_semantic_running_odf_version,
     get_semantic_version,
+    VERSION_4_22,
     get_ocs_version_from_csv,
 )
 
@@ -47,11 +48,11 @@ ALERT_MAP = {
 }
 
 if is_collect_only:
-    ocs_version = get_semantic_version("4.22")  # Default to latest for collection
+    ocs_version = VERSION_4_22  # Default to latest for collection
 else:
     ocs_version = get_ocs_version_from_csv(only_major_minor=True)
 
-if ocs_version >= get_semantic_version("4.22"):
+if ocs_version >= VERSION_4_22:
     ALERT_MAP.update(
         {
             constants.ALERT_CLUSTERWARNINGSTATE: 0,
@@ -96,7 +97,7 @@ def get_alert_params():
             "custom-odf-core-pod-restarted.yaml",
         ),
     ]
-    if ocs_version >= get_semantic_version("4.22"):
+    if ocs_version >= VERSION_4_22:
         params.extend(
             [
                 (
@@ -413,7 +414,7 @@ class TestHealthOverview(ManageTest):
         """
 
         def finalizer():
-            if self.mon_scaling:
+            if getattr(self, "mon_scaling", False):
                 logger.info("[CLEANUP] Ensuring mon scaling is done")
                 try:
                     ocp = OCP(namespace=config.ENV_DATA.get("cluster_namespace"))
@@ -423,51 +424,6 @@ class TestHealthOverview(ManageTest):
                     logger.warning(f"Failed to scale mon during cleanup: {ex}")
 
         request.addfinalizer(finalizer)
-
-    def get_alert_params(self):
-        """
-        Get alert parameters based on OCS version
-
-        Returns:
-            list: List of tuples (alert_name, alert_yaml)
-        """
-        # Base parameters for all versions
-        params = [
-            (
-                constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000,
-                "custom-odf-mtu-less-than-9000.yaml",
-            ),
-            (
-                constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION,
-                "custom-odf-nic-bandwidth-saturation.yaml",
-            ),
-            (
-                constants.ALERT_ODF_DISK_UTILIZATION_HIGH,
-                "custom-odf-disk-utilization-high.yaml",
-            ),
-            (
-                constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES,
-                "custom-odf-latency-rule.yaml",
-            ),
-            (
-                constants.ALERT_ODF_CORE_POD_RESTART,
-                "custom-odf-core-pod-restarted.yaml",
-            ),
-        ]
-        if ocs_version >= get_semantic_version("4.22"):
-            params.extend(
-                [
-                    (
-                        constants.ALERT_CLUSTERERRORSTATE,
-                        "custom-ceph-cluster-error.yaml",
-                    ),
-                    (
-                        constants.ALERT_CLUSTERWARNINGSTATE,
-                        "custom-ceph-cluster-warn.yaml",
-                    ),
-                ]
-            )
-        return params
 
     @tier1
     @polarion_id("OCS-7475")
@@ -589,16 +545,6 @@ class TestHealthOverview(ManageTest):
         assert (
             baseline_score == self.get_health_score_ui()
         ), "Full health score not recovered"
-        if (
-            alert_name == constants.ALERT_CLUSTERWARNINGSTATE
-            or alert_name == constants.ALERT_CLUSTERERRORSTATE
-        ):
-            logger.info(
-                "Scaling down rook-ceph-mon-a deployment to 0 replicas to mock up alert"
-            )
-            scale_cmd = "scale deployment rook-ceph-mon-a --replicas=0 "
-            ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
-            self.mon_scaling = True
         severity = SEVERITY_BY_CHECK.get(alert_name)
         PageNavigator().take_screenshot(f"severity_of_alert_{alert_name}")
         assert severity, f"Severity not defined for alert {alert_name}"
@@ -608,6 +554,19 @@ class TestHealthOverview(ManageTest):
             f"expected drop={expected_drop}%"
         )
         if ALERT_MAP[alert_name] == 0 and alert_name != "ODFCorePodRestarted":
+            if alert_name in {
+                constants.ALERT_CLUSTERWARNINGSTATE,
+                constants.ALERT_CLUSTERERRORSTATE,
+            }:
+                logger.info(
+                    "Scaling down rook-ceph-mon-a deployment to 0 replicas to mock up alert"
+                )
+                scale_cmd = "scale deployment rook-ceph-mon-a --replicas=0 "
+                ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+                self.wait_for_deployment_ready_replicas(
+                    "rook-ceph-mon-a", expected_replicas=0
+                )
+                self.mon_scaling = True
             logger.info(f"Applying alert rule YAML: {alert_yaml}")
             alert_yaml_load = load_yaml(
                 os.path.join(constants.HEALTHALERTS_DIR, alert_yaml)
@@ -632,6 +591,9 @@ class TestHealthOverview(ManageTest):
             if self.mon_scaling:
                 scale_cmd = "scale deployment rook-ceph-mon-a --replicas=1 "
                 ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+                self.wait_for_deployment_ready_replicas(
+                    "rook-ceph-mon-a", expected_replicas=1
+                )
                 self.mon_scaling = False
             logger.info("Waiting for alert to be resolved...")
             api.refresh_connection()

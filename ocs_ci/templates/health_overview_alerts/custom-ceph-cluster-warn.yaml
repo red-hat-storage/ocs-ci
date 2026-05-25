@@ -17,6 +17,6 @@ spec:
             severity_level: warning
             storage_type: ceph
           annotations:
-            description: Storage cluster is in warning state for more than 15m.
+            description: Storage cluster is in warning state for more than 1m.
             message: Storage cluster is in degraded state
             runbook_url: https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator/CephClusterWarningState.md
