@@ -557,7 +557,7 @@ class AZURE:
                     f"az storage account show --name {test_storage_account} "
                     f"--subscription {subscription_id} --query id -o tsv"
                 )
-                sa_resource_id = sa_result.stdout.strip()
+                sa_resource_id = sa_result.stdout.decode().strip()
                 if sa_resource_id:
                     for role in roles:
                         logger.info(
