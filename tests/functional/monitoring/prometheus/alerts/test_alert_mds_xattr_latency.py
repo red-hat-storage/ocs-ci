@@ -604,8 +604,11 @@ class TestMdsXattrAlerts(E2ETest):
         """
 
         def finalizer():
-            """Teardown to ensure all nodes are up after test"""
+            """Teardown to ensure all nodes are up and cluster is healthy after test"""
             nodes.restart_nodes_by_stop_and_start_teardown()
+            assert (
+                is_cluster_healthy()
+            ), "Cluster is not healthy after node restart in teardown"
 
         request.addfinalizer(finalizer)
 
