@@ -42,8 +42,6 @@ class TestVirtSCAutoProvisioning:
             )
 
         # 2. Robust Installation Check
-        # manually check for the namespace because CNVInstaller's
-        # cnv_hyperconverged_installed() can return false positives.
         ns_exists = ns_handler.is_exist(resource_name=constants.CNV_NAMESPACE)
 
         if ns_exists and cnv_installer.cnv_hyperconverged_installed():
@@ -55,7 +53,6 @@ class TestVirtSCAutoProvisioning:
             log.info(
                 "CNV not found or namespace missing. Initiating full deployment..."
             )
-            # deploy_cnv handles: CatalogSource, Namespace, Subscription, and HCO CR
             cnv_installer.deploy_cnv(check_cnv_deployed=False)
 
         # 3. Force Software Emulation (Safety for vSphere/Cloud labs)
@@ -71,6 +68,8 @@ class TestVirtSCAutoProvisioning:
             log.info("CNV uninstallation completed successfully.")
         except Exception as e:
             log.error(f"Failed to uninstall CNV during teardown: {str(e)}")
+            # Re-raise the exception so pytest marks the cleanup as failed
+            raise e
 
     def test_virt_sc_and_vm_deployment(self):
         """
@@ -87,7 +86,6 @@ class TestVirtSCAutoProvisioning:
         try:
             # 1. Verify Virt StorageClass existence
             log.info(f"Step 1: Verifying {virt_sc_name} presence on the cluster.")
-            # FIX: Resource kind must be 'StorageClass', not the name of the SC
             sc_handler = ocp.OCP(kind=constants.STORAGECLASS)
 
             sampler = TimeoutSampler(
@@ -115,7 +113,6 @@ class TestVirtSCAutoProvisioning:
 
         finally:
             log.info(f"Cleaning up VM resources in {vm_namespace}...")
-            # VM cleanup should happen before NS deletion
             try:
                 vm_obj.delete()
             except Exception as e:
