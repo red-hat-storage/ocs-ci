@@ -53,7 +53,7 @@ def restart_csi_addons_controller(namespace: str = "") -> None:
             break
 
 
-def update_csi_addons_config(key: str, value: str, restart: bool = True) -> None:
+def update_csi_addons_config(key: str, value: str, *, restart: bool = True) -> None:
     """
     Create or update a key in the 'csi-addons-config' ConfigMap.
 

@@ -8,7 +8,7 @@ Upstream PR: https://github.com/csi-addons/kubernetes-csi-addons/pull/949
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -322,9 +322,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
                 for cj_name, ts in timestamps.items():
                     logger.info("Job timestamp for CronJob '%s': %s", cj_name, ts)
                 return timestamps
-        raise TimeoutExpiredError(
-            f"Jobs not found for all CronJobs within {JOB_CREATION_TIMEOUT}s"
-        )
+        raise TimeoutExpiredError(f"Jobs not found for all CronJobs within {timeout}s")
 
     def _assert_stagger_spread(self, timestamps: dict) -> None:
         """
@@ -937,7 +935,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         )
 
         logger.info("Resuming CronJob '%s'", cj_obj.resource_name)
-        resume_time = datetime.utcnow()
+        resume_time = datetime.now(timezone.utc).replace(tzinfo=None)
         self.resume_cronjob(cj_obj)
 
         logger.info("Waiting for post-resume Job")
@@ -1106,7 +1104,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         )
 
         uids = set()
-        for pvc_name, cj_obj in cronjob_map.items():
+        for cj_obj in cronjob_map.values():
             uid = cj_obj.get()["metadata"]["uid"]
             uids.add(uid)
         assert len(uids) == NUM_PVCS_LARGE, (
