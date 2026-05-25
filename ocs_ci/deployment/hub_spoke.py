@@ -1350,7 +1350,7 @@ class HostedClients(HyperShiftBase):
             )
         )
 
-        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+        if config.DEPLOYMENT.get("enable_data_replication_separation_public"):
             create_drs_machine_config()
             for cluster_name in cluster_names:
                 create_drs_nad(cluster_name)
@@ -2127,8 +2127,8 @@ class HypershiftHostedOCP(
             .get(self.name)
             .get("disable_default_sources", True)
         )
-        data_replication_separation = config.DEPLOYMENT.get(
-            "enable_data_replication_separation"
+        data_replication_separation_public = config.DEPLOYMENT.get(
+            "enable_data_replication_separation_public"
         )
         auto_repair = config.ENV_DATA.get("auto_repair", True)
         auto_repair = (
@@ -2197,7 +2197,7 @@ class HypershiftHostedOCP(
                 cp_availability_policy=cp_availability_policy,
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
-                data_replication_separation=data_replication_separation,
+                data_replication_separation=data_replication_separation_public,
                 auto_repair=auto_repair,
                 hcp_image=hcp_image,
             )

@@ -507,7 +507,10 @@ hci_provider_and_client_required = pytest.mark.skipif(
 )
 
 data_replication_separation_required = pytest.mark.skipif(
-    config.DEPLOYMENT.get("enable_data_replication_separation") is False,
+    not (
+        config.DEPLOYMENT.get("enable_data_replication_separation_public")
+        or config.DEPLOYMENT.get("enable_data_replication_separation_cluster")
+    ),
     reason="Test runs only on deployments with enabled data replication separation",
 )
 
