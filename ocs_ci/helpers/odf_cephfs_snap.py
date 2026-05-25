@@ -91,24 +91,15 @@ def create_provider_retain_cephfs_snapclass(snapclass_name, storage_client_name)
         ), f"Failed to create VolumeSnapshotClass {snapclass_name} on provider"
         log.info("Created VolumeSnapshotClass %s on provider", snapclass_name)
 
-        consumer_ns = config.ENV_DATA["cluster_namespace"]
-        consumer_ocp = ocp.OCP(kind=constants.STORAGECONSUMER, namespace=consumer_ns)
-        consumer_name = None
-        current_snapclasses = []
-        for name in get_consumer_names():
-            consumer_data = consumer_ocp.get(resource_name=name)
-            if (
-                consumer_data.get("status", {}).get("client", {}).get("name")
-                == storage_client_name
-            ):
-                consumer_name = name
-                current_snapclasses = consumer_data.get("spec", {}).get(
-                    "volumeSnapshotClasses", []
-                )
-                break
-        assert consumer_name, (
-            f"StorageConsumer for storage client '{storage_client_name}' "
-            "not found on provider"
+        consumer_name, consumer_data = _find_consumer_for_storage_client(
+            storage_client_name
+        )
+        consumer_ocp = ocp.OCP(
+            kind=constants.STORAGECONSUMER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        current_snapclasses = consumer_data.get("spec", {}).get(
+            "volumeSnapshotClasses", []
         )
 
         updated_snapclasses = [*current_snapclasses, {"name": snapclass_name}]
@@ -156,6 +147,58 @@ def create_provider_retain_cephfs_snapclass(snapclass_name, storage_client_name)
             log.info("Deleted VolumeSnapshotClass %s from provider", snapclass_name)
 
     return _teardown
+
+
+def _find_consumer_for_storage_client(storage_client_name):
+    """
+    Find the StorageConsumer CR on the provider that owns ``storage_client_name``.
+
+    Must be called within an active provider config context.
+
+    Args:
+        storage_client_name (str): StorageClient CR name on the client cluster.
+
+    Returns:
+        tuple[str, dict]: ``(consumer_name, consumer_data)`` for the matching
+            StorageConsumer.
+
+    Raises:
+        AssertionError: If no matching StorageConsumer is found.
+    """
+    consumer_ns = config.ENV_DATA["cluster_namespace"]
+    consumer_ocp = ocp.OCP(kind=constants.STORAGECONSUMER, namespace=consumer_ns)
+    for name in get_consumer_names():
+        consumer_data = consumer_ocp.get(resource_name=name)
+        if (
+            consumer_data.get("status", {}).get("client", {}).get("name")
+            == storage_client_name
+        ):
+            return name, consumer_data
+    raise AssertionError(
+        f"No StorageConsumer found for storage client '{storage_client_name}'"
+    )
+
+
+def get_consumer_svg_on_provider(storage_client_name):
+    """
+    Return the CephFS subvolume group name for a storage client on the
+    provider cluster.
+
+    The SVG name equals the StorageConsumer CR name on the provider.
+    Must be called within an active provider config context.
+
+    Args:
+        storage_client_name (str): StorageClient CR name on the client
+            cluster.
+
+    Returns:
+        str: Subvolume group name on the provider cluster.
+
+    Raises:
+        AssertionError: If no matching StorageConsumer is found.
+    """
+    consumer_name, _ = _find_consumer_for_storage_client(storage_client_name)
+    return consumer_name
 
 
 def get_cephfs_snap_entries(snap_runner):
