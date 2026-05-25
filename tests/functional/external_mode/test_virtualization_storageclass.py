@@ -1,5 +1,6 @@
 import logging
 import pytest
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     tier3,
     external_mode_required,
@@ -26,27 +27,35 @@ class TestVirtSCAutoProvisioning:
     def setup_and_teardown_cnv(self):
         """
         Setup: Ensure CNV is installed and Hardware Virtualization is checked.
-        Teardown: Uninstall CNV after the test completion.
+        Teardown: Uninstall CNV after the test completion ONLY if it wasn't pre-installed.
         """
         log.info("Checking for OpenShift Virtualization (CNV) status...")
         cnv_installer = CNVInstaller()
-        ns_handler = ocp.OCP(kind="namespace")
+        ns_handler = ocp.OCP(kind=constants.NAMESPACE)
 
         # 1. Hardware Virtualization Check
-        log.info("Verifying if Hardware Virtualization is available on nodes...")
-        try:
-            enable_hardware_virtualization()
-        except Exception as e:
-            log.warning(
-                f"Hardware virtualization check failed: {e}. Emulation will be used."
-            )
+        if (
+            config.ENV_DATA.get("enable_hw_virtualization")
+            or config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM
+        ):
+            log.info("Verifying if Hardware Virtualization is available on nodes...")
+            try:
+                enable_hardware_virtualization()
+            except Exception as e:
+                log.warning(
+                    f"Hardware virtualization check failed: {e}. Emulation will be used."
+                )
 
-        # 2. Robust Installation Check
+        # 2. Robust Installation & Pre-existing State Tracking Check
         ns_exists = ns_handler.is_exist(resource_name=constants.CNV_NAMESPACE)
+
+        self.cnv_pre_installed = False
 
         if ns_exists and cnv_installer.cnv_hyperconverged_installed():
             log.info("CNV namespace and operator detected. Verifying health...")
-            if not cnv_installer.post_install_verification(raise_exception=False):
+            if cnv_installer.post_install_verification(raise_exception=False):
+                self.cnv_pre_installed = True
+            else:
                 log.warning("CNV is unhealthy. Forcing redeployment to stabilize...")
                 cnv_installer.deploy_cnv(check_cnv_deployed=False)
         else:
@@ -61,15 +70,19 @@ class TestVirtSCAutoProvisioning:
         yield  # Execute the test
 
         # --- TEARDOWN ---
-        log.info("Test finished. Initiating CNV Uninstallation (Teardown)...")
-        try:
-            # Cleans up HyperConverged, Subscription, CSV, and Namespace
-            cnv_installer.uninstall_cnv(check_cnv_installed=True)
-            log.info("CNV uninstallation completed successfully.")
-        except Exception as e:
-            log.error(f"Failed to uninstall CNV during teardown: {str(e)}")
-            # Re-raise the exception so pytest marks the cleanup as failed
-            raise e
+        # FIX: Only run uninstallation if CNV was not already active prior to execution
+        if not self.cnv_pre_installed:
+            log.info("Test finished. Initiating CNV Uninstallation (Teardown)...")
+            try:
+                cnv_installer.uninstall_cnv(check_cnv_installed=True)
+                log.info("CNV uninstallation completed successfully.")
+            except Exception as e:
+                log.error(f"Failed to uninstall CNV during teardown: {str(e)}")
+                raise e
+        else:
+            log.info(
+                "Skipping CNV uninstallation because it was pre-existing on the test cluster."
+            )
 
     def test_virt_sc_and_vm_deployment(self):
         """
