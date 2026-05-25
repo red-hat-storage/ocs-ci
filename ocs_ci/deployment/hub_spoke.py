@@ -1259,7 +1259,9 @@ class HostedClients(HyperShiftBase):
             drs_verification_results = []
             for cluster_name in cluster_names:
                 drs_verification_results.append(
-                    self.verify_hosted_ocp_cluster_from_provider(cluster_name)
+                    self.verify_hosted_ocp_cluster_from_provider(
+                        cluster_name, timeout_hosted_cluster_completed_min=45
+                    )
                 )
             # Update hosted_ocp_verification_passed only if all clusters verified
             if all(drs_verification_results):
