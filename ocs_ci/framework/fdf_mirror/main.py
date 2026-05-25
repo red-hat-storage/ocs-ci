@@ -45,18 +45,29 @@ def main(argv=None):
         Mirror FDF catalog and related images to mirror registry.
         """
         catalog_image = parsed_args.catalog_image
-        mirror_registry = parsed_args.mirror_registry or config.DEPLOYMENT.get(
-            "mirror_registry"
-        )
+
+        # Try to get mirror_registry from CLI args first, then from config
+        mirror_registry = parsed_args.mirror_registry
+        if not mirror_registry:
+            mirror_registry = config.DEPLOYMENT.get("mirror_registry")
+            logger.debug(f"Reading mirror_registry from config: {mirror_registry}")
+        else:
+            logger.debug(f"Using mirror_registry from CLI args: {mirror_registry}")
+
         configure_registries = parsed_args.configure_registries
 
         logger.info(f"Starting FDF catalog mirroring for: {catalog_image}")
         logger.info(f"Target mirror registry: {mirror_registry}")
 
+        # Debug: Log all DEPLOYMENT config keys
+        logger.debug(
+            f"Available DEPLOYMENT config keys: {list(config.DEPLOYMENT.keys())}"
+        )
+
         if not mirror_registry:
             raise ValueError(
                 "Mirror registry not specified. Please provide --mirror-registry "
-                "or configure it in your config file."
+                "or configure it in your config file under DEPLOYMENT.mirror_registry"
             )
 
         # Mirror the FDF catalog
