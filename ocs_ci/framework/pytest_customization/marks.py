@@ -514,6 +514,16 @@ data_replication_separation_required = pytest.mark.skipif(
     reason="Test runs only on deployments with enabled data replication separation",
 )
 
+data_replication_separation_public_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("enable_data_replication_separation_public"),
+    reason="Test runs only on deployments with enabled public network data replication separation",
+)
+
+data_replication_separation_cluster_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("enable_data_replication_separation_cluster"),
+    reason="Test runs only on deployments with enabled cluster network data replication separation",
+)
+
 kms_config_required = pytest.mark.skipif(
     (
         config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
