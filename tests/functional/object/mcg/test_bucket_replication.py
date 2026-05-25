@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     mcg,
     sts_deployment_required,
+    aws_platform_required,
     skipif_noobaa_external_pgsql,
     jira,
 )
@@ -70,6 +71,7 @@ class TestReplication(MCGTest):
                 marks=[
                     tier2,
                     sts_deployment_required,
+                    aws_platform_required,
                     pytest.mark.polarion_id("OCS-5494"),
                 ],
             ),
@@ -284,6 +286,7 @@ class TestReplication(MCGTest):
                 marks=[
                     tier2,
                     sts_deployment_required,
+                    aws_platform_required,
                     pytest.mark.polarion_id("OCS-5495"),
                 ],
             ),

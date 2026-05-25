@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     skipif_fips_enabled,
     sts_deployment_required,
+    azure_platform_required,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ class TestMultiCloud(MCGTest):
             ),
             pytest.param(
                 ("oc", {"azure-sts": [(1, None)]}),
-                marks=[sts_deployment_required],
+                marks=[sts_deployment_required, azure_platform_required],
             ),
         ],
         # A test ID list for describing the parametrized tests
@@ -89,7 +90,7 @@ class TestMultiCloud(MCGTest):
             pytest.param(("oc", {"ibmcos": [(1, None)]})),
             pytest.param(
                 ("oc", {"azure-sts": [(1, None)]}),
-                marks=[sts_deployment_required],
+                marks=[sts_deployment_required, azure_platform_required],
             ),
         ],
         # A test ID list for describing the parametrized tests
