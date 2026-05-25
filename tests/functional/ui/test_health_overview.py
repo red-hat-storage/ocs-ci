@@ -364,6 +364,9 @@ class TestHealthOverview(ManageTest):
                 f"Deployment '{deployment}' ready replicas: {ready}, "
                 f"waiting for {expected_replicas}"
             )
+        raise TimeoutError(
+            f"Deployment '{deployment}' did not reach {expected_replicas} ready replica(s) within {timeout}s"
+        )
 
     @pytest.fixture
     def scale_exporters_teardown(self, request):
