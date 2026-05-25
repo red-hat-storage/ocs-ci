@@ -271,6 +271,9 @@ EXTERNAL_CEPHCLUSTER_NAME = "ocs-external-storagecluster-cephcluster"
 EXTERNAL_RGW_SC_NAME = "ocs-external-storagecluster-ceph-rgw"
 CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
 REPLICA1_STORAGECLASS = "ocs-storagecluster-ceph-non-resilient-rbd"
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_NON_RESILIENT_RBD = (
+    "ocs-external-storagecluster-ceph-non-resilient-rbd"
+)
 ENDPOINTS = "Endpoints"
 WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
