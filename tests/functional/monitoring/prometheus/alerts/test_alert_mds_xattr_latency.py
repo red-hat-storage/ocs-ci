@@ -206,7 +206,6 @@ def recover_mds_pods_if_not_running():
     Returns:
         None
     """
-    log.info("Teardown: Checking MDS deployments and scaling if needed")
 
     # Get all MDS deployments
     mds_deployments = ocp.OCP(
@@ -215,58 +214,38 @@ def recover_mds_pods_if_not_running():
         selector=constants.MDS_APP_LABEL,
     ).get()
 
-    if not mds_deployments or "items" not in mds_deployments:
-        log.warning("No MDS deployments found")
+    # Filter deployments that need scaling (replicas == 0)
+    deployments_to_scale = [
+        d for d in mds_deployments["items"] if d.get("spec", {}).get("replicas") == 0
+    ]
+
+    if not deployments_to_scale:
+        log.info("No MDS deployments needed scaling")
         return
 
-    # Check each deployment and scale up if needed
-    scaled_any = False
-    for deployment in mds_deployments["items"]:
-        deployment_name = deployment["metadata"]["name"]
-        replicas = deployment["spec"]["replicas"]
+    log.info(f"Found {len(deployments_to_scale)} MDS deployment(s) at 0 replicas")
 
-        if replicas == 0:
-            try:
-                helpers.modify_deployment_replica_count(
-                    deployment_name=deployment_name, replica_count=1
-                )
-                scaled_any = True
-                log.info(f"Successfully scaled {deployment_name} to 1 replica")
-            except Exception as e:
-                log.error(f"Failed to scale MDS deployment {deployment_name}: {e}")
-                raise AssertionError(
-                    f"Teardown failed: Could not scale MDS deployment {deployment_name} from 0 to 1"
-                )
-        else:
-            log.info(
-                f"MDS deployment {deployment_name} already has {replicas} replica(s), no scaling needed"
+    # Scale up each deployment from 0 to 1
+    for deployment in deployments_to_scale:
+        deployment_name = deployment["metadata"]["name"]
+        try:
+            helpers.modify_deployment_replica_count(
+                deployment_name=deployment_name, replica_count=1
+            )
+            log.info(f"Successfully scaled {deployment_name} to 1 replica")
+        except Exception as e:
+            log.error(f"Failed to scale MDS deployment {deployment_name}: {e}")
+            raise AssertionError(
+                f"Teardown failed: Could not scale MDS deployment {deployment_name} from 0 to 1"
             )
 
-    if not scaled_any:
-        log.info("No MDS deployments needed scaling")
-
-    # Verify MDS pods are running after scaling
-    if scaled_any:
-        log.info("Waiting for MDS pods to be in Running state after scaling")
-        time.sleep(30)  # Give pods time to start
-
-        mds_pods = get_mds_pods()
-        if not mds_pods:
-            raise AssertionError("No MDS pods found after scaling deployments")
-
-        log.info(f"Found {len(mds_pods)} MDS pod(s), verifying they are running")
-        for mds_pod in mds_pods:
-            try:
-                helpers.wait_for_resource_state(
-                    resource=mds_pod, state=constants.STATUS_RUNNING, timeout=120
-                )
-            except Exception as e:
-                log.error(f"MDS pod {mds_pod.name} failed to reach Running state: {e}")
-                raise AssertionError(
-                    f"Teardown failed: MDS pod {mds_pod.name} did not reach Running state after scaling"
-                )
-
-        log.info("All MDS pods are running successfully")
+    pod.wait_for_pods_to_be_running(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=constants.MDS_APP_LABEL,
+        timeout=180,
+        sleep=10,
+    )
+    log.info("All MDS pods are running successfully")
 
 
 @blue_squad
