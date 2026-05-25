@@ -1266,6 +1266,19 @@ class MCG:
 
         self.s3_client = self.s3_resource.meta.client
 
+    @property
+    def iam_client(self):
+        if not hasattr(self, "_iam_client") or self._iam_client is None:
+            self._iam_client = boto3.client(
+                "iam",
+                endpoint_url=self.iam_endpoint,
+                aws_access_key_id=self.access_key_id,
+                aws_secret_access_key=self.access_key,
+                verify=retrieve_verification_mode(),
+                region_name=self.region or None,
+            )
+        return self._iam_client
+
     def reset_admin_pw(self, new_password):
         """
         Reset the NooBaa admin password

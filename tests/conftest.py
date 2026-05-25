@@ -11841,6 +11841,15 @@ def iam_users_factory_fixture(request, mcg_obj, awscli_pod_session):
                 delete_key_cmd = f"delete-access-key --user-name {user_name} --access-key-id {access_key_id}"
                 run_iam_command(mcg_obj, awscli_pod_session, delete_key_cmd)
 
+            # User policies should be deleted before the user deletion
+            list_policies_cmd = f"list-user-policies --user-name {user_name}"
+            list_policies_result = run_iam_command(
+                mcg_obj, awscli_pod_session, list_policies_cmd
+            )
+            for policy_name in list_policies_result.get("PolicyNames", []):
+                delete_policy_cmd = f"delete-user-policy --user-name {user_name} --policy-name {policy_name}"
+                run_iam_command(mcg_obj, awscli_pod_session, delete_policy_cmd)
+
             delete_user_cmd = f"delete-user --user-name {user_name}"
             run_iam_command(mcg_obj, awscli_pod_session, delete_user_cmd)
 
