@@ -300,6 +300,10 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 zone_nodes
             )
             logger.info(f"Nodes in zone '{power_off_zone}' stopped")
+            logger.info(
+                "Waiting 10 minutes for OpenShift cluster to detect node failure"
+            )
+            sleep(600)  # 10 minutes = 600 seconds
 
         # Perform failover for workloads one by one
         try:
