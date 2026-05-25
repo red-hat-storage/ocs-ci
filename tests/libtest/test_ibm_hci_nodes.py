@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import libtest, tier1, resiliency
+from ocs_ci.framework.testlib import libtest
 from ocs_ci.framework.pytest_customization.marks import skipif_ibm_power
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 @libtest
-@tier1
-@resiliency
 @skipif_ibm_power
 @pytest.mark.polarion_id("OCS-5678")
 class TestIBMHCINodeOperations:
