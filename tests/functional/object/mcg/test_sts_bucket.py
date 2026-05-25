@@ -6,6 +6,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier2,
     sts_deployment_required,
+    aws_platform_required,
+    azure_platform_required,
     red_squad,
     mcg,
     polarion_id,
@@ -36,7 +38,7 @@ class TestSTSBucket:
                         "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
                     },
                 ],
-                marks=[tier2],
+                marks=[tier2, aws_platform_required],
             ),
             pytest.param(
                 *[
@@ -46,7 +48,7 @@ class TestSTSBucket:
                     },
                 ],
                 # TODO: assign polarion ID
-                marks=[tier1, polarion_id("OCS-XXXX")],
+                marks=[tier1, azure_platform_required, polarion_id("OCS-XXXX")],
             ),
             pytest.param(
                 *[
@@ -59,7 +61,7 @@ class TestSTSBucket:
                     },
                 ],
                 # TODO: assign polarion ID
-                marks=[tier1, polarion_id("OCS-XXXX")],
+                marks=[tier1, azure_platform_required, polarion_id("OCS-XXXX")],
             ),
             pytest.param(
                 *[None],
