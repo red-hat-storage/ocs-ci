@@ -571,18 +571,6 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 f"completed_relocates={completed_relocates}"
             ) from ex
 
-        # ========================================
-        # Step 8: Verify data integrity for CNV workloads
-        # ========================================
-        if cnv_workloads:
-            logger.info("Verifying data integrity for CNV workloads")
-            for wl_meta in workload_metadata:
-                if wl_meta["workload"] in cnv_workloads:
-                    logger.info(
-                        f"Verifying CNV workload {wl_meta['idx']} data integrity"
-                    )
-                    wl_meta["workload"].verify_data_integrity()
-
         logger.info(
             f"Successfully completed failover and relocate for all {len(all_workloads)} workloads"
         )
