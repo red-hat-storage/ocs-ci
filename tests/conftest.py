@@ -1283,12 +1283,64 @@ def storageclass_factory_fixture(
         return sc_obj
 
     def finalizer():
-        """
-        Delete the storageclass
-        """
+        """Run teardown for every factory-created StorageClass instance."""
         for instance in instances:
-            instance.delete()
-            instance.ocp.wait_for_delete(instance.name, timeout=120)
+            _delete_storageclass_with_retry(instance)
+
+    def _delete_storageclass_with_retry(instance, max_attempts=3, wait_timeout=20):
+        """
+        Delete a StorageClass while tolerating controller-driven recreation.
+
+        Clears StorageClient ownerReferences when present, deletes the object,
+        and retries when a controller recreates it before the delete completes.
+        """
+        for attempt in range(max_attempts):
+            try:
+                sc_data = instance.ocp.get(resource_name=instance.name)
+            except CommandFailed as ex:
+                if "NotFound" in str(ex):
+                    return
+                raise
+
+            owner_refs = sc_data.get("metadata", {}).get("ownerReferences") or []
+            if not isinstance(owner_refs, list):
+                log.warning(
+                    "Unexpected ownerReferences type for StorageClass %s: %s",
+                    instance.name,
+                    type(owner_refs).__name__,
+                )
+                owner_refs = []
+            filtered = [r for r in owner_refs if r.get("kind") != "StorageClient"]
+            if len(filtered) < len(owner_refs):
+                patch_value = "null" if not filtered else json.dumps(filtered)
+                try:
+                    instance.ocp.patch(
+                        resource_name=instance.name,
+                        params=f'{{"metadata": {{"ownerReferences": {patch_value}}}}}',
+                        format_type="merge",
+                    )
+                except CommandFailed:
+                    log.warning(
+                        f"Failed to clear StorageClient ownerReferences "
+                        f"from StorageClass {instance.name}"
+                    )
+
+            instance.ocp.delete(resource_name=instance.name)
+            try:
+                instance.ocp.wait_for_delete(instance.name, timeout=wait_timeout)
+                return
+            except TimeoutError:
+                if attempt < max_attempts - 1:
+                    log.warning(
+                        f"StorageClass {instance.name} was recreated by "
+                        f"a controller after deletion "
+                        f"(attempt {attempt + 1}/{max_attempts}), retrying"
+                    )
+
+        log.warning(
+            f"StorageClass {instance.name} could not be permanently "
+            f"deleted after {max_attempts} attempts"
+        )
 
     request.addfinalizer(finalizer)
     return factory
