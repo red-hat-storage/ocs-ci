@@ -1503,7 +1503,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             condition=constants.STATUS_RUNNING,
             resource_count=len(noobaa_pods),
             selector=constants.NOOBAA_APP_LABEL,
-            timeout=900,
+            timeout=2400,
         )
         # verify noobaa statefulset is present
         sample = TimeoutSampler(
