@@ -335,6 +335,14 @@ class TestEndpointCloudNetworkDisruption(MCGTest):
         ocp_obj = ocp.OCP(kind=constants.NETWORK_POLICY, namespace=namespace)
         ocp_obj.exec_oc_cmd(f"apply -f {temp_yaml.name}")
         os.unlink(temp_yaml.name)
+
+        # NetworkPolicy has no STATUS; wait on NAME to confirm creation
+        ocp_obj.wait_for_resource(
+            condition=self.NETWORK_POLICY_NAME,
+            column="NAME",
+            resource_name=self.NETWORK_POLICY_NAME,
+            timeout=30,
+        )
         logger.info(
             "NetworkPolicy applied - external egress blocked "
             "for noobaa-endpoint pods"
