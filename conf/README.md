@@ -472,6 +472,10 @@ example: <brew_registry_url>/rh-osbs/iib:565330
 * `custom_ramen_image` - Replace the downstream Ramen image for DR testing.
     Set to true to use the default upstream image (quay.io/ramendr/ramen-operator:canary),
     or set to a specific image URL to use that instead.
+* `run_ramenctl_e2e` - Run ramendr e2e tests using ramenctl tool after RDR deployment.
+    Set to true to automatically execute ramenctl e2e tests after DR policy deployment.
+    Test results are saved to a temporary directory and logged. E2E test failures do not fail the
+    deployment - they only log errors for investigation.
 
 #### AUTH
 
