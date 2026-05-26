@@ -268,11 +268,13 @@ def ocs_install_verification(
 
     # From 4.21, new resource blackbox-exporter added as part of feature odf
     # health overview
+    # Skip blackbox check after upgrade due to DFBUGS-7007
     odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
     if (
         not external
         and not config.DEPLOYMENT.get("mcg_only_deployment", False)
         and (odf_running_version >= version.VERSION_4_21)
+        and not post_upgrade_verification
     ):
         odf_semantic_version = get_semantic_running_odf_version()
         blackbox_label = (
