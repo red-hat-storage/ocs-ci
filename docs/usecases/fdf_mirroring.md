@@ -35,9 +35,9 @@ Only needed if you want to override mirror registry credentials. Create a config
 ```yaml
 ---
 DEPLOYMENT:
-  mirror_registry: 'r8-ru26-w-l.quay-service.fusion.tadn.ibm.com/organization/df_team'
-  mirror_registry_user: 'your-mirror-username'  # Optional: if not in pull secret
-  mirror_registry_password: ''  # Optional: if not in pull secret
+  mirror_registry: '<mirror registry>'
+  mirror_registry_user: 'your-mirror-username'
+  mirror_registry_password: ''
 ```
 
 **Note:** If your pull secret already contains credentials for the mirror registry, you don't need to provide them in the config file.
@@ -114,7 +114,7 @@ kind: ImageSetConfiguration
 apiVersion: mirror.openshift.io/v1alpha2
 mirror:
   operators:
-    - catalog: cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20
+    - catalog: <cateloge image>
 ```
 
 ### 2. Configure registries.conf (Optional - For Internal Images)
@@ -162,7 +162,7 @@ oc mirror \
 ```bash
 oc mirror \
   --config fdf_isc.yaml \
-  docker://r8-ru26-w-l.quay-service.fusion.tadn.ibm.com/organization/df_team \
+  <Mirror registry full path> \
   --workspace file://oc-mirror-workspace/results-files \
   --v2 \
   --dest-tls-verify=false \
@@ -188,12 +188,12 @@ oc wait --for=condition=Updated mcp/master --timeout=600s
 
 Use the appropriate catalog image for your FDF version:
 
-- **FDF 4.18**: `cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.18`
-- **FDF 4.19**: `cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.19`
-- **FDF 4.20**: `cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20`
+- **FDF 4.18**: `<registry-path>/isf-data-foundation-catalog:v4.18`
+- **FDF 4.19**: `<registry-path>/isf-data-foundation-catalog:v4.19`
+- **FDF 4.20**: `<registry-path>/isf-data-foundation-catalog:v4.20`
 
 For specific builds, append the build number:
-- Example: `cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.18.20-5`
+- Example: `<registry-path>/isf-data-foundation-catalog:v4.18.20-5`
 
 ## Templates
 
