@@ -488,6 +488,10 @@ def pytest_collection_modifyitems(session, config, items):
                 and ocsci_config.multicluster
             ):
                 if getattr(item, "callspec", ""):
+                    # Check if zone_rank and role_rank exist in params
+                    # (they only exist for tests parametrized by multicluster upgrade)
+                    if "zone_rank" not in item.callspec.params:
+                        continue
                     zone_rank = item.callspec.params["zone_rank"]
                     role_rank = item.callspec.params["role_rank"]
                 else:
