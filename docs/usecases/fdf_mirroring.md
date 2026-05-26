@@ -14,8 +14,7 @@ This guide covers mirroring FDF catalog images and their associated operator ima
 ### 1. Pull Secret (Required)
 
 A pull secret with authentication for both source and destination registries. The pull secret should be located at:
-- `${CLUSTER_PATH}/auth/pull-secret` (recommended), or
-- `~/.docker/config.json`
+- pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret") (recommended)
 
 The pull secret must include authentication for:
 
@@ -25,7 +24,7 @@ The pull secret must include authentication for:
 - `icr.io/cpopen` - FDF operator images
 
 **Destination registry** (where images are pushed to):
-- Your mirror registry (e.g., `r8-ru26-w-l.quay-service.fusion.tadn.ibm.com`)
+- Your mirror registry
 
 ```
 
@@ -55,8 +54,8 @@ DEPLOYMENT:
 
 ```bash
 python -m ocs_ci.framework.fdf_mirror.main \
-  --catalog-image cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20 \
-  --mirror-registry r8-ru26-w-l.quay-service.fusion.tadn.ibm.com/organization/df_team \
+  --catalog-image <cateloge name> \
+  --mirror-registry <mirror-registry> \
   --cluster-path ~/current-cluster-dir/openshift-cluster-dir \
   --cluster-name my-cluster \
   --configure-registries
@@ -65,7 +64,7 @@ python -m ocs_ci.framework.fdf_mirror.main \
 **With Config File:**
 ```bash
 python -m ocs_ci.framework.fdf_mirror.main \
-  --catalog-image cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20 \
+  --catalog-image <cateloge name> \
   --cluster-path ~/current-cluster-dir/openshift-cluster-dir \
   --ocsci-conf /path/to/config.yaml \
   --configure-registries
