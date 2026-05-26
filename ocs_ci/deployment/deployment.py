@@ -125,7 +125,6 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_by_label_count,
     wait_for_pods_to_be_running,
     wait_for_pods_to_be_in_statuses,
-    wait_for_storage_pods,
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
@@ -1627,7 +1626,19 @@ class Deployment(object):
             verify_storage_cluster()
 
             logger.info("Waiting for storage pods to restart with multus configuration")
-            wait_for_storage_pods()
+            # Use wait_for_pods_to_be_running which re-fetches pods each
+            # iteration and tolerates pods that disappear during restarts.
+            # wait_for_storage_pods fetches the pod list once and then fails
+            # when a pod is replaced mid-iteration (stale pod name).
+            wait_for_pods_to_be_running(
+                timeout=600,
+                sleep=15,
+                skip_for_status=[
+                    constants.STATUS_COMPLETED,
+                    "Succeeded",
+                    "Terminating",
+                ],
+            )
 
             logger.info("Verifying multus network configuration")
             verify_multus_network()
