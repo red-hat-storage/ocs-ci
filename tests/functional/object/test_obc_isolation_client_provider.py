@@ -28,7 +28,7 @@ from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.resources.objectbucket import wait_for_obc_phase
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class TestOBCIsolationClientProvider(ManageTest):
 
         def finalizer():
             """Cleanup resources."""
-            # Delete test files
+            # Close test file handles
             for test_file in self.test_files:
                 try:
                     test_file.close()
@@ -110,7 +110,7 @@ class TestOBCIsolationClientProvider(ManageTest):
         client2_s3_client = None
 
         # Step 1: Create OBC on first client cluster
-        logger.info("Step 1: Creating OBC on first client cluster")
+        logger.test_step("Step 1: Creating OBC on first client cluster")
         with config.RunWithConfigContext(client1_index):
             cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
             assert cluster_type == constants.HCI_CLIENT, (
@@ -144,7 +144,7 @@ class TestOBCIsolationClientProvider(ManageTest):
             )
 
             # Wait for OBC to reach Bound state
-            self._wait_for_obc_phase(
+            wait_for_obc_phase(
                 shared_obc_name, namespace1, constants.STATUS_BOUND, OBC_BIND_TIMEOUT
             )
 
@@ -183,7 +183,9 @@ class TestOBCIsolationClientProvider(ManageTest):
             )
 
         # Step 2: Check that the OBC is not visible on second client cluster
-        logger.info("Step 2: Verifying OBC is not visible on second client cluster")
+        logger.test_step(
+            "Step 2: Verifying OBC is not visible on second client cluster"
+        )
         with config.RunWithConfigContext(client2_index):
             cluster2_name = config.ENV_DATA.get("cluster_name", "client2")
             logger.info("Checking on client cluster %s", cluster2_name)
@@ -206,7 +208,7 @@ class TestOBCIsolationClientProvider(ManageTest):
             logger.info("Verified: OBC '%s' does not exist on client2", shared_obc_name)
 
         # Step 3: Create OBC with the same name on second client cluster
-        logger.info("Step 3: Creating OBC with same name on second client cluster")
+        logger.test_step("Step 3: Creating OBC with same name on second client cluster")
         with config.RunWithConfigContext(client2_index):
             # Create OBC on client2 with same name
             logger.info(
@@ -227,7 +229,7 @@ class TestOBCIsolationClientProvider(ManageTest):
             )
 
             # Wait for OBC to reach Bound state
-            self._wait_for_obc_phase(
+            wait_for_obc_phase(
                 shared_obc_name, namespace2, constants.STATUS_BOUND, OBC_BIND_TIMEOUT
             )
 
@@ -279,7 +281,7 @@ class TestOBCIsolationClientProvider(ManageTest):
             )
 
         # Step 4: Upload different data to both buckets
-        logger.info("Step 4: Uploading different data to both buckets")
+        logger.test_step("Step 4: Uploading different data to both buckets")
 
         # Upload to client1 bucket
         with config.RunWithConfigContext(client1_index):
@@ -328,7 +330,7 @@ class TestOBCIsolationClientProvider(ManageTest):
             logger.info("Upload to client2 bucket completed")
 
         # Step 5: Check that correct data is in correct bucket
-        logger.info("Step 5: Verifying correct data is in correct buckets")
+        logger.test_step("Step 5: Verifying correct data is in correct buckets")
 
         # Verify client1 bucket has only client1 data
         with config.RunWithConfigContext(client1_index):
@@ -430,43 +432,4 @@ class TestOBCIsolationClientProvider(ManageTest):
 
         logger.info(
             "Test completed successfully - OBCs are isolated between clients with correct data"
-        )
-
-    # Helper methods
-
-    def _wait_for_obc_phase(self, obc_name, namespace, phase, timeout):
-        """
-        Wait for OBC to reach specified phase.
-
-        Args:
-            obc_name (str): Name of the OBC
-            namespace (str): Namespace of the OBC
-            phase (str): Desired phase (e.g., "Bound")
-            timeout (int): Timeout in seconds
-
-        """
-        logger.info("Waiting for OBC '%s' to reach phase '%s'", obc_name, phase)
-        obc_obj = OCP(
-            kind="ObjectBucketClaim", namespace=namespace, resource_name=obc_name
-        )
-
-        def check_phase():
-            """Check if OBC has reached the desired phase."""
-            try:
-                obc_data = obc_obj.get()
-                current_phase = obc_data.get("status", {}).get("phase")
-                logger.info("OBC %s current phase: %s", obc_name, current_phase)
-                return current_phase == phase
-            except Exception as e:
-                logger.warning("Error checking OBC phase: %s", e)
-                return False
-
-        for sample in TimeoutSampler(timeout=timeout, sleep=10, func=check_phase):
-            if sample:
-                logger.info("OBC '%s' reached phase '%s'", obc_name, phase)
-                return
-
-        pytest.fail(
-            "OBC '%s' did not reach phase '%s' within %s seconds"
-            % (obc_name, phase, timeout)
         )

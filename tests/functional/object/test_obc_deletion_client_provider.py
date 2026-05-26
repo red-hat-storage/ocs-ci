@@ -29,6 +29,7 @@ from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.objectbucket import wait_for_obc_phase
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ class TestOBCDeletionClientProvider(ManageTest):
 
         def finalizer():
             """Cleanup resources."""
-            # Delete test files
+            # Close test file handles
             for test_file in self.test_files:
                 try:
                     test_file.close()
@@ -104,7 +105,7 @@ class TestOBCDeletionClientProvider(ManageTest):
         client_index = client_indices[0]
 
         # Step 1: Create OBC on client and add data
-        logger.info("Step 1: Creating OBC on client and adding data")
+        logger.test_step("Step 1: Creating OBC on client and adding data")
         with config.RunWithConfigContext(client_index):
             cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
             assert cluster_type == constants.HCI_CLIENT, (
@@ -134,7 +135,7 @@ class TestOBCDeletionClientProvider(ManageTest):
             logger.info("OBC '%s' created in namespace '%s'", obc_name, namespace)
 
             # Wait for OBC to reach Bound state
-            self._wait_for_obc_phase(
+            wait_for_obc_phase(
                 obc_name, namespace, constants.STATUS_BOUND, OBC_BIND_TIMEOUT
             )
 
@@ -215,14 +216,14 @@ class TestOBCDeletionClientProvider(ManageTest):
             )
 
         # Step 2: Delete OBC on client with data
-        logger.info("Step 2: Deleting OBC on client with data")
+        logger.test_step("Step 2: Deleting OBC on client with data")
         with config.RunWithConfigContext(client_index):
             logger.info("Deleting OBC '%s' from namespace '%s'", obc_name, namespace)
             obc_obj_cleanup = OCP(kind="ObjectBucketClaim", namespace=namespace)
             obc_obj_cleanup.delete(resource_name=obc_name)
 
             # Step 3: Verify Secret, ConfigMap and OB are deleted on client
-            logger.info(
+            logger.test_step(
                 "Step 3: Verifying Secret, ConfigMap and OB are deleted on client"
             )
 
@@ -251,7 +252,7 @@ class TestOBCDeletionClientProvider(ManageTest):
             logger.info("ConfigMap '%s' deleted successfully on client", obc_name)
 
         # Step 4: Verify Secret, ConfigMap and OB are deleted on provider
-        logger.info("Step 4: Verifying ObjectBucket deletion on provider")
+        logger.test_step("Step 4: Verifying ObjectBucket deletion on provider")
         with config.RunWithProviderConfigContextIfAvailable():
             for sample in TimeoutSampler(
                 timeout=OBJECTBUCKET_DELETE_TIMEOUT,
@@ -297,7 +298,7 @@ class TestOBCDeletionClientProvider(ManageTest):
         client_index = client_indices[0]
 
         # Step 1: Create OBC on client with no data
-        logger.info("Step 1: Creating OBC on client with no data")
+        logger.test_step("Step 1: Creating OBC on client with no data")
         with config.RunWithConfigContext(client_index):
             cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
             assert cluster_type == constants.HCI_CLIENT, (
@@ -327,7 +328,7 @@ class TestOBCDeletionClientProvider(ManageTest):
             logger.info("OBC '%s' created in namespace '%s'", obc_name, namespace)
 
             # Wait for OBC to reach Bound state
-            self._wait_for_obc_phase(
+            wait_for_obc_phase(
                 obc_name, namespace, constants.STATUS_BOUND, OBC_BIND_TIMEOUT
             )
 
@@ -363,14 +364,14 @@ class TestOBCDeletionClientProvider(ManageTest):
             )
 
         # Step 2: Delete OBC on client with no data
-        logger.info("Step 2: Deleting OBC on client with no data")
+        logger.test_step("Step 2: Deleting OBC on client with no data")
         with config.RunWithConfigContext(client_index):
             logger.info("Deleting OBC '%s' from namespace '%s'", obc_name, namespace)
             obc_obj_cleanup = OCP(kind="ObjectBucketClaim", namespace=namespace)
             obc_obj_cleanup.delete(resource_name=obc_name)
 
             # Step 3: Verify Secret, ConfigMap and OB are deleted on client
-            logger.info(
+            logger.test_step(
                 "Step 3: Verifying Secret, ConfigMap and OB are deleted on client"
             )
 
@@ -399,7 +400,7 @@ class TestOBCDeletionClientProvider(ManageTest):
             logger.info("ConfigMap '%s' deleted successfully on client", obc_name)
 
         # Step 4: Verify Secret, ConfigMap and OB are deleted on provider
-        logger.info("Step 4: Verifying ObjectBucket deletion on provider")
+        logger.test_step("Step 4: Verifying ObjectBucket deletion on provider")
         with config.RunWithProviderConfigContextIfAvailable():
             for sample in TimeoutSampler(
                 timeout=OBJECTBUCKET_DELETE_TIMEOUT,
@@ -423,43 +424,6 @@ class TestOBCDeletionClientProvider(ManageTest):
         )
 
     # Helper methods
-
-    def _wait_for_obc_phase(self, obc_name, namespace, phase, timeout):
-        """
-        Wait for OBC to reach specified phase.
-
-        Args:
-            obc_name (str): Name of the OBC
-            namespace (str): Namespace of the OBC
-            phase (str): Desired phase (e.g., "Bound")
-            timeout (int): Timeout in seconds
-
-        """
-        logger.info("Waiting for OBC '%s' to reach phase '%s'", obc_name, phase)
-        obc_obj = OCP(
-            kind="ObjectBucketClaim", namespace=namespace, resource_name=obc_name
-        )
-
-        def check_phase():
-            """Check if OBC has reached the desired phase."""
-            try:
-                obc_data = obc_obj.get()
-                current_phase = obc_data.get("status", {}).get("phase")
-                logger.info("OBC %s current phase: %s", obc_name, current_phase)
-                return current_phase == phase
-            except Exception as e:
-                logger.warning("Error checking OBC phase: %s", e)
-                return False
-
-        for sample in TimeoutSampler(timeout=timeout, sleep=10, func=check_phase):
-            if sample:
-                logger.info("OBC '%s' reached phase '%s'", obc_name, phase)
-                return
-
-        pytest.fail(
-            "OBC '%s' did not reach phase '%s' within %s seconds"
-            % (obc_name, phase, timeout)
-        )
 
     def _check_objectbucket_deleted(self, bucket_name):
         """

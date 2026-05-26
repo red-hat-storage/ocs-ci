@@ -744,3 +744,49 @@ BUCKET_MAP = {
     "rgw-oc": RGWOCBucket,
     "mcg-namespace": MCGNamespaceBucket,
 }
+
+
+def wait_for_obc_phase(obc_name, namespace, phase, timeout=300):
+    """
+    Wait for ObjectBucketClaim to reach specified phase.
+
+    This is a generic helper for waiting on OBC phase transitions, particularly
+    useful for client cluster scenarios where OCP.wait_for_phase() doesn't work
+    due to ObjectBucketClaim not having _has_phase=True.
+
+    Args:
+        obc_name (str): Name of the ObjectBucketClaim
+        namespace (str): Namespace containing the OBC
+        phase (str): Desired phase (e.g., "Bound")
+        timeout (int): Timeout in seconds (default: 300)
+
+    Raises:
+        TimeoutExpiredError: If OBC doesn't reach desired phase within timeout
+
+    Example:
+        >>> from ocs_ci.ocs.resources.objectbucket import wait_for_obc_phase
+        >>> from ocs_ci.ocs import constants
+        >>> wait_for_obc_phase("my-obc", "openshift-storage", constants.STATUS_BOUND)
+
+    """
+    logger.info(f"Waiting for OBC '{obc_name}' to reach phase '{phase}'")
+    obc_obj = OCP(kind="ObjectBucketClaim", namespace=namespace, resource_name=obc_name)
+
+    def check_phase():
+        """Check if OBC has reached the desired phase."""
+        try:
+            obc_data = obc_obj.get()
+            current_phase = obc_data.get("status", {}).get("phase")
+            logger.debug(f"OBC {obc_name} current phase: {current_phase}")
+            return current_phase == phase
+        except Exception as e:
+            logger.warning(f"Error checking OBC phase: {e}")
+            return False
+
+    sample = TimeoutSampler(timeout=timeout, sleep=10, func=check_phase)
+    if not sample.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            f"OBC '{obc_name}' did not reach phase '{phase}' within {timeout} seconds"
+        )
+
+    logger.info(f"OBC '{obc_name}' reached phase '{phase}'")
