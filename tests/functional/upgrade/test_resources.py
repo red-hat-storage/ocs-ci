@@ -172,6 +172,7 @@ def deprecated_test_noobaa_service_mon_after_ocs_upgrade():
 @skipif_hci_client
 @skipif_mcg_only
 @jira("DFBUGS-5211")
+@jira("DFBUGS-7007")
 @pytest.mark.polarion_id("OCS-7419")
 @purple_squad
 def test_blackbox_pod_after_upgrade():
