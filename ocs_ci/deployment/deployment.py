@@ -1690,15 +1690,19 @@ class Deployment(object):
             # iteration and tolerates pods that disappear during restarts.
             # wait_for_storage_pods fetches the pod list once and then fails
             # when a pod is replaced mid-iteration (stale pod name).
-            wait_for_pods_to_be_running(
-                timeout=600,
-                sleep=15,
+            if not wait_for_pods_to_be_running(
+                timeout=1200,
+                sleep=20,
                 skip_for_status=[
                     constants.STATUS_COMPLETED,
                     "Succeeded",
                     "Terminating",
                 ],
-            )
+            ):
+                raise Exception(
+                    "Not all storage pods reached Running state after "
+                    "multus StorageCluster patch"
+                )
 
             logger.info("Verifying multus network configuration")
             verify_multus_network()
