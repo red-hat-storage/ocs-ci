@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.9")
 class TestNoobaaSTSHostNodeFailure(ManageTest):
     """
-    Test to verify NooBaa Statefulset pods recovers in case of a node failure
+    Test to verify NooBaa Statefulset pods recover in case of a node failure
 
     """
 
