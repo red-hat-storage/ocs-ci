@@ -10,7 +10,6 @@ from selenium.common.exceptions import (
     TimeoutException,
 )
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.errorhandler import ErrorHandler
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -1273,7 +1272,7 @@ class OdfTopologyDeploymentsView(TopologyTab):
         )
         return details_dict
 
-    @retry(ErrorHandler)
+    @retry(TimeoutException)
     def filter_node_by_toggle_from_deployments_level(self, node_name):
         """
         Filters the node by toggle from the deployments level in the topology view.
