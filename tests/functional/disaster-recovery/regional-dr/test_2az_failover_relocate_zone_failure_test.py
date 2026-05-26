@@ -425,7 +425,10 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 zone_nodes
             )
             config.switch_to_cluster_by_name(first_workload["primary_cluster_name"])
-            wait_for_nodes_status(timeout=900)
+            wait_for_nodes_status([node.name for node in zone_nodes], timeout=900)
+            assert wait_for_pods_to_be_running(
+                timeout=720
+            ), "Not all the pods reached running state"
             namespace = config.ENV_DATA["cluster_namespace"]
             health = run_ceph_health_cmd(namespace, detail=True)
             ceph_health_recover(
@@ -436,6 +439,31 @@ class Test2AZFailoverAndRelocateZoneFailure:
             )
             ceph_health_check()
             logger.info(f"Nodes in zone '{power_off_zone}' restarted and healthy")
+
+            # Cleanup discovered apps after failover and node restart
+            discovered_workloads_after_failover = [
+                wl_meta for wl_meta in workload_metadata if wl_meta["is_discovered_app"]
+            ]
+            if discovered_workloads_after_failover:
+                logger.info(
+                    "Starting explicit cleanup for discovered workloads after failover "
+                    f"and node restart. Workloads to cleanup: "
+                    f"{[wl['drpc_name'] for wl in discovered_workloads_after_failover]}"
+                )
+                for wl_meta in discovered_workloads_after_failover:
+                    logger.info(
+                        f"Cleaning up discovered workload with drpc_name={wl_meta['drpc_name']}, "
+                        f"namespace={wl_meta['workload_namespace']}, "
+                        f"resource_name={wl_meta['resource_name']}, "
+                        f"old_primary={wl_meta['primary_cluster_name']}"
+                    )
+                    dr_helpers.do_discovered_apps_cleanup(
+                        drpc_name=wl_meta["resource_name"],
+                        old_primary=wl_meta["primary_cluster_name"],
+                        workload_namespace=wl_meta["workload"].workload_namespace,
+                        workload_dir=wl_meta["workload"].workload_dir,
+                        vrg_name=wl_meta["workload"].discovered_apps_placement_name,
+                    )
 
         # ========================================
         # Step 7: Sequential Relocate back to Primary Cluster
