@@ -8,7 +8,6 @@ and non-empty buckets.
 
 import base64
 import boto3
-from botocore.exceptions import ClientError
 import logging
 import pytest
 import tempfile
@@ -135,14 +134,9 @@ class TestOBCDeletionClientProvider(ManageTest):
             logger.info("OBC '%s' created in namespace '%s'", obc_name, namespace)
 
             # Wait for OBC to reach Bound state
-            logger.info("Waiting for OBC '%s' to reach Bound state", obc_name)
-            obc_obj = OCP(
-                kind="ObjectBucketClaim", namespace=namespace, resource_name=obc_name
+            self._wait_for_obc_phase(
+                obc_name, namespace, constants.STATUS_BOUND, OBC_BIND_TIMEOUT
             )
-            obc_obj.wait_for_phase(
-                phase=constants.STATUS_BOUND, timeout=OBC_BIND_TIMEOUT
-            )
-            logger.info("OBC '%s' reached Bound state", obc_name)
 
             # Extract S3 credentials
             logger.info("Extracting S3 credentials from Secret and ConfigMap")
@@ -333,14 +327,9 @@ class TestOBCDeletionClientProvider(ManageTest):
             logger.info("OBC '%s' created in namespace '%s'", obc_name, namespace)
 
             # Wait for OBC to reach Bound state
-            logger.info("Waiting for OBC '%s' to reach Bound state", obc_name)
-            obc_obj = OCP(
-                kind="ObjectBucketClaim", namespace=namespace, resource_name=obc_name
+            self._wait_for_obc_phase(
+                obc_name, namespace, constants.STATUS_BOUND, OBC_BIND_TIMEOUT
             )
-            obc_obj.wait_for_phase(
-                phase=constants.STATUS_BOUND, timeout=OBC_BIND_TIMEOUT
-            )
-            logger.info("OBC '%s' reached Bound state", obc_name)
 
             # Extract bucket name for verification
             logger.info("Extracting bucket name from ConfigMap")
@@ -434,6 +423,43 @@ class TestOBCDeletionClientProvider(ManageTest):
         )
 
     # Helper methods
+
+    def _wait_for_obc_phase(self, obc_name, namespace, phase, timeout):
+        """
+        Wait for OBC to reach specified phase.
+
+        Args:
+            obc_name (str): Name of the OBC
+            namespace (str): Namespace of the OBC
+            phase (str): Desired phase (e.g., "Bound")
+            timeout (int): Timeout in seconds
+
+        """
+        logger.info("Waiting for OBC '%s' to reach phase '%s'", obc_name, phase)
+        obc_obj = OCP(
+            kind="ObjectBucketClaim", namespace=namespace, resource_name=obc_name
+        )
+
+        def check_phase():
+            """Check if OBC has reached the desired phase."""
+            try:
+                obc_data = obc_obj.get()
+                current_phase = obc_data.get("status", {}).get("phase")
+                logger.info("OBC %s current phase: %s", obc_name, current_phase)
+                return current_phase == phase
+            except Exception as e:
+                logger.warning("Error checking OBC phase: %s", e)
+                return False
+
+        for sample in TimeoutSampler(timeout=timeout, sleep=10, func=check_phase):
+            if sample:
+                logger.info("OBC '%s' reached phase '%s'", obc_name, phase)
+                return
+
+        pytest.fail(
+            "OBC '%s' did not reach phase '%s' within %s seconds"
+            % (obc_name, phase, timeout)
+        )
 
     def _check_objectbucket_deleted(self, bucket_name):
         """
