@@ -356,6 +356,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     f"resource_name={wl_meta['resource_name']} "
                     f"drpc_name={wl_meta['drpc_name']}"
                 )
+                config.switch_to_cluster_by_name(wl_meta["secondary_cluster_name"])
                 dr_helpers.wait_for_all_resources_creation(
                     wl_meta["workload"].workload_pvc_count,
                     wl_meta["workload"].workload_pod_count,
@@ -363,7 +364,6 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     discovered_apps=wl_meta["is_discovered_app"],
                     timeout=1200,
                 )
-                config.switch_to_cluster_by_name(wl_meta["secondary_cluster_name"])
                 wait_for_pods_to_be_running(
                     namespace=wl_meta["workload_namespace"],
                     timeout=720,
