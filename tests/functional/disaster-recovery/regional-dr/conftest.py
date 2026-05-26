@@ -69,7 +69,7 @@ def check_subctl_cli():
         submariner.download_binary()
 
 
-@pytest.fixture(autouse=True, scope="function")
+@pytest.fixture(autouse=False, scope="function")
 def rdr_health_check():
     """
     Verify cluster health on both managed clusters before each RDR test.
