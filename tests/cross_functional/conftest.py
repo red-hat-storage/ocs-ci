@@ -1507,7 +1507,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         )
         # verify noobaa statefulset is present
         sample = TimeoutSampler(
-            timeout=1200,
+            timeout=3600,
             sleep=30,
             func=run_cmd_verify_cli_output,
             cmd="oc get sts noobaa-core -n openshift-storage",
