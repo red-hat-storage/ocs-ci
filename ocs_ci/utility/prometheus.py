@@ -90,6 +90,56 @@ def check_alert_list(
     logger.info("Alerts were triggered correctly during utilization")
 
 
+def validate_alert(
+    threading_lock,
+    alert_constant,
+    message,
+    description,
+    runbook,
+    severity="warning",
+    state="pending",
+    timeout=1200,
+    sleep=None,
+):
+    """
+    Wait for an alert and validate its properties.
+
+    Args:
+        threading_lock: Threading lock object for thread-safe Prometheus API operations
+        alert_constant (str): Alert name constant
+        message (str): Expected alert message
+        description (str): Expected alert description
+        runbook (str): Expected runbook URL
+        severity (str): Expected severity
+        state (str): Alert state to wait for
+        timeout (int): Timeout in seconds to wait for the alert
+        sleep (int): Optional polling interval for alert wait
+
+    Returns:
+        bool: True if alert is validated successfully, False otherwise
+    """
+    api = PrometheusAPI(threading_lock=threading_lock)
+    wait_kwargs = {"name": alert_constant, "state": state, "timeout": timeout}
+    if sleep is not None:
+        wait_kwargs["sleep"] = sleep
+    alerts = api.wait_for_alert(**wait_kwargs)
+
+    try:
+        check_alert_list(
+            label=alert_constant,
+            msg=message,
+            description=description,
+            runbook=runbook,
+            states=[state],
+            severity=severity,
+            alerts=alerts,
+        )
+        logger.info("Alert verified successfully")
+        return True
+    except AssertionError:
+        return False
+
+
 def check_query_range_result_viafunction(
     result,
     is_value_good,
