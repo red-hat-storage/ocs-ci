@@ -20,7 +20,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_logs
 from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, warp
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -41,6 +41,20 @@ class TestNoobaaDbBackupRecoveryOps:
             if config.ENV_DATA["mcg_only_deployment"]
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
         )
+
+    @pytest.fixture()
+    def warps3(self, request):
+        """
+        Create warp S3 benchmark resource for multi-client testing
+        """
+        warps3 = warp.Warp()
+        warps3.create_resource_warp(replicas=4, multi_client=True)
+
+        def teardown():
+            warps3.cleanup(multi_client=True)
+
+        request.addfinalizer(teardown)
+        return warps3
 
     def trigger_cluster_recovery(self, db_cluster_name):
         """
