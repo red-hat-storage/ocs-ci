@@ -48,7 +48,10 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
     def labels_map(self):
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_19:
-            noobaa_db_label = constants.NOOBAA_DB_LABEL_419_AND_ABOVE
+            noobaa_db_label = (
+                f"{constants.NOOBAA_DB_LABEL_419_AND_ABOVE},"
+                f"{constants.NB_DB_PRIMARY_POD_LABEL}"
+            )
         else:
             noobaa_db_label = constants.NOOBAA_DB_LABEL_47_AND_ABOVE
         return {
