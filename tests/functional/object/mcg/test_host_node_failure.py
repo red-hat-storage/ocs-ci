@@ -102,8 +102,8 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         node_restart_teardown,
     ):
         """
-        Test case to fail node where NooBaa Statefulset pod (noobaa-core, noobaa-db)
-        is hosted and verify the pod is rescheduled on a healthy node
+        Test case to fail the node where a NooBaa Statefulset pod (noobaa-core, noobaa-db)
+        is hosted and verify that the pod is rescheduled on a healthy node
 
         """
         executor = ThreadPoolExecutor(max_workers=1)
