@@ -3159,4 +3159,8 @@ EDIT = "edit"
 DELETE = "delete"
 MACHINE_POOL_ACTIONS = [CREATE, EDIT, DELETE]
 # MDR multicluster roles
+# RDR multicluster roles
+RDR_ROLES = ["ActiveACM", "PrimaryODF", "SecondaryODF"]
+ACM_RANK = 1
+MANAGED_CLUSTER_RANK = 2
 MDR_ROLES = ["ActiveACM", "PassiveACM", "PrimaryODF", "SecondaryODF"]
