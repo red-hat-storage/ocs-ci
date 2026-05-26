@@ -425,14 +425,6 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 timeout=720
             ), "Not all the pods reached running state"
 
-            # health = run_ceph_health_cmd(namespace, detail=True)
-            # ceph_health_recover(
-            #     health,
-            #     namespace,
-            #     update_jira=False,
-            #     no_exception_if_jira_issue_updated=False,
-            # )
-            # ceph_health_check()
             logger.info(f"Nodes in zone '{power_off_zone}' restarted and healthy")
 
             # Cleanup discovered apps after failover and node restart
@@ -514,6 +506,22 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     f"Waiting for completion..."
                 )
 
+                # For discovered apps, perform cleanup before verifying resources
+                if wl_meta["is_discovered_app"]:
+                    logger.info(
+                        f"Cleaning up discovered workload with drpc_name={wl_meta['drpc_name']}, "
+                        f"namespace={wl_meta['workload_namespace']}, "
+                        f"resource_name={wl_meta['resource_name']}, "
+                        f"old_primary={wl_meta['secondary_cluster_name']}"
+                    )
+                    dr_helpers.do_discovered_apps_cleanup(
+                        drpc_name=wl_meta["resource_name"],
+                        old_primary=wl_meta["secondary_cluster_name"],
+                        workload_namespace=wl_meta["workload"].workload_namespace,
+                        workload_dir=wl_meta["workload"].workload_dir,
+                        vrg_name=wl_meta["workload"].discovered_apps_placement_name,
+                    )
+
                 # Wait for this workload's relocate to complete before moving to next
                 logger.info(
                     f"Verifying relocate completion for workload "
@@ -522,6 +530,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     f"resource_name={wl_meta['resource_name']} "
                     f"drpc_name={wl_meta['drpc_name']}"
                 )
+                config.switch_to_cluster_by_name(wl_meta["primary_cluster_name"])
                 dr_helpers.wait_for_all_resources_creation(
                     wl_meta["workload"].workload_pvc_count,
                     wl_meta["workload"].workload_pod_count,
@@ -529,7 +538,6 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     discovered_apps=wl_meta["is_discovered_app"],
                     timeout=1200,
                 )
-                config.switch_to_cluster_by_name(wl_meta["primary_cluster_name"])
                 wait_for_pods_to_be_running(
                     namespace=wl_meta["workload_namespace"],
                     timeout=720,
@@ -551,29 +559,6 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     f"resource_name={wl_meta['resource_name']})"
                 )
 
-            discovered_workloads_to_cleanup = [
-                wl_meta for wl_meta in workload_metadata if wl_meta["is_discovered_app"]
-            ]
-            if discovered_workloads_to_cleanup:
-                logger.info(
-                    "Starting explicit cleanup for discovered workloads after all relocates "
-                    f"have completed. Workloads to cleanup: "
-                    f"{[wl['drpc_name'] for wl in discovered_workloads_to_cleanup]}"
-                )
-                for wl_meta in discovered_workloads_to_cleanup:
-                    logger.info(
-                        f"Cleaning up discovered workload with drpc_name={wl_meta['drpc_name']}, "
-                        f"namespace={wl_meta['workload_namespace']}, "
-                        f"resource_name={wl_meta['resource_name']}, "
-                        f"old_primary={wl_meta['secondary_cluster_name']}"
-                    )
-                    dr_helpers.do_discovered_apps_cleanup(
-                        drpc_name=wl_meta["resource_name"],
-                        old_primary=wl_meta["secondary_cluster_name"],
-                        workload_namespace=wl_meta["workload"].workload_namespace,
-                        workload_dir=wl_meta["workload"].workload_dir,
-                        vrg_name=wl_meta["workload"].discovered_apps_placement_name,
-                    )
         except Exception as ex:
             logger.error(
                 f"Relocate phase failed. Requested relocate batch: {relocate_batch}. "
