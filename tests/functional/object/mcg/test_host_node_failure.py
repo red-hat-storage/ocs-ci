@@ -19,6 +19,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility import version
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
     get_noobaa_pods,
@@ -43,11 +44,18 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
 
     """
 
-    labels_map = {
-        constants.NOOBAA_CORE_STATEFULSET: constants.NOOBAA_CORE_POD_LABEL,
-        constants.NOOBAA_DB_STATEFULSET: constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-        constants.NOOBAA_OPERATOR_DEPLOYMENT: constants.NOOBAA_OPERATOR_POD_LABEL,
-    }
+    @property
+    def labels_map(self):
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_19:
+            noobaa_db_label = constants.NOOBAA_DB_LABEL_419_AND_ABOVE
+        else:
+            noobaa_db_label = constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+        return {
+            constants.NOOBAA_CORE_STATEFULSET: constants.NOOBAA_CORE_POD_LABEL,
+            constants.NOOBAA_DB_STATEFULSET: noobaa_db_label,
+            constants.NOOBAA_OPERATOR_DEPLOYMENT: constants.NOOBAA_OPERATOR_POD_LABEL,
+        }
 
     @pytest.fixture(autouse=True)
     def init_sanity(self):
@@ -101,15 +109,24 @@ class TestNoobaaSTSHostNodeFailure(ManageTest):
         )
 
         # Get noobaa statefulset pod and node where it is hosted
-        noobaa_sts_pod = get_noobaa_pods(noobaa_label=self.labels_map[noobaa_sts])[0]
+        noobaa_sts_pods = get_noobaa_pods(noobaa_label=self.labels_map[noobaa_sts])
+        assert (
+            noobaa_sts_pods
+        ), f"No pods found with label {self.labels_map[noobaa_sts]}"
+        noobaa_sts_pod = noobaa_sts_pods[0]
         noobaa_sts_pod_node = get_pod_node(noobaa_sts_pod)
         log.info(f"{noobaa_sts_pod.name} is running on {noobaa_sts_pod_node.name}")
 
         # Get the NooBaa operator pod and node where it is hosted
         # Check if NooBaa operator and statefulset pod are hosted on same node
-        noobaa_operator_pod = get_noobaa_pods(
+        noobaa_operator_pods = get_noobaa_pods(
             noobaa_label=self.labels_map[constants.NOOBAA_OPERATOR_DEPLOYMENT]
-        )[0]
+        )
+        assert noobaa_operator_pods, (
+            f"No pods found with label "
+            f"{self.labels_map[constants.NOOBAA_OPERATOR_DEPLOYMENT]}"
+        )
+        noobaa_operator_pod = noobaa_operator_pods[0]
         noobaa_operator_pod_node = get_pod_node(noobaa_operator_pod)
         log.info(
             f"{noobaa_operator_pod.name} is running on {noobaa_operator_pod_node.name}"
