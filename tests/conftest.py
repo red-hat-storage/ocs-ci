@@ -1334,6 +1334,8 @@ def storageclass_factory_fixture(
                         interface_name = get_ec_metadata_pool_name()
                         ec_data_pool_name = pool_obj.name
                     else:
+                        pool_obj.ocp.resource_name = pool_obj.name
+                        pool_obj.ocp.wait_for_phase(phase="Ready", timeout=300)
                         interface_name = pool_obj.name
                 else:
                     if pool_name is None:
