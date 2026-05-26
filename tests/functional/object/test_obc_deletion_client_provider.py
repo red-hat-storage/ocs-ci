@@ -1,9 +1,9 @@
 """
 Test OBC deletion on client clusters with verification on provider.
 
-This test validates OBC deletion behavior on HCI client clusters connected to a provider,
-ensuring that deletion propagates correctly from client to provider for both empty
-and non-empty buckets.
+This test module validates OBC deletion behavior on HCI client clusters connected to
+a provider, ensuring that deletion propagates correctly from client to provider for
+both empty and non-empty buckets.
 """
 
 import base64
