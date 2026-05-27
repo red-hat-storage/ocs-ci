@@ -9,6 +9,7 @@ both empty and non-empty buckets.
 import base64
 import boto3
 import logging
+import os
 import pytest
 import tempfile
 import urllib3
@@ -67,12 +68,20 @@ class TestOBCDeletionClientProvider(ManageTest):
 
         def finalizer():
             """Cleanup resources."""
-            # Close test file handles
+            # Close and delete test files
             for test_file in self.test_files:
                 try:
                     test_file.close()
                 except Exception as e:
                     logger.warning("Failed to close test file: %s", e)
+
+                # Delete the temporary file from disk
+                try:
+                    os.unlink(test_file.name)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to delete test file %s: %s", test_file.name, e
+                    )
 
             # Switch back to current context if needed
             try:
