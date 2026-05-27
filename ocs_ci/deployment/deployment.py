@@ -3781,28 +3781,32 @@ class MultiClusterDROperatorsDeploy(object):
                 f"[ramenctl-e2e] Cloning ramenctl from {ramenctl_repo_url} "
                 f"(branch: {ramenctl_branch})"
             )
-            clone_repo(
-                url=ramenctl_repo_url,
-                location=ramenctl_clone_dir,
-                branch=ramenctl_branch,
-            )
-        except Exception as e:
-            logger.error(f"[ramenctl-e2e] Failed to clone ramenctl repo: {e}")
-            logger.warning("[ramenctl-e2e] Skipping ramenctl e2e tests")
-            return
+            try:
+                clone_repo(
+                    url=ramenctl_repo_url,
+                    location=ramenctl_clone_dir,
+                    branch=ramenctl_branch,
+                )
+            except Exception as e:
+                logger.error(f"[ramenctl-e2e] Failed to clone ramenctl repo: {e}")
+                logger.warning("[ramenctl-e2e] Skipping ramenctl e2e tests")
+                return
 
-        if not self._install_ramenctl(ramenctl_clone_dir):
-            logger.warning("[ramenctl-e2e] Skipping e2e tests due to build failure")
-            return
+            if not self._install_ramenctl(ramenctl_clone_dir):
+                logger.warning("[ramenctl-e2e] Skipping e2e tests due to build failure")
+                return
 
-        config_file = self._generate_ramenctl_config(ramenctl_clone_dir)
-        if not config_file:
-            logger.warning("[ramenctl-e2e] Skipping e2e tests due to config generation failure")
-            return
+            config_file = self._generate_ramenctl_config(ramenctl_clone_dir)
+            if not config_file:
+                logger.warning("[ramenctl-e2e] Skipping e2e tests due to config generation failure")
+                return
 
-        self._execute_ramenctl_e2e(ramenctl_clone_dir, config_file)
+            self._execute_ramenctl_e2e(ramenctl_clone_dir, config_file)
 
-        logger.info("[ramenctl-e2e] Completed ramenctl e2e test execution")
+            logger.info("[ramenctl-e2e] Completed ramenctl e2e test execution")
+        finally:
+            logger.info(f"[ramenctl-e2e] Cleaning up temporary directory: {ramenctl_clone_dir}")
+            shutil.rmtree(ramenctl_clone_dir, ignore_errors=True)
 
     def _install_ramenctl(self, ramenctl_dir):
         """
@@ -3874,7 +3878,11 @@ class MultiClusterDROperatorsDeploy(object):
         config_file = f"{ramenctl_dir}/config.yaml"
 
         logger.info("[ramenctl-e2e] Building config content with cluster details")
-        ramenctl_config = self._build_ramenctl_config_content(ramenctl_dir)
+        try:
+            ramenctl_config = self._build_ramenctl_config_content(ramenctl_dir)
+        except Exception as e:
+            logger.error(f"[ramenctl-e2e] Failed to build ramenctl config: {e}")
+            return None
 
         try:
             with open(config_file, "w") as f:
@@ -3927,11 +3935,29 @@ class MultiClusterDROperatorsDeploy(object):
 
             clusters_config["passive-hub"] = {"kubeconfig": ""}
 
-            managed_clusters = get_non_acm_cluster_config()
-            if not managed_clusters:
-                logger.warning("[ramenctl-e2e] No managed clusters found")
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            if dr_cluster_relations:
+                dr_cluster_names = dr_cluster_relations[0]
+                managed_clusters = [
+                    cluster
+                    for cluster in config.clusters
+                    if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+                ]
+            else:
+                managed_clusters = get_non_acm_cluster_config()
 
-            for idx, cluster in enumerate(managed_clusters, start=1):
+            primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
+            filtered_clusters = [
+                cluster
+                for cluster in managed_clusters
+                if cluster.ENV_DATA["cluster_name"] != primary_cluster_name
+                and not is_recovery_cluster(cluster)
+            ]
+
+            if not filtered_clusters:
+                logger.warning("[ramenctl-e2e] No DR-policy managed clusters found")
+
+            for idx, cluster in enumerate(filtered_clusters, start=1):
                 cluster_kubeconfig = cluster.RUN.get("kubeconfig")
                 if cluster_kubeconfig and os.path.exists(cluster_kubeconfig):
                     cluster_dest = os.path.join(ramenctl_dir, f"c{idx}.yaml")
@@ -3951,7 +3977,6 @@ class MultiClusterDROperatorsDeploy(object):
         finally:
             config.switch_ctx(old_ctx)
 
-        # Build pvcSpecs - use both RBD and CephFS
         pvc_specs = [
             {
                 "name": "rbd",
