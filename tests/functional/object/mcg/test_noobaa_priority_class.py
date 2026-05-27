@@ -363,3 +363,104 @@ class TestNoobaaPriorityClass(MCGTest):
                     f"PVPool pod {pod.name} still has priorityClassName={actual} "
                     f"after removal from backingstore CR"
                 )
+
+    @tier2
+    @polarion_id("OCS-7955")
+    @config.run_with_provider_context_if_available
+    def test_pvpool_multi_volume_priority_class(self, bucket_factory):
+        """
+        Test that priorityClassName set on a multi-volume PVPool backingstore CR
+        propagates to all of its corresponding pods after operator reconciliation.
+
+        1. Create a PVPool backingstore with 3 volumes
+        2. Patch the backingstore CR with priorityClassName=openshift-user-critical
+        3. Wait for the NooBaa operator to reconcile and for the pods to restart
+        4. Verify that all 3 PVPool pods have priorityClassName=openshift-user-critical
+        5. Patch the backingstore CR to remove the priorityClassName field
+        6. Wait for the NooBaa operator to reconcile and for the pods to restart
+        7. Verify that all 3 PVPool pods are Running without any priorityClassName
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        bs_ocp = OCP(kind="backingstore", namespace=namespace)
+        num_volumes = 3
+
+        # 1. Create a PVPool backingstore with 3 volumes
+        logger.test_step(
+            f"Step 1: Creating a PVPool backingstore with {num_volumes} volumes"
+        )
+        bucketclass_dict = {
+            "interface": "OC",
+            "backingstore_dict": {
+                "pv": [(num_volumes, MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC)]
+            },
+        }
+        bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
+        bs_name = bucket.bucketclass.backingstores[0].name
+
+        # 2. Patch the backingstore CR with priorityClassName
+        logger.test_step(
+            f"Step 2: Patching backingstore {bs_name} with "
+            f"priorityClassName={OPENSHIFT_USER_CRITICAL}"
+        )
+        patch = {"spec": {"pvPool": {"priorityClassName": OPENSHIFT_USER_CRITICAL}}}
+        bs_ocp.patch(
+            resource_name=bs_name,
+            params=json.dumps(patch),
+            format_type="merge",
+        )
+
+        # 3. Wait for the operator to reconcile and pods to restart
+        logger.test_step("Step 3: Waiting for operator reconciliation")
+        self._wait_for_pvpool_pods_priority_class(
+            bs_name=bs_name,
+            expected_pc=OPENSHIFT_USER_CRITICAL,
+            namespace=namespace,
+        )
+
+        # 4. Verify all PVPool pods have the expected priorityClassName
+        logger.test_step(
+            "Step 4: Verifying all PVPool pods have "
+            f"priorityClassName={OPENSHIFT_USER_CRITICAL}"
+        )
+        pods = get_noobaa_pvpool_pods(bs_name, namespace)
+        assert len(pods) == num_volumes, (
+            f"Expected {num_volumes} PVPool pods for {bs_name}, " f"got {len(pods)}"
+        )
+        for pod in pods:
+            actual = pod.get()["spec"].get("priorityClassName")
+            assert actual == OPENSHIFT_USER_CRITICAL, (
+                f"PVPool pod {pod.name} priorityClassName mismatch: "
+                f"expected={OPENSHIFT_USER_CRITICAL}, actual={actual}"
+            )
+
+        # 5. Remove priorityClassName from the backingstore CR
+        logger.test_step("Step 5: Removing priorityClassName from backingstore CR")
+        remove_patch = [{"op": "remove", "path": "/spec/pvPool/priorityClassName"}]
+        bs_ocp.patch(
+            resource_name=bs_name,
+            params=json.dumps(remove_patch),
+            format_type="json",
+        )
+
+        # 6. Wait for the operator to reconcile and pods to restart
+        logger.test_step("Step 6: Waiting for operator reconciliation")
+        self._wait_for_pvpool_pods_priority_class(
+            bs_name=bs_name,
+            expected_pc=None,
+            namespace=namespace,
+        )
+
+        # 7. Verify all PVPool pods are Running without any priorityClassName
+        logger.test_step(
+            "Step 7: Verifying all PVPool pods run without priorityClassName"
+        )
+        pods = get_noobaa_pvpool_pods(bs_name, namespace)
+        assert len(pods) == num_volumes, (
+            f"Expected {num_volumes} PVPool pods for {bs_name}, " f"got {len(pods)}"
+        )
+        for pod in pods:
+            actual = pod.get()["spec"].get("priorityClassName")
+            assert actual is None, (
+                f"PVPool pod {pod.name} still has priorityClassName={actual} "
+                f"after removal from backingstore CR"
+            )
