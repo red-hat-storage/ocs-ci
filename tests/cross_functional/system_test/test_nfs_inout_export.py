@@ -11,7 +11,7 @@ from ocs_ci.utility import nfs_utils
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, platform_nodes
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
@@ -319,10 +319,10 @@ class TestNfsExport(ManageTest):
             retcode, _, stderr = self.con.exec_cmd(cmd)
             if retcode != 0:
                 raise CommandFailed(
-                    f"NFS mount command failed with retcode " f"{retcode}: {stderr}"
+                    f"NFS mount command failed with retcode {retcode}: {stderr}"
                 )
 
-        retry((CommandFailed), tries=tries, delay=delay)(_do_mount)()
+        retry(CommandFailed, tries=tries, delay=delay)(_do_mount)()
 
     def write_io_to_single_file(self, con, file_path, num_iterations=20, delay=0.5):
         """
@@ -456,6 +456,41 @@ class TestNfsExport(ManageTest):
         log.info(f"NFS share for PVC {pvc_name}: {share_details}")
 
         return {"volume_name": vol_name, "share_details": share_details}
+
+    def log_nfs_loadbalancer_details(self, stage=""):
+        """
+        Log NFS LoadBalancer service details including endpoint and hostname.
+
+        Args:
+            stage (str): Description of when this is being called (e.g., "BEFORE shutdown", "AFTER recovery")
+        """
+        log.info("=" * 80)
+        log.info(f"NFS LoadBalancer details {stage}:")
+        try:
+            lb_svc = ocp.OCP(
+                kind=constants.SERVICE,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name="rook-ceph-nfs-my-nfs-load-balancer",
+            )
+            lb_data = lb_svc.get()
+            lb_ingress = (
+                lb_data.get("status", {}).get("loadBalancer", {}).get("ingress", [])
+            )
+            if lb_ingress:
+                lb_endpoint = lb_ingress[0].get("hostname") or lb_ingress[0].get("ip")
+                log.info(f"  LoadBalancer Endpoint: {lb_endpoint}")
+                log.info(f"  self.hostname_add: {self.hostname_add}")
+                if lb_endpoint != self.hostname_add:
+                    log.warning(
+                        f"  ⚠ LoadBalancer endpoint changed! Expected: {self.hostname_add}, Got: {lb_endpoint}"
+                    )
+                else:
+                    log.info("  ✓ LoadBalancer endpoint matches expected value")
+            else:
+                log.warning("  ⚠ No LoadBalancer ingress found")
+        except Exception as e:
+            log.warning(f"  ⚠ Failed to get LoadBalancer details: {e}")
+        log.info("=" * 80)
 
     def mount_nfs_export(self, con, share_details, mount_point):
         """
@@ -592,6 +627,7 @@ class TestNfsExport(ManageTest):
         self,
         pod_factory,
         request,
+        nodes,
     ):
         """
         This test is to validate NFS export using a PVC mounted on an app pod (in-cluster)
@@ -613,16 +649,17 @@ class TestNfsExport(ManageTest):
         import random
 
         unique_suffix = f"{int(time.time())}-{random.randint(1000, 9999)}"
-        pod_name = f"test-pod-outcluster-{unique_suffix}"
+        pod_name = f"test-deployment-outcluster-{unique_suffix}"
         pvc_name = f"test-pvc-outcluster-{unique_suffix}"
-        log.info(f"Using unique names: pod={pod_name}, pvc={pvc_name}")
+        log.info(f"Using unique names: pod deployment={pod_name}, pvc={pvc_name}")
+
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
             sc_name=self.nfs_sc,
             namespace=self.namespace,
             size="10Gi",
             do_reload=True,
-            access_mode=constants.ACCESS_MODE_RWX,
+            access_mode=constants.ACCESS_MODE_RWO,
             volume_mode="Filesystem",
             pvc_name=pvc_name,
         )
@@ -710,11 +747,11 @@ class TestNfsExport(ManageTest):
         # ), f"File {file_name} doesn't exist"
         # log.info(f"File {file_name} exists in {pod_obj.name}")
         # Create /var/lib/www/html/index.html file inside the pod
-        command = "bash -c " + '"echo ' + "'hello world'" + '  > /mnt/index.html"'
-        pod_obj.exec_cmd_on_pod(
-            command=command,
-            out_yaml_format=False,
-        )
+        # command = "bash -c " + '"echo ' + "'hello world'" + '  > /mnt/index.html"'
+        # pod_obj.exec_cmd_on_pod(
+        #     command=command,
+        #     out_yaml_format=False,
+        # )
         # Get connection once to avoid multiple 5-minute waits
         con = self.con
         retcode, _, _ = con.exec_cmd("mkdir -p " + test_folder_for_pod)
@@ -790,40 +827,6 @@ class TestNfsExport(ManageTest):
 
         request.addfinalizer(cleanup_all_resources)
 
-        # # Verify able to read exported volume
-        # command = f"cat {test_folder_for_pod}/index.html"
-        # retcode, stdout, _ = con.exec_cmd(command)
-        # stdout = stdout.rstrip()
-        # log.info(stdout)
-        # assert stdout == "hello world"
-        # command = f"chmod 666 {test_folder_for_pod}/index.html"
-        # retcode, _, _ = con.exec_cmd(command)
-        # assert retcode == 0
-
-        # # Verify able to write to the exported volume
-        # command = (
-        #     "bash -c "
-        #     + '"echo '
-        #     + "'test_writing'"
-        #     + f'  >> {test_folder_for_pod}/index.html"'
-        # )
-        # retcode, _, stderr = con.exec_cmd(command)
-        # assert retcode == 0, f"failed with error---{stderr}"
-        #
-        # command = f"cat {test_folder_for_pod}/index.html"
-        # retcode, stdout, _ = con.exec_cmd(command)
-        # assert retcode == 0
-        # stdout = stdout.rstrip()
-        # assert stdout == "hello world" + """\n""" + "test_writing"
-        #
-        # # Able to read updated /var/lib/www/html/index.html file from inside the pod
-        # command = "bash -c " + '"cat ' + ' /mnt/index.html"'
-        # result = pod_obj.exec_cmd_on_pod(
-        #     command=command,
-        #     out_yaml_format=False,
-        # )
-        # assert result.rstrip() == "hello world" + """\n""" + "test_writing"
-
         # ========================================================================
         # Scenario: NFS Server Pod Node Reboot During Active I/O
         # ========================================================================
@@ -853,7 +856,7 @@ class TestNfsExport(ManageTest):
                 # Initialize the file with initial content
                 initial_data = f"IO test started at {time.time()}"
                 init_cmd = f'echo "{initial_data}" > {test_file}'
-                retcode, _, stderr = con.exec_cmd(init_cmd)
+                retcode, _, stderr = con.exec_cmd(init_cmd, use_logger=False)
                 if retcode != 0:
                     io_errors.append(f"Failed to initialize test file: {stderr}")
                     log.error(f"Initialization error: {stderr}")
@@ -874,7 +877,7 @@ class TestNfsExport(ManageTest):
 
                     # Write operation - append to the file
                     write_cmd = f'echo "{test_data}" >> {test_file}'
-                    retcode, _, stderr = con.exec_cmd(write_cmd)
+                    retcode, _, stderr = con.exec_cmd(write_cmd, use_logger=False)
                     if retcode != 0:
                         io_errors.append(
                             f"Write failed at iteration {iteration}: {stderr}"
@@ -993,14 +996,18 @@ class TestNfsExport(ManageTest):
         nfs_node_name = nfs_server_pod.data["spec"]["nodeName"]
         log.info(f"NFS server pod is running on node: {nfs_node_name}")
 
+        # Get the node object for the NFS node
+        from ocs_ci.ocs.node import get_node_objs
+
+        nfs_node_obj = get_node_objs([nfs_node_name])[0]
         log.info(f"Rebooting node: {nfs_node_name}")
 
-        # # Perform node reboot using platform nodes
-        # log.info("Initiating node reboot...")
-        # factory = platform_nodes.PlatformNodesFactory()
-        # nodes_platform = factory.get_nodes_platform()
-        # nodes_platform.restart_nodes([nfs_node_obj], wait=True)
-        # log.info(f"Node {nfs_node_name} reboot completed")
+        # Perform node reboot using platform nodes
+        log.info("Initiating node reboot...")
+        factory = platform_nodes.PlatformNodesFactory()
+        nodes_platform = factory.get_nodes_platform()
+        nodes_platform.restart_nodes([nfs_node_obj], wait=True)
+        log.info(f"Node {nfs_node_name} reboot completed")
 
         # Step 3: Wait for node and pods to recover
         log.info("Step 3: Waiting for node to come back online")
@@ -1018,6 +1025,31 @@ class TestNfsExport(ManageTest):
             pod_names=[nfs_server_pod.name], namespace=self.namespace, timeout=600
         )
         log.info("NFS server pod is running again")
+
+        # Wait for deployment pod to be running (pod might have been recreated with new name)
+        log.info(f"Waiting for deployment {pod_name} pod to be running...")
+        assert self.pod_obj.wait_for_resource(
+            resource_count=1,
+            condition=constants.STATUS_RUNNING,
+            selector=f"name={pod_name}",
+            dont_allow_other_resources=True,
+            timeout=600,
+        ), f"Deployment {pod_name} pod not running after node reboot"
+
+        # Get fresh pod object from deployment (pod name will have changed after reboot)
+        log.info(f"Getting fresh pod object for deployment {pod_name}...")
+        pod_objs = pod.get_all_pods(
+            namespace=self.namespace,
+            selector=[pod_name],
+            selector_label="name",
+        )
+        if pod_objs:
+            pod_obj = pod_objs[0]
+            log.info(f"Got fresh pod object: {pod_obj.name}")
+        else:
+            raise Exception(
+                f"Could not find pod for deployment {pod_name} after node reboot"
+            )
 
         # Verify NFS mount is still accessible
         log.info("Verifying NFS mount accessibility...")
@@ -1070,7 +1102,7 @@ class TestNfsExport(ManageTest):
         else:
             log.error(f"Test file {test_file} not found on NFS mount")
 
-        # Verify data from pod perspective
+        # Verify data from pod perspective (using fresh pod object)
         log.info("Verifying data consistency from pod...")
         pod_file_path = f"/mnt/{IO_TEST_FILE_NAME}"
         pod_verify_cmd = f"test -f {pod_file_path} && wc -l {pod_file_path} || echo '0'"
@@ -1287,13 +1319,7 @@ class TestNfsExport(ManageTest):
         )
 
         log.info(f"Mounting restored NFS export: {export_restored_nfs_cmd}")
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(
-            con.exec_cmd
-        )(export_restored_nfs_cmd)
+        self._mount_nfs_with_retry(export_restored_nfs_cmd)
 
         # Verify mount is successful
         retcode, stdout, _ = con.exec_cmd(f"findmnt -M {restored_test_folder}")
@@ -1391,7 +1417,7 @@ class TestNfsExport(ManageTest):
         # Step 2: Create pod deployment using the cloned PVC
         log.info("Step 2: Creating pod deployment with cloned PVC")
 
-        cloned_pod_name = f"test-pod-cloned-{int(time.time())}"
+        cloned_pod_name = f"test-deployment-cloned-{int(time.time())}"
         cloned_deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
 
         # Deployment name
@@ -1684,7 +1710,7 @@ class TestNfsExport(ManageTest):
         # Step 3: Create pod deployment using the final restored PVC
         log.info("Step 3: Creating pod deployment with final restored PVC")
 
-        final_restored_pod_name = f"test-pod-final-{int(time.time())}"
+        final_restored_pod_name = f"test-deployment-final-{int(time.time())}"
         final_restored_deployment_data = templating.load_yaml(
             constants.NFS_APP_POD_YAML
         )
@@ -1786,13 +1812,7 @@ class TestNfsExport(ManageTest):
         )
 
         log.info(f"Mounting final restored NFS export: {mount_final_restored_cmd}")
-        retry(
-            (CommandFailed),
-            tries=28,
-            delay=10,
-        )(
-            con.exec_cmd
-        )(mount_final_restored_cmd)
+        self._mount_nfs_with_retry(mount_final_restored_cmd)
 
         # Verify mount is successful
         retcode, stdout, _ = con.exec_cmd(f"findmnt -M {final_restored_test_folder}")
@@ -1957,4 +1977,276 @@ class TestNfsExport(ManageTest):
         log.info(
             "All test scenarios completed successfully - cleanup will be handled by finalizers"
         )
+
+        # ========================================================================
+        # Non-Graceful Cluster Shutdown with Mount Point Validation
+        # ========================================================================
+        log.info("=" * 80)
+        log.info("Non-Graceful Cluster Shutdown with Mount Point Validation")
+        log.info("=" * 80)
+
+        # Collect all mount points that were created during the test
+        log.info("Collecting all NFS mount points created during the test")
+
+        # List of all mount points created in this test
+        nfs_mount_points = [
+            test_folder_for_pod,  # Original mount point
+            restored_test_folder,  # Restored PVC mount point
+            cloned_test_folder,  # Cloned PVC mount point
+            final_restored_test_folder,  # Final restored PVC mount point
+        ]
+
+        # List of all pod names created in this test
+        pod_names = [
+            pod_name,  # Original pod
+            restored_pod_name,  # Restored pod from snapshot
+            cloned_pod_name,  # Cloned pod
+            final_restored_pod_name,  # Final restored pod
+        ]
+
+        log.info(f"Total NFS mount points to validate: {len(nfs_mount_points)}")
+        for mount_point in nfs_mount_points:
+            log.info(f"  - {mount_point}")
+
+        log.info(f"Total pods to validate: {len(pod_names)}")
+        for pname in pod_names:
+            log.info(f"  - {pname}")
+
+        # Verify all mount points are accessible before shutdown
+        log.info("Verifying all mount points are accessible before shutdown")
+
+        for mount_point in nfs_mount_points:
+            retcode, stdout, _ = con.exec_cmd(f"findmnt -M {mount_point}")
+            assert (
+                retcode == 0
+            ), f"Mount point {mount_point} not accessible before shutdown"
+            log.info(f"✓ Mount point {mount_point} is accessible")
+
+        # Verify all pods are running before shutdown
+        log.info("Verifying all pods are running before shutdown")
+
+        for pname in pod_names:
+            pod_objs = pod.get_all_pods(
+                namespace=self.namespace,
+                selector=[pname],
+                selector_label="name",
+            )
+            assert pod_objs and len(pod_objs) > 0, f"Pod {pname} not found"
+            pod_obj = pod_objs[0]
+            pod_status = pod_obj.get().get("status", {}).get("phase", "Unknown")
+            assert pod_status == "Running", f"Pod {pname} not running: {pod_status}"
+            log.info(f"✓ Pod {pname} is running")
+
+        # Perform non-graceful cluster shutdown
+        log.info("Performing NON-GRACEFUL cluster shutdown")
+        log.info("This simulates an unexpected cluster failure (power loss scenario)")
+
+        # Import required modules for node operations
+        from ocs_ci.ocs.node import get_all_nodes, get_node_objs
+        from ocs_ci.utility.utils import ceph_health_check
+
+        # Get all cluster nodes
+        all_nodes = get_all_nodes()
+        log.info(f"Found {len(all_nodes)} nodes in the cluster")
+
+        # Get node objects for shutdown
+        node_objs = get_node_objs(all_nodes)
+
+        # Get EC2 instances if on AWS platform
+        if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            node_instances = nodes.get_ec2_instances(nodes=node_objs)
+            log.info(f"Retrieved EC2 instances for {len(node_instances)} nodes")
+
+        # Log NFS LoadBalancer details before shutdown
+        self.log_nfs_loadbalancer_details(stage="BEFORE cluster shutdown")
+
+        # Perform NON-GRACEFUL shutdown (force=True simulates power failure)
+        log.info(
+            "Initiating NON-GRACEFUL shutdown of all cluster nodes (force=True)..."
+        )
+        nodes.stop_nodes(nodes=node_objs, force=True)
+        log.info("All nodes stopped non-gracefully (simulating power failure)")
+
+        # Wait to ensure complete shutdown
+        log.info("Waiting for 3 minutes to ensure complete shutdown...")
+        time.sleep(180)
+
+        # Start all nodes back up
+        log.info("Starting all nodes back up...")
+        if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            nodes.start_nodes(instances=node_instances, nodes=node_objs)
+        else:
+            nodes.start_nodes(nodes=node_objs)
+        log.info("All nodes started")
+
+        # Wait for cluster recovery after non-graceful shutdown
+        log.info("Waiting for cluster recovery after NON-GRACEFUL shutdown")
+
+        # Wait for nodes to be ready (longer timeout for non-graceful recovery)
+        wait_for_nodes_status(node_names=all_nodes, timeout=1800)
+        log.info("All nodes are back online after non-graceful shutdown")
+
+        # Wait for all pods to be running in openshift-storage namespace
+        wait_for_pods_to_be_running(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            timeout=1200,
+        )
+        log.info("All storage pods are running")
+
+        # Verify Ceph health (may take longer after non-graceful shutdown)
+        ceph_health_check(tries=60, delay=60)
+        log.info("Ceph cluster health verified after non-graceful shutdown")
+
+        # Wait for NFS services to be fully operational
+        time.sleep(180)
+        log.info("Waiting for NFS services to stabilize after non-graceful recovery...")
+
+        # Log NFS LoadBalancer details after recovery
+        self.log_nfs_loadbalancer_details(stage="AFTER cluster recovery")
+
+        # Verify all mount points are accessible after recovery
+        log.info("Verifying all mount points are accessible after recovery")
+
+        max_retries = 20
+        retry_delay = 30
+        mount_recovery_status = {}
+
+        for mount_point in nfs_mount_points:
+            mount_accessible = False
+
+            for attempt in range(max_retries):
+                retcode, stdout, _ = con.exec_cmd(f"findmnt -M {mount_point}")
+                if retcode == 0:
+                    mount_accessible = True
+                    log.info(
+                        f"✓ Mount point {mount_point} is accessible after recovery"
+                    )
+                    break
+                else:
+                    log.info(
+                        f"Attempt {attempt + 1}/{max_retries}: Mount point {mount_point} "
+                        f"not yet accessible, waiting for recovery..."
+                    )
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+
+            mount_recovery_status[mount_point] = mount_accessible
+            if not mount_accessible:
+                log.error(f"✗ Mount point {mount_point} NOT accessible after recovery")
+
+        # Assert all mounts are accessible
+        failed_mounts = [
+            mp for mp, status in mount_recovery_status.items() if not status
+        ]
+        assert (
+            len(failed_mounts) == 0
+        ), f"The following mount points are not accessible after non-graceful recovery: {failed_mounts}"
+
+        log.info("All mount points verified accessible after non-graceful recovery")
+
+        # Perform I/O operations and verify bidirectional data consistency
+        log.info(
+            "Performing I/O operations and verifying bidirectional data consistency"
+        )
+
+        # Create a mapping of mount points to their corresponding pods
+        mount_to_pod_map = {
+            test_folder_for_pod: pod_name,  # Original mount -> Original pod
+            restored_test_folder: restored_pod_name,  # Restored mount -> Restored pod
+            cloned_test_folder: cloned_pod_name,  # Cloned mount -> Cloned pod
+            final_restored_test_folder: final_restored_pod_name,  # Final mount -> Final pod
+        }
+        for mount_point, pname in mount_to_pod_map.items():
+            try:
+                log.info(
+                    f"Testing bidirectional I/O for mount point: {mount_point} and pod: {pname}"
+                )
+
+                # Step 1: Write data from NFS client (mount point)
+                test_file_name = f"post_recovery_test_{int(time.time())}.txt"
+                test_file_nfs = f"{mount_point}/{test_file_name}"
+                test_data = f"Post-recovery NFS write test at {time.time()}"
+
+                write_cmd = f'echo "{test_data}" > {test_file_nfs}'
+                retcode, stdout, stderr = con.exec_cmd(write_cmd)
+                assert (
+                    retcode == 0
+                ), f"Failed to write from NFS mount {mount_point}: {stderr}"
+                log.info(f"✓ Successfully wrote data to NFS mount: {mount_point}")
+
+                # Step 2: Verify data is readable from NFS client
+                read_cmd = f"cat {test_file_nfs}"
+                retcode, stdout, stderr = con.exec_cmd(read_cmd)
+                assert (
+                    retcode == 0
+                ), f"Failed to read from NFS mount {mount_point}: {stderr}"
+                assert test_data in stdout, f"Data mismatch on NFS mount {mount_point}"
+                log.info(f"✓ Successfully verified data on NFS mount: {mount_point}")
+
+                # Step 3: Verify the same data is visible from the pod
+                pod_objs = pod.get_all_pods(
+                    namespace=self.namespace,
+                    selector=[pname],
+                    selector_label="name",
+                )
+                assert pod_objs and len(pod_objs) > 0, f"Pod {pname} not found"
+                pod_obj = pod_objs[0]
+
+                # Read the same file from within the pod
+                pod_file_path = f"/mnt/{test_file_name}"
+                read_from_pod_cmd = f"cat {pod_file_path}"
+                result = pod_obj.exec_cmd_on_pod(
+                    read_from_pod_cmd, out_yaml_format=False
+                )
+                assert test_data in result, (
+                    f"Data written to NFS mount is not visible from pod {pname}. "
+                    f"Expected: '{test_data}', Got: '{result}'"
+                )
+                log.info(
+                    f"✓ Successfully verified data from pod {pname} - bidirectional consistency confirmed"
+                )
+
+                # # Cleanup test file from NFS mount
+                # con.exec_cmd(f"rm -f {test_file_nfs}")
+                # log.info(f"✓ Bidirectional I/O test passed for {mount_point} <-> {pname}")
+
+            except Exception as e:
+                log.error(
+                    f"✗ Bidirectional I/O test failed for {mount_point} <-> {pname}: {e}"
+                )
+                raise
+
+        log.info("Bidirectional I/O operations verified successfully after recovery")
+
+        # Final summary for non-graceful shutdown scenario
+        log.info("=" * 80)
+        log.info(
+            "Non-Graceful Cluster Shutdown and Recovery Test - COMPLETED SUCCESSFULLY!"
+        )
+        log.info("=" * 80)
+        log.info("Summary:")
+        log.info(
+            "  - Shutdown type: NON-GRACEFUL (force=True, simulating power failure)"
+        )
+        log.info(f"  - Total mount points tested: {len(nfs_mount_points)}")
+        log.info(f"  - Total pods tested: {len(pod_names)}")
+        log.info("")
+        log.info("Mount points validated:")
+        for mount_point in nfs_mount_points:
+            log.info(f"  ✓ {mount_point}")
+        log.info("")
+        log.info("Pods validated:")
+        for pname in pod_names:
+            log.info(f"  ✓ {pname}")
+        log.info("")
+        log.info("All validations passed:")
+        log.info("  ✓ All mount points accessible after non-graceful recovery")
+        log.info("  ✓ All pods running and accessible")
+        log.info("  ✓ I/O operations from pods successful")
+        log.info("  ✓ I/O operations from NFS mounts successful")
+        log.info("=" * 80)
+        log.info(
+            "All test scenarios including non-graceful shutdown completed successfully"
+        )
+        log.info("Cleanup will be handled by finalizers")
         log.info("=" * 80)

@@ -141,7 +141,15 @@ def nfs_disable(
     pod_obj.wait_for_delete(resource_name=nfs_ganesha_pod_name)
 
     # Delete the nfs StorageClass
+    log.info(f"Deleting NFS StorageClass {constants.NFS_STORAGECLASS_NAME}")
     sc_obj.delete(resource_name=constants.NFS_STORAGECLASS_NAME)
+
+    # Wait for StorageClass deletion to complete before returning
+    log.info(
+        f"Waiting for NFS StorageClass {constants.NFS_STORAGECLASS_NAME} to be deleted..."
+    )
+    sc_obj.wait_for_delete(resource_name=constants.NFS_STORAGECLASS_NAME, timeout=120)
+    log.info(f"NFS StorageClass {constants.NFS_STORAGECLASS_NAME} deleted successfully")
 
 
 def create_nfs_load_balancer_service(
