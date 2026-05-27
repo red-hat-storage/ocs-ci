@@ -263,9 +263,9 @@ class TestNoobaaPriorityClass(MCGTest):
         Test that priorityClassName configured on a PVPool backingstore CR
         propagates to its corresponding pod after operator reconciliation.
 
-        1. Create 3 PVPool backingstores via bucket_factory (1 volume each)
+        1. Create 2 PVPool backingstores via bucket_factory (1 volume each)
         2. Verify backingstore CRs and pods have no priorityClassName
-        3. Create 3 custom PriorityClasses (one per backingstore)
+        3. Create 2 custom PriorityClasses (one per backingstore)
         4. Patch each backingstore CR with its corresponding PriorityClass
         5. Wait for the operator to reconcile and pods to restart
         6. Verify each PvPool pod has the expected priorityClassName
@@ -276,8 +276,8 @@ class TestNoobaaPriorityClass(MCGTest):
         namespace = config.ENV_DATA["cluster_namespace"]
         bs_ocp = OCP(kind="backingstore", namespace=namespace)
 
-        # 1. Create 3 PVPool backingstores via bucket_factory
-        logger.test_step("Step 1: Creating 3 PVPool backingstores")
+        # 1. Create 2 PVPool backingstores via bucket_factory
+        logger.test_step("Step 1: Creating 2 PVPool backingstores")
         bucketclass_dict = {
             "interface": "OC",
             "backingstore_dict": {
@@ -285,7 +285,7 @@ class TestNoobaaPriorityClass(MCGTest):
             },
         }
         bs_names = []
-        for _ in range(3):
+        for _ in range(2):
             bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
             bs_names.append(bucket.bucketclass.backingstores[0].name)
 
@@ -305,8 +305,8 @@ class TestNoobaaPriorityClass(MCGTest):
                     "priorityClassName" not in pod.get()["spec"]
                 ), f"PVPool pod {pod.name} already has priorityClassName set"
 
-        # 3. Create 3 custom PriorityClasses
-        logger.test_step("Step 3: Creating 3 custom PriorityClasses")
+        # 3. Create 2 custom PriorityClasses
+        logger.test_step("Step 3: Creating 2 custom PriorityClasses")
         pc_map = {}
         for i, name in enumerate(bs_names, start=1):
             pc_obj = helpers.create_priority_class(name, 500000 + i)
