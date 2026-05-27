@@ -11,14 +11,17 @@ from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.pod import (
     get_noobaa_core_pod,
     get_noobaa_endpoint_pods,
+    get_noobaa_pvpool_pods,
     get_pods_having_label,
     Pod,
 )
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -221,3 +224,142 @@ class TestNoobaaPriorityClass(MCGTest):
                 f"noobaa-db pod {db_pod.name} priorityClassName mismatch: "
                 f"expected={db_pc!r}, actual={actual!r}"
             )
+
+    def _wait_for_pvpool_pods_priority_class(
+        self, bs_name, expected_pc, namespace, timeout=360
+    ):
+        """
+        Poll PVPool pods until all carry the expected priorityClassName and are Running.
+        Pass None to wait for the field to be absent.
+        """
+        for pods in TimeoutSampler(
+            timeout=timeout,
+            sleep=15,
+            func=get_noobaa_pvpool_pods,
+            backingstore_name=bs_name,
+            namespace=namespace,
+        ):
+            if not pods:
+                continue
+            all_match = True
+            for pod in pods:
+                pod_dict = pod.get()
+                actual_pc = pod_dict["spec"].get("priorityClassName")
+                phase = pod_dict.get("status", {}).get("phase")
+                if actual_pc != expected_pc or phase != "Running":
+                    all_match = False
+                    break
+            if all_match:
+                return
+
+    @tier2
+    @polarion_id("OCS-7954")
+    @config.run_with_provider_context_if_available
+    def test_pvpool_backingstore_priority_class(self, bucket_factory, teardown_factory):
+        """
+        Test that priorityClassName configured on a PVPool backingstore CR
+        propagates to its corresponding pod after operator reconciliation.
+
+        1. Create 3 PVPool backingstores via bucket_factory (1 volume each)
+        2. Verify backingstore CRs and pods have no priorityClassName
+        3. Create 3 custom PriorityClasses (one per backingstore)
+        4. Patch each backingstore CR with its corresponding PriorityClass
+        5. Wait for the operator to reconcile and pods to restart
+        6. Verify each PvPool pod has the expected priorityClassName
+        7. Patch each backingstore CR to remove the priorityClassName
+        8. Wait for the operator to reconcile and pods to restart
+        9. Verify all PvPool pods run without any priorityClassName
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        bs_ocp = OCP(kind="backingstore", namespace=namespace)
+
+        # 1. Create 3 PVPool backingstores via bucket_factory
+        logger.test_step("Step 1: Creating 3 PVPool backingstores")
+        bucketclass_dict = {
+            "interface": "OC",
+            "backingstore_dict": {
+                "pv": [(1, MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC)]
+            },
+        }
+        bs_names = []
+        for _ in range(3):
+            bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
+            bs_names.append(bucket.bucketclass.backingstores[0].name)
+
+        # 2. Verify backingstore CRs and pods have no priorityClassName
+        logger.test_step(
+            "Step 2: Verifying backingstore CRs and pods have no priorityClassName"
+        )
+        for name in bs_names:
+            bs_cr = bs_ocp.get(resource_name=name)
+            assert (
+                "priorityClassName" not in bs_cr["spec"]["pvPool"]
+            ), f"Backingstore {name} already has priorityClassName set"
+            for pod in get_noobaa_pvpool_pods(name, namespace):
+                assert (
+                    "priorityClassName" not in pod.get()["spec"]
+                ), f"PVPool pod {pod.name} already has priorityClassName set"
+
+        # 3. Create 3 custom PriorityClasses
+        logger.test_step("Step 3: Creating 3 custom PriorityClasses")
+        pc_map = {}
+        for i, name in enumerate(bs_names, start=1):
+            pc_obj = helpers.create_priority_class(f"pvpool-{i}", 500000 + i)
+            teardown_factory(pc_obj)
+            pc_map[name] = pc_obj.name
+
+        # 4. Patch each backingstore CR with its corresponding PriorityClass
+        logger.test_step("Step 4: Patching each backingstore CR with its PriorityClass")
+        for name in bs_names:
+            patch = {"spec": {"pvPool": {"priorityClassName": pc_map[name]}}}
+            bs_ocp.patch(
+                resource_name=name,
+                params=json.dumps(patch),
+                format_type="merge",
+            )
+
+        # 5. Wait for the operator to reconcile and pods to restart
+        logger.test_step("Step 5: Waiting for operator reconciliation")
+        for name in bs_names:
+            self._wait_for_pvpool_pods_priority_class(
+                bs_name=name, expected_pc=pc_map[name], namespace=namespace
+            )
+
+        # 6. Verify each PvPool pod has the expected priorityClassName
+        logger.test_step("Step 6: Verifying pod priorityClassNames after patching")
+        for name in bs_names:
+            for pod in get_noobaa_pvpool_pods(name, namespace):
+                actual = pod.get()["spec"].get("priorityClassName")
+                assert actual == pc_map[name], (
+                    f"PVPool pod {pod.name} priorityClassName mismatch: "
+                    f"expected={pc_map[name]}, actual={actual}"
+                )
+
+        # 7. Remove priorityClassName from all backingstore CRs
+        logger.test_step("Step 7: Removing priorityClassName from all backingstore CRs")
+        for name in bs_names:
+            remove_patch = [{"op": "remove", "path": "/spec/pvPool/priorityClassName"}]
+            bs_ocp.patch(
+                resource_name=name,
+                params=json.dumps(remove_patch),
+                format_type="json",
+            )
+
+        # 8. Wait for the operator to reconcile and pods to restart
+        logger.test_step("Step 8: Waiting for operator reconciliation")
+        for name in bs_names:
+            self._wait_for_pvpool_pods_priority_class(
+                bs_name=name, expected_pc=None, namespace=namespace
+            )
+
+        # 9. Verify all PvPool pods run without any priorityClassName
+        logger.test_step(
+            "Step 9: Verifying all PvPool pods run without priorityClassName"
+        )
+        for name in bs_names:
+            for pod in get_noobaa_pvpool_pods(name, namespace):
+                actual = pod.get()["spec"].get("priorityClassName")
+                assert actual is None, (
+                    f"PVPool pod {pod.name} still has priorityClassName={actual} "
+                    f"after removal from backingstore CR"
+                )
