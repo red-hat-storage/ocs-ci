@@ -214,6 +214,72 @@ from ocs_ci.deployment.cnv import CNVInstaller
 logger = logging.getLogger(__name__)
 
 
+def _wait_for_multus_pods_ready(timeout=1200, interval=30):
+    """
+    Wait for Ceph pods to restart with multus network annotations after
+    the StorageCluster is patched with multus selectors.
+
+    Polls OSD pods until they all have the ``k8s.v1.cni.cncf.io/networks``
+    annotation, indicating multus has attached network interfaces. Then
+    waits for all storage pods to be Running and runs verify_multus_network.
+    """
+    public_net_name = config.ENV_DATA.get("multus_public_net_name", "public-net")
+
+    logger.info(
+        "Waiting for OSD pods to have multus network annotations (timeout=%ds)",
+        timeout,
+    )
+    for sample in TimeoutSampler(
+        timeout=timeout,
+        sleep=interval,
+        func=_osd_pods_have_multus_annotation,
+        public_net_name=public_net_name,
+    ):
+        if sample:
+            break
+
+    logger.info("All OSD pods have multus annotations, waiting for all pods Running")
+    if not wait_for_pods_to_be_running(
+        timeout=600,
+        sleep=20,
+        skip_for_status=[
+            constants.STATUS_COMPLETED,
+            "Succeeded",
+            "Terminating",
+        ],
+    ):
+        raise Exception(
+            "Not all storage pods reached Running state after multus restart"
+        )
+
+    logger.info("Verifying multus network configuration")
+    verify_multus_network()
+
+
+def _osd_pods_have_multus_annotation(public_net_name):
+    """Check if all OSD pods have the multus network annotation."""
+    from ocs_ci.ocs.resources.pod import get_osd_pods
+
+    try:
+        osd_pods = get_osd_pods()
+        if not osd_pods:
+            logger.info("No OSD pods found yet, waiting...")
+            return False
+        for pod in osd_pods:
+            annotations = pod.data.get("metadata", {}).get("annotations", {})
+            networks = annotations.get("k8s.v1.cni.cncf.io/networks", "")
+            if public_net_name not in networks:
+                logger.info(
+                    "OSD pod %s does not yet have multus annotation, waiting...",
+                    pod.name,
+                )
+                return False
+        return True
+    except Exception as ex:
+        logger.info("Error checking OSD pods for multus annotations: %s", ex)
+        return False
+
+
 class Deployment(object):
     """
     Base for all deployment platforms
@@ -1625,27 +1691,10 @@ class Deployment(object):
             logger.info("Waiting for StorageCluster to be Ready after multus patching")
             verify_storage_cluster()
 
-            logger.info("Waiting for storage pods to restart with multus configuration")
-            # Use wait_for_pods_to_be_running which re-fetches pods each
-            # iteration and tolerates pods that disappear during restarts.
-            # wait_for_storage_pods fetches the pod list once and then fails
-            # when a pod is replaced mid-iteration (stale pod name).
-            if not wait_for_pods_to_be_running(
-                timeout=1200,
-                sleep=20,
-                skip_for_status=[
-                    constants.STATUS_COMPLETED,
-                    "Succeeded",
-                    "Terminating",
-                ],
-            ):
-                raise Exception(
-                    "Not all storage pods reached Running state after "
-                    "multus StorageCluster patch"
-                )
-
-            logger.info("Verifying multus network configuration")
-            verify_multus_network()
+            logger.info(
+                "Waiting for Ceph pods to restart with multus network interfaces"
+            )
+            _wait_for_multus_pods_ready()
 
         if config.DEPLOYMENT["infra_nodes"]:
             log_step("Labeling infra nodes")
