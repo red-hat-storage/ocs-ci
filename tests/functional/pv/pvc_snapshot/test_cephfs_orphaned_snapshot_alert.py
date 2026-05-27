@@ -76,8 +76,11 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
             status=constants.STATUS_BOUND,
         )
 
+        storage_client = (
+            get_storage_client().resource_name if config.multicluster else None
+        )
         self._snap_runner = odf_cli_cephfs_snap_setup_helper(
-            storage_client=get_storage_client().resource_name
+            storage_client=storage_client
         )
 
         self.api = PrometheusAPI(
