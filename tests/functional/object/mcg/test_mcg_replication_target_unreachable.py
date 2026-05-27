@@ -118,7 +118,7 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         try:
             source_bucket.delete(verify=True)
         except CommandFailed as e:
-            logger.warning(f"Failed to delete source bucket: {e}")
+            pytest.fail(f"Failed to delete source bucket: {e}")
 
         # 6. Verify alert clears after source bucket deletion (blocked by DFBUGS-6398)
         if jira_issue("DFBUGS-6398"):
@@ -127,7 +127,7 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         cleared = api.wait_for_alert(
             name=constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE,
             state=None,
-            timeout=180,
+            timeout=60 * 5,
             sleep=30,
         )
         assert (
