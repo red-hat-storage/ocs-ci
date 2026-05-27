@@ -52,18 +52,8 @@ class TestReplicaOneExternal(ManageTest):
         self.topology_config = self._build_topology_config()
         self.created_pools = []
         self.created_rules = []
-        self.setup_completed = False
 
         def finalizer():
-            if not self.setup_completed:
-                log.error(
-                    "Setup did not complete. Potential orphaned resources "
-                    "on external cluster may require manual cleanup: "
-                    f"pools={self.topology_config.pool_names}, "
-                    f"rules={[f'{z.zone_name}-rule' for z in self.topology_config.zones]}"
-                )
-                return
-
             log.info("Starting external replica-1 teardown")
             try:
                 if self.created_pools:
@@ -161,7 +151,6 @@ class TestReplicaOneExternal(ManageTest):
         result = self.ext_cluster.setup_topology_replica_one(self.topology_config)
         self.created_pools = result["pools"]
         self.created_rules = result["rules"]
-        self.setup_completed = True
 
         log.info(f"Created pools: {self.created_pools}")
         log.info(f"Created rules: {self.created_rules}")
