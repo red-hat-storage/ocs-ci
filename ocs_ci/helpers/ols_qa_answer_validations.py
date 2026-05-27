@@ -30,10 +30,34 @@ def calculate_accuracy(answer, keywords):
             ``keywords`` is empty (no terms to verify).
 
     """
+    import logging
+    log = logging.getLogger(__name__)
+    
     if not keywords:
         return 0.0
-    matched = sum(1 for k in keywords if k.lower() in answer.lower())
-    return matched / len(keywords)
+    
+    answer_lower = answer.lower()
+    matched_keywords = []
+    missing_keywords = []
+    
+    for k in keywords:
+        if k.lower() in answer_lower:
+            matched_keywords.append(k)
+        else:
+            missing_keywords.append(k)
+    
+    accuracy = len(matched_keywords) / len(keywords)
+    
+    # Log details for debugging when accuracy is low
+    if accuracy < 0.75:
+        log.warning(
+            f"Low accuracy ({accuracy:.2f}): "
+            f"Matched {len(matched_keywords)}/{len(keywords)} keywords. "
+            f"Missing: {missing_keywords}"
+        )
+        log.debug(f"Answer received (first 500 chars): {answer[:500]}")
+    
+    return accuracy
 
 
 def is_uncertain(answer):

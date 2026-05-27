@@ -81,15 +81,23 @@ def do_deploy_ols():
     """
     log.info("Creating OpenshiftLightspeed Operator")
 
-    # check if OLS is already installed (short timeout / fast poll)
-    if validate_ols_operator_installed(timeout=10, interval=1):
-        log.info("OLS Operator already installed")
-        return True
-
+    # Check if OLS is already installed (short timeout / fast poll)
     try:
+        if validate_ols_operator_installed(timeout=60, interval=5):
+            log.info("OLS Operator already installed")
+            return True
+    except ResourceWrongStatusException:
+        log.info("OLS Operator not found, proceeding with installation")
+
+    # Install OLS operator
+    try:
+        log.info("Installing OLS Operator")
         exec_cmd(f"oc create -f {constants.OLS_OPERATOR_YAML}")
-        validate_ols_operator_installed()
+        log.info("Waiting for OLS Operator CSV to reach Succeeded state")
+        validate_ols_operator_installed(timeout=600, interval=5)
+        log.info("Waiting for OLS Operator pods to be running")
         wait_for_pods_to_be_running(namespace=constants.OLS_OPERATOR_NAMESPACE)
+        log.info("OLS Operator installation completed successfully")
         return True
     except (CommandFailed, ResourceWrongStatusException) as ex:
         log.error("Failed to install OLS Operator: %s", ex)
@@ -442,6 +450,83 @@ def delete_ols_config_and_secret():
         f"oc delete secret watsonx-api-keys -n {constants.OLS_OPERATOR_NAMESPACE} --ignore-not-found=true"
     )
     time.sleep(constants.OLS_CONFIG_DELETE_WAIT_SEC)
+
+
+def cleanup_ols_operator():
+    """
+
+    Complete cleanup of OLS operator, including config, secret, subscription, CSV, and namespace.
+    Used for test teardown to ensure clean state.
+
+    This function performs the following cleanup steps:
+    1. Delete OLSConfig custom resource
+    2. Delete watsonx API secret
+    3. Delete OLS operator subscription
+    4. Delete OLS operator CSV
+    5. Delete openshift-lightspeed namespace (which removes all remaining resources)
+
+    Waits after each major deletion to allow resources to be properly removed.
+
+    """
+    log.info("Starting complete OLS operator cleanup")
+
+    # Delete OLSConfig
+    try:
+        log.info("Deleting OLSConfig")
+        run_cmd(
+            f"oc delete {constants.OLS_CONFIG_KIND} cluster "
+            f"-n {constants.OLS_OPERATOR_NAMESPACE} --ignore-not-found=true"
+        )
+    except Exception as ex:
+        log.warning("Failed to delete OLSConfig: %s", ex)
+
+    # Delete secret
+    try:
+        log.info("Deleting watsonx API secret")
+        run_cmd(
+            f"oc delete secret watsonx-api-keys "
+            f"-n {constants.OLS_OPERATOR_NAMESPACE} --ignore-not-found=true"
+        )
+    except Exception as ex:
+        log.warning("Failed to delete secret: %s", ex)
+
+    # Delete subscription
+    try:
+        log.info("Deleting OLS operator subscription")
+        run_cmd(
+            f"oc delete subscription lightspeed-operator "
+            f"-n {constants.OLS_OPERATOR_NAMESPACE} --ignore-not-found=true"
+        )
+    except Exception as ex:
+        log.warning("Failed to delete subscription: %s", ex)
+
+    # Delete CSV
+    try:
+        csv_name = get_ols_operator_csv_name(namespace=constants.OLS_OPERATOR_NAMESPACE)
+        if csv_name:
+            log.info("Deleting OLS operator CSV: %s", csv_name)
+            run_cmd(
+                f"oc delete csv {csv_name} "
+                f"-n {constants.OLS_OPERATOR_NAMESPACE} --ignore-not-found=true"
+            )
+    except Exception as ex:
+        log.warning("Failed to delete CSV: %s", ex)
+
+    # Wait for resources to be deleted
+    time.sleep(10)
+
+    # Delete namespace (this will remove all remaining resources)
+    try:
+        log.info("Deleting openshift-lightspeed namespace and waiting for completion")
+        run_cmd(
+            f"oc delete namespace {constants.OLS_OPERATOR_NAMESPACE} "
+            "--ignore-not-found=true --timeout=300s"
+        )
+        log.info("Namespace openshift-lightspeed deleted successfully")
+    except Exception as ex:
+        log.warning("Failed to delete namespace: %s", ex)
+
+    log.info("OLS operator cleanup completed")
 
 
 def verify_ols_pod_logs_contain_expected_errors(

@@ -1,3 +1,15 @@
+"""
+Test suite for OpenShift Lightspeed (OLS) RAG image deployment and configuration validation.
+
+This module contains tests that verify:
+- OLS operator installation and RAG image deployment
+- LLM connectivity with IBM watsonx
+- Q&A validation against expected responses
+- YAML context attachment and processing
+- Negative scenarios for BYOK misconfiguration
+
+Tests use the setup_ui fixture from tests/conftest.py for browser-based UI interactions.
+"""
 import logging
 import pytest
 import uuid
@@ -30,6 +42,7 @@ log = logging.getLogger(__name__)
 
 @cyan_squad
 @tier1
+@pytest.mark.usefixtures("ols_cleanup")
 class TestRagImageDeploymentAndConfiguration(ManageTest):
     """
 
@@ -37,6 +50,10 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
     This will validate the core prerequisites for RAG functionality, and also verifies the response given by OLS.
 
     UI tests use the ``setup_ui`` fixture from ``tests/conftest.py`` (browser login and teardown).
+
+    Fixtures from ``tests/functional/z_cluster/rag/conftest.py``:
+    - ``ols_setup``: Ensures OLS operator is installed before each test (function scope)
+    - ``ols_cleanup``: Complete cleanup of OLS resources after all tests (class scope)
 
     """
 
@@ -81,9 +98,9 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
     def test_data_foundation_answers(self, setup_ui):
         """
 
-        Validate OLS responses against ``qa-expectation.yaml``.
+        Validate OLS responses against ``qa-expectations.yaml``.
 
-        1. Load sample Q&A from ``qa-expectation.yaml``.
+        1. Load sample Q&A from ``qa-expectations.yaml``.
         2. For each case: ask the question, then validate by type (valid / invalid / no_rag_answer).
         3. For ``valid`` cases: ask the same question twice and require both answers to meet the
            keyword accuracy threshold (consistency check).
