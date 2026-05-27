@@ -226,11 +226,12 @@ class TestNoobaaPriorityClass(MCGTest):
             )
 
     def _wait_for_pvpool_pods_priority_class(
-        self, bs_name, expected_pc, namespace, timeout=360
+        self, bs_name, expected_pc, namespace, expected_count=None, timeout=360
     ):
         """
         Poll PVPool pods until all carry the expected priorityClassName and are Running.
-        Pass None to wait for the field to be absent.
+        Pass None for expected_pc to wait for the field to be absent.
+        If expected_count is set, also wait until exactly that many pods exist.
         """
         for pods in TimeoutSampler(
             timeout=timeout,
@@ -240,6 +241,8 @@ class TestNoobaaPriorityClass(MCGTest):
             namespace=namespace,
         ):
             if not pods:
+                continue
+            if expected_count is not None and len(pods) != expected_count:
                 continue
             all_match = True
             for pod in pods:
@@ -295,7 +298,9 @@ class TestNoobaaPriorityClass(MCGTest):
             assert (
                 "priorityClassName" not in bs_cr["spec"]["pvPool"]
             ), f"Backingstore {name} already has priorityClassName set"
-            for pod in get_noobaa_pvpool_pods(name, namespace):
+            pods = get_noobaa_pvpool_pods(name, namespace)
+            assert pods, f"No PVPool pods found for backingstore {name}"
+            for pod in pods:
                 assert (
                     "priorityClassName" not in pod.get()["spec"]
                 ), f"PVPool pod {pod.name} already has priorityClassName set"
@@ -304,7 +309,7 @@ class TestNoobaaPriorityClass(MCGTest):
         logger.test_step("Step 3: Creating 3 custom PriorityClasses")
         pc_map = {}
         for i, name in enumerate(bs_names, start=1):
-            pc_obj = helpers.create_priority_class(f"pvpool-{i}", 500000 + i)
+            pc_obj = helpers.create_priority_class(name, 500000 + i)
             teardown_factory(pc_obj)
             pc_map[name] = pc_obj.name
 
@@ -415,6 +420,7 @@ class TestNoobaaPriorityClass(MCGTest):
             bs_name=bs_name,
             expected_pc=OPENSHIFT_USER_CRITICAL,
             namespace=namespace,
+            expected_count=num_volumes,
         )
 
         # 4. Verify all PVPool pods have the expected priorityClassName
@@ -423,9 +429,9 @@ class TestNoobaaPriorityClass(MCGTest):
             f"priorityClassName={OPENSHIFT_USER_CRITICAL}"
         )
         pods = get_noobaa_pvpool_pods(bs_name, namespace)
-        assert len(pods) == num_volumes, (
-            f"Expected {num_volumes} PVPool pods for {bs_name}, " f"got {len(pods)}"
-        )
+        assert (
+            len(pods) == num_volumes
+        ), f"Expected {num_volumes} PVPool pods for {bs_name}, got {len(pods)}"
         for pod in pods:
             actual = pod.get()["spec"].get("priorityClassName")
             assert actual == OPENSHIFT_USER_CRITICAL, (
@@ -448,6 +454,7 @@ class TestNoobaaPriorityClass(MCGTest):
             bs_name=bs_name,
             expected_pc=None,
             namespace=namespace,
+            expected_count=num_volumes,
         )
 
         # 7. Verify all PVPool pods are Running without any priorityClassName
@@ -455,9 +462,9 @@ class TestNoobaaPriorityClass(MCGTest):
             "Step 7: Verifying all PVPool pods run without priorityClassName"
         )
         pods = get_noobaa_pvpool_pods(bs_name, namespace)
-        assert len(pods) == num_volumes, (
-            f"Expected {num_volumes} PVPool pods for {bs_name}, " f"got {len(pods)}"
-        )
+        assert (
+            len(pods) == num_volumes
+        ), f"Expected {num_volumes} PVPool pods for {bs_name}, got {len(pods)}"
         for pod in pods:
             actual = pod.get()["spec"].get("priorityClassName")
             assert actual is None, (
