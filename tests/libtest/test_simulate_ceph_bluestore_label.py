@@ -50,6 +50,8 @@ class TestSimulateCephBlueStoreLabel(ManageTest):
         """
         if not config.ENV_DATA.get("simulate_bluestore_label_dmcrypt", False):
             pytest.skip("simulate_bluestore_label_dmcrypt not set in config")
+        # clear_signatures=False: the LUKS header must remain on disk so
+        # that Rook can detect the encrypted OSD layout during ODF install.
         result = simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
             clear_signatures=False
         )
