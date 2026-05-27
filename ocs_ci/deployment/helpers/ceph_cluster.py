@@ -663,7 +663,7 @@ def simulate_ceph_bluestore_dmcrypt_on_node_disk(wnode, disk_name=None, namespac
     return result
 
 
-def simulate_ceph_bluestore_dmcrypt_on_wnodes(wnodes, namespace=None):
+def simulate_ceph_bluestore_dmcrypt_on_wnodes(wnodes, namespace=None, disk_map=None):
     """
     Simulates encrypted Ceph BlueStore OSDs (dm-crypt/LUKS) on worker nodes.
 
@@ -671,6 +671,8 @@ def simulate_ceph_bluestore_dmcrypt_on_wnodes(wnodes, namespace=None):
         wnodes (list): List of worker node objects where the simulation
             should be performed.
         namespace (str): Namespace for the debug pod.
+        disk_map (dict): Map of node name to pre-detected disk name. When
+            provided, skips per-node disk detection.
 
     Returns:
         bool: True if the simulation succeeded on all nodes, False otherwise.
@@ -678,8 +680,9 @@ def simulate_ceph_bluestore_dmcrypt_on_wnodes(wnodes, namespace=None):
     """
     for wnode in wnodes:
         logger.info(f"Simulating encrypted Ceph BlueStore on worker node: {wnode.name}")
+        disk_name = (disk_map or {}).get(wnode.name)
         result = simulate_ceph_bluestore_dmcrypt_on_node_disk(
-            wnode, namespace=namespace
+            wnode, disk_name=disk_name, namespace=namespace
         )
         if not result:
             logger.warning(
@@ -745,7 +748,16 @@ def simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
         else:
             add_disk_for_vsphere_platform()
 
-    # Step 2: Install minimal Ceph cluster and configuration
+    # Step 2: Detect disks once so the same device is used for simulation and cleanup
+    disk_map = {}
+    for wnode in wnodes:
+        disk = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+        if not disk:
+            logger.error(f"Disk detection failed on node {wnode.name}. Aborting.")
+            return False
+        disk_map[wnode.name] = disk
+
+    # Step 3: Install minimal Ceph cluster and configuration
     host_node = wnodes[0]
     result = install_minimal_ceph_cluster_and_conf_on_wnodes(
         wnodes, host_node, namespace
@@ -754,29 +766,39 @@ def simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
         logger.warning("Failed to install minimal Ceph cluster and configuration.")
         return False
 
-    # Step 3: Simulate encrypted BlueStore OSDs on all worker nodes
-    result = simulate_ceph_bluestore_dmcrypt_on_wnodes(wnodes, namespace)
-    if not result:
-        logger.warning("Failed to simulate encrypted Ceph BlueStore on worker nodes.")
-        return False
-
-    # Step 4: Optionally remove the minimal Ceph cluster
-    if remove_ceph_cluster:
-        logger.info("Removing minimal Ceph cluster from host node.")
-        result = remove_minimal_ceph_cluster(host_node, namespace)
-        if not result:
-            logger.warning("Failed to remove minimal Ceph cluster from host node.")
-            return False
-
-    # Step 5: Optionally clear BlueStore signatures from disks
-    if clear_signatures:
-        logger.info("Clearing Ceph BlueStore signatures from worker node disks.")
-        result = clear_ceph_bluestore_signature_on_wnodes(wnodes, namespace=namespace)
-        if not result:
+    # Steps 4-6: simulation + cleanup (cleanup always runs when flags are set)
+    simulation_result = False
+    cleanup_ok = True
+    try:
+        # Step 4: Simulate encrypted BlueStore OSDs on all worker nodes
+        simulation_result = simulate_ceph_bluestore_dmcrypt_on_wnodes(
+            wnodes, namespace, disk_map
+        )
+        if not simulation_result:
             logger.warning(
-                "Failed to clear Ceph BlueStore signatures from worker nodes."
+                "Failed to simulate encrypted Ceph BlueStore on worker nodes."
             )
-            return False
+    finally:
+        # Step 5: Optionally remove the minimal Ceph cluster
+        if remove_ceph_cluster:
+            logger.info("Removing minimal Ceph cluster from host node.")
+            if not remove_minimal_ceph_cluster(host_node, namespace):
+                logger.warning("Failed to remove minimal Ceph cluster from host node.")
+                cleanup_ok = False
+
+        # Step 6: Optionally clear BlueStore signatures from disks
+        if clear_signatures:
+            logger.info("Clearing Ceph BlueStore signatures from worker node disks.")
+            if not clear_ceph_bluestore_signature_on_wnodes(
+                wnodes, disk_names=disk_map, namespace=namespace
+            ):
+                logger.warning(
+                    "Failed to clear Ceph BlueStore signatures from worker nodes."
+                )
+                cleanup_ok = False
+
+    if not simulation_result or not cleanup_ok:
+        return False
 
     logger.info(
         "Full encrypted Ceph BlueStore simulation process completed successfully."
