@@ -17,6 +17,8 @@ SEVERITY_BY_CHECK = {
     constants.ALERT_ODF_DISK_UTILIZATION_HIGH: "Medium",
     constants.ALERT_ODF_CORE_POD_RESTART: "Medium",
     constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: "Medium",
+    constants.ALERT_CLUSTERERRORSTATE: "Critical",
+    constants.ALERT_CLUSTERWARNINGSTATE: "Medium",
 }
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,7 @@ DATETIME_RE = re.compile(
     r"((?:\d{1,2}\s+\w+|\w+\s+\d{1,2}),?\s+\d{4},\s+\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)",
     re.IGNORECASE,
 )
-CHECK_RE = re.compile(r"\b(ODF[A-Za-z0-9]+)\b")
+CHECK_RE = re.compile(r"\b((?:ODF|Ceph)[A-Za-z0-9]+)\b")
 
 
 @dataclass
