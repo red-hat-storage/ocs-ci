@@ -262,6 +262,19 @@ def _wait_for_multus_pods_ready(timeout=1200, interval=30):
         )
 
     logger.info("Verifying multus network configuration")
+    # Ceph internal state (MDS map, OSD map) may take additional time to
+    # reflect the new multus IPs even after pods are Running with annotations.
+    _verify_multus_with_retry()
+
+
+@retry(
+    (AssertionError, KeyError, CommandFailed),
+    tries=10,
+    delay=30,
+    backoff=1,
+)
+def _verify_multus_with_retry():
+    """Run verify_multus_network with retries for Ceph map convergence."""
     verify_multus_network()
 
 
