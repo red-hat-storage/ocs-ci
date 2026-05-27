@@ -219,26 +219,27 @@ def _wait_for_multus_pods_ready(timeout=1200, interval=30):
     Wait for Ceph pods to restart with multus network annotations after
     the StorageCluster is patched with multus selectors.
 
-    Polls OSD pods until they all have the ``k8s.v1.cni.cncf.io/networks``
+    Polls all Ceph daemon pods (OSD, MON, MGR, MDS) and CSI controller
+    pods until they all have the ``k8s.v1.cni.cncf.io/networks``
     annotation, indicating multus has attached network interfaces. Then
     waits for all storage pods to be Running and runs verify_multus_network.
     """
     public_net_name = config.ENV_DATA.get("multus_public_net_name", "public-net")
 
     logger.info(
-        "Waiting for OSD pods to have multus network annotations (timeout=%ds)",
+        "Waiting for all Ceph pods to have multus network annotations (timeout=%ds)",
         timeout,
     )
     for sample in TimeoutSampler(
         timeout=timeout,
         sleep=interval,
-        func=_osd_pods_have_multus_annotation,
+        func=_ceph_pods_have_multus_annotation,
         public_net_name=public_net_name,
     ):
         if sample:
             break
 
-    logger.info("All OSD pods have multus annotations, waiting for all pods Running")
+    logger.info("All Ceph pods have multus annotations, waiting for all pods Running")
     if not wait_for_pods_to_be_running(
         timeout=600,
         sleep=20,
@@ -256,27 +257,46 @@ def _wait_for_multus_pods_ready(timeout=1200, interval=30):
     verify_multus_network()
 
 
-def _osd_pods_have_multus_annotation(public_net_name):
-    """Check if all OSD pods have the multus network annotation."""
-    from ocs_ci.ocs.resources.pod import get_osd_pods
+def _ceph_pods_have_multus_annotation(public_net_name):
+    """Check if all Ceph daemon and CSI controller pods have multus annotations."""
+    from ocs_ci.ocs.resources.pod import (
+        get_osd_pods,
+        get_mon_pods,
+        get_mgr_pods,
+        get_mds_pods,
+        get_cephfsplugin_provisioner_pods,
+        get_rbdfsplugin_provisioner_pods,
+    )
 
     try:
-        osd_pods = get_osd_pods()
-        if not osd_pods:
-            logger.info("No OSD pods found yet, waiting...")
-            return False
-        for pod in osd_pods:
+        all_pods = []
+        for getter, label in [
+            (get_osd_pods, "OSD"),
+            (get_mon_pods, "MON"),
+            (get_mgr_pods, "MGR"),
+            (get_mds_pods, "MDS"),
+            (get_cephfsplugin_provisioner_pods, "CephFS CSI"),
+            (get_rbdfsplugin_provisioner_pods, "RBD CSI"),
+        ]:
+            pods = getter()
+            if not pods:
+                logger.info("No %s pods found yet, waiting...", label)
+                return False
+            all_pods.extend((pod, label) for pod in pods)
+
+        for pod, label in all_pods:
             annotations = pod.data.get("metadata", {}).get("annotations", {})
             networks = annotations.get("k8s.v1.cni.cncf.io/networks", "")
             if public_net_name not in networks:
                 logger.info(
-                    "OSD pod %s does not yet have multus annotation, waiting...",
+                    "%s pod %s does not yet have multus annotation, waiting...",
+                    label,
                     pod.name,
                 )
                 return False
         return True
     except Exception as ex:
-        logger.info("Error checking OSD pods for multus annotations: %s", ex)
+        logger.info("Error checking Ceph pods for multus annotations: %s", ex)
         return False
 
 
