@@ -6,7 +6,6 @@ a provider, ensuring that deletion propagates correctly from client to provider 
 both empty and non-empty buckets.
 """
 
-import base64
 import boto3
 import logging
 import os
@@ -30,7 +29,10 @@ from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.objectbucket import wait_for_obc_phase
+from ocs_ci.ocs.resources.objectbucket import (
+    get_s3_credentials_from_obc,
+    wait_for_obc_phase,
+)
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -149,33 +151,18 @@ class TestOBCDeletionClientProvider(ManageTest):
             )
 
             # Extract S3 credentials
-            logger.info("Extracting S3 credentials from Secret and ConfigMap")
-            configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace)
-            secret_obj = OCP(kind=constants.SECRET, namespace=namespace)
-
-            configmap_data = configmap_obj.get(resource_name=obc_name)
-            secret_data = secret_obj.get(resource_name=obc_name)
-
-            self.bucket_name = configmap_data["data"].get("BUCKET_NAME")
-            s3_endpoint = configmap_data["data"]["BUCKET_HOST"]
-            access_key_id = base64.b64decode(
-                secret_data["data"]["AWS_ACCESS_KEY_ID"]
-            ).decode("utf-8")
-            secret_key = base64.b64decode(
-                secret_data["data"]["AWS_SECRET_ACCESS_KEY"]
-            ).decode("utf-8")
-
-            assert self.bucket_name, (
-                "Bucket name not found in ConfigMap for OBC %s" % obc_name
+            s3_creds = get_s3_credentials_from_obc(obc_name, namespace)
+            self.bucket_name = s3_creds["bucket_name"]
+            logger.info(
+                "Bucket: %s, Endpoint: %s", self.bucket_name, s3_creds["endpoint"]
             )
-            logger.info("Bucket: %s, Endpoint: %s", self.bucket_name, s3_endpoint)
 
             # Create S3 client and upload data
             s3_client = boto3.client(
                 "s3",
-                aws_access_key_id=access_key_id,
-                aws_secret_access_key=secret_key,
-                endpoint_url="https://%s" % s3_endpoint,
+                aws_access_key_id=s3_creds["access_key_id"],
+                aws_secret_access_key=s3_creds["secret_access_key"],
+                endpoint_url="https://%s" % s3_creds["endpoint"],
                 verify=False,
             )
 
@@ -342,14 +329,8 @@ class TestOBCDeletionClientProvider(ManageTest):
             )
 
             # Extract bucket name for verification
-            logger.info("Extracting bucket name from ConfigMap")
-            configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace)
-            configmap_data = configmap_obj.get(resource_name=obc_name)
-            self.bucket_name = configmap_data["data"].get("BUCKET_NAME")
-
-            assert self.bucket_name, (
-                "Bucket name not found in ConfigMap for OBC %s" % obc_name
-            )
+            s3_creds = get_s3_credentials_from_obc(obc_name, namespace)
+            self.bucket_name = s3_creds["bucket_name"]
             logger.info("Bucket: %s (no data uploaded)", self.bucket_name)
 
         # Verify bucket exists on provider before deletion

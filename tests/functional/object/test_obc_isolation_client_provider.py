@@ -5,7 +5,6 @@ This test module validates that OBCs are properly isolated between different
 HCI client clusters connected to a provider, ensuring proper multi-tenancy.
 """
 
-import base64
 import boto3
 import logging
 import os
@@ -29,7 +28,10 @@ from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.objectbucket import wait_for_obc_phase
+from ocs_ci.ocs.resources.objectbucket import (
+    get_s3_credentials_from_obc,
+    wait_for_obc_phase,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -158,36 +160,20 @@ class TestOBCIsolationClientProvider(ManageTest):
             )
 
             # Extract S3 credentials from client1
-            logger.info("Extracting S3 credentials from client1")
-            configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace1)
-            secret_obj = OCP(kind=constants.SECRET, namespace=namespace1)
-
-            configmap_data = configmap_obj.get(resource_name=shared_obc_name)
-            secret_data = secret_obj.get(resource_name=shared_obc_name)
-
-            client1_bucket_name = configmap_data["data"].get("BUCKET_NAME")
-            s3_endpoint1 = configmap_data["data"]["BUCKET_HOST"]
-            access_key_id1 = base64.b64decode(
-                secret_data["data"]["AWS_ACCESS_KEY_ID"]
-            ).decode("utf-8")
-            secret_key1 = base64.b64decode(
-                secret_data["data"]["AWS_SECRET_ACCESS_KEY"]
-            ).decode("utf-8")
-
-            assert client1_bucket_name, (
-                "Bucket name not found in ConfigMap for OBC %s on client1"
-                % shared_obc_name
-            )
+            s3_creds1 = get_s3_credentials_from_obc(shared_obc_name, namespace1)
+            client1_bucket_name = s3_creds1["bucket_name"]
             logger.info(
-                "Client1 bucket: %s, Endpoint: %s", client1_bucket_name, s3_endpoint1
+                "Client1 bucket: %s, Endpoint: %s",
+                client1_bucket_name,
+                s3_creds1["endpoint"],
             )
 
             # Create S3 client for client1
             client1_s3_client = boto3.client(
                 "s3",
-                aws_access_key_id=access_key_id1,
-                aws_secret_access_key=secret_key1,
-                endpoint_url="https://%s" % s3_endpoint1,
+                aws_access_key_id=s3_creds1["access_key_id"],
+                aws_secret_access_key=s3_creds1["secret_access_key"],
+                endpoint_url="https://%s" % s3_creds1["endpoint"],
                 verify=False,
             )
 
@@ -243,28 +229,12 @@ class TestOBCIsolationClientProvider(ManageTest):
             )
 
             # Extract S3 credentials from client2
-            logger.info("Extracting S3 credentials from client2")
-            configmap_obj2 = OCP(kind=constants.CONFIGMAP, namespace=namespace2)
-            secret_obj2 = OCP(kind=constants.SECRET, namespace=namespace2)
-
-            configmap_data2 = configmap_obj2.get(resource_name=shared_obc_name)
-            secret_data2 = secret_obj2.get(resource_name=shared_obc_name)
-
-            client2_bucket_name = configmap_data2["data"].get("BUCKET_NAME")
-            s3_endpoint2 = configmap_data2["data"]["BUCKET_HOST"]
-            access_key_id2 = base64.b64decode(
-                secret_data2["data"]["AWS_ACCESS_KEY_ID"]
-            ).decode("utf-8")
-            secret_key2 = base64.b64decode(
-                secret_data2["data"]["AWS_SECRET_ACCESS_KEY"]
-            ).decode("utf-8")
-
-            assert client2_bucket_name, (
-                "Bucket name not found in ConfigMap for OBC %s on client2"
-                % shared_obc_name
-            )
+            s3_creds2 = get_s3_credentials_from_obc(shared_obc_name, namespace2)
+            client2_bucket_name = s3_creds2["bucket_name"]
             logger.info(
-                "Client2 bucket: %s, Endpoint: %s", client2_bucket_name, s3_endpoint2
+                "Client2 bucket: %s, Endpoint: %s",
+                client2_bucket_name,
+                s3_creds2["endpoint"],
             )
 
             # Verify bucket names are different
@@ -283,9 +253,9 @@ class TestOBCIsolationClientProvider(ManageTest):
             # Create S3 client for client2
             client2_s3_client = boto3.client(
                 "s3",
-                aws_access_key_id=access_key_id2,
-                aws_secret_access_key=secret_key2,
-                endpoint_url="https://%s" % s3_endpoint2,
+                aws_access_key_id=s3_creds2["access_key_id"],
+                aws_secret_access_key=s3_creds2["secret_access_key"],
+                endpoint_url="https://%s" % s3_creds2["endpoint"],
                 verify=False,
             )
 
