@@ -106,7 +106,7 @@ class ODFCLIRetriever:
         """Get architecture-specific path for ODF CLI binary in the container image."""
         system = platform.system()
         machine = platform.machine()
-        path = "/releases/"
+        path = "/usr/share/odf/"
 
         if system == "Linux":
             path = os.path.join(path, "linux")
