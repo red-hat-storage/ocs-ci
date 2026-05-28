@@ -1097,6 +1097,51 @@ class HyperShiftBase:
             return
         return kubeconfig_path
 
+    @staticmethod
+    def download_hosted_cluster_kubeadmin_password(name: str, cluster_path: str):
+        """
+        Download HyperShift hosted cluster kubeadmin password
+
+        Args:
+            name (str): name of the cluster
+            cluster_path (str): path to create auth directory and download
+                kubeadmin-password there
+
+        Returns:
+            str: path to the downloaded kubeadmin-password file, None if failed
+
+        """
+        path_abs = os.path.expanduser(cluster_path)
+        auth_path = os.path.join(path_abs, "auth")
+        os.makedirs(auth_path, exist_ok=True)
+        password_path = os.path.join(auth_path, "kubeadmin-password")
+
+        logger.info(
+            f"Downloading kubeadmin-password for HyperShift hosted cluster "
+            f"{name} to {password_path}"
+        )
+
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                OCP().exec_oc_cmd(
+                    f"extract secret/kubeadmin-password -n clusters-{name} "
+                    f"--to {auth_path} --confirm"
+                )
+        except Exception as e:
+            logger.error(
+                f"Failed to download kubeadmin-password for HyperShift "
+                f"hosted cluster {name}\n{e}"
+            )
+            return
+
+        if not os.path.isfile(password_path) or not os.stat(password_path).st_size > 0:
+            logger.error(
+                f"Failed to download kubeadmin-password for HyperShift "
+                f"hosted cluster {name}"
+            )
+            return
+        return password_path
+
     def get_hosted_cluster_progress(self, name: str):
         """
         Get HyperShift hosted cluster creation progress
@@ -1473,6 +1518,33 @@ def create_kubeconfig_file_hosted_cluster():
 
     config.RUN["kubeconfig"] = kubeconfig_path
     logger.info("Created kubeconfig file")
+
+
+@retry(CommandFailed, tries=3, delay=20, backoff=1)
+def create_kubeadmin_password_file_hosted_cluster():
+    """
+    Export kubeadmin-password to auth directory in cluster path.
+
+    This function is wrapped with retry decorator to handle CommandFailed
+    errors. It will retry up to 3 times with 20 sec delay between attempts.
+
+    Raises:
+        CommandFailed: if the kubeadmin-password file could not be downloaded
+
+    """
+    cluster_path = config.ENV_DATA["cluster_path"]
+    cluster_name = config.ENV_DATA["cluster_name"]
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        password_path = HyperShiftBase.download_hosted_cluster_kubeadmin_password(
+            cluster_name, cluster_path=cluster_path
+        )
+    if not password_path:
+        raise CommandFailed(
+            f"Failed to create kubeadmin-password file for hosted cluster "
+            f"{cluster_name}"
+        )
+    logger.info("Created kubeadmin-password file")
 
 
 def wait_for_worker_nodes_ready(timeout=600, sleep=10, expected_nodes=None):

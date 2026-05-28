@@ -1173,6 +1173,7 @@ class HostedClients(HyperShiftBase):
         # stage 2 download all available kubeconfig files
         log_step("Download kubeconfig for all clusters")
         kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
+        self.download_hosted_clusters_kubeadmin_password_files()
 
         # stage 3 verify OCP clusters are ready
         log_step(
@@ -1508,6 +1509,49 @@ class HostedClients(HyperShiftBase):
             )
 
         return self.kubeconfig_paths
+
+    def download_hosted_clusters_kubeadmin_password_files(
+        self, cluster_names_paths_dict=None
+    ):
+        """
+        Download kubeadmin-password for multiple HyperShift hosted clusters.
+
+        Args:
+            cluster_names_paths_dict (dict): Optional mapping of cluster name
+                to cluster path. If omitted, uses clusters from config.
+
+        Returns:
+            list: paths to downloaded kubeadmin-password files
+
+        """
+        if cluster_names_paths_dict is None:
+            cluster_names_paths_dict = dict()
+
+        cluster_names = (
+            list(cluster_names_paths_dict.keys())
+            if cluster_names_paths_dict
+            else list(config.ENV_DATA.get("clusters", {}).keys())
+        )
+        cluster_names = [
+            name
+            for name in cluster_names
+            if (
+                config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+                is None
+                or config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+                == "hci_client"
+            )
+        ]
+
+        password_paths = []
+        for name in cluster_names:
+            path = cluster_names_paths_dict.get(name) or config.ENV_DATA.setdefault(
+                "clusters", {}
+            ).setdefault(name, {}).get("hosted_cluster_path")
+            password_paths.append(
+                self.download_hosted_cluster_kubeadmin_password(name, path)
+            )
+        return password_paths
 
     def get_kubeconfig_path(self, cluster_name):
         """
@@ -7900,6 +7944,9 @@ def hypershift_cluster_factory(
                     hosted_clients_obj.download_hosted_clusters_kubeconfig_files(
                         {cluster_name: cluster_path}, from_hcp=False
                     )
+                )
+                hosted_clients_obj.download_hosted_clusters_kubeadmin_password_files(
+                    {cluster_name: cluster_path}
                 )
                 if not kubeconf_paths:
                     logger.warning(
