@@ -1127,19 +1127,21 @@ class HyperShiftBase:
                     f"extract secret/kubeadmin-password -n clusters-{name} "
                     f"--to {auth_path} --confirm"
                 )
-        except Exception as e:
-            logger.error(
-                f"Failed to download kubeadmin-password for HyperShift "
-                f"hosted cluster {name}\n{e}"
+        except CommandFailed:
+            logger.exception(
+                "Failed to download kubeadmin-password for HyperShift "
+                "hosted cluster %s",
+                name,
             )
-            return
+            return None
 
         if not os.path.isfile(password_path) or not os.stat(password_path).st_size > 0:
             logger.error(
-                f"Failed to download kubeadmin-password for HyperShift "
-                f"hosted cluster {name}"
+                "Failed to download kubeadmin-password for HyperShift "
+                "hosted cluster %s",
+                name,
             )
-            return
+            return None
         return password_path
 
     def get_hosted_cluster_progress(self, name: str):

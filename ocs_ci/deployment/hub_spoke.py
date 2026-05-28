@@ -1173,7 +1173,12 @@ class HostedClients(HyperShiftBase):
         # stage 2 download all available kubeconfig files
         log_step("Download kubeconfig for all clusters")
         kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
-        self.download_hosted_clusters_kubeadmin_password_files()
+        password_paths = self.download_hosted_clusters_kubeadmin_password_files()
+        if not password_paths or not all(password_paths):
+            logger.warning(
+                "kubeadmin-password could not be downloaded for one or more "
+                "hosted clusters"
+            )
 
         # stage 3 verify OCP clusters are ready
         log_step(
@@ -7945,9 +7950,15 @@ def hypershift_cluster_factory(
                         {cluster_name: cluster_path}, from_hcp=False
                     )
                 )
-                hosted_clients_obj.download_hosted_clusters_kubeadmin_password_files(
+                pw_paths = hosted_clients_obj.download_hosted_clusters_kubeadmin_password_files(
                     {cluster_name: cluster_path}
                 )
+                if not pw_paths or not all(pw_paths):
+                    logger.warning(
+                        "kubeadmin-password could not be downloaded for "
+                        "hosted cluster %s",
+                        cluster_name,
+                    )
                 if not kubeconf_paths:
                     logger.warning(
                         "kubeconfig was not found after download attempt; "
