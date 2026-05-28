@@ -497,7 +497,7 @@ class TestFIOBenchmark(PASTest):
                 *["random", "64KiB", 60, True],
                 marks=[
                     ec_allowed,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7964"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",
@@ -508,7 +508,7 @@ class TestFIOBenchmark(PASTest):
                 *["sequential", "64KiB", 60, True],
                 marks=[
                     ec_allowed,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7965"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",

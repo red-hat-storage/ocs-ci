@@ -43,7 +43,7 @@ class TestMultipleScOnePoolRep2Comp(ManageTest):
                 True,
                 marks=[
                     ec_allowed,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7979"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",

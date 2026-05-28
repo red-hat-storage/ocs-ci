@@ -197,7 +197,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 False,
                 marks=[
                     ec_allowed,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7966"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",
@@ -213,7 +213,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 False,
                 marks=[
                     ec_allowed,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7967"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",
@@ -229,7 +229,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 False,
                 marks=[
                     ec_allowed,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7968"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",
@@ -246,7 +246,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 True,
                 marks=[
                     ec_allowed,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7969"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",
@@ -262,7 +262,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 True,
                 marks=[
                     ec_allowed,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7970"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",

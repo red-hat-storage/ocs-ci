@@ -88,7 +88,7 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
                 marks=[
                     ec_allowed,
                     tier2,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7957"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",
@@ -106,7 +106,7 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
                 marks=[
                     ec_allowed,
                     tier2,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-7958"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",
