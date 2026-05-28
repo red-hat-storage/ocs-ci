@@ -295,11 +295,8 @@ def get_selector_for_ocs_operator():
         str: Selector for package manifest if we are on internal
             builds, otherwise it returns None
     """
-    cs_name = config.DEPLOYMENT.get(
-        "ocs_catalog_source_name", constants.OPERATOR_CATALOG_SOURCE_NAME
-    )
     catalog_source = CatalogSource(
-        resource_name=cs_name,
+        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
         namespace=constants.MARKETPLACE_NAMESPACE,
         selector=constants.OPERATOR_INTERNAL_SELECTOR,
     )
