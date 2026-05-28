@@ -1217,11 +1217,7 @@ class Deployment(object):
         rosa_hcp_non_ga = platform == constants.ROSA_HCP_PLATFORM and bool(
             config.DEPLOYMENT.get("ocs_registry_image")
         )
-        if config.DEPLOYMENT.get("ocs_catalog_source_name"):
-            subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT[
-                "ocs_catalog_source_name"
-            ]
-        elif config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
+        if config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
             )
@@ -2333,15 +2329,6 @@ class Deployment(object):
                         namespace=self.namespace, tries=60, delay=10
                     )
 
-            # Workaround for DFBUGS-6749: devicehealth module fails when its
-            # pool cannot be created due to a missing default CRUSH rule.
-            try:
-                ceph_health_resolve_devicehealth()
-            except Exception as ex:
-                logger.warning(
-                    f"devicehealth workaround failed (may not be needed): {ex}"
-                )
-
             # In case of RDR, check for bluestore-rdr on osds: 4.14 onwards
             # until 4.17
             if (
@@ -3074,9 +3061,8 @@ def create_catalog_source(image=None, ignore_upgrade=False):
 
     """
     rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
-    cs_name_override = config.DEPLOYMENT.get("ocs_catalog_source_name")
     logger.info("Adding CatalogSource")
-    if not cs_name_override and not rosa_hcp:
+    if not rosa_hcp:
         # Because custom catalog source will be called: redhat-operators, we need
         # to disable default sources. This should not be an issue as OCS internal
         # registry images are now based on OCP registry image
@@ -3133,9 +3119,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     if managed_ibmcloud:
         create_ocs_secret(constants.MARKETPLACE_NAMESPACE)
         catalog_source_data["spec"]["secrets"] = [constants.OCS_SECRET]
-    if cs_name_override:
-        cs_name = cs_name_override
-        catalog_source_data["metadata"]["name"] = cs_name
     change_cs_condition = (
         (image or image_tag)
         and catalog_source_data["kind"] == "CatalogSource"

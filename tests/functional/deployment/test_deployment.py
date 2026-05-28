@@ -90,6 +90,11 @@ def test_deployment(pvc_factory, pod_factory):
                 elif config.ENV_DATA.get("odf_provider_mode_deployment", False):
                     logger.info("Verifying ODF provider mode deployment")
                     verify_provider_mode_deployment()
+                elif config.DEPLOYMENT.get("skip_storagecluster_install"):
+                    logger.info(
+                        "StorageCluster install was skipped — "
+                        "skipping full ODF verification"
+                    )
                 else:
                     logger.info("Verifying ODF installation")
                     ocs_install_verification(ocs_registry_image=ocs_registry_image)
