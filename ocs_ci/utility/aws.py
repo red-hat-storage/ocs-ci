@@ -201,12 +201,28 @@ class AWS(object):
 
     def delete_iam_user(self, username):
         """
-        Delete an IAM user. Keys and policies must be removed first.
+        Delete an IAM user after removing its inline policies and access keys.
 
         Args:
             username (str): IAM username to delete
 
         """
+        for policy_name in self.iam_client.list_user_policies(UserName=username).get(
+            "PolicyNames", []
+        ):
+            self.iam_client.delete_user_policy(
+                UserName=username, PolicyName=policy_name
+            )
+            logger.info(f"Deleted inline policy {policy_name} from user {username}")
+
+        for key in self.iam_client.list_access_keys(UserName=username).get(
+            "AccessKeyMetadata", []
+        ):
+            self.iam_client.delete_access_key(
+                UserName=username, AccessKeyId=key["AccessKeyId"]
+            )
+            logger.info(f"Deleted access key {key['AccessKeyId']} from user {username}")
+
         self.iam_client.delete_user(UserName=username)
         logger.info(f"Deleted IAM user {username}")
 

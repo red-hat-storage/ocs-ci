@@ -171,6 +171,8 @@ def bucket_class_factory(
                         ]
                         namespace_policy["write_resource"] = namespacestores[0].name
 
+            elif "backingstores" in bucket_class_dict:
+                backingstores = bucket_class_dict["backingstores"]
             elif "backingstore_dict" in bucket_class_dict:
                 try:
                     backingstores = [

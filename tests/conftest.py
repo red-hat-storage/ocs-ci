@@ -106,6 +106,7 @@ from ocs_ci.ocs import utils
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.resources.job import get_job_obj
 from ocs_ci.ocs.resources.backingstore import (
+    BackingStore,
     backingstore_factory as backingstore_factory_implementation,
     clone_bs_dict_from_backingstore,
 )
@@ -179,6 +180,7 @@ from ocs_ci.utility.resource_check import (
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.kms import is_kms_enabled, get_ksctl_cli
 from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.multicluster import (
@@ -11874,6 +11876,116 @@ def iam_users_factory_fixture(request, mcg_obj, awscli_pod_session):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture()
+def aws_backingstore_with_toggleable_creds(
+    request, cld_mgr, mcg_obj, cloud_uls_factory
+):
+    """
+    Create an AWS S3 backingstore with dedicated IAM credentials
+    that can be toggled on and off at runtime.
+
+    Creates the full chain: S3 bucket (via cloud_uls_factory),
+    dedicated IAM user with a bucket-scoped policy, access key,
+    and backingstore (using --access-key/--secret-key, which
+    auto-creates a K8s secret with ownerReferences).
+
+    Returns:
+        dict: backingstore (BackingStore), disable (callable) to
+            revoke the IAM key, enable (callable) to restore it.
+
+    """
+    aws_obj = AWS()
+    region = cld_mgr.aws_client.region
+    created = {}
+
+    def _cleanup():
+        if "backingstore" in created:
+            try:
+                created["backingstore"].delete()
+            except Exception:
+                log.warning(
+                    f"Failed to delete backingstore " f"{created['backingstore'].name}"
+                )
+        if "username" in created:
+            try:
+                aws_obj.delete_iam_user(created["username"])
+            except Exception:
+                log.warning(f"Failed to delete IAM user {created['username']}")
+
+    request.addfinalizer(_cleanup)
+
+    # 1. Create the S3 bucket via cloud_uls_factory (handles cleanup)
+    uls_names = cloud_uls_factory({"aws": [(1, region)]})
+    bucket_name = list(uls_names["aws"])[0]
+
+    # 2. Create IAM user with a bucket-scoped inline policy
+    username = create_unique_resource_name("ocs-ci-s3", "iam")
+    aws_obj.create_iam_user(username)
+    created["username"] = username
+
+    # NooBaa requires s3:ListAllMyBuckets for CheckExternalConnection
+    policy_name = f"{username}-s3"
+    policy_document = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": "s3:*",
+                    "Resource": [
+                        f"arn:aws:s3:::{bucket_name}",
+                        f"arn:aws:s3:::{bucket_name}/*",
+                    ],
+                },
+                {
+                    "Effect": "Allow",
+                    "Action": "s3:ListAllMyBuckets",
+                    "Resource": "arn:aws:s3:::*",
+                },
+            ],
+        }
+    )
+    aws_obj.put_user_policy(username, policy_name, policy_document)
+
+    # 3. Create access key
+    response = aws_obj.create_access_key(username)
+    key_data = response["AccessKey"]
+    access_key_id = key_data["AccessKeyId"]
+
+    log.info("Sleeping 60s for IAM credential propagation")
+    time.sleep(60)
+
+    # 4. Create backingstore (auto-creates a K8s secret via ownerReferences)
+    bs_name = create_unique_resource_name("repl-alert", "bs")
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create aws-s3 {bs_name} "
+        f"--access-key {access_key_id} "
+        f"--secret-key {key_data['SecretAccessKey']} "
+        f"--target-bucket {bucket_name} "
+        f"--region {region}",
+        use_yes=True,
+    )
+    bs_obj = BackingStore(
+        name=bs_name,
+        method="cli",
+        type="cloud",
+        uls_name=bucket_name,
+        mcg_obj=mcg_obj,
+    )
+    created["backingstore"] = bs_obj
+    log.info(f"Created backingstore {bs_name}")
+
+    return {
+        "backingstore": bs_obj,
+        "disable": lambda: aws_obj.update_access_key_status(
+            username, access_key_id, status="Inactive"
+        ),
+        "enable": lambda: aws_obj.update_access_key_status(
+            username, access_key_id, status="Active"
+        ),
+    }
 
 
 @pytest.fixture()
