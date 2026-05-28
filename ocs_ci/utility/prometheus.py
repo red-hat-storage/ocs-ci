@@ -881,6 +881,31 @@ class PrometheusAPI(object):
                 timeout -= sleep
         return alerts
 
+    def get_alerts_for_bucket(self, alert_name, source_bucket):
+        """
+        Get firing alerts matching a specific alert name and source bucket label.
+
+        Args:
+            alert_name (str): Alert name to match.
+            source_bucket (str): Source bucket label value to filter by.
+
+        Returns:
+            list: Matching alert records, empty if none found.
+        """
+        with self._cluster_context():
+            response = self.get(
+                "alerts",
+                payload={"silenced": False, "inhibited": False},
+            )
+            if not response.ok:
+                raise AlertingError(f"Request {response.request.url} failed")
+            return [
+                alert
+                for alert in response.json()["data"]["alerts"]
+                if alert["labels"].get("alertname") == alert_name
+                and alert["labels"].get("source_bucket") == source_bucket
+            ]
+
     def check_alert_cleared(self, label, measure_end_time, time_min=120):
         """
         Check that all alerts with provided label are cleared.
