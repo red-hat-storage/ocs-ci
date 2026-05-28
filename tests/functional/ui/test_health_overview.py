@@ -50,7 +50,7 @@ ALERT_MAP = {
 if is_collect_only:
     ocs_version = VERSION_4_22  # Default to latest for collection
 else:
-    ocs_version = get_ocs_version_from_csv(only_major_minor=True)
+    ocs_version = get_ocs_version_from_csv(only_major_minor=True) or VERSION_4_22
 
 if ocs_version >= VERSION_4_22:
     ALERT_MAP.update(
