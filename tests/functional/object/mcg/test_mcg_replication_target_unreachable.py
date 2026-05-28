@@ -140,65 +140,39 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
             len(cleared) == 0
         ), f"{constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE} alerts were not cleared"
 
-    @pytest.fixture()
-    def replication_target_with_aws_toggleable_creds(
-        self,
-        aws_backingstore_with_toggleable_creds,
-        bucket_class_factory,
-        bucket_factory,
-    ):
-        """
-        Create an MCG replication target OBC backed by an AWS S3
-        backingstore whose IAM credentials can be toggled on and off.
-
-        Returns:
-            dict: target_bucket (MCGOCBucket), disable (callable) to
-                revoke the IAM key, enable (callable) to restore it.
-
-        """
-        bs_obj = aws_backingstore_with_toggleable_creds["backingstore"]
-
-        bc_obj = bucket_class_factory({"interface": "CLI", "backingstores": [bs_obj]})
-        logger.info(f"Created bucketclass {bc_obj.name}")
-
-        target_bucket = bucket_factory(1, "OC", bucketclass=bc_obj)[0]
-        logger.info(f"Target OBC {target_bucket.name} is Bound and healthy")
-
-        return {
-            "target_bucket": target_bucket,
-            "disable": aws_backingstore_with_toggleable_creds["disable"],
-            "enable": aws_backingstore_with_toggleable_creds["enable"],
-        }
-
     @skipif_aws_creds_are_missing
     @skipif_disconnected_cluster
     @tier2
     @polarion_id("OCS-7918")
     def test_noobaa_replication_target_unreachable_iam_key_revocation(
         self,
+        aws_backingstore_with_toggleable_creds,
         bucket_factory,
+        bucket_class_factory,
         mcg_obj,
         awscli_pod_session,
         test_directory_setup,
         threading_lock,
-        replication_target_with_aws_toggleable_creds,
     ):
         """
-        1. Create a source OBC with a replication policy targeting
-           the AWS-backed target OBC
-        2. Write test objects and verify replication works
-        3. Disable the IAM access key
-        4. Upload new objects to trigger failing replication
-        5. Wait for the NooBaaReplicationTargetUnreachable alert to fire
-        6. Re-enable the IAM access key
-        7. Wait for the alert to clear
+        1. Create a target OBC backed by the toggleable-creds backingstore
+        2. Create a source OBC with a replication policy targeting it
+        3. Write test objects and verify replication works
+        4. Disable the IAM access key
+        5. Upload new objects to trigger failing replication
+        6. Wait for the NooBaaReplicationTargetUnreachable alert to fire
+        7. Re-enable the IAM access key
+        8. Wait for the alert to clear
         """
 
-        target_obc_name = replication_target_with_aws_toggleable_creds[
-            "target_bucket"
-        ].name
+        # 1. Create a target OBC backed by the toggleable-creds backingstore
+        bs_obj = aws_backingstore_with_toggleable_creds["backingstore"]
+        bc_obj = bucket_class_factory({"interface": "CLI", "backingstores": [bs_obj]})
+        target_bucket = bucket_factory(1, "OC", bucketclass=bc_obj)[0]
+        target_obc_name = target_bucket.name
+        logger.info(f"Target OBC {target_obc_name} is Bound and healthy")
 
-        # 1. Create a source OBC with a replication policy
+        # 2. Create a source OBC with a replication policy
         replication_policy = ("repl-alert-rule", target_obc_name, None)
         source_bucket = bucket_factory(1, "OC", replication_policy=replication_policy)[
             0
@@ -207,7 +181,7 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
             f"Replication configured: {source_bucket.name} -> {target_obc_name}"
         )
 
-        # 2. Write test objects and verify replication works
+        # 3. Write test objects and verify replication works
         pre_disrupt_dir = f"{test_directory_setup.origin_dir}/pre"
         write_random_test_objects_to_bucket(
             awscli_pod_session,
@@ -222,10 +196,10 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         ), "Replication did not work before IAM key revocation"
         logger.info("Initial replication verified successfully")
 
-        # 3. Disable the IAM access key
-        replication_target_with_aws_toggleable_creds["disable"]()
+        # 4. Disable the IAM access key
+        aws_backingstore_with_toggleable_creds["disable"]()
 
-        # 4. Upload new objects to trigger failing replication
+        # 5. Upload new objects to trigger failing replication
         post_disrupt_dir = f"{test_directory_setup.origin_dir}/post"
         write_random_test_objects_to_bucket(
             awscli_pod_session,
@@ -236,7 +210,7 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
             mcg_obj=mcg_obj,
         )
 
-        # 5. Wait for the NooBaaReplicationTargetUnreachable alert to fire
+        # 6. Wait for the NooBaaReplicationTargetUnreachable alert to fire
         alert_name = constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE
         api = PrometheusAPI(threading_lock=threading_lock)
         for alert_found in TimeoutSampler(
@@ -250,10 +224,10 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
                 logger.info(f"Alert {alert_name} is firing for {source_bucket.name}")
                 break
 
-        # 6. Re-enable the IAM access key
-        replication_target_with_aws_toggleable_creds["enable"]()
+        # 7. Re-enable the IAM access key
+        aws_backingstore_with_toggleable_creds["enable"]()
 
-        # 7. Wait for the alert to clear
+        # 8. Wait for the alert to clear
         for alert_cleared in TimeoutSampler(
             timeout=600,
             sleep=10,
