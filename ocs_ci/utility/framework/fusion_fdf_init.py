@@ -69,6 +69,12 @@ class Initializer(object):
             FileNotFoundError: If the provided cluster_path is not found
             ClusterNameNotProvidedError: If the cluster_name isn't provided or found
 
+        Note:
+            For fdf-mirror deployment type, if --mirror-registry-user or --mirror-registry-password
+            CLI arguments are provided, they will be stored in config.DEPLOYMENT to make them
+            available to the mirroring functions. The mirror_registry itself is passed directly
+            to the mirroring function without modifying global config.
+
         """
         framework.config.init_cluster_configs()
         # Merge both --ocsci-conf and --conf arguments
@@ -113,6 +119,17 @@ class Initializer(object):
                 config.DEPLOYMENT["fdf_image_tag"] = args.fdf_image_tag
             if args.live_deploy:
                 config.DEPLOYMENT["live_deployment"] = args.live_deploy
+
+        if self.deployment_type == "fdf-mirror":
+            # Store mirror registry credentials from CLI args if provided
+            if args.mirror_registry_user:
+                config.DEPLOYMENT["mirror_registry_user"] = args.mirror_registry_user
+                logger.info("Using mirror_registry_user from CLI argument")
+            if args.mirror_registry_password:
+                config.DEPLOYMENT["mirror_registry_password"] = (
+                    args.mirror_registry_password
+                )
+                logger.info("Using mirror_registry_password from CLI argument")
 
     def init_cli(self, args: list) -> list:
         """
@@ -179,6 +196,16 @@ class Initializer(object):
                 "--mirror-registry",
                 default=None,
                 help="Target mirror registry (e.g., registry.example.com:5000). If not provided, uses config value.",
+            )
+            parser.add_argument(
+                "--mirror-registry-user",
+                default=None,
+                help="Mirror registry username. If not provided, uses config value or pull secret.",
+            )
+            parser.add_argument(
+                "--mirror-registry-password",
+                default=None,
+                help="Mirror registry password. If not provided, uses config value or pull secret.",
             )
             parser.add_argument(
                 "--configure-registries",
