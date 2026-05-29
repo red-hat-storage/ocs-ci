@@ -27,6 +27,10 @@ from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.framework import config
+from ocs_ci.utility.version import (
+    get_semantic_running_odf_version,
+    get_semantic_version,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -315,8 +319,14 @@ class TestHealthOverview(ManageTest):
                 "[CLEANUP] Exporters not scaled up in test, scaling up to 1 replica"
             )
             ocp = OCP(namespace=config.ENV_DATA.get("cluster_namespace"))
+            odf_semantic_version = get_semantic_running_odf_version()
+            blackbox_label = (
+                constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
+                if odf_semantic_version >= get_semantic_version("4.21.7-1")
+                else constants.BLACKBOX_POD_LABEL
+            )
             deployment_labels = [
-                constants.BLACKBOX_POD_LABEL,
+                blackbox_label,
                 constants.OCS_METRICS_EXPORTER,
             ]
             deployments = [label.split("=")[1] for label in deployment_labels]
@@ -541,8 +551,14 @@ class TestHealthOverview(ManageTest):
         df_overview = PageNavigator().nav_storage_data_foundation_overview_page()
         df_overview.nav_health_view_checks()
 
+        odf_semantic_version = get_semantic_running_odf_version()
+        blackbox_label = (
+            constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
+            if odf_semantic_version >= get_semantic_version("4.21.7-1")
+            else constants.BLACKBOX_POD_LABEL
+        )
         deployment_labels = [
-            constants.BLACKBOX_POD_LABEL,
+            blackbox_label,
             constants.OCS_METRICS_EXPORTER,
         ]
         deployments = [label.split("=")[1] for label in deployment_labels]
