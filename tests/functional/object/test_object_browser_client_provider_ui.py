@@ -21,7 +21,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     polarion_id,
     ui,
-    skipif_ui_not_support,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
@@ -58,7 +57,6 @@ OBC_BIND_TIMEOUT = 300
 @mcg
 @runs_on_provider
 @hci_provider_and_client_required
-@skipif_ui_not_support("object_browser_on_client")
 class TestObjectBrowserClientProviderUI(ManageTest):
     """
     Test NooBaa Object Browser UI on client clusters.
