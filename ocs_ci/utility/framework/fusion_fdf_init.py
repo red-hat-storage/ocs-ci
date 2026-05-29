@@ -158,6 +158,16 @@ class Initializer(BaseInitializer):
                 help="Target mirror registry (e.g., registry.example.com:5000). If not provided, uses config value.",
             )
             parser.add_argument(
+                "--mirror-registry-user",
+                default=None,
+                help="Mirror registry username. If not provided, uses config value or pull secret.",
+            )
+            parser.add_argument(
+                "--mirror-registry-password",
+                default=None,
+                help="Mirror registry password. If not provided, uses config value or pull secret.",
+            )
+            parser.add_argument(
                 "--configure-registries",
                 action="store_true",
                 default=False,
