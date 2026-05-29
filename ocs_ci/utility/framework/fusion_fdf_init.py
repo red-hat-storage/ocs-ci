@@ -70,10 +70,9 @@ class Initializer(object):
             ClusterNameNotProvidedError: If the cluster_name isn't provided or found
 
         Note:
-            For fdf-mirror deployment type, if --mirror-registry-user or --mirror-registry-password
-            CLI arguments are provided, they will be stored in config.DEPLOYMENT to make them
-            available to the mirroring functions. The mirror_registry itself is passed directly
-            to the mirroring function without modifying global config.
+            For fdf-mirror deployment type, CLI arguments (--mirror-registry, --mirror-registry-user,
+            --mirror-registry-password) are stored in config.DEPLOYMENT to make them available to
+            the mirroring functions. CLI arguments take precedence over config file values.
 
         """
         framework.config.init_cluster_configs()
@@ -121,7 +120,10 @@ class Initializer(object):
                 config.DEPLOYMENT["live_deployment"] = args.live_deploy
 
         if self.deployment_type == "fdf-mirror":
-            # Store mirror registry credentials from CLI args if provided
+            # Store mirror registry and credentials from CLI args if provided
+            if args.mirror_registry:
+                config.DEPLOYMENT["mirror_registry"] = args.mirror_registry
+                logger.info("Using mirror_registry from CLI argument")
             if args.mirror_registry_user:
                 config.DEPLOYMENT["mirror_registry_user"] = args.mirror_registry_user
                 logger.info("Using mirror_registry_user from CLI argument")
