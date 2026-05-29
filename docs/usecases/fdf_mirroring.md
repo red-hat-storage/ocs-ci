@@ -52,21 +52,35 @@ DEPLOYMENT:
 
 ### CLI Command
 
+**Basic Usage (with all CLI arguments):**
 ```bash
 python -m ocs_ci.framework.fdf_mirror.main \
-  --catalog-image <cateloge name> \
-  --mirror-registry <mirror-registry> \
-  --cluster-path ~/current-cluster-dir/openshift-cluster-dir \
-  --cluster-name my-cluster \
+  --catalog-image <catalog-image-url> \
+  --mirror-registry <mirror-registry-url> \
+  --mirror-registry-user <username> \
+  --mirror-registry-password '<password>' \
+  --cluster-path <path-to-cluster-dir> \
+  --cluster-name <cluster-name> \
   --configure-registries
 ```
 
-**With Config File:**
+**With Config File (credentials in config):**
 ```bash
 python -m ocs_ci.framework.fdf_mirror.main \
-  --catalog-image <cateloge name> \
-  --cluster-path ~/current-cluster-dir/openshift-cluster-dir \
+  --catalog-image <catalog-image-url> \
+  --mirror-registry <mirror-registry-url> \
+  --cluster-path <path-to-cluster-dir> \
   --ocsci-conf /path/to/config.yaml \
+  --configure-registries
+```
+
+**Mixed (registry from CLI, credentials from config):**
+```bash
+python -m ocs_ci.framework.fdf_mirror.main \
+  --catalog-image <catalog-image-url> \
+  --mirror-registry <mirror-registry-url> \
+  --cluster-path <path-to-cluster-dir> \
+  --conf /path/to/config.yaml \
   --configure-registries
 ```
 
@@ -77,9 +91,13 @@ python -m ocs_ci.framework.fdf_mirror.main \
 
 **Optional Arguments:**
 - `--cluster-name`: Name of the OCP cluster (optional if metadata.json exists in cluster-path)
-- `--configure-registries`: Configure /etc/containers/registries.conf for internal images
+- `--mirror-registry-user`: Mirror registry username (optional, can be provided via CLI or config file)
+- `--mirror-registry-password`: Mirror registry password (optional, can be provided via CLI or config file)
+- `--configure-registries`: Configure /etc/containers/registries.conf for internal FDF images
 - `--ocsci-conf` or `--conf`: Path to config file (optional, can be used to provide mirror_registry and credentials). Both arguments are supported and can be used interchangeably or together.
 - `--report`: Path for JUnit report output
+
+**Note:** CLI arguments take precedence over config file values. If credentials are not provided via CLI or config, the tool will use credentials from the pull secret.
 
 ### Python API
 
