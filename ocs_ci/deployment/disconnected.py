@@ -51,21 +51,21 @@ def mirror_fdf_catalog_via_oc_mirror(
     Args:
         catalog_image (str): FDF catalog image URL
             Example: cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20
-        mirror_registry (str): Target mirror registry. If None, uses config.DEPLOYMENT['mirror_registry']
+        mirror_registry (str): Target mirror registry. If None, uses config.DEPLOYMENT['mirror_registry'].
         configure_registries (bool): Whether to configure /etc/containers/registries.conf for internal images
 
     Returns:
         str: mirrored catalog image URL
 
+    Note:
+        Mirror registry credentials (mirror_registry_user, mirror_registry_password) should be set in
+        config.DEPLOYMENT before calling this function, or they will be read from the pull secret.
+
     """
     logger.info(f"Mirroring FDF catalog: {catalog_image}")
 
-    # Set mirror_registry in config if provided
-    if mirror_registry:
-        config.DEPLOYMENT["mirror_registry"] = mirror_registry
-        logger.info(f"Set mirror_registry in config: {mirror_registry}")
-
     # Call the generic function with FDF-specific parameters
+    # mirror_registry is passed directly - no need to modify global config
     return mirror_index_image_via_oc_mirror(
         index_image=catalog_image,
         packages=None,  # Mirror entire FDF catalog (no package filtering)
