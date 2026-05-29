@@ -1075,7 +1075,7 @@ def main():
 
 def get_service_ca_certificate():
     """
-    Get OpenShift service CA certificate from service-ca ConfigMap.
+    Get OpenShift service CA certificate from signing-cabundle ConfigMap.
 
     OpenShift uses this CA to sign certificates for services exposed via routes.
     This is not specific to any particular service (NooBaa, RGW, etc.) - it's
@@ -1090,17 +1090,19 @@ def get_service_ca_certificate():
     """
     try:
         cm_obj = ocp.OCP(kind="ConfigMap", namespace="openshift-service-ca")
-        cm_data = cm_obj.get(resource_name="service-ca")
-        ca_cert = cm_data.get("data", {}).get("service-ca.crt")
+        cm_data = cm_obj.get(resource_name="signing-cabundle")
+        ca_cert = cm_data.get("data", {}).get("ca-bundle.crt")
         if ca_cert:
-            logger.info("Retrieved service CA certificate from service-ca ConfigMap")
+            logger.info(
+                "Retrieved service CA certificate from signing-cabundle ConfigMap"
+            )
             return ca_cert
     except Exception as e:
-        logger.warning("Could not get CA cert from service-ca ConfigMap: %s", e)
+        logger.warning("Could not get CA cert from signing-cabundle ConfigMap: %s", e)
 
     raise Exception(
         "Could not retrieve service CA certificate. "
-        "Ensure the service-ca ConfigMap exists in openshift-service-ca namespace."
+        "Ensure the signing-cabundle ConfigMap exists in openshift-service-ca namespace."
     )
 
 
