@@ -185,7 +185,7 @@ def test_blackbox_pod_after_upgrade():
         pytest.skip("The test is not supported on odf version less than 4.21")
     else:
         odf_semantic_version = version.get_semantic_running_odf_version()
-        if odf_semantic_version >= version.get_semantic_version("4.22.0-78"):
+        if odf_semantic_version >= version.get_semantic_version("4.21.7-1"):
             blackbox_label = constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
             expected_label_key = "app"
         else:

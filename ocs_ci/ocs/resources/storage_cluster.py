@@ -155,6 +155,157 @@ def verify_osd_tree_schema(ct_pod, deviceset_pvcs):
     )
 
 
+def remove_storageclass_from_storageconsumer(
+    sc_name, consumer_name=constants.INTERNAL_STORAGE_CONSUMER_NAME
+):
+    """
+    Remove a StorageClass entry from StorageConsumer.spec.storageClasses[].
+
+    This prevents the ocs-client-operator from recreating the SC on its
+    next reconcile cycle via the gRPC GetDesiredClientState() call.
+    Must be called BEFORE deleting the StorageClass.
+
+    Args:
+        sc_name (str): Name of the StorageClass to deregister.
+        consumer_name (str): Name of the StorageConsumer CR; default
+            ``ocs_ci.ocs.constants.INTERNAL_STORAGE_CONSUMER_NAME`` (``"internal"``).
+    """
+    consumer_ocp = OCP(
+        kind="StorageConsumer",
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    if not consumer_ocp.is_exist(resource_name=consumer_name):
+        log.debug(
+            f"StorageConsumer {consumer_name} not found; "
+            f"skipping deregistration of {sc_name}"
+        )
+        return
+
+    consumer = consumer_ocp.get(resource_name=consumer_name)
+    current_classes = consumer.get("spec", {}).get("storageClasses", [])
+    updated_classes = [sc for sc in current_classes if sc.get("name") != sc_name]
+
+    if len(updated_classes) == len(current_classes):
+        log.debug(
+            f"StorageClass {sc_name} not found in "
+            f"StorageConsumer {consumer_name}.spec.storageClasses; nothing to remove"
+        )
+        return
+
+    patch_body = json.dumps({"spec": {"storageClasses": updated_classes}})
+    consumer_ocp.patch(
+        resource_name=consumer_name,
+        params=patch_body,
+        format_type="merge",
+    )
+    log.info(
+        f"Removed {sc_name} from StorageConsumer "
+        f"{consumer_name}.spec.storageClasses"
+    )
+
+
+def _storageclass_ocs_external_label_patch():
+    """Merge-patch body for ``storageclass.ocs.openshift.io/is-external``."""
+    return {
+        "metadata": {
+            "labels": {
+                constants.OCS_EXTERNAL_STORAGECLASS_LABEL: (
+                    constants.OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE
+                ),
+            }
+        }
+    }
+
+
+def patch_storageclass_ocs_external_label(resource_name):
+    """
+    Merge-patch ``storageclass.ocs.openshift.io/is-external: "true"`` on a
+    StorageClass if it exists.
+
+    Used before deleting StorageClasses so the provider-side gRPC server
+    excludes the SC from the GetDesiredClientState() response. Applies to
+    all deployment types since ODF 4.22 uses the provider/consumer model
+    even for internal deployments.
+    """
+    sc_ocp = OCP(kind=constants.STORAGECLASS)
+    if not sc_ocp.is_exist(resource_name=resource_name):
+        log.warning(
+            f"StorageClass {resource_name} not found; skipping pre-delete external OCS label patch"
+        )
+        return
+    log.info(
+        f"Patching StorageClass {resource_name} before delete: "
+        f"{constants.OCS_EXTERNAL_STORAGECLASS_LABEL}="
+        f"{constants.OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE}"
+    )
+    sc_ocp.patch(
+        resource_name=resource_name,
+        params=json.dumps(_storageclass_ocs_external_label_patch()),
+        format_type="merge",
+    )
+
+
+def _delete_storageclass_ignore_not_found(sc_ocp, sc_name):
+    """
+    Cluster-scoped delete; succeeds if the StorageClass is already gone (TOCTOU-safe).
+    """
+    sc_ocp.exec_oc_cmd(
+        f"delete {constants.STORAGECLASS} {sc_name} --ignore-not-found",
+        timeout=600,
+    )
+
+
+def delete_storageclass_and_deregister(sc_name, sc_ocp=None, timeout=180):
+    """
+    Fully clean up a test-created StorageClass:
+        1. Deregister from StorageConsumer (prevents reconciler recreation)
+        2. Label with is-external (prevents gRPC serving)
+        3. Delete the SC
+        4. Verify it stays deleted (not recreated by operator)
+
+    Args:
+        sc_name (str): Name of the StorageClass.
+        sc_ocp (:obj:`~ocs_ci.ocs.ocp.OCP`, optional): OCP instance for StorageClass. Created if None.
+        timeout (int): Seconds to wait for deletion confirmation.
+
+    Raises:
+        TimeoutExpiredError: If the SC keeps getting recreated.
+    """
+    if sc_ocp is None:
+        sc_ocp = OCP(kind=constants.STORAGECLASS)
+
+    remove_storageclass_from_storageconsumer(sc_name)
+    patch_storageclass_ocs_external_label(sc_name)
+
+    if sc_ocp.is_exist(resource_name=sc_name):
+        log.info(f"Deleting StorageClass {sc_name}")
+        _delete_storageclass_ignore_not_found(sc_ocp, sc_name)
+
+    def _wait_storageclass_stays_deleted():
+        if not sc_ocp.is_exist(resource_name=sc_name):
+            return True
+        log.warning(
+            f"StorageClass {sc_name} was recreated; re-deregistering and deleting"
+        )
+        remove_storageclass_from_storageconsumer(sc_name)
+        patch_storageclass_ocs_external_label(sc_name)
+        log.info(f"Deleting StorageClass {sc_name}")
+        _delete_storageclass_ignore_not_found(sc_ocp, sc_name)
+        return False
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=15,
+        func=_wait_storageclass_stays_deleted,
+    )
+    sampler.timeout_exc_args = [
+        timeout,
+        f"StorageClass {sc_name} keeps getting recreated after {timeout}s",
+    ]
+    sampler.wait_for_func_value(True)
+    log.info(f"StorageClass {sc_name} confirmed deleted")
+
+
 def ocs_install_verification(
     timeout=600,
     skip_osd_distribution_check=False,
@@ -279,7 +430,7 @@ def ocs_install_verification(
         odf_semantic_version = get_semantic_running_odf_version()
         blackbox_label = (
             constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
-            if odf_semantic_version >= get_semantic_version("4.22.0-78")
+            if odf_semantic_version >= get_semantic_version("4.21.7-1")
             else constants.BLACKBOX_POD_LABEL
         )
         resources_dict.update(
