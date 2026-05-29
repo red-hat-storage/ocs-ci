@@ -1148,21 +1148,30 @@ def setup_client_ca_cert_secret(
         logger.info("Updated secret '%s' with key '%s'", secret_name, cert_key)
 
     except Exception:
-        # Create new secret
+        # Create new secret using oc command
         logger.info(
             "Creating new secret '%s' in namespace '%s'", secret_name, namespace
         )
 
-        secret_data = {
-            "apiVersion": "v1",
-            "kind": "Secret",
-            "metadata": {"name": secret_name, "namespace": namespace},
-            "type": "Opaque",
-            "data": {cert_key: ca_cert_b64},
-        }
+        # Write cert to temp file
+        import tempfile
 
-        secret_obj.create(**secret_data)
-        logger.info("Created secret '%s' with key '%s'", secret_name, cert_key)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".crt", delete=False) as f:
+            f.write(ca_cert)
+            cert_file = f.name
+
+        try:
+            # Create secret using oc create secret generic
+            cmd = (
+                f"create secret generic {secret_name} "
+                f"-n {namespace} "
+                f"--from-file={cert_key}={cert_file}"
+            )
+            secret_obj.exec_oc_cmd(cmd, out_yaml_format=False)
+            logger.info("Created secret '%s' with key '%s'", secret_name, cert_key)
+        finally:
+            # Clean up temp file
+            os.remove(cert_file)
 
 
 def setup_object_browser_ca_cert_on_client(ca_cert):
