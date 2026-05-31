@@ -366,6 +366,14 @@ deployment_4_21 = {
         "//span[contains(@class, 'menu') and contains(text(), 'Performance mode')]",
         By.XPATH,
     ),
+    "enable_forceful_deployment": (
+        "input#enable-forceful-deployment",
+        By.CSS_SELECTOR,
+    ),
+    "confirm_forceful_deployment": (
+        "input#forceful-deployment-confirmation",
+        By.CSS_SELECTOR,
+    ),
 }
 
 deployment_4_22 = {
@@ -434,6 +442,7 @@ deployment_4_22 = {
         "//dt[text()='Installed Version']/following-sibling::dd",
         By.XPATH,
     ),
+    "localblock_sc": ("//button[@id='localblock-link']", By.XPATH),
 }
 
 generic_locators = {

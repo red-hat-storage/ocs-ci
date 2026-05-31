@@ -244,51 +244,74 @@ class DeploymentUI(PageNavigator):
         Install LSO cluster via UI
 
         """
-        logger.info("Click Internal - Attached Devices")
-        if self.operator_name == ODF_OPERATOR:
-            self.do_click(self.dep_loc["choose_lso_deployment"], enable_screenshot=True)
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_22:
+            logger.info("Step 1: Backing storage — select existing StorageClass")
+            self.do_click(self.dep_loc["internal_mode_odf"], enable_screenshot=True)
+            self.do_click(
+                self.dep_loc["storage_class_dropdown"], enable_screenshot=True
+            )
+            self.do_click(self.dep_loc["localblock_sc"], enable_screenshot=True)
+            self.do_click(self.dep_loc["next"], enable_screenshot=True)
         else:
-            self.do_click(
-                self.dep_loc["internal-attached_devices"], enable_screenshot=True
-            )
-            logger.info("Click on All nodes")
-            self.do_click(self.dep_loc["all_nodes_lso"], enable_screenshot=True)
-        self.do_click(self.dep_loc["next"], enable_screenshot=True)
+            logger.info("Click Internal - Attached Devices")
+            if self.operator_name == ODF_OPERATOR:
+                self.do_click(
+                    self.dep_loc["choose_lso_deployment"],
+                    enable_screenshot=True,
+                )
+            else:
+                self.do_click(
+                    self.dep_loc["internal-attached_devices"],
+                    enable_screenshot=True,
+                )
+                logger.info("Click on All nodes")
+                self.do_click(self.dep_loc["all_nodes_lso"], enable_screenshot=True)
+            self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
-        logger.info(
-            f"Configure Volume Set Name and Storage Class Name as {constants.LOCAL_BLOCK_RESOURCE}"
-        )
-        self.do_send_keys(
-            locator=self.dep_loc["lv_name"],
-            text=constants.LOCAL_BLOCK_RESOURCE,
-            timeout=300,
-        )
-        self.take_screenshot()
-        self.do_send_keys(
-            locator=self.dep_loc["sc_name"], text=constants.LOCAL_BLOCK_RESOURCE
-        )
-        if self.operator_name == OCS_OPERATOR:
-            logger.info("Select all nodes on 'Create Storage Class' step")
-            self.do_click(
-                locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
+            logger.info(
+                "Configure Volume Set Name and Storage Class Name"
+                f" as {constants.LOCAL_BLOCK_RESOURCE}"
             )
-        if config.ENV_DATA.get("platform") not in [
-            constants.BAREMETAL_PLATFORM,
-            constants.HCI_BAREMETAL,
-        ]:
+            self.do_send_keys(
+                locator=self.dep_loc["lv_name"],
+                text=constants.LOCAL_BLOCK_RESOURCE,
+                timeout=300,
+            )
             self.take_screenshot()
-            self.verify_disks_lso_attached()
-            timeout_next = 60
-        else:
-            timeout_next = 600
-        self.do_click(
-            self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
-        )
+            self.do_send_keys(
+                locator=self.dep_loc["sc_name"],
+                text=constants.LOCAL_BLOCK_RESOURCE,
+            )
+            if self.operator_name == OCS_OPERATOR:
+                logger.info("Select all nodes on 'Create Storage Class' step")
+                self.do_click(
+                    locator=self.dep_loc["all_nodes_create_sc"],
+                    enable_screenshot=True,
+                )
+            if config.ENV_DATA.get("platform") not in [
+                constants.BAREMETAL_PLATFORM,
+                constants.HCI_BAREMETAL,
+            ]:
+                self.take_screenshot()
+                self.verify_disks_lso_attached()
+                timeout_next = 60
+            else:
+                timeout_next = 600
+            self.do_click(
+                self.dep_loc["next"],
+                enable_screenshot=True,
+                timeout=timeout_next,
+            )
 
-        logger.info("Confirm new storage class")
-        self.do_click(self.dep_loc["yes"], enable_screenshot=True)
-        if config.ENV_DATA.get("mcg_only_deployment", False):
-            return
+            logger.info("Confirm new storage class")
+            self.do_click(self.dep_loc["yes"], enable_screenshot=True)
+            if config.ENV_DATA.get("mcg_only_deployment", False):
+                return
+
+        if ocs_version >= version.VERSION_4_20:
+            logger.info("Click Next on Optional settings")
+            self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
         sample = TimeoutSampler(
             timeout=600,
@@ -299,20 +322,26 @@ class DeploymentUI(PageNavigator):
         if not sample.wait_for_func_status(result=True):
             raise TimeoutExpiredError("Nodes not found after 600 seconds")
 
-        self.enable_taint_nodes()
+        if ocs_version >= version.VERSION_4_22:
+            self.do_click(self.dep_loc["next"], enable_screenshot=True)
+        else:
+            self.enable_taint_nodes()
 
-        self.configure_performance()
+            self.configure_performance()
 
-        sample = TimeoutSampler(
-            timeout=700,
-            sleep=40,
-            func=self.wait_next_button_lso,
-        )
-        if not sample.wait_for_func_status(result=True):
-            self.take_screenshot()
-            raise TimeoutExpiredError(
-                "Next button on LSO is not clickable after 700 seconds"
+            sample = TimeoutSampler(
+                timeout=700,
+                sleep=40,
+                func=self.wait_next_button_lso,
             )
+            if not sample.wait_for_func_status(result=True):
+                self.take_screenshot()
+                raise TimeoutExpiredError(
+                    "Next button on LSO is not clickable after 700 seconds"
+                )
+
+        if ocs_version >= version.VERSION_4_20:
+            self.configure_advanced_settings()
 
         self.configure_encryption()
 
@@ -401,6 +430,25 @@ class DeploymentUI(PageNavigator):
                 self.do_click(locator=self.dep_loc["lean_mode"])
             elif mode == "performance":
                 self.do_click(locator=self.dep_loc["performance_mode"])
+
+    def configure_advanced_settings(self):
+        """
+        Configure Advanced Settings step in the ODF 4.20+ Create StorageSystem
+        wizard (LSO path). Enables forceful deployment when configured and
+        advances to the next step.
+
+        """
+        if config.DEPLOYMENT.get("odf_forceful_deployment"):
+            logger.info("Enable forceful deployment")
+            self.select_checkbox_status(
+                status=True,
+                locator=self.dep_loc["enable_forceful_deployment"],
+            )
+            self.do_send_keys(
+                locator=self.dep_loc["confirm_forceful_deployment"],
+                text="CONFIRM",
+            )
+        self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
     def create_storage_cluster(self):
         """
