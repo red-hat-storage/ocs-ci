@@ -289,41 +289,39 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         """
         Wait for the CephFSOrphanedSnapshot alert to fire.
 
-        In multicluster mode the alert fires on the provider Prometheus;
-        the consumer check is skipped due to DFBUGS-7011 (ocs_client_alert
-        federation not active).  In standalone mode the single cluster's
-        Prometheus is used.
+        In multicluster mode both the provider and consumer Prometheus are
+        checked.  In standalone mode the single cluster's Prometheus is used.
         """
-        api = self.provider_api or self.api
-        log.info(
-            "Waiting for CephFSOrphanedSnapshot alert to fire on %s",
-            "provider" if self.provider_api else "consumer",
-        )
+        if self.provider_api:
+            log.info("Waiting for CephFSOrphanedSnapshot alert to fire on provider")
+            wait_for_alert_firing(
+                self.provider_api,
+                constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT,
+                expected_severity="warning",
+                expected_message_substr=constants.CEPHFS_SNAPSHOT_STATE_ORPHANED,
+            )
+        log.info("Waiting for CephFSOrphanedSnapshot alert to fire on consumer")
         wait_for_alert_firing(
-            api,
+            self.api,
             constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT,
             expected_severity="warning",
             expected_message_substr=constants.CEPHFS_SNAPSHOT_STATE_ORPHANED,
         )
-        # Skip consumer alert check in multicluster mode — DFBUGS-7011
-        # (ocs_client_alert federation not active)
 
     def _wait_for_orphaned_alert_cleared(self):
         """
         Wait for the CephFSOrphanedSnapshot alert to clear.
 
-        In multicluster mode the provider Prometheus is checked; the consumer
-        check is skipped due to DFBUGS-7011 (ocs_client_alert federation not
-        active).  In standalone mode the single cluster's Prometheus is used.
+        In multicluster mode both the provider and consumer Prometheus are
+        checked.  In standalone mode the single cluster's Prometheus is used.
         """
-        api = self.provider_api or self.api
-        log.info(
-            "Waiting for CephFSOrphanedSnapshot alerts to clear on %s",
-            "provider" if self.provider_api else "consumer",
-        )
-        wait_for_alert_cleared(api, constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT)
-        # Skip consumer alert check in multicluster mode — DFBUGS-7011
-        # (ocs_client_alert federation not active)
+        if self.provider_api:
+            log.info("Waiting for CephFSOrphanedSnapshot alerts to clear on provider")
+            wait_for_alert_cleared(
+                self.provider_api, constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT
+            )
+        log.info("Waiting for CephFSOrphanedSnapshot alerts to clear on consumer")
+        wait_for_alert_cleared(self.api, constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT)
 
     def _resolve_svg(self, svg_param):
         """
