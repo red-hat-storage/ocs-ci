@@ -56,7 +56,7 @@ def _wait_for_replication_alert(
     for alerts in TimeoutSampler(
         timeout=timeout,
         sleep=sleep,
-        func=api.get_firing_alerts_by_labels,
+        func=api.get_alerts_by_labels,
         alert_name=alert_name,
         labels_dict=labels,
     ):
