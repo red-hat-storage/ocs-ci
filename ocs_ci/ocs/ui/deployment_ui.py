@@ -2,14 +2,21 @@ import logging
 import time
 
 from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STORAGE
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
 from ocs_ci.ocs.resources import csv
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, ConfigurationError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.ocs.node import (
+    get_worker_nodes,
+    mark_masters_schedulable,
+    get_all_nodes,
+    get_node_objs,
+    label_nodes,
+)
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.deployment.helpers.lso_helpers import (
     add_disk_for_vsphere_platform,
@@ -314,6 +321,27 @@ class DeploymentUI(PageNavigator):
                 "Next button on LSO is not clickable after 700 seconds"
             )
 
+        if config.DEPLOYMENT.get("odf_forceful_deployment"):
+            self.enable_forceful_deployment()
+
+        if config.DEPLOYMENT.get("ec_default_pools"):
+            if config.ENV_DATA.get("mark_masters_schedulable", True):
+                mark_masters_schedulable()
+                # Allow ODF to be deployed on all nodes
+                logger.info("labeling all nodes as storage nodes")
+                nodes = get_all_nodes()
+                node_objs = get_node_objs(nodes)
+                label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+                # give a timeout to allow nodes to appear on console
+                time.sleep(10)
+
+            if not self.enable_erasure_coding():
+                raise ConfigurationError
+
+        self.do_click(
+            locator=self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
+        )
+
         self.configure_encryption()
 
         self.configure_data_protection()
@@ -418,6 +446,173 @@ class DeploymentUI(PageNavigator):
             )
         logger.info("Sleep 10 second after click on 'create storage cluster'")
         time.sleep(10)
+
+    def check_forceful_deployment(self):
+        """
+        Check if the Enable forceful deployment checkbox is currently selected.
+
+        Returns:
+            bool: True if the checkbox is checked, False otherwise.
+        """
+        return self.get_checkbox_status(
+            locator=self.dep_loc["enable_forceful_deployment"]
+        )
+
+    def enable_forceful_deployment(self):
+        """
+        Enable the forceful deployment checkbox and type CONFIRM in the
+        confirmation input that appears.
+        """
+        logger.info("Enable forceful deployment")
+        self.select_checkbox_status(
+            status=True, locator=self.dep_loc["enable_forceful_deployment"]
+        )
+        self.do_send_keys(
+            locator=self.dep_loc["forceful_deployment_confirmation"],
+            text="CONFIRM",
+        )
+        self.take_screenshot("odf_forceful_deployment_enabled")
+
+    def is_element_greyed_out(self, locator):
+        """
+        Check if a UI element is disabled (greyed out).
+
+        Args:
+            locator (tuple): (selector str, By type) of the element to check.
+
+        Returns:
+            bool: True if the element has the disabled attribute, False otherwise.
+        """
+        return self.get_element_attribute(locator, "disabled") is not None
+
+    def check_erasure_coding(self):
+        """
+        Check if the Use erasure coding checkbox is currently selected.
+
+        Returns:
+            bool: True if the checkbox is checked, False otherwise or when
+                ec_default_pools is not set in config.
+        """
+        if not config.DEPLOYMENT.get("ec_default_pools"):
+            return False
+        return self.get_checkbox_status(locator=self.dep_loc["use_erasure_coding"])
+
+    def _select_ec_scheme(self, k, m):
+        """
+        Click the radio button for the EC scheme matching k+m in the scheme table.
+
+        Args:
+            k (int): Number of data chunks (ec_data_chunks).
+            m (int): Number of coding chunks (ec_coding_chunks).
+        """
+        scheme = f"{k}+{m}"
+        logger.info(f"Selecting EC scheme {scheme} from the erasure coding table")
+        self.do_click(
+            locator=format_locator(self.dep_loc["ec_scheme_radio"], scheme),
+            enable_screenshot=True,
+        )
+
+    def _verify_ec_effective_capacity(self, k, m):
+        """
+        Cross-validate the Effective capacity values shown in the EC scheme
+        table.  Derives total raw capacity from the first row and verifies
+        every other row matches ``total_raw * k_i / (k_i + m_i)`` rounded
+        to two decimal places.
+
+        Args:
+            k (int): Number of data chunks of the selected scheme.
+            m (int): Number of coding chunks of the selected scheme.
+        """
+        scheme = f"{k}+{m}"
+        rows = self.get_elements(locator=self.dep_loc["ec_scheme_table_rows"])
+        if not rows:
+            raise ConfigurationError(
+                "EC scheme table has no rows — cannot verify effective capacity"
+            )
+
+        scheme_cell = self.dep_loc["_ec_row_scheme_cell"]
+        cap_cell = self.dep_loc["_ec_row_effective_capacity_cell"]
+        parsed = []
+        for row in rows:
+            scheme_text = row.find_element(scheme_cell[1], scheme_cell[0]).text.split()[
+                0
+            ]
+            capacity_text = row.find_element(cap_cell[1], cap_cell[0]).text
+            ki, mi = (int(x) for x in scheme_text.split("+"))
+            capacity_value = float(capacity_text.split()[0])
+            parsed.append((scheme_text, ki, mi, capacity_value))
+
+        available_schemes = [p[0] for p in parsed]
+        if scheme not in available_schemes:
+            raise ConfigurationError(
+                f"Selected EC scheme {scheme} not found in the table. "
+                f"Available: {available_schemes}"
+            )
+
+        ref_scheme, ref_k, ref_m, ref_cap = parsed[0]
+        total_raw = ref_cap * (ref_k + ref_m) / ref_k
+        # Raw storage will be always in TiB; we do not expect GiB values in the EC table
+        logger.info(
+            f"EC table: derived total raw capacity = {total_raw:.2f} TiB "
+            f"(from reference scheme {ref_scheme})"
+        )
+
+        for row_scheme, ki, mi, displayed_cap in parsed:
+            expected_cap = round(total_raw * ki / (ki + mi), 2)
+            if round(displayed_cap, 2) != expected_cap:
+                raise ConfigurationError(
+                    f"EC scheme {row_scheme}: expected effective capacity "
+                    f"{expected_cap} TiB, got {displayed_cap} TiB"
+                )
+            logger.info(
+                f"EC scheme {row_scheme}: effective capacity = {displayed_cap} TiB "
+                f"(expected {expected_cap} TiB)"
+            )
+
+    def is_erasure_coding_disabled(self):
+        """
+        Check whether the Use erasure coding checkbox is greyed out (disabled).
+
+        The checkbox is disabled when the cluster does not meet EC prerequisites,
+        e.g. fewer than 4 nodes or no LSO on the cluster.
+
+        Returns:
+            bool: True if the checkbox is disabled, False if it can be clicked.
+        """
+        disabled = self.is_element_greyed_out(
+            locator=self.dep_loc["use_erasure_coding"]
+        )
+        if disabled:
+            logger.warning(
+                "Use erasure coding checkbox is greyed out — cluster may not meet "
+                "EC prerequisites (e.g. fewer than 4 nodes or no LSO)."
+            )
+        return disabled
+
+    def enable_erasure_coding(self):
+        """
+        Enable the Use erasure coding checkbox, select the EC scheme from config,
+        and verify the displayed effective capacity.
+
+        No-op when the checkbox is greyed out (not enough nodes to support EC or other).
+        EC scheme is derived from ec_data_chunks (k) and ec_coding_chunks (m).
+
+        Returns:
+            bool or None: True if erasure coding was successfully enabled,
+                None if the checkbox is disabled (greyed out).
+        """
+        if self.is_erasure_coding_disabled():
+            return None
+        logger.info("Enable Use erasure coding")
+        self.select_checkbox_status(
+            status=True, locator=self.dep_loc["use_erasure_coding"]
+        )
+        k = config.DEPLOYMENT.get("ec_data_chunks", 2)
+        m = config.DEPLOYMENT.get("ec_coding_chunks", 1)
+        self._select_ec_scheme(k, m)
+        self._verify_ec_effective_capacity(k, m)
+        self.take_screenshot("erasure_coding_enabled")
+        return True
 
     def configure_encryption(self):
         """

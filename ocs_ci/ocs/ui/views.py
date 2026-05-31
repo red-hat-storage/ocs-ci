@@ -369,6 +369,15 @@ deployment_4_21 = {
 }
 
 deployment_4_22 = {
+    "enable_forceful_deployment": (
+        "input#enable-forceful-deployment",
+        By.CSS_SELECTOR,
+    ),
+    "forceful_deployment_confirmation": (
+        "input#forceful-deployment-confirmation",
+        By.CSS_SELECTOR,
+    ),
+    "use_erasure_coding": ("input#use-erasure-coding", By.CSS_SELECTOR),
     # Perspective switcher for ACM hub cluster (PF v6)
     "perspective_switcher_toggle": (
         'button[data-test-id="perspective-switcher-toggle"]',
@@ -432,6 +441,24 @@ deployment_4_22 = {
     ),
     "operator_installed_version": (
         "//dt[text()='Installed Version']/following-sibling::dd",
+        By.XPATH,
+    ),
+    "ec_scheme_table_rows": (
+        "//table[@aria-label='Erasure coding scheme selection']//tbody/tr",
+        By.XPATH,
+    ),
+    "ec_scheme_radio": (
+        "//tr[.//td[@data-label='Scheme (k+m)' and "
+        "starts-with(normalize-space(.), '{}')]]"
+        "//input[@name='radioGroup']",
+        By.XPATH,
+    ),
+    "_ec_row_scheme_cell": (
+        ".//td[@data-label='Scheme (k+m)']",
+        By.XPATH,
+    ),
+    "_ec_row_effective_capacity_cell": (
+        ".//td[@data-label='Effective capacity']",
         By.XPATH,
     ),
 }
@@ -1644,7 +1671,7 @@ add_capacity = {
     "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
     "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
     "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
-    "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
+    "localblock_sc": ("a[id='localblock-link'], #localblock-link", By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
@@ -2722,7 +2749,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "storage_class_dropdown": (
-        "//button[@data-test='sc-dropdown']",
+        "//button[@data-test='sc-dropdown']| //button[@data-test='storage-class-dropdown']",
         By.XPATH,
     ),
     "storage_class_noobaa_option": (
