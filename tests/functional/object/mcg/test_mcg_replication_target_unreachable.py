@@ -88,25 +88,21 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         target_bucket.delete()
         logger.info(f"Target bucket deleted: {target_bucket.name}")
 
+        alert_name = constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE
         api = PrometheusAPI(threading_lock=threading_lock)
-        alerts = api.wait_for_alert(
-            name=constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE,
-            state="firing",
+        for alerts in TimeoutSampler(
             timeout=60 * 8,
             sleep=30,
-        )
+            func=api.get_alerts_by_labels,
+            alert_name=alert_name,
+            labels_dict={"source_bucket": source_bucket.name},
+        ):
+            if alerts:
+                logger.info(f"Alert {alert_name} is firing for {source_bucket.name}")
+                break
+
         # 4. Verify alert properties and bucket names (not hash IDs - DFBUGS-6380)
-        alert = next(
-            (
-                a
-                for a in alerts
-                if a.get("labels", {}).get("source_bucket") == source_bucket.name
-            ),
-            None,
-        )
-        assert (
-            alert is not None
-        ), "NooBaaReplicationTargetUnreachable alert not found for source bucket"
+        alert = alerts[0]
         assert (
             alert["annotations"]["message"]
             == "A NooBaa Replication Target Is Unreachable"
@@ -130,15 +126,16 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         if jira_issue("DFBUGS-6398"):
             pytest.skip("DFBUGS-6398: alert persists after source bucket deletion")
 
-        cleared = api.wait_for_alert(
-            name=constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE,
-            state=None,
+        for alerts in TimeoutSampler(
             timeout=60 * 5,
             sleep=30,
-        )
-        assert (
-            len(cleared) == 0
-        ), f"{constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE} alerts were not cleared"
+            func=api.get_alerts_by_labels,
+            alert_name=alert_name,
+            labels_dict={"source_bucket": source_bucket.name},
+        ):
+            if not alerts:
+                logger.info(f"Alert {alert_name} cleared for {source_bucket.name}")
+                break
 
     @skipif_aws_creds_are_missing
     @skipif_disconnected_cluster
@@ -216,9 +213,9 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         for alert_found in TimeoutSampler(
             timeout=600,
             sleep=10,
-            func=api.get_alerts_for_bucket,
+            func=api.get_alerts_by_labels,
             alert_name=alert_name,
-            source_bucket=source_bucket.name,
+            labels_dict={"source_bucket": source_bucket.name},
         ):
             if alert_found:
                 logger.info(f"Alert {alert_name} is firing for {source_bucket.name}")
@@ -231,9 +228,9 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         for alert_cleared in TimeoutSampler(
             timeout=600,
             sleep=10,
-            func=api.get_alerts_for_bucket,
+            func=api.get_alerts_by_labels,
             alert_name=alert_name,
-            source_bucket=source_bucket.name,
+            labels_dict={"source_bucket": source_bucket.name},
         ):
             if not alert_cleared:
                 logger.info(f"Alert {alert_name} cleared for {source_bucket.name}")
