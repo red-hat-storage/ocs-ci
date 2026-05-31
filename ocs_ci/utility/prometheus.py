@@ -882,9 +882,10 @@ class PrometheusAPI(object):
                 timeout -= sleep
         return alerts
 
-    def get_firing_alerts_by_labels(self, alert_name, labels_dict):
+    def get_alerts_by_labels(self, alert_name, labels_dict):
         """
-        Get firing alerts matching a specific alert name and label values.
+        Get alerts (pending or firing) matching a specific alert name and
+        label values.
 
         Args:
             alert_name (str): Alert name to match.
@@ -905,7 +906,6 @@ class PrometheusAPI(object):
                 alert
                 for alert in response.json()["data"]["alerts"]
                 if alert["labels"].get("alertname") == alert_name
-                and alert.get("state") == "firing"
                 and all(alert["labels"].get(k) == v for k, v in labels_dict.items())
             ]
 
