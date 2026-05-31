@@ -1,6 +1,5 @@
 import logging
 import os
-import sys
 import time
 import pytest
 import requests
@@ -37,7 +36,6 @@ from ocs_ci.utility.version import (
 
 logger = logging.getLogger(__name__)
 
-is_collect_only = "--collect-only" in sys.argv or "--co" in sys.argv
 ALERT_MAP = {
     constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES: 0,
     constants.ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES: 0,
@@ -45,20 +43,9 @@ ALERT_MAP = {
     constants.ALERT_ODF_CORE_POD_RESTART: 0,
     constants.ALERT_ODF_DISK_UTILIZATION_HIGH: 0,
     constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: 0,
+    constants.ALERT_CLUSTERWARNINGSTATE: 0,
+    constants.ALERT_CLUSTERERRORSTATE: 0,
 }
-
-if is_collect_only:
-    ocs_version = VERSION_4_22  # Default to latest for collection
-else:
-    ocs_version = get_ocs_version_from_csv(only_major_minor=True)
-
-if ocs_version >= VERSION_4_22:
-    ALERT_MAP.update(
-        {
-            constants.ALERT_CLUSTERWARNINGSTATE: 0,
-            constants.ALERT_CLUSTERERRORSTATE: 0,
-        }
-    )
 
 SEVERITY_DROP_MAP = {
     "Minor": 2,
@@ -75,6 +62,15 @@ def get_alert_params():
         list: List of tuples (alert_name, alert_yaml)
     """
     # Base parameters for all versions
+    try:
+        ocs_version = get_ocs_version_from_csv(only_major_minor=True)
+    except Exception as e:
+        # Fallback if cluster not ready (e.g., during deployment)
+        logger.warning(
+            f"Could not detect OCS version (cluster may not be ready): {e}. "
+            f"Using default version {VERSION_4_22}"
+        )
+        ocs_version = VERSION_4_22
     params = [
         (
             constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000,
