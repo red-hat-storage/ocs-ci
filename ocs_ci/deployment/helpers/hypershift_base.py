@@ -1537,10 +1537,9 @@ def create_kubeadmin_password_file_hosted_cluster():
     cluster_path = config.ENV_DATA["cluster_path"]
     cluster_name = config.ENV_DATA["cluster_name"]
 
-    with config.RunWithProviderConfigContextIfAvailable():
-        password_path = HyperShiftBase.download_hosted_cluster_kubeadmin_password(
-            cluster_name, cluster_path=cluster_path
-        )
+    password_path = HyperShiftBase.download_hosted_cluster_kubeadmin_password(
+        cluster_name, cluster_path=cluster_path
+    )
     if not password_path:
         raise CommandFailed(
             f"Failed to create kubeadmin-password file for hosted cluster "
