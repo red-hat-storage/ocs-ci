@@ -19,7 +19,11 @@ from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutException
+from ocs_ci.ocs.exceptions import (
+    ResourceWrongStatusException,
+    TimeoutException,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.ui.base_ui import (
     wait_for_element_to_be_clickable,
     wait_for_element_to_be_visible,
@@ -862,6 +866,203 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     acm_obj.do_click(
         acm_loc["disaster-recovery-overview"], avoid_stale=True, enable_screenshot=True
     )
+
+
+def verify_pending_cleanup_alert_firing(
+    acm_obj, operation="Failover", drpc_name=None, namespace=None
+):
+    """
+    Verify that ApplicationCleanupPending alert is firing on DR Dashboard.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        operation (str): DR operation name for logging (Failover/Relocate)
+        drpc_name (str): DRPC name to verify specific alert (optional)
+        namespace (str): Namespace of DRPC (optional, defaults to DR_OPS_NAMESPACE)
+
+    Raises:
+        UnexpectedBehaviour: If alert is not found on DR Dashboard
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    namespace = namespace or constants.DR_OPS_NAMESPACE
+
+    log.info(
+        f"Verifying {constants.ALERT_APPLICATION_CLEANUP_PENDING} "
+        f"alert is firing on DR Dashboard after {operation}"
+        + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+    )
+    acm_obj.refresh_page()
+    acm_obj.navigate_data_services()
+
+    # Navigate to Disaster Recovery Overview page where alerts are shown
+    acm_obj.do_click(
+        acm_loc["disaster-recovery-overview"],
+        avoid_stale=True,
+        enable_screenshot=True,
+        timeout=60,
+    )
+    acm_obj.take_screenshot()
+
+    # Expand Critical alerts section (best-effort)
+    try:
+        critical_alert = acm_obj.find_an_element_by_xpath(
+            acm_loc["critical-alert"][0]
+        ).get_attribute("aria-expanded")
+
+        if critical_alert == "false":
+            critical_alert_elem = wait_for_element_to_be_clickable(
+                acm_loc["critical-alert"]
+            )
+            acm_obj.driver.execute_script("arguments[0].click();", critical_alert_elem)
+            acm_obj.take_screenshot()
+    except (NoSuchElementException, StaleElementReferenceException) as e:
+        log.warning(
+            f"Could not expand Critical alerts section: {e}. "
+            "Proceeding to verify alert presence directly."
+        )
+        acm_obj.take_screenshot()
+
+    # Verify alert is visible - use DRPC-specific locator if drpc_name provided
+    if drpc_name:
+        alert_locator = (
+            acm_loc["pending-cleanup-alert-drpc-message"][0].format(
+                drpc_name, namespace
+            ),
+            acm_loc["pending-cleanup-alert-drpc-message"][1],
+        )
+        expected_text = f"DRPC '{drpc_name}'"
+    else:
+        alert_locator = acm_loc["pending-cleanup-alert"]
+        expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
+
+    alert_found = acm_obj.wait_until_expected_text_is_found(
+        locator=alert_locator,
+        expected_text=expected_text,
+        timeout=120,
+    )
+
+    if alert_found:
+        log.info(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+            f"found on DR Dashboard after {operation}"
+            + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+        )
+        acm_obj.take_screenshot()
+    else:
+        log.error(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+            f"NOT found on DR Dashboard after {operation}"
+            + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+        )
+        acm_obj.take_screenshot()
+        raise UnexpectedBehaviour(
+            f"{constants.ALERT_APPLICATION_CLEANUP_PENDING} alert "
+            f"did not appear on DR Dashboard after {operation}"
+            + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+        )
+
+
+def verify_pending_cleanup_alert_resolved(
+    acm_obj, operation="Failover", drpc_name=None, namespace=None
+):
+    """
+    Verify that ApplicationCleanupPending alert is resolved/cleared from DR Dashboard.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        operation (str): DR operation name for logging (Failover/Relocate)
+        drpc_name (str): DRPC name to verify specific alert resolved (optional)
+        namespace (str): Namespace of DRPC (optional, defaults to DR_OPS_NAMESPACE)
+
+    Raises:
+        UnexpectedBehaviour: If alert is still present on DR Dashboard
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    namespace = namespace or constants.DR_OPS_NAMESPACE
+
+    log.info(
+        f"Verifying {constants.ALERT_APPLICATION_CLEANUP_PENDING} "
+        f"alert is cleared from DR Dashboard after {operation} cleanup"
+        + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+    )
+
+    # Navigate to DR Dashboard Overview page
+    acm_obj.refresh_page()
+    acm_obj.navigate_data_services()
+    acm_obj.do_click(
+        acm_loc["disaster-recovery-overview"],
+        avoid_stale=True,
+        enable_screenshot=True,
+        timeout=60,
+    )
+    acm_obj.take_screenshot()
+
+    # Try to expand Critical alerts section if it exists
+    try:
+        critical_alert = acm_obj.find_an_element_by_xpath(
+            acm_loc["critical-alert"][0]
+        ).get_attribute("aria-expanded")
+
+        if critical_alert == "false":
+            critical_alert_elem = wait_for_element_to_be_clickable(
+                acm_loc["critical-alert"]
+            )
+            acm_obj.driver.execute_script("arguments[0].click();", critical_alert_elem)
+            acm_obj.take_screenshot()
+    except (NoSuchElementException, StaleElementReferenceException) as e:
+        log.info(
+            f"Critical alerts section not found or not expandable: {e}. "
+            "This may indicate no critical alerts exist (expected)."
+        )
+        acm_obj.take_screenshot()
+    except Exception as e:
+        acm_obj.take_screenshot()
+        raise UnexpectedBehaviour(
+            f"Unable to verify DR Dashboard critical-alert section after {operation} cleanup."
+        ) from e
+
+    # Verify alert is NOT visible - use DRPC-specific locator if drpc_name provided
+    if drpc_name:
+        alert_locator = (
+            acm_loc["pending-cleanup-alert-drpc-message"][0].format(
+                drpc_name, namespace
+            ),
+            acm_loc["pending-cleanup-alert-drpc-message"][1],
+        )
+        expected_text = f"DRPC '{drpc_name}'"
+    else:
+        alert_locator = acm_loc["pending-cleanup-alert"]
+        expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
+
+    # use_fallback=False as this is intentional negative check (alert should NOT exist)
+    alert_still_present = acm_obj.wait_until_expected_text_is_found(
+        locator=alert_locator,
+        expected_text=expected_text,
+        timeout=60,
+        use_fallback=False,
+    )
+
+    if alert_still_present:
+        log.error(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+            f"still present on DR Dashboard after {operation} cleanup"
+            + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+        )
+        acm_obj.take_screenshot()
+        raise UnexpectedBehaviour(
+            f"{constants.ALERT_APPLICATION_CLEANUP_PENDING} alert "
+            f"did not clear after {operation} cleanup"
+            + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+        )
+    else:
+        log.info(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+            f"successfully cleared from DR Dashboard after {operation}"
+            + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+        )
+        acm_obj.take_screenshot()
 
 
 def failover_relocate_ui(
