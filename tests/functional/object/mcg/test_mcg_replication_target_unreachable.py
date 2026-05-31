@@ -43,6 +43,10 @@ def _wait_for_replication_alert(
 
     Returns:
         list: The matching alerts (empty list when cleared=True).
+
+    Raises:
+        TimeoutExpiredError: If the alert does not reach the expected
+            state within the timeout.
     """
     alert_name = constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE
     api = PrometheusAPI(threading_lock=threading_lock)
