@@ -388,7 +388,7 @@ class TestHealthOverview(ManageTest):
             odf_semantic_version = get_semantic_running_odf_version()
             blackbox_label = (
                 constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
-                if odf_semantic_version >= get_semantic_version("4.22.0-78")
+                if odf_semantic_version >= get_semantic_version("4.21.7-1")
                 else constants.BLACKBOX_POD_LABEL
             )
             deployment_labels = [
@@ -636,7 +636,7 @@ class TestHealthOverview(ManageTest):
         odf_semantic_version = get_semantic_running_odf_version()
         blackbox_label = (
             constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
-            if odf_semantic_version >= get_semantic_version("4.22.0-78")
+            if odf_semantic_version >= get_semantic_version("4.21.7-1")
             else constants.BLACKBOX_POD_LABEL
         )
         deployment_labels = [

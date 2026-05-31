@@ -1,7 +1,6 @@
 import logging
 import uuid
 
-import boto3
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -461,17 +460,6 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         obj_versions = []
         version_key = "ObjKey-" + str(uuid.uuid4().hex)
         total_versions = 10
-        aws_s3_resource = boto3.resource(
-            "s3",
-            endpoint_url=constants.MCG_NS_AWS_ENDPOINT.format(
-                bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]["aws"][
-                    0
-                ][1]
-            ),
-            aws_access_key_id=cld_mgr.aws_client.access_key,
-            aws_secret_access_key=cld_mgr.aws_client.secret_key,
-        )
-
         ns_buc = bucket_factory(
             amount=1,
             interface=bucketclass_dict["interface"],
@@ -479,7 +467,7 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         )[0]
         ns_bucket = ns_buc.name
         namespace_res = ns_buc.bucketclass.namespacestores[0].uls_name
-        aws_s3_client = aws_s3_resource.meta.client
+        aws_s3_client = cld_mgr.aws_client.client.meta.client
 
         # Put, Get bucket versioning and verify
         logger.info(f"Enabling bucket versioning on resource bucket: {namespace_res}")

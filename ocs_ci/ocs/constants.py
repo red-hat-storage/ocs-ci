@@ -269,8 +269,12 @@ MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
 CEPH_CLUSTER = "CephCluster"
 EXTERNAL_CEPHCLUSTER_NAME = "ocs-external-storagecluster-cephcluster"
 EXTERNAL_RGW_SC_NAME = "ocs-external-storagecluster-ceph-rgw"
+EXTERNAL_VIRT_SC_NAME = "ocs-external-storagecluster-ceph-rbd-virtualization"
 CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
 REPLICA1_STORAGECLASS = "ocs-storagecluster-ceph-non-resilient-rbd"
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_NON_RESILIENT_RBD = (
+    "ocs-external-storagecluster-ceph-non-resilient-rbd"
+)
 ENDPOINTS = "Endpoints"
 WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
@@ -604,6 +608,10 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE_PREFIX = (
     f"{DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD}-rados-namespace"
 )
+
+# Label on RBD/CephFS StorageClasses (all deployment types; provider/consumer model).
+OCS_EXTERNAL_STORAGECLASS_LABEL = "storageclass.ocs.openshift.io/is-external"
+OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE = "true"
 
 # Default StorageClass for Provider-mode
 DEFAULT_STORAGECLASS_CLIENT_CEPHFS = f"{STORAGE_CLIENT_NAME}-cephfs"
@@ -1576,6 +1584,7 @@ ALERT_BUCKETEXCEEDINGQUOTASTATE = "NooBaaBucketExceedingQuotaState"
 ALERT_BUCKETEXCEEDINGSIZEQUOTASTATE = "NooBaaBucketExceedingSizeQuotaState"
 ALERT_NAMESPACERESOURCEERRORSTATE = "NooBaaNamespaceResourceErrorState"
 ALERT_NAMESPACEBUCKETERRORSTATE = "NooBaaNamespaceBucketErrorState"
+ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE = "NooBaaReplicationTargetUnreachable"
 ALERT_NODEDOWN = "CephNodeDown"
 ALERT_CLUSTERNEARFULL = "CephClusterNearFull"
 ALERT_CLUSTERCRITICALLYFULL = "CephClusterCriticallyFull"
@@ -1627,6 +1636,7 @@ ALERT_ODF_NODE_MTU_LESS_THAN_9000 = "ODFNodeMTULessThan9000"
 ALERT_CEPHFS_ORPHANED_SNAPSHOT = "CephFSOrphanedSnapshot"
 CEPHFS_SNAPSHOT_STATE_ORPHANED = "orphaned"
 CEPHFS_SNAPSHOT_STATE_BOUND = "bound"
+ALERT_MDSXATTR = "CephXattrSetLatency"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -3680,6 +3690,9 @@ METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
 # helper script to perform file creation IO on app pod to fill MDS cpu
 FILE_CREATOR_IO = os.path.join(
     TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
+)
+EXTENDED_ATTRIBUTES = os.path.join(
+    TEMPLATE_WORKLOAD_DIR, "helper_scripts/check_xattr.py"
 )
 
 # workaround: marking disks as ssd
