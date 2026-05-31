@@ -21,6 +21,47 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
+def _wait_for_replication_alert(
+    threading_lock,
+    source_bucket_name,
+    target_bucket_name=None,
+    timeout=600,
+    sleep=30,
+    cleared=False,
+):
+    """
+    Wait for the NooBaaReplicationTargetUnreachable alert to fire or clear
+    for a specific source bucket and optionally a specific target bucket.
+
+    Args:
+        threading_lock: Lock for Prometheus API access
+        source_bucket_name (str): Source bucket name to filter by
+        target_bucket_name (str, optional): Target bucket name to filter by
+        timeout (int): Seconds to wait before timing out
+        sleep (int): Seconds between polls
+        cleared (bool): If True, wait for the alert to clear instead of appear
+
+    Returns:
+        list: The matching alerts (empty list when cleared=True).
+    """
+    alert_name = constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE
+    api = PrometheusAPI(threading_lock=threading_lock)
+    labels = {"source_bucket": source_bucket_name}
+    if target_bucket_name:
+        labels["target_bucket"] = target_bucket_name
+    for alerts in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=api.get_firing_alerts_by_labels,
+        alert_name=alert_name,
+        labels_dict=labels,
+    ):
+        if bool(alerts) != cleared:
+            state = "cleared" if cleared else "firing"
+            logger.info(f"Alert {alert_name} {state} for {source_bucket_name}")
+            return alerts
+
+
 @mcg
 @red_squad
 class TestMCGReplicationTargetUnreachableAlert(MCGTest):
@@ -88,18 +129,9 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         target_bucket.delete()
         logger.info(f"Target bucket deleted: {target_bucket.name}")
 
-        alert_name = constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE
-        api = PrometheusAPI(threading_lock=threading_lock)
-        for alerts in TimeoutSampler(
-            timeout=60 * 8,
-            sleep=30,
-            func=api.get_alerts_by_labels,
-            alert_name=alert_name,
-            labels_dict={"source_bucket": source_bucket.name},
-        ):
-            if alerts:
-                logger.info(f"Alert {alert_name} is firing for {source_bucket.name}")
-                break
+        alerts = _wait_for_replication_alert(
+            threading_lock, source_bucket.name, timeout=60 * 8
+        )
 
         # 4. Verify alert properties and bucket names (not hash IDs - DFBUGS-6380)
         alert = alerts[0]
@@ -126,16 +158,9 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         if jira_issue("DFBUGS-6398"):
             pytest.skip("DFBUGS-6398: alert persists after source bucket deletion")
 
-        for alerts in TimeoutSampler(
-            timeout=60 * 5,
-            sleep=30,
-            func=api.get_alerts_by_labels,
-            alert_name=alert_name,
-            labels_dict={"source_bucket": source_bucket.name},
-        ):
-            if not alerts:
-                logger.info(f"Alert {alert_name} cleared for {source_bucket.name}")
-                break
+        _wait_for_replication_alert(
+            threading_lock, source_bucket.name, timeout=60 * 5, cleared=True
+        )
 
     @skipif_aws_creds_are_missing
     @skipif_disconnected_cluster
@@ -167,7 +192,6 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         bc_obj = bucket_class_factory({"interface": "CLI", "backingstores": [bs_obj]})
         target_bucket = bucket_factory(1, "OC", bucketclass=bc_obj)[0]
         target_obc_name = target_bucket.name
-        logger.info(f"Target OBC {target_obc_name} is Bound and healthy")
 
         # 2. Create a source OBC with a replication policy
         replication_policy = ("repl-alert-rule", target_obc_name, None)
@@ -208,30 +232,14 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         )
 
         # 6. Wait for the NooBaaReplicationTargetUnreachable alert to fire
-        alert_name = constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE
-        api = PrometheusAPI(threading_lock=threading_lock)
-        for alert_found in TimeoutSampler(
-            timeout=600,
-            sleep=10,
-            func=api.get_alerts_by_labels,
-            alert_name=alert_name,
-            labels_dict={"source_bucket": source_bucket.name},
-        ):
-            if alert_found:
-                logger.info(f"Alert {alert_name} is firing for {source_bucket.name}")
-                break
+        _wait_for_replication_alert(
+            threading_lock, source_bucket.name, timeout=600, sleep=10
+        )
 
         # 7. Re-enable the IAM access key
         aws_backingstore_with_toggleable_creds["enable"]()
 
         # 8. Wait for the alert to clear
-        for alert_cleared in TimeoutSampler(
-            timeout=600,
-            sleep=10,
-            func=api.get_alerts_by_labels,
-            alert_name=alert_name,
-            labels_dict={"source_bucket": source_bucket.name},
-        ):
-            if not alert_cleared:
-                logger.info(f"Alert {alert_name} cleared for {source_bucket.name}")
-                break
+        _wait_for_replication_alert(
+            threading_lock, source_bucket.name, timeout=600, sleep=10, cleared=True
+        )

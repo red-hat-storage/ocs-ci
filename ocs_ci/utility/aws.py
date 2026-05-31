@@ -273,16 +273,17 @@ class AWS(object):
         )
         return response
 
-    def update_access_key_status(self, username, access_key_id, status):
+    def update_access_key_status(self, username, access_key_id, active):
         """
         Activate or deactivate an IAM access key.
 
         Args:
             username (str): IAM username
             access_key_id (str): The access key ID to update
-            status (str): 'Active' or 'Inactive'
+            active (bool): True to activate, False to deactivate
 
         """
+        status = "Active" if active else "Inactive"
         self.iam_client.update_access_key(
             UserName=username, AccessKeyId=access_key_id, Status=status
         )

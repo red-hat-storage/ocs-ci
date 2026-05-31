@@ -11980,10 +11980,10 @@ def aws_backingstore_with_toggleable_creds(
     return {
         "backingstore": bs_obj,
         "disable": lambda: aws_obj.update_access_key_status(
-            username, access_key_id, status="Inactive"
+            username, access_key_id, active=False
         ),
         "enable": lambda: aws_obj.update_access_key_status(
-            username, access_key_id, status="Active"
+            username, access_key_id, active=True
         ),
     }
 
