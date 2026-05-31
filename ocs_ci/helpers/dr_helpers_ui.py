@@ -15,7 +15,11 @@ from selenium.common.exceptions import (
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutException
+from ocs_ci.ocs.exceptions import (
+    ResourceWrongStatusException,
+    TimeoutException,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.ui.base_ui import (
     wait_for_element_to_be_clickable,
     wait_for_element_to_be_visible,
@@ -198,6 +202,159 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     acm_obj.do_click(
         acm_loc["disaster-recovery-overview"], avoid_stale=True, enable_screenshot=True
     )
+
+
+def verify_pending_cleanup_alert_firing(acm_obj, scheduling_interval, operation="Failover"):
+    """
+    Verify that ApplicationCleanupPending alert is firing on DR Dashboard.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        scheduling_interval (int): Scheduling interval for DRPolicy verification
+        operation (str): DR operation name for logging (Failover/Relocate)
+
+    Raises:
+        UnexpectedBehaviour: If alert is not found on DR Dashboard
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+
+    log.info(
+        f"Verifying {constants.ALERT_APPLICATION_CLEANUP_PENDING} "
+        f"alert is firing on DR Dashboard after {operation}"
+    )
+    acm_obj.refresh_page()
+    acm_obj.navigate_data_services()
+
+    # Navigate to Disaster Recovery Overview page where alerts are shown
+    acm_obj.do_click(
+        acm_loc["disaster-recovery-overview"], avoid_stale=True, enable_screenshot=True
+    )
+    acm_obj.take_screenshot()
+
+    # Expand Critical alerts section
+    try:
+        critical_alert = acm_obj.find_an_element_by_xpath(
+            acm_loc["critical-alert"][0]
+        ).get_attribute("aria-expanded")
+
+        if critical_alert == "false":
+            critical_alert_elem = wait_for_element_to_be_clickable(
+                acm_loc["critical-alert"]
+            )
+            acm_obj.driver.execute_script(
+                "arguments[0].click();", critical_alert_elem
+            )
+            acm_obj.take_screenshot()
+    except Exception as e:
+        log.error(
+            f"Critical alerts section not found on DR Dashboard. "
+            f"This indicates no critical alerts are present. Error: {e}"
+        )
+        acm_obj.take_screenshot()
+        raise UnexpectedBehaviour(
+            f"Critical alerts section not found on DR Dashboard after {operation}. "
+            f"{constants.ALERT_APPLICATION_CLEANUP_PENDING} alert did not fire."
+        )
+
+    # Verify alert is visible
+    alert_found = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["pending-cleanup-alert"],
+        expected_text=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+        timeout=120,
+    )
+
+    if alert_found:
+        log.info(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+            f"found on DR Dashboard after {operation}"
+        )
+        acm_obj.take_screenshot()
+    else:
+        log.error(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+            f"NOT found on DR Dashboard after {operation}"
+        )
+        acm_obj.take_screenshot()
+        raise UnexpectedBehaviour(
+            f"{constants.ALERT_APPLICATION_CLEANUP_PENDING} alert "
+            f"did not appear on DR Dashboard after {operation}"
+        )
+
+
+def verify_pending_cleanup_alert_resolved(acm_obj, scheduling_interval, operation="Failover"):
+    """
+    Verify that ApplicationCleanupPending alert is resolved/cleared from DR Dashboard.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        scheduling_interval (int): Scheduling interval for DRPolicy verification
+        operation (str): DR operation name for logging (Failover/Relocate)
+
+    Raises:
+        UnexpectedBehaviour: If alert is still present on DR Dashboard
+
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+
+    log.info(
+        f"Verifying {constants.ALERT_APPLICATION_CLEANUP_PENDING} "
+        f"alert is cleared from DR Dashboard after {operation} cleanup"
+    )
+
+    # Navigate to DR Dashboard Overview page
+    acm_obj.refresh_page()
+    acm_obj.navigate_data_services()
+    acm_obj.do_click(
+        acm_loc["disaster-recovery-overview"], avoid_stale=True, enable_screenshot=True
+    )
+    acm_obj.take_screenshot()
+
+    # Try to expand Critical alerts section if it exists
+
+    try:
+        critical_alert = acm_obj.find_an_element_by_xpath(
+            acm_loc["critical-alert"][0]
+        ).get_attribute("aria-expanded")
+
+        if critical_alert == "false":
+            critical_alert_elem = wait_for_element_to_be_clickable(
+                acm_loc["critical-alert"]
+            )
+            acm_obj.driver.execute_script(
+                "arguments[0].click();", critical_alert_elem
+            )
+            acm_obj.take_screenshot()
+    except Exception as e:
+        log.info(
+            f"Critical alerts section not found or not expandable: {e}. "
+            f"This may indicate no critical alerts exist (expected)."
+        )
+        acm_obj.take_screenshot()
+
+    # Verify alert is NOT visible (short timeout)
+    alert_still_present = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["pending-cleanup-alert"],
+        expected_text=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+        timeout=60,
+    )
+
+    if alert_still_present:
+        log.error(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+            f"still present on DR Dashboard after {operation} cleanup"
+        )
+        acm_obj.take_screenshot()
+        raise UnexpectedBehaviour(
+            f"{constants.ALERT_APPLICATION_CLEANUP_PENDING} alert "
+            f"did not clear after {operation} cleanup"
+        )
+    else:
+        log.info(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+            f"successfully cleared from DR Dashboard after {operation}"
+        )
+        acm_obj.take_screenshot()
 
 
 def failover_relocate_ui(

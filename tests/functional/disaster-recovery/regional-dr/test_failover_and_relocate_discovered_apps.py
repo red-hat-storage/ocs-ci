@@ -12,11 +12,20 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_replication_destinations_deletion,
     is_cg_cephfs_enabled,
 )
+from ocs_ci.helpers.dr_helpers_ui import (
+    verify_drpolicy_ui,
+    verify_pending_cleanup_alert_firing,
+    verify_pending_cleanup_alert_resolved,
+)
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.ocs.acm.acm import AcmAddClusters
+from ocs_ci.ocs.utils import enable_mco_console_plugin
+from ocs_ci.ocs.version import get_semantic_ocs_version_from_config
 from ocs_ci.utility.utils import ceph_health_check
+from semantic_version import Version
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +132,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         discovered_apps_dr_workload,
         nodes_multicluster,
         node_restart_teardown,
+        setup_acm_ui,
     ):
         """
         Tests to verify application failover and relocate with discovered applications
@@ -231,6 +241,35 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                     logger.info("Checking for Ceph Health OK")
                     ceph_health_check()
 
+
+                # Verify pending cleanup alert on OCS 4.22+
+                if get_semantic_ocs_version_from_config() >= Version("4.22"):
+                    config.switch_acm_ctx()
+                    enable_mco_console_plugin()
+
+                    # STEP A: Wait for DRPC to enter WaitOnUserToCleanUp state
+                    logger.info("Waiting for DRPC to enter WaitOnUserToCleanUp state")
+                    drpc_obj.wait_for_progression_status(
+                        constants.STATUS_WAITFORUSERTOCLEANUP
+                    )
+                    logger.info("DRPC is in WaitOnUserToCleanUp state")
+
+                    # STEP B: Wait 15+ minutes for alert to fire
+                    alert_wait_time = (
+                        constants.ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD + 60
+                    )
+                    logger.info(
+                        f"Waiting {alert_wait_time} seconds for "
+                        f"{constants.ALERT_APPLICATION_CLEANUP_PENDING} alert to fire..."
+                    )
+                    sleep(alert_wait_time)
+
+                    # STEP C: Navigate to DR Dashboard and verify alert is firing
+                    acm_obj = AcmAddClusters()
+                    verify_pending_cleanup_alert_firing(
+                        acm_obj, scheduling_interval, operation="Failover"
+                    )
+
                 logger.info("Doing Cleanup Operations")
                 dr_helpers.do_discovered_apps_cleanup(
                     drpc_name=rdr_workload.discovered_apps_placement_name,
@@ -239,6 +278,16 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                     workload_dir=rdr_workload.workload_dir,
                     vrg_name=rdr_workload.discovered_apps_placement_name,
                 )
+
+
+                if get_semantic_ocs_version_from_config() >= Version("4.22"):
+                    # Brief wait for alert to clear from Prometheus/UI
+                    sleep(120)
+
+                    # Verify alert is resolved
+                    verify_pending_cleanup_alert_resolved(
+                        acm_obj, scheduling_interval, operation="Failover"
+                    )
 
                 # Verify resources creation on secondary cluster (failoverCluster)
                 config.switch_to_cluster_by_name(secondary_cluster_name)
@@ -319,7 +368,49 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                     discovered_apps=True,
                     old_primary=primary_cluster_name_after_failover,
                     workload_instance=rdr_workload,
+                    vm_auto_cleanup=(get_semantic_ocs_version_from_config() >= Version("4.22")),
                 )
+
+                # Verify pending cleanup alert for Relocate operation on OCS 4.22+
+                if get_semantic_ocs_version_from_config() >= Version("4.22"):
+                    # Wait for DRPC to enter WaitOnUserToCleanUp state
+                    config.switch_acm_ctx()
+                    logger.info(
+                        f"Waiting for DRPC to enter {constants.STATUS_WAITFORUSERTOCLEANUP} state"
+                    )
+                    drpc_obj.wait_for_progression_status(
+                        constants.STATUS_WAITFORUSERTOCLEANUP
+                    )
+                    logger.info(
+                        f"DRPC entered {constants.STATUS_WAITFORUSERTOCLEANUP} state, "
+                        f"waiting {constants.ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD + 60}s for alert to fire"
+                    )
+
+                    # Wait for alert threshold + buffer
+                    sleep(constants.ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD + 60)
+
+                    # Verify alert is firing
+                    verify_pending_cleanup_alert_firing(
+                        acm_obj, scheduling_interval, operation="Relocate"
+                    )
+
+                    # Perform manual cleanup
+                    logger.info("Doing Cleanup Operations after Relocate")
+                    dr_helpers.do_discovered_apps_cleanup(
+                        drpc_name=rdr_workload.discovered_apps_placement_name,
+                        old_primary=primary_cluster_name_after_failover,
+                        workload_namespace=rdr_workload.workload_namespace,
+                        workload_dir=rdr_workload.workload_dir,
+                        vrg_name=rdr_workload.discovered_apps_placement_name,
+                    )
+
+                    # Brief wait for alert to clear
+                    sleep(120)
+
+                    # Verify alert is resolved
+                    verify_pending_cleanup_alert_resolved(
+                        acm_obj, scheduling_interval, operation="Relocate"
+                    )
 
                 logger.info(
                     "Checking for lastKubeObjectProtectionTime post Relocate Operation"
