@@ -60,7 +60,8 @@ def _wait_for_replication_alert(
         alert_name=alert_name,
         labels_dict=labels,
     ):
-        if bool(alerts) != cleared:
+        found = bool(alerts)
+        if (cleared and not found) or (not cleared and found):
             state = "cleared" if cleared else "firing"
             logger.info(f"Alert {alert_name} {state} for {source_bucket_name}")
             return alerts
