@@ -881,13 +881,14 @@ class PrometheusAPI(object):
                 timeout -= sleep
         return alerts
 
-    def get_alerts_for_bucket(self, alert_name, source_bucket):
+    def get_alerts_by_labels(self, alert_name, labels_dict):
         """
-        Get firing alerts matching a specific alert name and source bucket label.
+        Get firing alerts matching a specific alert name and label values.
 
         Args:
             alert_name (str): Alert name to match.
-            source_bucket (str): Source bucket label value to filter by.
+            labels_dict (dict): Label key-value pairs to filter by
+                (e.g. {"source_bucket": "my-bucket"}).
 
         Returns:
             list: Matching alert records, empty if none found.
@@ -903,7 +904,7 @@ class PrometheusAPI(object):
                 alert
                 for alert in response.json()["data"]["alerts"]
                 if alert["labels"].get("alertname") == alert_name
-                and alert["labels"].get("source_bucket") == source_bucket
+                and all(alert["labels"].get(k) == v for k, v in labels_dict.items())
             ]
 
     def check_alert_cleared(self, label, measure_end_time, time_min=120):
