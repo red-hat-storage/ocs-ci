@@ -243,18 +243,6 @@ class AWS(object):
         )
         logger.info(f"Put inline policy {policy_name} on user {username}")
 
-    def delete_user_policy(self, username, policy_name):
-        """
-        Delete an inline policy from an IAM user.
-
-        Args:
-            username (str): IAM username
-            policy_name (str): Name of the inline policy
-
-        """
-        self.iam_client.delete_user_policy(UserName=username, PolicyName=policy_name)
-        logger.info(f"Deleted inline policy {policy_name} from user {username}")
-
     def create_access_key(self, username):
         """
         Create a new IAM access key for the given user.

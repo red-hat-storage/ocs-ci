@@ -12219,12 +12219,21 @@ def aws_backingstore_with_toggleable_creds(
     created = {}
 
     def _cleanup():
+        # If the test failed while creds were disabled, re-enable them so
+        # NooBaa can reach the target bucket during backingstore deletion
+        if "access_key_id" in created:
+            try:
+                aws_obj.update_access_key_status(
+                    created["username"], created["access_key_id"], active=True
+                )
+            except Exception:
+                log.warning("Failed to re-enable IAM access key before cleanup")
         if "backingstore" in created:
             try:
                 created["backingstore"].delete()
             except Exception:
                 log.warning(
-                    f"Failed to delete backingstore " f"{created['backingstore'].name}"
+                    f"Failed to delete backingstore {created['backingstore'].name}"
                 )
         if "username" in created:
             try:
@@ -12271,7 +12280,9 @@ def aws_backingstore_with_toggleable_creds(
     response = aws_obj.create_access_key(username)
     key_data = response["AccessKey"]
     access_key_id = key_data["AccessKeyId"]
+    created["access_key_id"] = access_key_id
 
+    # AWS IAM is eventually consistent; new credentials may not be usable immediately
     log.info("Sleeping 60s for IAM credential propagation")
     time.sleep(60)
 
