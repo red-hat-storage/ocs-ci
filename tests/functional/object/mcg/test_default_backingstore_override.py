@@ -83,7 +83,7 @@ class TestDefaultBackingstoreOverride(MCGTest):
         self,
         request,
         mcg_obj_session,
-        override_default_backingstore_session,
+        override_default_backingstore_session_no_teardown,
     ):
         """
         1. Override the current default using the new backingstore of the same type
@@ -91,7 +91,7 @@ class TestDefaultBackingstoreOverride(MCGTest):
 
         """
         # 1. Override the current default using the new backingstore of the same type
-        alt_default_bs_name = override_default_backingstore_session()
+        alt_default_bs_name = override_default_backingstore_session_no_teardown()
         # Cache the new default backingstore name to pass to the post-upgrade test
         request.config.cache.set("pre_upgrade_alt_bs_name", alt_default_bs_name)
 
