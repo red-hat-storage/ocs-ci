@@ -16,15 +16,10 @@ from ocs_ci.framework.testlib import E2ETest, tier1
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import ocp
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources import ocs
-from ocs_ci.ocs.resources.pvc import flatten_image
 from ocs_ci.framework import config
 from ocs_ci.utility import nfs_utils
-from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.ocs.cluster import change_ceph_full_ratio
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
@@ -44,24 +39,19 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
     """
 
     @pytest.fixture(scope="function")
-    def setup_nfs_feature_and_prerequisites(
-        self, request, create_multiple_storage_pvcs_pods
-    ):
+    def setup_nfs_feature(self, request):
         """
-        Fixture to enable NFS feature for in-cluster NFS, create storage resources,
-        and disable NFS after test completion.
+        Fixture to enable NFS feature for in-cluster NFS and disable after test completion.
 
         This fixture:
         1. Enables the Ceph NFS Ganesha feature
-        2. Creates PVCs and pods for all storage types (4 PVCs each)
-        3. Registers finalizer to clean up NFS resources and disable NFS feature
+        2. Registers finalizer to disable NFS feature after test
 
         Args:
             request: pytest request object for finalizer registration
-            create_multiple_storage_pvcs_pods: Factory fixture to create storage resources
 
         Returns:
-            dict: Storage resources dictionary with nested structure
+            str: NFS Ganesha pod name
 
         """
         namespace = config.ENV_DATA["cluster_namespace"]
@@ -82,6 +72,43 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
             f"NFS feature enabled successfully. NFS Ganesha pod: {nfs_ganesha_pod_name}"
         )
 
+        def finalizer():
+            """
+            Finalizer to disable NFS feature after test completion.
+            """
+            # Disable NFS feature
+            nfs_sc = constants.NFS_STORAGECLASS_NAME
+            sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": nfs_sc})
+
+            nfs_utils.nfs_disable(
+                storage_cluster_obj,
+                config_map_obj,
+                pod_obj,
+                sc,
+                nfs_ganesha_pod_name,
+            )
+            log.info("NFS feature disabled successfully")
+
+        request.addfinalizer(finalizer)
+        return nfs_ganesha_pod_name
+
+    @pytest.fixture(scope="function")
+    def setup_prerequisites(self, setup_nfs_feature, create_multiple_storage_pvcs_pods):
+        """
+        Fixture to create storage resources for test prerequisites.
+
+        This fixture:
+        1. Creates PVCs and pods for all storage types (4 PVCs each)
+        2. Starts FIO workload on all created pods
+
+        Args:
+            setup_nfs_feature: Fixture that enables NFS feature
+            create_multiple_storage_pvcs_pods: Factory fixture to create storage resources
+
+        Returns:
+            dict: Storage resources dictionary with nested structure
+
+        """
         # Create prerequisites resources for testcase
         fixture_storage_resources = create_multiple_storage_pvcs_pods(
             proj_obj=self.proj_obj,
@@ -105,39 +132,15 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
         fixture_cephfs_pod_objs = fixture_storage_resources["cephfs"]["pods"]
         fixture_nfs_pod_objs = fixture_storage_resources["nfs"]["pods"]
 
-        # Prepare pods with config for FIO
-        fs_config = {"volume_mode": constants.VOLUME_MODE_FILESYSTEM}
-        fixture_pods_with_config = (
-            list(zip(fixture_pod_objs, fixture_pvc_combinations))
-            + list(zip(fixture_non_enc_pod_objs, fixture_non_enc_combinations))
-            + [
-                (pod, {**fs_config, "pod_type": "cephfs"})
-                for pod in fixture_cephfs_pod_objs
-            ]
-            + [(pod, {**fs_config, "pod_type": "nfs"}) for pod in fixture_nfs_pod_objs]
+        self.start_fio_on_pods(
+            pod_objs=fixture_pod_objs,
+            pvc_combinations=fixture_pvc_combinations,
+            non_enc_pod_objs=fixture_non_enc_pod_objs,
+            non_enc_combinations=fixture_non_enc_combinations,
+            cephfs_pod_objs=fixture_cephfs_pod_objs,
+            nfs_pod_objs=fixture_nfs_pod_objs,
         )
-        self.start_fio_on_pods(fixture_pods_with_config)
 
-        def finalizer():
-            """
-            Finalizer to disable NFS feature after test completion.
-            Also recovers cluster from full state if needed.
-            """
-
-            # Disable NFS feature
-            nfs_sc = constants.NFS_STORAGECLASS_NAME
-            sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": nfs_sc})
-
-            nfs_utils.nfs_disable(
-                storage_cluster_obj,
-                config_map_obj,
-                pod_obj,
-                sc,
-                nfs_ganesha_pod_name,
-            )
-            log.info("NFS feature disabled successfully")
-
-        request.addfinalizer(finalizer)
         return fixture_storage_resources
 
     @pytest.fixture(scope="function")
@@ -174,14 +177,39 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
 
         return _verify_key_rotation
 
-    def start_fio_on_pods(self, all_pods_with_config):
+    def start_fio_on_pods(
+        self,
+        pod_objs=None,
+        pvc_combinations=None,
+        non_enc_pod_objs=None,
+        non_enc_combinations=None,
+        cephfs_pod_objs=None,
+        nfs_pod_objs=None,
+    ):
         """
         Start FIO workload on pods and wait for completion.
 
         Args:
-            all_pods_with_config (list): List of tuples (pod_obj, pvc_config)
+            pod_objs (list): List of encrypted RBD pod objects
+            pvc_combinations (list): List of PVC configurations for encrypted RBD
+            non_enc_pod_objs (list): List of non-encrypted RBD pod objects
+            non_enc_combinations (list): List of PVC configurations for non-encrypted RBD
+            cephfs_pod_objs (list): List of CephFS pod objects
+            nfs_pod_objs (list): List of NFS pod objects
 
         """
+        # Prepare pods with config for FIO
+        fs_config = {"volume_mode": constants.VOLUME_MODE_FILESYSTEM}
+        all_pods_with_config = (
+            list(zip(pod_objs or [], pvc_combinations or []))
+            + list(zip(non_enc_pod_objs or [], non_enc_combinations or []))
+            + [
+                (pod, {**fs_config, "pod_type": "cephfs"})
+                for pod in (cephfs_pod_objs or [])
+            ]
+            + [(pod, {**fs_config, "pod_type": "nfs"}) for pod in (nfs_pod_objs or [])]
+        )
+
         for idx, (pod_obj, pvc_config) in enumerate(all_pods_with_config, start=1):
             # Determine IO type based on volume mode
             if pvc_config["volume_mode"] == constants.VOLUME_MODE_BLOCK:
@@ -216,109 +244,10 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
             pod_obj.get_fio_results()
         log.info(f"FIO completed on all {len(all_pods_with_config)} pods")
 
-    def create_clones_until_full(
-        self, pvcs_to_clone, pvc_clone_factory, threading_lock, min_pending_clones=7
-    ):
-        """
-        Create clones of PVCs until cluster reaches 85% full ratio.
-
-        Args:
-            pvcs_to_clone (list): List of PVC objects to clone from
-            pvc_clone_factory: Factory fixture to create PVC clones
-            threading_lock: Threading lock for Prometheus API
-            min_pending_clones (int): Minimum number of pending clones to ensure (default: 7)
-
-        Returns:
-            list: List of created clone objects
-        """
-        log.info("Starting clone creation to fill cluster to 85% capacity")
-
-        all_clones = []
-        clone_batch_size = 10
-        max_attempts = 12
-        attempt = 0
-
-        while attempt < max_attempts:
-            # Create a batch of clones
-            for i in range(clone_batch_size):
-                # Cycle through available PVCs
-                pvc_to_clone = pvcs_to_clone[len(all_clones) % len(pvcs_to_clone)]
-
-                try:
-                    log.info(
-                        f"Creating clone {len(all_clones) + 1} from PVC: {pvc_to_clone.name}"
-                    )
-                    clone_obj = pvc_clone_factory(
-                        pvc_obj=pvc_to_clone,
-                        storageclass=pvc_to_clone.backed_sc,
-                        timeout=900,
-                    )
-
-                    # Flatten RBD clones - check if storage class uses RBD provisioner
-                    sc_name = pvc_to_clone.backed_sc
-                    sc_obj = ocp.OCP(kind=constants.STORAGECLASS, resource_name=sc_name)
-                    sc_data = sc_obj.get()
-                    provisioner = sc_data.get("provisioner", "")
-
-                    if constants.RBD_PROVISIONER in provisioner:
-                        log.info(f" Flattening RBD clone: {clone_obj.name}")
-                        flatten_image(clone_obj)
-
-                    all_clones.append(clone_obj)
-                    log.info(f" Clone {len(all_clones)} created: {clone_obj.name}")
-
-                except Exception as e:
-                    log.warning(
-                        f"Clone creation failed (expected when cluster is full): {e}"
-                    )
-                    break
-
-            # Check if we've reached the target alerts
-            log.info("Checking for CephOSDNearFull and CephOSDCriticallyFull alerts")
-            expected_alerts = ["CephOSDCriticallyFull"]
-            prometheus = PrometheusAPI(threading_lock=threading_lock)
-
-            sample = TimeoutSampler(
-                timeout=180,
-                sleep=10,
-                func=prometheus.verify_alerts_via_prometheus,
-                expected_alerts=expected_alerts,
-                threading_lock=threading_lock,
-            )
-
-            if sample.wait_for_func_status(result=True):
-                log.info(
-                    " Cluster has reached 85% full ratio - Expected alerts detected"
-                )
-                break
-            else:
-                log.info(
-                    f"Alerts not detected yet. Created {len(all_clones)} clones so far. Continuing..."
-                )
-                attempt += 1
-
-        if attempt == max_attempts:
-            log.error("Maximum attempts reached. Expected alerts were not detected.")
-            raise TimeoutExpiredError(
-                "Failed to reach 85% cluster full ratio - alerts not triggered"
-            )
-
-        # Count pending clones
-        pending_clones = 0
-        for clone in all_clones[-15:]:  # Check last 15 clones
-            try:
-                if clone.status != constants.STATUS_BOUND:
-                    pending_clones += 1
-            except Exception:
-                pending_clones += 1
-
-        log.info(f"Pending clones (approximate): {pending_clones}")
-
-        return all_clones
-
     @pytest.fixture(autouse=True)
     def setup_encrypted_storage(
         self,
+        request,
         project_factory,
         pv_encryption_kms_setup_factory,
         storageclass_factory,
@@ -334,6 +263,7 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
         5. Generates and creates Vault CSI KMS token in the namespace
 
         Args:
+            request: pytest request object for finalizer registration
             project_factory: Factory fixture to create projects
             pv_encryption_kms_setup_factory: Factory to setup PV encryption with KMS
             storageclass_factory: Factory fixture to create storage classes
@@ -341,8 +271,6 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
 
         log.info("SETUP: Configuring Vault KMS and encrypted storage class")
 
-        # Create a test project
-        log.info(" Creating test project/namespace")
         self.proj_obj = project_factory()
         log.info(f"Created project: {self.proj_obj.namespace}")
 
@@ -368,7 +296,7 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
         self.kms.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
         log.info(f"Created Vault CSI KMS token in namespace: {self.proj_obj.namespace}")
 
-        # Step 5: Add key rotation annotation to storage class
+        # Add key rotation annotation to storage class
         self.pvk_obj = PVKeyrotation(self.sc_obj)
         self.pvk_obj.annotate_storageclass_key_rotation(schedule="*/2 * * * *")
         log.info(
@@ -376,15 +304,23 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
         )
         log.info("SETUP COMPLETE: Ready to create PVCs and test key rotation")
 
+        def finalizer():
+
+            change_ceph_full_ratio(85)
+
+        request.addfinalizer(finalizer)
+
     @tier1
     def test_rbd_encrypted_pvc_keyrotation_all_combinations(
         self,
         create_multiple_storage_pvcs_pods,
-        setup_nfs_feature_and_prerequisites,
+        setup_nfs_feature,
+        setup_prerequisites,
         verify_pvc_key_rotation,
         snapshot_factory,
         snapshot_restore_factory,
         pvc_clone_factory,
+        create_clones_until_cluster_full,
         threading_lock,
     ):
         """
@@ -412,7 +348,6 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
 
         """
 
-        # Call the fixture factory to create all PVCs and deployment pods with "test-" prefix
         storage_resources = create_multiple_storage_pvcs_pods(
             proj_obj=self.proj_obj,
             sc_obj=self.sc_obj,
@@ -427,22 +362,19 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
         non_enc_pod_objs = storage_resources["non_encrypted_rbd"]["pods"]
         non_enc_combinations = storage_resources["non_encrypted_rbd"]["combinations"]
         cephfs_pod_objs = storage_resources["cephfs"]["pods"]
-        nfs_pvc_objs = storage_resources["nfs"]["pvcs"]
         nfs_pod_objs = storage_resources["nfs"]["pods"]
 
         log.info(" Starting FIO workload on all pods")
 
-        # Combine all pods with their configurations
-        fs_config = {"volume_mode": constants.VOLUME_MODE_FILESYSTEM}
-        all_pods_with_config = (
-            list(zip(pod_objs, pvc_combinations))
-            + list(zip(non_enc_pod_objs, non_enc_combinations))
-            + [(pod, {**fs_config, "pod_type": "cephfs"}) for pod in cephfs_pod_objs]
-            + [(pod, {**fs_config, "pod_type": "nfs"}) for pod in nfs_pod_objs]
-        )
-
         # Start FIO on all pods using helper method and wait for completion
-        self.start_fio_on_pods(all_pods_with_config)
+        self.start_fio_on_pods(
+            pod_objs=pod_objs,
+            pvc_combinations=pvc_combinations,
+            non_enc_pod_objs=non_enc_pod_objs,
+            non_enc_combinations=non_enc_combinations,
+            cephfs_pod_objs=cephfs_pod_objs,
+            nfs_pod_objs=nfs_pod_objs,
+        )
 
         log.info(" Waiting for key rotation to occur")
         wait_time = 120  # 2 minutes
@@ -514,10 +446,12 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
             pvcs_to_clone = pvc_objs + non_enc_pvc_objs + cephfs_pvc_objs
             log.info(f"Total PVCs available for cloning: {len(pvcs_to_clone)}")
 
-            full_ratio_clones = self.create_clones_until_full(
+            full_ratio_clones = create_clones_until_cluster_full(
                 pvcs_to_clone=pvcs_to_clone,
-                pvc_clone_factory=pvc_clone_factory,
-                threading_lock=threading_lock,
+                clone_batch_size=10,
+                max_attempts=12,
+                expected_alerts=["CephOSDCriticallyFull"],
+                flatten_rbd_clones=True,
                 min_pending_clones=7,
             )
 
@@ -573,24 +507,3 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
         log.info("Waiting for 2 minutes to ensure key rotation has occurred")
         time.sleep(120)  # Wait 2 minutes for key rotation schedule
         verify_pvc_key_rotation(pvc_objs, self.pvk_obj)
-
-        log.info("Cleaning up all NFS resources ")
-
-        fixture_nfs_pod_objs = setup_nfs_feature_and_prerequisites["nfs"]["pods"]
-        fixture_nfs_pvc_objs = setup_nfs_feature_and_prerequisites["nfs"]["pvcs"]
-        all_nfs_pod_objs = fixture_nfs_pod_objs + nfs_pod_objs
-        all_nfs_pvc_objs = fixture_nfs_pvc_objs + nfs_pvc_objs
-
-        if all_nfs_pod_objs:
-            for nfs_pod_obj in all_nfs_pod_objs:
-                pod.delete_deployment_pods(nfs_pod_obj)
-
-        if all_nfs_pvc_objs:
-            for nfs_pvc_obj in all_nfs_pvc_objs:
-                nfs_pvc_obj.delete()
-                nfs_pvc_obj.ocp.wait_for_delete(
-                    resource_name=nfs_pvc_obj.name, timeout=180
-                )
-
-
-# Made with Bob
