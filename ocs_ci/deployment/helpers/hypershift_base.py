@@ -1135,6 +1135,12 @@ class HyperShiftBase:
             )
             return None
 
+        # oc extract names the file after the secret key ("password"),
+        # rename it to the expected "kubeadmin-password" filename
+        extracted_path = os.path.join(auth_path, "password")
+        if os.path.isfile(extracted_path):
+            os.rename(extracted_path, password_path)
+
         if not os.path.isfile(password_path) or not os.stat(password_path).st_size > 0:
             logger.error(
                 "Failed to download kubeadmin-password for HyperShift "
