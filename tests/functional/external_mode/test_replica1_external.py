@@ -5,7 +5,6 @@ This test validates topology-based replica-1 provisioning where each zone
 gets its own single-replica pool with a dedicated CRUSH rule.
 """
 
-import json
 import logging
 import pytest
 
@@ -18,10 +17,9 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     get_external_cluster_instance,
-    TopologyReplica1Config,
-    ZoneConfig,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterExporterRunFailed
+from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -49,12 +47,31 @@ class TestReplicaOneExternal(ManageTest):
         EXTERNAL_MODE configuration. Registers finalizer for cleanup.
         """
         self.ext_cluster = get_external_cluster_instance()
-        self.topology_config = self._build_topology_config()
+        self.topology_config = self._build_topology_config_or_skip()
         self.created_pools = []
         self.created_rules = []
+        self.applied_resources = {"secrets": [], "configmaps": []}
 
         def finalizer():
             log.info("Starting external replica-1 teardown")
+            namespace = config.ENV_DATA["cluster_namespace"]
+
+            for name in self.applied_resources.get("secrets", []):
+                try:
+                    OCP(kind="Secret", namespace=namespace).delete(resource_name=name)
+                    log.info(f"Deleted Secret: {name}")
+                except CommandFailed as e:
+                    log.warning(f"Failed to delete Secret {name}: {e}")
+
+            for name in self.applied_resources.get("configmaps", []):
+                try:
+                    OCP(kind="ConfigMap", namespace=namespace).delete(
+                        resource_name=name
+                    )
+                    log.info(f"Deleted ConfigMap: {name}")
+                except CommandFailed as e:
+                    log.warning(f"Failed to delete ConfigMap {name}: {e}")
+
             try:
                 if self.created_pools:
                     self.ext_cluster.cleanup_replica_one_pools(self.created_pools)
@@ -71,66 +88,17 @@ class TestReplicaOneExternal(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def _discover_zones_from_crush_tree(self) -> list[ZoneConfig]:
+    def _build_topology_config_or_skip(self):
         """
-        Auto-detect zones from the external cluster's CRUSH tree.
-
-        Queries 'ceph osd tree' and extracts host-type buckets.
-        Each host becomes a zone (zone-a, zone-b, ...).
-
-        Returns:
-            list[ZoneConfig]: Zone configurations derived from CRUSH hosts.
-
+        Build topology config from ExternalCluster, skip if too few hosts.
         """
-        _, out, _ = self.ext_cluster.exec_external_ceph_cmd(
-            cmd="ceph osd tree --format json",
-            error_msg="Failed to get OSD tree from external cluster",
-            exception_class=CommandFailed,
-        )
-        osd_tree = json.loads(out)
-        hosts = [node["name"] for node in osd_tree["nodes"] if node["type"] == "host"]
-
-        if len(hosts) < 2:
+        topology_config = self.ext_cluster.build_topology_replica1_config()
+        if len(topology_config.zones) < 2:
             pytest.skip(
                 f"Need at least 2 OSD hosts for replica-1 test, "
-                f"found {len(hosts)}: {hosts}"
+                f"found {len(topology_config.zones)}"
             )
-
-        zones = [
-            ZoneConfig(zone_name=f"zone-{chr(ord('a') + i)}", host_name=host)
-            for i, host in enumerate(hosts)
-        ]
-        log.info(f"Auto-detected {len(zones)} zones from CRUSH tree: {zones}")
-        return zones
-
-    def _build_topology_config(self) -> TopologyReplica1Config:
-        """
-        Build topology configuration from EXTERNAL_MODE config or CRUSH tree.
-
-        Reads replica1_zones from config.EXTERNAL_MODE if available.
-        Falls back to auto-detecting zones from the cluster's CRUSH tree.
-
-        Returns:
-            TopologyReplica1Config: Configuration for replica-1 setup.
-
-        """
-        zones_config = config.EXTERNAL_MODE.get("replica1_zones", [])
-        if zones_config:
-            log.info(f"Using replica1_zones from config: {zones_config}")
-            zones = [
-                ZoneConfig(
-                    zone_name=z["zone_name"],
-                    host_name=z["host_name"],
-                    pool_name=z.get("pool_name", ""),
-                )
-                for z in zones_config
-            ]
-        else:
-            log.info("replica1_zones not configured, auto-detecting from CRUSH tree")
-            zones = self._discover_zones_from_crush_tree()
-
-        log.info(f"Built topology config with {len(zones)} zones")
-        return TopologyReplica1Config(zones=zones)
+        return topology_config
 
     def test_replica1_setup_and_verify(self):
         """
@@ -156,8 +124,6 @@ class TestReplicaOneExternal(ManageTest):
         log.info(f"Created rules: {self.created_rules}")
 
         # Verify pool setup completed successfully
-        assert self.created_pools, "No pools were created"
-        assert self.created_rules, "No CRUSH rules were created"
         assert len(self.created_pools) == len(
             self.topology_config.zones
         ), f"Expected {len(self.topology_config.zones)} pools, got {len(self.created_pools)}"
@@ -176,11 +142,14 @@ class TestReplicaOneExternal(ManageTest):
             # Step 6: Apply exported resources to ODF cluster
             log.info("Applying exported resources to ODF")
             applied = self.ext_cluster.apply_topology_export_resources(export_resources)
+            self.applied_resources = applied
 
             log.info(f"Applied secrets: {applied['secrets']}")
             log.info(f"Applied configmaps: {applied['configmaps']}")
 
         except ExternalClusterExporterRunFailed as e:
+            if "Failed to parse" in str(e):
+                raise
             pytest.skip(f"Exporter script not available: {e}")
 
         log.info("External replica-1 setup test completed successfully")
