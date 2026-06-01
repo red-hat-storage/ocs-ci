@@ -18,8 +18,8 @@ from ocs_ci.helpers.odf_cephfs_snap import (
     delete_volumesnaps_volumesnapcontents,
     get_cephfs_snap_by_name,
     get_cephfs_snap_entries,
-    get_consumer_svg_on_provider,
 )
+from ocs_ci.ocs.resources.storageconsumer import get_consumer_svg_on_provider
 from ocs_ci.helpers.odf_cli import odf_cli_cephfs_snap_setup_helper
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pvc as pvc_resource
@@ -400,62 +400,47 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         num_of_orphaned = random.randint(1, 4)
         num_of_bound = random.randint(4, 7)
 
-        # Step 1: resolve --svg and update the snap runner
-        log.info("Step 1: Resolving odf-cli --svg from svg_param=%s", svg_param)
+        log.test_step("Resolve odf-cli --svg from svg_param=%s", svg_param)
         self._resolve_svg(svg_param)
 
-        # Step 2: verify no snapshots exist
-        log.info("Step 2: Verifying no CephFS snapshots exist")
+        log.test_step("Verify no CephFS snapshots exist")
         assert not get_cephfs_snap_entries(
             self._snap_runner
         ), "Expected no CephFS snapshots before the test"
 
-        # Steps 3-5: create all snapshots with Retain policy,
-        # verify Ceph state is Bound and k8s objects exist
-        log.info(
-            "Steps 3-5: Creating %d CephFS VolumeSnapshots with Retain "
-            "policy and verifying Kubernetes objects",
+        log.test_step(
+            "Create %d CephFS VolumeSnapshots with Retain "
+            "policy and verify Kubernetes objects",
             num_of_orphaned + num_of_bound,
         )
         self.create_retain_cephfs_snapshots(num_of_orphaned + num_of_bound)
         orphaned_snaps = self.snap_list_names[:num_of_orphaned]
         bound_snaps = self.snap_list_names[num_of_orphaned:]
 
-        # Step 6: delete k8s objects for the orphaned group only;
-        # Ceph-side snapshots are retained, becoming orphaned
-        log.info(
-            "Step 6: Deleting VolumeSnapshots and VolumeSnapshotContents "
-            "for %d snapshot(s)",
+        log.test_step(
+            "Delete VolumeSnapshots and VolumeSnapshotContents " "for %d snapshot(s)",
             num_of_orphaned,
         )
         delete_volumesnaps_volumesnapcontents(orphaned_snaps)
 
-        # Step 7: verify the two groups are in the expected states
-        log.info(
-            "Step 7: Verifying %d snapshot(s) are orphaned and "
-            "%d snapshot(s) remain bound",
+        log.test_step(
+            "Verify %d snapshot(s) are orphaned and %d snapshot(s) remain bound",
             num_of_orphaned,
             num_of_bound,
         )
         self.verify_cephfs_snapshots_orphaned(orphaned_snaps)
         self.verify_cephfs_snapshots_bound(bound_snaps)
 
-        # Step 8: wait for the alert to fire and validate
-        log.info("Step 8: Waiting for CephFSOrphanedSnapshot alert to fire")
+        log.test_step("Wait for CephFSOrphanedSnapshot alert to fire")
         self._wait_for_orphaned_alert_firing()
 
-        # Step 9: delete the orphaned snapshots via odf CLI
-        log.info(
-            "Step 9: Deleting %d orphaned snapshot(s) via odf CLI",
+        log.test_step(
+            "Delete %d orphaned snapshot(s) via odf CLI",
             num_of_orphaned,
         )
         self.delete_orphaned_cephfs_snapshots(orphaned_snaps)
 
-        # Step 10: verify only the bound group remains
-        log.info(
-            "Step 10: Verifying %d bound snapshot(s) remain",
-            num_of_bound,
-        )
+        log.test_step("Verify %d bound snapshot(s) remain", num_of_bound)
         snap_entries = get_cephfs_snap_entries(self._snap_runner)
         assert len(snap_entries) == num_of_bound, (
             f"Expected {num_of_bound} snapshot(s) after cleanup, "
@@ -463,6 +448,5 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         )
         self.verify_cephfs_snapshots_bound(bound_snaps)
 
-        # Step 11: verify all alerts are cleared
-        log.info("Step 11: Waiting for CephFSOrphanedSnapshot alerts to clear")
+        log.test_step("Wait for CephFSOrphanedSnapshot alerts to clear")
         self._wait_for_orphaned_alert_cleared()
