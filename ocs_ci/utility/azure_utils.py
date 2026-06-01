@@ -552,30 +552,22 @@ class AZURE:
             logger.info(
                 f"Looking up resource ID for test storage account '{test_storage_account}'"
             )
-            try:
-                sa_result = exec_cmd(
-                    f"az storage account show --name {test_storage_account} "
-                    f"--subscription {subscription_id} --query id -o tsv"
-                )
-                sa_resource_id = sa_result.stdout.decode().strip()
-                if sa_resource_id:
-                    for role in roles:
-                        logger.info(
-                            f"Assigning role '{role}' on test storage account "
-                            f"'{test_storage_account}'"
-                        )
-                        exec_cmd(
-                            f"az role assignment create --assignee-object-id {principal_id} "
-                            f'--assignee-principal-type ServicePrincipal --role "{role}" '
-                            f"--scope {sa_resource_id} --subscription {subscription_id}"
-                        )
-            except Exception:
-                logger.warning(
-                    f"Could not assign roles on test storage account "
-                    f"'{test_storage_account}'. Azure STS backingstore/namespacestore "
-                    f"tests targeting this account may fail.",
-                    exc_info=True,
-                )
+            sa_result = exec_cmd(
+                f"az storage account show --name {test_storage_account} "
+                f"--subscription {subscription_id} --query id -o tsv"
+            )
+            sa_resource_id = sa_result.stdout.decode().strip()
+            if sa_resource_id:
+                for role in roles:
+                    logger.info(
+                        f"Assigning role '{role}' on test storage account "
+                        f"'{test_storage_account}'"
+                    )
+                    exec_cmd(
+                        f"az role assignment create --assignee-object-id {principal_id} "
+                        f'--assignee-principal-type ServicePrincipal --role "{role}" '
+                        f"--scope {sa_resource_id} --subscription {subscription_id}"
+                    )
 
         logger.info("Retrieving OIDC issuer URL from the cluster")
         auth_result = exec_cmd("oc get authentication cluster -ojson")

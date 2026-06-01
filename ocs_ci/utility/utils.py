@@ -6297,9 +6297,15 @@ def get_azure_sts_creds_from_sub():
         namespace=config.ENV_DATA["cluster_namespace"],
     )
     creds = {}
-    for item in odf_sub.get()["spec"]["config"]["env"]:
+    env_items = odf_sub.get().get("spec", {}).get("config", {}).get("env", [])
+    for item in env_items:
         if item["name"] in env_key_map:
             creds[env_key_map[item["name"]]] = item["value"]
+
+    required = {"client_id", "tenant_id", "subscription_id"}
+    if not required.issubset(creds):
+        raise ClusterNotInSTSModeException
+
     return creds
 
 
