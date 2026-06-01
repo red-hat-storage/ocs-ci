@@ -9183,6 +9183,17 @@ def override_default_backingstore_session(
     )
 
 
+@pytest.fixture(scope="session")
+def override_default_backingstore_session_no_teardown(
+    mcg_obj_session,
+    backingstore_factory_session,
+    allow_default_backingstore_override,
+):
+    return override_default_backingstore_fixture(
+        None, mcg_obj_session, backingstore_factory_session
+    )
+
+
 @pytest.fixture(scope="function")
 def override_default_backingstore(
     request, mcg_obj_session, backingstore_factory, allow_default_backingstore_override
@@ -9262,7 +9273,8 @@ def override_default_backingstore_fixture(
             constants.DEFAULT_NOOBAA_BACKINGSTORE
         )
 
-    request.addfinalizer(finalizer)
+    if request is not None:
+        request.addfinalizer(finalizer)
     return _override_nb_default_backingstore_implementation
 
 
