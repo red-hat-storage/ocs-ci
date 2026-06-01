@@ -186,8 +186,11 @@ class TestDenyHTTP:
                     "",
                 ), f"Expected successful connection to {url}, got status {status_code}"
                 return True
-            else:
-                return True
+            assert status_code in (
+                "000",
+                "",
+            ), f"Expected connection to {url} to be refused, but got status {status_code}"
+            return True
         except Exception as e:
             if should_succeed:
                 raise AssertionError(
@@ -199,7 +202,6 @@ class TestDenyHTTP:
     @tier2
     @skipif_external_mode
     @skipif_ocs_version("<4.22")
-    @pytest.mark.polarion_id("OCS-XXXX")
     def test_deny_http_noobaa(self, mcg_obj, bucket_factory, revert_deny_http):
         """
         Test the denyHTTP feature on the NooBaa CR.
@@ -309,7 +311,6 @@ class TestDenyHTTP:
                 "HTTP access succeeded unexpectedly after denyHTTP was enabled"
             )
         except (
-            botocore.exceptions.ClientError,
             botocore.exceptions.EndpointConnectionError,
             botocore.exceptions.ConnectionClosedError,
             ConnectionError,
