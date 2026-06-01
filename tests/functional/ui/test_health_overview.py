@@ -424,6 +424,9 @@ class TestHealthOverview(ManageTest):
                     ocp = OCP(namespace=config.ENV_DATA.get("cluster_namespace"))
                     scale_cmd = "scale deployment rook-ceph-mon-a --replicas=1"
                     ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+                    self.wait_for_deployment_ready_replicas(
+                        "rook-ceph-mon-a", expected_replicas=1
+                    )
                 except Exception as ex:
                     logger.warning(f"Failed to scale mon during cleanup: {ex}")
 

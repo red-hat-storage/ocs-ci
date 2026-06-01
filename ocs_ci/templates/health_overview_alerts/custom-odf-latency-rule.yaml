@@ -21,7 +21,7 @@ spec:
           phase="rtt",
           job="odf-blackbox-exporter",
           daemon_type="osd"}[24h: ]
-        ) > 0.010
+        ) > 0.005
       for: 1m
       labels:
         component: odf

@@ -18,13 +18,13 @@ spec:
             ) > 0.01
           for: 1m
           labels:
-            Component: odf
-            Severity: warning
+            component: odf
+            severity: warning
           annotations:
-            Description: >
+            description: >
               Node {{ $labels.instance }} has max ICMP RTT latency > 100ms
               over the last 24h. Investigate network health.
-            Summary: >
+            summary: >
               High ICMP latency (>100ms) detected on ODF non-OSD node(s)
             runbook_url: >
               https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator/ODFNodeLatencyHighOnNONOSDNodes.md
