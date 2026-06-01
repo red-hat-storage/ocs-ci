@@ -93,6 +93,10 @@ def get_alert_params():
             constants.ALERT_ODF_CORE_POD_RESTART,
             "custom-odf-core-pod-restarted.yaml",
         ),
+        (
+            constants.ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES,
+            "custom-odf-node-latency-high-non-osd.yaml",
+        ),
     ]
     if ocs_version >= VERSION_4_22:
         params.extend(
