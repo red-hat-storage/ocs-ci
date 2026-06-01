@@ -61,9 +61,10 @@ def get_alert_params():
     Returns:
         list: List of tuples (alert_name, alert_yaml)
     """
-    # Base parameters for all versions
     try:
         ocs_version = get_ocs_version_from_csv(only_major_minor=True)
+        if ocs_version is None:
+            raise ValueError("get_ocs_version_from_csv returned None")
     except Exception as e:
         # Fallback if cluster not ready (e.g., during deployment)
         logger.warning(
