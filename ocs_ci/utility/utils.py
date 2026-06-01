@@ -3130,9 +3130,13 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
-def ceph_health_resolve_crash():
+def ceph_health_resolve_crash(health_status):
     """
-    Fix ceph health issue with daemon crash
+    Fix ceph health issue with daemon crash.
+
+    Args:
+        health_status (str): Ceph health status output (not used by this function,
+            but required for consistency - all recovery functions must accept it)
     """
     log.warning("Trying to fix the issue with crash by archiving crashes")
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
@@ -3229,6 +3233,68 @@ def restart_mon_pods(mon_ids):
         )
 
 
+# Module-level Ceph health fix configurations with per-issue tracking
+# Runtime field recovery_attempts is initialized on-demand using .get() with default 0
+# max_recovery_attempts defaults to 2 if not specified
+# Jira is updated on each recovery attempt (up to max_recovery_attempts)
+#
+# IMPORTANT: All recovery functions (func) must accept health_status as first parameter.
+# This is a required convention for consistency, even if the function doesn't use it.
+ceph_health_fixes = [
+    {
+        "pattern": r"daemons have recently crashed",
+        "func": ceph_health_resolve_crash,
+        "func_kwargs": {},
+        "ceph_health_tries": 5,
+        "ceph_health_delay": 30,
+        "max_recovery_attempts": 2,  # Example: override default (2)
+    },
+    {
+        "pattern": r"modules have recently crashed",
+        "func": ceph_health_resolve_crash,
+        "func_kwargs": {},
+        "ceph_health_tries": 5,
+        "ceph_health_delay": 30,
+        # max_recovery_attempts not specified, will default to 2
+        "known_issues": [
+            {
+                "issue": "DFBUGS-2781",
+                "pattern": r"mgr module prometheus crashed in",
+                # Runtime fields initialized on-demand
+            },
+        ],
+    },
+    {
+        "pattern": r"slow ops, oldest one blocked for \d+ sec, .*(?:has|have) slow ops",
+        "func": ceph_health_resolve_mon_slow_ops,
+        "func_kwargs": {},
+        "ceph_health_tries": 6,
+        "ceph_health_delay": 30,
+        "known_issues": [
+            {
+                "issue": "DFBUGS-2456",
+                "func": lambda: config.MULTICLUSTER.get("multicluster_mode")
+                == "regional-dr",
+            },
+        ],
+    },
+    {
+        "pattern": r"HEALTH_WARN \d+ network partitions? detected",
+        "func": ceph_health_resolve_network_partition,
+        "func_kwargs": {},
+        "ceph_health_tries": 6,
+        "ceph_health_delay": 30,
+        "known_issues": [
+            {
+                "issue": "DFBUGS-4521",
+                "pattern": r"Netsplit detected between mon",
+            },
+        ],
+    },
+    # TODO: Add more patterns and fix functions
+]
+
+
 def ceph_health_recover(
     health_status,
     namespace=None,
@@ -3236,7 +3302,13 @@ def ceph_health_recover(
     no_exception_if_jira_issue_updated=False,
 ):
     """
-    Function which tries to recover ceph health to be HEALTH OK
+    Function which tries to recover ceph health to be HEALTH OK.
+
+    Uses module-level ceph_health_fixes configuration with per-issue tracking.
+    Each fix pattern can specify max_recovery_attempts (default: 2).
+    Tracks recovery attempts separately for specific Jira issues vs generic pattern matches.
+    Updates Jira on each recovery attempt (up to max_recovery_attempts).
+    Runtime field recovery_attempts is initialized on-demand.
 
     Args:
         health_status (str): Ceph health status
@@ -3246,64 +3318,12 @@ def ceph_health_recover(
             and ceph health is recovered
 
     Raises:
-        CephHealthNotRecoveredException: When Ceph health was not recovered
+        CephHealthNotRecoveredException: When Ceph health was not recovered or when
+            the same issue persists after max_recovery_attempts
         CephHealthRecoveredException: When Ceph health was recovered
 
     """
-    ceph_health_fixes = [
-        {
-            "pattern": r"daemons have recently crashed",
-            "func": ceph_health_resolve_crash,
-            "func_args": [],
-            "func_kwargs": {},
-            "ceph_health_tries": 5,
-            "ceph_health_delay": 30,
-        },
-        {
-            "pattern": r"modules have recently crashed",
-            "func": ceph_health_resolve_crash,
-            "func_args": [],
-            "func_kwargs": {},
-            "ceph_health_tries": 5,
-            "ceph_health_delay": 30,
-            "known_issues": [
-                {
-                    "issue": "DFBUGS-2781",
-                    "pattern": r"mgr module prometheus crashed in",
-                },
-            ],
-        },
-        {
-            "pattern": r"slow ops, oldest one blocked for \d+ sec, .*(?:has|have) slow ops",
-            "func": ceph_health_resolve_mon_slow_ops,
-            "func_args": [health_status],
-            "func_kwargs": {},
-            "ceph_health_tries": 6,
-            "ceph_health_delay": 30,
-            "known_issues": [
-                {
-                    "issue": "DFBUGS-2456",
-                    "func": lambda: config.MULTICLUSTER.get("multicluster_mode")
-                    == "regional-dr",
-                },
-            ],
-        },
-        {
-            "pattern": r"HEALTH_WARN \d+ network partitions? detected",
-            "func": ceph_health_resolve_network_partition,
-            "func_args": [health_status],
-            "func_kwargs": {},
-            "ceph_health_tries": 6,
-            "ceph_health_delay": 30,
-            "known_issues": [
-                {
-                    "issue": "DFBUGS-4521",
-                    "pattern": r"Netsplit detected between mon",
-                },
-            ],
-        },
-        # TODO: Add more patterns and fix functions
-    ]
+    global ceph_health_fixes
     for fix_dict in ceph_health_fixes:
         pattern = fix_dict["pattern"]
         jira_issues = fix_dict.get("known_issues", [])
@@ -3312,6 +3332,58 @@ def ceph_health_recover(
                 "Trying to fix Ceph Health because we found in Health status the matching pattern"
                 f": '{pattern}'!"
             )
+
+            # --- BEGIN TRACKING LOGIC ---
+            # Identify the specific Jira issue (if any) to use appropriate tracking
+            issue_confirmed = False
+            confirmed_known_issue = None
+            jira_issue_id = None
+            for jira_issue in jira_issues:
+                jira_issue_id = jira_issue["issue"]
+                jira_issue_pattern = jira_issue.get("pattern")
+                jira_issue_function = jira_issue.get("func")
+                if jira_issue_pattern:
+                    if re.search(jira_issue["pattern"], health_status):
+                        issue_confirmed = True
+                        confirmed_known_issue = jira_issue
+                if jira_issue_function:
+                    if jira_issue_function():
+                        issue_confirmed = True
+                        confirmed_known_issue = jira_issue
+                if issue_confirmed:
+                    break
+
+            # Determine which tracking to use: known_issue level or pattern level
+            if issue_confirmed and confirmed_known_issue:
+                # Use known_issue tracking
+                tracking_dict = confirmed_known_issue
+                issue_key = jira_issue_id
+            else:
+                # Use pattern-level tracking
+                tracking_dict = fix_dict
+                issue_key = pattern
+
+            # Get max attempts from fix_dict (default: 2)
+            fix_max_attempts = fix_dict.get("max_recovery_attempts", 2)
+
+            # Get and increment recovery attempt counter (initialize if doesn't exist)
+            current_attempt = tracking_dict.get("recovery_attempts", 0) + 1
+            tracking_dict["recovery_attempts"] = current_attempt
+
+            log.info(
+                f"Ceph health issue '{issue_key}' detected "
+                f"(attempt {current_attempt}/{fix_max_attempts})"
+            )
+
+            # If we've exceeded max attempts, fail immediately without MG collection
+            if current_attempt > fix_max_attempts:
+                raise CephHealthNotRecoveredException(
+                    f"Ceph health issue '{issue_key}' persisted after "
+                    f"{fix_max_attempts} recovery attempts. "
+                    f"Health status: {health_status}"
+                )
+            # --- END TRACKING LOGIC ---
+
             # Avoid circular dependencies, importing here
             from ocs_ci.ocs.utils import collect_ocs_logs
             from ocs_ci.framework.pytest_customization import ocscilib
@@ -3341,23 +3413,12 @@ def ceph_health_recover(
             except Exception:
                 odf_version = version_module.get_ocs_version_from_csv()
             ocp_version = version_module.get_semantic_ocp_running_version()
-            issue_confirmed = False
             issue_commented = False
-            jira_issue_id = None
-            for jira_issue in jira_issues:
-                jira_issue_id = jira_issue["issue"]
-                jira_issue_pattern = jira_issue.get("pattern")
-                jira_issue_function = jira_issue.get("func")
-                if jira_issue_pattern:
-                    if re.search(jira_issue["pattern"], health_status):
-                        issue_confirmed = True
-                if jira_issue_function:
-                    issue_confirmed = jira_issue_function()
-                if issue_confirmed:
-                    break
+            # Note: issue_confirmed and jira_issue_id already determined in tracking logic above
             if issue_confirmed and update_jira:
                 msg_lines = [
                     "*OCS-CI report*",
+                    f"Issue occurrence: {current_attempt} of {fix_max_attempts} max attempts",
                     f"ODF version: {odf_version}",
                     f"OCP version: {ocp_version}",
                 ]
@@ -3380,9 +3441,8 @@ def ceph_health_recover(
                 except Exception as ex:
                     log.error(f"Failed to connect or comment to Jira: {ex}")
 
-            fix_dict["func"](
-                *fix_dict.get("func_args", []), **fix_dict.get("func_kwargs", {})
-            )
+            # Call recovery function (all must accept health_status as first parameter)
+            fix_dict["func"](health_status, **fix_dict.get("func_kwargs", {}))
             try:
                 ceph_health_check(
                     namespace,
@@ -3447,7 +3507,10 @@ def ceph_health_check(
         delay=delay,
         backoff=1,
     )(ceph_health_check_base)(
-        namespace, fix_ceph_health, update_jira, no_exception_if_jira_issue_updated
+        namespace,
+        fix_ceph_health,
+        update_jira,
+        no_exception_if_jira_issue_updated,
     )
 
 
