@@ -8,7 +8,10 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from subprocess import TimeoutExpired
 
-from ocs_ci.ocs.cluster import change_ceph_full_ratio
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.resources.pvc import flatten_image
+from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.helpers.helpers import (
@@ -63,7 +66,6 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
 from ocs_ci.utility.utils import (
     clone_notify,
-    TimeoutSampler,
 )
 
 from ocs_ci.resiliency.resiliency_workload import workload_object
@@ -2984,10 +2986,33 @@ def create_multiple_storage_pvcs_pods(
     Returns:
         function: Factory function that accepts parameters and returns created resources
     """
+    # Track all NFS resources created across all factory calls
+    all_nfs_resources = {"pods": [], "pvcs": []}
 
     def teardown():
+        """
+        Teardown to restore Ceph full ratio and clean up NFS resources.
+        """
 
-        change_ceph_full_ratio(85)
+        # clean up all NFS resources
+        if all_nfs_resources["pods"]:
+            logger.info("Cleaning up all NFS pod resources")
+            for nfs_pod_obj in all_nfs_resources["pods"]:
+                try:
+                    pod.delete_deployment_pods(nfs_pod_obj)
+                except Exception as e:
+                    logger.warning(f"Failed to delete NFS pod {nfs_pod_obj.name}: {e}")
+
+        if all_nfs_resources["pvcs"]:
+            logger.info("Cleaning up all NFS PVC resources")
+            for nfs_pvc_obj in all_nfs_resources["pvcs"]:
+                try:
+                    nfs_pvc_obj.delete()
+                    nfs_pvc_obj.ocp.wait_for_delete(
+                        resource_name=nfs_pvc_obj.name, timeout=180
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to delete NFS PVC {nfs_pvc_obj.name}: {e}")
 
     request.addfinalizer(teardown)
 
@@ -3204,6 +3229,11 @@ def create_multiple_storage_pvcs_pods(
                 )
                 nfs_pod_obj = nfs_pod_list[0]
                 nfs_pod_objs.append(nfs_pod_obj)
+                # Track NFS resources for cleanup in teardown
+                all_nfs_resources["pods"].append(nfs_pod_obj)
+
+            # Track NFS PVCs for cleanup in teardown
+            all_nfs_resources["pvcs"].extend(nfs_pvc_objs)
 
             logger.info(
                 f" All {len(nfs_pod_objs)} NFS deployment pods created and running"
@@ -3234,5 +3264,118 @@ def create_multiple_storage_pvcs_pods(
         }
 
         return resources
+
+    return factory
+
+
+@pytest.fixture(scope="function")
+def create_clones_until_cluster_full(pvc_clone_factory, threading_lock):
+    """
+    Fixture to create PVC clones until cluster reaches specified full ratio and alerts are triggered.
+
+    Args:
+        pvc_clone_factory: Factory fixture to create PVC clones
+        threading_lock: Threading lock for Prometheus API
+
+    Returns:
+        function: Factory function that creates clones until cluster is full
+    """
+
+    def factory(
+        pvcs_to_clone,
+        clone_batch_size=10,
+        max_attempts=12,
+        expected_alerts=None,
+        flatten_rbd_clones=True,
+        min_pending_clones=0,
+    ):
+
+        if expected_alerts is None:
+            expected_alerts = ["CephOSDCriticallyFull"]
+
+        logger.info(
+            f"Starting clone creation to fill cluster until alerts {expected_alerts} are detected"
+        )
+
+        all_clones = []
+        attempt = 0
+
+        while attempt < max_attempts:
+            for i in range(clone_batch_size):
+                pvc_to_clone = pvcs_to_clone[len(all_clones) % len(pvcs_to_clone)]
+
+                try:
+                    logger.info(f"Start creation of clone number {len(all_clones)}.")
+                    clone_obj = pvc_clone_factory(
+                        pvc_obj=pvc_to_clone,
+                        storageclass=pvc_to_clone.backed_sc,
+                        timeout=900,
+                    )
+                    clone_obj.reload()
+
+                    # Flatten RBD clones if requested
+                    if (
+                        flatten_rbd_clones
+                        and pvc_to_clone.get_pvc_vol_type == constants.CEPHBLOCKPOOL
+                    ):
+                        flatten_image(clone_obj)
+                        logger.info(
+                            f"Clone with name {clone_obj.name} was created and flattened."
+                        )
+                        clone_obj.reload()
+                    else:
+                        logger.info(f"Clone with name {clone_obj.name} was created.")
+
+                    all_clones.append(clone_obj)
+
+                except Exception as e:
+                    logger.warning(
+                        f"Clone creation failed (expected when cluster is full): {e}"
+                    )
+                    break
+
+            # Check if we've reached the target alerts
+            logger.info(f"Checking for expected alerts: {expected_alerts}")
+            prometheus = PrometheusAPI(threading_lock=threading_lock)
+
+            sample = TimeoutSampler(
+                timeout=180,
+                sleep=10,
+                func=prometheus.verify_alerts_via_prometheus,
+                expected_alerts=expected_alerts,
+                threading_lock=threading_lock,
+            )
+
+            if sample.wait_for_func_status(result=True):
+                logger.info(
+                    f"Cluster has reached target capacity - Expected alerts {expected_alerts} detected"
+                )
+                break
+            else:
+                logger.info(
+                    f"Alerts not detected yet. Created {len(all_clones)} clones so far. Continuing..."
+                )
+                attempt += 1
+
+        if attempt == max_attempts:
+            logger.error("Maximum attempts reached. Expected alerts were not detected.")
+            raise TimeoutExpiredError(
+                f"Failed to reach target cluster capacity - alerts {expected_alerts} not triggered"
+            )
+
+        # Count pending clones if minimum is specified
+        if min_pending_clones > 0:
+            pending_clones = 0
+            for clone in all_clones[-15:]:  # Check last 15 clones
+                try:
+                    if clone.status != constants.STATUS_BOUND:
+                        pending_clones += 1
+                except Exception:
+                    pending_clones += 1
+
+            logger.info(f"Pending clones (approximate): {pending_clones}")
+
+        logger.info(f"Clone creation complete. Total clones created: {len(all_clones)}")
+        return all_clones
 
     return factory
