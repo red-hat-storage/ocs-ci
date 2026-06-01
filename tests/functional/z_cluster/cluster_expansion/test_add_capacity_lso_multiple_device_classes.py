@@ -73,6 +73,10 @@ class TestAddCapacityLSOMultipleDeviceClasses(ManageTest):
         """
         device_sets = get_all_device_sets()
         if len(device_sets) < 2:
+            logger.warning(
+                "Skipping: requires multiple device classes " "(found %d device set)",
+                len(device_sets),
+            )
             pytest.skip(
                 "Test requires a cluster with multiple device classes "
                 f"(found only {len(device_sets)} device set)"
@@ -83,6 +87,7 @@ class TestAddCapacityLSOMultipleDeviceClasses(ManageTest):
         self.bucket_factory = bucket_factory
         self.rgw_bucket_factory = rgw_bucket_factory
         self.sanity_helpers = Sanity()
+        logger.info("Test state initialized with %d device sets", len(device_sets))
 
     def post_verification_steps(
         self, sc_timeout=300, ceph_health_tries=80, ceph_rebalance_timeout=3600
@@ -101,6 +106,7 @@ class TestAddCapacityLSOMultipleDeviceClasses(ManageTest):
             ceph_rebalance_timeout (int): Seconds to wait for Ceph rebalance.
 
         """
+        logger.test_step("Wait for StorageCluster to reach Ready phase")
         sc_obj = get_storage_cluster()
         sc_obj.wait_for_resource(
             condition=constants.STATUS_READY,
@@ -111,12 +117,14 @@ class TestAddCapacityLSOMultipleDeviceClasses(ManageTest):
         )
 
         if config.ENV_DATA.get("encryption_at_rest"):
+            logger.test_step("Verify OSD encryption")
             osd_encryption_verification()
 
+        logger.test_step("Verify device classes and Ceph health")
         verify_deviceclasses_steps()
         check_ceph_health_after_add_capacity(ceph_health_tries, ceph_rebalance_timeout)
 
-        logger.info("Check basic cluster functionality")
+        logger.test_step("Check basic cluster functionality")
         self.sanity_helpers.create_resources(
             self.pvc_factory,
             self.pod_factory,
@@ -131,7 +139,7 @@ class TestAddCapacityLSOMultipleDeviceClasses(ManageTest):
         """
 
         def finalizer():
-            logger.info("Wait for the ceph health to be OK")
+            logger.test_step("Wait for ceph health to be OK")
             ceph_health_check(tries=20)
 
         request.addfinalizer(finalizer)
@@ -165,10 +173,20 @@ class TestAddCapacityLSOMultipleDeviceClasses(ManageTest):
             8. Verify device classes and Ceph health after capacity addition.
             9. Check basic cluster functionality by creating resources.
         """
+        logger.test_step("Select the second device set as the capacity target")
         device_sets = get_all_device_sets()
         target_ds = device_sets[1]
         sc_name = target_ds["dataPVCTemplate"]["spec"]["storageClassName"]
+        logger.info(
+            "Target device set: '%s' (storage class: '%s')",
+            target_ds["name"],
+            sc_name,
+        )
+
+        logger.test_step("Add one new disk per OCS node for the second device class")
         num_of_new_pvs = add_pvs_for_deviceset(sc_name, target_ds["name"])
+
+        logger.test_step("Increment device set count to add new OSDs")
         new_count = target_ds["count"] + num_of_new_pvs
         logger.info(
             "Setting count for device set '%s' (index 1) to %d",
@@ -177,7 +195,7 @@ class TestAddCapacityLSOMultipleDeviceClasses(ManageTest):
         )
         set_deviceset_count(new_count, index=1)
 
-        logger.info("Wait for the new deviceset PVCs to reach Bound status")
+        logger.test_step("Wait for new device set PVCs to reach Bound status")
         wait_for_pvcs_in_deviceset_to_reach_status(
             target_ds["name"],
             new_count,
