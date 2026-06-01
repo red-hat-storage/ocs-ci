@@ -3950,7 +3950,7 @@ def get_ocs_olm_operator_tags(limit=100):
     return all_tags
 
 
-@retry(requests.RequestException, 10, 30, 1)
+@retry(requests.RequestException, 20, 30, 1)
 def query_quay_for_operator_tags(
     image: str, headers: dict, limit: int, page: int
 ) -> list:
@@ -3981,7 +3981,9 @@ def query_quay_for_operator_tags(
         timeout=120,
     )
     if not resp.ok:
-        raise requests.RequestException(resp.json())
+        raise requests.RequestException(
+            f"Quay API returned {resp.status_code}: {resp.text[:200]}"
+        )
     tags = resp.json()["tags"]
     return tags
 

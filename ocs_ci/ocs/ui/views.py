@@ -136,8 +136,8 @@ deployment = {
     ),
     "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
     "choose_local_storage_version": (
-        'a[data-test="local-storage-operator-redhat-operators-openshift-marketplace"]',
-        By.CSS_SELECTOR,
+        "//button[@aria-labelledby='local-storage-operator-{}-openshift-marketplace']",
+        By.XPATH,
     ),
     "click_install_lso": (
         'a[data-test-id="operator-install-btn"], a[data-test="catalog-details-modal-cta"]',
@@ -145,10 +145,6 @@ deployment = {
     ),
     "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
     "next": ("//*[contains(text(), 'Next')]", By.XPATH),
-    "choose_local_storage_version_non_ga": (
-        'a[data-test="local-storage-operator-optional-operators-openshift-marketplace"]',
-        By.CSS_SELECTOR,
-    ),
     "enable_in_transit_encryption": (
         'input[data-test="in-transit-encryption-checkbox"]',
         By.CSS_SELECTOR,

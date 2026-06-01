@@ -1835,6 +1835,51 @@ class Deployment(object):
         time.sleep(120)
         logger.info("Ocs addon started enabling.")
 
+    @staticmethod
+    def _is_catalog_source_ready():
+        """
+        Check if the ODF CatalogSource already exists, is in READY state,
+        and points to the expected image (when configured).
+
+        Returns:
+            bool: True if the CatalogSource is present, READY, and has a
+                matching image (or no specific image is configured).
+        """
+        cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
+        cs = ocp.OCP(
+            kind="CatalogSource",
+            namespace=constants.MARKETPLACE_NAMESPACE,
+            resource_name=cs_name,
+        )
+        if not cs.check_resource_existence(
+            should_exist=True, timeout=10, resource_name=cs_name
+        ):
+            return False
+
+        cs_data = cs.get()
+        state = (
+            cs_data.get("status", {})
+            .get("connectionState", {})
+            .get("lastObservedState", "")
+        )
+        if state != "READY":
+            logger.info("CatalogSource %s exists but state is %s", cs_name, state)
+            return False
+
+        expected_image = config.DEPLOYMENT.get("ocs_registry_image")
+        if expected_image:
+            actual_image = cs_data.get("spec", {}).get("image", "")
+            if expected_image not in actual_image:
+                logger.info(
+                    "CatalogSource %s image mismatch: expected %s, got %s",
+                    cs_name,
+                    expected_image,
+                    actual_image,
+                )
+                return False
+
+        return True
+
     def deployment_with_ui(self):
         """
         Deployment OCS Operator via OpenShift Console
@@ -1845,7 +1890,13 @@ class Deployment(object):
 
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         if not live_deployment:
-            create_catalog_source()
+            if self._is_catalog_source_ready():
+                logger.info(
+                    "CatalogSource %s already exists and is READY, skipping creation",
+                    constants.OPERATOR_CATALOG_SOURCE_NAME,
+                )
+            else:
+                create_catalog_source()
         login_ui()
         deployment_obj = DeploymentUI()
         deployment_obj.install_ocs_ui()

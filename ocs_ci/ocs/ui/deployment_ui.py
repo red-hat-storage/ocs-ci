@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 
 from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STORAGE
@@ -17,11 +18,8 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     label_nodes,
 )
-from ocs_ci.utility.deployment import get_ocp_ga_version
-from ocs_ci.deployment.helpers.lso_helpers import (
-    add_disk_for_vsphere_platform,
-    create_optional_operators_catalogsource_non_ga,
-)
+from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
+from ocs_ci.utility.operators import LocalStorageOperator
 from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
@@ -52,16 +50,52 @@ class DeploymentUI(PageNavigator):
             capacity_str = str(capacity / 1024).rstrip("0").rstrip(".") + " TiB"
         else:
             capacity_str = str(capacity) + " GiB"
-        logger.info(f"Waiting for {capacity_str}")
+        logger.info(f"Waiting for at least {capacity_str}")
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=sleep,
-            func=self.check_element_text,
-            expected_text=capacity_str,
+            func=self._check_disk_capacity,
+            min_capacity_gib=capacity,
             take_screenshot=True,
         )
         if not sample.wait_for_func_status(result=True):
             raise TimeoutExpiredError(f"Disks are not attached after {timeout} seconds")
+
+    def _check_disk_capacity(self, min_capacity_gib, take_screenshot=False):
+        """
+        Check if the displayed disk capacity meets the minimum expected.
+
+        Searches for capacity text (GiB or TiB) on the page and verifies
+        the value is at least min_capacity_gib. This tolerates extra disks
+        from previous runs.
+
+        Args:
+            min_capacity_gib (int): Minimum expected capacity in GiB.
+            take_screenshot (bool): Whether to take a screenshot.
+
+        Returns:
+            bool: True if displayed capacity >= min_capacity_gib.
+        """
+        if take_screenshot:
+            self.take_screenshot("disk_capacity_check")
+        page_text = self.driver.find_elements(
+            By.XPATH, "//*[contains(text(), 'GiB') or contains(text(), 'TiB')]"
+        )
+        for el in page_text:
+            try:
+                text = el.text.strip()
+                parts = text.split()
+                value = float(parts[0])
+                unit = parts[1]
+                capacity_gib = value * 1024 if unit == "TiB" else value
+                if capacity_gib >= min_capacity_gib:
+                    logger.info(
+                        f"Found disk capacity: {text} (>= {min_capacity_gib} GiB)"
+                    )
+                    return True
+            except (ValueError, IndexError):
+                continue
+        return False
 
     def install_ocs_operator(self):
         """
@@ -119,16 +153,14 @@ class DeploymentUI(PageNavigator):
             logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
             logger.info("Choose Local Storage Version")
-            ocp_ga_version = get_ocp_ga_version(self.ocp_version_full)
-            if ocp_ga_version:
-                self.do_click(
-                    self.dep_loc["choose_local_storage_version"], enable_screenshot=True
-                )
-            else:
-                self.do_click(
-                    self.dep_loc["choose_local_storage_version_non_ga"],
-                    enable_screenshot=True,
-                )
+            lso = LocalStorageOperator()
+            self.do_click(
+                locator=format_locator(
+                    self.dep_loc["choose_local_storage_version"],
+                    lso.catalog_name,
+                ),
+                enable_screenshot=True,
+            )
 
             logger.info("Click Install LSO")
             self.do_click(self.dep_loc["click_install_lso"], enable_screenshot=True)
@@ -251,6 +283,15 @@ class DeploymentUI(PageNavigator):
         Install LSO cluster via UI
 
         """
+        if config.DEPLOYMENT.get("ec_default_pools"):
+            if config.ENV_DATA.get("mark_masters_schedulable", True):
+                mark_masters_schedulable()
+                logger.info("Labeling all nodes as storage nodes")
+                nodes = get_all_nodes()
+                node_objs = get_node_objs(nodes)
+                label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+                time.sleep(10)
+
         logger.info("Click Internal - Attached Devices")
         if self.operator_name == ODF_OPERATOR:
             self.do_click(self.dep_loc["choose_lso_deployment"], enable_screenshot=True)
@@ -262,13 +303,20 @@ class DeploymentUI(PageNavigator):
             self.do_click(self.dep_loc["all_nodes_lso"], enable_screenshot=True)
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
+        # skipping optional settings such as NFS,
+        # RBD as the default StorageClass, Set default StorageClass for virtualization,
+        # Use external PostgreSQL, Automatic backup
+        # In future we'll need to automate them
+        self.do_click(self.dep_loc["next"], enable_screenshot=True)
+
         logger.info(
             f"Configure Volume Set Name and Storage Class Name as {constants.LOCAL_BLOCK_RESOURCE}"
         )
+        # setting a large
         self.do_send_keys(
             locator=self.dep_loc["lv_name"],
             text=constants.LOCAL_BLOCK_RESOURCE,
-            timeout=300,
+            timeout=600,
         )
         self.take_screenshot()
         self.do_send_keys(
@@ -325,16 +373,6 @@ class DeploymentUI(PageNavigator):
             self.enable_forceful_deployment()
 
         if config.DEPLOYMENT.get("ec_default_pools"):
-            if config.ENV_DATA.get("mark_masters_schedulable", True):
-                mark_masters_schedulable()
-                # Allow ODF to be deployed on all nodes
-                logger.info("labeling all nodes as storage nodes")
-                nodes = get_all_nodes()
-                node_objs = get_node_objs(nodes)
-                label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
-                # give a timeout to allow nodes to appear on console
-                time.sleep(10)
-
             if not self.enable_erasure_coding():
                 raise ConfigurationError
 
@@ -534,9 +572,13 @@ class DeploymentUI(PageNavigator):
         cap_cell = self.dep_loc["_ec_row_effective_capacity_cell"]
         parsed = []
         for row in rows:
-            scheme_text = row.find_element(scheme_cell[1], scheme_cell[0]).text.split()[
-                0
-            ]
+            raw_scheme = row.find_element(scheme_cell[1], scheme_cell[0]).text
+            # Extract "k+m" pattern, stripping badges like "Recommended"
+            match = re.match(r"(\d+\+\d+)", raw_scheme.strip())
+            if not match:
+                logger.warning(f"Could not parse EC scheme from: '{raw_scheme}'")
+                continue
+            scheme_text = match.group(1)
             capacity_text = row.find_element(cap_cell[1], cap_cell[0]).text
             ki, mi = (int(x) for x in scheme_text.split("+"))
             capacity_value = float(capacity_text.split()[0])
@@ -813,9 +855,10 @@ class DeploymentUI(PageNavigator):
 
         """
         if config.DEPLOYMENT.get("local_storage"):
-            create_optional_operators_catalogsource_non_ga()
+            LocalStorageOperator(create_catalog=True)
             if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
                 add_disk_for_vsphere_platform()
+            self.refresh_page()
         self.install_local_storage_operator()
         if not csv.get_csvs_start_with_prefix(
             defaults.ODF_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]
