@@ -74,7 +74,8 @@ class TestAddCapacityLSOMultipleDeviceClasses(ManageTest):
         device_sets = get_all_device_sets()
         if len(device_sets) < 2:
             logger.warning(
-                "Skipping: requires multiple device classes " "(found %d device set)",
+                "Skipping: requires multiple device classes "
+                "(found %d device set(s))",
                 len(device_sets),
             )
             pytest.skip(
