@@ -3561,6 +3561,8 @@ def bucket_factory_fixture(
                         log.warning(f"{bucket.name} could not be found in cleanup")
                     else:
                         raise
+                except Exception as e:
+                    log.warning(f"Failed to delete {bucket.name} during cleanup: {e}")
 
     request.addfinalizer(bucket_cleanup)
 
