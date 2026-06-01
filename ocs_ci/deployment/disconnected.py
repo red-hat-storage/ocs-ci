@@ -311,7 +311,9 @@ def mirror_index_image_via_oc_mirror(
 
     # Configure registries.conf if requested (for FDF internal images)
     if configure_registries:
-        logger.info("Configuring /etc/containers/registries.conf for internal images")
+        logger.info(
+            "Configuring registry mirrors for internal images using registries.conf.d/"
+        )
         registries_template = os.path.join(
             constants.FDF_TEMPLATE_DIR, "registries.conf.template"
         )
@@ -320,23 +322,30 @@ def mirror_index_image_via_oc_mirror(
                 with open(registries_template, "r") as f:
                     registries_content = f.read()
 
-                # Backup and update registries.conf
-                registries_conf_path = "/etc/containers/registries.conf"
-                exec_cmd(
-                    f"sudo cp {registries_conf_path} {registries_conf_path}.backup"
+                # Use registries.conf.d/ directory
+                registries_conf_d_dir = "/etc/containers/registries.conf.d"
+                ocs_ci_conf_file = os.path.join(
+                    registries_conf_d_dir, "ocs-ci-fdf-mirrors.conf"
                 )
 
+                # Ensure registries.conf.d directory exists
+                exec_cmd(f"sudo mkdir -p {registries_conf_d_dir}")
+
+                # Create temporary file with registry configuration
                 temp_file = tempfile.NamedTemporaryFile(
                     mode="w", delete=False, suffix=".conf"
                 )
                 temp_file.write(registries_content)
                 temp_file.close()
 
-                exec_cmd(f"sudo cp {temp_file.name} {registries_conf_path}")
+                # Copy to registries.conf.d/ directory
+                exec_cmd(f"sudo cp {temp_file.name} {ocs_ci_conf_file}")
                 os.unlink(temp_file.name)
-                logger.info("Successfully configured registries.conf")
+                logger.info(
+                    f"Successfully configured registry mirrors at {ocs_ci_conf_file}"
+                )
             except Exception as e:
-                logger.warning(f"Failed to configure registries.conf: {e}")
+                logger.warning(f"Failed to configure registry mirrors: {e}")
 
     # prepare imageset-config.yaml file
     imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG_V2)
