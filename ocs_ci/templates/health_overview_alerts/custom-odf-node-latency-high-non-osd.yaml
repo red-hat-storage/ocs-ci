@@ -15,14 +15,14 @@ spec:
                 job="odf-blackbox-exporter",
                 daemon_type="mon"
               }[24h:]
-            ) > 0.01
+            ) > 0.005
           for: 1m
           labels:
             component: odf
             severity: warning
           annotations:
             description: >
-              Node {{ $labels.instance }} has max ICMP RTT latency > 10ms
+              Node {{ $labels.instance }} has max ICMP RTT latency > 5ms
               over the last 24h. Investigate network health.
             summary: >
               High ICMP latency (>10ms) detected on ODF non-OSD node(s)
