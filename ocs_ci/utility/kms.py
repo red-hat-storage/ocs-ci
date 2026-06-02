@@ -2582,7 +2582,7 @@ def get_ksctl_cli(bin_dir=None):
         prepare_bin_dir()
         url = f"https://{load_auth_config()['kmip']['KMIP_ENDPOINT']}/downloads/{zip_file}"
         download_file(url, zip_file, verify=False)
-        run_cmd(f"unzip -d {bin_dir} {zip_file}")
+        run_cmd(f"unzip -o -d {bin_dir} {zip_file}")
         run_cmd(f"mv {bin_dir}/ksctl-{system}-amd64 {bin_dir}/{ksctl_cli_filename}")
         delete_file(zip_file)
 
