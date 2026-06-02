@@ -1897,6 +1897,20 @@ class Deployment(object):
                 )
             else:
                 create_catalog_source()
+
+        # Complete all CLI prep work (LSO catalog, disk attachment) before
+        # opening the browser to avoid stale element errors caused by the
+        # console re-rendering while the browser sits idle.
+        if config.DEPLOYMENT.get("local_storage"):
+            from ocs_ci.deployment.helpers.lso_helpers import (
+                add_disk_for_vsphere_platform,
+            )
+            from ocs_ci.utility.operators import LocalStorageOperator
+
+            LocalStorageOperator(create_catalog=True)
+            if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
+                add_disk_for_vsphere_platform()
+
         login_ui()
         deployment_obj = DeploymentUI()
         deployment_obj.install_ocs_ui()

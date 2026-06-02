@@ -229,8 +229,18 @@ deployment_4_9 = {
     ),
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
     "refresh_popup": (
-        "//button[text()='Refresh web console']|//button[contains(.,'Refresh web console')]",
+        "//button[normalize-space()='Refresh web console']",
         By.XPATH,
+    ),
+    "view_installed_operators_btn": (
+        "a[data-test='view-installed-operators-btn']",
+        By.CSS_SELECTOR,
+    ),
+    "dismiss_welcome_modal": (
+        "button[aria-label='Close'], "
+        ".pf-v6-c-modal-box button.pf-m-plain, "
+        ".pf-v6-l-bullseye button.pf-m-plain",
+        By.CSS_SELECTOR,
     ),
     "odf_operator_row_succeeded": (
         "//tr[.//a[contains(@data-test-operator-row,'{}')]]"

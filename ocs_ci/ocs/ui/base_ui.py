@@ -383,28 +383,16 @@ class BaseUI:
             bool: True if element expanded, False otherwise
 
         """
-        for attempt in range(3):
-            wait = WebDriverWait(self.driver, timeout)
-            try:
-                element = wait.until(
-                    ec.element_to_be_clickable((locator[1], locator[0]))
-                )
-            except TimeoutException:
-                element = wait.until(
-                    ec.presence_of_element_located((locator[1], locator[0]))
-                )
-            try:
-                return element.get_attribute("aria-expanded") == "true"
-            except StaleElementReferenceException:
-                logger.warning(
-                    "StaleElementReferenceException in is_expanded "
-                    "(attempt %d/3), retrying",
-                    attempt + 1,
-                )
-                time.sleep(2)
-        raise StaleElementReferenceException(
-            f"Element {locator} remained stale after 3 retries"
-        )
+        wait = WebDriverWait(self.driver, timeout)
+        try:
+            element = wait.until(ec.element_to_be_clickable((locator[1], locator[0])))
+        except TimeoutException:
+            # element_to_be_clickable() doesn't work as expected so just to harden
+            # we are using presence_of_element_located
+            element = wait.until(
+                ec.presence_of_element_located((locator[1], locator[0]))
+            )
+        return True if element.get_attribute("aria-expanded") == "true" else False
 
     def choose_expanded_mode(self, mode, locator):
         """

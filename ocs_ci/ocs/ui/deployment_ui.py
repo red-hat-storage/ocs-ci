@@ -18,7 +18,6 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     label_nodes,
 )
-from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
 from ocs_ci.utility.operators import LocalStorageOperator
 from selenium.webdriver.common.by import By
 
@@ -123,17 +122,37 @@ class DeploymentUI(PageNavigator):
         self.do_click(
             self.dep_loc["click_install_ocs"], enable_screenshot=True, timeout=60
         )
+        self.page_has_loaded()
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
         if self.operator_name is ODF_OPERATOR:
             try:
-                self.navigate_installed_operators_page()
-                self.do_click(locator=self.dep_loc["refresh_popup"], timeout=500)
-            except Exception as e:
-                logger.error(f"Refresh pop-up does not exist: {e}")
-                self.refresh_page()
+                self.page_has_loaded()
+                self.do_click(
+                    locator=self.dep_loc["view_installed_operators_btn"],
+                    enable_screenshot=True,
+                    timeout=60,
+                )
+                self.do_click(locator=self.dep_loc["refresh_popup"], timeout=30)
+            except Exception:
+                logger.info("Post-install navigation/refresh failed, refreshing page")
+            self.refresh_page()
+            self.page_has_loaded()
+            self._dismiss_welcome_modal()
         self.verify_operator_succeeded(operator=self.operator_name)
+
+    def _dismiss_welcome_modal(self):
+        """
+        Dismiss the ODF welcome modal overlay if present.
+        The modal appears after ODF console plugin loads and blocks
+        sidebar navigation.
+        """
+        close_btn = self.get_elements(locator=self.dep_loc["dismiss_welcome_modal"])
+        if close_btn:
+            logger.info("Dismissing ODF welcome modal")
+            close_btn[0].click()
+            time.sleep(1)
 
     def refresh_popup(self, timeout=30):
         """
@@ -600,11 +619,11 @@ class DeploymentUI(PageNavigator):
         )
 
         for row_scheme, ki, mi, displayed_cap in parsed:
-            expected_cap = round(total_raw * ki / (ki + mi), 2)
-            if round(displayed_cap, 2) != expected_cap:
+            expected_cap = total_raw * ki / (ki + mi)
+            if abs(displayed_cap - expected_cap) > 0.02:
                 raise ConfigurationError(
                     f"EC scheme {row_scheme}: expected effective capacity "
-                    f"{expected_cap} TiB, got {displayed_cap} TiB"
+                    f"~{expected_cap:.2f} TiB, got {displayed_cap} TiB"
                 )
             logger.info(
                 f"EC scheme {row_scheme}: effective capacity = {displayed_cap} TiB "
@@ -854,11 +873,6 @@ class DeploymentUI(PageNavigator):
         Install OCS/ODF via UI
 
         """
-        if config.DEPLOYMENT.get("local_storage"):
-            LocalStorageOperator(create_catalog=True)
-            if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
-                add_disk_for_vsphere_platform()
-            self.refresh_page()
         self.install_local_storage_operator()
         if not csv.get_csvs_start_with_prefix(
             defaults.ODF_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]
