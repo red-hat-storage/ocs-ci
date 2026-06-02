@@ -1131,8 +1131,10 @@ def setup_client_ca_cert_secret(
     # Check if secret exists and create/update accordingly
     secret_obj = ocp.OCP(kind="Secret", namespace=namespace)
 
-    try:
-        existing_secret = secret_obj.get(resource_name=secret_name)
+    # Check if secret exists (don't raise if not found)
+    existing_secret = secret_obj.get(resource_name=secret_name, dont_raise=True)
+
+    if existing_secret:
         # Update existing secret
         logger.info(
             "Updating existing secret '%s' in namespace '%s'", secret_name, namespace
@@ -1147,7 +1149,7 @@ def setup_client_ca_cert_secret(
         secret_obj.apply(**existing_secret)
         logger.info("Updated secret '%s' with key '%s'", secret_name, cert_key)
 
-    except Exception:
+    else:
         # Create new secret using oc command
         logger.info(
             "Creating new secret '%s' in namespace '%s'", secret_name, namespace
