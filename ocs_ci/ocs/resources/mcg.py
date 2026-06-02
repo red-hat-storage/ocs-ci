@@ -813,8 +813,8 @@ class MCG:
                         "object_api", "list_objects", params={"bucket": bucket_name}
                     )
                     .json()
-                    .get("reply")
-                    .get("objects")
+                    .get("reply", {})
+                    .get("objects", [])
                 )
             except Exception as e:
                 logger.warning(f"Failed to list objects for mirroring check: {e}")
@@ -833,8 +833,8 @@ class MCG:
                             },
                         )
                         .json()
-                        .get("reply")
-                        .get("chunks")
+                        .get("reply", {})
+                        .get("chunks", [])
                     )
                 except Exception as e:
                     logger.warning(
