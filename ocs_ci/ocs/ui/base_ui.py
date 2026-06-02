@@ -1409,6 +1409,7 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
     hci_platform_conf = (
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
     )
+    is_client_cluster = config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
 
     def _skip_tour():
         # Skip tour if it appears, if not found, continue without clicking
@@ -1422,7 +1423,8 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
         else:
             logger.info("Skip tour element not found. Continuing without clicking.")
 
-    if hci_platform_conf:
+    # Navigate to local cluster page only for provider clusters, not client clusters
+    if hci_platform_conf and not is_client_cluster:
         dashboard_url = console_url + "/dashboards"
         # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
         # when the hci platform is confirmed and proceed to the client if needed from within the test
