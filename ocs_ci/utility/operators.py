@@ -171,7 +171,6 @@ class Operator:
         with open(catalog_data_yaml.name, "w") as fd:
             fd.write(yaml.dump(catalog_data))
         run_cmd(f"oc apply -f {catalog_data_yaml.name}")
-        wait_for_machineconfigpool_status("all", force_delete_pods=False)
 
     def create_unreleased_catalog(self):
         """
@@ -181,10 +180,30 @@ class Operator:
             raise ValueError(
                 "Child class must define attribute `unreleased_catalog_image`"
             )
-        self.create_idms_for_unreleased_catalog()
+        cluster_name = config.ENV_DATA.get("cluster_name")
+        # Import here to avoid circular import
+        from ocs_ci.deployment.helpers.hypershift_base import (
+            HyperShiftBase,
+            is_hosted_cluster,
+        )
+
+        is_hosted = is_hosted_cluster(cluster_name)
+        if is_hosted:
+            with config.RunWithProviderConfigContextIfAvailable():
+                idms_data = self.get_idms_data()
+                hypershift_base = HyperShiftBase()
+
+                # Apply IDMS mirrors to the hosted cluster's imageContentSources
+                hypershift_base.apply_idms_to_hosted_cluster(
+                    name=cluster_name, idms_json_dict=idms_data, replace=False
+                )
+        else:
+            self.create_idms_for_unreleased_catalog()
         self._create_catalog(
             self.unreleased_catalog_full_image, self.unreleased_catalog_name
         )
+        if not is_hosted:
+            wait_for_machineconfigpool_status("all", force_delete_pods=False)
 
     def create_disconnected_catalog(self):
         # in case of disconnected environment, we have to mirror all the
@@ -201,6 +220,11 @@ class Operator:
             idms=idms,
         )
         self._create_catalog(mirrored_index_image, self.unreleased_catalog_name)
+        # Import here to avoid circular import
+        from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
+
+        if not is_hosted_cluster(config.ENV_DATA.get("cluster_name")):
+            wait_for_machineconfigpool_status("all", force_delete_pods=False)
 
     @retry(CommandFailed, tries=5, delay=30, backoff=1)
     def is_available(self):
@@ -275,10 +299,53 @@ class Operator:
         """
         pass
 
+    def operatorgroup_exists(self):
+        """
+        Check if an OperatorGroup already exists in the namespace.
+
+        This is important for platforms like Fusion Data Foundation where
+        the platform controller (e.g., OdfManager) may create and manage
+        the OperatorGroup automatically.
+
+        Returns:
+            bool: True if at least one OperatorGroup exists, False otherwise
+
+        Raises:
+            CommandFailed: If checking for existing OperatorGroups fails
+        """
+        ocp = OCP(kind="operatorgroup", namespace=self.namespace)
+        try:
+            count = len(ocp.get().get("items", []))
+            if count > 0:
+                logger.info(
+                    "Found %s existing OperatorGroup(s) in namespace %s",
+                    count,
+                    self.namespace,
+                )
+            return count > 0
+        except CommandFailed as e:
+            logger.warning(
+                "Failed to check for existing OperatorGroup in %s: %s",
+                self.namespace,
+                e,
+            )
+            raise
+
     def create_operatorgroup(self):
         """
-        Create an OperatorGroup for the operator
+        Create an OperatorGroup for the operator.
+
+        If an OperatorGroup already exists in the namespace, skip creation
+        to avoid OLM errors (TooManyOperatorGroups). This handles cases where
+        platform operators (e.g., Fusion OdfManager) create OperatorGroups.
         """
+        if self.operatorgroup_exists():
+            logger.info(
+                "OperatorGroup already exists in namespace %s, skipping creation",
+                self.namespace,
+            )
+            return
+
         operatorgroup_data = templating.load_yaml(
             os.path.join(OPERATORS_TEMPLATES_DIR, "operatorgroup.yaml")
         )

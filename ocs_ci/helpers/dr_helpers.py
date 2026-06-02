@@ -4,6 +4,7 @@ Helper functions specific for DR
 
 import json
 import logging
+import os
 import tempfile
 import time
 from datetime import datetime
@@ -13,6 +14,9 @@ from novaclient.exceptions import ResourceNotFound
 
 from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 
+import yaml
+
+from ocs_ci.deployment.fusion_data_foundation import FusionDataFoundationDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.cluster import is_hci_cluster
@@ -30,7 +34,7 @@ from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_ceph_tools_pod,
-    get_pods_having_label,
+    get_odf_external_snapshotter_leader,
     wait_for_matching_pattern_in_pod_logs,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
@@ -40,15 +44,20 @@ from ocs_ci.ocs.node import (
     get_node_internal_ip,
     get_worker_nodes,
 )
+from ocs_ci.ocs.resources.storage_cluster import StorageCluster, validate_serviceexport
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.utils import (
+    enable_literal_block_style,
     get_non_acm_cluster_config,
     get_active_acm_index,
     get_primary_cluster_config,
     get_passive_acm_index,
     enable_mco_console_plugin,
+    is_hostnetwork_enabled,
     set_recovery_as_primary,
     get_all_acm_indexes,
     get_non_acm_cluster_and_non_provider_cluster_config,
+    get_non_acm_cluster_indexes,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -56,15 +65,18 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     CommandFailed,
+    clone_repo,
     run_cmd,
     exec_cmd,
     is_cluster_y_version_upgraded,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
     find_cephblockpoolradosnamespace,
     find_cephfilesystemsubvolumegroup,
     create_unique_resource_name,
+    find_radosnamespace,
 )
 from ocs_ci.helpers import helpers
 
@@ -384,6 +396,46 @@ def relocate(
     config.switch_ctx(restore_index)
 
 
+def check_rbd_mirror_running(namespace=None):
+    """
+    Check if the rbd-mirror daemon deployment is running with at least one ready replica.
+    Ceph HEALTH_OK does not reflect rbd-mirror daemon absence, so this explicit
+    check is needed to catch silent failures before tests run.
+
+    Args:
+        namespace (str): Namespace to check in.
+            Defaults to config.ENV_DATA['cluster_namespace'].
+
+    Returns:
+        bool: True if rbd-mirror deployment has ready replicas
+
+    Raises:
+        UnexpectedDeploymentConfiguration: If the rbd-mirror deployment is
+            not found or not running
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    dep_ocp = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    try:
+        dep_data = dep_ocp.get(resource_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT)
+    except CommandFailed:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} deployment not found in {namespace}"
+        )
+    spec_replicas = dep_data.get("spec", {}).get("replicas") or 0
+    ready_replicas = dep_data.get("status", {}).get("readyReplicas") or 0
+    if spec_replicas < 1 or ready_replicas < 1:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is not running: "
+            f"spec.replicas={spec_replicas}, status.readyReplicas={ready_replicas}"
+        )
+    logger.info(
+        f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is running: "
+        f"replicas={spec_replicas}, readyReplicas={ready_replicas}"
+    )
+    return True
+
+
 def check_mirroring_status_ok(
     replaying_images=None,
     replaying_groups=None,
@@ -420,8 +472,20 @@ def check_mirroring_status_ok(
         if not cephbpradosns:
             raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
 
-        if "ocs-storagecluster-cephblockpool" not in cephbpradosns:
-            cephbpradosns = "ocs-storagecluster-cephblockpool-" + cephbpradosns
+        if (
+            "ocs-storagecluster-cephblockpool" not in cephbpradosns
+            and "replicated-metadata-pool" not in cephbpradosns
+        ):
+            cephblockpool_rns_names = [
+                cephbprns_data["metadata"]["name"]
+                for cephbprns_data in ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).get()["items"]
+            ]
+            cephbpradosns = list(
+                filter(lambda x: f"-{cephbpradosns}" in x, cephblockpool_rns_names)
+            )[0]
 
         logger.info(f"Got cephblockpoolradosnamespace {cephbpradosns}")
 
@@ -434,7 +498,17 @@ def check_mirroring_status_ok(
         )
     else:
         if ocs_version >= version.VERSION_4_19:
-            cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
+            # The name of builtin-implicit cephblockpoolradosnamespace is different in EC cluster and non EC cluster
+            cephblockpool_rns_names = [
+                cephbprns_data["metadata"]["name"]
+                for cephbprns_data in ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).get()["items"]
+            ]
+            cephbpradosns = list(
+                filter(lambda x: "-builtin-implicit" in x, cephblockpool_rns_names)
+            )[0]
             cbp_obj = ocp.OCP(
                 kind=constants.CEPHBLOCKPOOLRADOSNS,
                 namespace=config.ENV_DATA["cluster_namespace"],
@@ -1378,7 +1452,7 @@ def verify_backend_volume_deletion(
         cephbpradosns = (
             cephblockpoolradosns
             or config.ENV_DATA.get("radosnamespace_name", None)
-            or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
+            or find_radosnamespace(storageclient_uid=storageclient_uid)
         )
 
         if not cephbpradosns:
@@ -1457,15 +1531,29 @@ def get_all_drpolicy():
     config.switch_acm_ctx()
     return_drpolicy_list = []
     current_managed_clusters_list = []
-    acm_hub_name = config.get_cluster_name_by_index(get_active_acm_index())
     with config.RunWithAcmConfigContext():
         drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
         drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
+    # Build list of managed clusters for DR
+    # Include clusters with rbd_dr_scenario (RDR) or in metro-dr mode (MDR)
+    # Exclude all ACM hubs (both active and passive) as they are not managed clusters
+    multicluster_mode = config.MULTICLUSTER.get("multicluster_mode")
+    acm_indexes = get_all_acm_indexes()
+
     for cluster_name in config.clusters:
-        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+        cluster_index = cluster_name.MULTICLUSTER.get("multicluster_index")
+        # Skip ACM hub clusters
+        if cluster_index in acm_indexes:
+            continue
+
+        if (
+            cluster_name.ENV_DATA.get("rbd_dr_scenario")
+            or multicluster_mode == constants.MDR_MODE
+        ):
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )
+
     dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     if dr_cluster_relations:
         current_managed_clusters_list = [
@@ -1473,8 +1561,6 @@ def get_all_drpolicy():
             for item in dr_cluster_relations[0]
             if is_hosted_cluster(cluster_name=item)
         ]
-    else:
-        current_managed_clusters_list.remove(acm_hub_name)
 
     for drpolicy in drpolicy_list:
 
@@ -1697,12 +1783,71 @@ def get_all_drclusters():
     return drclusters
 
 
-def get_managed_cluster_node_ips():
+def ordered_unique_cidrs(cidrs):
     """
-    Gets node ips of individual managed clusters for enabling fencing on MDR DRCluster configuration
+    Preserve order while removing duplicates
+    """
+    seen = set()
+    ordered = []
+    for cidr in cidrs:
+        if not cidr or cidr in seen:
+            continue
+        seen.add(cidr)
+        ordered.append(cidr)
+    return ordered
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
+def get_fencing_cidrs_from_drclusterconfig(cluster_name):
+    """
+    Read fencing CIDRs from DRClusterConfig.status.storageAccessDetails on the
+    current (managed) cluster context (ODF 4.21+ / Ramen).
+
+    Prefers the DRClusterConfig named like the managed cluster, then RBD CSI
+    provisioner entries, with sensible fallbacks.
+
+    Args:
+        cluster_name (str): Managed cluster name (matches DRCluster / DRClusterConfig name on hub)
 
     Returns:
-        cluster (list): Returns list of managed cluster, indexes and their node IPs
+        list: CIDR strings for hub DRCluster.spec.cidrs
+
+    Raises:
+        UnexpectedBehaviour: If CIDRs are not yet published or cannot be determined
+    """
+    drc_ocp = ocp.OCP(kind=constants.DRCLUSTERCONFIG)
+    items = (drc_ocp.get(silent=True) or {}).get("items") or []
+    if not items:
+        raise UnexpectedBehaviour(
+            "No DRClusterConfig resources found on managed cluster"
+        )
+    configs = [i for i in items if i.get("metadata", {}).get("name") == cluster_name]
+
+    cidrs = []
+    for item in configs:
+        details = (item.get("status") or {}).get("storageAccessDetails") or []
+        for detail in details:
+            detail_cidrs = detail.get("cidrs") or []
+            cidrs.extend(detail_cidrs)
+
+    cidrs = ordered_unique_cidrs(cidrs)
+    if not cidrs:
+        raise UnexpectedBehaviour(
+            f"DRClusterConfig on cluster {cluster_name} has no status.storageAccessDetails.cidrs yet"
+        )
+    logger.info(
+        f"Collected {len(cidrs)} fencing CIDR(s) from DRClusterConfig for {cluster_name}"
+    )
+
+    return cidrs
+
+
+def get_managed_cluster_node_ips():
+    """
+    Gets node ips of individual managed clusters for enabling fencing from each managed cluster's DRClusterConfig
+
+    Returns:
+        list: [[managed_cluster_name, multicluster_index, [cidr, ...]], ...]
 
     """
     primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
@@ -1719,16 +1864,10 @@ def get_managed_cluster_node_ips():
     ]
     for cluster in cluster_data:
         config.switch_ctx(cluster[1])
-        logger.info(f"Getting node IPs on managed cluster: {cluster[0]}")
-        node_obj = ocp.OCP(kind=constants.NODE).get()
-        external_ips = []
-        for node in node_obj.get("items"):
-            addresses = node.get("status").get("addresses")
-            for address in addresses:
-                if address.get("type") == "ExternalIP":
-                    external_ips.append(address.get("address"))
-        external_ips_with_cidr = [f"{ip}/32" for ip in external_ips]
-        cluster.append(external_ips_with_cidr)
+        logger.info(
+            f"Reading fencing CIDRs from DRClusterConfig on managed cluster {cluster[0]}"
+        )
+        cluster.append(get_fencing_cidrs_from_drclusterconfig(cluster[0]))
     return cluster_data
 
 
@@ -1756,32 +1895,60 @@ def enable_fence(drcluster_name, switch_ctx=None):
     config.switch_ctx(restore_index)
 
 
+@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
+def verify_drcluster_validated_on_hub(drcluster_name, switch_ctx=None):
+    """
+    Wait until hub DRCluster reports a successful validation condition.
+
+    Ramen surfaces hub reconciliation via status.conditions (reason/type
+    Validated or legacy Succeeded).
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    dr_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    data = dr_obj.get()
+    conditions = (data.get("status") or {}).get("conditions") or []
+    for cond in conditions:
+        if cond.get("status") != "True":
+            continue
+        reason = cond.get("reason") or ""
+        ctype = cond.get("type") or ""
+        if reason in constants.DRPOLICY_SUCCESS_REASONS:
+            logger.info(f"DRCluster {drcluster_name} validation OK ({reason or ctype})")
+            config.switch_ctx(restore_index)
+            return True
+        if ctype.lower() == "validated":
+            logger.info(f"DRCluster {drcluster_name} validation OK (type={ctype})")
+            config.switch_ctx(restore_index)
+            return True
+    config.switch_ctx(restore_index)
+    raise UnexpectedBehaviour(
+        f"DRCluster {drcluster_name} not validated yet; conditions={conditions}"
+    )
+
+
 def configure_drcluster_for_fencing():
     """
     Configures DRClusters for enabling fencing
 
     """
     old_ctx = config.cur_index
-    cluster_ip_list = get_managed_cluster_node_ips()
+    cluster_rows = get_managed_cluster_node_ips()
     config.switch_acm_ctx()
-    for cluster in cluster_ip_list:
+    for cluster in cluster_rows:
+        drcluster_name = cluster[0]
         fence_ip_data = json.dumps({"spec": {"cidrs": cluster[2]}})
         fence_ip_cmd = (
-            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_ip_data}'"
+            f"oc patch drcluster {drcluster_name} --type merge -p '{fence_ip_data}'"
         )
-        logger.info(f"Patching DRCluster: {cluster[0]} to add node IP addresses")
+        logger.info(
+            f"Patching hub DRCluster {drcluster_name} with CIDRs from managed-cluster DRClusterConfig"
+        )
         run_cmd(fence_ip_cmd)
 
-        fence_annotation_data = """{"metadata": {"annotations": {
-        "drcluster.ramendr.openshift.io/storage-clusterid": "openshift-storage",
-        "drcluster.ramendr.openshift.io/storage-driver": "openshift-storage.rbd.csi.ceph.com",
-        "drcluster.ramendr.openshift.io/storage-secret-name": "rook-csi-rbd-provisioner",
-        "drcluster.ramendr.openshift.io/storage-secret-namespace": "openshift-storage" } } }"""
-        fencing_annotation_cmd = (
-            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_annotation_data}'"
-        )
-        logger.info(f"Patching DRCluster: {cluster[0]} to add fencing annotations")
-        run_cmd(fencing_annotation_cmd)
+    verify_drpolicy_cli()
+    for cluster in cluster_rows:
+        verify_drcluster_validated_on_hub(cluster[0])
 
     config.switch_ctx(old_ctx)
 
@@ -1968,17 +2135,27 @@ def verify_drpolicy_cli(switch_ctx=None):
     restore_index = config.cur_index
     config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
-    status = drpolicy_obj.get().get("items")[0].get("status").get("conditions")[0]
-    if status.get("reason") == "Succeeded":
-        logger.info("DRPolicy validation succeeded")
+    drpolicy_items = drpolicy_obj.get().get("items") or []
+    if not drpolicy_items:
         config.switch_ctx(restore_index)
-        return True
-    else:
-        logger.warning(f"DRPolicy is not in succeeded or validated state: {status}")
-        config.switch_ctx(restore_index)
-        raise UnexpectedBehaviour(
-            f"DRPolicy is not in succeeded or validated state: {status}"
-        )
+        raise UnexpectedBehaviour("No DRPolicy resources found on hub")
+    conditions = drpolicy_items[0].get("status", {}).get("conditions") or []
+    for cond in conditions:
+        if cond.get("status") != "True":
+            continue
+        reason = cond.get("reason") or ""
+        if reason in constants.DRPOLICY_SUCCESS_REASONS:
+            logger.info(f"DRPolicy validation succeeded (reason={reason})")
+            config.switch_ctx(restore_index)
+            return True
+    logger.warning(
+        f"DRPolicy is not in succeeded or validated state; conditions={conditions}"
+    )
+    config.switch_ctx(restore_index)
+    raise UnexpectedBehaviour(
+        "DRPolicy is not in succeeded or validated state "
+        f"(expected reason in {sorted(constants.DRPOLICY_SUCCESS_REASONS)})"
+    )
 
 
 @retry(UnexpectedBehaviour, tries=25, delay=5, backoff=5)
@@ -2711,20 +2888,25 @@ def create_service_exporter(annotate=True):
     for cluster in managed_clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
-        if (
+
+        if not (
             cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
-            or get_provider_service_type() == "NodePort"
+            and get_provider_service_type() == "NodePort"
+            or is_hostnetwork_enabled()
         ):
-            logger.info("Skipping ServiceExport creation for multiclient cluster")
-            continue
+            logger.info("Checking if multiClusterService exists")
+            create_multiclusterservice_dr()
+        else:
+            logger.info("Skipping multiClusterService creation for multiclient cluster")
         logger.info("Creating Service exporter")
         run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
 
         if annotate:
+            cluster_type = cluster.ENV_DATA.get("cluster_type", "").lower()
             if (
                 config.ENV_DATA.get("odf_provider_mode_deployment")
-                and cluster.ENV_DATA.get("cluster_type").lower()
-                == constants.HCI_PROVIDER
+                or cluster_type == constants.HCI_PROVIDER
+                or get_provider_service_type() == "NodePort"
             ):
                 cluster_address = get_node_internal_ip(
                     get_node_objs(get_worker_nodes()[0])[0]
@@ -2840,9 +3022,7 @@ def validate_volumegroupsnapshot(vgs_namespace):
 
     """
     namespace = config.ENV_DATA["cluster_namespace"]
-    odf_external_snapshotter_pod = get_pods_having_label(
-        constants.ODF_EXTERNAL_SNAPSHOTTER, namespace
-    )
+    odf_external_snapshotter_leader = get_odf_external_snapshotter_leader(namespace)
     vgs_name = get_vgs_name(vgs_namespace)
     expected_output_lst = (
         f"{vgs_name} was successfully created by the CSI driver",
@@ -2851,26 +3031,16 @@ def validate_volumegroupsnapshot(vgs_namespace):
     try:
         for expected_val in expected_output_lst:
             wait_for_matching_pattern_in_pod_logs(
-                pod_name=odf_external_snapshotter_pod[0]["metadata"]["name"],
+                pod_name=odf_external_snapshotter_leader.name,
                 pattern=expected_val,
                 namespace=namespace,
                 timeout=300,
                 sleep=5,
             )
     except TimeoutExpiredError:
-        if len(odf_external_snapshotter_pod) > 1:
-            for expected_val in expected_output_lst:
-                wait_for_matching_pattern_in_pod_logs(
-                    pod_name=odf_external_snapshotter_pod[1]["metadata"]["name"],
-                    pattern=expected_val,
-                    namespace=namespace,
-                    timeout=300,
-                    sleep=5,
-                )
-        else:
-            raise UnexpectedBehaviour(
-                f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
-            )
+        raise UnexpectedBehaviour(
+            f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
+        )
 
 
 def is_cg_cephfs_enabled():
@@ -2884,6 +3054,152 @@ def is_cg_cephfs_enabled():
     vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
 
     return vgsc.is_exist(resource_name=resource_name)
+
+
+def create_ingress_cert_dr(
+    cert_name="user-ca-bundle",
+    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+    patch_proxy=True,
+):
+
+    non_acm_indexes = get_non_acm_cluster_indexes()
+    ingress_data = templating.load_yaml(constants.OC_INGRESS_CERT_YAML)
+    LiteralString = enable_literal_block_style()
+    ssl_data = []
+
+    # Save original context to restore later
+    original_index = config.cur_index
+
+    for non_acm_index in non_acm_indexes:
+        config.switch_ctx(non_acm_index)
+        default_ingress_cert = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=constants.DEFAULT_INGRESS_CRT_OPENSHIFT,
+            namespace=constants.OPENSHIFT_CONFIG_MANAGED_NAMESPACE,
+        )
+
+        ssl_data.append(
+            default_ingress_cert.get()["data"]["ca-bundle.crt"].strip() + "\n"
+        )
+        ingress_data["data"]["ca-bundle.crt"] = LiteralString("".join(ssl_data))
+        ingress_data["metadata"]["name"] = cert_name
+        ingress_data["metadata"]["namespace"] = namespace
+        ingress_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="ingress_cert_", delete=False
+        )
+        templating.dump_data_to_temp_yaml(ingress_data, ingress_file.name)
+
+    # Restore original context
+    config.switch_ctx(original_index)
+
+    for cluster in config.clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+        is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+
+        if not is_hosted:
+            with config.RunWithConfigContext(index):
+                # Skip proxy patches and MachineConfigPool waits for hosted (HCP) clusters
+                is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+
+                logger.info(f"[{cluster_name}] Creating Ingress cert")
+                run_cmd(cmd=f"oc apply -f {ingress_file.name}")
+
+                if patch_proxy and not is_hosted:
+                    logger.info(f"[{cluster_name}] Proxy patch")
+                    cmd = (
+                        f"oc patch proxy/cluster --type=merge "
+                        f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{cert_name}"}}}}}}\''
+                    )
+                    run_cmd(cmd=cmd)
+
+    for cluster in config.clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+        is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+
+        if not is_hosted:
+            with config.RunWithConfigContext(index):
+                logger.info(
+                    f"[{cluster_name}] Waiting for MachineConfigPool to be updated"
+                )
+                wait_for_machineconfigpool_status(node_type="all")
+
+
+def create_multiclusterservice_dr():
+    """
+    This function is used to create multiClusterService used for RDR
+
+    Returns:
+        bool: true when multiClusterService already exists
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    try:
+        if (
+            storage_cluster.data.get("spec")
+            .get("network")
+            .get("multiClusterService")
+            .get("enabled")
+        ):
+            logger.info("Found multiClusterService skipping creation")
+            return
+    except AttributeError:
+        logger.info("multiClusterService not found creating now")
+    ptch = (
+        f'\'{{"spec": {{"network": {{"multiClusterService": '
+        f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
+        f'"enabled": true}}}}}}}}\''
+    )
+    ptch_cmd = (
+        f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+        f"-n openshift-storage  --type merge --patch {ptch}"
+    )
+    run_cmd(ptch_cmd)
+    storage_cluster.reload_data()
+    assert (
+        storage_cluster.data.get("spec")
+        .get("network")
+        .get("multiClusterService")
+        .get("enabled")
+    ), "Failed to update StorageCluster globalnet"
+    validate_serviceexport()
+
+
+def setup_fdf_catsrc_for_hub():
+    """
+    This function creates fdf catalogsource on hub
+
+    """
+    logger.info("Creating FDF specific resource")
+
+    fdf = FusionDataFoundationDeployment()
+    fdf.create_image_tag_mirror_set()
+    fdf.create_image_digest_mirror_set()
+    logger.info("Creating FDF Catsrc from Primary")
+    isf_data_foundation_catsrc = templating.load_yaml(constants.FDF_CATSRC_CR)
+    isf_data_foundation_catsrc["spec"]["image"] = (
+        constants.FDF_CATSRC_IMAGE_PATH + ":" + config.DEPLOYMENT.get("fdf_image_tag")
+    )
+    isf_data_foundation_catsrc_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="isf_df_catsrc", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        isf_data_foundation_catsrc, isf_data_foundation_catsrc_yaml.name
+    )
+
+    wait_for_machineconfigpool_status("all", timeout=1800)
+    run_cmd(f"oc apply -f {isf_data_foundation_catsrc_yaml.name}")
+    fdf_catalog_source = CatalogSource(
+        resource_name=constants.FDF_CATALOG_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+
+    logger.info("Waiting for CatalogSource to be READY")
+    fdf_catalog_source.wait_for_state("READY")
 
 
 def validate_protection_label(kind, namespace, protection_name=None):
@@ -2920,3 +3236,182 @@ def validate_protection_label(kind, namespace, protection_name=None):
     logger.info(
         f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
     )
+
+
+def generate_rdr_mirror_images():
+    """
+    Extract and return list of container images from RDR workload repository.
+
+    Returns:
+        list: List of container image strings for mirroring in disconnected environments
+    """
+    # Check whether deployment is disconnected
+    if config.DEPLOYMENT.get("disconnected"):
+
+        workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
+        logger.info(f"Repo used: {workload_repo_url}")
+        workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
+        clone_repo(
+            url=workload_repo_url,
+            location="/tmp/ocs-workload-repo",
+            branch=workload_repo_branch,
+        )
+
+        # List all Kubernetes container images under rdr/ folder
+        rdr_path = "/tmp/ocs-workload-repo/rdr"
+        if os.path.exists(rdr_path):
+            logger.info(f"Extracting Kubernetes container images from {rdr_path}:")
+            images_found = set()
+
+            for root, dirs, files in os.walk(rdr_path):
+                for file in files:
+                    # Process YAML files
+                    if file.lower().endswith((".yaml", ".yml")):
+                        yaml_file_path = os.path.join(root, file)
+                        relative_path = os.path.relpath(yaml_file_path, rdr_path)
+
+                        try:
+                            with open(yaml_file_path, "r") as f:
+                                yaml_content = yaml.safe_load_all(f)
+
+                                for doc in yaml_content:
+                                    if doc:
+                                        # Extract images from the YAML document
+                                        images = extract_images_from_yaml(doc)
+                                        for image in images:
+                                            if image not in images_found:
+                                                images_found.add(image)
+                                                logger.info(
+                                                    f"  - {image} (from {relative_path})"
+                                                )
+                        except Exception as e:
+                            logger.warning(f"Failed to parse {relative_path}: {e}")
+
+            # Convert set to sorted list for consistent ordering
+            image_list = sorted(list(images_found))
+
+            if image_list:
+                logger.info(f"Total unique container images found: {len(image_list)}")
+                logger.info("Images ready for mirroring in disconnected environment")
+            else:
+                logger.warning("No container images found in YAML files")
+            logger.info(image_list)
+            return image_list
+        else:
+            logger.warning(f"RDR path does not exist: {rdr_path}")
+            return []
+
+    return []
+
+
+def apply_itms_to_managed_clusters(itms_file_path):
+    """
+    Apply itms configuration to all managed clusters and wait for MCP to complete.
+
+    Args:
+        itms_file_path (str): Path to the itms-oc-mirror.yaml file
+    """
+    logger.info("Applying itms to managed clusters")
+
+    # Get all managed cluster configs
+    managed_clusters = get_non_acm_cluster_config()
+
+    if not managed_clusters:
+        logger.warning("No managed clusters found")
+        return
+
+    # Store original context to restore later
+    original_ctx = config.cur_index
+
+    try:
+        for cluster_config in managed_clusters:
+            cluster_name = cluster_config.ENV_DATA.get("cluster_name", "unknown")
+            logger.info(f"Applying itms to managed cluster: {cluster_name}")
+
+            # Switch to the managed cluster context
+            cluster_index = cluster_config.MULTICLUSTER.get("multicluster_index")
+            if cluster_index is not None:
+                config.switch_ctx(cluster_index)
+
+                try:
+                    # Apply the itms file
+                    run_cmd(f"oc apply -f {itms_file_path}")
+                    logger.info(f"Successfully applied itms to {cluster_name}")
+
+                    # Wait for MachineConfigPool to complete
+                    logger.info(
+                        f"Waiting for MachineConfigPool to complete on {cluster_name}"
+                    )
+                    wait_for_machineconfigpool_status("all", timeout=1800)
+                    logger.info(f"MachineConfigPool update completed on {cluster_name}")
+
+                except CommandFailed as e:
+                    logger.error(f"Failed to apply itms to {cluster_name}: {e}")
+                    raise
+                except Exception as e:
+                    logger.error(
+                        f"Error during itms application to {cluster_name}: {e}"
+                    )
+                    raise
+            else:
+                logger.warning(f"Could not find cluster index for {cluster_name}")
+
+    finally:
+        # Restore original context
+        config.switch_ctx(original_ctx)
+        logger.info("Restored original cluster context")
+
+
+def extract_images_from_yaml(obj, images=None):
+    """
+    Recursively extract container image references from a YAML object.
+    Extracts values from 'image', 'url', and 'value' keys that contain image references.
+
+    Args:
+        obj: YAML object (dict, list, or primitive)
+        images: Set to collect images (created if None)
+
+    Returns:
+        set: Set of container image strings
+    """
+    if images is None:
+        images = set()
+
+    if isinstance(obj, dict):
+        # Check for 'image', 'url', and 'value' keys that contain image references
+        for key in ["image", "url", "value"]:
+            if key in obj and isinstance(obj[key], str):
+                # Only add if it looks like a container image reference
+                # (contains registry path or common image patterns)
+                value = obj[key].strip()
+                if value and ("/" in value or ":" in value):
+                    # Skip obvious non-image schemes (URLs, git refs, file paths)
+                    if any(
+                        value.startswith(scheme)
+                        for scheme in ["http://", "https://", "git://", "git@"]
+                    ):
+                        continue
+                    if "://" in value and not value.startswith("docker://"):
+                        continue
+                    # Require either a registry-like domain (contains '.' or ':' before first '/')
+                    # or typical image pattern (path segments with optional :tag or @sha256:)
+                    first_slash = value.find("/")
+                    if first_slash > 0:
+                        # Check if there's a domain-like prefix before the first slash
+                        prefix = value[:first_slash]
+                        if "." in prefix or ":" in prefix:
+                            images.add(value)
+                    elif ":" in value and not value.startswith("/"):
+                        # Simple image:tag format without registry
+                        images.add(value)
+
+        # Recursively process all values
+        for value in obj.values():
+            extract_images_from_yaml(value, images)
+
+    elif isinstance(obj, list):
+        # Recursively process all items
+        for item in obj:
+            extract_images_from_yaml(item, images)
+
+    return images

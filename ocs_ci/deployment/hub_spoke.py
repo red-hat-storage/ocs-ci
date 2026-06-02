@@ -2084,10 +2084,16 @@ class HypershiftHostedOCP(
         Returns:
             str: Name of the hosted cluster
         """
-        ocp_version = str(config.ENV_DATA["clusters"][self.name].get("ocp_version"))
-        if ocp_version and len(ocp_version.split(".")) == 2:
-            # if ocp_version is provided in form x.y, we need to get the full form x.y.z
-            ocp_version = get_ocp_ga_version(ocp_version)
+        hcp_image = config.ENV_DATA["clusters"].get(self.name).get("hcp_image")
+        ocp_version = None
+
+        # Find image using OCP version if an image is not provided
+        if not hcp_image:
+            ocp_version = str(config.ENV_DATA["clusters"][self.name].get("ocp_version"))
+            if ocp_version and len(ocp_version.split(".")) == 2:
+                # if ocp_version is provided in form x.y, we need to get the full form x.y.z
+                ocp_version = get_ocp_ga_version(ocp_version)
+
         # use default value 6 for cpu_cores_per_hosted_cluster as used in create_kubevirt_ocp_cluster()
         cpu_cores_per_hosted_cluster = (
             config.ENV_DATA["clusters"]
@@ -2179,6 +2185,7 @@ class HypershiftHostedOCP(
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
                 auto_repair=auto_repair,
+                hcp_image=hcp_image,
             )
         else:
             return self.create_kubevirt_ocp_cluster(
@@ -2192,6 +2199,7 @@ class HypershiftHostedOCP(
                 disable_default_sources=disable_default_sources,
                 data_replication_separation=data_replication_separation,
                 auto_repair=auto_repair,
+                hcp_image=hcp_image,
             )
 
     def deploy_dependencies(

@@ -240,7 +240,13 @@ class OCP(object):
 
     @retry(CommandFailed, tries=3, delay=30, backoff=1)
     def exec_oc_debug_cmd(
-        self, node, cmd_list, timeout=300, namespace="default", use_root=True
+        self,
+        node,
+        cmd_list,
+        timeout=300,
+        namespace="default",
+        use_root=True,
+        secrets=None,
     ):
         """
         Function to execute "oc debug" command on OCP node
@@ -252,6 +258,8 @@ class OCP(object):
             namespace (str): Namespace name which will be used to create debug pods
                 It will use default namespace if not specified. openshift-stroage
                 namespace cannot be used from 4.19 because we are hitting: violates PodSecurity
+            use_root (bool): Whether to use root user or not for running the command.
+            secrets (list): A list of secrets to be masked with asterisks in logs.
 
         Returns:
             out (str): Returns output of the executed command/commands
@@ -273,7 +281,12 @@ class OCP(object):
             f' -- {root_option} "{cmd}"'
         )
         out = str(
-            self.exec_oc_cmd(command=debug_cmd, out_yaml_format=False, timeout=timeout)
+            self.exec_oc_cmd(
+                command=debug_cmd,
+                out_yaml_format=False,
+                timeout=timeout,
+                secrets=secrets,
+            )
         )
         if err_msg in out:
             raise CommandFailed
@@ -748,6 +761,8 @@ class OCP(object):
 
         """
         command = ["oc", "login", "-u", user, "-p", password]
+        if self.skip_tls_verify:
+            command.append("--insecure-skip-tls-verify")
         status = exec_cmd(
             command, secrets=[password], threading_lock=self.threading_lock
         )

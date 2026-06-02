@@ -63,7 +63,11 @@ def test_deployment(pvc_factory, pod_factory):
                             f"Running standard sanity check for cluster '{cluster_name}'"
                         )
                         sanity_helpers = Sanity()
-                    sanity_helpers.health_check()
+                    sanity_helpers.health_check(
+                        fix_ceph_health=True,
+                        update_jira=True,
+                        no_exception_if_jira_issue_updated=True,
+                    )
                     sanity_helpers.delete_resources()
                 logger.info(f"Restoring context to index {restore_ctx_index}")
                 config.switch_ctx(restore_ctx_index)

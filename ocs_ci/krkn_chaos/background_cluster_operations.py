@@ -27,13 +27,12 @@ from contextlib import suppress
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, node as node_helpers, ocp
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import pvc as pvc_helpers
 from ocs_ci.ocs.resources import job as job_helpers
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
-from ocs_ci.ocs import node as node_helpers
 from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     CommandFailed,
@@ -914,7 +913,7 @@ class BackgroundClusterOperations:
             workload_pvcs = []
             for idx, workload in enumerate(self.workloads[:num_pvcs]):
                 log.debug(
-                    f"Checking workload {idx+1}/{num_pvcs}: "
+                    f"Checking workload {idx + 1}/{num_pvcs}: "
                     f"type={type(workload).__name__}, "
                     f"has_pvc_objs={hasattr(workload, 'pvc_objs')}, "
                     f"has_pvc_obj={hasattr(workload, 'pvc_obj')}, "

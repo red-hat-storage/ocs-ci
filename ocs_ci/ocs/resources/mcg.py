@@ -807,7 +807,7 @@ class MCG:
                 f"with policy {namespace_policy_type} is not supported"
             )
 
-    def check_if_mirroring_is_done(self, bucket_name, timeout=300):
+    def check_if_mirroring_is_done(self, bucket_name, timeout=900):
         """
         Check whether all object chunks in a bucket
         are mirrored across all backing stores.
@@ -823,30 +823,42 @@ class MCG:
 
         def _get_mirroring_percentage():
             results = []
-            obj_list = (
-                self.send_rpc_query(
-                    "object_api", "list_objects", params={"bucket": bucket_name}
-                )
-                .json()
-                .get("reply")
-                .get("objects")
-            )
-
-            for written_object in obj_list:
-                object_chunks = (
+            try:
+                obj_list = (
                     self.send_rpc_query(
-                        "object_api",
-                        "read_object_mapping",
-                        params={
-                            "bucket": bucket_name,
-                            "key": written_object.get("key"),
-                            "obj_id": written_object.get("obj_id"),
-                        },
+                        "object_api", "list_objects", params={"bucket": bucket_name}
                     )
                     .json()
-                    .get("reply")
-                    .get("chunks")
+                    .get("reply", {})
+                    .get("objects", [])
                 )
+            except Exception as e:
+                logger.warning(f"Failed to list objects for mirroring check: {e}")
+                raise
+
+            for written_object in obj_list:
+                try:
+                    object_chunks = (
+                        self.send_rpc_query(
+                            "object_api",
+                            "read_object_mapping",
+                            params={
+                                "bucket": bucket_name,
+                                "key": written_object.get("key"),
+                                "obj_id": written_object.get("obj_id"),
+                            },
+                        )
+                        .json()
+                        .get("reply", {})
+                        .get("chunks", [])
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to read object mapping for "
+                        f"{written_object.get('key')}: {e}"
+                    )
+                    results.append(False)
+                    continue
 
                 for object_chunk in object_chunks:
                     mirror_blocks = object_chunk.get("frags")[0].get("blocks")
@@ -858,29 +870,38 @@ class MCG:
                         results.append(True)
                     else:
                         results.append(False)
+            if not results:
+                return 0.0
             current_percentage = (results.count(True) / len(results)) * 100
             return current_percentage
 
-        mirror_percentage = _get_mirroring_percentage()
-        logger.info(f"{mirror_percentage}% mirroring is done.")
-        previous_percentage = 0
-        while mirror_percentage < 100:
-            previous_percentage = mirror_percentage
-            try:
-                for mirror_percentage in TimeoutSampler(
-                    timeout, 5, _get_mirroring_percentage
+        max_mirror_percentage = None
+        try:
+            for mirror_percentage in TimeoutSampler(
+                timeout, 30, _get_mirroring_percentage
+            ):
+                if (
+                    max_mirror_percentage is None
+                    or mirror_percentage > max_mirror_percentage
                 ):
-                    if previous_percentage == mirror_percentage:
-                        logger.warning("The mirroring process is stuck.")
-                    else:
-                        break
-            except TimeoutExpiredError:
-                logger.error(
-                    f"The mirroring process is stuck from last {timeout} seconds."
-                )
-                assert False
-            mirror_percentage = _get_mirroring_percentage()
-        logger.info("All objects mirrored successfully.")
+                    max_mirror_percentage = mirror_percentage
+                logger.info(f"Mirroring is {mirror_percentage}% done.")
+                if mirror_percentage >= 100:
+                    logger.info("All objects mirrored successfully.")
+                    return
+        except TimeoutExpiredError as err:
+            observed = (
+                f"{max_mirror_percentage}%"
+                if max_mirror_percentage is not None
+                else "unknown"
+            )
+            logger.error(
+                f"Mirroring did not complete within {timeout}s. "
+                f"Max percentage reached: {observed}"
+            )
+            raise AssertionError(
+                f"Mirroring reached {observed} but did not complete after {timeout}s"
+            ) from err
 
     def check_backingstore_state(self, backingstore_name, desired_state, timeout=600):
         """
@@ -1265,6 +1286,19 @@ class MCG:
         )
 
         self.s3_client = self.s3_resource.meta.client
+
+    @property
+    def iam_client(self):
+        if not hasattr(self, "_iam_client") or self._iam_client is None:
+            self._iam_client = boto3.client(
+                "iam",
+                endpoint_url=self.iam_endpoint,
+                aws_access_key_id=self.access_key_id,
+                aws_secret_access_key=self.access_key,
+                verify=retrieve_verification_mode(),
+                region_name=self.region or None,
+            )
+        return self._iam_client
 
     def reset_admin_pw(self, new_password):
         """

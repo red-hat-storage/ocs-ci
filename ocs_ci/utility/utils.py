@@ -834,15 +834,17 @@ def exec_cmd(
         log.info(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
-        completed_process = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            timeout=timeout,
-            env=_env,
-            **kwargs,
-        )
+        run_kw = {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "timeout": timeout,
+            "env": _env,
+        }
+        # subprocess.run forbids stdin= and input= together; when callers pass input,
+        # stdin is managed internally. Do not inject stdin=PIPE if the caller set stdin.
+        if "input" not in kwargs and "stdin" not in kwargs:
+            run_kw["stdin"] = subprocess.PIPE
+        completed_process = subprocess.run(cmd, **run_kw, **kwargs)
     finally:
         if threading_lock and cmd[0] == "oc":
             threading_lock.release()
@@ -1826,7 +1828,7 @@ def get_vault_cli(bind_dir=None, force_download=False):
         os.chdir(bin_dir)
         url = f"{constants.VAULT_DOWNLOAD_BASE_URL}/{version}/{zip_file}"
         download_file(url, zip_file)
-        run_cmd(f"unzip {zip_file}")
+        run_cmd(f"unzip -o {zip_file}")
         delete_file(zip_file)
         os.chdir(previous_dir)
     vault_ver = run_cmd(f"{vault_binary_path} version")
@@ -3128,58 +3130,9 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
-def ceph_health_resolve_devicehealth():
-    """
-    Fix ceph health issue where the devicehealth module fails because
-    its pool cannot be created due to a missing CRUSH rule.
-
-    Workaround:
-        1. Set osd_pool_default_crush_rule to 0 (block pool rule)
-        2. Restart the devicehealth module so it retries pool creation
-        3. Archive any resulting crash reports
-
-    """
-    # importing here to avoid circular import
-    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-
-    log.warning(
-        "Trying to fix devicehealth module failure by setting "
-        "default CRUSH rule and restarting the module"
-    )
-    ct_pod = get_ceph_tools_pod()
-
-    ct_pod.exec_ceph_cmd(
-        ceph_cmd="ceph config set mon osd_pool_default_crush_rule 0",
-        format=None,
-        out_yaml_format=False,
-    )
-    log.info("Set osd_pool_default_crush_rule to 0")
-
-    ct_pod.exec_ceph_cmd(
-        ceph_cmd=("ceph mgr module force disable devicehealth --yes-i-really-mean-it"),
-        format=None,
-        out_yaml_format=False,
-    )
-    log.info("Force disabled devicehealth module")
-
-    ct_pod.exec_ceph_cmd(
-        ceph_cmd="ceph mgr module enable devicehealth",
-        format=None,
-        out_yaml_format=False,
-    )
-    log.info("Re-enabled devicehealth module")
-
-    # give time to generate crash
-    time.sleep(180)
-
-    ceph_crash_info_display(ct_pod)
-    archive_ceph_crashes(ct_pod)
-
-
 def ceph_health_resolve_crash():
     """
     Fix ceph health issue with daemon crash
-
     """
     log.warning("Trying to fix the issue with crash by archiving crashes")
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
@@ -3298,20 +3251,6 @@ def ceph_health_recover(
 
     """
     ceph_health_fixes = [
-        {
-            "pattern": r"Module 'devicehealth' has failed",
-            "func": ceph_health_resolve_devicehealth,
-            "func_args": [],
-            "func_kwargs": {},
-            "ceph_health_tries": 10,
-            "ceph_health_delay": 30,
-            "known_issues": [
-                {
-                    "issue": "DFBUGS-6749",
-                    "pattern": r"Module 'devicehealth' has failed",
-                },
-            ],
-        },
         {
             "pattern": r"daemons have recently crashed",
             "func": ceph_health_resolve_crash,
@@ -3466,6 +3405,9 @@ def ceph_health_recover(
                 " This might be because of product bug, so please do not ignore this error and"
                 " analyze why this has happened!"
             )
+    raise CephHealthNotRecoveredException(
+        f"No known fix pattern matched for health status: {health_status}"
+    )
 
 
 def ceph_health_check(

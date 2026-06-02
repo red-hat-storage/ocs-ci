@@ -18,6 +18,7 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
+    ClusterNotFoundException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
@@ -242,7 +243,10 @@ def is_hosted_cluster(cluster_name=None):
 
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
     config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
-    config.switch_to_provider()
+    try:
+        config.switch_to_provider()
+    except ClusterNotFoundException:
+        return False
     ocp_obj = OCP(
         kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
     )
@@ -702,6 +706,7 @@ class HyperShiftBase:
         disable_default_sources=None,
         data_replication_separation=False,
         auto_repair=True,
+        hcp_image=None,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -724,6 +729,7 @@ class HyperShiftBase:
             data_replication_separation (bool): If the deployment uses data replication separation
                 then add additional network
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
+            hcp_image (str): OCP image url for HCP cluster
 
         Returns:
             str: Name of the hosted cluster
@@ -740,14 +746,19 @@ class HyperShiftBase:
         pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
-        if not ocp_version:
-            provider_version = get_ocp_version()
-            if "nightly" in provider_version:
-                index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
-            else:
-                index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+        if hcp_image:
+            index_image = hcp_image
         else:
-            index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
+            if not ocp_version:
+                provider_version = get_ocp_version()
+                if "nightly" in provider_version:
+                    index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
+                else:
+                    index_image = (
+                        f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+                    )
+            else:
+                index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
 
         if not name:
             name = "hcp-" + datetime.utcnow().strftime("%f")
@@ -836,6 +847,7 @@ class HyperShiftBase:
         infra_availability_policy=None,
         disable_default_sources=None,
         auto_repair=True,
+        hcp_image=None,
     ):
         """
         Create agent hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -853,6 +865,7 @@ class HyperShiftBase:
                 available quorum 1 in pdb.
             disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
+            hcp_image (str): OCP image url for HCP cluster
 
         Returns:
             str: Name of the hosted cluster
@@ -863,7 +876,10 @@ class HyperShiftBase:
         pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
-        index_image = resolve_ocp_image(ocp_version)
+        if hcp_image:
+            index_image = hcp_image
+        else:
+            index_image = resolve_ocp_image(ocp_version)
 
         if not name:
             name = "hcp-" + datetime.now().strftime("%f")
@@ -1141,8 +1157,9 @@ class HyperShiftBase:
 
         Args:
             name (str): HostedCluster name (namespace is clusters-<name> but resource lives in clusters namespace)
-            idms_json_dict (dict|None): If provided, use this pre-fetched dict
-                (output of 'oc get imagedigestmirrorsets -o json').
+            idms_json_dict (dict|None): If provided, use this pre-fetched dict. Can be either:
+                - Output of 'oc get imagedigestmirrorsets -o json' (list with "items")
+                - A single ImageDigestMirrorSet resource dict (without "items" wrapper)
                 If None, it will be fetched automatically.
             replace (bool): If True, replace any existing spec.imageContentSources with the new list.
                             If False, merge (append new unique entries after existing ones).

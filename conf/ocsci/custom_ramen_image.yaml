@@ -1,0 +1,11 @@
+---
+# Replace the downstream Ramen image for DR testing.
+# Pass this via --ocsci-conf to patch odr-hub-operator and
+# odr-cluster-operator CSVs on all clusters.
+#
+# Set to true to use the default upstream image
+# (quay.io/ramendr/ramen-operator:canary), or set to a specific
+# image URL to use that instead.
+
+UPGRADE:
+  custom_ramen_image: true
