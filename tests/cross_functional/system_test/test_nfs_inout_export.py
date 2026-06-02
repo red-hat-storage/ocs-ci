@@ -1,22 +1,15 @@
 import ipaddress
-from threading import Thread
-import pytest
 import logging
-import time
 import os
+import random
 import socket
 import threading
+import time
+from threading import Thread
 
-from ocs_ci.utility import nfs_utils
-from ocs_ci.utility.utils import exec_cmd
+import pytest
+
 from ocs_ci.framework import config
-from ocs_ci.utility.connection import Connection
-from ocs_ci.ocs import constants, ocp, platform_nodes
-from ocs_ci.ocs.resources import pvc
-from ocs_ci.utility import templating
-from ocs_ci.helpers import helpers
-from ocs_ci.ocs.node import wait_for_nodes_status
-from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_rosa_hcp,
     skipif_lean_deployment,
@@ -34,13 +27,21 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_hci_client,
 )
-from ocs_ci.utility import version as version_module
-from ocs_ci.ocs.resources import pod, ocs
-from ocs_ci.utility.retry import retry
+from ocs_ci.helpers import helpers
+from ocs_ci.ocs import constants, ocp, platform_nodes
 from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
+from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_all_nodes
+from ocs_ci.ocs.resources import pod, ocs, pvc
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
+    wait_for_pods_to_be_running,
 )
+from ocs_ci.ocs.resources.pvc import create_pvc_snapshot
+from ocs_ci.utility import nfs_utils, templating
+from ocs_ci.utility import version as version_module
+from ocs_ci.utility.connection import Connection
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import exec_cmd, ceph_health_check
 
 log = logging.getLogger(__name__)
 # Error message to look in a command output
@@ -630,24 +631,114 @@ class TestNfsExport(ManageTest):
         nodes,
     ):
         """
-        This test is to validate NFS export using a PVC mounted on an app pod (in-cluster)
+        Comprehensive NFS export test with in-cluster and out-cluster mounts,
+        including snapshot/restore, clone operations, resize, and cluster shutdown scenarios.
 
-        Steps:
-        1:- Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
-        2:- Create pods with nfs pvcs mounted
-        3:- Run IO
-        4:- Wait for IO completion
-        5:- Verify presence of the file
-        6:- Deletion of Pods and PVCs
+        Test Description:
+        -----------------
+        This test validates NFS export functionality with various PVC operations including
+        snapshot creation, restoration, cloning, resizing, and data integrity verification
+        across cluster shutdown/recovery cycles. The test uses a single PVC set that is
+        mounted both inside and outside the OCP cluster simultaneously.
 
+        Prerequisites:
+        --------------
+        - ODF cluster deployed with:
+          * Hugepages enabled
+          * Multus networking configured
+          * Encryption in transit enabled
+          * NFS feature enabled during deployment
+
+        Entry Criteria:
+        ---------------
+        1. Background operations running (if applicable)
+        2. Background features enabled (if applicable)
+        3. Background I/O operations in progress (if applicable)
+        4. Static load on the cluster (if applicable)
+
+        Test Steps:
+        -----------
+        a) **Initial Setup:**
+           - Create a PVC using the NFS storageclass 'ocs-storagecluster-ceph-nfs'
+           - PVC configuration: 10Gi, RWO access mode, Filesystem volume mode
+
+        b) **NFS Export Creation:**
+           - Create NFS export for the PVC
+           - Export share simultaneously to:
+             * Inside OCP cluster (in-cluster mount via pod)
+             * Outside OCP cluster (out-cluster mount via external client VM)
+
+        c) **I/O Operations with Node Reboot:**
+           - Start continuous I/O operations from both clients (in-cluster and out-cluster)
+           - While I/O is in progress, reboot the NFS pod nodes
+           - Expected: No impact to ongoing I/O operations
+           - Verify I/O continues without interruption
+
+        d) **Data Integrity Verification:**
+           - Stop I/O operations
+           - Capture MD5 checksums for sample files on both NFS mounts
+           - Verify data consistency between in-cluster and out-cluster mounts
+
+        e) **Snapshot and Restore Operations:**
+           - Create a snapshot of the PVC
+           - Restore the snapshot to create a new PVC
+           - Create NFS export for the restored PVC
+           - Mount on both clients (in-cluster and out-cluster)
+           - Write I/O to the restored PVC
+           - Stop I/O and capture MD5 checksums
+           - Verify data integrity by comparing checksums from both clients
+
+        f) **Clone Operations:**
+           - Create a clone of the restored PVC
+           - Create NFS export for the cloned PVC
+           - Mount on both clients
+           - Write I/O to the cloned PVC
+           - Stop I/O and capture MD5 checksums
+           - Resize the cloned PVC
+           - Verify data integrity after resize by comparing checksums
+
+        g) **Snapshot of Resized Clone:**
+           - Create a snapshot of the resized cloned PVC
+           - Restore the snapshot to create a new PVC
+           - Create NFS export for the final restored PVC
+           - Mount on both clients
+           - Write I/O to the final restored PVC
+           - Stop I/O and capture MD5 checksums
+           - Resize the final restored PVC
+           - Verify data integrity after resize by comparing checksums
+
+        h) **Cluster Shutdown and Recovery:**
+           - Perform ordered cluster shutdown (maintenance mode)
+           - Recover the OCP cluster
+           - Verify NFS mount points on both clients are still accessible
+           - Verify data integrity on both mounts
+           - Confirm all NFS exports are functional post-recovery
+
+        Expected Results:
+        -----------------
+        1. NFS exports are successfully created and accessible from both in-cluster
+           and out-cluster clients simultaneously
+        2. I/O operations continue without interruption during NFS pod node reboots
+        3. Data integrity is maintained across all operations:
+           - Snapshot creation and restoration
+           - Clone operations
+           - PVC resize operations
+           - Cluster shutdown and recovery
+        4. MD5 checksums match between in-cluster and out-cluster mounts at all stages
+        5. All NFS mount points remain accessible after cluster recovery
+        6. No data loss or corruption occurs throughout the test lifecycle
+
+        Cleanup:
+        --------
+        - Unmount NFS exports from both clients
+        - Delete all created resources (PVCs, snapshots, clones, pods, deployments)
+        - Verify all resources are properly cleaned up
         """
 
-        log.info("Starting outcluster case")
+        log.info("test_cluster_inout_nfs_export")
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
-        # Generate unique names using timestamp to avoid conflicts between test runs
-        import random
-
+        # Generate unique names using timestamp to avoid conflicts between test run
         unique_suffix = f"{int(time.time())}-{random.randint(1000, 9999)}"
         pod_name = f"test-deployment-outcluster-{unique_suffix}"
         pvc_name = f"test-pvc-outcluster-{unique_suffix}"
@@ -663,13 +754,6 @@ class TestNfsExport(ManageTest):
             volume_mode="Filesystem",
             pvc_name=pvc_name,
         )
-
-        # # Create nginx pod with nfs pvcs mounted
-        # pod_obj = pod_factory(
-        #     interface=constants.CEPHFILESYSTEM,
-        #     pvc=nfs_pvc_obj,
-        #     status=constants.STATUS_RUNNING,
-        # )
 
         # Create deployment for app pod
         log.info("----creating deployment ---")
@@ -691,6 +775,7 @@ class TestNfsExport(ManageTest):
         ]["claimName"] = pvc_name
 
         helpers.create_resource(**deployment_data)
+
         time.sleep(120)
         assert self.pod_obj.wait_for_resource(
             resource_count=1,
@@ -722,37 +807,6 @@ class TestNfsExport(ManageTest):
         share_details = self.pv_obj.exec_oc_cmd(fetch_pv_share_cmd)
         log.info(f"Share details is, {share_details}")
 
-        # file_name = pod_obj.name
-        # # Run IO
-        # pod_obj.run_io(
-        #     storage_type="fs",
-        #     size="4Gi",
-        #     fio_filename=file_name,
-        #     runtime=60,
-        # )
-        # log.info("IO started on all pods")
-        #
-        # # Wait for IO completion
-        # fio_result = pod_obj.get_fio_results()
-        # log.info("IO completed on all pods")
-        # err_count = fio_result.get("jobs")[0].get("error")
-        # assert err_count == 0, (
-        #     f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
-        # )
-        # # Verify presence of the file
-        # file_path = pod.get_file_path(pod_obj, file_name)
-        # log.info(f"Actual file path on the pod {file_path}")
-        # assert pod.check_file_existence(
-        #     pod_obj, file_path
-        # ), f"File {file_name} doesn't exist"
-        # log.info(f"File {file_name} exists in {pod_obj.name}")
-        # Create /var/lib/www/html/index.html file inside the pod
-        # command = "bash -c " + '"echo ' + "'hello world'" + '  > /mnt/index.html"'
-        # pod_obj.exec_cmd_on_pod(
-        #     command=command,
-        #     out_yaml_format=False,
-        # )
-        # Get connection once to avoid multiple 5-minute waits
         con = self.con
         retcode, _, _ = con.exec_cmd("mkdir -p " + test_folder_for_pod)
         assert retcode == 0
@@ -995,9 +1049,7 @@ class TestNfsExport(ManageTest):
         # Get node hosting the NFS server pod
         nfs_node_name = nfs_server_pod.data["spec"]["nodeName"]
         log.info(f"NFS server pod is running on node: {nfs_node_name}")
-
         # Get the node object for the NFS node
-        from ocs_ci.ocs.node import get_node_objs
 
         nfs_node_obj = get_node_objs([nfs_node_name])[0]
         log.info(f"Rebooting node: {nfs_node_name}")
@@ -1161,7 +1213,6 @@ class TestNfsExport(ManageTest):
             f"Creating snapshot: {snapshot_name} from NFS PVC: {pvc_name} using "
             f"snapshot class: {nfs_snapshotclass_name}"
         )
-        from ocs_ci.ocs.resources.pvc import create_pvc_snapshot
 
         snapshot_obj = create_pvc_snapshot(
             pvc_name=pvc_name,
@@ -2040,10 +2091,6 @@ class TestNfsExport(ManageTest):
         # Perform non-graceful cluster shutdown
         log.info("Performing NON-GRACEFUL cluster shutdown")
         log.info("This simulates an unexpected cluster failure (power loss scenario)")
-
-        # Import required modules for node operations
-        from ocs_ci.ocs.node import get_all_nodes, get_node_objs
-        from ocs_ci.utility.utils import ceph_health_check
 
         # Get all cluster nodes
         all_nodes = get_all_nodes()
