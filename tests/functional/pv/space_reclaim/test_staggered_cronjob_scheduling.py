@@ -41,9 +41,8 @@ NUM_PVCS = 3
 PVC_SIZE_GIB = 5
 SHORT_SCHEDULE = "*/3 * * * *"
 CRONJOB_CREATION_TIMEOUT = 180
-JOB_CREATION_TIMEOUT = 360
+JOB_CREATION_TIMEOUT = 420
 MIN_STAGGER_SPREAD_SECONDS = 5
-FIVE_MIN_SCHEDULE = "*/5 * * * *"
 CUSTOM_STAGGER_WINDOW_HOURS = "1"
 INVALID_STAGGER_WINDOW = "abc"
 NUM_PVCS_LARGE = 10
@@ -634,7 +633,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         logger.info("Resumed CronJob '%s'", cronjob_ocp.resource_name)
 
     @tier2
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-7982")
     @jira("DFBUGS-6991")
     def test_invalid_stagger_window_blocks_cronjob_creation(
         self,
@@ -718,7 +717,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         )
 
     @tier2
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-7983")
     def test_configmap_update_requires_controller_restart(
         self,
         storageclass_factory,
@@ -798,7 +797,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         )
 
     @tier2
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-7984")
     def test_short_interval_shrinks_stagger_window(
         self,
         storageclass_factory,
@@ -809,31 +808,30 @@ class TestStaggeredCronjobScheduling(ManageTest):
         Verify that when the schedule interval is shorter than the configured
         stagger window, the effective window shrinks to match the interval.
 
-        With */5 schedule and default 2h window: min(5min, 2h) = 5min.
-        Jobs must be staggered but within a 5-minute window.
+        With */3 schedule and default 2h window: min(3min, 2h) = 3min.
+        Jobs must be staggered but within a 3-minute window.
 
         Steps:
             1. Ensure default stagger window (2h).
-            2. Create PVCs with */5 schedule.
+            2. Create PVCs with */3 schedule.
             3. Wait for Jobs and verify stagger is active.
-            4. Verify all timestamps fall within 5 minutes of each other.
+            4. Verify all timestamps fall within 3 minutes of each other.
 
         """
         pvc_objs, cronjob_map = self._create_pvcs_and_wait_for_cronjobs(
             storageclass_factory,
             multi_pvc_factory,
             pod_factory,
-            schedule=FIVE_MIN_SCHEDULE,
         )
         pvc_namespace = pvc_objs[0].namespace
         cronjob_names = [cj.resource_name for cj in cronjob_map.values()]
 
         timestamps = self._collect_job_timestamps(pvc_namespace, cronjob_names)
         self._assert_stagger_spread(timestamps)
-        self._assert_stagger_within_window(timestamps, window_seconds=300)
+        self._assert_stagger_within_window(timestamps, window_seconds=180)
 
     @tier2
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-7985")
     def test_same_uid_produces_same_offset(
         self,
         storageclass_factory,
@@ -875,7 +873,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         self._assert_offsets_match(offsets_round1, offsets_round2, interval_seconds=180)
 
     @tier3
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-7986")
     def test_missed_run_bypasses_stagger(
         self,
         storageclass_factory,
@@ -966,7 +964,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
                 break
 
     @tier3
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-7987")
     def test_offset_survives_controller_restart(
         self,
         storageclass_factory,
@@ -983,7 +981,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
             2. Calculate stagger offsets for round 1.
             3. Verify CronJob UIDs before restart.
             4. Restart the controller.
-            5. Wait for round 2 Jobs, calculate offsets.
+            5. Wait for round 3 Jobs (skip round 2 catch-up), calculate offsets.
             6. Assert UIDs unchanged and offsets match.
 
         """
@@ -1014,19 +1012,21 @@ class TestStaggeredCronjobScheduling(ManageTest):
             f"before={uids_before}, after={uids_after}"
         )
 
-        logger.info("Collecting round 2 timestamps (post-restart)")
-        ts_round2 = self._collect_nth_round_job_timestamps(
+        logger.info(
+            "Collecting round 3 timestamps (post-restart, skipping catch-up round)"
+        )
+        ts_round3 = self._collect_nth_round_job_timestamps(
             pvc_namespace,
             cronjob_names,
-            round_number=2,
+            round_number=3,
         )
-        offsets_round2 = self._calculate_stagger_offsets(ts_round2, interval_minutes=3)
+        offsets_round3 = self._calculate_stagger_offsets(ts_round3, interval_minutes=3)
 
-        self._assert_offsets_match(offsets_round1, offsets_round2, interval_seconds=180)
+        self._assert_offsets_match(offsets_round1, offsets_round3, interval_seconds=180)
         logger.info("Stagger offsets survived controller restart")
 
     @tier3
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-7988")
     def test_custom_stagger_window(
         self,
         storageclass_factory,
@@ -1074,7 +1074,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         self._assert_stagger_spread(timestamps)
 
     @tier3
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-7989")
     def test_many_pvcs_spread_uniformly(
         self,
         storageclass_factory,
@@ -1086,7 +1086,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
         many PVCs sharing the same schedule.
 
         Steps:
-            1. Create 10 PVCs with */5 schedule.
+            1. Create 10 PVCs with */3 schedule.
             2. Wait for 10 CronJobs, verify unique UIDs.
             3. Wait for 10 Jobs.
             4. Verify stagger spread and no timestamp clustering.
@@ -1097,7 +1097,6 @@ class TestStaggeredCronjobScheduling(ManageTest):
             multi_pvc_factory,
             pod_factory,
             num_pvcs=NUM_PVCS_LARGE,
-            schedule=FIVE_MIN_SCHEDULE,
         )
 
         uids = set()
