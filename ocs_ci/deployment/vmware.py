@@ -104,6 +104,7 @@ from ocs_ci.deployment import assisted_installer
 from ocs_ci.framework.logger_helper import log_step
 from .helpers.hypershift_base import (
     HyperShiftBase,
+    create_kubeadmin_password_file_hosted_cluster,
     create_kubeconfig_file_hosted_cluster,
     prepare_vsphere_agent_host_cluster_config,
     wait_for_hosted_cluster_available,
@@ -2350,6 +2351,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
             wait_for_hosted_cluster_available(self.cluster_name, timeout=1200, sleep=30)
 
             create_kubeconfig_file_hosted_cluster()
+            create_kubeadmin_password_file_hosted_cluster()
 
             log_step(
                 "Waiting for worker nodes to appear and become ready in inventory of the Agent cluster"
