@@ -385,7 +385,7 @@ class TestObjectBrowserClientProviderUI(ManageTest):
             # Navigate to the bucket (click on bucket name)
             logger.info("Navigating to bucket: %s", client1_bucket_name)
             bucket_ui.do_click(
-                f"//a[contains(text(), '{client1_bucket_name}')]", by="xpath"
+                (f"//a[contains(text(), '{client1_bucket_name}')]", By.XPATH)
             )
             time.sleep(3)
 
