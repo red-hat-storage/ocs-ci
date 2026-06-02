@@ -337,8 +337,9 @@ def mirror_index_image_via_oc_mirror(
                 temp_file.write(registries_content)
                 temp_file.close()
 
-                # Copy to registries.conf.d/ directory
+                # Copy to registries.conf.d/ directory and set readable permissions
                 exec_cmd(f"sudo cp {temp_file.name} {ocs_ci_conf_file}")
+                exec_cmd(f"sudo chmod 644 {ocs_ci_conf_file}")
                 os.unlink(temp_file.name)
                 logger.info(
                     f"Successfully configured registry mirrors at {ocs_ci_conf_file}"
