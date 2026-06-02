@@ -1,0 +1,95 @@
+
+
+## odf dr configuration file
+
+## Clusters configuration.
+# - Modify clusters "kubeconfig" to match your hub and managed clusters
+#   kubeconfig files.
+# - Modify "passive-hub" kubeconfig for optional passive hub cluster,
+#   leave it empty if not using passive hub.
+clusters:
+  hub:
+    kubeconfig: ""
+  passive-hub:
+    kubeconfig: ""
+  c1:
+    kubeconfig: ""
+  c2:
+    kubeconfig: ""
+
+## Git repository for test command.
+# - Modify "url" to use your own Git repository.
+# - Modify "branch" to test a different branch.
+repo:
+  url: https://github.com/RamenDR/ocm-ramen-samples.git
+  branch: main
+
+## DRPolicy for test command.
+# - Modify to match actual DRPolicy in the hub cluster.
+drPolicy: odr-policy-5m
+
+## ClusterSet for test command.
+# - Modify to match your Open Cluster Management configuration.
+clusterSet: clusterset-submariner-d66a2b06afc94d1e9a
+
+## PVC specifications for test command.
+# - Modify items "storageclassname" to match the actual storage classes in the
+#   managed clusters.
+# - Add new items for testing more storage types.
+pvcSpecs:
+- name: rbd
+  storageClassName: ocs-storagecluster-ceph-rbd
+  accessModes: ReadWriteOnce
+- name: cephfs
+  storageClassName: ocs-storagecluster-cephfs
+  accessModes: ReadWriteMany
+
+## Deployer specifications for test command.
+# - Modify items "name" and "type" to match your deployer configurations.
+# - Add new items for testing more deployers.
+# - Available types: appset, subscr, disapp
+deployers:
+- name: appset
+  type: appset
+  description: ApplicationSet deployer for ArgoCD
+- name: subscr
+  type: subscr
+  description: Subscription deployer for OCM subscriptions
+- name: disapp
+  type: disapp
+  description: Discovered Application deployer
+- name: disapp-recipe
+  type: disapp
+  recipe:
+    type: generate
+  description: Discovered Application deployer with recipe
+- name: disapp-recipe-check
+  type: disapp
+  recipe:
+    type: generate
+    checkHook: true
+  description: Discovered Application deployer with recipe using check hook
+- name: disapp-recipe-exec
+  type: disapp
+  recipe:
+    type: generate
+    execHook: true
+  description: Discovered Application deployer with recipe using exec hook
+- name: disapp-recipe-check-exec
+  type: disapp
+  recipe:
+    type: generate
+    checkHook: true
+    execHook: true
+  description: Discovered Application deployer with recipe using check and exec hooks
+
+## Tests cases for test command.
+# - Modify the test for your preferred workload or deployment type.
+# - Add new tests for testing more combinations in parallel.
+# - Available workloads: deploy.
+# - Available deployers: appset, subscr, disapp, disapp-recipe,
+#   disapp-recipe-check, disapp-recipe-exec, disapp-recipe-check-exec.
+tests:
+- workload: deploy
+  deployer: appset
+  pvcSpec: rbd
