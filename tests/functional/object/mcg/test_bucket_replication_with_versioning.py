@@ -293,10 +293,16 @@ class TestReplicationWithVersioning(MCGTest):
         )
 
         # Verify target versioning is actually Suspended before proceeding
-        target_versioning = s3_get_bucket_versioning(mcg_obj, target_bucket.name)
-        assert (
-            target_versioning.get("Status") == "Suspended"
-        ), f"Expected target bucket versioning to be Suspended, got: {target_versioning}"
+        for target_versioning in TimeoutSampler(
+            timeout=60,
+            sleep=5,
+            func=s3_get_bucket_versioning,
+            s3_obj=mcg_obj,
+            bucketname=target_bucket.name,
+        ):
+            if target_versioning.get("Status") == "Suspended":
+                logger.info("Target bucket versioning is confirmed Suspended")
+                break
 
         # 7. Write versions to the source bucket under a different object key
         obj_key = "test_obj_" + str(uuid4())[:4]
