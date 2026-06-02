@@ -565,6 +565,7 @@ class PrometheusAPI(object):
                 namespace=defaults.OCS_MONITORING_NAMESPACE,
                 threading_lock=self._threading_lock,
                 cluster_kubeconfig=kubeconfig,
+                skip_tls_verify=config.ENV_DATA.get("skip_tls_verify", False),
             )
             kube_data = ""
             with open(kubeconfig, "r") as kube_file:
