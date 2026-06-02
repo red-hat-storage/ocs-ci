@@ -1392,8 +1392,19 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
     password_el.send_keys(password)
 
     logger.info("Username and password filled in, clicking Log in")
-    confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
-    confirm_login_el.click()
+    # Client clusters have OAuth-based login with different button structure
+    is_client_cluster = (
+        config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+    )
+    if is_client_cluster:
+        logger.info("Client cluster detected, using OAuth login button locator")
+        confirm_login_el = driver.find_element(By.XPATH, "//button[@type='submit']")
+        confirm_login_el.click()
+    else:
+        confirm_login_el = wait_for_element_to_be_clickable(
+            login_loc["click_login"], 60
+        )
+        confirm_login_el.click()
 
     hci_platform_conf = (
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
