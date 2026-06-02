@@ -238,11 +238,19 @@ def patch_storageclass_ocs_external_label(resource_name):
         f"{constants.OCS_EXTERNAL_STORAGECLASS_LABEL}="
         f"{constants.OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE}"
     )
-    sc_ocp.patch(
-        resource_name=resource_name,
-        params=json.dumps(_storageclass_ocs_external_label_patch()),
-        format_type="merge",
-    )
+    try:
+        sc_ocp.patch(
+            resource_name=resource_name,
+            params=json.dumps(_storageclass_ocs_external_label_patch()),
+            format_type="merge",
+        )
+    except CommandFailed as ex:
+        if "NotFound" in str(ex):
+            log.warning(
+                f"StorageClass {resource_name} disappeared before patch; skipping"
+            )
+        else:
+            raise
 
 
 def _delete_storageclass_ignore_not_found(sc_ocp, sc_name):
