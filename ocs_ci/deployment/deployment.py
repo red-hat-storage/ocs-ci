@@ -1351,6 +1351,22 @@ class Deployment(object):
             and platform in constants.AWS_STS_PLATFORMS
         )
 
+        add_new_disks_for_lso = True
+        # Simulate bluestore label on worker nodes before deploying OCS.
+        # Must run before ui_deployment early-return so it applies to both
+        # UI and non-UI paths.
+        simulate_bluestore_label = config.ENV_DATA.get(
+            "simulate_bluestore_label", False
+        )
+        if simulate_bluestore_label:
+            from ocs_ci.deployment.helpers.ceph_cluster import (
+                simulate_full_ceph_bluestore_process_on_wnodes,
+            )
+
+            log_step("Simulate Ceph OSD bluestore on worker nodes")
+            simulate_full_ceph_bluestore_process_on_wnodes()
+            add_new_disks_for_lso = False
+
         if ui_deployment and ui_deployment_conditions():
             log_step("Start ODF deployment with UI")
             self.deployment_with_ui()
@@ -1412,19 +1428,6 @@ class Deployment(object):
                     "oc wait --for=condition=Updated --timeout=30m mcp/worker",
                     timeout=2100,
                 )
-
-        add_new_disks_for_lso = True
-        # Simulate bluestore label on Baremetal or vSphere LSO worker nodes before deploying OCS
-        simulate_bluestore_label = config.ENV_DATA.get(
-            "simulate_bluestore_label", False
-        )
-        if simulate_bluestore_label:
-            from ocs_ci.deployment.helpers.ceph_cluster import (
-                simulate_full_ceph_bluestore_process_on_wnodes,
-            )
-
-            simulate_full_ceph_bluestore_process_on_wnodes()
-            add_new_disks_for_lso = False
 
         # with Hub/Spoke deployments LSO on IBM BareMetal is a mandatory requirement, it is installed on Dependency
         # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
@@ -2253,6 +2256,16 @@ class Deployment(object):
                 resource_count=1,
                 timeout=600,
             )
+
+            if config.ENV_DATA.get("simulate_bluestore_label", False):
+                from ocs_ci.deployment.helpers.ceph_cluster import (
+                    verify_osd_prepare_logs_bluestore_wipe,
+                )
+
+                logger.info("Verify rook-ceph-osd-prepare logs confirm bluestore wipe")
+                assert (
+                    verify_osd_prepare_logs_bluestore_wipe()
+                ), "Bluestore wipe verification failed in rook-ceph-osd-prepare logs"
 
             if not config.COMPONENTS["disable_cephfs"]:
                 # Check for CephFilesystem creation in ocp

@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from pathlib import Path
 
 from ocs_ci.deployment.baremetal import (
@@ -481,4 +482,54 @@ def simulate_full_ceph_bluestore_process_on_wnodes(
         return False
 
     logger.info("Full Ceph BlueStore simulation process completed successfully.")
+    return True
+
+
+def verify_osd_prepare_logs_bluestore_wipe():
+    """
+    Check that each rook-ceph-osd-prepare pod successfully detected and wiped
+    a pre-existing bluestore OSD from a different cluster before provisioning
+    a new OSD.
+
+    These patterns are present in both encrypted and unencrypted OSD prepare
+    logs whenever the disk carried bluestore data from a prior cluster.
+
+    Checks for the following regex patterns in each pod's logs:
+    - completed wiping OSD <id> device "<dev>" belonging to a different ceph
+      cluster — foreign bluestore data was detected and zapped
+    - successfully zapped osd.<id> path "<dev>" — low-level wipe succeeded
+    - ceph-volume raw dmcrypt prepare successful — new OSD prepared
+      (rook-ceph emits this message for both encrypted and unencrypted OSDs)
+
+    Returns:
+        bool: True if all patterns are found in all pods, False otherwise.
+    """
+    from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
+
+    expected_patterns = [
+        re.compile(
+            r'completed wiping OSD \d+ device ".+" belonging to a different'
+            r" ceph cluster"
+        ),
+        re.compile(r'successfully zapped osd\.\d+ path ".+"'),
+        re.compile(r"ceph-volume raw dmcrypt prepare successful"),
+    ]
+
+    osd_prepare_pods = get_osd_prepare_pods()
+    if not osd_prepare_pods:
+        logger.error("No rook-ceph-osd-prepare pods found")
+        return False
+
+    for pod in osd_prepare_pods:
+        logs = get_pod_logs(pod.name)
+        logger.info("Verifying bluestore wipe log entries in pod %s", pod.name)
+        for pattern in expected_patterns:
+            if not pattern.search(logs):
+                logger.error(
+                    "Expected log pattern not found in pod %r: %r",
+                    pod.name,
+                    pattern.pattern,
+                )
+                return False
+
     return True
