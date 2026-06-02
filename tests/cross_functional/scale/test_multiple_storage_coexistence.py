@@ -55,13 +55,70 @@ def create_custom_secret(name, namespace, data_dict, secret_type="Opaque"):
 class TestMultiStorageCoexistence(ManageTest):
 
     @pytest.fixture(autouse=True)
-    def setup_scale_infrastructure(self):
+    def setup_scale_infrastructure(self, request):
         """
         Infrastructure Setup: MCO, Entitlement, Cluster CR, and Pod Health Check.
+        Uses addfinalizer to guarantee execution tracking even on early failures.
         """
         log.info("--- Phase 1: Scale Infrastructure Setup ---")
         ns = constants.IBM_STORAGE_SCALE_NAMESPACE
         cluster_name = "ibm-spectrum-scale"
+
+        # Dynamically generate unique resource names to safely permit parallel/re-run scenarios
+        sc_name = helpers.create_unique_resource_name("scale-test", "sc")
+        rc_name = helpers.create_unique_resource_name("scale-test", "rc")
+        user_secret_name = f"{rc_name}-user-details-secret"
+
+        # Cache dynamic names to the test class instance so the validation methods can reference them
+        self.sc_name = sc_name
+        self.rc_name = rc_name
+        self.user_secret_name = user_secret_name
+
+        def finalizer_cleanup():
+            log.info("--- Phase 5: Cleanup Scale Resources ---")
+
+            # Cleanup cluster-scoped StorageClass resource
+            try:
+                log.info(f"Scrubbing manual StorageClass: {sc_name}")
+                exec_cmd(f"oc delete storageclass {sc_name} --ignore-not-found")
+            except exceptions.CommandFailed as e:
+                log.warning(f"StorageClass deletion skipped or failed: {e}")
+
+            # Cleanup test authentication details secret
+            try:
+                log.info(f"Scrubbing user details secret: {user_secret_name}")
+                exec_cmd(
+                    f"oc delete secret {user_secret_name} -n {ns} --ignore-not-found"
+                )
+            except exceptions.CommandFailed as e:
+                log.warning(f"User details secret deletion skipped or failed: {e}")
+
+            # Cleanup core storage custom definitions
+            for kind in ["Filesystem", "RemoteCluster", "Cluster"]:
+                ocp_obj = OCP(kind=f"{kind}.scale.spectrum.ibm.com", namespace=ns)
+                try:
+                    items = ocp_obj.get().get("items", [])
+                except exceptions.CommandFailed as e:
+                    log.warning(f"Could not list custom resources for kind {kind}: {e}")
+                    continue
+
+                for res in items:
+                    name = res["metadata"]["name"]
+                    # Clean up all generated test resources but preserve shared infrastructure if required
+                    if "scale-test" in name or name == cluster_name:
+                        try:
+                            log.info(f"Scrubbing {kind}: {name}")
+                            exec_cmd(
+                                f"oc patch {kind.lower()}.scale.spectrum.ibm.com {name} -n {ns}"
+                                f' --type=merge -p \'{{"metadata":{{"finalizers":null}}}}\''
+                            )
+                            ocp_obj.delete(resource_name=name)
+                        except exceptions.CommandFailed as e:
+                            log.warning(
+                                f"Teardown cleanup failed for {kind} '{name}': {e}"
+                            )
+
+        request.addfinalizer(finalizer_cleanup)
 
         # 1. Apply MCO (Operator)
         mco_url = (
@@ -103,13 +160,11 @@ class TestMultiStorageCoexistence(ManageTest):
         scale_cluster_ocp = OCP(kind=scale_cluster_kind, namespace=ns)
 
         try:
-            # create local cluster CR if not present
             scale_cluster_ocp.get(resource_name=cluster_name)
             log.info(f"Scale Cluster CR '{cluster_name}' already exists.")
         except exceptions.CommandFailed:
             log.info(f"Creating local IBM Scale Cluster CR '{cluster_name}'...")
 
-            # Fetch configurable host aliases
             host_aliases = config.AUTH.get("scale_host_aliases")
             if not host_aliases:
                 pytest.skip("scale_host_aliases not configured in AUTH")
@@ -139,42 +194,6 @@ class TestMultiStorageCoexistence(ManageTest):
                     os.remove(temp_path)
             log.info(f"Successfully created Cluster {cluster_name}")
 
-        yield
-
-        log.info("--- Phase 5: Cleanup Scale Resources ---")
-
-        # Cleanup cluster-scoped StorageClass resource
-        try:
-            log.info("Scrubbing manual StorageClass...")
-            exec_cmd("oc delete storageclass scale-test-sc --ignore-not-found")
-        except exceptions.CommandFailed as e:
-            log.warning(f"StorageClass deletion skipped or failed: {e}")
-
-        # Cleanup test authentication details secret
-        try:
-            log.info("Scrubbing user details secret...")
-            exec_cmd(
-                f"oc delete secret scale-sels-test-user-details-secret -n {ns} --ignore-not-found"
-            )
-        except exceptions.CommandFailed as e:
-            log.warning(f"User details secret deletion skipped or failed: {e}")
-
-        # Cleanup core storage custom definitions
-        for kind in ["Filesystem", "RemoteCluster", "Cluster"]:
-            ocp_obj = OCP(kind=f"{kind}.scale.spectrum.ibm.com", namespace=ns)
-            try:
-                items = ocp_obj.get().get("items", [])
-                for res in items:
-                    name = res["metadata"]["name"]
-                    log.info(f"Scrubbing {kind}: {name}")
-                    exec_cmd(
-                        f"oc patch {kind.lower()}.scale.spectrum.ibm.com {name} -n {ns}"
-                        f' --type=merge -p \'{{"metadata":{{"finalizers":null}}}}\''
-                    )
-                    ocp_obj.delete(resource_name=name)
-            except exceptions.CommandFailed as e:
-                log.warning(f"Teardown cleanup for {kind} skipped: {e}")
-
     @tier1
     def test_pvc_pod_coexistence_ceph_and_scale(self, project_factory):
         """
@@ -194,8 +213,8 @@ class TestMultiStorageCoexistence(ManageTest):
         9. Run localized write/read file system execution checks on all target mount paths.
         """
         ns = constants.IBM_STORAGE_SCALE_NAMESPACE
-        rc_name = "scale-sels-test"
-        fs_cr_name = "scale-sels-test-fs2"
+        rc_name = self.rc_name
+        fs_cr_name = helpers.create_unique_resource_name("scale-test", "fs2")
 
         # --- Phase 1.5: Pre-flight StorageClass Check ---
         log.info("Verifying Mandatory ODF StorageClasses...")
@@ -216,16 +235,12 @@ class TestMultiStorageCoexistence(ManageTest):
         gui_hosts = config.AUTH.get("scale_gui_hosts")
 
         if not gui_user or not gui_password:
-            pytest.skip(
-                "Scale GUI Auth credentials (scale_gui_user/scale_gui_password) not configured."
-            )
+            pytest.skip("Scale GUI Auth credentials not configured.")
         if not gui_hosts:
-            pytest.skip(
-                "scale_gui_hosts address target endpoint mapping not configured."
-            )
+            pytest.skip("scale_gui_hosts target endpoint mapping not configured.")
 
         create_custom_secret(
-            name=f"{rc_name}-user-details-secret",
+            name=self.user_secret_name,
             namespace=ns,
             data_dict={
                 "username": gui_user,
@@ -243,7 +258,7 @@ class TestMultiStorageCoexistence(ManageTest):
                     "insecureSkipVerify": True,
                     "port": 443,
                     "scheme": "https",
-                    "secretName": f"{rc_name}-user-details-secret",
+                    "secretName": self.user_secret_name,
                 }
             },
         }
@@ -312,11 +327,11 @@ class TestMultiStorageCoexistence(ManageTest):
         project = project_factory()
         namespace = project.namespace
 
-        # Create Scale StorageClass
+        # Create Scale StorageClass using dynamic tracking name
         sc_data = {
             "apiVersion": "storage.k8s.io/v1",
             "kind": "StorageClass",
-            "metadata": {"name": "scale-test-sc"},
+            "metadata": {"name": self.sc_name},
             "provisioner": "spectrumscale.csi.ibm.com",
             "parameters": {"volBackendFs": fs_cr_name},
             "reclaimPolicy": constants.RECLAIM_POLICY_DELETE,
