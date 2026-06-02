@@ -69,7 +69,7 @@ def check_subctl_cli():
         submariner.download_binary()
 
 
-@pytest.fixture(autouse=False, scope="function")
+@pytest.fixture(autouse=True, scope="function")
 def rdr_health_check():
     """
     Verify cluster health on both managed clusters before each RDR test.
@@ -323,7 +323,6 @@ def verify_arbiter_deployment_with_zone_failure():
         pytest.skip: If the cluster doesn't meet the requirements
 
     """
-    # log.info(f'======={get_primary_cluster_config().DEPLOYMENT.get("arbiter_deployment"}')
 
     if not get_primary_cluster_config().DEPLOYMENT.get("arbiter_deployment", False):
         pytest.skip(
