@@ -223,7 +223,10 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
-    "create_storage_system": ("//button[text()='Create storage system']", By.XPATH),
+    "create_storage_system": (
+        "//button[.//span[text()='Create storage system']]",
+        By.XPATH,
+    ),
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
     "refresh_popup": (
         "//button[text()='Refresh web console']|//button[contains(.,'Refresh web console')]",
