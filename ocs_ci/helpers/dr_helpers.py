@@ -3418,8 +3418,8 @@ def extract_images_from_yaml(obj, images=None):
 
     return images
 
-def validate_application_odf_cli(drpc_name, namespace, action="validate"):
 
+def validate_application_odf_cli(drpc_name, namespace, action="validate"):
     """
     Run an ODF CLI DR action on a DR application.
 
