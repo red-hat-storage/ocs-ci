@@ -25,6 +25,6 @@ spec:
               Node {{ $labels.instance }} has max ICMP RTT latency > 5ms
               over the last 24h. Investigate network health.
             summary: >
-              High ICMP latency (>10ms) detected on ODF non-OSD node(s)
+              High ICMP latency (>5ms) detected on ODF non-OSD node(s)
             runbook_url: >
               https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator/ODFNodeLatencyHighOnNONOSDNodes.md
