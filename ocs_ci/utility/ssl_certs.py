@@ -1140,13 +1140,12 @@ def setup_client_ca_cert_secret(
             "Updating existing secret '%s' in namespace '%s'", secret_name, namespace
         )
 
-        # Add/update the certificate key
-        if "data" not in existing_secret:
-            existing_secret["data"] = {}
-        existing_secret["data"][cert_key] = ca_cert_b64
+        # Use oc patch to update the secret data
+        import json
 
-        # Apply the updated secret
-        secret_obj.apply(**existing_secret)
+        patch_data = {"data": {cert_key: ca_cert_b64}}
+        cmd = f"patch secret {secret_name} -n {namespace} -p '{json.dumps(patch_data)}'"
+        secret_obj.exec_oc_cmd(cmd, out_yaml_format=False)
         logger.info("Updated secret '%s' with key '%s'", secret_name, cert_key)
 
     else:
