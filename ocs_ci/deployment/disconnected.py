@@ -73,6 +73,7 @@ def mirror_fdf_catalog_via_oc_mirror(
         idms_name_prefix="fdf",  # Use 'fdf' prefix for IDMS naming
         configure_registries=configure_registries,  # FDF-specific feature
         mirror_registry=mirror_registry,
+        registries_template=constants.FDF_REGISTRIES_CONF_TEMPLATE,
     )
 
 
@@ -271,6 +272,7 @@ def mirror_index_image_via_oc_mirror(
     idms_name_prefix="odf",
     configure_registries=False,
     mirror_registry=None,
+    registries_template=None,
 ):
     """
     Mirror all images required for ODF deployment and testing to mirror
@@ -314,10 +316,7 @@ def mirror_index_image_via_oc_mirror(
         logger.info(
             "Configuring registry mirrors for internal images using registries.conf.d/"
         )
-        registries_template = os.path.join(
-            constants.FDF_TEMPLATE_DIR, "registries.conf.template"
-        )
-        if os.path.exists(registries_template):
+        if registries_template and os.path.exists(registries_template):
             try:
                 with open(registries_template, "r") as f:
                     registries_content = f.read()

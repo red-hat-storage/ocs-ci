@@ -20,3 +20,11 @@ location="cp.stg.icr.io/cp/df"
 mirror-by-digest-only = false
 pull-from-mirror = "all"
 short-name-mode = "permissive"
+
+[[registry]]
+location="preprod.icr.io/cpopen/"
+[[registry.mirror]]
+location="cp.stg.icr.io/cp/df"
+mirror-by-digest-only = false
+pull-from-mirror = "all"
+short-name-mode = "permissive"
