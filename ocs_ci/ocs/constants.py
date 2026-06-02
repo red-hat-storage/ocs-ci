@@ -620,10 +620,6 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE_PREFIX = (
     f"{DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD}-rados-namespace"
 )
 
-# Label on RBD/CephFS StorageClasses (all deployment types; provider/consumer model).
-OCS_EXTERNAL_STORAGECLASS_LABEL = "storageclass.ocs.openshift.io/is-external"
-OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE = "true"
-
 # Default StorageClass for Provider-mode
 DEFAULT_STORAGECLASS_CLIENT_CEPHFS = f"{STORAGE_CLIENT_NAME}-cephfs"
 DEFAULT_STORAGECLASS_CLIENT_RBD = f"{STORAGE_CLIENT_NAME}-ceph-rbd"
@@ -820,6 +816,13 @@ ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+# OCS Metrics Exporter constants (RHSTOR-7964)
+OCS_METRICS_EXPORTER_HTTPS_PORT = 8443
+OCS_METRICS_EXPORTER_METRICS_PATH = "/metrics"
+OCS_METRICS_EXPORTER_READYZ_PATH = "/readyz"
+OCS_METRICS_EXPORTER_CEPH_AUTH_SECRET = (
+    "ocs-metrics-exporter-ceph-auth"  # pragma: allowlist secret
+)
 MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
@@ -1153,7 +1156,6 @@ OC_MIRROR_IMAGESET_CONFIG = os.path.join(
 OC_MIRROR_IMAGESET_CONFIG_V2 = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config-v2.yaml"
 )
-OC_INGRESS_CERT_YAML = os.path.join(TEMPLATE_DIR, "ocp-deployment", "ingress_cert.yaml")
 
 CSI_CEPHFS_ROX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "csi-cephfs-rox.yaml")
 
@@ -1606,7 +1608,6 @@ ALERT_BUCKETEXCEEDINGQUOTASTATE = "NooBaaBucketExceedingQuotaState"
 ALERT_BUCKETEXCEEDINGSIZEQUOTASTATE = "NooBaaBucketExceedingSizeQuotaState"
 ALERT_NAMESPACERESOURCEERRORSTATE = "NooBaaNamespaceResourceErrorState"
 ALERT_NAMESPACEBUCKETERRORSTATE = "NooBaaNamespaceBucketErrorState"
-ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE = "NooBaaReplicationTargetUnreachable"
 ALERT_NODEDOWN = "CephNodeDown"
 ALERT_CLUSTERNEARFULL = "CephClusterNearFull"
 ALERT_CLUSTERCRITICALLYFULL = "CephClusterCriticallyFull"
@@ -1659,7 +1660,6 @@ ALERT_ODF_NODE_MTU_LESS_THAN_9000 = "ODFNodeMTULessThan9000"
 ALERT_CEPHFS_ORPHANED_SNAPSHOT = "CephFSOrphanedSnapshot"
 CEPHFS_SNAPSHOT_STATE_ORPHANED = "orphaned"
 CEPHFS_SNAPSHOT_STATE_BOUND = "bound"
-ALERT_MDSXATTR = "CephXattrSetLatency"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -2459,7 +2459,6 @@ CLI_TOOL_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
 ODF_CLI_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
-DEFAULT_INGRESS_CRT_OPENSHIFT = "default-ingress-cert"
 SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_MONITORS = "servicemonitors"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
@@ -2514,7 +2513,6 @@ FLEXY_DEFAULT_PRIVATE_CONF_REPO = (
 FLEXY_JENKINS_USER = "jenkins"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
-OPENSHIFT_CONFIG_MANAGED_NAMESPACE = "openshift-config-managed"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
 FLEXY_IMAGE_URL = "images.paas.redhat.com/dno-ood/ocp4:latest"
 FLEXY_ENV_FILE_UPDATED_NAME = "ocs-flexy-env-file-updated.env"
@@ -2726,8 +2724,6 @@ RHEL_OS = "RHEL"
 RHCOS = "RHCOS"
 
 # Scale constants
-IBM_STORAGE_SCALE_NAMESPACE = "ibm-spectrum-scale"
-REMOTE_CLUSTER = "RemoteCluster"
 SCALE_NODE_SELECTOR = {"scale-label": "app-scale"}
 SCALE_LABEL = "scale-label=app-scale"
 # TODO: Revisit the dict value once there is change in instance/vm/server type
@@ -3736,9 +3732,6 @@ METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
 FILE_CREATOR_IO = os.path.join(
     TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
 )
-EXTENDED_ATTRIBUTES = os.path.join(
-    TEMPLATE_WORKLOAD_DIR, "helper_scripts/check_xattr.py"
-)
 
 # workaround: marking disks as ssd
 MC_WORKAROUND_SSD = os.path.join(
@@ -3756,8 +3749,7 @@ SPECTRUM_FUSION_CR = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_FUSION, "spectrum-fusion.yaml"
 )
 FDF_ODFCLUSTER_CR = os.path.join(FDF_TEMPLATE_DIR, "odfcluster.yaml")
-FDF_CATSRC_CR = os.path.join(FDF_TEMPLATE_DIR, "isf_datafoundation_catsrc.yaml")
-FDF_CATSRC_IMAGE_PATH = "icr.io/cpopen/isf-data-foundation-catalog"
+
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
 FUSION_NAMESPACE = "ibm-spectrum-fusion-ns"
 ISF_CATALOG_SOURCE_NAME = "isf-catalog"
@@ -3955,8 +3947,6 @@ BLACKBOX_POD_LABEL_422_AND_ABOVE = "app=odf-blackbox-exporter"
 
 # ODF 4.21 health overview mock alerts dir
 HEALTHALERTS_DIR = os.path.join(TEMPLATE_DIR, "health_overview_alerts")
-FDF_CATALOG_NAME = "isf-data-foundation-catalog"
-FDF_OPERATOR_SELECTOR = "fdf-operator-internal=true"
 
 # CSI PORTS
 CEPH_NODE_PORT = 31659
