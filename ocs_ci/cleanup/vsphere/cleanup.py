@@ -87,7 +87,10 @@ def delete_ipi_nodes(vsphere, cluster_name):
     vms_ipi = []
     for vm in vms_dc:
         try:
-            if cluster_name in vm.name and "generated-zone" not in vm.name:
+            if (
+                vm.name.startswith(f"{cluster_name}-")
+                and "generated-zone" not in vm.name
+            ):
                 vms_ipi.append(vm)
                 logger.info(vm.name)
         except vmodl.fault.ManagedObjectNotFound as e:
