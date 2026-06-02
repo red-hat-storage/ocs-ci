@@ -3316,7 +3316,7 @@ def create_clones_until_cluster_full(pvc_clone_factory, threading_lock):
                     # Flatten RBD clones if requested
                     if (
                         flatten_rbd_clones
-                        and pvc_to_clone.get_pvc_vol_type == constants.CEPHBLOCKPOOL
+                        and "rbd.csi.ceph.com" in pvc_to_clone.provisioner
                     ):
                         flatten_image(clone_obj)
                         logger.info(
