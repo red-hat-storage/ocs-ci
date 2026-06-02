@@ -7,7 +7,7 @@ from ocs_ci.ocs.managedservice import get_consumer_names
 from ocs_ci.ocs.resources.storageconsumer import add_storageclasses_to_storageconsumer
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.utility.ssl_certs import (
-    get_service_ca_certificate,
+    get_root_ca_cert,
     setup_object_browser_ca_cert_on_client,
 )
 
@@ -113,7 +113,7 @@ def object_browser_ca_cert_setup_client(request):
     to trust the S3 endpoint. This fixture automates the setup of:
     - Secret: "ocs-client-operator-console-s3-endpoint-ca-certs"
     - Key: "ocs-s3-endpoints-list-<STORAGECLIENT_UID>-noobaaS3.crt"
-    - Value: CA certificate chain from service-ca (OpenShift service certificate authority)
+    - Value: Root CA certificate for custom ingress (from get_root_ca_cert())
 
     The fixture runs at session scope and sets up certificates on all client clusters
     in a provider/client deployment.
@@ -135,9 +135,19 @@ def object_browser_ca_cert_setup_client(request):
         len(client_indices),
     )
 
-    # Get CA certificate from provider (OpenShift service CA, used for all routes)
+    # Get CA certificate from provider (root CA for custom ingress certificates)
     with config.RunWithProviderConfigContextIfAvailable():
-        ca_cert = get_service_ca_certificate()
+        ca_cert_file = get_root_ca_cert()
+        if not ca_cert_file:
+            raise Exception(
+                "No root CA certificate file found. "
+                "Ensure DEPLOYMENT['ingress_ssl_ca_cert'] is configured or "
+                "custom_ssl_cert_provider is set."
+            )
+
+        # Read certificate content from file
+        with open(ca_cert_file, "r") as f:
+            ca_cert = f.read()
 
     # Setup certificate on each client
     for client_index in client_indices:
