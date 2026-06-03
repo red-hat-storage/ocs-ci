@@ -136,7 +136,7 @@ class TestNooBaaBucketErrorStateMode:
     def test_data_bucket_quota_error_mode(self, mcg_obj, awscli_pod):
         """
         Trigger a quota-related bucket mode on a data bucket and verify
-        the bucket enters EXCEEDING_QUOTA mode.
+        that the bucket enters EXCEEDING_QUOTA mode.
 
         Steps:
             1. Create a data bucket with a 2Gi quota
