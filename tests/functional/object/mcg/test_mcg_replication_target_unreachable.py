@@ -189,7 +189,8 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         5. Upload new objects to trigger failing replication
         6. Wait for the NooBaaReplicationTargetUnreachable alert to fire
         7. Re-enable the IAM access key
-        8. Wait for the alert to clear
+        8. Write test objects and verify replication works again
+        9. Wait for the alert to clear
         """
 
         # 1. Create a target OBC backed by the toggleable-creds backingstore
@@ -226,7 +227,7 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         aws_backingstore_with_toggleable_creds["disable"]()
 
         # 5. Upload new objects to trigger failing replication
-        post_disrupt_dir = f"{test_directory_setup.origin_dir}/post"
+        post_disrupt_dir = f"{test_directory_setup.origin_dir}/post_disrupt"
         write_random_test_objects_to_bucket(
             awscli_pod_session,
             source_bucket.name,
@@ -244,7 +245,22 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         # 7. Re-enable the IAM access key
         aws_backingstore_with_toggleable_creds["enable"]()
 
-        # 8. Wait for the alert to clear
+        # 8. Write test objects and verify replication works again
+        post_recovery_dir = f"{test_directory_setup.origin_dir}/post_recovery"
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_bucket.name,
+            post_recovery_dir,
+            amount=3,
+            pattern="post-recovery-",
+            mcg_obj=mcg_obj,
+        )
+        assert compare_bucket_object_list(
+            mcg_obj, source_bucket.name, target_obc_name, timeout=600
+        ), "Replication did not work after IAM key recovery"
+        logger.info("Post-recovery replication verified successfully")
+
+        # 9. Wait for the alert to clear
         _wait_for_replication_alert(
             threading_lock, source_bucket.name, timeout=600, sleep=10, cleared=True
         )
