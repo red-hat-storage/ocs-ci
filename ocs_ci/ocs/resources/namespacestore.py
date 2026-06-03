@@ -467,9 +467,14 @@ def namespace_store_factory(
                 for nss_tup in nss_lst:
                     for _ in range(nss_tup[0] if isinstance(nss_tup[0], int) else 1):
                         if platform.lower() == "nsfs":
-                            uls_name = nss_tup[0] or create_unique_resource_name(
-                                constants.PVC.lower(), platform
-                            )
+                            # Use nss_tup[0] as PVC name only if it's a string
+                            # If it's an int (amount) or None, generate a unique name
+                            if isinstance(nss_tup[0], str) and nss_tup[0].strip():
+                                uls_name = nss_tup[0].strip()
+                            else:
+                                uls_name = create_unique_resource_name(
+                                    constants.PVC.lower(), platform
+                                )
                             pvc_factory_session(
                                 custom_data=template_pvc(uls_name, size=nss_tup[1])
                             )
