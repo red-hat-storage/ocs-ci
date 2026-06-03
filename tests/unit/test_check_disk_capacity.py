@@ -9,6 +9,10 @@ Or via pytest from outside ocs-ci:
 
 from unittest.mock import MagicMock
 
+from ocs_ci.framework.pytest_customization.marks import purple_squad
+
+pytestmark = purple_squad
+
 
 def make_element(text):
     el = MagicMock()

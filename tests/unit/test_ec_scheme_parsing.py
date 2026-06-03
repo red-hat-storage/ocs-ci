@@ -9,6 +9,10 @@ Run: python tests/unit/test_ec_scheme_parsing.py
 
 import re
 
+from ocs_ci.framework.pytest_customization.marks import purple_squad
+
+pytestmark = purple_squad
+
 
 def parse_scheme(raw_text):
     """
