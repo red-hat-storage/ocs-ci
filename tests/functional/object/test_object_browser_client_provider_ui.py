@@ -395,59 +395,34 @@ class TestObjectBrowserClientProviderUI(ManageTest):
             logger.info("Verifying objects/folders are visible in bucket")
 
             # Check if we can find folder1 using the file_name_text locator
-            try:
-                folder1_locator = format_locator(
-                    bucket_ui.bucket_tab["file_name_text"], "folder1"
-                )
-                folder1_elements = bucket_ui.get_elements(folder1_locator)
-                if folder1_elements:
-                    logger.info("✓ Found folder1 in object list")
-                else:
-                    logger.warning("✗ folder1 not found in object list")
-            except Exception as e:
-                logger.warning("Could not verify folder1 visibility: %s", e)
+            folder1_locator = format_locator(
+                bucket_ui.bucket_tab["file_name_text"], "folder1"
+            )
+            folder1_elements = bucket_ui.get_elements(folder1_locator)
+            assert folder1_elements, "folder1 not found in object list"
+            logger.info("✓ Found folder1 in object list")
 
             # Check if we can find root-file.txt
-            try:
-                root_file_locator = format_locator(
-                    bucket_ui.bucket_tab["file_name_text"], "root-file.txt"
-                )
-                root_file_elements = bucket_ui.get_elements(root_file_locator)
-                if root_file_elements:
-                    logger.info("✓ Found root-file.txt in object list")
-                else:
-                    logger.warning("✗ root-file.txt not found in object list")
-            except Exception as e:
-                logger.warning("Could not verify root-file.txt visibility: %s", e)
+            root_file_locator = format_locator(
+                bucket_ui.bucket_tab["file_name_text"], "root-file.txt"
+            )
+            root_file_elements = bucket_ui.get_elements(root_file_locator)
+            assert root_file_elements, "root-file.txt not found in object list"
+            logger.info("✓ Found root-file.txt in object list")
 
-            # Try to navigate into folder1 using first_folder_link
+            # Navigate into folder1 using first_folder_link
             logger.info("Attempting folder navigation into folder1")
-            try:
-                # Click on first folder link
-                bucket_ui.do_click(bucket_ui.bucket_tab["first_folder_link"])
-                time.sleep(2)
-                logger.info("✓ Clicked on folder link - navigation attempted")
+            bucket_ui.do_click(bucket_ui.bucket_tab["first_folder_link"])
+            time.sleep(2)
+            logger.info("✓ Clicked on folder link - navigation attempted")
 
-                # Try to verify we're inside folder1 by looking for file1.txt
-                file1_locator = format_locator(
-                    bucket_ui.bucket_tab["file_name_text"], "file1.txt"
-                )
-                file1_elements = bucket_ui.get_elements(file1_locator)
-                if file1_elements:
-                    logger.info(
-                        "✓ Successfully navigated into folder - found file1.txt"
-                    )
-                else:
-                    logger.warning("Folder navigation unclear - file1.txt not found")
-
-            except Exception as e:
-                logger.warning(
-                    "Folder navigation failed or needs different locator: %s", e
-                )
-
-            # Note: Full object list verification and breadcrumb navigation
-            # require additional UI locators to be discovered
-            # See UI_ELEMENT_DISCOVERY_GUIDE.md for instructions
+            # Verify we're inside folder1 by looking for file1.txt
+            file1_locator = format_locator(
+                bucket_ui.bucket_tab["file_name_text"], "file1.txt"
+            )
+            file1_elements = bucket_ui.get_elements(file1_locator)
+            assert file1_elements, "file1.txt not found after navigating into folder1"
+            logger.info("✓ Successfully navigated into folder - found file1.txt")
 
         # Step 6-7: Login to object browser on client 2 and verify isolation
         logger.test_step(
@@ -507,8 +482,23 @@ class TestObjectBrowserClientProviderUI(ManageTest):
             )
             time.sleep(3)
 
-            # TODO: Verify client2 objects are listed
-            logger.info("TODO: Verify client2 objects are listed in UI")
-            logger.info("Expected objects: client2-folder/, client2-data.txt")
+            # Verify client2 objects are listed in UI
+            logger.info("Verifying client2 objects are visible in bucket")
+
+            # Check if we can find client2-folder
+            client2_folder_locator = format_locator(
+                bucket_ui2.bucket_tab["file_name_text"], "client2-folder"
+            )
+            client2_folder_elements = bucket_ui2.get_elements(client2_folder_locator)
+            assert client2_folder_elements, "client2-folder not found in object list"
+            logger.info("✓ Found client2-folder in object list")
+
+            # Check if we can find client2-data.txt
+            client2_data_locator = format_locator(
+                bucket_ui2.bucket_tab["file_name_text"], "client2-data.txt"
+            )
+            client2_data_elements = bucket_ui2.get_elements(client2_data_locator)
+            assert client2_data_elements, "client2-data.txt not found in object list"
+            logger.info("✓ Found client2-data.txt in object list")
 
         logger.info("Test completed successfully - Object browser isolation verified")
