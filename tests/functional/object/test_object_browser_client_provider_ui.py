@@ -119,7 +119,7 @@ class TestObjectBrowserClientProviderUI(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    @polarion_id("OCS-7954")
+    @polarion_id("OCS-7990")
     def test_object_browser_list_objects_with_folders(self, project_factory):
         """
         Test object browser can list objects and navigate folders on client clusters.
