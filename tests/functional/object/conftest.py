@@ -111,7 +111,7 @@ def object_browser_ca_cert_setup_client(request):
 
     For private/custom CA certificates, the object browser needs the CA cert chain
     to trust the S3 endpoint. This fixture automates the setup of:
-    - Secret: "ocs-client-operator-console-s3-endpoint-ca-certs"
+    - Resource name: "ocs-client-operator-console-s3-endpoint-ca-certs"
     - Key: "ocs-s3-endpoints-list-<STORAGECLIENT_UID>-noobaaS3.crt"
     - Value: Root CA certificate for custom ingress (from get_root_ca_cert())
 
