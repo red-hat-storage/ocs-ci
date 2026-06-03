@@ -389,11 +389,21 @@ class DeploymentUI(PageNavigator):
             )
 
         if config.DEPLOYMENT.get("odf_forceful_deployment"):
+            if "enable_forceful_deployment" not in self.dep_loc:
+                raise ConfigurationError(
+                    "Forceful deployment UI automation is supported only on ODF/OCP 4.22+."
+                )
             self.enable_forceful_deployment()
 
         if config.DEPLOYMENT.get("ec_default_pools"):
+            if "use_erasure_coding" not in self.dep_loc:
+                raise ConfigurationError(
+                    "Erasure coding UI automation is supported only on ODF/OCP 4.22+."
+                )
             if not self.enable_erasure_coding():
-                raise ConfigurationError
+                raise ConfigurationError(
+                    "Erasure coding is unavailable in the Advanced Settings step."
+                )
 
         self.do_click(
             locator=self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
@@ -569,18 +579,18 @@ class DeploymentUI(PageNavigator):
             enable_screenshot=True,
         )
 
-    def _verify_ec_effective_capacity(self, k, m):
+    def _parse_ec_scheme_table(self):
         """
-        Cross-validate the Effective capacity values shown in the EC scheme
-        table.  Derives total raw capacity from the first row and verifies
-        every other row matches ``total_raw * k_i / (k_i + m_i)`` rounded
-        to two decimal places.
+        Parse the EC scheme table rows from the UI into structured data.
 
-        Args:
-            k (int): Number of data chunks of the selected scheme.
-            m (int): Number of coding chunks of the selected scheme.
+        Returns:
+            list[tuple]: List of (scheme_text, k, m, capacity_value) for each
+                parseable row. scheme_text is e.g. "2+2", capacity_value is
+                the effective capacity in TiB as a float.
+
+        Raises:
+            ConfigurationError: If the table has no rows.
         """
-        scheme = f"{k}+{m}"
         rows = self.get_elements(locator=self.dep_loc["ec_scheme_table_rows"])
         if not rows:
             raise ConfigurationError(
@@ -592,7 +602,6 @@ class DeploymentUI(PageNavigator):
         parsed = []
         for row in rows:
             raw_scheme = row.find_element(scheme_cell[1], scheme_cell[0]).text
-            # Extract "k+m" pattern, stripping badges like "Recommended"
             match = re.match(r"(\d+\+\d+)", raw_scheme.strip())
             if not match:
                 logger.warning(f"Could not parse EC scheme from: '{raw_scheme}'")
@@ -602,6 +611,21 @@ class DeploymentUI(PageNavigator):
             ki, mi = (int(x) for x in scheme_text.split("+"))
             capacity_value = float(capacity_text.split()[0])
             parsed.append((scheme_text, ki, mi, capacity_value))
+        return parsed
+
+    def _verify_ec_effective_capacity(self, k, m):
+        """
+        Cross-validate the Effective capacity values shown in the EC scheme
+        table.  Derives total raw capacity from the first row and verifies
+        every other row matches ``total_raw * k_i / (k_i + m_i)`` within
+        0.02 TiB tolerance.
+
+        Args:
+            k (int): Number of data chunks of the selected scheme.
+            m (int): Number of coding chunks of the selected scheme.
+        """
+        scheme = f"{k}+{m}"
+        parsed = self._parse_ec_scheme_table()
 
         available_schemes = [p[0] for p in parsed]
         if scheme not in available_schemes:
@@ -612,7 +636,6 @@ class DeploymentUI(PageNavigator):
 
         ref_scheme, ref_k, ref_m, ref_cap = parsed[0]
         total_raw = ref_cap * (ref_k + ref_m) / ref_k
-        # Raw storage will be always in TiB; we do not expect GiB values in the EC table
         logger.info(
             f"EC table: derived total raw capacity = {total_raw:.2f} TiB "
             f"(from reference scheme {ref_scheme})"
@@ -627,7 +650,7 @@ class DeploymentUI(PageNavigator):
                 )
             logger.info(
                 f"EC scheme {row_scheme}: effective capacity = {displayed_cap} TiB "
-                f"(expected {expected_cap} TiB)"
+                f"(expected ~{expected_cap:.2f} TiB)"
             )
 
     def is_erasure_coding_disabled(self):

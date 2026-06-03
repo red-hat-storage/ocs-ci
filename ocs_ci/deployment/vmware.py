@@ -277,12 +277,24 @@ class VSPHEREBASE(Deployment):
 
     def delete_disks(self):
         """
-        Delete the extra disks from all the worker nodes and is sno delete it from sno nodes which is compute also
+        Delete the extra disks from all targeted cluster VMs.
+        Includes master VMs when ec_default_pools + mark_masters_schedulable.
         """
-        if config.ENV_DATA["sno"]:
+        if config.ENV_DATA.get("sno"):
             vms = self.get_vms_by_string(self.datacenter, self.cluster, "sno")
         else:
-            vms = self.get_compute_vms(self.datacenter, self.cluster)
+            include_masters = config.DEPLOYMENT.get(
+                "ec_default_pools"
+            ) and config.ENV_DATA.get("mark_masters_schedulable", True)
+            all_vms = self.vsphere.get_all_vms_in_pool(
+                config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
+            )
+            vms = [
+                vm
+                for vm in all_vms
+                if "compute" in vm.name
+                or (include_masters and "control-plane" in vm.name)
+            ]
         if vms:
             for vm in vms:
                 self.vsphere.remove_disks(vm)
@@ -398,16 +410,16 @@ class VSPHEREBASE(Deployment):
         # Importing here to avoid circular dependency (baremetal imports lso_helpers)
         from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 
-        target_nodes = get_nodes(node_type="worker")
+        target_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
         if include_masters:
-            target_nodes += get_nodes(node_type="master")
+            target_nodes += get_nodes(node_type=constants.MASTER_MACHINE)
         extra_disks = config.ENV_DATA.get("extra_disks", 1)
         total_available_disks = sum(
             len(disks_available_to_cleanup(n)) for n in target_nodes
         )
         logger.info(
             "Total available (non-boot) disks across %s nodes: %s",
-            "all" if include_masters else "worker",
+            "all" if include_masters else constants.WORKER_MACHINE,
             total_available_disks,
         )
 
