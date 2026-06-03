@@ -238,8 +238,8 @@ deployment_4_9 = {
     ),
     "dismiss_welcome_modal": (
         "button[aria-label='Close'], "
-        ".pf-v6-c-modal-box button.pf-m-plain, "
-        ".pf-v6-l-bullseye button.pf-m-plain",
+        "[class*='c-modal-box'] button[class*='m-plain'], "
+        "[class*='l-bullseye'] button[class*='m-plain']",
         By.CSS_SELECTOR,
     ),
     "odf_operator_row_succeeded": (
@@ -394,7 +394,7 @@ deployment_4_22 = {
     ),
     "select_core_platform": (
         "//h2[normalize-space()='Core platform']"
-        "/ancestor::button[contains(@class, 'pf-v6-c-menu__item')]",
+        "/ancestor::button[contains(@class, 'c-menu__item')]",
         By.XPATH,
     ),
     # PF v6 sidebar navigation locators
