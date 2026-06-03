@@ -27,6 +27,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.helpers import ocs_metrics_exporter_helpers as ome_helpers
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
@@ -182,8 +183,6 @@ def test_kube_rbac_proxy_removed():
     logger.info("✓ Deployment spec has no kube-rbac-proxy image references")
 
     # Verify service configuration
-    from ocs_ci.ocs.ocp import OCP
-
     ocp_service = OCP(kind=constants.SERVICE, namespace=namespace)
     services = ocp_service.get(selector=constants.OCS_METRICS_EXPORTER).get("items", [])
 
@@ -208,8 +207,6 @@ def test_kube_rbac_proxy_removed():
 
     # Verify ServiceMonitor configuration
     try:
-        from ocs_ci.ocs.ocp import OCP
-
         ocp_sm = OCP(
             kind="ServiceMonitor",
             namespace=namespace,
