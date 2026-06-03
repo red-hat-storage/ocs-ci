@@ -141,8 +141,9 @@ class TestNooBaaBucketErrorStateMode:
         Steps:
             1. Create a data bucket with a 2Gi quota
             2. Upload ~2.5GB to exceed the quota
-            3. Verify bucket mode is EXCEEDING_QUOTA via NooBaa
-            4. Clean up
+            3. Wait for bucket mode to propagate
+            4. Verify bucket mode is EXCEEDING_QUOTA via NooBaa
+            5. Clean up
 
         Args:
             mcg_obj (MCG): MCG object with S3 connection credentials
@@ -161,6 +162,10 @@ class TestNooBaaBucketErrorStateMode:
                 f"(quota 2Gi) to trigger EXCEEDING_QUOTA"
             )
 
+            run_time = 60 * 7
+            log.info(f"Waiting {run_time}s for bucket mode to propagate")
+            time.sleep(run_time)
+
             expected_mode = "EXCEEDING_QUOTA"
             bucket_mode = _get_bucket_mode(mcg_obj, bucket_name)
             assert bucket_mode == expected_mode, (
@@ -171,7 +176,9 @@ class TestNooBaaBucketErrorStateMode:
             bucket.delete()
 
     @polarion_id("OCS-XXXXX")
-    def test_data_bucket_resource_error_mode(self, mcg_obj, bucket_factory, cld_mgr):
+    def test_data_bucket_resource_error_mode(
+        self, mcg_obj, bucket_factory, cld_mgr, request
+    ):
         """
         Trigger a resource-related bucket mode on a data bucket and
         verify the bucket enters a non-OPTIMAL error mode.
@@ -187,6 +194,7 @@ class TestNooBaaBucketErrorStateMode:
             mcg_obj (MCG): MCG object with S3 connection credentials
             bucket_factory (func): Factory for creating MCG buckets
             cld_mgr (CloudManager): Cloud manager for cloud operations
+            request: Pytest request object for finalizer registration
         """
         bucketclass_dict = {
             "interface": "OC",
@@ -197,9 +205,17 @@ class TestNooBaaBucketErrorStateMode:
             interface=bucketclass_dict["interface"],
             bucketclass=bucketclass_dict,
         )[0]
+        backingstore = bucket.bucketclass.backingstores[0]
+
+        def cleanup():
+            bucket.delete()
+            bucket.bucketclass.delete()
+            backingstore.delete()
+
+        request.addfinalizer(cleanup)
+
         log.info(f"Created data bucket {bucket.name} with AWS backing store")
 
-        backingstore = bucket.bucketclass.backingstores[0]
         target_uls_name = backingstore.uls_name
         log.info(
             f"Backing store {backingstore.name} uses "
@@ -221,13 +237,11 @@ class TestNooBaaBucketErrorStateMode:
             f"deleting backing store target"
         )
 
-        bucket.delete()
-        bucket.bucketclass.delete()
-        backingstore.delete()
-
     @skipif_mcg_only
     @polarion_id("OCS-XXXXX")
-    def test_data_bucket_capacity_error_mode(self, mcg_obj, awscli_pod, bucket_factory):
+    def test_data_bucket_capacity_error_mode(
+        self, mcg_obj, awscli_pod, bucket_factory, request
+    ):
         """
         Trigger a capacity-related bucket mode on a data bucket and
         verify the bucket enters a non-OPTIMAL error mode.
@@ -244,6 +258,7 @@ class TestNooBaaBucketErrorStateMode:
             mcg_obj (MCG): MCG object with S3 connection credentials
             awscli_pod (Pod): Pod running the AWSCLI tools
             bucket_factory (func): Factory for creating MCG buckets
+            request: Pytest request object for finalizer registration
         """
         bucketclass_dict = {
             "interface": "OC",
@@ -255,6 +270,14 @@ class TestNooBaaBucketErrorStateMode:
             bucketclass=bucketclass_dict,
         )[0]
         backingstore = bucket.bucketclass.backingstores[0]
+
+        def cleanup():
+            bucket.delete()
+            bucket.bucketclass.delete()
+            backingstore.delete()
+
+        request.addfinalizer(cleanup)
+
         log.info(
             f"Created data bucket {bucket.name} with "
             f"2Gi PV pool backing store {backingstore.name}"
@@ -276,10 +299,6 @@ class TestNooBaaBucketErrorStateMode:
             f"exceeding PV pool capacity"
         )
 
-        bucket.delete()
-        bucket.bucketclass.delete()
-        backingstore.delete()
-
     # ------------------------------------------------------------------
     # Namespace bucket tests
     # ------------------------------------------------------------------
@@ -291,6 +310,7 @@ class TestNooBaaBucketErrorStateMode:
         bucket_factory,
         namespace_store_factory,
         cld_mgr,
+        request,
     ):
         """
         Trigger a resource-related bucket mode on a namespace bucket
@@ -309,10 +329,10 @@ class TestNooBaaBucketErrorStateMode:
             bucket_factory (func): Factory for creating MCG buckets
             namespace_store_factory (func): Factory for creating namespace stores
             cld_mgr (CloudManager): Cloud manager for cloud operations
+            request: Pytest request object for finalizer registration
         """
         nss_tup = ("oc", {"aws": [(2, "us-east-2")]})
         ns_stores = namespace_store_factory(*nss_tup)
-        log.info(f"Created namespace stores: " f"{[ns.name for ns in ns_stores]}")
 
         bucketclass_dict = {
             "interface": "OC",
@@ -326,7 +346,17 @@ class TestNooBaaBucketErrorStateMode:
             interface=bucketclass_dict["interface"],
             bucketclass=bucketclass_dict,
         )[0]
-        log.info(f"Created namespace bucket {ns_bucket.name} " f"with Multi policy")
+
+        def cleanup():
+            ns_bucket.delete()
+            ns_bucket.bucketclass.delete()
+            for ns_store in ns_stores:
+                ns_store.delete()
+
+        request.addfinalizer(cleanup)
+
+        log.info(f"Created namespace stores: {[ns.name for ns in ns_stores]}")
+        log.info(f"Created namespace bucket {ns_bucket.name} with Multi policy")
 
         target_uls_name = ns_stores[0].uls_name
         log.info(
@@ -345,10 +375,6 @@ class TestNooBaaBucketErrorStateMode:
             f"after deleting namespace store target"
         )
 
-        ns_bucket.delete()
-        ns_bucket.bucketclass.delete()
-        ns_stores[0].delete()
-
     @polarion_id("OCS-XXXXX")
     def test_ns_bucket_quota_error_mode(
         self,
@@ -356,6 +382,7 @@ class TestNooBaaBucketErrorStateMode:
         awscli_pod,
         bucket_factory,
         namespace_store_factory,
+        request,
     ):
         """
         Trigger a quota-related bucket mode on a namespace bucket and
@@ -367,18 +394,19 @@ class TestNooBaaBucketErrorStateMode:
                namespace store
             3. Set a 100Mi quota on the namespace bucket
             4. Upload data exceeding the quota
-            5. Verify bucket mode is EXCEEDING_QUOTA via NooBaa
-            6. Clean up
+            5. Wait for bucket mode to propagate
+            6. Verify bucket mode is EXCEEDING_QUOTA via NooBaa
+            7. Clean up
 
         Args:
             mcg_obj (MCG): MCG object with S3 connection credentials
             awscli_pod (Pod): Pod running the AWSCLI tools
             bucket_factory (func): Factory for creating MCG buckets
             namespace_store_factory (func): Factory for creating namespace stores
+            request: Pytest request object for finalizer registration
         """
         nss_tup = ("oc", {"aws": [(1, "us-east-2")]})
         ns_stores = namespace_store_factory(*nss_tup)
-        log.info(f"Created namespace store: {ns_stores[0].name}")
 
         bucketclass_dict = {
             "interface": "OC",
@@ -392,6 +420,15 @@ class TestNooBaaBucketErrorStateMode:
             interface=bucketclass_dict["interface"],
             bucketclass=bucketclass_dict,
         )[0]
+
+        def cleanup():
+            ns_bucket.delete()
+            ns_bucket.bucketclass.delete()
+            ns_stores[0].delete()
+
+        request.addfinalizer(cleanup)
+
+        log.info(f"Created namespace store: {ns_stores[0].name}")
         log.info(f"Created namespace bucket {ns_bucket.name} (Single policy)")
 
         mcg_obj.exec_mcg_cmd(
@@ -407,15 +444,15 @@ class TestNooBaaBucketErrorStateMode:
             f"(quota 100Mi) to trigger EXCEEDING_QUOTA"
         )
 
+        run_time = 60 * 7
+        log.info(f"Waiting {run_time}s for bucket mode to propagate")
+        time.sleep(run_time)
+
         expected_mode = "EXCEEDING_QUOTA"
         bucket_mode = _get_bucket_mode(mcg_obj, ns_bucket.name)
         assert (
             bucket_mode == expected_mode
         ), f"Expected bucket mode {expected_mode}, got {bucket_mode}"
-
-        ns_bucket.delete()
-        ns_bucket.bucketclass.delete()
-        ns_stores[0].delete()
 
     @skipif_mcg_only
     @polarion_id("OCS-XXXXX")
@@ -426,6 +463,7 @@ class TestNooBaaBucketErrorStateMode:
         bucket_factory,
         backingstore_factory,
         namespace_store_factory,
+        request,
     ):
         """
         Trigger a capacity-related bucket mode on a namespace bucket
@@ -452,18 +490,14 @@ class TestNooBaaBucketErrorStateMode:
             bucket_factory (func): Factory for creating MCG buckets
             backingstore_factory (func): Factory for creating backing stores
             namespace_store_factory (func): Factory for creating namespace stores
+            request: Pytest request object for finalizer registration
         """
         pv_backingstore = backingstore_factory(
             "oc", {"pv": [(1, 2, constants.DEFAULT_STORAGECLASS_RBD)]}
         )[0]
-        log.info(
-            f"Created PV pool backing store {pv_backingstore.name} "
-            f"(2Gi) for cache layer"
-        )
 
         nss_tup = ("oc", {"aws": [(1, "us-east-2")]})
         ns_stores = namespace_store_factory(*nss_tup)
-        log.info(f"Created namespace store (hub): {ns_stores[0].name}")
 
         cache_bucketclass = {
             "interface": "OC",
@@ -479,9 +513,21 @@ class TestNooBaaBucketErrorStateMode:
             interface=cache_bucketclass["interface"],
             bucketclass=cache_bucketclass,
         )[0]
+
+        def cleanup():
+            ns_bucket.delete()
+            ns_bucket.bucketclass.delete()
+            pv_backingstore.delete()
+            ns_stores[0].delete()
+
+        request.addfinalizer(cleanup)
+
         log.info(
-            f"Created Cache namespace bucket {ns_bucket.name} " f"with PV pool cache"
+            f"Created PV pool backing store {pv_backingstore.name} "
+            f"(2Gi) for cache layer"
         )
+        log.info(f"Created namespace store (hub): {ns_stores[0].name}")
+        log.info(f"Created Cache namespace bucket {ns_bucket.name} with PV pool cache")
 
         _upload_data_to_bucket(awscli_pod, ns_bucket.name, mcg_obj, 4, 700)
         log.info(
@@ -499,11 +545,6 @@ class TestNooBaaBucketErrorStateMode:
             f"after exceeding cache PV pool capacity"
         )
 
-        ns_bucket.delete()
-        ns_bucket.bucketclass.delete()
-        pv_backingstore.delete()
-        ns_stores[0].delete()
-
 
 def setup_module(module):
     ocs_obj = OCP()
@@ -511,5 +552,6 @@ def setup_module(module):
 
 
 def teardown_module(module):
-    ocs_obj = OCP()
-    ocs_obj.login_as_user(module.original_user)
+    if hasattr(module, "original_user"):
+        ocs_obj = OCP()
+        ocs_obj.login_as_user(module.original_user)
