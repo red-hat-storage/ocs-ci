@@ -52,7 +52,7 @@ DEPLOYMENT:
 
 **Basic Usage (with all CLI arguments):**
 ```bash
-python -m ocs_ci.framework.fdf_mirror.main \
+fdf-mirror \
   --catalog-image <catalog-image-url> \
   --mirror-registry <mirror-registry-url> \
   --mirror-registry-user <username> \
@@ -64,7 +64,7 @@ python -m ocs_ci.framework.fdf_mirror.main \
 
 **With Config File (credentials in config):**
 ```bash
-python -m ocs_ci.framework.fdf_mirror.main \
+fdf-mirror \
   --catalog-image <catalog-image-url> \
   --mirror-registry <mirror-registry-url> \
   --cluster-path <path-to-cluster-dir> \
@@ -74,7 +74,7 @@ python -m ocs_ci.framework.fdf_mirror.main \
 
 **Mixed (registry from CLI, credentials from config):**
 ```bash
-python -m ocs_ci.framework.fdf_mirror.main \
+fdf-mirror \
   --catalog-image <catalog-image-url> \
   --mirror-registry <mirror-registry-url> \
   --cluster-path <path-to-cluster-dir> \
@@ -118,7 +118,7 @@ results = mirror_fdf_catalog_via_oc_mirror(
 ```
 
 **Notes:**
-- Use `python -m ocs_ci.framework.fdf_mirror.main` for reliability in Jenkins
+- Use `fdf-mirror` command (installed entrypoint) or `python -m ocs_ci.framework.fdf_mirror.main` as alternative
 - KUBECONFIG must point to cluster kubeconfig
 - Pull secret at `${CLUSTER_PATH}/auth/pull-secret` is used automatically
 - oc-mirror tool is installed automatically if not present
@@ -132,7 +132,7 @@ results = mirror_fdf_catalog_via_oc_mirror(
 The tool supports generating JUnit XML format test reports for CI/CD integration:
 
 ```bash
-python -m ocs_ci.framework.fdf_mirror.main \
+fdf-mirror \
   --catalog-image <catalog-image-url> \
   --mirror-registry <mirror-registry-url> \
   --cluster-path <path-to-cluster-dir> \
@@ -425,7 +425,7 @@ cat /path/to/report.xml
 ### 6. CI/CD Integration
 - Use `--report` option for JUnit XML output
 - Set appropriate timeouts in CI pipelines (5+ hours recommended)
-- Use `python -m ocs_ci.framework.fdf_mirror.main` for module execution reliability
+- Use `fdf-mirror` command (installed entrypoint)
 - Check exit codes for success/failure status
 
 ### 7. Troubleshooting
