@@ -205,10 +205,11 @@ class Operator:
         )
         if not is_hosted:
             wait_for_machineconfigpool_status("all", force_delete_pods=False)
-        CatalogSource(
+        catalog_source = CatalogSource(
             resource_name=self.unreleased_catalog_name,
             namespace=constants.MARKETPLACE_NAMESPACE,
-        ).wait_for_state("READY")
+        )
+        catalog_source.wait_for_state("READY")
 
     def create_disconnected_catalog(self):
         # in case of disconnected environment, we have to mirror all the
@@ -230,10 +231,11 @@ class Operator:
 
         if not is_hosted_cluster(config.ENV_DATA.get("cluster_name")):
             wait_for_machineconfigpool_status("all", force_delete_pods=False)
-        CatalogSource(
+        catalog_source = CatalogSource(
             resource_name=self.unreleased_catalog_name,
             namespace=constants.MARKETPLACE_NAMESPACE,
-        ).wait_for_state("READY")
+        )
+        catalog_source.wait_for_state("READY")
 
     @retry(CommandFailed, tries=5, delay=30, backoff=1)
     def is_available(self):
