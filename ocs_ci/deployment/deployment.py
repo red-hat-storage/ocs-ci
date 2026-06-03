@@ -2257,15 +2257,24 @@ class Deployment(object):
                 timeout=600,
             )
 
-            if config.ENV_DATA.get("simulate_bluestore_label", False):
+            wipe_devices_from_other_clusters = config.ENV_DATA.get(
+                "wipe_devices_from_other_clusters", False
+            )
+            odf_forceful_deployment = config.DEPLOYMENT.get(
+                "odf_forceful_deployment", False
+            )
+            if wipe_devices_from_other_clusters or odf_forceful_deployment:
                 from ocs_ci.deployment.helpers.ceph_cluster import (
-                    verify_osd_prepare_logs_bluestore_wipe,
+                    verify_wipe_devices_from_other_clusters,
                 )
 
-                logger.info("Verify rook-ceph-osd-prepare logs confirm bluestore wipe")
+                logger.info(
+                    "Verify wipe devices from other clusters "
+                    "(StorageCluster CR flag and OSD prepare logs)"
+                )
                 assert (
-                    verify_osd_prepare_logs_bluestore_wipe()
-                ), "Bluestore wipe verification failed in rook-ceph-osd-prepare logs"
+                    verify_wipe_devices_from_other_clusters()
+                ), "Wipe devices from other clusters verification failed"
 
             if not config.COMPONENTS["disable_cephfs"]:
                 # Check for CephFilesystem creation in ocp

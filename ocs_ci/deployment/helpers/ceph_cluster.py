@@ -485,27 +485,55 @@ def simulate_full_ceph_bluestore_process_on_wnodes(
     return True
 
 
-def verify_osd_prepare_logs_bluestore_wipe():
+def verify_wipe_devices_from_other_clusters():
     """
-    Check that each rook-ceph-osd-prepare pod successfully detected and wiped
-    a pre-existing bluestore OSD from a different cluster before provisioning
-    a new OSD.
+    Verify that the cluster correctly wiped pre-existing bluestore OSDs from
+    another cluster before provisioning new OSDs.
 
-    These patterns are present in both encrypted and unencrypted OSD prepare
-    logs whenever the disk carried bluestore data from a prior cluster.
+    Performs two checks:
 
-    Checks for the following regex patterns in each pod's logs:
-    - completed wiping OSD <id> device "<dev>" belonging to a different ceph
-      cluster — foreign bluestore data was detected and zapped
-    - successfully zapped osd.<id> path "<dev>" — low-level wipe succeeded
-    - ceph-volume raw dmcrypt prepare successful — new OSD prepared
-      (rook-ceph emits this message for both encrypted and unencrypted OSDs)
+    1. **StorageCluster CR** — asserts that
+       ``spec.managedResources.cephCluster.cleanupPolicy.wipeDevicesFromOtherClusters``
+       is exactly ``true``.
+
+    2. **OSD prepare logs** — checks each ``rook-ceph-osd-prepare`` pod for
+       the following regex patterns, which confirm that foreign bluestore data
+       was detected and zapped:
+
+       - ``completed wiping OSD <id> device "<dev>" belonging to a different
+         ceph cluster`` — foreign bluestore data detected and zapped
+       - ``successfully zapped osd.<id> path "<dev>"`` — low-level wipe
+         succeeded
+       - ``ceph-volume raw dmcrypt prepare successful`` — new OSD prepared
+         (emitted for both encrypted and unencrypted OSDs)
 
     Returns:
-        bool: True if all patterns are found in all pods, False otherwise.
+        bool: True if both checks pass, False otherwise.
+
     """
     from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 
+    # Check 1: StorageCluster CR flag
+    sc_obj = get_storage_cluster()
+    sc_data = sc_obj.get(resource_name=constants.DEFAULT_STORAGE_CLUSTER)
+    flag = (
+        sc_data.get("spec", {})
+        .get("managedResources", {})
+        .get("cephCluster", {})
+        .get("cleanupPolicy", {})
+        .get("wipeDevicesFromOtherClusters")
+    )
+    if flag is True:
+        logger.info("StorageCluster has wipeDevicesFromOtherClusters set to true")
+    else:
+        logger.error(
+            "StorageCluster wipeDevicesFromOtherClusters is %r, expected true",
+            flag,
+        )
+        return False
+
+    # Check 2: OSD prepare pod logs
     expected_patterns = [
         re.compile(
             r'completed wiping OSD \d+ device ".+" belonging to a different'
