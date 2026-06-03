@@ -803,11 +803,13 @@ HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
 # OCS Metrics Exporter constants (RHSTOR-7964)
 OCS_METRICS_EXPORTER_HTTPS_PORT = 8443
+OCS_METRICS_EXPORTER_SELF_HTTPS_PORT = 9443
 OCS_METRICS_EXPORTER_METRICS_PATH = "/metrics"
 OCS_METRICS_EXPORTER_READYZ_PATH = "/readyz"
 OCS_METRICS_EXPORTER_CEPH_AUTH_SECRET = (
     "ocs-metrics-exporter-ceph-auth"  # pragma: allowlist secret
 )
+PROMETHEUS_K8S_SA = "prometheus-k8s"
 MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
