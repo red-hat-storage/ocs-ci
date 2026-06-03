@@ -116,7 +116,7 @@ class Initializer(BaseInitializer):
             "--conf",
             action="append",
             default=[],
-            help="Path to config file (alias for --ocsci-conf). Repeatable.",
+            help="Path to config file. Repeatable.",
         )
         parser.add_argument(
             "--report", default=None, help="Filepath for generated junit report"
