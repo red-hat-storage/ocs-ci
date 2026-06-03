@@ -30,8 +30,6 @@ from ocs_ci.framework import config
 from ocs_ci.utility.version import (
     get_semantic_running_odf_version,
     get_semantic_version,
-    VERSION_4_22,
-    get_ocs_version_from_csv,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,66 +50,6 @@ SEVERITY_DROP_MAP = {
     "Medium": 10,
     "Critical": 20,
 }
-
-
-def get_alert_params():
-    """
-    Get alert parameters based on OCS version
-
-    Returns:
-        list: List of tuples (alert_name, alert_yaml)
-    """
-    try:
-        ocs_version = get_ocs_version_from_csv(only_major_minor=True)
-        if ocs_version is None:
-            raise ValueError("get_ocs_version_from_csv returned None")
-    except Exception as e:
-        # Fallback if cluster not ready (e.g., during deployment)
-        logger.warning(
-            f"Could not detect OCS version (cluster may not be ready): {e}. "
-            f"Using default version {VERSION_4_22}"
-        )
-        ocs_version = VERSION_4_22
-    params = [
-        (
-            constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000,
-            "custom-odf-mtu-less-than-9000.yaml",
-        ),
-        (
-            constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION,
-            "custom-odf-nic-bandwidth-saturation.yaml",
-        ),
-        (
-            constants.ALERT_ODF_DISK_UTILIZATION_HIGH,
-            "custom-odf-disk-utilization-high.yaml",
-        ),
-        (
-            constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES,
-            "custom-odf-latency-rule.yaml",
-        ),
-        (
-            constants.ALERT_ODF_CORE_POD_RESTART,
-            "custom-odf-core-pod-restarted.yaml",
-        ),
-        (
-            constants.ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES,
-            "custom-odf-node-latency-high-non-osd.yaml",
-        ),
-    ]
-    if ocs_version >= VERSION_4_22:
-        params.extend(
-            [
-                (
-                    constants.ALERT_CLUSTERERRORSTATE,
-                    "custom-ceph-cluster-error.yaml",
-                ),
-                (
-                    constants.ALERT_CLUSTERWARNINGSTATE,
-                    "custom-ceph-cluster-warn.yaml",
-                ),
-            ]
-        )
-    return params
 
 
 @ui
@@ -510,7 +448,42 @@ class TestHealthOverview(ManageTest):
     @polarion_id("OCS-7509")
     @pytest.mark.parametrize(
         "alert_name, alert_yaml",
-        get_alert_params(),
+        [
+            (
+                constants.ALERT_ODF_NODE_MTU_LESS_THAN_9000,
+                "custom-odf-mtu-less-than-9000.yaml",
+            ),
+            (
+                constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION,
+                "custom-odf-nic-bandwidth-saturation.yaml",
+            ),
+            (
+                constants.ALERT_ODF_DISK_UTILIZATION_HIGH,
+                "custom-odf-disk-utilization-high.yaml",
+            ),
+            (
+                constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES,
+                "custom-odf-latency-rule.yaml",
+            ),
+            (
+                constants.ALERT_ODF_CORE_POD_RESTART,
+                "custom-odf-core-pod-restarted.yaml",
+            ),
+            (
+                constants.ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES,
+                "custom-odf-node-latency-high-non-osd.yaml",
+            ),
+            pytest.param(
+                constants.ALERT_CLUSTERERRORSTATE,
+                "custom-ceph-cluster-error.yaml",
+                marks=skipif_ocs_version("<4.22"),
+            ),
+            pytest.param(
+                constants.ALERT_CLUSTERWARNINGSTATE,
+                "custom-ceph-cluster-warn.yaml",
+                marks=skipif_ocs_version("<4.22"),
+            ),
+        ],
     )
     def test_health_score_changes_based_on_alert_severity(
         self,
