@@ -21,7 +21,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @tier4a
@@ -61,6 +61,7 @@ class TestMonFailuresWithIntransitEncryption:
             8. Verify the in-transit encryption configuration after
             scaling up mons and restarting mgr pod.
         """
+        logger.test_step("Ensure in-transit encryption is enabled on the cluster")
         self.mons = []
         if not get_in_transit_encryption_config_state():
             if config.ENV_DATA.get("in_transit_encryption"):
@@ -72,20 +73,20 @@ class TestMonFailuresWithIntransitEncryption:
 
         ceph_obj = CephCluster()
 
-        log.info("Verifying the in-transit encryption is enable on setup.")
+        logger.assertion("In-transit encryption verification: expected='True'")
         assert (
             in_transit_encryption_verification()
         ), "In transit encryption verification failed"
 
         # Select Two mons
+        logger.test_step("Scale down two mons and restart Mgr pod")
         self.mons = ceph_obj.get_mons_from_cluster()[:2]
-        # self.mons = get_mon_deployments()[:2]
 
         # Scale Down Mon Count to replica=0
         for mon in self.mons:
             modify_deployment_replica_count(mon, 0)
 
-        # Sleeping for 10 seconds to emulate a condition where the 2 mons is inaccessibe  for 10 seconds.
+        # Sleeping for 10 seconds to emulate a condition where the 2 mons is inaccessible for 10 seconds.
         time.sleep(10)
 
         def restart_mgr_pod():
@@ -103,25 +104,30 @@ class TestMonFailuresWithIntransitEncryption:
         # Sleeping for 5 seconds to rejoin the manager's pod.
         time.sleep(5)
 
-        log.info(f"Scaling up mons {','.join(self.mons)}")
+        logger.test_step(
+            f"Scale up mons {','.join(self.mons)} and wait for Mgr pod Running state"
+        )
         for mon in self.mons:
             modify_deployment_replica_count(mon, 1)
 
-        log.info("Waiting for mgr pod move to Running state")
+        logger.info("Waiting for mgr pod to move to Running state")
         ceph_obj.scan_cluster()
 
+        logger.assertion("Mgr pod status: expected='Running'")
         assert ceph_obj.POD.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=constants.MGR_APP_LABEL,
             resource_count=1,
             timeout=100,
-        ), "Mgr pod did'nt move to Running state after 100 seconds"
+        ), "Mgr pod didn't move to Running state after 100 seconds"
 
-        log.info(
-            "Verifying the in-transit encryption config "
-            "After scaling up mon and restarting mgr pod"
+        logger.test_step(
+            "Verify in-transit encryption after scaling up mons and restarting mgr pod"
         )
 
+        logger.assertion(
+            "In-transit encryption verification after recovery: expected='True'"
+        )
         assert (
             in_transit_encryption_verification()
         ), "In transit encryption verification failed"

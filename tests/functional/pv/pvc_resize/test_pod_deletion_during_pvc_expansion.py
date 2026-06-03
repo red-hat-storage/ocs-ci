@@ -16,7 +16,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -48,16 +48,14 @@ class TestPodRespinDuringPvcExpansion(ManageTest):
 
         pvc_size_new = 20
 
-        # Modify size of PVCs and verify the change
-        log.info(f"Expanding size of PVC {rbd_pvc.name} to {pvc_size_new}G")
+        logger.test_step(f"Expand PVC {rbd_pvc.name} from 10G to {pvc_size_new}G")
+        logger.info(f"Expanding size of PVC {rbd_pvc.name} to {pvc_size_new}G")
         rbd_pvc.resize_pvc(pvc_size_new, True)
+        logger.info(f"Size of PVC {rbd_pvc.name} expanded to {pvc_size_new}G")
 
-        log.info(f"Verified: Size of PVC is expanded to {pvc_size_new}G")
-
-        log.info("Verifying new size on pod.")
-
+        logger.test_step("Verify expanded size is reflected on pod")
         # Wait for 240 seconds to reflect the change on pod
-        log.info(f"Checking pod {rbd_pod.name} to verify the change.")
+        logger.debug(f"Checking pod {rbd_pod.name} to verify the change.")
 
         for df_out in TimeoutSampler(240, 3, rbd_pod.exec_cmd_on_pod, command="df -kh"):
             if not df_out:
@@ -69,41 +67,47 @@ class TestPodRespinDuringPvcExpansion(ManageTest):
                 f"{float(pvc_size_new)}G",
                 f"{pvc_size_new}G",
             ]:
-                log.info(
+                logger.info(
                     f"Verified: Expanded size of PVC "
                     f"is reflected on pod {rbd_pod.name}"
                 )
                 break
-            log.info(
+            logger.debug(
                 f"Expanded size of PVC is not reflected"
                 f" on pod {rbd_pod.name}. New size on mount is not "
                 f"{pvc_size_new}G as expected, but {new_size_mount}. "
                 f"Checking again."
             )
-        log.info(f"Verified: Modified size {pvc_size_new}G is reflected on all pods.")
+        logger.info(f"Verified: Modified size {pvc_size_new}G is reflected on pod")
 
-        # Respin app-pods multiple times
+        logger.test_step("Respin app pod multiple times (14 iterations)")
         for count in range(1, 15):
             rbd_pod.delete(wait=True)
             pod_objs = get_all_pods(namespace=rbd_pvc.namespace)
             rbd_pod = pod_objs[0]
+        logger.info("Completed 14 pod respins")
 
-        # Check app-pod status
+        logger.test_step("Verify app pod is running after respins")
         rbd_pod.ocp.wait_for_resource(
             condition=constants.STATUS_RUNNING, resource_name=rbd_pod.name
         )
 
+        logger.test_step("Check csi-rbdplugin pod logs for stagingtarget path error")
         # Check csi-rbdplugin pod logs on the node where the app pod is running
         unexpected_log = "Internal desc = failed to get device for stagingtarget path"
         app_node = get_pod_node(rbd_pod).name
         csi_rbdplugin_pods = get_plugin_pods(interface=constants.CEPHBLOCKPOOL)
-        for pod in range(len(csi_rbdplugin_pods)):
-            plugin_pod_node = get_pod_node(csi_rbdplugin_pods[pod])
+        for pod_idx in range(len(csi_rbdplugin_pods)):
+            plugin_pod_node = get_pod_node(csi_rbdplugin_pods[pod_idx])
             if app_node == plugin_pod_node.name:
-                rbd_plugin_pod = csi_rbdplugin_pods[pod]
-                log.info(f"App pod running node {plugin_pod_node.name}")
+                rbd_plugin_pod = csi_rbdplugin_pods[pod_idx]
+                logger.info(f"App pod running on node {plugin_pod_node.name}")
                 break
         pod_log = get_pod_logs(pod_name=rbd_plugin_pod.name, container="csi-rbdplugin")
+        logger.assertion(
+            f"Stagingtarget path error in {rbd_plugin_pod.name} logs: "
+            f"expected=False, actual={unexpected_log in pod_log}"
+        )
         assert not (
             unexpected_log in pod_log
         ), f"Stagingtarget path of device is found in {rbd_plugin_pod.name} logs"

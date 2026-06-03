@@ -18,8 +18,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 
-
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Set the arg values based on KMS provider.
 if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
@@ -88,9 +87,9 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
         Setup csi-kms-connection-details configmap
 
         """
-        log.info("Setting up csi-kms-connection-details configmap")
+        logger.test_step("Set up csi-kms-connection-details configmap")
         self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
-        log.info("csi-kms-connection-details setup successful")
+        logger.info("csi-kms-connection-details setup successful")
 
     @pytest.mark.parametrize(
         argnames=argnames,
@@ -120,10 +119,9 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
             8.	Check for any error messages that appear during the IO operation.
 
         """
-        # Create a project
+        logger.test_step("Create project, storage class, and annotate for key rotation")
         proj_obj = project_factory()
 
-        # Create an encryption enabled storageclass for RBD
         sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
@@ -140,7 +138,7 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
         pvk_obj = PVKeyrotation(sc_obj)
         pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
-        # Create RBD PVCs with volume mode Block
+        logger.test_step("Create encrypted PVC and deploy pod")
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=proj_obj,
@@ -152,21 +150,27 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
         pod_obj = pod_factory(pvc=pvc_obj)
 
         # Verify the pod status
-        log.info("Verifying the pod status.")
+        logger.assertion(
+            f"Pod status: expected='{constants.STATUS_RUNNING}', "
+            f"actual='{pod_obj.data['status']['phase']}'"
+        )
         assert (
             pod_obj.data["status"]["phase"] == constants.STATUS_RUNNING
         ), f"Pod {pod_obj.name} is not in {constants.STATUS_RUNNING} state."
 
+        logger.test_step("Start IO workload and wait for key rotation")
         pod_obj.run_io("fs", size="5G", verify=True, runtime=180)
 
         # Verify PV Keyrotation.
+        logger.assertion(f"PV key rotation for PVC {pvc_obj.name}: expected=True")
         assert pvk_obj.wait_till_keyrotation(
             pvc_obj.get_pv_volume_handle_name
         ), f"Failed to rotate Key for the PVC {pvc_obj.name}"
 
-        log.info("Getting FIO results")
+        logger.test_step("Verify IO completed without errors during key rotation")
         result = pod_obj.get_fio_results(timeout=180)
 
+        logger.assertion("IO result contains no errors: expected='Error' not in result")
         assert (
             "Error" not in result
         ), f" IO Failed when Keyrotation operation happen for the PVC: {pvc_obj.name}"

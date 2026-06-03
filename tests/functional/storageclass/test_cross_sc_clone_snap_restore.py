@@ -18,8 +18,7 @@ from tests.fixtures import create_project
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.utility.utils import run_cmd
 
-
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -69,51 +68,59 @@ class TestCrossScCloneSnapRestore(ManageTest):
         10. Restore pvc from the snapshot of step 9 to the first sc
         """
 
-        # Create a Storage Class
+        logger.test_step(f"Create first {interface_type} StorageClass")
         sc_obj1 = storageclass_factory(interface=interface_type)
-        log.info(
-            f"{interface_type}StorageClass: {sc_obj1.name} " f"created successfully"
+        logger.info(
+            f"{interface_type} StorageClass: {sc_obj1.name} created successfully"
         )
 
+        logger.test_step(f"Create PVC and run FIO on StorageClass {sc_obj1.name}")
         pvc_obj = self.create_pvc_and_run_fio(
             pvc_factory, pod_factory, interface_type, sc_obj1
         )
 
+        logger.test_step("Clone PVC on the same StorageClass")
         clone_same_sc_pvc = pvc_clone_factory(
             pvc_obj,
             clone_name=f"pvc-{interface_type.lower()}-clone-test-cross-same-sc",
             storageclass=pvc_obj.backed_sc,
         )
-        log.info(f"Same SC clone {clone_same_sc_pvc.name} successfully created")
+        logger.info(f"Same SC clone {clone_same_sc_pvc.name} successfully created")
 
+        logger.test_step(
+            f"Create second {interface_type} StorageClass and clone PVC to it"
+        )
         sc_obj2 = storageclass_factory(interface=interface_type)
-        log.info(
-            f"{interface_type}StorageClass: {sc_obj2.name} " f"created successfully"
+        logger.info(
+            f"{interface_type} StorageClass: {sc_obj2.name} created successfully"
         )
         clone_sc2_pvc = pvc_clone_factory(
             pvc_obj,
             clone_name=f"pvc-{interface_type.lower()}-clone-test-cross-other-sc",
             storageclass=sc_obj2.name,
         )
-        log.info(f"Other SC clone {clone_sc2_pvc.name} successfully created")
+        logger.info(f"Other SC clone {clone_sc2_pvc.name} successfully created")
 
         clone_sc1_pvc = pvc_clone_factory(
             clone_sc2_pvc,
             clone_name=f"pvc-{interface_type.lower()}-clone-test-cross-first-sc",
             storageclass=sc_obj1.name,
         )
-        log.info(f"First SC clone {clone_sc1_pvc.name} successfully created")
+        logger.info(f"First SC clone {clone_sc1_pvc.name} successfully created")
 
+        logger.test_step(
+            "Create snapshot and restore on same and different StorageClasses"
+        )
         snap_name1 = f"pvc-{interface_type.lower()}-snapshot-test-cross"
         snap_obj1 = snapshot_factory(pvc_obj, snap_name1)
-        log.info(f"Snapshot {snap_name1} successfully created")
+        logger.info(f"Snapshot {snap_name1} successfully created")
 
         restore_pvc_yaml = constants.CSI_RBD_PVC_RESTORE_YAML
         if interface_type == constants.CEPHFILESYSTEM:
             restore_pvc_yaml = constants.CSI_CEPHFS_PVC_RESTORE_YAML
 
         restore_pvc_name1 = f"{pvc_obj.name}-restored-same-sc"
-        log.info("Restoring the PVC from snapshot on the same SC")
+        logger.info(f"Restoring PVC from snapshot on the same SC ({sc_obj1.name})")
         restore_pvc_obj1 = pvc.create_restore_pvc(
             sc_name=f"{sc_obj1.name}",
             snap_name=snap_obj1.name,
@@ -126,11 +133,11 @@ class TestCrossScCloneSnapRestore(ManageTest):
             restore_pvc_obj1, constants.STATUS_BOUND, timeout=600
         )
         restore_pvc_obj1.reload()
-        log.info("PVC was restored from the snapshot on the same SC")
+        logger.info(f"PVC {restore_pvc_name1} restored from snapshot on the same SC")
         restore_pvc_obj1.delete()
 
         restore_pvc_name2 = f"{pvc_obj.name}-restored-other-sc"
-        log.info("Restoring the PVC from Snapshot")
+        logger.info(f"Restoring PVC from snapshot on another SC ({sc_obj2.name})")
         restore_pvc_obj2 = pvc.create_restore_pvc(
             sc_name=f"{sc_obj2.name}",
             snap_name=snap_obj1.name,
@@ -143,16 +150,17 @@ class TestCrossScCloneSnapRestore(ManageTest):
             restore_pvc_obj2, constants.STATUS_BOUND, timeout=600
         )
         restore_pvc_obj2.reload()
-        log.info("PVC was restored from the snapshot on another SC")
+        logger.info(f"PVC {restore_pvc_name2} restored from snapshot on another SC")
 
+        logger.test_step("Snapshot restored PVC and restore back to first StorageClass")
         snap_name2 = f"pvc-{interface_type.lower()}-snapshot-test-cross-back1"
         snap_obj2 = snapshot_factory(restore_pvc_obj2, snap_name2)
-        log.info(f"Snapshot {snap_name2} successfully created")
+        logger.info(f"Snapshot {snap_name2} successfully created")
 
         restore_pvc_obj2.delete()
 
         restore_pvc_sc1_name = f"{pvc_obj.name}-restored-from-other-sc"
-        log.info("Restoring the PVC from Snapshot on the first SC")
+        logger.info(f"Restoring PVC from snapshot on the first SC ({sc_obj1.name})")
         restore_pvc_obj3 = pvc.create_restore_pvc(
             sc_name=f"{sc_obj1.name}",
             snap_name=snap_obj2.name,
@@ -165,7 +173,9 @@ class TestCrossScCloneSnapRestore(ManageTest):
             restore_pvc_obj3, constants.STATUS_BOUND, timeout=600
         )
         restore_pvc_obj3.reload()
-        log.info("PVC was restored on the first SC from the snapshot on another SC")
+        logger.info(
+            f"PVC {restore_pvc_sc1_name} restored on the first SC from snapshot on another SC"
+        )
         restore_pvc_obj3.delete()
 
     @pytest.mark.parametrize(
@@ -219,7 +229,10 @@ class TestCrossScCloneSnapRestore(ManageTest):
             sc2_compression (bool) If true, sc2 is created with compression = True, otherwise use default
         """
 
-        # Create a Storage Class on default pool
+        logger.test_step(
+            f"Create first {interface_type} StorageClass "
+            f"(replica={sc1_replica or 'default'})"
+        )
         if sc1_replica == "":
             sc_obj1 = storageclass_factory(interface=interface_type)
         else:
@@ -229,14 +242,19 @@ class TestCrossScCloneSnapRestore(ManageTest):
         pool_name1 = run_cmd(
             f"oc get sc {sc_obj1.name} -o jsonpath={{'.parameters.pool'}}"
         )
-        log.info(
-            f"{interface_type}StorageClass: {sc_obj1.name} on pool {pool_name1} created successfully"
+        logger.info(
+            f"{interface_type} StorageClass: {sc_obj1.name} on pool {pool_name1} created successfully"
         )
+
+        logger.test_step(f"Create PVC and run FIO on StorageClass {sc_obj1.name}")
         pvc_obj = self.create_pvc_and_run_fio(
             pvc_factory, pod_factory, interface_type, sc_obj1
         )
 
-        # Create a Storage Class on another pool
+        logger.test_step(
+            f"Create second {interface_type} StorageClass on a different pool "
+            f"(replica={sc_replica2 or 'default'}, compression={sc2_compression})"
+        )
         if sc_replica2 == "":
             if sc2_compression:
                 sc_obj2 = storageclass_factory(
@@ -255,41 +273,43 @@ class TestCrossScCloneSnapRestore(ManageTest):
         pool_name2 = run_cmd(
             f"oc get sc {sc_obj2.name} -o jsonpath={{'.parameters.pool'}}"
         )
-        log.info(
-            f"{interface_type}StorageClass: {sc_obj2.name} on pool {pool_name2} created successfully"
+        logger.info(
+            f"{interface_type} StorageClass: {sc_obj2.name} on pool {pool_name2} created successfully"
         )
 
-        # Clones
+        logger.test_step("Clone PVC across storage classes on different pools")
         clone_pvc_sc2 = pvc_clone_factory(
             pvc_obj,
             clone_name=f"pvc-{interface_type.lower()}-clone-test-cross-other-sc",
             storageclass=sc_obj2.name,
         )
-        log.info(
-            f"SC clone {clone_pvc_sc2.name}  on storage class on another pool successfully created"
+        logger.info(
+            f"Clone {clone_pvc_sc2.name} on SC {sc_obj2.name} (pool {pool_name2}) created successfully"
         )
-        # clone the clone created on sc2 (restore_pvc_sc2_obj) back tp sc1
         clone_pvc_sc1 = pvc_clone_factory(
             clone_pvc_sc2,
             clone_name=f"pvc-{interface_type.lower()}-clone-test-cross-back-sc1",
             storageclass=sc_obj1.name,
         )
-        log.info(
-            f"SC clone {clone_pvc_sc1.name} on storage class {sc_obj1.name} on the first pool successfully created"
+        logger.info(
+            f"Clone {clone_pvc_sc1.name} on SC {sc_obj1.name} (pool {pool_name1}) created successfully"
         )
 
-        # Snapshots
-        # Create the pvs snapshot on the first sc and restore it on the second sc
+        logger.test_step(
+            "Snapshot PVC and restore across storage classes on different pools"
+        )
         snap_name_sc1 = f"pvc-{interface_type.lower()}-snapshot-test-cross-sc1"
         snap_obj1 = snapshot_factory(pvc_obj, snap_name_sc1)
-        log.info(f"Snapshot {snap_name_sc1} successfully created")
+        logger.info(f"Snapshot {snap_name_sc1} successfully created")
 
         restore_pvc_yaml = constants.CSI_RBD_PVC_RESTORE_YAML
         if interface_type == constants.CEPHFILESYSTEM:
             restore_pvc_yaml = constants.CSI_CEPHFS_PVC_RESTORE_YAML
 
         restore_pvc_sc2_name = f"{pvc_obj.name}-restored-sc-another-pool"
-        log.info("Restoring the PVC from snapshot")
+        logger.info(
+            f"Restoring PVC from snapshot to SC {sc_obj2.name} (pool {pool_name2})"
+        )
         restore_pvc_sc2_obj = pvc.create_restore_pvc(
             sc_name=f"{sc_obj2.name}",
             snap_name=snap_obj1.name,
@@ -302,17 +322,19 @@ class TestCrossScCloneSnapRestore(ManageTest):
             restore_pvc_sc2_obj, constants.STATUS_BOUND, timeout=600
         )
         restore_pvc_sc2_obj.reload()
-        log.info("PVC was restored from the snapshot on SC on another pool")
+        logger.info(f"PVC {restore_pvc_sc2_name} restored on SC on another pool")
 
-        # On the second sc take the snapshot of the restored pvc and restore it back to the first sc
+        logger.test_step("Snapshot restored PVC and restore back to first StorageClass")
         snap_name_sc2 = f"pvc-{interface_type.lower()}-snapshot-test-cross-sc1"
         snap_obj2 = snapshot_factory(restore_pvc_sc2_obj, snap_name_sc2)
-        log.info(f"Snapshot {snap_name_sc2} successfully created")
+        logger.info(f"Snapshot {snap_name_sc2} successfully created")
 
         restore_pvc_sc2_obj.delete()
 
         restore_pvc_sc1_name = f"{restore_pvc_sc2_obj.name}-restored-sc-same-pool"
-        log.info("Restoring the PVC from snapshot")
+        logger.info(
+            f"Restoring PVC from snapshot back to SC {sc_obj1.name} (pool {pool_name1})"
+        )
         restore_pvc_sc1_obj = pvc.create_restore_pvc(
             sc_name=f"{sc_obj1.name}",
             snap_name=snap_obj2.name,
@@ -325,7 +347,9 @@ class TestCrossScCloneSnapRestore(ManageTest):
             restore_pvc_sc1_obj, constants.STATUS_BOUND, timeout=600
         )
         restore_pvc_sc1_obj.reload()
-        log.info("PVC was restored from the snapshot back on SC on the first pool")
+        logger.info(
+            f"PVC {restore_pvc_sc1_name} restored on the first SC from snapshot on another SC"
+        )
 
         restore_pvc_sc1_obj.delete()
 
@@ -346,18 +370,15 @@ class TestCrossScCloneSnapRestore(ManageTest):
         Returns:
             pvc (obj): PVC object created
         """
-        # Create a PVC using the created StorageClass
-        log.info(f"Creating a PVC using {sc_obj.name}")
+        logger.info(f"Creating a PVC using {sc_obj.name}")
         pvc_obj = pvc_factory(interface=interface_type, storageclass=sc_obj)
-        log.info(f"PVC: {pvc_obj.name} created successfully using " f"{sc_obj.name}")
+        logger.info(f"PVC: {pvc_obj.name} created successfully using {sc_obj.name}")
 
-        # Create app pod and mount each PVC
-        log.info(f"Creating an app pod and mount {pvc_obj.name}")
+        logger.info(f"Creating an app pod and mounting {pvc_obj.name}")
         pod_obj = pod_factory(interface=interface_type)
-        log.info(f"{pod_obj.name} created successfully and mounted {pvc_obj.name}")
+        logger.info(f"{pod_obj.name} created successfully and mounted {pvc_obj.name}")
 
-        # Run IO on each app pod for sometime
-        log.info(f"Running FIO on {pod_obj.name}")
+        logger.info(f"Running FIO on {pod_obj.name}")
         pod_obj.run_io("fs", size="500M")
         get_fio_rw_iops(pod_obj)
 

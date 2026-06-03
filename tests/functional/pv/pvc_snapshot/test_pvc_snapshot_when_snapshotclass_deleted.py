@@ -17,7 +17,7 @@ from ocs_ci.ocs.resources import pvc, ocs
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import templating
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -78,6 +78,9 @@ class TestPvcSnapshotWhenSnapshotClassDeleted(ManageTest):
         snapshotclass_data["metadata"]["name"] = snapclass_name
         ocs_obj = ocs.OCS(**snapshotclass_data)
         created_snapclass = ocs_obj.create(do_reload=True)
+        logger.assertion(
+            f"Snapshot class creation: expected=True, actual={bool(created_snapclass)}"
+        )
         assert created_snapclass, f"Failed to create snapshot class {snapclass_name}"
         return ocs_obj
 
@@ -91,11 +94,15 @@ class TestPvcSnapshotWhenSnapshotClassDeleted(ManageTest):
 
         """
 
-        # Create own snapshotclass
+        logger.test_step(
+            f"Create custom VolumeSnapshotClass for interface {self.interface}"
+        )
         snapclass_obj = self.create_snapshotclass(interface=self.interface)
         teardown_factory(snapclass_obj)
 
-        # Take a snapshot from created snapshotclass
+        logger.test_step(
+            f"Take a snapshot of PVC {self.pvc_obj.name} using custom snapshotclass"
+        )
         snap_yaml = (
             constants.CSI_CEPHFS_SNAPSHOT_YAML
             if self.interface == constants.CEPHFILESYSTEM
@@ -118,10 +125,7 @@ class TestPvcSnapshotWhenSnapshotClassDeleted(ManageTest):
         teardown_factory(snap_obj)
         snap_obj_get = snap_obj.get()
 
-        # Delete the volumesnapshotclass used to create the above volume snapshot
-        log.info(
-            "Delete the volumesnapshotclass used to create the above volume snapshot"
-        )
+        logger.test_step(f"Delete VolumeSnapshotClass {snapclass_obj.name}")
         snapclass_obj.delete()
 
         # Verify volumesnapshotclass deleted
@@ -132,11 +136,17 @@ class TestPvcSnapshotWhenSnapshotClassDeleted(ManageTest):
                 f'volumesnapshotclasses.snapshot.storage.k8s.io "{snapclass_obj.name}" not found'
                 not in str(ex)
             ):
-                log.error("Volumesnapshotclass not deleted")
+                logger.warning(
+                    f"VolumeSnapshotClass {snapclass_obj.name} not deleted as expected"
+                )
                 raise ex
-            log.info("Volumesnapshotclass deleted succesfully")
+            logger.info(
+                f"VolumeSnapshotClass {snapclass_obj.name} deleted successfully"
+            )
 
-        # Check the status of snapshots are in Ready state
+        logger.test_step(
+            "Verify snapshot remains in Ready state after snapshotclass deletion"
+        )
         snap_obj.ocp.wait_for_resource(
             condition="true",
             resource_name=snap_obj.name,
@@ -144,7 +154,7 @@ class TestPvcSnapshotWhenSnapshotClassDeleted(ManageTest):
             timeout=60,
         )
 
-        # Check the status of snapshot contents are in Ready state
+        logger.test_step("Verify snapshot content remains in Ready state")
         snapshotcontent_name = snap_obj_get["status"]["boundVolumeSnapshotContentName"]
         snapshotcontent_obj = OCP(
             kind=constants.VOLUMESNAPSHOTCONTENT, namespace=snap_obj.namespace

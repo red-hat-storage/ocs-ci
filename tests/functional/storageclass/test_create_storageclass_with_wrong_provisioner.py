@@ -10,7 +10,7 @@ from tests.fixtures import (
     create_cephfs_secret,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -38,7 +38,10 @@ class TestCreateStorageClassWithWrongProvisioner(ManageTest):
         Test function which creates Storage Class with
         wrong provisioner and verifies PVC status
         """
-        log.info(f"Creating a {interface} storage class")
+        logger.test_step(
+            f"Create a {interface} StorageClass with wrong provisioner "
+            f"({constants.AWS_EFS_PROVISIONER})"
+        )
         if interface == "RBD":
             interface_type = constants.CEPHBLOCKPOOL
             secret = self.rbd_secret_obj.name
@@ -53,16 +56,16 @@ class TestCreateStorageClassWithWrongProvisioner(ManageTest):
             secret_name=secret,
             provisioner=constants.AWS_EFS_PROVISIONER,
         )
-        log.info(f"{interface}Storage class: {sc_obj.name} created successfully")
+        logger.info(f"{interface} StorageClass: {sc_obj.name} created successfully")
 
-        # Create PVC
+        logger.test_step(f"Create PVC using StorageClass {sc_obj.name}")
         pvc_obj = helpers.create_pvc(sc_name=sc_obj.name, do_reload=False)
 
-        # Check PVC status
+        logger.test_step("Verify PVC remains in Pending state for 20 seconds")
         pvc_output = pvc_obj.get()
         pvc_status = pvc_output["status"]["phase"]
-        log.info(f"Status of PVC {pvc_obj.name} after creation: {pvc_status}")
-        log.info(
+        logger.info(f"Status of PVC {pvc_obj.name} after creation: {pvc_status}")
+        logger.info(
             f"Waiting for status '{constants.STATUS_PENDING}' "
             f"for 20 seconds (it shouldn't change)"
         )
@@ -73,21 +76,22 @@ class TestCreateStorageClassWithWrongProvisioner(ManageTest):
             timeout=20,
             sleep=5,
         )
-        # Check PVC status again after 20 seconds
         pvc_output = pvc_obj.get()
         pvc_status = pvc_output["status"]["phase"]
-        assert_msg = (
-            f"PVC {pvc_obj.name} is not in {constants.STATUS_PENDING} " f"status"
+        logger.assertion(
+            f"PVC {pvc_obj.name} status: expected='{constants.STATUS_PENDING}', "
+            f"actual='{pvc_status}'"
         )
-        assert pvc_status == constants.STATUS_PENDING, assert_msg
-        log.info(f"Status of {pvc_obj.name} after 20 seconds: {pvc_status}")
+        assert (
+            pvc_status == constants.STATUS_PENDING
+        ), f"PVC {pvc_obj.name} is not in {constants.STATUS_PENDING} status"
+        logger.info(f"Status of {pvc_obj.name} after 20 seconds: {pvc_status}")
 
-        # Delete PVC
-        log.info(f"Deleting PVC: {pvc_obj.name}")
+        logger.test_step("Delete PVC and StorageClass")
+        logger.info(f"Deleting PVC: {pvc_obj.name}")
         assert pvc_obj.delete()
-        log.info(f"PVC {pvc_obj.name} delete successfully")
+        logger.info(f"PVC {pvc_obj.name} deleted successfully")
 
-        # Delete Storage Class
-        log.info(f"Deleting Storageclass: {sc_obj.name}")
+        logger.info(f"Deleting StorageClass: {sc_obj.name}")
         assert sc_obj.delete()
-        log.info(f"Storage Class: {sc_obj.name} deleted successfully")
+        logger.info(f"StorageClass: {sc_obj.name} deleted successfully")

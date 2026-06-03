@@ -40,7 +40,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.helpers import disruption_helpers, helpers
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @tier4
@@ -75,8 +75,8 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         num_of_pvcs_rbd = 15
         access_mode_dist_ratio_rbd = [7, 5, 3]
 
-        # Create CephFS PVCs
-        log.info("Creating CephFS PVCs")
+        logger.test_step("Create CephFS and RBD PVCs")
+        logger.info("Creating CephFS PVCs")
         pvc_objs_cephfs = multi_pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             project=None,
@@ -89,12 +89,12 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             num_of_pvc=num_of_pvcs_cephfs,
             wait_each=False,
         )
-        log.info("Created CephFS PVCs")
+        logger.info("Created CephFS PVCs")
 
         self.project = pvc_objs_cephfs[0].project
 
         # Create RBD PVCs
-        log.info("Creating RBD PVCs")
+        logger.info("Creating RBD PVCs")
         pvc_objs_rbd = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=self.project,
@@ -107,16 +107,15 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             num_of_pvc=num_of_pvcs_rbd,
             wait_each=False,
         )
-        log.info("Created RBD PVCs")
+        logger.info("Created RBD PVCs")
 
-        # Confirm PVCs are Bound
-        log.info("Verifying the CephFS and RBD PVCs are Bound")
+        logger.test_step("Verify all CephFS and RBD PVCs are Bound")
         for pvc_obj in pvc_objs_cephfs + pvc_objs_rbd:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
             )
             pvc_obj.reload()
-        log.info("Verified: CephFS and RBD PVCs are Bound")
+        logger.info("Verified: CephFS and RBD PVCs are Bound")
 
         # Set interface argument for reference
         for pvc_obj in pvc_objs_cephfs:
@@ -145,7 +144,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                     if pvc_obj.access_mode == access_mode
                 ][:num_pvc]
             )
-        log.info(
+        logger.info(
             f"PVCs selected for creating pods during disruption - "
             f"{[pvc_obj.name for pvc_obj in cephfs_pvc_for_pods + rbd_pvc_for_pods]}"
         )
@@ -162,8 +161,8 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         nodes_iter = cycle(node.get_worker_nodes())
 
-        # Create one pod using each RWO PVC and two pods using each RWX PVC
-        log.info(
+        logger.test_step("Create pods - one per RWO PVC, two per RWX PVC")
+        logger.info(
             "Starting the creation of pods. Creating one pod using each RWO PVC and two pods using each RWX PVC"
         )
         for pvc_obj in pvc_objs:
@@ -197,7 +196,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         for pod_obj in pod_objs + rwx_pod_objs:
             wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
             pod_obj.reload()
-        log.info(f"Created {len(pod_objs) + len(rwx_pod_objs)} pods.")
+        logger.info(f"Created {len(pod_objs) + len(rwx_pod_objs)} pods.")
 
         return pvc_objs, pod_objs, rwx_pod_objs, cephfs_pvc_for_pods, rbd_pvc_for_pods
 
@@ -250,6 +249,9 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         and IO are progressing
 
         """
+        logger.test_step(
+            "Select pods and PVCs for deletion, IO, and creation during disruption"
+        )
         if config.DEPLOYMENT["external_mode"]:
             ceph_csi_pods_to_delete = [
                 "cephfsplugin",
@@ -336,17 +338,17 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             if pod_obj.pvc in select_unique_pvcs([pod_obj.pvc for pod_obj in io_pods])
         ]
 
-        log.info(
+        logger.info(
             f"{len(pods_to_delete)} pods selected for deletion in which "
             f"{len(pods_to_delete) - num_of_pods_to_delete} pairs of pod "
             f"share same RWX PVC"
         )
-        log.info(
+        logger.info(
             f"{len(io_pods)} pods selected for running IO in which one "
             f"pair of pod share same RWX PVC"
         )
         no_of_rwx_pvcs_delete = len(pods_for_pvc) - len(pvcs_to_delete)
-        log.info(
+        logger.info(
             f"{len(pvcs_to_delete)} PVCs selected for deletion. "
             f"RWO PVCs: {len(pvcs_to_delete) - no_of_rwx_pvcs_delete}, "
             f"RWX PVCs: {no_of_rwx_pvcs_delete}"
@@ -437,10 +439,10 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         pvc_uuid_map = {}
         for pvc_obj in pvcs_to_delete:
             pvc_uuid_map[pvc_obj] = pvc_obj.image_uuid
-        log.info("Fetched image uuid associated with each PVC")
+        logger.info("Fetched image uuid associated with each PVC")
 
-        # Do setup on pods for running IO
-        log.info("Setting up pods for running IO.")
+        logger.test_step("Set up pods for running IO and load data on PVCs to delete")
+        logger.info("Setting up pods for running IO.")
         for pod_obj in pod_objs + rwx_pod_objs:
             if pod_obj.pvc.get_pvc_vol_mode == "Block":
                 storage_type = "block"
@@ -450,14 +452,14 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         # Wait for setup on pods to complete
         for pod_obj in pod_objs + rwx_pod_objs:
-            log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
+            logger.debug(f"Waiting for IO setup to complete on pod {pod_obj.name}")
             for sample in TimeoutSampler(360, 2, getattr, pod_obj, "wl_setup_done"):
                 if sample:
-                    log.info(
-                        f"Setup for running IO is completed on pod " f"{pod_obj.name}."
+                    logger.debug(
+                        f"Setup for running IO is completed on pod {pod_obj.name}."
                     )
                     break
-        log.info("Setup for running IO is completed on all pods.")
+        logger.info("Setup for running IO is completed on all pods.")
 
         # Start IO on pods having PVCs to delete to load data
         pods_for_pvc_io = [
@@ -466,16 +468,16 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             if pod_obj.pvc
             in select_unique_pvcs([pod_obj.pvc for pod_obj in pods_for_pvc])
         ]
-        log.info("Starting IO on pods having PVCs to delete.")
+        logger.info("Starting IO on pods having PVCs to delete.")
         self.run_io_on_pods(pods_for_pvc_io)
-        log.info("IO started on pods having PVCs to delete.")
+        logger.info("IO started on pods having PVCs to delete.")
 
-        log.info("Fetching IO results from the pods having PVCs to delete.")
+        logger.info("Fetching IO results from the pods having PVCs to delete.")
         for pod_obj in pods_for_pvc_io:
             if getattr(pod_obj, "io_running", False):
                 pod_obj.get_fio_results(300)
                 pod_obj.io_running = False
-        log.info("Verified IO result on pods having PVCs to delete.")
+        logger.info("Verified IO result on pods having PVCs to delete.")
 
         # Delete pods having PVCs to delete.
         assert self.delete_pods(
@@ -483,7 +485,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         ), "Couldn't delete pods which are having PVCs to delete."
         for pod_obj in pods_for_pvc:
             pod_obj.ocp.wait_for_delete(pod_obj.name)
-        log.info("Verified: Deleted pods which are having PVCs to delete.")
+        logger.info("Verified: Deleted pods which are having PVCs to delete.")
 
         # Start IO on pods to be deleted
         pods_to_delete_io = [
@@ -492,12 +494,14 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             if pod_obj.pvc
             in select_unique_pvcs([pod_obj.pvc for pod_obj in pods_to_delete])
         ]
-        log.info("Starting IO on selected pods to be deleted.")
+        logger.info("Starting IO on selected pods to be deleted.")
         self.run_io_on_pods(pods_to_delete_io)
-        log.info("IO started on selected pods to be deleted.")
+        logger.info("IO started on selected pods to be deleted.")
 
-        # Start creating new pods
-        log.info("Start creating new pods.")
+        logger.test_step(
+            "Start concurrent pod creation, PVC creation, PVC deletion, pod deletion, and IO"
+        )
+        logger.info("Start creating new pods.")
         pod_create_rbd = executor.submit(
             helpers.create_pods,
             rbd_pvc_for_pods,
@@ -514,7 +518,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         )
 
         # Start creation of new CephFS PVCs.
-        log.info("Start creating new CephFS PVCs.")
+        logger.info("Start creating new CephFS PVCs.")
         pvc_create_cephfs = executor.submit(
             multi_pvc_factory,
             interface=constants.CEPHFILESYSTEM,
@@ -529,7 +533,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         )
 
         # Start creation of new RBD PVCs
-        log.info("Start creating new RBD PVCs.")
+        logger.info("Start creating new RBD PVCs.")
         pvc_create_rbd = executor.submit(
             multi_pvc_factory,
             interface=constants.CEPHBLOCKPOOL,
@@ -545,40 +549,42 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         # Start deleting PVCs
         pvc_bulk_delete = executor.submit(delete_pvcs, pvcs_to_delete)
-        log.info("Started deleting PVCs")
+        logger.info("Started deleting PVCs")
 
         # Start deleting app pods
         pod_bulk_delete = executor.submit(self.delete_pods, pods_to_delete)
-        log.info("Started deleting pods")
+        logger.info("Started deleting pods")
 
         # Start IO on IO pods
         self.run_io_on_pods(io_pods)
-        log.info("Started IO on IO pods")
+        logger.info("Started IO on IO pods")
 
         # Wait for 1 second before deleting pods. This is to wait for the create/delete operations to start
         sleep(1)
 
-        # Delete the pods in the list 'ceph_csi_pods_to_delete'
+        logger.test_step("Delete ceph-csi pods during concurrent operations")
         resource_delete_proc_dict = {}
         for disruption in disruption_ops:
-            log.info(f"Deleting {disruption.resource} pod")
+            logger.info(f"Deleting {disruption.resource} pod")
             resource_delete_proc_dict[disruption.resource] = executor.submit(
                 disruption.delete_resource
             )
 
         for resource_type, proc in resource_delete_proc_dict.items():
-            log.info(f"Verifying the deletion process of {resource_type} pod")
+            logger.debug(f"Verifying the deletion process of {resource_type} pod")
             resource_delete_proc_dict[resource_type].result()
-            log.info(
-                f"Deletion of {resource_type} pod was success. A new pod is created automatically."
+            logger.debug(
+                f"Deletion of {resource_type} pod was successful. A new pod is created automatically."
             )
 
-        # Verify pods are deleted
+        logger.test_step(
+            "Verify pods, PVCs, and PVs are deleted and mount points removed"
+        )
         pods_deleted = pod_bulk_delete.result()
         assert pods_deleted, "Deletion of pods failed."
         for pod_obj in pods_to_delete:
             pod_obj.ocp.wait_for_delete(pod_obj.name, 300)
-        log.info("Verified: Pods are deleted.")
+        logger.info("Verified: Pods are deleted.")
 
         # Verify that the mount point is removed from the nodes after deleting pod
         node_pv_mounted = verify_pv_mounted_on_node(node_pv_dict)
@@ -586,7 +592,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             assert (
                 not pvs
             ), f"PVs {pvs} is still present on node {node} after deleting the app pods."
-        log.info(
+        logger.info(
             "Verified: Mount points are removed from nodes after deleting the app pods"
         )
 
@@ -596,13 +602,13 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         # Verify PVCs are deleted
         for pvc_obj in pvcs_to_delete:
             pvc_obj.ocp.wait_for_delete(pvc_obj.name)
-        log.info("Verified: PVCs are deleted.")
+        logger.info("Verified: PVCs are deleted.")
 
         # Getting result of PVC creation as list of PVC objects
-        log.info("Getting the result of CephFS PVC creation process")
+        logger.info("Getting the result of CephFS PVC creation process")
         pvc_objs_cephfs_new = pvc_create_cephfs.result()
 
-        log.info("Getting the result of RBD PVC creation process")
+        logger.info("Getting the result of RBD PVC creation process")
         pvc_objs_rbd_new = pvc_create_rbd.result()
 
         # Set interface argument for reference
@@ -614,32 +620,32 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             pvc_obj.interface = constants.CEPHBLOCKPOOL
 
         # Confirm PVCs are Bound
-        log.info("Verifying the new CephFS and RBD PVCs are Bound")
+        logger.info("Verifying the new CephFS and RBD PVCs are Bound")
         for pvc_obj in pvc_objs_cephfs_new + pvc_objs_rbd_new:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
             )
             pvc_obj.reload()
-        log.info("Verified: New CephFS and RBD PVCs are Bound.")
+        logger.info("Verified: New CephFS and RBD PVCs are Bound.")
 
         # Getting result of pods creation as list of Pod objects
-        log.info("Getting the result of pods creation process")
+        logger.info("Getting the result of pods creation process")
         pod_objs_rbd_new = pod_create_rbd.result()
         pod_objs_cephfs_new = pod_create_cephfs.result()
 
         # Verify new pods are Running
-        log.info("Verifying the new pods are Running")
+        logger.info("Verifying the new pods are Running")
         for pod_obj in pod_objs_rbd_new + pod_objs_cephfs_new:
             helpers.wait_for_resource_state(
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
-        log.info("Verified: All new pods are Running.")
+        logger.info("Verified: All new pods are Running.")
 
         # Verify PVs are deleted
         for pv_obj in pv_objs:
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
-        log.info("Verified: PVs are deleted.")
+        logger.info("Verified: PVs are deleted.")
 
         # Verify PV using ceph toolbox. Image/Subvolume should be deleted.
         pool_name = default_ceph_block_pool()
@@ -658,7 +664,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 ret
             ), f"Volume associated with PVC {pvc_obj.name} still exists in the backend"
 
-        log.info("Fetching IO results from the pods.")
+        logger.info("Fetching IO results from the pods.")
         for pod_obj in io_pods:
             if getattr(pod_obj, "io_running", False):
                 fio_result = pod_obj.get_fio_results()
@@ -667,10 +673,10 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 assert (
                     err_count == 0
                 ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
-        log.info("Verified IO result on pods.")
+        logger.info("Verified IO result on pods.")
 
-        # Verify that the new PVCs are usable by creating new pods
-        log.info("Verify that the new PVCs are usable by creating new pods")
+        logger.test_step("Verify new PVCs are usable by creating pods and running IO")
+        logger.info("Verify that the new PVCs are usable by creating new pods")
         pod_objs_rbd_re = helpers.create_pods(
             pvc_objs_rbd_new, pod_factory, constants.CEPHBLOCKPOOL, 2
         )
@@ -679,13 +685,13 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         )
 
         # Verify pods are Running
-        log.info("Verifying the pods are Running")
+        logger.info("Verifying the pods are Running")
         for pod_obj in pod_objs_rbd_re + pod_objs_cephfs_re:
             helpers.wait_for_resource_state(
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=90
             )
             pod_obj.reload()
-        log.info(
+        logger.info(
             "Successfully created and verified the status of the pods using the new CephFS and RBD PVCs."
         )
 
@@ -697,7 +703,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         )
 
         # Do setup on the new pods for running IO
-        log.info("Setting up the new pods for running IO.")
+        logger.info("Setting up the new pods for running IO.")
         for pod_obj in new_pods:
             if pod_obj.pvc.get_pvc_vol_mode == "Block":
                 storage_type = "block"
@@ -707,32 +713,35 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
 
         # Wait for setup on the new pods to complete
         for pod_obj in new_pods:
-            log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
+            logger.debug(f"Waiting for IO setup to complete on pod {pod_obj.name}")
             for sample in TimeoutSampler(360, 2, getattr, pod_obj, "wl_setup_done"):
                 if sample:
-                    log.info(
-                        f"Setup for running IO is completed on pod " f"{pod_obj.name}."
+                    logger.debug(
+                        f"Setup for running IO is completed on pod {pod_obj.name}."
                     )
                     break
-        log.info("Setup for running IO is completed on the new pods.")
+        logger.info("Setup for running IO is completed on the new pods.")
 
         # Start IO on the new pods
-        log.info("Start IO on the new pods")
+        logger.info("Start IO on the new pods")
         self.run_io_on_pods(new_pods)
-        log.info("Started IO on the new pods")
+        logger.info("Started IO on the new pods")
 
-        log.info("Fetching IO results from the new pods.")
+        logger.info("Fetching IO results from the new pods.")
         for pod_obj in new_pods:
             if getattr(pod_obj, "io_running", False):
                 get_fio_rw_iops(pod_obj)
                 pod_obj.io_running = False
-        log.info("Verified IO result on the new pods.")
+        logger.info("Verified IO result on the new pods.")
 
-        # Verify number of pods of each daemon type
+        logger.test_step("Verify pod counts for each daemon type match initial values")
         final_num_resource_name = [
             len(pod_functions[resource_name]())
             for resource_name in ceph_csi_pods_to_delete
         ]
+        logger.assertion(
+            f"Pod counts per daemon type: expected={num_of_resource_pods}, actual={final_num_resource_name}"
+        )
         assert final_num_resource_name == num_of_resource_pods, (
             f"Total number of pods of each type is not matching with "
             f"initial value. Total number of pods of each type before daemon kill: "

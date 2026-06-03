@@ -52,13 +52,11 @@ class TestEnforceStorageclassPrecedenceForReclaimSpace:
         6. Switch precedence to PVC and verify behavior
         7. Revert precedence to StorageClass and verify behavior
         """
-        logger.info("Starting ReclaimSpace precedence test")
-
-        # Step 1: Create RBD StorageClass
+        logger.test_step("Create RBD StorageClass for ReclaimSpace precedence test")
         sc_rbd = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
         logger.info(f"Created StorageClass: {sc_rbd.name}")
 
-        # Step 2: Create RBD PVCs (Filesystem and Block) and attach pods
+        logger.test_step("Create RBD PVCs (Filesystem and Block) and attach pods")
         reclaimspace_precedence_helper._prepare_pvcs_and_workloads(
             multi_pvc_factory=multi_pvc_factory,
             pod_factory=pod_factory,
@@ -67,11 +65,13 @@ class TestEnforceStorageclassPrecedenceForReclaimSpace:
         )
         logger.info("RBD workloads and PVCs created successfully")
 
-        # Step 3: Ensure all pods are in Running state
+        logger.test_step("Ensure all pods are in Running state")
         reclaimspace_precedence_helper._ensure_pods_running()
         logger.info("All pods are running successfully")
 
-        # Step 4: Annotate StorageClass(@weekly) and PVCs(@daily) with reclaim-space schedules
+        logger.test_step(
+            "Annotate StorageClass with @weekly and PVCs with @daily reclaim-space schedules"
+        )
         reclaimspace_precedence_helper._annotate_storageclass(
             sc_rbd, RECLAIMSPACE_SCHEDULE_ANNOTATION, WEEKLY_SCHEDULE
         )
@@ -82,35 +82,36 @@ class TestEnforceStorageclassPrecedenceForReclaimSpace:
         )
         logger.info("Annotations applied to StorageClass and PVCs")
 
-        # Step 5: Verify StorageClass precedence in ReclaimSpaceCronJobs is by default
-        logger.info("=== Testing StorageClass Precedence (Default) ===")
+        logger.test_step(
+            "Verify StorageClass precedence (default) in ReclaimSpaceCronJobs"
+        )
         reclaimspace_precedence_helper._ensure_precedence_setting(
             STORAGECLASS_PRECEDENCE
         )
         reclaimspace_precedence_helper._verify_precedence_behavior(
             sc_rbd, RECLAIMSPACE_SCHEDULE_ANNOTATION, STORAGECLASS_PRECEDENCE
         )
-        logger.info("✓ StorageClass precedence verified successfully")
+        logger.info("StorageClass precedence verified successfully")
 
-        # Step 6: Switch precedence to PVC and verify behavior
-        logger.info("=== Testing PVC Precedence ===")
+        logger.test_step("Switch precedence to PVC and verify ReclaimSpace behavior")
         from ocs_ci.helpers.helpers import set_schedule_precedence
 
         set_schedule_precedence(PVC_PRECEDENCE)
         reclaimspace_precedence_helper._verify_precedence_behavior(
             sc_rbd, RECLAIMSPACE_SCHEDULE_ANNOTATION, PVC_PRECEDENCE
         )
-        logger.info("✓ PVC precedence verified successfully")
+        logger.info("PVC precedence verified successfully")
 
-        # Step 7: Revert precedence to StorageClass and verify behavior
-        logger.info("=== Testing StorageClass Precedence (Revert) ===")
+        logger.test_step(
+            "Revert precedence to StorageClass and verify ReclaimSpace behavior"
+        )
         set_schedule_precedence(STORAGECLASS_PRECEDENCE)
         reclaimspace_precedence_helper._verify_precedence_behavior(
             sc_rbd, RECLAIMSPACE_SCHEDULE_ANNOTATION, STORAGECLASS_PRECEDENCE
         )
-        logger.info("✓ StorageClass precedence revert verified successfully")
+        logger.info("StorageClass precedence revert verified successfully")
 
-        logger.info("✅ All ReclaimSpace precedence tests completed successfully")
+        logger.info("All ReclaimSpace precedence tests completed successfully")
 
 
 @green_squad
@@ -146,15 +147,13 @@ class TestEnforceStorageclassPrecedenceForKeyRotation:
         6. Switch precedence to PVC and verify KeyrotationCronjob following PVC schedule
         7. Revert precedence to StorageClass and verify behavior
         """
-        logger.info("Starting KeyRotation precedence test")
-
-        # Setup encryption
+        logger.test_step("Set up encryption for KeyRotation precedence test")
         proj_obj = project_factory()
         vault = pv_encryption_kms_setup_factory("v1", False)
         logger.info(f"Created project: {proj_obj.namespace}")
         logger.info(f"Setup KMS vault: {vault.kmsid}")
 
-        # Step 1: Create encrypted RBD StorageClass
+        logger.test_step("Create encrypted RBD StorageClass")
         sc_rbd = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
@@ -162,12 +161,11 @@ class TestEnforceStorageclassPrecedenceForKeyRotation:
         )
         logger.info(f"Created encrypted StorageClass: {sc_rbd.name}")
 
-        # Setup KMS token
         vault.vault_path_token = vault.generate_vault_token()
         vault.create_vault_csi_kms_token(namespace=proj_obj.namespace)
         logger.info("KMS token created successfully")
 
-        # Step 2: Create encrypted PVC and attach pods
+        logger.test_step("Create encrypted PVCs and attach pods")
         keyrotation_precedence_helper._prepare_pvcs_and_workloads(
             multi_pvc_factory=multi_pvc_factory,
             pod_factory=pod_factory,
@@ -177,11 +175,13 @@ class TestEnforceStorageclassPrecedenceForKeyRotation:
         )
         logger.info("Encrypted RBD workloads and PVCs created successfully")
 
-        # Step 3: Ensure all pods are in Running state
+        logger.test_step("Ensure all pods are in Running state")
         keyrotation_precedence_helper._ensure_pods_running()
         logger.info("All pods are running successfully")
 
-        # Step 4: Annotate StorageClass(@weekly) and PVCs(@daily) with keyrotation schedules
+        logger.test_step(
+            "Annotate StorageClass with @weekly and PVCs with @daily keyrotation schedules"
+        )
         keyrotation_precedence_helper._annotate_storageclass(
             sc_rbd, KEYROTATION_SCHEDULE_ANNOTATION, WEEKLY_SCHEDULE
         )
@@ -192,32 +192,33 @@ class TestEnforceStorageclassPrecedenceForKeyRotation:
         )
         logger.info("Annotations applied to StorageClass and PVCs")
 
-        # Step 5: Verify StorageClass precedence in KeyrotationCronjob is by default
-        logger.info("=== Testing StorageClass Precedence (Default) ===")
+        logger.test_step(
+            "Verify StorageClass precedence (default) in KeyRotationCronJobs"
+        )
         keyrotation_precedence_helper._ensure_precedence_setting(
             STORAGECLASS_PRECEDENCE
         )
         keyrotation_precedence_helper._verify_precedence_behavior(
             sc_rbd, KEYROTATION_SCHEDULE_ANNOTATION, STORAGECLASS_PRECEDENCE
         )
-        logger.info("✓ StorageClass precedence verified successfully")
+        logger.info("StorageClass precedence verified successfully")
 
-        # Step 6: Switch precedence to PVC and verify KeyrotationCronjob following PVC schedule
-        logger.info("=== Testing PVC Precedence ===")
+        logger.test_step("Switch precedence to PVC and verify KeyRotation behavior")
         from ocs_ci.helpers.helpers import set_schedule_precedence
 
         set_schedule_precedence(PVC_PRECEDENCE)
         keyrotation_precedence_helper._verify_precedence_behavior(
             sc_rbd, KEYROTATION_SCHEDULE_ANNOTATION, PVC_PRECEDENCE
         )
-        logger.info("✓ PVC precedence verified successfully")
+        logger.info("PVC precedence verified successfully")
 
-        # Step 7: Revert precedence to StorageClass and verify behavior
-        logger.info("=== Testing StorageClass Precedence (Revert) ===")
+        logger.test_step(
+            "Revert precedence to StorageClass and verify KeyRotation behavior"
+        )
         set_schedule_precedence(STORAGECLASS_PRECEDENCE)
         keyrotation_precedence_helper._verify_precedence_behavior(
             sc_rbd, KEYROTATION_SCHEDULE_ANNOTATION, STORAGECLASS_PRECEDENCE
         )
-        logger.info("✓ StorageClass precedence revert verified successfully")
+        logger.info("StorageClass precedence revert verified successfully")
 
-        logger.info("✅ All KeyRotation precedence tests completed successfully")
+        logger.info("All KeyRotation precedence tests completed successfully")

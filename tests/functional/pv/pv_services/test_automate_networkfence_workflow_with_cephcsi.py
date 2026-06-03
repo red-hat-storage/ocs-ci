@@ -158,6 +158,9 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
            the recovered node; uncordon.
 
         """
+        logger.test_step(
+            "Cordon all workers except one and create RBD + CephFS workloads"
+        )
         pod_obj_list = []
         node_shutdown = outage_type == "shutdown"
 
@@ -172,6 +175,9 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
             pod_obj_list.append(pod_obj)
 
         pod_nodes = {get_pod_node(p).name for p in pod_obj_list}
+        logger.assertion(
+            f"Workload pod nodes: expected={{{selected_node_name}}}, actual={pod_nodes}"
+        )
         assert pod_nodes == {selected_node_name}, (
             f"Expected both workloads on {selected_node_name} while other workers "
             f"were cordoned; got {pod_nodes}"
@@ -186,6 +192,7 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
             f"PVC -> node: {pvc_to_node_before}"
         )
 
+        logger.test_step("Run IO on workload pods and capture checksums before outage")
         logger.info(f"Starting IO on app pods: {[p.name for p in pod_obj_list]}")
         for pod_obj in pod_obj_list:
             pod_obj.run_io(
@@ -201,6 +208,9 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
             md5sum_before.append(cal_md5sum(pod_obj=pod_obj, file_name="io_file1"))
         logger.info(f"Stored checksums for pods {[p.name for p in pod_obj_list]}")
 
+        logger.test_step(
+            f"Induce {outage_type} on node {outage_node.name} and apply out-of-service taint"
+        )
         if node_shutdown:
             logger.info(f"Stopping node {outage_node.name}")
             nodes.stop_nodes([outage_node])
@@ -211,16 +221,20 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
             logger.info(f"Inducing network failure on node {outage_node.name}")
             node_network_failure([outage_node.name], wait=True)
 
-        assert taint_nodes(
+        taint_result = taint_nodes(
             nodes=[outage_node.name],
             taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
-        ), f"Failed to add taint on node {outage_node.name}"
+        )
+        logger.assertion(
+            f"Taint out-of-service on node {outage_node.name}: expected=True, actual={taint_result}"
+        )
+        assert taint_result, f"Failed to add taint on node {outage_node.name}"
         self.taint_nodes_list.append(outage_node)
 
         def workloads_rescheduled_off_outage_node():
             pods = pods_for_test_workload_pvcs(pod_obj_list)
             if len(pods) != len(pod_obj_list):
-                logger.info(
+                logger.debug(
                     f"Migration wait: expected {len(pod_obj_list)} workload pods, "
                     f"found {len(pods)}"
                 )
@@ -231,13 +245,14 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
                 if migrated_pod is None:
                     return False
                 if get_pod_node(migrated_pod).name == outage_node.name:
-                    logger.info(
+                    logger.debug(
                         f"PVC {orig.pvc.name}: pod {migrated_pod.name} still on "
                         f"outage node {outage_node.name}"
                     )
                     return False
             return True
 
+        logger.test_step("Wait for workloads to migrate off outage node")
         logger.info(
             f"Polling until workloads leave outage node {outage_node.name} "
             f"(timeout {self.WORKLOAD_MIGRATION_TIMEOUT_SEC}s, "
@@ -255,7 +270,13 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
                 f"{self.WORKLOAD_MIGRATION_TIMEOUT_SEC}s",
             )
 
+        logger.test_step(
+            "Verify migrated workloads are on different nodes and data integrity"
+        )
         migrated_pod_list = pods_for_test_workload_pvcs(pod_obj_list)
+        logger.assertion(
+            f"Migrated pod count: expected={len(pod_obj_list)}, actual={len(migrated_pod_list)}"
+        )
         assert len(migrated_pod_list) == len(pod_obj_list), (
             f"Expected {len(pod_obj_list)} workload pods after migration, "
             f"got {len(migrated_pod_list)}: {[p.name for p in migrated_pod_list]}"
@@ -278,11 +299,15 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
             cal_md5sum(pod_obj=migrated_by_pvc[orig.pvc.name], file_name="io_file1")
             for orig in pod_obj_list
         ]
+        logger.assertion(
+            f"Data integrity checksums: expected={md5sum_before}, actual={md5sum_after}"
+        )
         assert md5sum_before == md5sum_after, (
             "Checksum mismatch after migration. "
             f"before={md5sum_before}, after={md5sum_after}"
         )
 
+        logger.test_step("Recover outage node and remove out-of-service taint")
         if node_shutdown:
             logger.info(f"Starting node {outage_node.name}")
             nodes.start_nodes([outage_node])
@@ -291,13 +316,17 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
         wait_for_nodes_status(
             node_names=[outage_node.name], status=constants.NODE_READY
         )
-        assert untaint_nodes(
+        untaint_result = untaint_nodes(
             taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
             nodes_to_untaint=[outage_node],
-        ), f"Failed to remove taint on node {outage_node.name}"
+        )
+        logger.assertion(
+            f"Remove out-of-service taint from {outage_node.name}: expected=True, actual={untaint_result}"
+        )
+        assert untaint_result, f"Failed to remove taint on node {outage_node.name}"
         self.taint_nodes_list = []
 
-        logger.info("Starting IO on migrated pods")
+        logger.test_step("Verify IO on migrated pods after node recovery")
         for pod_obj in migrated_pod_list:
             pod_obj.run_io(
                 storage_type="fs",
@@ -309,10 +338,16 @@ class TestAutomateNetworkfenceWorkflowWithCephCSI(ManageTest):
             get_fio_rw_iops(pod_obj)
         logger.info("IO completed on migrated pods")
 
+        logger.test_step(
+            "Delete migrated pods and verify redeployment on recovered node"
+        )
         for pod_obj in migrated_pod_list:
-            logger.info(f"Deleting pod {pod_obj.name}")
+            logger.debug(f"Deleting pod {pod_obj.name}")
             pod_obj.delete()
         redeployed_pod_list = pods_for_test_workload_pvcs(pod_obj_list)
+        logger.assertion(
+            f"Redeployed pod count: expected={len(pod_obj_list)}, actual={len(redeployed_pod_list)}"
+        )
         assert len(redeployed_pod_list) == len(pod_obj_list), (
             f"Expected {len(pod_obj_list)} workload pods after redeploy, "
             f"got {len(redeployed_pod_list)}"

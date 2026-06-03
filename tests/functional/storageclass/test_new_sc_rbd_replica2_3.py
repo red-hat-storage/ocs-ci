@@ -14,7 +14,7 @@ from ocs_ci.ocs.cluster import (
     validate_replica_data,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -84,6 +84,10 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
         *. Mount PVC to an app pod
         *. Run IO on an app pod
         """
+        logger.test_step(
+            f"Create storage class with replica={replica}, compression={compression}, "
+            f"volume_binding_mode={volume_binding_mode}"
+        )
         interface_type = constants.CEPHBLOCKPOOL
         sc_obj = storageclass_factory(
             interface=interface_type,
@@ -93,19 +97,19 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
             volume_binding_mode=volume_binding_mode,
         )
 
-        log.info(f"Creating a PVC using {sc_obj.name}")
+        logger.test_step(f"Create PVC using storage class {sc_obj.name}")
         pvc_obj = pvc_factory(
             interface=interface_type, storageclass=sc_obj, size=10, status=pvc_status
         )
-        log.info(f"PVC: {pvc_obj.name} created successfully using " f"{sc_obj.name}")
+        logger.info(f"PVC {pvc_obj.name} created successfully using {sc_obj.name}")
 
-        # Create app pod and mount each PVC
-        log.info(f"Creating an app pod and mount {pvc_obj.name}")
+        logger.test_step(f"Create app pod and mount PVC {pvc_obj.name}")
         pod_obj = pod_factory(interface=interface_type, pvc=pvc_obj)
-        log.info(f"{pod_obj.name} created successfully and mounted {pvc_obj.name}")
+        logger.info(
+            f"Pod {pod_obj.name} created successfully and mounted {pvc_obj.name}"
+        )
 
-        # Run IO on each app pod for sometime
-        log.info(f"Running FIO on {pod_obj.name}")
+        logger.test_step(f"Run FIO on pod {pod_obj.name}")
         pod_obj.run_io(
             "fs",
             size="1G",
@@ -118,10 +122,12 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
             readwrite="readwrite",
         )
         cluster_used_space = get_percent_used_capacity()
-        log.info(
-            f"Cluster used space with replica size {replica}, "
-            f"compression mode {compression}={cluster_used_space}"
+        logger.info(
+            f"Cluster used space with replica={replica}, compression={compression}: "
+            f"{cluster_used_space}"
         )
+
+        logger.test_step("Validate compression and replica data on the pool")
         cbp_name = sc_obj.get().get("parameters").get("pool")
         if compression != "none":
             validate_compression(cbp_name)

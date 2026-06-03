@@ -15,7 +15,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 from ocs_ci.helpers.helpers import wait_for_resource_state, get_snapshot_content_obj
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -53,10 +53,15 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
         """
         snapshots = []
         usage_percent = [0, 20, 40, 60, 80]
+        logger.test_step(
+            f"Run IO at utilization levels {usage_percent}% and create snapshots at each level"
+        )
         for usage in usage_percent:
             if usage != 0:
                 for pod_obj in self.pods:
-                    log.info(f"Running IO on pod {pod_obj.name} to utilize {usage}%")
+                    logger.debug(
+                        f"Running IO on pod {pod_obj.name} to utilize {usage}%"
+                    )
                     pod_obj.pvc.filename = f"{pod_obj.name}_{usage}"
                     pod_obj.run_io(
                         storage_type="fs",
@@ -64,13 +69,12 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                         runtime=20,
                         fio_filename=pod_obj.pvc.filename,
                     )
-                log.info(f"IO started on all pods to utilize {usage}%")
 
                 for pod_obj in self.pods:
                     # Wait for fio to finish
                     pod_obj.get_fio_results()
-                    log.info(
-                        f"IO to utilize {usage}% finished on pod " f"{pod_obj.name}"
+                    logger.debug(
+                        f"IO to utilize {usage}% finished on pod {pod_obj.name}"
                     )
                     # Calculate md5sum
                     md5_sum = pod.cal_md5sum(pod_obj, pod_obj.pvc.filename)
@@ -79,9 +83,9 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                     pod_obj.pvc.md5_sum[pod_obj.pvc.filename] = md5_sum
 
             # Take snapshot of all PVCs
-            log.info(f"Creating snapshot of all PVCs at {usage}%")
+            logger.info(f"Creating snapshot of all PVCs at {usage}% utilization")
             for pvc_obj in self.pvcs:
-                log.info(f"Creating snapshot of PVC {pvc_obj.name} at {usage}%")
+                logger.debug(f"Creating snapshot of PVC {pvc_obj.name} at {usage}%")
                 snap_obj = snapshot_factory(pvc_obj, wait=False)
                 # Set a dict containing filename:md5sum for later verification
                 setattr(snap_obj, "md5_sum", deepcopy(getattr(pvc_obj, "md5_sum", {})))
@@ -89,12 +93,11 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                     pvc_obj.get_attached_pods()[0]
                 )
                 snapshots.append(snap_obj)
-                log.info(f"Created snapshot of PVC {pvc_obj.name} at {usage}%")
-            log.info(f"Created snapshot of all PVCs at {usage}%")
-        log.info("Snapshots creation completed.")
+        logger.info(
+            f"Created {len(snapshots)} snapshots at different utilization levels"
+        )
 
-        # Verify snapshots are ready
-        log.info("Verify snapshots are ready")
+        logger.test_step(f"Verify all {len(snapshots)} snapshots are ready")
         for snapshot in snapshots:
             snapshot.ocp.wait_for_resource(
                 condition="true",
@@ -103,34 +106,29 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 timeout=90,
             )
 
-        # Delete pods
-        log.info("Deleting the pods")
+        logger.test_step("Delete pods and parent PVCs to verify snapshot independence")
         for pod_obj in self.pods:
             pod_obj.delete()
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
-        log.info("Deleted all the pods")
+        logger.info("Deleted all the pods")
 
-        # Delete parent PVCs
-        log.info("Deleting parent PVCs")
         for pvc_obj in self.pvcs:
             pv_obj = pvc_obj.backed_pv_obj
             pvc_obj.delete()
             pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
-            log.info(
-                f"Deleted PVC {pvc_obj.name}. Verifying whether PV "
-                f"{pv_obj.name} is deleted."
+            logger.debug(
+                f"Deleted PVC {pvc_obj.name}. Verifying PV {pv_obj.name} is deleted."
             )
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
-        log.info(
-            "Deleted parent PVCs before restoring snapshot. " "PVs are also deleted."
-        )
+        logger.info("Deleted parent PVCs and PVs before restoring snapshots")
 
         restore_pvc_objs = []
 
-        # Create PVCs out of the snapshots
-        log.info("Creating new PVCs from snapshots")
+        logger.test_step(
+            f"Restore {len(snapshots)} PVCs from snapshots and verify Bound state"
+        )
         for snapshot in snapshots:
-            log.info(f"Creating a PVC from snapshot {snapshot.name}")
+            logger.debug(f"Creating a PVC from snapshot {snapshot.name}")
             restore_pvc_obj = snapshot_restore_factory(
                 snapshot_obj=snapshot,
                 size=f"{self.pvc_size}Gi",
@@ -139,36 +137,33 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 status="",
             )
 
-            log.info(
-                f"Created PVC {restore_pvc_obj.name} from snapshot " f"{snapshot.name}"
+            logger.debug(
+                f"Created PVC {restore_pvc_obj.name} from snapshot {snapshot.name}"
             )
             restore_pvc_objs.append(restore_pvc_obj)
-        log.info("Created new PVCs from all the snapshots")
+        logger.info(f"Created {len(restore_pvc_objs)} new PVCs from snapshots")
 
-        # Confirm that the restored PVCs are Bound
         # Increased wait time to 600 seconds as a workaround for BZ 1899968
         # TODO: Revert wait time to 200 seconds once BZ 1899968 is fixed
-        log.info("Verify the restored PVCs are Bound")
         for pvc_obj in restore_pvc_objs:
             wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=600
             )
             pvc_obj.reload()
-        log.info("Verified: Restored PVCs are Bound.")
+        logger.info("Verified: Restored PVCs are Bound.")
 
+        logger.test_step(
+            "Delete snapshots and verify VolumeSnapshotContents are cleaned up"
+        )
         snapcontent_objs = []
-        # Get VolumeSnapshotContent form VolumeSnapshots and delete
-        # VolumeSnapshots
-        log.info("Deleting snapshots")
         for snapshot in snapshots:
             snapcontent_objs.append(get_snapshot_content_obj(snap_obj=snapshot))
             snapshot.delete()
 
-        # Verify volume snapshots are deleted
-        log.info("Verify snapshots are deleted")
+        logger.info("Verifying snapshots are deleted")
         for snapshot in snapshots:
             snapshot.ocp.wait_for_delete(resource_name=snapshot.name)
-        log.info("Verified: Snapshots are deleted")
+        logger.info("Verified: Snapshots are deleted")
 
         # Verify VolumeSnapshotContents are deleted
         for snapcontent_obj in snapcontent_objs:
@@ -176,8 +171,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 resource_name=snapcontent_obj.name, timeout=180
             )
 
-        # Attach the restored PVCs to pods
-        log.info("Attach the restored PVCs to pods")
+        logger.test_step("Attach restored PVCs to pods and verify Running state")
         restore_pod_objs = []
         for restore_pvc_obj in restore_pvc_objs:
             interface = (
@@ -188,14 +182,12 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
             restore_pod_obj = pod_factory(
                 interface=interface, pvc=restore_pvc_obj, status=""
             )
-            log.info(
-                f"Attached the PVC {restore_pvc_obj.name} to pod "
-                f"{restore_pod_obj.name}"
+            logger.debug(
+                f"Attached PVC {restore_pvc_obj.name} to pod {restore_pod_obj.name}"
             )
             restore_pod_objs.append(restore_pod_obj)
 
-        # Verify the new pods are running
-        log.info("Verify the new pods are running")
+        logger.info("Verifying new pods are running")
         for pod_obj in restore_pod_objs:
             timeout = (
                 300
@@ -203,60 +195,41 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 else 60
             )
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout)
-        log.info("Verified: New pods are running")
+        logger.info("Verified: New pods are running")
 
-        # Verify md5sum of files
-        log.info("Verifying md5sum of files on all the pods")
+        logger.test_step("Verify md5sum data integrity on all restored pods")
         for restore_pod_obj in restore_pod_objs:
-            log.info(
-                f"Verifying md5sum of these files on pod "
-                f"{restore_pod_obj.name}:"
-                f"{restore_pod_obj.pvc.snapshot.md5_sum}"
+            logger.debug(
+                f"Verifying md5sum of files on pod {restore_pod_obj.name}: "
+                f"{list(restore_pod_obj.pvc.snapshot.md5_sum.keys())}"
             )
             for (
                 file_name,
                 actual_md5_sum,
             ) in restore_pod_obj.pvc.snapshot.md5_sum.items():
                 file_path = pod.get_file_path(restore_pod_obj, file_name)
-                log.info(
-                    f"Checking the existence of file {file_name} on pod "
-                    f"{restore_pod_obj.name}"
-                )
-                assert pod.check_file_existence(restore_pod_obj, file_path), (
-                    f"File {file_name} does not exist on pod " f"{restore_pod_obj.name}"
-                )
-                log.info(f"File {file_name} exists on pod {restore_pod_obj.name}")
+                assert pod.check_file_existence(
+                    restore_pod_obj, file_path
+                ), f"File {file_name} does not exist on pod {restore_pod_obj.name}"
 
-                # Verify that the md5sum matches
-                log.info(
-                    f"Verifying md5sum of file {file_name} on pod "
-                    f"{restore_pod_obj.name}"
-                )
                 pod.verify_data_integrity(restore_pod_obj, file_name, actual_md5_sum)
-                log.info(
-                    f"Verified md5sum of file {file_name} on pod "
-                    f"{restore_pod_obj.name}"
+                logger.debug(
+                    f"Verified md5sum of file {file_name} on pod {restore_pod_obj.name}"
                 )
-            log.info(
-                f"Verified md5sum of these files on pod "
-                f"{restore_pod_obj.name}:"
-                f"{restore_pod_obj.pvc.snapshot.md5_sum}"
-            )
-        log.info("md5sum verified")
+        logger.info("md5sum verified on all restored pods")
 
-        # Verify usage on mount point
-        log.info("Verify usage on new pods")
+        logger.test_step("Verify usage on mount point matches snapshot usage")
         for pod_obj in restore_pod_objs:
             usage_on_pod = get_used_space_on_mount_point(pod_obj)
+            logger.assertion(
+                f"Usage on pod {pod_obj.name}: "
+                f"expected={pod_obj.pvc.snapshot.usage_on_mount}%, actual={usage_on_pod}%"
+            )
             assert usage_on_pod == pod_obj.pvc.snapshot.usage_on_mount, (
                 f"Usage on mount point is not the expected value on pod "
                 f"{pod_obj.name}. Usage in percentage {usage_on_pod}. "
                 f"Expected usage in percentage "
                 f"{pod_obj.pvc.snapshot.usage_on_mount}"
             )
-            log.info(
-                f"Verified usage on new pod {pod_obj.name}. Usage in "
-                f"percentage {usage_on_pod}. Expected usage in percentage "
-                f"{pod_obj.pvc.snapshot.usage_on_mount}"
-            )
-        log.info("Verified usage on new pods")
+            logger.debug(f"Verified usage on pod {pod_obj.name}: {usage_on_pod}%")
+        logger.info("Verified usage on all restored pods")

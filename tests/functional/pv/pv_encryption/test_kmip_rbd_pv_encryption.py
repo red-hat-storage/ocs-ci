@@ -20,8 +20,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import verify_crypt_device_present_onnode
 
-
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -48,9 +47,9 @@ class TestKmipRbdPvEncryptionKMIP(ManageTest):
         Setup csi-kms-connection-details configmap
 
         """
-        log.info("Setting up csi-kms-connection-details configmap")
+        logger.test_step("Set up csi-kms-connection-details configmap for KMIP")
         self.kms = pv_encryption_kmip_setup_factory()
-        log.info("csi-kms-connection-details setup successful")
+        logger.info("csi-kms-connection-details setup successful")
 
     @tier1
     def test_rbd_pv_encryption_kmip(
@@ -64,17 +63,16 @@ class TestKmipRbdPvEncryptionKMIP(ManageTest):
         Test to verify creation and deletion of encrypted RBD PVC
 
         """
-        # Create a project
+        logger.test_step("Create project and encryption-enabled RBD storage class")
         proj_obj = project_factory()
 
-        # Create an encryption enabled storageclass for RBD
         sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
             encryption_kms_id=self.kms.kmsid,
         )
 
-        # Create RBD PVCs with volume mode Block
+        logger.test_step("Create RBD PVCs with volume mode Block")
         pvc_size = 5
         pvc_objs = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
@@ -99,12 +97,12 @@ class TestKmipRbdPvEncryptionKMIP(ManageTest):
             status=constants.STATUS_RUNNING,
         )
 
+        logger.test_step("Verify encrypted devices and start IO on all pods")
         vol_handles = []
         for pvc_obj in pvc_objs:
             pv_obj = pvc_obj.backed_pv_obj
             vol_handles.append(pv_obj.get().get("spec").get("csi").get("volumeHandle"))
 
-        # Verify whether encrypted device is present inside the pod and run IO
         for vol_handle, pod_obj in zip(vol_handles, pod_objs):
             node = pod_obj.get_node()
             assert verify_crypt_device_present_onnode(
@@ -117,9 +115,9 @@ class TestKmipRbdPvEncryptionKMIP(ManageTest):
                 io_direction="write",
                 runtime=60,
             )
-        log.info("IO started on all pods")
+        logger.info("IO started on all pods")
 
-        # Wait for IO completion
+        logger.test_step("Wait for IO completion on all pods")
         for pod_obj in pod_objs:
             pod_obj.get_fio_results()
-        log.info("IO completed on all pods")
+        logger.info("IO completed on all pods")

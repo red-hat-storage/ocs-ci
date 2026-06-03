@@ -27,7 +27,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.framework import config
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
 
@@ -68,6 +68,9 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         9. Create PVC, should succeeded.
 
         """
+        logger.test_step(
+            "Create pods and start background IO before mon service deletion"
+        )
         if self.consumer_cluster_index is not None:
             # Switch to consumer to create PVC, pod and start IO
             config.switch_to_consumer(self.consumer_cluster_index)
@@ -80,6 +83,9 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             # Switch to provider
             config.switch_to_provider()
 
+        logger.test_step(
+            "Delete each mon service, update configmap, and verify recovery"
+        )
         # Get all mon services
         mon_svc = get_services_by_label(
             label=constants.MON_APP_LABEL,
@@ -98,11 +104,11 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             operator_name = operator_pod_obj[0].name
 
             # Scale down rook-ceph-operator
-            log.info("Scale down rook-ceph-operator")
+            logger.info("Scale down rook-ceph-operator")
             assert modify_deployment_replica_count(
                 deployment_name="rook-ceph-operator", replica_count=0
             ), "Failed to scale down rook-ceph-operator to 0"
-            log.info("Successfully scaled down rook-ceph-operator to 0")
+            logger.info("Successfully scaled down rook-ceph-operator to 0")
 
             # Validate rook-ceph-operator pod not running
             POD_OBJ.wait_for_delete(resource_name=operator_name)
@@ -115,7 +121,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             list_old_svc.append(cluster_ip)
 
             # Delete deployment
-            log.info("Delete mon deployments")
+            logger.info("Delete mon deployments")
             del_obj = OCP(
                 kind=constants.DEPLOYMENT,
                 namespace=config.ENV_DATA["cluster_namespace"],
@@ -129,12 +135,12 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 mon_node = mon_info["spec"]["template"]["spec"]["nodeSelector"][
                     "kubernetes.io/hostname"
                 ]
-                log.info(f"Delete the directory `{mon_data_path}` from {mon_node}")
+                logger.info(f"Delete the directory `{mon_data_path}` from {mon_node}")
                 cmd = f"rm -rf {mon_data_path}"
                 ocp_obj = OCP(namespace=config.ENV_DATA["cluster_namespace"])
                 ocp_obj.exec_oc_debug_cmd(node=mon_node, cmd_list=[cmd])
             else:
-                log.info("Delete mon PVC")
+                logger.info("Delete mon PVC")
                 pvc_name = svc["metadata"]["labels"]["pvc_name"]
                 pvc_obj = OCP(
                     kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
@@ -142,14 +148,14 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 pvc_obj.delete(resource_name=pvc_name)
 
             # Delete the mon service
-            log.info("Delete mon service")
+            logger.info("Delete mon service")
             svc_obj = OCP(
                 kind=constants.SERVICE, namespace=config.ENV_DATA["cluster_namespace"]
             )
             svc_obj.delete(resource_name=svc_name)
 
             # Edit the cm
-            log.info(f"Edit the configmap {constants.ROOK_CEPH_MON_ENDPOINTS}")
+            logger.info(f"Edit the configmap {constants.ROOK_CEPH_MON_ENDPOINTS}")
             configmap_obj = OCP(
                 kind=constants.CONFIGMAP,
                 namespace=config.ENV_DATA["cluster_namespace"],
@@ -178,23 +184,23 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 else new_data["mapping"].replace(f',"{mon_id}":null', "")
             )
             params = f'{{"data": {json.dumps(new_data)}}}'
-            log.info(f"Removing {mon_id} entries from configmap")
+            logger.info(f"Removing {mon_id} entries from configmap")
             configmap_obj.patch(
                 resource_name=constants.ROOK_CEPH_MON_ENDPOINTS,
                 params=params,
                 format_type="strategic",
             )
-            log.info(
+            logger.info(
                 f"Configmap {constants.ROOK_CEPH_MON_ENDPOINTS} edited successfully"
             )
 
             # Scale up rook-ceph-operator
-            log.info("Scale up rook-ceph-operator")
+            logger.info("Scale up rook-ceph-operator")
             assert modify_deployment_replica_count(
                 deployment_name="rook-ceph-operator", replica_count=1
             ), "Failed to scale up rook-ceph-operator to 1"
-            log.info("Successfully scaled up rook-ceph-operator to 1")
-            log.info("Validate rook-ceph-operator pod is running")
+            logger.info("Successfully scaled up rook-ceph-operator to 1")
+            logger.info("Validate rook-ceph-operator pod is running")
             POD_OBJ.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 selector=constants.OPERATOR_LABEL,
@@ -204,7 +210,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             )
 
             # Validate all mons are running
-            log.info("Validate all mons are up and running")
+            logger.info("Validate all mons are up and running")
             POD_OBJ.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 selector=constants.MON_APP_LABEL,
@@ -212,7 +218,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 timeout=1200,
                 sleep=5,
             )
-            log.info("All mons are up and running")
+            logger.info("All mons are up and running")
 
             # Check the ceph health OK
             ceph_health_check(tries=90, delay=15)
@@ -222,11 +228,12 @@ class TestPvcCreationAfterDelMonService(E2ETest):
 
             # Sleep for some seconds before deleting another mon
             sleep_time = 60
-            log.info(f"Waiting for {sleep_time} seconds before deleting another mon")
+            logger.info(f"Waiting for {sleep_time} seconds before deleting another mon")
             time.sleep(sleep_time)
 
+        logger.test_step("Validate all mon endpoints have changed after recreation")
         # Check the endpoints are different
-        log.info("Validate the mon endpoints are changed")
+        logger.info("Validate the mon endpoints are changed")
         new_mon_svc = get_services_by_label(
             label=constants.MON_APP_LABEL,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -236,19 +243,26 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             cluster_ip = new_svc["spec"]["clusterIP"]
             list_new_svc.append(cluster_ip)
         diff = set(list_new_svc) ^ set(list_old_svc)
+        logger.assertion(
+            f"Mon endpoints changed: expected diff count={len(list_old_svc + list_new_svc)}, "
+            f"actual diff count={len(diff)}"
+        )
         assert len(diff) == len(list_old_svc + list_new_svc), (
             f"Not all endpoints are changed. Set of old "
             f"endpoints {list_old_svc} and new endpoints {list_new_svc}"
         )
-        log.info(f"All new mon endpoints are created {list_new_svc}")
+        logger.info(f"All new mon endpoints are created {list_new_svc}")
 
         if self.consumer_cluster_index is not None:
             # Switch to consumer to create PVC, pod and run IO
             config.switch_to_consumer(self.consumer_cluster_index)
 
+        logger.test_step(
+            "Create PVCs and run IO to verify cluster functionality after mon recreation"
+        )
         # Create PVC and pods
         for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
-            log.info(f"Create {interface} PVC")
+            logger.info(f"Create {interface} PVC")
             pod_obj = pod_factory(interface=interface)
             pod_obj.run_io(storage_type="fs", size="500M")
 
@@ -302,11 +316,11 @@ class TestPvcCreationAfterDelMonService(E2ETest):
                 ):
                     try:
                         if len(svc_list) == len(mon_svc_list):
-                            log.info("All expected mon services are up")
+                            logger.info("All expected mon services are up")
                             break
                     except IndexError:
-                        log.error(
-                            f"All expected mon services are not up only found :{svc_list}. "
+                        logger.warning(
+                            f"All expected mon services are not up yet, only found: {svc_list}. "
                             f"Expected: {mon_svc_list}"
                         )
 
@@ -349,6 +363,7 @@ class TestPvcCreationAfterDelMonService(E2ETest):
 
         self.sanity_helpers = Sanity()
 
+        logger.test_step("Delete all mon services one by one")
         # Get all mon services
         mon_svc_before = get_services_by_label(
             label=constants.MON_APP_LABEL,
@@ -366,11 +381,14 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         for svc in mon_svc_before:
             svc_name = svc["metadata"]["name"]
             mon_svc_ip_before.append(svc["spec"]["clusterIP"])
-            log.info(f"Delete mon service {svc_name}")
+            logger.info(f"Delete mon service {svc_name}")
             svc_obj.delete(resource_name=svc_name)
             # Verify mon services deleted
             svc_obj.wait_for_delete(resource_name=svc_name)
 
+        logger.test_step(
+            "Restart rook-ceph-operator and verify same mon services are recreated"
+        )
         # Restart the rook-operator pod
         operator_pod_obj = get_operator_pods()
         delete_pods(pod_objs=operator_pod_obj)
@@ -384,10 +402,10 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             svc_obj.check_resource_existence(
                 should_exist=True, timeout=300, resource_name=svc_name
             )
-        log.info("Same old mon services are recreated")
+        logger.info("Same old mon services are recreated")
 
         # Validate all mons are running
-        log.info("Validate all mons are up and running")
+        logger.info("Validate all mons are up and running")
         POD_OBJ.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=constants.MON_APP_LABEL,
@@ -397,21 +415,29 @@ class TestPvcCreationAfterDelMonService(E2ETest):
         )
 
         # Validate same mon services are running
-        log.info("Validate same mon services are running")
+        logger.info("Validate same mon services are running")
         mon_svc_after = get_services_by_label(
             label=constants.MON_APP_LABEL,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         mon_svc_ip_after = [svc["spec"]["clusterIP"] for svc in mon_svc_after]
+        logger.assertion(
+            f"Mon service IPs unchanged: before={mon_svc_ip_before}, after={mon_svc_ip_after}"
+        )
         assert len(set(mon_svc_ip_after) ^ set(mon_svc_ip_before)) == 0, (
             "Different mon services are running. "
             f"Before mon services list: {mon_svc_ip_before}, "
             f"After mon services list: {mon_svc_ip_after}"
         )
-        log.info("Same old mon services are running and all mons are in running state")
+        logger.info(
+            "Same old mon services are running and all mons are in running state"
+        )
 
+        logger.test_step(
+            "Verify cluster health and create PVCs to confirm functionality"
+        )
         # Verify everything running fine
-        log.info("Verifying All resources are Running and matches expected result")
+        logger.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=120)
 
         # Validate all storage pods are running

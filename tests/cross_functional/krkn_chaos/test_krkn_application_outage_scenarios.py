@@ -34,7 +34,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
 )
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -95,11 +95,12 @@ class TestKrKnApplicationOutageScenarios:
             "grouped application outage", group_name, component_name=group_name
         )
 
-        # WORKLOAD SETUP - Start workloads and background cluster operations
-        log.info("Setting up workloads for application outage testing")
+        logger.test_step("Set up workloads for application outage testing")
         workload_ops.setup_workloads()
 
-        # 1. Initialize application scenario helper
+        logger.test_step(
+            "Initialize application scenario helper and validate group configuration"
+        )
         app_helper = ApplicationScenarioHelper(
             scenario_dir=krkn_scenario_directory,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
@@ -113,17 +114,19 @@ class TestKrKnApplicationOutageScenarios:
             )
 
         group_config = groups[group_name]
-        log.info(f"Testing group '{group_name}': {group_config['description']}")
-        log.info(f"📋 Target pod selectors: {group_config['pod_selectors']}")
+        logger.info(f"Testing group '{group_name}': {group_config['description']}")
+        logger.debug(f"Target pod selectors: {group_config['pod_selectors']}")
 
-        # 3. Create grouped application outage scenario
+        logger.test_step(
+            "Create grouped application outage scenario and configure Krkn"
+        )
         scenario_file = app_helper.create_grouped_application_outage_scenario(
             group_name=group_name, duration=duration, block=block_directions
         )
 
-        log.info(f"Configuration: duration={duration}s, block={block_directions}")
-        log.info(f"🔥 Chaos testing group: {group_name}")
-        log.info(f"📋 Generated scenario file: {scenario_file}")
+        logger.debug(f"Configuration: duration={duration}s, block={block_directions}")
+        logger.info(f"Chaos testing group: {group_name}")
+        logger.debug(f"Generated scenario file: {scenario_file}")
 
         # 4. Configure and execute Krkn
         config = KrknConfigGenerator()
@@ -131,18 +134,18 @@ class TestKrKnApplicationOutageScenarios:
         config.set_tunings(wait_duration=300, iterations=1)  # Standard wait duration
         config.write_to_file(location=krkn_scenario_directory)
 
-        # 5. Execute chaos scenarios using KrknExecutionHelper
+        logger.test_step("Execute chaos scenarios using KrknExecutionHelper")
         executor = KrknExecutionHelper(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         chaos_data = executor.execute_chaos_scenarios(
             config, group_name, "grouped application outage"
         )
 
-        # 6. Validate workloads
+        logger.test_step("Validate workloads after chaos execution")
         try:
             workload_ops.validate_and_cleanup()
-            log.info("Workloads validated and cleaned up successfully")
+            logger.info("Workloads validated and cleaned up successfully")
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.warning(f"Workload validation/cleanup issue: {str(e)}")
+            logger.warning(f"Workload validation/cleanup issue: {str(e)}")
 
         # 7. Analyze results and check system health
         analyzer = KrknResultAnalyzer()
@@ -159,17 +162,20 @@ class TestKrKnApplicationOutageScenarios:
             "grouped application outage chaos",
         )
 
-        # Final Ceph health check using CephHealthHelper
+        logger.test_step("Perform final Ceph health check")
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             group_name, "grouped application outage chaos"
         )
+        logger.assertion(
+            f"Ceph crashes after outage: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🎉 Grouped application outage test for {group_name} completed successfully"
+        logger.info(
+            f"Grouped application outage test for {group_name} completed successfully"
         )
 
     @pytest.mark.parametrize(
@@ -227,11 +233,10 @@ class TestKrKnApplicationOutageScenarios:
             duration_multiplier=duration_multiplier,
         )
 
-        # WORKLOAD SETUP - Start workloads and background cluster operations
-        log.info("Setting up workloads for strength testing")
+        logger.test_step("Set up workloads for strength testing")
         workload_ops.setup_workloads()
 
-        # Get component label using ApplicationScenarioHelper (inherits from BaseScenarioHelper)
+        logger.test_step("Detect component instances and get pod selector")
         app_helper = ApplicationScenarioHelper()
         ceph_component_label = app_helper.get_component_label(target_component)
         # Use InstanceDetectionHelper to get pod_selector (we don't need instance detection here)
@@ -245,8 +250,9 @@ class TestKrKnApplicationOutageScenarios:
             fallback_on_error=True,
         )
 
-        log.info(f"Configuration: duration_multiplier={duration_multiplier}x")
+        logger.debug(f"Configuration: duration_multiplier={duration_multiplier}x")
 
+        logger.test_step("Create strength test scenarios and configure Krkn")
         app_helper = ApplicationScenarioHelper(
             scenario_dir=krkn_scenario_directory,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
@@ -259,7 +265,7 @@ class TestKrKnApplicationOutageScenarios:
             duration_multiplier=duration_multiplier,
         )
 
-        log.info(f"📋 Generated {len(scenarios)} strength testing scenarios")
+        logger.info(f"Generated {len(scenarios)} strength testing scenarios")
 
         # Configure and execute
         config = KrknConfigGenerator()
@@ -270,16 +276,16 @@ class TestKrKnApplicationOutageScenarios:
         config.set_tunings(wait_duration=extended_wait, iterations=1)
         config.write_to_file(location=krkn_scenario_directory)
 
-        # Execute strength test scenarios using KrknExecutionHelper
+        logger.test_step("Execute strength test scenarios using KrknExecutionHelper")
         executor = KrknExecutionHelper(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         chaos_data = executor.execute_strength_test_scenarios(
             config, target_component, stress_level
         )
 
-        # Enhanced validation for strength testing
+        logger.test_step("Validate workloads after strength testing")
         try:
             workload_ops.validate_and_cleanup()
-            log.info("💪 Workloads survived strength testing - resilience confirmed!")
+            logger.info("Workloads survived strength testing - resilience confirmed")
         except (UnexpectedBehaviour, CommandFailed) as e:
             validator = ValidationHelper()
             validator.handle_workload_validation_failure(
@@ -303,7 +309,7 @@ class TestKrKnApplicationOutageScenarios:
             min_success_rate=60,
         )
 
-        # Final Ceph health check using CephHealthHelper
+        logger.test_step("Perform final Ceph health check after strength testing")
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
@@ -311,9 +317,12 @@ class TestKrKnApplicationOutageScenarios:
             f"{target_component} strength testing",
             "application outage strength testing",
         )
+        logger.assertion(
+            f"Ceph crashes after strength test: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🎉 STRENGTH TEST PASSED: {target_component} achieved {strength_score:.1f}% "
-            f"resilience under {stress_level} stress!"
+        logger.info(
+            f"Strength test passed: {target_component} achieved {strength_score:.1f}% "
+            f"resilience under {stress_level} stress"
         )

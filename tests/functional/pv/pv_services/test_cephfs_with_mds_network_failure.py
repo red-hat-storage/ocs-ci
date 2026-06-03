@@ -16,7 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.resources.pod import search_pattern_in_pod_logs
 from ocs_ci.helpers.helpers import change_vm_network_state
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -47,16 +47,17 @@ class TestCephFSWithMDSNetworkFailure:
         9. Keep checking on ceph -s to identify any ceph daemon crash
         """
 
-        # Get standby-replay daemon info
-        log.info("Getting standby-replay daemon info...")
+        logger.test_step("Get MDS standby-replay daemon info")
         ceph_standby_replay_info = get_mds_standby_replay_info()
+        logger.assertion(
+            f"MDS standby-replay info: expected=non-empty, actual={'found' if ceph_standby_replay_info else 'empty'}"
+        )
         assert ceph_standby_replay_info, "Failed To get ceph mds daemon information."
 
         self.standby_replay_node_ip = ceph_standby_replay_info["node_ip"]
         request.addfinalizer(self.teardown)
 
-        # Launch IO thread
-        log.info("Launching IO thread...")
+        logger.test_step("Launch CephFS IO thread on a new pod")
         pod_obj = pod_factory(interface=constants.CEPHFILESYSTEM)
         kwargs = {"storage_type": "fs", "size": "3G", "runtime": 240}
         io_thread = Thread(
@@ -66,8 +67,10 @@ class TestCephFSWithMDSNetworkFailure:
         )
         io_thread.start()
 
-        # Cause network interruption to the standby-replay daemon three times
-        log.info("Starting network interruptions...")
+        logger.test_step("Cause 3 network interruptions to standby-replay MDS node")
+        logger.info(
+            f"Starting network interruptions on node {self.standby_replay_node_ip}"
+        )
         for i in range(1, 4):
             disable_vm_network_for_duration(
                 self.standby_replay_node_ip, duration=randint(5, 15)
@@ -75,22 +78,28 @@ class TestCephFSWithMDSNetworkFailure:
             time.sleep(5)
 
         # Wait for IO thread to finish
-        log.info("Waiting for IO thread to finish...")
+        logger.info("Waiting for IO thread to finish...")
         io_thread.join()
 
-        # Search MDS pod logs for pattern
-        log.info("Searching MDS pod logs for pattern...")
+        logger.test_step(
+            "Verify MDS pod logs do not contain 'respawn' or 'Map removed me' patterns"
+        )
         ceph_standby_replay_info = get_mds_standby_replay_info()
         pattern = r"respawn|Map removed me"
         matched_lines = search_pattern_in_pod_logs(
             ceph_standby_replay_info["standby_replay_pod"], pattern=pattern
         )
 
-        # Assert that the pattern was found in the logs
+        logger.assertion(
+            f"MDS log pattern matches: expected=0, actual={len(matched_lines)}"
+        )
         assert (
             len(matched_lines) == 0
         ), f"ceph MDS pod logs has lines with pattern '{pattern}'"
 
-        # Check Ceph cluster health
-        log.info("Checking Ceph cluster health...")
-        assert ceph_health_check(), "Ceph cluster health is not OK"
+        logger.test_step("Verify Ceph cluster health is OK")
+        health_ok = ceph_health_check()
+        logger.assertion(
+            f"Ceph cluster health: expected=OK, actual={'OK' if health_ok else 'NOT OK'}"
+        )
+        assert health_ok, "Ceph cluster health is not OK"

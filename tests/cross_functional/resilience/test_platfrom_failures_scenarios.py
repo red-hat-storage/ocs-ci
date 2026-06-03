@@ -5,7 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad, resiliency
 from ocs_ci.resiliency.resiliency_helper import Resiliency
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -75,17 +75,17 @@ class TestPlatformFailureScenarios:
             workload_ops: WorkloadOps fixture for workload management
         """
         scenario = platfrom_failure_scenarios.get("SCENARIO_NAME")
-        log.info(f"Running Scenario: {scenario}, Failure Case: {failure_case}")
+        logger.info(f"Running Scenario: {scenario}, Failure Case: {failure_case}")
 
         resiliency_runner = None
 
         try:
-            # Setup workloads (starts workloads, background ops, and scaling)
-            log.info("Setting up workloads and background operations")
+            logger.test_step("Set up workloads and background operations")
             workload_ops.setup_workloads()
 
-            # Start failure injection
-            log.info("Starting platform failure injection while workloads are running")
+            logger.test_step(
+                f"Inject {failure_case} platform failure while workloads are running"
+            )
             resiliency_runner = Resiliency(scenario, failure_method=failure_case)
             resiliency_runner.start()
 
@@ -93,12 +93,11 @@ class TestPlatformFailureScenarios:
             resiliency_runner.cleanup()
             resiliency_runner = None
 
-            # Validate and cleanup workloads
-            log.info("Validating and cleaning up workloads")
+            logger.test_step("Validate and clean up workloads")
             workload_ops.validate_and_cleanup()
 
         except UnexpectedBehaviour as e:
-            log.error(f"Test execution failed: {e}")
+            logger.exception(f"Test execution failed: {e}")
             raise
         finally:
             # Cleanup failure injection if not already done
@@ -106,9 +105,9 @@ class TestPlatformFailureScenarios:
                 try:
                     resiliency_runner.cleanup()
                 except UnexpectedBehaviour as cleanup_e:
-                    log.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
+                    logger.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
 
-        log.info(
+        logger.info(
             "Test completed successfully - workloads and failure injection completed"
         )
 
@@ -167,21 +166,20 @@ class TestPlatformFailureScenarios:
             run_platform_stress: Fixture to run platform stress operations
         """
         scenario = platfrom_failure_scenarios.get("SCENARIO_NAME")
-        log.info(f"Running Scenario: {scenario}, Failure Case: {failure_case}")
+        logger.info(f"Running Scenario: {scenario}, Failure Case: {failure_case}")
 
         resiliency_runner = None
 
         try:
-            # Setup workloads (starts workloads, background ops, and scaling)
-            log.info("Setting up workloads and background operations")
+            logger.test_step("Set up workloads and background operations")
             workload_ops.setup_workloads()
 
-            # Start platform stress
-            log.info("Starting platform stress operations")
+            logger.test_step("Start platform stress operations")
             run_platform_stress()
 
-            # Start failure injection
-            log.info("Starting platform failure injection under stress conditions")
+            logger.test_step(
+                f"Inject {failure_case} platform failure under stress conditions"
+            )
             resiliency_runner = Resiliency(scenario, failure_method=failure_case)
             resiliency_runner.start()
 
@@ -189,12 +187,11 @@ class TestPlatformFailureScenarios:
             resiliency_runner.cleanup()
             resiliency_runner = None
 
-            # Validate and cleanup workloads
-            log.info("Validating and cleaning up workloads")
+            logger.test_step("Validate and clean up workloads")
             workload_ops.validate_and_cleanup()
 
         except UnexpectedBehaviour as e:
-            log.error(f"Test execution failed: {e}")
+            logger.exception(f"Test execution failed: {e}")
             raise
         finally:
             # Cleanup failure injection if not already done
@@ -202,8 +199,8 @@ class TestPlatformFailureScenarios:
                 try:
                     resiliency_runner.cleanup()
                 except UnexpectedBehaviour as cleanup_e:
-                    log.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
+                    logger.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
 
-        log.info(
+        logger.info(
             "Test completed successfully - workloads, stress, and failure injection completed"
         )

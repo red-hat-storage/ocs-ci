@@ -11,7 +11,7 @@ from ocs_ci.framework.testlib import tier2, ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @provider_mode
@@ -52,11 +52,12 @@ class TestPVCFullWithIORWO(ManageTest):
         """
         Writing data to PVC to reach limit
         """
-        log.info(f"Running FIO to fill PVC size: {self.pvc_size_gb}")
+        logger.test_step(f"Run FIO to fill {self.pvc_size_gb}Gi PVC to capacity")
+        logger.info(f"Running FIO to fill PVC size: {self.pvc_size_gb}")
         self.pod_obj.run_io(
             "fs", size=self.pvc_size_gb, io_direction="write", runtime=60
         )
-        log.info("Waiting for IO results")
+        logger.info("Waiting for IO results")
         try:
             self.pod_obj.get_fio_results()
         except ex.CommandFailed as cf:
@@ -64,17 +65,24 @@ class TestPVCFullWithIORWO(ManageTest):
                 raise
             else:
                 used_space = get_used_space_on_mount_point(self.pod_obj)
+                logger.assertion(
+                    f"PVC used space: expected='100%', actual='{used_space}'"
+                )
                 assert used_space == "100%", (
                     f"The used space is not 100% but {used_space} which means "
                     f"the device is not full"
                 )
-                log.info("FIO succeeded to fill the PVC with data")
-        log.info("Deleting the pod and attaching the full PVC to a new pod")
+                logger.info("FIO succeeded to fill the PVC with data")
+        logger.test_step("Delete pod and attach the full PVC to a new pod")
+        logger.info("Deleting the pod and attaching the full PVC to a new pod")
         self.pod_obj.delete()
         self.pod_obj.ocp.wait_for_delete(resource_name=self.pod_obj.name)
-        log.info("Creating a new Pod with the existing full PVC")
+        logger.info("Creating a new Pod with the existing full PVC")
         self.pod_obj = pod_factory(interface=self.interface, pvc=self.pvc_obj)
         used_space = get_used_space_on_mount_point(self.pod_obj)
+        logger.assertion(
+            f"PVC used space from new pod: expected='100%', actual='{used_space}'"
+        )
         assert (
             used_space == "100%"
         ), f"The used space is not 100% but {used_space} from the new pod"
@@ -108,11 +116,14 @@ class TestPVCFullWithIORWX(ManageTest):
         """
         Writing data to PVC to reach limit
         """
-        log.info(f"Running FIO to fill PVC size: {self.pvc_size_gb}")
+        logger.test_step(
+            f"Run FIO on first pod to fill {self.pvc_size_gb}Gi RWX PVC to capacity"
+        )
+        logger.info(f"Running FIO to fill PVC size: {self.pvc_size_gb}")
         self.pod_obj1.run_io(
             "fs", size=self.pvc_size_gb, io_direction="write", runtime=60
         )
-        log.info("Waiting for IO results")
+        logger.info("Waiting for IO results")
         try:
             self.pod_obj1.get_fio_results()
         except ex.CommandFailed as cf:
@@ -120,19 +131,31 @@ class TestPVCFullWithIORWX(ManageTest):
                 raise
             else:
                 used_space = get_used_space_on_mount_point(self.pod_obj1)
+                logger.assertion(
+                    f"PVC used space from pod1: expected='100%', actual='{used_space}'"
+                )
                 assert used_space == "100%", (
                     f"The used space is not 100% but {used_space} which means "
                     f"the device is not full"
                 )
                 used_space = get_used_space_on_mount_point(self.pod_obj2)
+                logger.assertion(
+                    f"PVC used space from pod2: expected='100%', actual='{used_space}'"
+                )
                 assert used_space == "100%", (
                     f"The used space is not 100% but {used_space} which means "
                     f"the device is not full"
                 )
-                log.info("FIO succeeded to fill the PVC with data")
-        log.info("Deleting the first pod and checking used size from the 2nd pod")
+                logger.info("FIO succeeded to fill the PVC with data")
+        logger.test_step(
+            "Delete first pod and verify used space is still 100% from second pod"
+        )
+        logger.info("Deleting the first pod and checking used size from the 2nd pod")
         self.pod_obj1.delete()
         used_space = get_used_space_on_mount_point(self.pod_obj2)
+        logger.assertion(
+            f"PVC used space from second pod after first pod deletion: expected='100%', actual='{used_space}'"
+        )
         assert (
             used_space == "100%"
         ), f"The used space is not 100% but {used_space} from 2nd pod"

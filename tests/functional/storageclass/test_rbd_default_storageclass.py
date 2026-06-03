@@ -14,7 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.ui.helpers_ui import is_ui_deployment
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -37,30 +37,38 @@ class TestRBDStorageClassAsDefaultStorageClass:
         if not is_ui_deployment():
             pytest.skip("cluster is not deployed from UI. Skipping test.")
 
+        logger.test_step("Create PVC without specifying storageClassName")
         pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
         pvc_data["metadata"]["name"] = create_unique_resource_name("test", "pvc")
-        log.info("Removing 'storageClassName' Parameter from the PVC yaml file.")
+        logger.info("Removing 'storageClassName' parameter from the PVC yaml file")
         del pvc_data["spec"]["storageClassName"]
 
         pvc_obj = pvc_factory(custom_data=pvc_data, status=constants.STATUS_BOUND)
-        log.info("Created PVC without providing storage class name")
+        logger.info(f"Created PVC {pvc_obj.name} without providing storage class name")
+        logger.assertion(f"PVC object created: expected=truthy, actual={bool(pvc_obj)}")
         assert pvc_obj, "PVC creation failed."
 
+        logger.test_step("Verify PVC is attached to the default RBD storage class")
         sc_attached_to_pvc = pvc_obj.get().get("spec").get("storageClassName")
-        log.info("Verifying the storageclass attached to PVC is correct.")
+        logger.info(f"Storage class attached to PVC: {sc_attached_to_pvc}")
 
+        logger.assertion(
+            f"RBD default storage class: expected=True, "
+            f"actual=is_rbd_default_storage_class('{sc_attached_to_pvc}')"
+        )
         assert is_rbd_default_storage_class(
             sc_name=sc_attached_to_pvc
         ), f"RBD storageclass {sc_attached_to_pvc} is not default storageclass for Cluster."
 
-        log.info("Attaching PVC to pod to start IO workload.")
+        logger.test_step("Attach PVC to pod and run IO workload")
         pod_obj = pod_factory(pvc=pvc_obj, status=constants.STATUS_RUNNING)
         pod_obj.run_io(direct=1, runtime=60, storage_type="fs", size="1G")
 
-        # Wait for IO completion
+        logger.test_step("Verify IO completed without errors")
         fio_result = pod_obj.get_fio_results()
-        log.info("IO completed on all pods")
+        logger.info(f"IO completed on pod {pod_obj.name}")
         err_count = fio_result.get("jobs")[0].get("error")
+        logger.assertion(f"FIO error count: expected=0, actual={err_count}")
         assert err_count == 0, (
             f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
         )

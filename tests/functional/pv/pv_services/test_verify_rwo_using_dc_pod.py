@@ -14,7 +14,7 @@ from ocs_ci.framework import config
 
 from ocs_ci.utility.utils import TimeoutSampler
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -82,6 +82,7 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
         """
         Wait for the pods to be created and verify only one pod is running
         """
+        logger.test_step("Wait for replica pods and verify only one is Running")
         timeout_value = 360
 
         if config.ENV_DATA.get("worker_replicas") == 0:
@@ -107,7 +108,7 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
         for pod_info in sampler:
             if pod_info["status"]["phase"] == constants.STATUS_RUNNING:
                 self.running_pod = curr_pod
-                log.info(f"Pod {curr_pod.name} reached state Running.")
+                logger.info(f"Pod {curr_pod.name} reached Running state")
                 break
             curr_pod = next(pods_iter)
             sampler.func = curr_pod.get
@@ -124,13 +125,13 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
                     f"Unexpected: Pod {pod_obj.name} is in Running state. "
                     f"RWO PVC is mounted on pods which are on different nodes."
                 )
-                log.info(
+                logger.debug(
                     f"Expected: Pod {pod_obj.name} is Running. "
                     f"Pods which are running are on the same node "
                     f"{pod_running_node}"
                 )
             except ResourceWrongStatusException:
-                log.info(f"Verified: Pod {pod_obj.name} is not in " f"running state.")
+                logger.debug(f"Verified: Pod {pod_obj.name} is not in Running state")
 
     def test_verify_rwo_using_replicated_pod(self):
         """
@@ -139,7 +140,9 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
         """
         self.wait_for_pods_and_verify()
 
-        # Delete running pod
+        logger.test_step(
+            "Delete running pod and re-verify only one pod becomes Running"
+        )
         self.running_pod.delete()
         self.running_pod.ocp.wait_for_delete(self.running_pod.name)
 

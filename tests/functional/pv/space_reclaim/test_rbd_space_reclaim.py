@@ -29,7 +29,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import fetch_used_size, default_storage_class
 from ocs_ci.utility.utils import TimeoutSampler
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -93,8 +93,11 @@ class TestRbdSpaceReclaim(ManageTest):
         fio_filename2 = "fio_file2"
 
         # Fetch the used size of pool
+        logger.test_step(
+            f"Create two 10GiB files on pod and verify pool '{self.data_pool}' used size increases"
+        )
         used_size_before_io = fetch_used_size(self.data_pool)
-        log.info(f"Used size before IO is {used_size_before_io}")
+        logger.info(f"Used size before IO is {used_size_before_io}")
 
         # Create two 10 GB file
         for filename in fio_filename1, fio_filename2:
@@ -110,9 +113,10 @@ class TestRbdSpaceReclaim(ManageTest):
         # Verify used size after IO
         exp_used_size_after_io = used_size_before_io + (20 * self.pool_size_factor)
         used_size_after_io = fetch_used_size(self.data_pool, exp_used_size_after_io)
-        log.info(f"Used size after IO is {used_size_after_io}")
+        logger.info(f"Used size after IO is {used_size_after_io}")
 
         # Delete one file
+        logger.test_step(f"Delete file '{fio_filename1}' and create ReclaimSpaceJob")
         file_path = get_file_path(pod_obj, fio_filename1)
         pod_obj.exec_cmd_on_pod(command=f"rm -f {file_path}", out_yaml_format=False)
 
@@ -122,7 +126,7 @@ class TestRbdSpaceReclaim(ManageTest):
         except CommandFailed as cmdfail:
             if "No such file or directory" not in str(cmdfail):
                 raise
-            log.info(f"Verified: File {file_path} deleted.")
+            logger.info(f"Verified: File {file_path} deleted.")
 
         # Wait for 15 seconds after deleting the file
         time.sleep(15)
@@ -136,19 +140,22 @@ class TestRbdSpaceReclaim(ManageTest):
         time.sleep(120)
 
         # Verify space is reclaimed by checking the used size of the RBD pool
+        logger.test_step("Verify space is reclaimed and remaining file is intact")
         used_after_reclaiming_space = fetch_used_size(
             self.data_pool, used_size_after_io - (10 * self.pool_size_factor)
         )
-        log.info(
-            f"Space has been reclaimed. Used size after io is {used_after_reclaiming_space}."
+        logger.info(
+            f"Space has been reclaimed. Used size after reclaim is {used_after_reclaiming_space}."
         )
 
         # Verify the presence of another file in the directory
-        log.info("Verifying the existence of remaining file in the pod")
+        logger.info(
+            f"Verifying the existence of remaining file '{fio_filename2}' in the pod"
+        )
         file_path = get_file_path(pod_obj, fio_filename2)
-        log.info(check_file_existence(pod_obj=pod_obj, file_path=file_path))
+        logger.info(check_file_existence(pod_obj=pod_obj, file_path=file_path))
         if check_file_existence(pod_obj=pod_obj, file_path=file_path):
-            log.info(f"{fio_filename2} is intact")
+            logger.info(f"{fio_filename2} is intact")
 
     @polarion_id("OCS-2774")
     @tier2
@@ -174,8 +181,11 @@ class TestRbdSpaceReclaim(ManageTest):
         fio_filename2 = "fio_file2"
 
         # Fetch the used size of pool
+        logger.test_step(
+            f"Create two 10GiB files and verify pool '{self.data_pool}' used size increases"
+        )
         used_size_before_io = fetch_used_size(self.data_pool)
-        log.info(f"Used size before IO is {used_size_before_io}")
+        logger.info(f"Used size before IO is {used_size_before_io}")
 
         # Create a 10 GB file
         for filename in [fio_filename1, fio_filename2]:
@@ -191,9 +201,12 @@ class TestRbdSpaceReclaim(ManageTest):
         # Verify used size after IO
         exp_used_size_after_io = used_size_before_io + (20 * self.pool_size_factor)
         used_size_after_io = fetch_used_size(self.data_pool, exp_used_size_after_io)
-        log.info(f"Used size after IO is {used_size_after_io}")
+        logger.info(f"Used size after IO is {used_size_after_io}")
 
         # Create ReclaimSpaceJob
+        logger.test_step(
+            "Create ReclaimSpaceJob and verify pool size remains unchanged"
+        )
         reclaim_space_job = pvc_obj.create_reclaim_space_job()
 
         # Verify Succeeded result of ReclaimSpaceJob
@@ -203,8 +216,8 @@ class TestRbdSpaceReclaim(ManageTest):
         used_after_reclaiming_space = fetch_used_size(
             self.data_pool, used_size_after_io
         )
-        log.info(
-            f"Memory remains intact. Used size after io is {used_after_reclaiming_space}."
+        logger.info(
+            f"Pool size unchanged as expected. Used size after reclaim is {used_after_reclaiming_space}."
         )
 
     @polarion_id("OCS-3733")
@@ -230,8 +243,11 @@ class TestRbdSpaceReclaim(ManageTest):
         fio_filename1 = "fio_file1"
 
         # Fetch the used size of pool
+        logger.test_step(
+            f"Create 10GiB file on pod and verify pool '{self.data_pool}' used size increases"
+        )
         used_size_before_io = fetch_used_size(self.data_pool)
-        log.info(f"Used size before IO is {used_size_before_io}")
+        logger.info(f"Used size before IO is {used_size_before_io}")
 
         # Create a 10 GB file
         pod_obj.run_io(
@@ -246,7 +262,7 @@ class TestRbdSpaceReclaim(ManageTest):
         # Verify used size after IO
         exp_used_size_after_io = used_size_before_io + (10 * self.pool_size_factor)
         used_size_after_io = fetch_used_size(self.data_pool, exp_used_size_after_io)
-        log.info(f"Used size after IO is {used_size_after_io}")
+        logger.info(f"Used size after IO is {used_size_after_io}")
 
         # Delete the file
         file_path = get_file_path(pod_obj, fio_filename1)
@@ -258,14 +274,17 @@ class TestRbdSpaceReclaim(ManageTest):
         except CommandFailed as cmdfail:
             if "No such file or directory" not in str(cmdfail):
                 raise
-            log.info(f"Verified: File {file_path} deleted.")
+            logger.info(f"Verified: File {file_path} deleted.")
 
         # Delete the pod
-        log.info(f"Deleting the pod {pod_obj}")
+        logger.test_step(
+            f"Delete pod {pod_obj.name} and create ReclaimSpaceJob without volume mounted"
+        )
+        logger.info(f"Deleting pod {pod_obj.name}")
         delete_pods([pod_obj])
 
         # Validation of pod deletion
-        log.info(f"Validate the deletion of pod - {pod_obj.name}")
+        logger.info(f"Validate the deletion of pod - {pod_obj.name}")
         pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
         # Create ReclaimSpaceJob
@@ -283,7 +302,7 @@ class TestRbdSpaceReclaim(ManageTest):
             None
         """
 
-        log.info("Verifying the reclaim space job")
+        logger.info("Verifying the reclaim space job")
 
         # Wait for the Succeeded result of ReclaimSpaceJob
         try:
@@ -292,10 +311,10 @@ class TestRbdSpaceReclaim(ManageTest):
             ):
                 result = reclaim_space_job_yaml.get("status", {}).get("result")
                 if result == "Succeeded":
-                    log.info(f"ReclaimSpaceJob {reclaim_space_job.name} succeeded")
+                    logger.info(f"ReclaimSpaceJob {reclaim_space_job.name} succeeded")
                     break
                 else:
-                    log.info(
+                    logger.debug(
                         f"Waiting for the Succeeded result of the ReclaimSpaceJob {reclaim_space_job.name}. "
                         f"Present value of result is {result}"
                     )

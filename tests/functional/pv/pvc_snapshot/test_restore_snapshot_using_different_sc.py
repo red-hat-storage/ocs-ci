@@ -18,7 +18,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.utility import version
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -67,8 +67,7 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
         """
         snap_objs = []
         file_name = "file_snapshot"
-        # Run IO
-        log.info("Start IO on all pods")
+        logger.test_step("Run IO on all pods and calculate md5sum")
         for pod_obj in self.pods:
             pod_obj.run_io(
                 storage_type="fs",
@@ -76,27 +75,23 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
                 runtime=30,
                 fio_filename=file_name,
             )
-        log.info("IO started on all pods")
+        logger.info("IO started on all pods")
 
         # Wait for IO completion
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
             # Get md5sum of the file
             pod_obj.pvc.md5sum = cal_md5sum(pod_obj=pod_obj, file_name=file_name)
-        log.info("IO completed on all pods")
+        logger.info("IO completed on all pods")
 
-        # Create snapshots
-        log.info("Create snapshots of all PVCs")
+        logger.test_step("Create snapshots of all PVCs and verify Ready state")
         for pvc_obj in self.pvcs:
-            log.info(f"Creating snapshot of PVC {pvc_obj.name}")
+            logger.debug(f"Creating snapshot of PVC {pvc_obj.name}")
             snap_obj = snapshot_factory(pvc_obj, wait=False)
             snap_obj.md5sum = pvc_obj.md5sum
             snap_obj.interface = pvc_obj.interface
             snap_objs.append(snap_obj)
-        log.info("Snapshots created")
-
-        # Verify snapshots are Ready
-        log.info("Verify snapshots are ready")
+        logger.info(f"Created {len(snap_objs)} snapshots")
         for snap_obj in snap_objs:
             snap_obj.ocp.wait_for_resource(
                 condition="true",
@@ -129,12 +124,14 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
                 ).name
             )
 
-        # Create PVCs out of the snapshots
+        logger.test_step("Restore snapshots using different storage classes")
         restore_pvc_objs = []
-        log.info("Creating new PVCs from snapshots")
         for snap_obj in snap_objs:
             for storageclass in sc_objs[snap_obj.interface]:
-                log.info(f"Creating a PVC from snapshot {snap_obj.name}")
+                logger.debug(
+                    f"Creating PVC from snapshot {snap_obj.name} "
+                    f"using storage class {storageclass}"
+                )
                 restore_pvc_obj = snapshot_restore_factory(
                     snapshot_obj=snap_obj,
                     storageclass=storageclass,
@@ -144,25 +141,25 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
                     status="",
                 )
 
-                log.info(
-                    f"Created PVC {restore_pvc_obj.name} from snapshot {snap_obj.name}."
-                    f"Used the storage class {storageclass}"
+                logger.debug(
+                    f"Created PVC {restore_pvc_obj.name} from snapshot {snap_obj.name} "
+                    f"using storage class {storageclass}"
                 )
                 restore_pvc_obj.md5sum = snap_obj.md5sum
                 restore_pvc_objs.append(restore_pvc_obj)
-        log.info("Created new PVCs from all the snapshots")
+        logger.info(
+            f"Created {len(restore_pvc_objs)} new PVCs from snapshots using different SCs"
+        )
 
-        # Confirm that the restored PVCs are Bound
-        log.info("Verify the restored PVCs are Bound")
+        logger.test_step("Verify restored PVCs reach Bound state")
         for pvc_obj in restore_pvc_objs:
             wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
             )
             pvc_obj.reload()
-        log.info("Verified: Restored PVCs are Bound.")
+        logger.info("Verified: Restored PVCs are Bound.")
 
-        # Attach the restored PVCs to pods
-        log.info("Attach the restored PVCs to pods")
+        logger.test_step("Attach restored PVCs to pods and verify Running state")
         restore_pod_objs = []
         for restore_pvc_obj in restore_pvc_objs:
             restore_pod_obj = pod_factory(
@@ -170,36 +167,32 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
                 pvc=restore_pvc_obj,
                 status="",
             )
-            log.info(
-                f"Attached the PVC {restore_pvc_obj.name} to pod {restore_pod_obj.name}"
+            logger.debug(
+                f"Attached PVC {restore_pvc_obj.name} to pod {restore_pod_obj.name}"
             )
             restore_pod_objs.append(restore_pod_obj)
 
-        # Verify the new pods are running
-        log.info("Verify the new pods are running")
         for pod_obj in restore_pod_objs:
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
-        log.info("Verified: New pods are running")
+        logger.info(f"Verified: {len(restore_pod_objs)} new pods are running")
 
-        # Verify md5sum
-        log.info("Verifying md5sum on new pods")
+        logger.test_step("Verify md5sum data integrity on restored pods")
         for pod_obj in restore_pod_objs:
-            log.info(f"Verifying md5sum on pod {pod_obj.name}")
+            logger.debug(f"Verifying md5sum on pod {pod_obj.name}")
             verify_data_integrity(
                 pod_obj=pod_obj,
                 file_name=file_name,
                 original_md5sum=pod_obj.pvc.snapshot.md5sum,
             )
-            log.info(f"Verified md5sum on pod {pod_obj.name}")
-        log.info("Verified md5sum on all pods")
+            logger.debug(f"Verified md5sum on pod {pod_obj.name}")
+        logger.info("Verified md5sum on all restored pods")
 
-        # Run IO on new pods
-        log.info("Starting IO on new pods")
+        logger.test_step("Run IO on restored pods to verify usability")
         for pod_obj in restore_pod_objs:
             pod_obj.run_io(storage_type="fs", size="500M", runtime=15)
 
         # Wait for IO completion on new pods
-        log.info("Waiting for IO completion on new pods")
+        logger.info("Waiting for IO completion on new pods")
         for pod_obj in restore_pod_objs:
             pod_obj.get_fio_results()
-        log.info("IO completed on new pods.")
+        logger.info("IO completed on new pods.")

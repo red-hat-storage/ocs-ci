@@ -22,7 +22,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import convert_device_size
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -78,6 +78,7 @@ class TestRawBlockPV(ManageTest):
         """
         Testing basic creation of app pod with RBD RWX raw block pv support
         """
+        logger.test_step("Create RWX raw block PVCs with MB, GB, and TB sizes")
         worker_nodes = node.get_worker_nodes()
         pvcs = list()
         size_mb = "500Mi"
@@ -98,6 +99,7 @@ class TestRawBlockPV(ManageTest):
             )
         pvc_mb, pvc_gb, pvc_tb = pvcs[0], pvcs[1], pvcs[2]
 
+        logger.test_step("Wait for all PVCs to reach Bound state")
         for pvc in pvcs:
             helpers.wait_for_resource_state(
                 resource=pvc, state=constants.STATUS_BOUND, timeout=120
@@ -105,6 +107,7 @@ class TestRawBlockPV(ManageTest):
 
         pvs = [pvc.backed_pv_obj for pvc in pvcs]
 
+        logger.test_step("Create 3 pods per PVC with raw block volume")
         pods = list()
         pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
         for pvc in pvc_mb, pvc_gb, pvc_tb:
@@ -127,9 +130,10 @@ class TestRawBlockPV(ManageTest):
             )
         storage_type = "block"
 
+        logger.test_step("Run IO on all pods concurrently")
         with ThreadPoolExecutor() as p:
             for pod in pvc_mb_pods:
-                log.info(f"running io on pod {pod.name}")
+                logger.debug(f"Submitting IO on pod {pod.name}")
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
@@ -138,7 +142,7 @@ class TestRawBlockPV(ManageTest):
                     direct=1,
                 )
             for pod in pvc_gb_pods:
-                log.info(f"running io on pod {pod.name}")
+                logger.debug(f"Submitting IO on pod {pod.name}")
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
@@ -147,7 +151,7 @@ class TestRawBlockPV(ManageTest):
                     direct=1,
                 )
             for pod in pvc_tb_pods:
-                log.info(f"running io on pod {pod.name}")
+                logger.debug(f"Submitting IO on pod {pod.name}")
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
@@ -156,6 +160,7 @@ class TestRawBlockPV(ManageTest):
                     direct=1,
                 )
 
+        logger.test_step("Verify IO results on all pods")
         for pod in pods:
             get_fio_rw_iops(pod)
         return pods, pvcs, pvs

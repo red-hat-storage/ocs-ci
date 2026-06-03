@@ -31,7 +31,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
 from ocs_ci.krkn_chaos.krkn_scenario_generator import ContainerScenarios
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -89,8 +89,7 @@ class TestKrKnContainerChaosScenarios:
             safety_info=f"Testing multiple components with {kill_signal} signal",
         )
 
-        # WORKLOAD SETUP
-        log.info(f"Setting up workloads for unified {kill_signal} testing")
+        logger.test_step(f"Set up workloads for unified {kill_signal} testing")
         workload_ops.setup_workloads()
 
         # Register finalizer for cleanup
@@ -104,10 +103,9 @@ class TestKrKnContainerChaosScenarios:
         analyzer = KrknResultAnalyzer()
 
         try:
-            # =================================================================
-            # UNIFIED KRKN CONFIG: All components with configurable kill signal
-            # =================================================================
-            log.info(f"Creating UNIFIED Krkn configuration with {kill_signal} signal")
+            logger.test_step(
+                f"Create unified Krkn configuration with {kill_signal} signal"
+            )
 
             # Build unified scenarios using the helper class with specified kill signal
             scenario_helper = ContainerScenarioHelper()
@@ -133,16 +131,13 @@ class TestKrKnContainerChaosScenarios:
                 scenarios=unified_scenarios,
             )
 
-            log.info(f"Created unified scenario file: {scenario_file}")
+            logger.debug(f"Created unified scenario file: {scenario_file}")
 
             # Create a unified Krkn configuration
             unified_config = KrknConfigGenerator()
             unified_config.add_scenario("container_scenarios", scenario_file)
 
-            # =================================================================
-            # UNIFIED EXECUTION: Single Krkn run with specified kill signal
-            # =================================================================
-            # Log execution start using helper function
+            logger.test_step(f"Execute unified Krkn run with {kill_signal} signal")
             scenario_helper.log_execution_start(
                 unified_scenarios, kill_signal=kill_signal
             )
@@ -157,7 +152,7 @@ class TestKrKnContainerChaosScenarios:
             krkn_runner.wait_for_completion(check_interval=60)
             chaos_output = krkn_runner.get_chaos_data()
 
-            log.info(f"Unified multi-component chaos with {kill_signal} completed")
+            logger.info(f"Unified multi-component chaos with {kill_signal} completed")
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
@@ -168,15 +163,13 @@ class TestKrKnContainerChaosScenarios:
             )
             raise
         except Exception as e:
-            log.error(
-                f"❌ Multi-component container chaos with {kill_signal} failed: {e}"
+            logger.exception(
+                f"Multi-component container chaos with {kill_signal} failed: {e}"
             )
             raise
 
-        # =================================================================
-        # UNIFIED RESULTS ANALYSIS
-        # =================================================================
-        log.info(f"MULTI-COMPONENT CHAOS RESULTS ({kill_signal}):")
+        logger.test_step(f"Analyze multi-component chaos results for {kill_signal}")
+        logger.info(f"Multi-component chaos results ({kill_signal}):")
 
         # Analyze overall results from unified execution
         total_executed, successful_executed, failing_executed = (
@@ -226,16 +219,19 @@ class TestKrKnContainerChaosScenarios:
             min_success_rate,
         )
 
-        # Final health check
+        logger.test_step("Perform final Ceph health check")
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             None, f"multi-component container chaos ({kill_signal})"
         )
+        logger.assertion(
+            f"Ceph crashes after container chaos: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🏆 Multi-component container chaos testing with {kill_signal} completed successfully! "
+        logger.info(
+            f"Multi-component container chaos testing with {kill_signal} completed successfully. "
             f"All components handled unified execution with {overall_success_rate:.1f}% success rate. "
-            f"✨ Unified configuration approach: {len(unified_scenarios)} component scenarios in single Krkn run!"
+            f"Unified configuration: {len(unified_scenarios)} component scenarios in single Krkn run."
         )
 
     @pytest.mark.parametrize(
@@ -295,8 +291,7 @@ class TestKrKnContainerChaosScenarios:
             safety_info=f"Targeting openshift-storage namespace with {kill_count} pod kills",
         )
 
-        # WORKLOAD SETUP
-        log.info("Setting up workloads for pod kill testing")
+        logger.test_step("Set up workloads for pod kill testing")
         workload_ops.setup_workloads()
 
         # Register finalizer for cleanup
@@ -313,10 +308,10 @@ class TestKrKnContainerChaosScenarios:
         )
 
         try:
-            # =================================================================
-            # POD KILL SCENARIO CONFIGURATION
-            # =================================================================
-            log.info(
+            logger.test_step(
+                f"Create pod kill scenario configuration for {stress_level} level"
+            )
+            logger.info(
                 f"Creating pod kill configuration for {stress_level} level: Target namespace: openshift-storage,"
                 f"Pods to kill per iteration: {kill_count}, Total iterations: {iterations}, Recovery time: 120 seconds"
             )
@@ -333,12 +328,10 @@ class TestKrKnContainerChaosScenarios:
             # Since this is a pod disruption scenario, we need to add it to pod_disruption_scenarios
             unified_config.add_scenario("pod_disruption_scenarios", scenario_file)
 
-            log.info(f"Created pod kill scenario: {scenario_file}")
+            logger.debug(f"Created pod kill scenario: {scenario_file}")
 
-            # =================================================================
-            # KRKN EXECUTION WITH ITERATIONS
-            # =================================================================
-            log.info(
+            logger.test_step(f"Execute pod kill chaos with {iterations} iterations")
+            logger.info(
                 f"Executing pod kill chaos: {iterations} iterations, stress level: {stress_level.upper()},"
                 f"kill count per iteration: {kill_count}"
             )
@@ -353,7 +346,7 @@ class TestKrKnContainerChaosScenarios:
             krkn_runner.wait_for_completion(check_interval=60)
             chaos_output = krkn_runner.get_chaos_data()
 
-            log.info("Pod kill chaos execution completed")
+            logger.info("Pod kill chaos execution completed")
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
@@ -364,13 +357,13 @@ class TestKrKnContainerChaosScenarios:
             )
             raise
         except Exception as e:
-            log.error(f"❌ Random pod kill chaos failed for {stress_level} level: {e}")
+            logger.exception(
+                f"Random pod kill chaos failed for {stress_level} level: {e}"
+            )
             raise
 
-        # =================================================================
-        # RESULTS ANALYSIS
-        # =================================================================
-        log.info("RANDOM POD KILL CHAOS RESULTS:")
+        logger.test_step("Analyze pod kill chaos results")
+        logger.info("Random pod kill chaos results:")
 
         # Analyze results
         total_executed, successful_executed, failing_executed = (
@@ -383,11 +376,11 @@ class TestKrKnContainerChaosScenarios:
             (successful_executed / total_executed * 100) if total_executed > 0 else 0
         )
 
-        log.info(
+        logger.info(
             f"POD KILL EXECUTION RESULTS: Stress level: {stress_level.upper()},"
             f"Pods killed per iteration: {kill_count}, Total iterations executed: {total_executed},"
             f"Successful iterations: {successful_executed}, Failed iterations: {failing_executed},"
-            f"Overall success rate: {overall_success_rate:.1f}%" + "=" * 60
+            f"Overall success rate: {overall_success_rate:.1f}%"
         )
 
         # Validate success rate based on stress level
@@ -413,15 +406,17 @@ class TestKrKnContainerChaosScenarios:
             min_success_rate,
         )
 
-        # Final health check
+        logger.test_step("Perform final Ceph health check")
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             None, "random pod kill chaos"
         )
+        logger.assertion(
+            f"Ceph crashes after pod kill chaos: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🏆 Random pod kill chaos testing for {stress_level} level completed successfully!"
-            f"Killed {kill_count} pods per iteration across {iterations} iterations with"
+        logger.info(
+            f"Random pod kill chaos testing for {stress_level} level completed successfully. "
+            f"Killed {kill_count} pods per iteration across {iterations} iterations with "
             f"{overall_success_rate:.1f}% success rate."
-            f"✨ Pod kill resilience validated for openshift-storage namespace!"
         )

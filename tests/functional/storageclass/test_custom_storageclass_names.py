@@ -21,7 +21,7 @@ from ocs_ci.ocs.constants import (
 from fauxfactory import gen_alpha, gen_special
 from ocs_ci.framework.testlib import on_prem_platform_required
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -54,7 +54,7 @@ class TestCustomStorageClassNames:
                             sc_type, storage_class_name=sc_name
                         )
                     except Exception as e:
-                        log.info(f"Patch failed with an error: {e}")
+                        logger.warning(f"Patch failed during teardown: {e}")
 
         request.addfinalizer(restore_custom_storage_class_names)
 
@@ -89,14 +89,22 @@ class TestCustomStorageClassNames:
         """
 
         random_sc_name = f"custom-{interface}-{gen_alpha()}".lower()
-        log.info(
-            f"Adding custom storageclass '{random_sc_name}' of type '{interface}' in storagecluster spec."
+        logger.test_step(
+            f"Add custom StorageClass '{random_sc_name}' of type '{interface}'"
+        )
+        logger.info(
+            f"Adding custom storageclass '{random_sc_name}' of type '{interface}' in storagecluster spec"
+        )
+        logger.assertion(
+            f"Patch StorageCluster for custom SC '{random_sc_name}': expected='True'"
         )
         assert patch_storage_cluster_for_custom_storage_class(
             interface, storage_class_name=random_sc_name
         ), f"Failed to add custom storageclass '{random_sc_name}' of type '{interface}' in storagecluster spec."
         self.custom_sc_list.append(random_sc_name)
 
+        logger.test_step("Verify custom StorageClass presence")
+        logger.assertion("Custom StorageClass presence check: expected='True'")
         assert (
             check_custom_storageclass_presence()
         ), "Error validating the created storage classes."
@@ -135,28 +143,32 @@ class TestCustomStorageClassNames:
                 '"', ""
             ).replace("'", "")
 
-        log.info(
-            f"Creating Custom Storageclass Name using '{sc_name}'"
-            f"characters and length = {str_length}: StorageclassName: {sc_custom_name}"
+        logger.test_step(
+            f"Create custom StorageClass with '{sc_name}' characters "
+            f"(length={str_length}, expect_to_pass={expect_to_pass})"
+        )
+        logger.info(
+            f"Creating Custom Storageclass Name using '{sc_name}' "
+            f"characters and length={str_length}: StorageclassName: {sc_custom_name}"
         )
 
         if expect_to_pass:
-            log.info("Testing with an expected passing scenario...")
+            logger.info("Testing with an expected passing scenario")
             assert patch_storage_cluster_for_custom_storage_class(
                 OCS_COMPONENTS_MAP["cephfs"], storage_class_name=sc_custom_name
             )
-            log.info("Custom Storageclass created successfully.")
+            logger.info("Custom Storageclass created successfully")
             patch_storage_cluster_for_custom_storage_class(
                 OCS_COMPONENTS_MAP["cephfs"], action="remove"
             )
             assert run_cmd(
                 f"oc delete sc {sc_custom_name}"
             ), f"Failed to remove Storageclass {sc_custom_name}"
-            log.info("Custom Storageclass removed successfully.")
+            logger.info(f"Custom Storageclass {sc_custom_name} removed successfully")
             self.custom_sc_list.append(sc_custom_name)
         else:
-            log.info("Testing with an expected failing scenario...")
+            logger.info("Testing with an expected failing scenario")
             assert not patch_storage_cluster_for_custom_storage_class(
                 OCS_COMPONENTS_MAP["cephfs"], storage_class_name=sc_custom_name
             )
-            log.info("Custom Storageclass creation failed as expected.")
+            logger.info("Custom Storageclass creation failed as expected")

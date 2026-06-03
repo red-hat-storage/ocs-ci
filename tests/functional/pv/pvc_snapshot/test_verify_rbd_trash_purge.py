@@ -14,7 +14,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -50,7 +50,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
         )
 
         # Create PVC
-        log.info("Create PVCs")
+        logger.info(f"Creating {self.num_of_pvc} RBD PVCs")
         self.pvc_objs = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             storageclass=self.sc_obj,
@@ -61,12 +61,12 @@ class TestVerifyRbdTrashPurge(ManageTest):
         )
 
         # Create snapshot
-        log.info("Create snapshots")
+        logger.info(f"Creating snapshots for {self.num_of_pvc} PVCs")
         self.snap_objs = [snapshot_factory(pvc_obj, False) for pvc_obj in self.pvc_objs]
 
         # Verify snapshots are ready
         # Setting timeout as 600 seconds due to the bug 1972013
-        log.info("Verify snapshots are ready")
+        logger.info("Verify snapshots are ready")
         for snap_obj in self.snap_objs:
             snap_obj.ocp.wait_for_resource(
                 condition="true",
@@ -84,6 +84,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
         ct_pod = get_ceph_tools_pod()
 
         # Delete the PVCs
+        logger.test_step(f"Delete all {self.num_of_pvc} PVCs and half of the snapshots")
         for pvc_obj in self.pvc_objs:
             pvc_obj.delete()
         for pvc_obj in self.pvc_objs:
@@ -96,11 +97,14 @@ class TestVerifyRbdTrashPurge(ManageTest):
             snap_obj.ocp.wait_for_delete(resource_name=snap_obj.name)
 
         # Collect the list of RBD images in trash
+        logger.test_step(
+            f"Run rbd trash purge on pool '{pool_name}' and verify it fails for images with snapshots"
+        )
         image_list_out = ct_pod.exec_ceph_cmd(
             ceph_cmd=f"rbd trash ls {pool_name}", format=""
         )
         image_list_initial = image_list_out.strip().split("\n")
-        log.info(f"List of RBD images in trash - {image_list_initial}")
+        logger.info(f"RBD images in trash for pool '{pool_name}': {image_list_initial}")
 
         # Try to delete all images using rbd trash purge command.
         # The command should fail because some images cannot be removed from trash.
@@ -118,14 +122,14 @@ class TestVerifyRbdTrashPurge(ManageTest):
             ceph_cmd=f"rbd trash ls {pool_name}", format=""
         )
         image_final = image_list_out.strip().split("\n")[0]
-        log.info(
+        logger.info(
             f"List of RBD images remaining in trash after running trash purge- {image_final}"
         )
 
         # Try to delete each of the remaining images from trash. Rbd trash rm command should fail.
-        # Get the image IDs from image_final str.
-        # Eg : image_final = '61379c647069 csi-vol-7b1da20d-f107-11eb-99c7-0a580a80020d 6137b6f29eb7
-        # csi-vol-7e40651f-f107-11eb-99c7-0a580a80020d 6137c642615f csi-vol-77f43877-f107-11eb-99c7-0a580a80020d'
+        logger.test_step(
+            "Verify rbd trash rm fails for individual images that have snapshots"
+        )
         for image_id in image_final.split()[::2]:
             try:
                 ct_pod.exec_ceph_cmd(
@@ -140,6 +144,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
                     raise
 
         # Check if any image removal is in progress
+        logger.test_step("Verify no image removal is in progress after trash purge")
         ceph_progress = ct_pod.exec_ceph_cmd(ceph_cmd="ceph progress json", format="")
         for progress_item in ceph_progress.get("events", []):
             assert (

@@ -22,7 +22,7 @@ from ocs_ci.ocs.cluster import (
 )
 from ocs_ci.ocs.constants import CEPHBLOCKPOOL
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -79,6 +79,9 @@ class TestRbDPool(ManageTest):
         *. Mount PVC to an app pod
         *. Run IO on an app pod
         """
+        logger.test_step(
+            f"Create StorageClass with new RBD pool (replica={replica}, compression={compression})"
+        )
         interface_type = constants.CEPHBLOCKPOOL
         sc_obj = storageclass_factory(
             interface=interface_type,
@@ -88,29 +91,34 @@ class TestRbDPool(ManageTest):
             volume_binding_mode=volume_binding_mode,
         )
 
-        log.info(f"Creating a PVC using {sc_obj.name}")
+        logger.info(f"Creating a PVC using {sc_obj.name}")
         pvc_obj = pvc_factory(
             interface=interface_type, storageclass=sc_obj, size=10, status=pvc_status
         )
-        log.info(f"PVC: {pvc_obj.name} created successfully using " f"{sc_obj.name}")
+        logger.info(f"PVC: {pvc_obj.name} created successfully using " f"{sc_obj.name}")
 
         # Create app pod and mount each PVC
-        log.info(f"Creating an app pod and mount {pvc_obj.name}")
+        logger.info(f"Creating an app pod and mount {pvc_obj.name}")
         pod_obj = pod_factory(interface=interface_type, pvc=pvc_obj)
-        log.info(f"{pod_obj.name} created successfully and mounted {pvc_obj.name}")
+        logger.info(f"{pod_obj.name} created successfully and mounted {pvc_obj.name}")
 
         # verifying rbd pool in ui
+        logger.test_step("Verify RBD pool and StorageClass existence in UI")
         blockpool_name = sc_obj.interface_name
         blockpool_ui_obj = BlockPoolUI()
+        logger.assertion(f"Block pool '{blockpool_name}' exists in UI")
         assert blockpool_ui_obj.check_pool_existence(blockpool_name)
 
         # verify storage classs in UI
         storageclass_name = sc_obj.name
         storageclass_ui_obj = StorageClassUI()
+        logger.assertion(f"StorageClass '{storageclass_name}' exists in UI")
         assert storageclass_ui_obj.verify_storageclass_existence(storageclass_name)
 
         # Run IO on each app pod for sometime
-        log.info(f"Running FIO on {pod_obj.name}")
+        logger.test_step(
+            f"Run FIO on pod '{pod_obj.name}' and validate compression/replication"
+        )
         pod_obj.run_io(
             "fs",
             size="1G",
@@ -123,7 +131,7 @@ class TestRbDPool(ManageTest):
             readwrite="readwrite",
         )
         cluster_used_space = get_percent_used_capacity()
-        log.info(
+        logger.info(
             f"Cluster used space with replica size {replica}, "
             f"compression mode {compression}={cluster_used_space}"
         )
@@ -140,6 +148,7 @@ class TestRbDPool(ManageTest):
         blockpool_ui_obj.check_pool_compression_savings(blockpool_name)
 
         # verify block pool stats post running of IO
+        logger.test_step(f"Verify block pool '{blockpool_name}' stats after IO")
         checks = {
             "block_pool_ready_state": (
                 blockpool_ui_obj.check_pool_status(blockpool_name) == "Ready"
@@ -151,6 +160,7 @@ class TestRbDPool(ManageTest):
                 blockpool_ui_obj.check_pool_compression_status(blockpool_name)
             ),
         }
+        logger.assertion(f"Block pool stats checks: {checks}")
         assert all(checks.values())
 
     @pytest.mark.polarion_id("OCS-3890")
@@ -168,20 +178,20 @@ class TestRbDPool(ManageTest):
         *. Verify the UI for storage class and rbd
         """
 
-        log.info("Creating new pool with replica2 and compression")
+        logger.test_step("Create new RBD pool with replica2 and compression")
         pool_obj = ceph_pool_factory(
             interface=CEPHBLOCKPOOL,
             compression="aggressive",
         )
 
-        log.info(f"Creating first storageclass with pool {pool_obj.name}")
+        logger.info(f"Creating first storageclass with pool {pool_obj.name}")
         sc_obj1 = storageclass_factory(
             interface=CEPHBLOCKPOOL,
             new_rbd_pool=False,
             pool_name=pool_obj.name,
         )
 
-        log.info(f"Creating second storageclass with pool {pool_obj.name}")
+        logger.info(f"Creating second storageclass with pool {pool_obj.name}")
         sc_obj2 = storageclass_factory(
             interface=CEPHBLOCKPOOL,
             new_rbd_pool=False,
@@ -191,14 +201,22 @@ class TestRbDPool(ManageTest):
         sc_obj_list = [sc_obj1, sc_obj2]
 
         # Check if 2 storage class exists in the pool page
+        logger.test_step(
+            f"Verify pool '{pool_obj.name}' exists and has 2 storage classes attached in UI"
+        )
         blockpool_ui_obj = BlockPoolUI()
+        logger.assertion(f"Block pool '{pool_obj.name}' exists in UI")
         assert blockpool_ui_obj.check_pool_existence(pool_obj.name)
-        assert (
-            blockpool_ui_obj.check_storage_class_attached(pool_obj.name) == 2
-        ), "The Storage class didnot matched."
+        attached_count = blockpool_ui_obj.check_storage_class_attached(pool_obj.name)
+        logger.assertion(
+            f"Storage classes attached to pool '{pool_obj.name}': expected='2', actual='{attached_count}'"
+        )
+        assert attached_count == 2, "The Storage class didnot matched."
 
         # Check storage class existence in UI
+        logger.test_step("Verify both storage classes exist in UI")
         storageclass_ui_obj = StorageClassUI()
         for storageclass in sc_obj_list:
             storageclass_name = storageclass.name
+            logger.assertion(f"StorageClass '{storageclass_name}' exists in UI")
             assert storageclass_ui_obj.verify_storageclass_existence(storageclass_name)

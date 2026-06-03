@@ -18,7 +18,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.helpers import helpers
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @provider_mode
@@ -77,9 +77,8 @@ class TestPvcSnapshot(ManageTest):
             pvc_factory: A fixture to create new pvc
             teardown_factory: A fixture to destroy objects
         """
-        log.info(f"Running IO on pod {self.pod_obj.name}")
+        logger.test_step(f"Run IO on pod {self.pod_obj.name} and calculate md5sum")
         file_name = self.pod_obj.name
-        log.info(f"File created during IO {file_name}")
         self.pod_obj.run_io(storage_type="fs", size="1G", fio_filename=file_name)
 
         # Wait for fio to finish
@@ -88,19 +87,22 @@ class TestPvcSnapshot(ManageTest):
         assert err_count == 0, (
             f"IO error on pod {self.pod_obj.name}. " f"FIO result: {fio_result}"
         )
-        log.info(f"Verified IO on pod {self.pod_obj.name}.")
+        logger.info(f"IO completed successfully on pod {self.pod_obj.name}")
 
         # Verify presence of the file
         file_path = pod.get_file_path(self.pod_obj, file_name)
-        log.info(f"Actual file path on the pod {file_path}")
-        assert pod.check_file_existence(
-            self.pod_obj, file_path
-        ), f"File {file_name} doesn't exist"
-        log.info(f"File {file_name} exists in {self.pod_obj.name}")
+        logger.debug(f"Actual file path on the pod: {file_path}")
+        file_exists = pod.check_file_existence(self.pod_obj, file_path)
+        logger.assertion(
+            f"File {file_name} exists on pod: expected=True, actual={file_exists}"
+        )
+        assert file_exists, f"File {file_name} doesn't exist"
+        logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
         # Calculate md5sum
         orig_md5_sum = pod.cal_md5sum(self.pod_obj, file_name)
-        # Take a snapshot
+
+        logger.test_step(f"Take a snapshot of PVC {self.pvc_obj.name}")
         snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
         if interface == constants.CEPHFILESYSTEM:
             snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
@@ -127,8 +129,7 @@ class TestPvcSnapshot(ManageTest):
         # Size should be same as of the original PVC
         pvc_size = str(self.pvc_obj.size) + "Gi"
 
-        # Create pvc out of the snapshot
-        # Both, the snapshot and the restore PVC should be in same namespace
+        logger.test_step(f"Create new PVC from snapshot {snap_obj.name}")
         restore_pvc_name = helpers.create_unique_resource_name("test", "restore-pvc")
         restore_pvc_yaml = constants.CSI_RBD_PVC_RESTORE_YAML
         if interface == constants.CEPHFILESYSTEM:
@@ -148,7 +149,7 @@ class TestPvcSnapshot(ManageTest):
         restore_pvc_obj.reload()
         teardown_factory(restore_pvc_obj)
 
-        # Create and attach pod to the pvc
+        logger.test_step("Create and attach pod to the restored PVC")
         restore_pod_obj = helpers.create_pod(
             interface_type=interface,
             pvc_name=restore_pvc_obj.name,
@@ -163,31 +164,28 @@ class TestPvcSnapshot(ManageTest):
         restore_pod_obj.reload()
         teardown_factory(restore_pod_obj)
 
-        # Verify that the file is present on the new pod
-        log.info(
-            f"Checking the existence of {file_name} "
-            f"on restore pod {restore_pod_obj.name}"
+        logger.test_step("Verify file exists and data integrity on restored pod")
+        file_exists_on_restore = pod.check_file_existence(restore_pod_obj, file_path)
+        logger.assertion(
+            f"File {file_name} exists on restore pod {restore_pod_obj.name}: "
+            f"expected=True, actual={file_exists_on_restore}"
         )
-        assert pod.check_file_existence(
-            restore_pod_obj, file_path
-        ), f"File {file_name} doesn't exist"
-        log.info(f"File {file_name} exists in {restore_pod_obj.name}")
+        assert file_exists_on_restore, f"File {file_name} doesn't exist"
+        logger.info(f"File {file_name} exists in {restore_pod_obj.name}")
 
         # Verify that the md5sum matches
-        log.info(
-            f"Verifying that md5sum of {file_name} "
-            f"on pod {self.pod_obj.name} matches with md5sum "
-            f"of the same file on restore pod {restore_pod_obj.name}"
-        )
-        assert pod.verify_data_integrity(
+        data_integrity = pod.verify_data_integrity(
             restore_pod_obj, file_name, orig_md5_sum
-        ), "Data integrity check failed"
-        log.info("Data integrity check passed, md5sum are same")
+        )
+        logger.assertion(
+            f"Data integrity check on {restore_pod_obj.name}: expected=True, actual={data_integrity}"
+        )
+        assert data_integrity, "Data integrity check failed"
+        logger.info("Data integrity check passed, md5sum matches")
 
-        log.info("Running IO on new pod")
-        # Run IO on new pod
+        logger.test_step("Run IO on restored pod to verify usability")
         restore_pod_obj.run_io(storage_type="fs", size="1G", runtime=20)
 
         # Wait for fio to finish
         restore_pod_obj.get_fio_results()
-        log.info("IO finished o new pod")
+        logger.info("IO finished on restored pod")

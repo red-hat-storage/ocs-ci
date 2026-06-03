@@ -19,7 +19,7 @@ from ocs_ci.framework.testlib import (
     skipif_vsphere_ipi,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -56,8 +56,11 @@ class TestNodeRestartDuringPvcClone(ManageTest):
 
         def finalizer():
             nodes.restart_nodes_by_stop_and_start_teardown()
+            logger.assertion(
+                "Ceph cluster health: expected='OK', actual checked via ceph_health_check()"
+            )
             assert ceph_health_check(), "Ceph cluster health is not OK"
-            log.info("Ceph cluster health is OK")
+            logger.info("Ceph cluster health is OK")
 
         request.addfinalizer(finalizer)
 
@@ -76,8 +79,8 @@ class TestNodeRestartDuringPvcClone(ManageTest):
             node_type=constants.WORKER_MACHINE, num_of_nodes=1
         )
 
-        # Run IO
-        log.info("Starting IO on all pods")
+        logger.test_step("Run IO on all pods")
+        logger.info(f"Starting IO on {len(self.pods)} pods")
         for pod_obj in self.pods:
             storage_type = (
                 "block"
@@ -92,14 +95,13 @@ class TestNodeRestartDuringPvcClone(ManageTest):
                 end_fsync=1,
                 direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
-            log.info(f"IO started on pod {pod_obj.name}")
-        log.info("Started IO on all pods")
+            logger.debug(f"IO started on pod {pod_obj.name}")
+        logger.info("Started IO on all pods")
 
-        # Wait for IO to finish
-        log.info("Wait for IO to finish on pods")
+        logger.test_step("Wait for IO to finish and calculate md5sum")
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
-            log.info(f"IO finished on pod {pod_obj.name}")
+            logger.debug(f"IO finished on pod {pod_obj.name}")
             # Calculate md5sum
             file_name_pod = (
                 file_name
@@ -111,14 +113,18 @@ class TestNodeRestartDuringPvcClone(ManageTest):
                 file_name_pod,
                 pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
+        logger.info("IO finished and md5sum calculated on all pods")
 
+        logger.test_step(
+            f"Restart worker node {selected_node[0].name} and create PVC clones concurrently"
+        )
         # Restart node
-        log.info(f"Restart node {selected_node[0].name}")
+        logger.info(f"Restarting node {selected_node[0].name}")
         restart_thread = executor.submit(nodes.restart_nodes, nodes=selected_node)
 
-        log.info("Creating clone of all PVCs.")
+        logger.info(f"Creating clones of all {len(self.pvcs)} PVCs")
         for pvc_obj in self.pvcs:
-            log.info(f"Creating clone of {pvc_obj.name}")
+            logger.debug(f"Creating clone of {pvc_obj.name}")
             pvc_obj.clone_proc = executor.submit(
                 pvc_clone_factory, pvc_obj=pvc_obj, status=""
             )
@@ -126,7 +132,7 @@ class TestNodeRestartDuringPvcClone(ManageTest):
         # Check result of 'restart_nodes'
         restart_thread.result()
 
-        log.info("Verify status of node.")
+        logger.test_step("Verify node is ready and cloned PVCs are Bound")
         node.wait_for_nodes_status(
             node_names=[node.get_node_name(selected_node[0])],
             status=constants.NODE_READY,
@@ -136,16 +142,15 @@ class TestNodeRestartDuringPvcClone(ManageTest):
         # Get cloned PVCs
         cloned_pvcs = [pvc_obj.clone_proc.result() for pvc_obj in self.pvcs]
 
-        log.info("Verifying cloned PVCs are Bound")
+        logger.info(f"Verifying {len(cloned_pvcs)} cloned PVCs are Bound")
         for pvc_obj in cloned_pvcs:
             wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=540
             )
             pvc_obj.reload()
-        log.info("Verified: Cloned PVCs are Bound")
+        logger.info("Verified: Cloned PVCs are Bound")
 
-        # Attach the cloned PVCs to pods
-        log.info("Attach the cloned PVCs to pods")
+        logger.test_step("Attach cloned PVCs to pods and verify they are running")
         clone_pod_objs = []
         for pvc_obj in cloned_pvcs:
             if pvc_obj.volume_mode == "Block":
@@ -159,16 +164,17 @@ class TestNodeRestartDuringPvcClone(ManageTest):
                 pod_dict_path=pod_dict_path,
                 raw_block_pv=pvc_obj.volume_mode == "Block",
             )
-            log.info(f"Attaching the PVC {pvc_obj.name} to pod {clone_pod_obj.name}")
+            logger.debug(
+                f"Attaching the PVC {pvc_obj.name} to pod {clone_pod_obj.name}"
+            )
             clone_pod_objs.append(clone_pod_obj)
 
         # Verify the new pods are running
-        log.info("Verify the new pods are running")
         for pod_obj in clone_pod_objs:
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=120)
-        log.info("Verified: New pods are running")
+        logger.info(f"All {len(clone_pod_objs)} new pods are running")
 
-        # Verify md5sum
+        logger.test_step("Verify data integrity using md5sum on clone pods")
         for pod_obj in clone_pod_objs:
             file_name_pod = (
                 pod_obj.get_storage_path(storage_type="block")
@@ -181,14 +187,14 @@ class TestNodeRestartDuringPvcClone(ManageTest):
                 pod_obj.pvc.parent.md5sum,
                 pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
-            log.info(
+            logger.debug(
                 f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
                 f"matches with the original md5sum"
             )
-        log.info("Data integrity check passed on all pods")
+        logger.info("Data integrity check passed on all pods")
 
-        # Run IO
-        log.info("Starting IO on the new pods")
+        logger.test_step("Run IO on clone pods and verify completion")
+        logger.info(f"Starting IO on {len(clone_pod_objs)} new pods")
         for pod_obj in clone_pod_objs:
             storage_type = (
                 "block"
@@ -203,12 +209,11 @@ class TestNodeRestartDuringPvcClone(ManageTest):
                 end_fsync=1,
                 direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
-            log.info(f"IO started on pod {pod_obj.name}")
-        log.info("Started IO on the new pods")
+            logger.debug(f"IO started on pod {pod_obj.name}")
+        logger.info("Started IO on all new pods")
 
         # Wait for IO to finish
-        log.info("Wait for IO to finish on the new pods")
         for pod_obj in clone_pod_objs:
             pod_obj.get_fio_results()
-            log.info(f"IO finished on pod {pod_obj.name}")
-        log.info("IO finished on the new pods")
+            logger.debug(f"IO finished on pod {pod_obj.name}")
+        logger.info("IO finished on all new pods")

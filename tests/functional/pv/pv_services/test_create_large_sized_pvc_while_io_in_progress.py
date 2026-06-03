@@ -11,7 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest, tier2
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @provider_mode
@@ -47,9 +47,15 @@ class TestCreateLargeSizedPVCWhileIOInProgress(ManageTest):
         test_cyclic_largesized_pvc_app
         test_consecutive_largesized_pvc_and_app_pod_creation
         """
+        logger.test_step(
+            f"Create 5 large-sized PVCs with {interface} and run IO in background"
+        )
         # Repeating the above flow for 5 times
         for i in range(5):
-            log.info(f"Creating {interface} based PVC")
+            logger.debug(f"Iteration {i+1}/5: Creating {interface} based PVC")
             pvc_obj = pvc_factory(interface=interface, size="500")
             pod_obj = pod_factory(pvc=pvc_obj, interface=interface)
             pod.run_io_in_bg(pod_obj)
+        logger.info(
+            f"Successfully created 5 large-sized PVCs with {interface} and started IO"
+        )

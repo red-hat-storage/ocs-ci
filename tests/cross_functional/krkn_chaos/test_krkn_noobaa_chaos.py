@@ -38,7 +38,7 @@ from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 from ocs_ci.krkn_chaos.krkn_scenario_generator import PodScenarios
 from ocs_ci.krkn_chaos.noobaa_chaos_helper import validate_noobaa_health
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -116,14 +116,12 @@ class TestKrKnNooBaaChaos:
             kill_interval=f"{kill_interval_seconds}s",
         )
 
-        # WORKLOAD SETUP - Start S3 workloads before chaos
-        log.info("Setting up S3 workloads for NooBaa chaos testing")
-        log.info(f"🎯 Target pod: {target_pod}")
-        log.info(
-            f"⏱️  Total duration: {duration_seconds}s ({duration_seconds // 60} minutes)"
+        logger.test_step("Set up S3 workloads for NooBaa chaos testing")
+        logger.info(
+            f"Target pod: {target_pod}, total duration: {duration_seconds}s "
+            f"({duration_seconds // 60} minutes), kill interval: {kill_interval_seconds}s, "
+            f"expected pod kills: ~{duration_seconds // kill_interval_seconds}"
         )
-        log.info(f"🔄 Kill interval: {kill_interval_seconds}s")
-        log.info(f"🔥 Expected pod kills: ~{duration_seconds // kill_interval_seconds}")
 
         workload_ops.setup_workloads()
 
@@ -134,13 +132,13 @@ class TestKrKnNooBaaChaos:
                 return
             try:
                 workload_ops.validate_and_cleanup()
-                log.info("✅ S3 workloads validated and cleaned up successfully")
+                logger.info("S3 workloads validated and cleaned up successfully")
             except (UnexpectedBehaviour, CommandFailed) as e:
-                log.warning(
-                    "⚠️  Workload validation/cleanup issue (finalizer or post-chaos): %s",
+                logger.warning(
+                    "Workload validation/cleanup issue (finalizer or post-chaos): %s",
                     str(e),
                 )
-                log.info(
+                logger.info(
                     "Temporary S3 failures during pod disruption are expected behavior"
                 )
             finally:
@@ -152,8 +150,9 @@ class TestKrKnNooBaaChaos:
         # We'll use KRKN's iteration feature to repeat the chaos
         num_iterations = max(1, duration_seconds // kill_interval_seconds)
 
-        log.info(
-            f"📋 Configuring {num_iterations} pod kill iterations with "
+        logger.test_step("Configure pod kill scenario and Krkn iterations")
+        logger.info(
+            f"Configuring {num_iterations} pod kill iterations with "
             f"{kill_interval_seconds}s wait between kills"
         )
 
@@ -167,7 +166,7 @@ class TestKrKnNooBaaChaos:
             krkn_pod_recovery_time=kill_interval_seconds,  # Recovery time = kill interval
         )
 
-        log.info(f"📋 Generated pod disruption scenario: {scenario_file}")
+        logger.debug(f"Generated pod disruption scenario: {scenario_file}")
 
         # Configure Krkn with iterations for repeated chaos
         config = KrknConfigGenerator()
@@ -181,21 +180,21 @@ class TestKrKnNooBaaChaos:
         )
         config.write_to_file(location=krkn_scenario_directory)
 
-        log.info(f"🚀 Starting NooBaa pod disruption chaos for {duration_seconds}s")
-        log.info(f"⚡ Pods will be killed every {kill_interval_seconds}s")
-        log.info(f"💥 Total expected disruptions: {num_iterations}")
+        logger.test_step(f"Execute NooBaa pod disruption chaos for {duration_seconds}s")
+        logger.info(
+            f"Starting chaos: pods killed every {kill_interval_seconds}s, "
+            f"total expected disruptions: {num_iterations}"
+        )
 
-        # Execute chaos scenarios using KrknExecutionHelper
         executor = KrknExecutionHelper(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         chaos_data = executor.execute_chaos_scenarios(
             config, target_pod, "NooBaa pod disruption"
         )
 
-        log.info("✅ Chaos execution completed")
-        log.info(f"📊 Total iterations executed: {num_iterations}")
+        logger.info("Chaos execution completed")
+        logger.debug(f"Total iterations executed: {num_iterations}")
 
-        # Validate workloads (idempotent with finalizer: runs once if not already done)
-        log.info("🔍 Validating S3 workload health after chaos")
+        logger.test_step("Validate S3 workload health after chaos")
         _workload_validate_and_cleanup_once()
 
         # Analyze results
@@ -204,10 +203,10 @@ class TestKrKnNooBaaChaos:
             analyzer.analyze_application_outage_results(chaos_data, target_pod)
         )
 
-        log.info("📊 Chaos Results:")
-        log.info(f"   Total scenarios: {total_scenarios}")
-        log.info(f"   Successful: {successful_scenarios}")
-        log.info(f"   Failed: {failing_scenarios}")
+        logger.info(
+            f"Chaos results: total={total_scenarios}, successful={successful_scenarios}, "
+            f"failed={failing_scenarios}"
+        )
 
         # Validate chaos execution using ValidationHelper
         # We expect some transient failures during pod kills
@@ -219,12 +218,11 @@ class TestKrKnNooBaaChaos:
             "NooBaa pod disruption chaos",
         )
 
-        # Final NooBaa health check
-        log.info("🔍 Performing final NooBaa health validation")
+        logger.test_step("Perform final NooBaa health validation")
         validate_noobaa_health(target_pod)
 
-        log.info(
-            f"🎉 NooBaa pod disruption test for {target_pod} completed successfully"
+        logger.info(
+            f"NooBaa pod disruption test for {target_pod} completed successfully"
         )
 
     @pytest.mark.parametrize(
@@ -285,15 +283,12 @@ class TestKrKnNooBaaChaos:
             kill_interval=f"{kill_interval}s",
         )
 
-        log.info(
-            f"⚠️  {stress_level.upper()} TESTING WARNING: This test will aggressively disrupt NooBaa pods"
-        )
-        log.info(
-            f"🔥 Configuration: {duration_multiplier}x duration, {kill_interval}s kill interval"
+        logger.warning(
+            f"{stress_level.upper()} testing: aggressively disrupting NooBaa pods, "
+            f"{duration_multiplier}x duration, {kill_interval}s kill interval"
         )
 
-        # WORKLOAD SETUP
-        log.info("Setting up S3 workloads for strength testing")
+        logger.test_step("Set up S3 workloads for strength testing")
         workload_ops.setup_workloads()
 
         _workload_cleanup_done = []
@@ -303,8 +298,8 @@ class TestKrKnNooBaaChaos:
                 return
             try:
                 workload_ops.validate_and_cleanup()
-                log.info(
-                    "💪 Workloads survived strength testing - resilience confirmed!"
+                logger.info(
+                    "Workloads survived strength testing - resilience confirmed"
                 )
             except (UnexpectedBehaviour, CommandFailed) as e:
                 validator = ValidationHelper()
@@ -334,7 +329,7 @@ class TestKrKnNooBaaChaos:
             ("noobaa-operator.*", "NooBaa Operator"),
         ]
 
-        log.info(f"📋 Creating {len(target_pods)} pod disruption scenarios")
+        logger.test_step(f"Create {len(target_pods)} pod disruption scenarios")
 
         for pod_pattern, description in target_pods:
             num_iterations = max(1, total_duration // kill_interval)
@@ -347,8 +342,8 @@ class TestKrKnNooBaaChaos:
                 krkn_pod_recovery_time=kill_interval,
             )
             scenarios.append(scenario_file)
-            log.info(
-                f"   ✓ {description}: {num_iterations} iterations at {kill_interval}s intervals"
+            logger.debug(
+                f"{description}: {num_iterations} iterations at {kill_interval}s intervals"
             )
 
         # Configure and execute all scenarios
@@ -363,11 +358,11 @@ class TestKrKnNooBaaChaos:
         )
         config.write_to_file(location=krkn_scenario_directory)
 
-        log.info(f"🚀 Starting {stress_level.upper()} NooBaa strength testing")
-        log.info(
-            f"⏱️  Total duration: {total_duration}s ({total_duration // 60} minutes)"
+        logger.test_step(f"Execute {stress_level.upper()} NooBaa strength testing")
+        logger.info(
+            f"Total duration: {total_duration}s ({total_duration // 60} minutes), "
+            f"expected disruptions per pod: ~{num_iterations}"
         )
-        log.info(f"💥 Expected disruptions per pod: ~{num_iterations}")
 
         # Execute strength test scenarios
         executor = KrknExecutionHelper(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
@@ -375,8 +370,7 @@ class TestKrKnNooBaaChaos:
             config, "noobaa", stress_level
         )
 
-        # Enhanced validation for strength testing (idempotent with finalizer)
-        log.info("🔍 Validating workloads after strength testing")
+        logger.test_step("Validate workloads after strength testing")
         _workload_validate_and_cleanup_once()
 
         # Analyze results with strength-specific criteria
@@ -385,10 +379,10 @@ class TestKrKnNooBaaChaos:
             analyzer.analyze_strength_test_results(chaos_data, "noobaa", stress_level)
         )
 
-        log.info("📊 Strength Test Results:")
-        log.info(f"   Total scenarios: {total_scenarios}")
-        log.info(f"   Successful: {successful_scenarios}")
-        log.info(f"   Strength score: {strength_score:.1f}%")
+        logger.info(
+            f"Strength test results: total={total_scenarios}, successful={successful_scenarios}, "
+            f"strength_score={strength_score:.1f}%"
+        )
 
         # Validate strength test results
         # Set appropriate success thresholds based on stress level
@@ -407,11 +401,10 @@ class TestKrKnNooBaaChaos:
             min_success_rate=min_success_rates.get(stress_level, 60),
         )
 
-        # Final NooBaa health check
-        log.info("🔍 Performing final NooBaa health validation")
+        logger.test_step("Perform final NooBaa health validation")
         validate_noobaa_health("noobaa-all-pods")
 
-        log.info(
-            f"🎉 STRENGTH TEST PASSED: NooBaa achieved {strength_score:.1f}% "
-            f"resilience under {stress_level} stress!"
+        logger.info(
+            f"Strength test passed: NooBaa achieved {strength_score:.1f}% "
+            f"resilience under {stress_level} stress"
         )

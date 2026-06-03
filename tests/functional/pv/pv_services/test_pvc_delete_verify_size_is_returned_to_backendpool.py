@@ -40,7 +40,7 @@ def verify_pv_not_exists(pvc_obj, cbp_name, rbd_image_id):
     )
 
     # Validate on oc side
-    logger.info("Verifying whether PV is deleted")
+    logger.info(f"Verifying whether PV {pvc_obj.backed_pv} is deleted")
     try:
         assert helpers.validate_pv_delete(pvc_obj.backed_pv)
     except AssertionError as ecf:
@@ -83,6 +83,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
           - Replicated: ``replica_count``  (e.g. 3)
           - EC:         ``(k + m) / k``   (e.g. 1.5 for k=2, m=1)
         """
+        logger.test_step("Determine pool names and size factor for the cluster")
         # Pool used for RBD image existence checks (always the metadata pool)
         cbp_name = helpers.default_ceph_block_pool()
 
@@ -96,6 +97,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
             f"data_pool: {data_pool} | size_factor: {size_factor}"
         )
 
+        logger.test_step("Create PVC and pod, then run IO")
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL, size=10, status=constants.STATUS_BOUND
         )
@@ -115,6 +117,9 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         used_after_io = helpers.fetch_used_size(data_pool, exp_size)
         logger.info(f"Used space after IO {used_after_io}")
 
+        logger.test_step(
+            "Delete pod and PVC, then verify size returned to backend pool"
+        )
         rbd_image_id = pvc_obj.image_uuid
         pod_obj.delete()
         pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)

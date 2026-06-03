@@ -125,6 +125,9 @@ class TestDynamicPvc(ManageTest):
         storage_type = "fs"
         sc_obj, worker_nodes_list = setup
 
+        logger.test_step(
+            f"Create RWO PVC and two pods on different nodes with {interface_type}"
+        )
         logger.info(f"Creating PVC with {access_mode} access mode")
         pvc_obj = pvc_factory(
             interface=interface_type,
@@ -160,8 +163,14 @@ class TestDynamicPvc(ManageTest):
 
         node_pod1 = pod_obj1.get().get("spec").get("nodeName")
         node_pod2 = pod_obj2.get().get("spec").get("nodeName")
+        logger.assertion(
+            f"Pods on different nodes: node_pod1='{node_pod1}', node_pod2='{node_pod2}'"
+        )
         assert node_pod1 != node_pod2, "Both pods are on the same node"
 
+        logger.test_step(
+            f"Run IO on first pod {pod_obj1.name} and verify second pod cannot attach RWO PVC"
+        )
         logger.info(f"Running IO on first pod {pod_obj1.name}")
         file_name = pod_obj1.name
         pod_obj1.run_io(storage_type=storage_type, size="1G", fio_filename=file_name)
@@ -192,6 +201,9 @@ class TestDynamicPvc(ManageTest):
                 ocs_obj=pod_obj2, failure_str=expected_failure_str
             )
 
+        logger.test_step(
+            f"Delete first pod and verify second pod attaches PVC {pvc_obj.name}"
+        )
         logger.info(
             f"Deleting first pod so that second pod can attach PVC {pvc_obj.name}"
         )
@@ -254,7 +266,9 @@ class TestDynamicPvc(ManageTest):
         storage_type = "fs"
         sc_obj, worker_nodes_list = setup
 
-        logger.info("CephFS RWX test")
+        logger.test_step(
+            f"Create RWX PVC and two pods on different nodes with {interface_type}"
+        )
         logger.info(f"Creating PVC with {access_mode} access mode")
         pvc_obj = pvc_factory(
             interface=interface_type,
@@ -292,12 +306,16 @@ class TestDynamicPvc(ManageTest):
         node_pod1 = pod_obj1.get().get("spec").get("nodeName")
         node_pod2 = pod_obj2.get().get("spec").get("nodeName")
 
+        logger.assertion(
+            f"Pods on different nodes: node_pod1='{node_pod1}', node_pod2='{node_pod2}'"
+        )
         assert node_pod1 != node_pod2, "Both pods are on the same node"
 
+        logger.test_step("Run IO on both pods and verify data integrity")
         # Run IO on both the pods
         logger.info(f"Running IO on pod {pod_obj1.name}")
         file_name1 = pod_obj1.name
-        logger.info(file_name1)
+        logger.debug(f"IO file name for pod1: {file_name1}")
         pod_obj1.run_io(storage_type=storage_type, size="1G", fio_filename=file_name1)
 
         logger.info(f"Running IO on pod {pod_obj2.name}")
@@ -311,7 +329,7 @@ class TestDynamicPvc(ManageTest):
         pod.get_fio_rw_iops(pod_obj2)
         md5sum_pod2_data = pod.cal_md5sum(pod_obj=pod_obj2, file_name=file_name2)
 
-        logger.info("verify data from alternate pods")
+        logger.test_step("Verify data integrity from alternate pods")
 
         pod.verify_data_integrity(
             pod_obj=pod_obj2, file_name=file_name1, original_md5sum=md5sum_pod1_data
@@ -323,10 +341,10 @@ class TestDynamicPvc(ManageTest):
 
         # Verify that data is mutable from any pod
 
-        logger.info("Perform modification of files from alternate pod")
+        logger.test_step("Verify data mutability from alternate pods")
         # Access and rename file written by pod-2 from pod-1
         file_path2 = pod.get_file_path(pod_obj2, file_name2)
-        logger.info(file_path2)
+        logger.debug(f"File path for pod2: {file_path2}")
         pod_obj1.exec_cmd_on_pod(
             command=f'bash -c "mv {file_path2} {file_path2}-renamed"',
             out_yaml_format=False,
@@ -334,7 +352,7 @@ class TestDynamicPvc(ManageTest):
 
         # Access and rename file written by pod-1 from pod-2
         file_path1 = pod.get_file_path(pod_obj1, file_name1)
-        logger.info(file_path1)
+        logger.debug(f"File path for pod1: {file_path1}")
         pod_obj2.exec_cmd_on_pod(
             command=f'bash -c "mv {file_path1} {file_path1}-renamed"',
             out_yaml_format=False,

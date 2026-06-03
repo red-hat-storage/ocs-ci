@@ -25,7 +25,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility import kms
 from ocs_ci.ocs.node import verify_crypt_device_present_onnode
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Set the arg values based on whether HCP Vault is being used
 if config.ENV_DATA.get("vault_hcp"):
@@ -72,7 +72,7 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
         Configure kubernetes authentication method and setup csi-kms-connection-details configmap
 
         """
-        log.info(
+        logger.info(
             "Configuring kube auth method and csi-kms-connection-details configmap"
         )
         self.kms = vault_tenant_sa_setup_factory(
@@ -80,7 +80,7 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
             use_auth_path=use_auth_path,
             use_vault_namespace=use_vault_namespace,
         )
-        log.info("Test setup complete")
+        logger.info("Test setup complete")
 
     @tier1
     def test_rbd_pv_encryption_vaulttenantsa(
@@ -95,6 +95,7 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
         Test to verify creation and deletion of encrypted RBD PVC using vaulttenantsa method
 
         """
+        logger.test_step("Create project and encryption-enabled RBD storage class")
         # Create a project
         proj_obj = project_factory()
 
@@ -105,12 +106,14 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
             encryption_kms_id=self.kms.kmsid,
         )
 
+        logger.test_step("Create tenant service account and Vault kube auth role")
         # Create serviceaccount in the tenant namespace
         self.kms.create_tenant_sa(namespace=proj_obj.namespace)
 
         # Create role in Vault
         self.kms.create_vault_kube_auth_role(namespace=proj_obj.namespace)
 
+        logger.test_step("Create RBD PVCs with volume mode Block")
         # Create RBD PVCs with volume mode Block
         pvc_size = 5
         pvc_objs = multi_pvc_factory(
@@ -127,6 +130,7 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
             wait_each=False,
         )
 
+        logger.test_step("Create pods and verify encryption keys in Vault")
         # Create pods
         pod_objs = create_pods(
             pvc_objs,
@@ -145,10 +149,11 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
 
         # Check if encryption key is created in Vault
         if kms.is_key_present_in_path(key=vol_handle, path=self.kms.vault_backend_path):
-            log.info(f"Vault: Found key for {pvc_obj.name}")
+            logger.info(f"Vault: Found key for {pvc_obj.name}")
         else:
             raise ResourceNotFoundError(f"Vault: Key not found for {pvc_obj.name}")
 
+        logger.test_step("Verify encrypted devices on nodes and run IO on all pods")
         # Verify whether encrypted device is present inside the pod and run IO
         for vol_handle, pod_obj in zip(vol_handles, pod_objs):
             node = pod_obj.get_node()
@@ -162,13 +167,14 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
                 io_direction="write",
                 runtime=60,
             )
-        log.info("IO started on all pods")
+        logger.info("IO started on all pods")
 
         # Wait for IO completion
         for pod_obj in pod_objs:
             pod_obj.get_fio_results()
-        log.info("IO completed on all pods")
+        logger.info("IO completed on all pods")
 
+        logger.test_step("Delete pods and PVCs, then verify Vault key cleanup")
         # Delete the pod
         for pod_obj in pod_objs:
             pod_obj.delete()
@@ -185,7 +191,7 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
             if not kms.is_key_present_in_path(
                 key=vol_handle, path=self.kms.vault_backend_path
             ):
-                log.info(f"Vault: Key deleted for {vol_handle}")
+                logger.info(f"Vault: Key deleted for {vol_handle}")
             else:
                 raise KMSResourceCleaneupError(
                     f"Vault: Key deletion failed for {vol_handle}"

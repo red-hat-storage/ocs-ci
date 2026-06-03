@@ -14,7 +14,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_pods
 from concurrent.futures import ThreadPoolExecutor
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -41,7 +41,7 @@ class TestInTransitEncryptionSanity:
         current_state = get_in_transit_encryption_config_state()
         new_state = not current_state
 
-        log.info(
+        logger.info(
             f"Toggling in-transit encryption from "
             f"{'enabled' if current_state else 'disabled'} to "
             f"{'enabled' if new_state else 'disabled'}."
@@ -49,7 +49,7 @@ class TestInTransitEncryptionSanity:
 
         result = set_in_transit_encryption(enabled=new_state)
         assert result, "Failed to toggle in-transit encryption state."
-        log.info(
+        logger.info(
             f"In-transit encryption is now {'enabled' if new_state else 'disabled'}."
         )
         return result
@@ -69,6 +69,9 @@ class TestInTransitEncryptionSanity:
         4. Start IO from  All pods.
         5. During the IO running on the pod toggle intransit encryption state.
         """
+        logger.test_step(
+            "Create PVCs for CephBlockPool and CephFS with multiple access modes"
+        )
         size = 5
         access_modes = {
             constants.CEPHBLOCKPOOL: [
@@ -96,11 +99,13 @@ class TestInTransitEncryptionSanity:
             assert pvcs, f"Failed to create PVCs for {interface}."
 
         # Toggle encryption state
+        logger.test_step("Toggle in-transit encryption state")
         assert (
             self.toggle_intransit_encryption_state()
         ), "Failed to change in-transit encryption state."
 
         # Create pods for each interface
+        logger.test_step("Create pods for each interface")
         self.all_pods = []
         for interface, pvcs in pvc_objects.items():
             pods = create_pods(
@@ -114,6 +119,7 @@ class TestInTransitEncryptionSanity:
             self.all_pods.extend(pods)
 
         # Perform I/O on all pods using ThreadPoolExecutor
+        logger.test_step("Run IO on all pods and toggle encryption state during IO")
         with ThreadPoolExecutor() as executor:
             futures = [
                 executor.submit(
@@ -124,7 +130,7 @@ class TestInTransitEncryptionSanity:
 
             # Toggle encryption state during I/O operations
             for _ in range(2):
-                log.info("Toggling encryption state during I/O.")
+                logger.info("Toggling encryption state during I/O.")
                 assert (
                     self.toggle_intransit_encryption_state()
                 ), "Failed to change in-transit encryption state."

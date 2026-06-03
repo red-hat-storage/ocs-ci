@@ -21,8 +21,8 @@ from ocs_ci.framework.testlib import (
     polarion_id,
 )
 
+logger = logging.getLogger(__name__)
 
-log = logging.getLogger(__name__)
 # Error message to look in a command output
 ERRMSG = "Error in command"
 
@@ -61,6 +61,9 @@ class TestMetadataUnavailable(ManageTest):
         and not suported in previous ODF versions (<4.12) and setmetadata is unavailable,
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
         """
+        logger.test_step(
+            "Patch rook-ceph-operator-config with CSI_ENABLE_METADATA flag"
+        )
         external_mode = config.DEPLOYMENT["external_mode"]
         fs, sc_name = metadata_utils.update_testdata_for_external_modes(
             sc_name, fs, external_mode=external_mode
@@ -81,15 +84,17 @@ class TestMetadataUnavailable(ManageTest):
         metadata_flag = config_map_obj.exec_oc_cmd(
             "get cm rook-ceph-operator-config --output  jsonpath='{.data.CSI_ENABLE_METADATA}'"
         )
-        log.info(f"metadata flag----{metadata_flag}")
+        logger.debug(f"Metadata flag value: {metadata_flag}")
 
-        # Check 'setmatadata' is not set for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
+        logger.test_step("Verify setmetadata is not available for provisioner pods")
         res = metadata_utils.check_setmetadata_availability(pod_obj)
+        logger.assertion(f"Metadata availability: expected=False, actual={res}")
         assert (
             not res
         ), "Error: The metadata is set, while it is expected to be unavailable "
         available_subvolumes = metadata_utils.available_subvolumes(sc_name, toolbox, fs)
-        # Create pvc object
+
+        logger.test_step("Create PVC and verify no metadata is set on subvolume")
         pvc_obj = helpers.create_pvc(
             sc_name=sc_name,
             namespace="test-metadata",
@@ -107,6 +112,7 @@ class TestMetadataUnavailable(ManageTest):
             sc_name, fs, toolbox, created_subvolume
         )
         # metadata details unavailable for the PVC
+        logger.assertion(f"Metadata for PVC: expected={{}}, actual={metadata}")
         assert metadata == {}, "Error: Metadata details are available for the PVC"
 
         # Delete the PVC
@@ -125,10 +131,11 @@ class TestMetadataUnavailable(ManageTest):
         and not suported in previous ODF versions (<4.12) and setmetadata is unavailable,
         for csi-cephfsplugin-provisioner and csi-rbdplugin-provisioner pods
         """
+        logger.test_step("Create and delete a CephFS PVC for pre-upgrade validation")
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM, status=constants.STATUS_BOUND
         )
-        log.info(f"PVC {pvc_obj.name} created!")
+        logger.info(f"PVC {pvc_obj.name} created")
         # Delete the PVC
         pvc_obj.delete()
         pvc_obj.ocp.wait_for_delete(
@@ -166,7 +173,7 @@ class TestMetadata(ManageTest):
 
         """
         self = request.node.cls
-        log.info("-----Setup-----")
+        logger.test_step("Create project and enable metadata feature")
         self.project_name = "metadata"
         project_factory(project_name=self.project_name)
         self.namespace = config.ENV_DATA["cluster_namespace"]
@@ -177,16 +184,16 @@ class TestMetadata(ManageTest):
         self.external_mode = config.DEPLOYMENT["external_mode"]
 
         # Enable metadata feature
-        log.info("----Enable metadata----")
         self.cluster_name = metadata_utils.enable_metadata(
             self.config_map_obj,
             self.pod_obj,
         )
-        log.info(f"cluster name is ----- {self.cluster_name}")
+        logger.info(f"Cluster name: {self.cluster_name}")
 
     def teardown(self):
-        log.info("-----Teardown-----")
-        # Metadata is enabled by default in OCS 4.20+, no teardown needed
+        logger.info(
+            "Teardown: metadata is enabled by default in OCS 4.20+, no action needed"
+        )
 
     @pytest.mark.parametrize(
         argnames=["fs", "sc_name"],
@@ -224,7 +231,8 @@ class TestMetadata(ManageTest):
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
-        # Create pvc object
+
+        logger.test_step("Create PVC and validate metadata on subvolume")
         pvc_obj = helpers.create_pvc(
             sc_name=sc_name,
             namespace=self.project_name,
@@ -250,7 +258,8 @@ class TestMetadata(ManageTest):
             namespace=self.project_name,
         )
         available_subvolumes = updated_subvolumes
-        # Clone the PVC
+
+        logger.test_step("Clone PVC and validate metadata on cloned subvolume")
         clone_pvc_obj = pvc_clone_factory(pvc_obj=pvc_obj, timeout=600)
         updated_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
@@ -269,7 +278,8 @@ class TestMetadata(ManageTest):
             pvc_name=clone_pvc_obj.name,
             namespace=self.project_name,
         )
-        # Create a volume snapshot
+
+        logger.test_step("Create volume snapshot and validate metadata")
         available_subvolumes = updated_subvolumes
         snap_obj = snapshot_factory(clone_pvc_obj, wait=True)
         snap_obj_get = snap_obj.get()
@@ -294,7 +304,8 @@ class TestMetadata(ManageTest):
             volumesnapshot_content=snapshotcontent_name,
             namespace=self.project_name,
         )
-        # Restore volume from snapshot
+
+        logger.test_step("Restore volume from snapshot and validate metadata")
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
@@ -316,7 +327,8 @@ class TestMetadata(ManageTest):
             pvc_name=restored_pvc.name,
             namespace=self.project_name,
         )
-        # Deleted PVCs and PVs
+
+        logger.test_step("Delete PVCs and verify cleanup")
         pvc_obj.delete()
         pvc_obj.ocp.wait_for_delete(
             resource_name=pvc_obj.name, timeout=300
@@ -356,7 +368,8 @@ class TestMetadata(ManageTest):
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
-        # Create pvc object
+
+        logger.test_step("Create PVC and validate metadata")
         pvc_obj = helpers.create_pvc(
             sc_name=sc_name,
             namespace=self.project_name,
@@ -382,7 +395,8 @@ class TestMetadata(ManageTest):
             pvc_name=pvc_name,
             namespace=self.project_name,
         )
-        # Delete the PVC
+
+        logger.test_step(f"Delete PVC {pvc_name} and recreate with the same name")
         pvc_obj.delete()
         pvc_obj.ocp.wait_for_delete(
             resource_name=pvc_obj.name, timeout=300
@@ -406,13 +420,18 @@ class TestMetadata(ManageTest):
         metadata_new_pvc = metadata_utils.fetch_metadata(
             sc_name, fs, self.toolbox, created_subvolume
         )
-        # metadata validation for new PVC created
+
+        logger.test_step("Validate metadata for new PVC differs from original")
         metadata_utils.validate_metadata(
             metadata=metadata_new_pvc,
             clustername=self.cluster_name,
             pv_name=pvc_obj.backed_pv_obj.name,
             pvc_name=pvc_name,
             namespace=self.project_name,
+        )
+        logger.assertion(
+            f"New PVC metadata differs from original: "
+            f"metadata_new_pvc != metadata is {metadata_new_pvc != metadata}"
         )
         assert metadata_new_pvc != metadata
 
@@ -460,19 +479,18 @@ class TestMetadata(ManageTest):
         fs, sc_name = metadata_utils.update_testdata_for_external_modes(
             sc_name, fs, external_mode=self.external_mode
         )
-        # Enable CSI_ENABLE_OMAP_GENERATOR flag
-        enable_omap_generator = '{"data":{"CSI_ENABLE_OMAP_GENERATOR": "true"}}'
 
-        # Enable CSI_ENABLE_OMAP_GENERATOR flag for rook-ceph-operator-config using patch command
+        logger.test_step("Enable CSI_ENABLE_OMAP_GENERATOR flag")
+        enable_omap_generator = '{"data":{"CSI_ENABLE_OMAP_GENERATOR": "true"}}'
         assert self.config_map_obj.patch(
             resource_name="rook-ceph-operator-config",
             params=enable_omap_generator,
         ), "configmap/rook-ceph-operator-config not patched"
 
+        logger.test_step("Create PVC and set PV reclaim policy to Retain")
         available_subvolumes = metadata_utils.available_subvolumes(
             sc_name, self.toolbox, fs
         )
-        # Create pvc object
         pvc_obj = helpers.create_pvc(
             sc_name=sc_name,
             namespace=self.project_name,
@@ -481,7 +499,7 @@ class TestMetadata(ManageTest):
         )
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=600)
         pv_name = pvc_obj.backed_pv_obj.name
-        log.info(f"pv name is ----- {pv_name}")
+        logger.debug(f"PV name: {pv_name}")
 
         # Update persistentVolumeReclaimPolicy:Retain for the PV
         params = '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
@@ -506,7 +524,8 @@ class TestMetadata(ManageTest):
             pvc_name=pvc_obj.name,
             namespace=self.project_name,
         )
-        # Delete the PVC
+
+        logger.test_step("Delete PVC and make PV available by removing claimRef")
         pvc_obj.delete()
         pvc_obj.ocp.wait_for_delete(
             resource_name=pvc_obj.name, timeout=300
@@ -517,15 +536,16 @@ class TestMetadata(ManageTest):
             condition=constants.STATUS_RELEASED, resource_name=pv_name
         )
         # Edit restore PV and remove the claimRef section
-        log.info(f"Remove the claimRef section from PVC {pv_name}")
+        logger.info(f"Removing claimRef section from PV {pv_name}")
         params = '[{"op": "remove", "path": "/spec/claimRef"}]'
         self.pv_obj.patch(resource_name=pv_name, params=params, format_type="json")
-        log.info(f"Successfully removed claimRef section from PVC {pv_name}")
+        logger.info(f"Successfully removed claimRef section from PV {pv_name}")
         # Validate PV is in Available state
         self.pv_obj.wait_for_resource(
             condition=constants.STATUS_AVAILABLE, resource_name=pv_name
         )
-        # Create another pvc
+
+        logger.test_step("Create new PVC bound to the same PV and validate metadata")
         new_pvc_obj = helpers.create_pvc(
             sc_name=sc_name,
             namespace=self.project_name,
@@ -534,6 +554,10 @@ class TestMetadata(ManageTest):
         )
         helpers.wait_for_resource_state(
             new_pvc_obj, constants.STATUS_BOUND, timeout=600
+        )
+        logger.assertion(
+            f"New PVC bound to original PV: expected='{pv_name}', "
+            f"actual='{new_pvc_obj.backed_pv_obj.name}'"
         )
         assert new_pvc_obj.backed_pv_obj.name == pv_name
         metadata = metadata_utils.fetch_metadata(
@@ -547,7 +571,8 @@ class TestMetadata(ManageTest):
             pvc_name=new_pvc_obj.name,
             namespace=self.project_name,
         )
-        # Delete the PVC
+
+        logger.test_step("Delete second PVC and make PV available again")
         new_pvc_obj.delete()
         new_pvc_obj.ocp.wait_for_delete(
             resource_name=new_pvc_obj.name, timeout=600
@@ -558,15 +583,18 @@ class TestMetadata(ManageTest):
             condition=constants.STATUS_RELEASED, resource_name=pv_name
         )
         # Edit again restore PV and remove the claimRef section
-        log.info(f"Remove the claimRef section from PVC {pv_name}")
+        logger.info(f"Removing claimRef section from PV {pv_name}")
         params = '[{"op": "remove", "path": "/spec/claimRef"}]'
         self.pv_obj.patch(resource_name=pv_name, params=params, format_type="json")
-        log.info(f"Successfully removed claimRef section from PVC {pv_name}")
+        logger.info(f"Successfully removed claimRef section from PV {pv_name}")
         # Validate PV is in Available state
         self.pv_obj.wait_for_resource(
             condition=constants.STATUS_AVAILABLE, resource_name=pv_name
         )
-        # Create another pvc in a different namespace
+
+        logger.test_step(
+            "Create PVC in different namespace and validate metadata update"
+        )
         dif_namespace = "new-project"
         project_factory_class(project_name=dif_namespace)
         pvc_obj_in_dif_namespace = helpers.create_pvc(
@@ -577,6 +605,10 @@ class TestMetadata(ManageTest):
         )
         helpers.wait_for_resource_state(
             pvc_obj_in_dif_namespace, constants.STATUS_BOUND, timeout=600
+        )
+        logger.assertion(
+            f"PVC in different namespace bound to original PV: expected='{pv_name}', "
+            f"actual='{pvc_obj_in_dif_namespace.backed_pv_obj.name}'"
         )
         assert pvc_obj_in_dif_namespace.backed_pv_obj.name == pv_name
         metadata = metadata_utils.fetch_metadata(

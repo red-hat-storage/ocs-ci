@@ -17,7 +17,7 @@ from ocs_ci.ocs.exceptions import (
     PoolNotReplicatedAsNeeded,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -45,7 +45,9 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
 
         """
 
-        log.info("Creating storageclasses")
+        logger.test_step(
+            "Create two storage classes with replica 2 and 3, both with aggressive compression"
+        )
         interface_type = constants.CEPHBLOCKPOOL
         sc_obj1 = storageclass_factory(
             interface=interface_type,
@@ -66,7 +68,7 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
         replicas[sc_obj2.name] = 3
         sc_obj_list = [sc_obj1, sc_obj2]
 
-        log.info("Creating pvc and pods")
+        logger.test_step("Create PVCs and pods for each storage class")
         pod_obj_list = []
         for sc_obj in sc_obj_list:
             for pod_num in range(1, 5):
@@ -75,8 +77,7 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
                 )
                 pod_obj_list.append(pod_factory(interface=interface_type, pvc=pvc_obj))
 
-        log.info("Running io on pods")
-
+        logger.test_step(f"Run IO on {len(pod_obj_list)} pods")
         for pod_obj in pod_obj_list:
             pod_obj.run_io(
                 "fs",
@@ -90,6 +91,7 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
                 readwrite="readwrite",
             )
 
+        logger.test_step("Validate compression and replication on each pool")
         for sc_obj in sc_obj_list:
             cbp_name = sc_obj.get()["parameters"]["pool"]
             cbp_size = replicas[sc_obj.name]

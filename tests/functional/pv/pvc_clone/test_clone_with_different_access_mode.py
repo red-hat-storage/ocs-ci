@@ -14,7 +14,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -58,8 +58,8 @@ class TestCloneWithDifferentAccessMode(ManageTest):
             },
         }
 
-        # Run IO
-        log.info("Starting IO on all pods")
+        logger.test_step("Run IO on all pods")
+        logger.info(f"Starting IO on {len(self.pods)} pods")
         for pod_obj in self.pods:
             storage_type = (
                 "block"
@@ -74,14 +74,13 @@ class TestCloneWithDifferentAccessMode(ManageTest):
                 end_fsync=1,
                 direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
-            log.info(f"IO started on pod {pod_obj.name}")
-        log.info("Started IO on all pods")
+            logger.debug(f"IO started on pod {pod_obj.name}")
+        logger.info("Started IO on all pods")
 
-        # Wait for IO to finish
-        log.info("Wait for IO to finish on pods")
+        logger.test_step("Wait for IO to finish and calculate md5sum")
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
-            log.info(f"IO finished on pod {pod_obj.name}")
+            logger.debug(f"IO finished on pod {pod_obj.name}")
             # Calculate md5sum
             file_name_pod = (
                 file_name
@@ -93,8 +92,9 @@ class TestCloneWithDifferentAccessMode(ManageTest):
                 file_name_pod,
                 pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
+        logger.info("IO finished and md5sum calculated on all pods")
 
-        log.info("Creating clone of the PVCs with different access modes")
+        logger.test_step("Create clones of PVCs with different access modes")
         cloned_pvcs = []
         for pvc_obj in self.pvcs:
             access_modes = access_modes_dict[pvc_obj.interface][pvc_obj.volume_mode]
@@ -103,28 +103,29 @@ class TestCloneWithDifferentAccessMode(ManageTest):
                     pvc_obj=pvc_obj, status="", access_mode=access_mode
                 )
                 clone_obj.interface = pvc_obj.interface
-                log.info(
+                logger.debug(
                     f"Clone {clone_obj.name} created. "
                     f"Parent PVC: {pvc_obj.name}. "
                     f"Parent accessMode: {pvc_obj.get_pvc_access_mode}. "
                     f"Cloned PVC accessMode: {access_mode}"
                 )
                 cloned_pvcs.append(clone_obj)
-        log.info("Created clone of the PVCs with different access modes")
+        logger.info(
+            f"Created {len(cloned_pvcs)} clones of the PVCs with different access modes"
+        )
 
-        log.info("Verifying cloned PVCs are Bound")
+        logger.test_step("Verify cloned PVCs are Bound")
         for pvc_obj in cloned_pvcs:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=480
             )
             pvc_obj.reload()
-        log.info("Verified: Cloned PVCs are Bound")
+        logger.info("Verified: Cloned PVCs are Bound")
 
         # Get worker node names and create an iterator
         nodes_iter = cycle(node.get_worker_nodes())
 
-        # Attach the cloned PVCs to pods
-        log.info("Attach the cloned PVCs to pods")
+        logger.test_step("Attach cloned PVCs to pods and verify they are running")
         clone_pod_objs = []
         for pvc_obj in cloned_pvcs:
             if pvc_obj.volume_mode == "Block":
@@ -143,18 +144,17 @@ class TestCloneWithDifferentAccessMode(ManageTest):
                     pod_dict_path=pod_dict_path,
                     raw_block_pv=pvc_obj.volume_mode == "Block",
                 )
-                log.info(
-                    f"Attaching the PVC {pvc_obj.name} to pod " f"{clone_pod_obj.name}"
+                logger.debug(
+                    f"Attaching the PVC {pvc_obj.name} to pod {clone_pod_obj.name}"
                 )
                 clone_pod_objs.append(clone_pod_obj)
 
         # Verify the new pods are running
-        log.info("Verify the new pods are running")
         for pod_obj in clone_pod_objs:
             helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
-        log.info("Verified: New pods are running")
+        logger.info(f"All {len(clone_pod_objs)} new pods are running")
 
-        # Verify md5sum
+        logger.test_step("Verify data integrity using md5sum on all clone pods")
         for pod_obj in clone_pod_objs:
             file_name_pod = (
                 pod_obj.get_storage_path(storage_type="block")
@@ -167,8 +167,8 @@ class TestCloneWithDifferentAccessMode(ManageTest):
                 pod_obj.pvc.parent.md5sum,
                 pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
-            log.info(
+            logger.debug(
                 f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
                 f"matches with the original md5sum"
             )
-        log.info("Data integrity check passed on all pods")
+        logger.info("Data integrity check passed on all pods")

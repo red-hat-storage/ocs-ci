@@ -18,7 +18,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -123,30 +123,36 @@ class TestExpansionSnapshotClone(ManageTest):
         pvc_size_expand_3 = 8
         snapshots = []
 
+        logger.test_step("Run IO on pods and calculate md5sum")
         # Run IO
-        log.info("Start IO on pods")
+        logger.info("Start IO on pods")
         for pod_obj in self.pods:
-            log.info(f"Running IO on pod {pod_obj.name}")
+            logger.debug(f"Running IO on pod {pod_obj.name}")
             pod_obj.run_io(
                 storage_type="fs", size="1G", runtime=20, fio_filename=filename
             )
-        log.info("IO started on all pods")
+        logger.info(f"IO started on all {len(self.pods)} pods")
 
-        log.info("Wait for IO completion on pods")
+        logger.info("Wait for IO completion on pods")
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
-            log.info(f"IO finished on pod {pod_obj.name}")
+            logger.debug(f"IO finished on pod {pod_obj.name}")
             # Calculate md5sum
             md5sum = pod.cal_md5sum(pod_obj, filename)
             pod_obj.pvc.md5sum = md5sum
-        log.info("IO completed on all pods")
+        logger.info("IO completed on all pods")
 
+        logger.test_step(
+            f"Expand parent PVCs to {pvc_size_expand_1}Gi and take snapshots"
+        )
         # Expand PVCs
-        log.info(f"Expanding PVCs to {pvc_size_expand_1}Gi")
+        logger.info(f"Expanding PVCs to {pvc_size_expand_1}Gi")
         for pvc_obj in self.pvcs:
-            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expand_1}Gi")
+            logger.debug(
+                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expand_1}Gi"
+            )
             pvc_obj.resize_pvc(pvc_size_expand_1, True)
-        log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_1}Gi")
+        logger.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_1}Gi")
 
         # Verify thick provision by checking the image used size
         if pvc_create_sc_type == "thick":
@@ -156,22 +162,21 @@ class TestExpansionSnapshotClone(ManageTest):
                 rbd_pool=constants.DEFAULT_BLOCKPOOL,
                 expect_match=True,
             ), "One or more PVCs are not thick provisioned after expansion"
-            log.info(
+            logger.info(
                 f"Verified thick provision after expanding the PVCs to {pvc_size_expand_1}GiB"
             )
 
         # Take snapshot of all PVCs
-        log.info("Creating snapshot of all PVCs")
+        logger.info("Creating snapshot of all PVCs")
         for pvc_obj in self.pvcs:
-            log.info(f"Creating snapshot of PVC {pvc_obj.name}")
+            logger.debug(f"Creating snapshot of PVC {pvc_obj.name}")
             snap_obj = snapshot_factory(pvc_obj, wait=False)
             snap_obj.md5sum = pvc_obj.md5sum
             snapshots.append(snap_obj)
-            log.info(f"Created snapshot of PVC {pvc_obj.name}")
-        log.info("Created snapshot of all PVCs")
+        logger.info(f"Created {len(snapshots)} snapshots of all PVCs")
 
         # Verify snapshots are ready
-        log.info("Verify snapshots are ready")
+        logger.info("Verify snapshots are ready")
         for snap_obj in snapshots:
             snap_obj.ocp.wait_for_resource(
                 condition="true",
@@ -180,14 +185,19 @@ class TestExpansionSnapshotClone(ManageTest):
                 timeout=180,
             )
             snap_obj.reload()
-        log.info("Verified: Snapshots are Ready")
+        logger.info("Verified: Snapshots are Ready")
 
+        logger.test_step(
+            f"Expand parent PVCs to {pvc_size_expand_2}Gi and create clones"
+        )
         # Expand PVCs
-        log.info(f"Expanding PVCs to {pvc_size_expand_2}Gi")
+        logger.info(f"Expanding PVCs to {pvc_size_expand_2}Gi")
         for pvc_obj in self.pvcs:
-            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expand_2}Gi")
+            logger.debug(
+                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expand_2}Gi"
+            )
             pvc_obj.resize_pvc(pvc_size_expand_2, True)
-        log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_2}Gi")
+        logger.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_2}Gi")
 
         # Verify thick provision by checking the image used size
         if pvc_create_sc_type == "thick":
@@ -197,24 +207,23 @@ class TestExpansionSnapshotClone(ManageTest):
                 rbd_pool=constants.DEFAULT_BLOCKPOOL,
                 expect_match=True,
             ), "One or more PVCs are not thick provisioned after expansion"
-            log.info(
+            logger.info(
                 f"Verified thick provision after expanding the PVCs to {pvc_size_expand_2}GiB"
             )
 
         # Clone PVCs
-        log.info("Creating clone of all PVCs")
+        logger.info("Creating clone of all PVCs")
         clone_objs = []
         for pvc_obj in self.pvcs:
-            log.info(f"Creating clone of PVC {pvc_obj.name}")
+            logger.debug(f"Creating clone of PVC {pvc_obj.name}")
             clone_obj = pvc_clone_factory(
                 pvc_obj=pvc_obj, status="", volume_mode=constants.VOLUME_MODE_FILESYSTEM
             )
             clone_obj.md5sum = pvc_obj.md5sum
             clone_objs.append(clone_obj)
-            log.info(f"Created clone of PVC {pvc_obj.name}")
-        log.info("Created clone of all PVCs")
+        logger.info(f"Created {len(clone_objs)} clones of all PVCs")
 
-        log.info("Wait for cloned PVCs to reach Bound state and verify size")
+        logger.info("Wait for cloned PVCs to reach Bound state and verify size")
         for pvc_obj in clone_objs:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=360
@@ -223,13 +232,13 @@ class TestExpansionSnapshotClone(ManageTest):
                 f"Size is not {pvc_size_expand_2} but {pvc_obj.size} in "
                 f"cloned PVC {pvc_obj.name}"
             )
-        log.info(
+        logger.info(
             f"Cloned PVCs reached Bound state. Verified the size of all PVCs "
             f"as {pvc_size_expand_2}Gi"
         )
 
         # Ensure restore size is not impacted by parent PVC expansion
-        log.info("Verify restore size of snapshots")
+        logger.info("Verify restore size of snapshots")
         for snapshot_obj in snapshots:
             snapshot_info = snapshot_obj.get()
             assert snapshot_info["status"]["restoreSize"] == (
@@ -238,10 +247,13 @@ class TestExpansionSnapshotClone(ManageTest):
                 f"Restore size mismatch in snapshot {snapshot_obj.name}\n"
                 f"{snapshot_info}"
             )
-        log.info(f"Verified: Restore size of all snapshots are {pvc_size_expand_1}Gi")
+        logger.info(
+            f"Verified: Restore size of all snapshots are {pvc_size_expand_1}Gi"
+        )
 
+        logger.test_step("Restore snapshots and expand cloned and restored PVCs")
         # Restore snapshots
-        log.info("Restore snapshots")
+        logger.info("Restore snapshots")
         restore_objs = []
         for snap_obj in snapshots:
             restore_obj = snapshot_restore_factory(
@@ -250,13 +262,13 @@ class TestExpansionSnapshotClone(ManageTest):
             restore_obj.md5sum = snap_obj.md5sum
             restore_objs.append(restore_obj)
 
-        log.info("Verify restored PVCs are Bound")
+        logger.info("Verify restored PVCs are Bound")
         for pvc_obj in restore_objs:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=360
             )
             pvc_obj.reload()
-        log.info("Verified: Restored PVCs are Bound.")
+        logger.info("Verified: Restored PVCs are Bound.")
 
         # Verify restored PVCs are thick provision or not by checking the image used size
         if restore_sc_type == "thick":
@@ -266,7 +278,7 @@ class TestExpansionSnapshotClone(ManageTest):
                 rbd_pool=constants.DEFAULT_BLOCKPOOL,
                 expect_match=True,
             ), "One or more restored PVCs are not thick provisioned"
-            log.info("Verified thick provision on restored PVCs")
+            logger.info("Verified thick provision on restored PVCs")
         elif restore_sc_type == "thin" and (
             "thick" in (pvc_create_sc_type, restore_sc_type)
         ):
@@ -276,7 +288,7 @@ class TestExpansionSnapshotClone(ManageTest):
                 rbd_pool=constants.DEFAULT_BLOCKPOOL,
                 expect_match=False,
             ), "One or more restored PVCs are not thin provisioned"
-            log.info("Verified: Restored PVCs are not thick provisioned.")
+            logger.info("Verified: Restored PVCs are not thick provisioned.")
 
         # Verify clones are thick provision or not by checking the image used size
         if pvc_create_sc_type == "thick":
@@ -286,7 +298,7 @@ class TestExpansionSnapshotClone(ManageTest):
                 rbd_pool=constants.DEFAULT_BLOCKPOOL,
                 expect_match=True,
             ), "One or more cloned PVCs are not thick provisioned"
-            log.info("Verified thick provision on cloned PVCs.")
+            logger.info("Verified thick provision on cloned PVCs.")
         elif pvc_create_sc_type == "thin" and (
             "thick" in (pvc_create_sc_type, restore_sc_type)
         ):
@@ -296,10 +308,10 @@ class TestExpansionSnapshotClone(ManageTest):
                 rbd_pool=constants.DEFAULT_BLOCKPOOL,
                 expect_match=False,
             ), "One or more cloned PVCs are not thin provisioned"
-            log.info("Verified: Cloned PVCs are not thick provisioned.")
+            logger.info("Verified: Cloned PVCs are not thick provisioned.")
 
         # Attach the restored and cloned PVCs to pods
-        log.info("Attach the restored and cloned PVCs to pods")
+        logger.info("Attach the restored and cloned PVCs to pods")
         restore_clone_pod_objs = []
         for pvc_obj in restore_objs + clone_objs:
             interface = (
@@ -308,26 +320,26 @@ class TestExpansionSnapshotClone(ManageTest):
                 else constants.CEPHBLOCKPOOL
             )
             pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status="")
-            log.info(f"Attached the PVC {pvc_obj.name} to pod {pod_obj.name}")
+            logger.info(f"Attached the PVC {pvc_obj.name} to pod {pod_obj.name}")
             restore_clone_pod_objs.append(pod_obj)
 
-        log.info("Verify pods are Running")
+        logger.info("Verify pods are Running")
         for pod_obj in restore_clone_pod_objs:
             helpers.wait_for_resource_state(
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
             )
             pod_obj.reload()
-        log.info("Verified: Pods reached Running state")
+        logger.info("Verified: Pods reached Running state")
 
         # Expand cloned and restored PVCs
-        log.info(f"Expanding cloned and restored PVCs to {pvc_size_expand_3}Gi")
+        logger.info(f"Expanding cloned and restored PVCs to {pvc_size_expand_3}Gi")
         for pvc_obj in clone_objs + restore_objs:
-            log.info(
+            logger.debug(
                 f"Expanding size of PVC {pvc_obj.name} to "
                 f"{pvc_size_expand_3}Gi from {pvc_obj.size}"
             )
             pvc_obj.resize_pvc(pvc_size_expand_3, True)
-        log.info(
+        logger.info(
             f"Verified: Size of all cloned and restored PVCs are expanded to "
             f"{pvc_size_expand_3}G"
         )
@@ -343,7 +355,7 @@ class TestExpansionSnapshotClone(ManageTest):
                 "One or more cloned PVCs are not thick provisioned after expanding "
                 f"to {pvc_size_expand_3}GiB"
             )
-            log.info(
+            logger.info(
                 f"Verified thick provision after expanding cloned PVCs to {pvc_size_expand_3}GiB"
             )
         elif pvc_create_sc_type == "thin" and (
@@ -358,7 +370,7 @@ class TestExpansionSnapshotClone(ManageTest):
                 "One or more cloned PVCs are not thin provisioned after expanding "
                 f"to {pvc_size_expand_3}GiB"
             )
-            log.info(
+            logger.info(
                 "Verified: PVCs are not thick provisioned after expanding cloned "
                 f"PVCs to {pvc_size_expand_3}GiB"
             )
@@ -372,7 +384,7 @@ class TestExpansionSnapshotClone(ManageTest):
                 "One or more restored PVCs are not thick provisioned after"
                 f" expanding to {pvc_size_expand_3}GiB"
             )
-            log.info(
+            logger.info(
                 "Verified thick provision after expanding restored PVCs "
                 f"to {pvc_size_expand_3}GiB"
             )
@@ -388,66 +400,71 @@ class TestExpansionSnapshotClone(ManageTest):
                 "One or more restored PVCs are not thin provisioned after "
                 f"expanding to {pvc_size_expand_3}GiB"
             )
-            log.info(
+            logger.info(
                 "Verified: PVCs are not thick provisioned after expanding "
                 f"restored PVCs to {pvc_size_expand_3}GiB"
             )
 
+        logger.test_step(
+            "Run IO on pods attached with cloned and restored PVCs and verify data integrity"
+        )
         # Run IO on pods attached with cloned and restored PVCs
-        log.info("Starting IO on pods attached with cloned and restored PVCs")
+        logger.info("Starting IO on pods attached with cloned and restored PVCs")
         for pod_obj in restore_clone_pod_objs:
-            log.info(f"Running IO on pod {pod_obj.name}")
+            logger.debug(f"Running IO on pod {pod_obj.name}")
             pod_obj.run_io(
                 storage_type="fs",
                 size="1G",
                 runtime=20,
                 fio_filename=filename_restore_clone,
             )
-        log.info("IO started on all pods")
+        logger.info("IO started on all pods")
 
-        log.info(
+        logger.info(
             "Waiting for IO completion on pods attached with cloned and "
             "restored PVCs"
         )
         for pod_obj in restore_clone_pod_objs:
             pod_obj.get_fio_results()
-            log.info(f"IO finished on pod {pod_obj.name}")
+            logger.debug(f"IO finished on pod {pod_obj.name}")
             # Calculate md5sum of second file 'filename_restore_clone'
             md5sum = pod.cal_md5sum(pod_obj, filename_restore_clone)
             pod_obj.pvc.md5sum_new = md5sum
-        log.info(
+        logger.info(
             f"IO completed on all pods. Obtained md5sum of file "
             f"{filename_restore_clone}"
         )
 
         # Verify md5sum of first file 'filename'
-        log.info(f"Verify md5sum of file {filename} on pods")
+        logger.info(f"Verify md5sum of file {filename} on pods")
         for pod_obj in restore_clone_pod_objs:
             pod.verify_data_integrity(pod_obj, filename, pod_obj.pvc.md5sum)
-            log.info(
+            logger.info(
                 f"Verified: md5sum of {filename} on pod {pod_obj.name} "
                 f"matches with the original md5sum"
             )
-        log.info(
+        logger.info(
             "Data integrity check passed on all pods where restored and "
             "cloned PVCs are attached"
         )
 
+        logger.test_step(
+            "Clone restored PVCs, snapshot cloned PVCs, and restore new snapshots"
+        )
         # Clone the restored PVCs
-        log.info("Creating clone of restored PVCs")
+        logger.info("Creating clone of restored PVCs")
         restored_clone_objs = []
         for pvc_obj in restore_objs:
-            log.info(f"Creating clone of restored PVC {pvc_obj.name}")
+            logger.debug(f"Creating clone of restored PVC {pvc_obj.name}")
             clone_obj = pvc_clone_factory(
                 pvc_obj=pvc_obj, status="", volume_mode=constants.VOLUME_MODE_FILESYSTEM
             )
             clone_obj.md5sum = pvc_obj.md5sum
             clone_obj.md5sum_new = pvc_obj.md5sum_new
             restored_clone_objs.append(clone_obj)
-            log.info(f"Created clone of restored PVC {pvc_obj.name}")
-        log.info("Created clone of restored all PVCs")
+        logger.info(f"Created {len(restored_clone_objs)} clones of restored PVCs")
 
-        log.info("Wait for cloned PVCs to reach Bound state and verify size")
+        logger.info("Wait for cloned PVCs to reach Bound state and verify size")
         for pvc_obj in restored_clone_objs:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=360
@@ -456,7 +473,7 @@ class TestExpansionSnapshotClone(ManageTest):
                 f"Size is not {pvc_size_expand_3} but {pvc_obj.size} in "
                 f"cloned PVC {pvc_obj.name}"
             )
-        log.info(
+        logger.info(
             f"Cloned PVCs reached Bound state. Verified the size of all PVCs "
             f"as {pvc_size_expand_3}Gi"
         )
@@ -470,7 +487,7 @@ class TestExpansionSnapshotClone(ManageTest):
                 rbd_pool=constants.DEFAULT_BLOCKPOOL,
                 expect_match=True,
             ), "One or more PVCs cloned from restored PVCs are not thick provisioned"
-            log.info(
+            logger.info(
                 "Verified that the PVCs cloned from restored PVCs are thick provisioned"
             )
         if restore_sc_type == "thin" and (
@@ -482,24 +499,23 @@ class TestExpansionSnapshotClone(ManageTest):
                 rbd_pool=constants.DEFAULT_BLOCKPOOL,
                 expect_match=False,
             ), "One or more PVCs cloned from restored PVCs are not thin provisioned"
-            log.info(
+            logger.info(
                 "Verified that the PVCs cloned from restored PVCs are not thick provisioned"
             )
 
         # Take snapshot of all cloned PVCs
         snapshots_new = []
-        log.info("Creating snapshot of all cloned PVCs")
+        logger.info("Creating snapshot of all cloned PVCs")
         for pvc_obj in clone_objs + restored_clone_objs:
-            log.info(f"Creating snapshot of PVC {pvc_obj.name}")
+            logger.debug(f"Creating snapshot of PVC {pvc_obj.name}")
             snap_obj = snapshot_factory(pvc_obj, wait=False)
             snap_obj.md5sum = pvc_obj.md5sum
             snap_obj.md5sum_new = pvc_obj.md5sum_new
             snapshots_new.append(snap_obj)
-            log.info(f"Created snapshot of PVC {pvc_obj.name}")
-        log.info("Created snapshot of all cloned PVCs")
+        logger.info(f"Created {len(snapshots_new)} snapshots of all cloned PVCs")
 
         # Verify snapshots are ready
-        log.info("Verify snapshots of cloned PVCs are Ready")
+        logger.info("Verify snapshots of cloned PVCs are Ready")
         for snap_obj in snapshots_new:
             snap_obj.ocp.wait_for_resource(
                 condition="true",
@@ -508,10 +524,10 @@ class TestExpansionSnapshotClone(ManageTest):
                 timeout=180,
             )
             snap_obj.reload()
-        log.info("Verified: Snapshots of cloned PVCs are Ready")
+        logger.info("Verified: Snapshots of cloned PVCs are Ready")
 
         # Restore snapshots
-        log.info("Restoring snapshots of cloned PVCs")
+        logger.info("Restoring snapshots of cloned PVCs")
         restore_objs_new = []
         for snap_obj in snapshots_new:
             restore_obj = snapshot_restore_factory(
@@ -521,13 +537,13 @@ class TestExpansionSnapshotClone(ManageTest):
             restore_obj.md5sum_new = snap_obj.md5sum_new
             restore_objs_new.append(restore_obj)
 
-        log.info("Verify restored PVCs are Bound")
+        logger.info("Verify restored PVCs are Bound")
         for pvc_obj in restore_objs_new:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=360
             )
             pvc_obj.reload()
-        log.info("Verified: Restored PVCs are Bound.")
+        logger.info("Verified: Restored PVCs are Bound.")
 
         # Verify thick provision or not by checking the image used size
         if restore_sc_type == "thick":
@@ -537,7 +553,7 @@ class TestExpansionSnapshotClone(ManageTest):
                 rbd_pool=constants.DEFAULT_BLOCKPOOL,
                 expect_match=True,
             ), "One or more restored PVCs are not thick provisioned"
-            log.info("Verified thick provision on PVCs restored from the snapshots.")
+            logger.info("Verified thick provision on PVCs restored from the snapshots.")
         if restore_sc_type == "thin" and (
             "thick" in (pvc_create_sc_type, restore_sc_type)
         ):
@@ -547,21 +563,22 @@ class TestExpansionSnapshotClone(ManageTest):
                 rbd_pool=constants.DEFAULT_BLOCKPOOL,
                 expect_match=False,
             ), "One or more restored PVCs are not thin provisioned"
-            log.info(
+            logger.info(
                 "Verified that the PVCs restored from the snapshots are not thick provisioned."
             )
 
+        logger.test_step("Reattach PVCs to new pods, expand, and verify data integrity")
         # Delete pods to attach the cloned PVCs to new pods
-        log.info("Delete pods")
+        logger.info("Delete pods")
         for pod_obj in restore_clone_pod_objs:
             pod_obj.delete()
 
         for pod_obj in restore_clone_pod_objs:
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
-        log.info("Pods are deleted")
+        logger.info("Pods are deleted")
 
         # Attach the restored and cloned PVCs to new pods
-        log.info("Attach the restored and cloned PVCs to new pods")
+        logger.info("Attach the restored and cloned PVCs to new pods")
         restore_clone_pod_objs.clear()
         for pvc_obj in restore_objs_new + clone_objs:
             interface = (
@@ -570,41 +587,43 @@ class TestExpansionSnapshotClone(ManageTest):
                 else constants.CEPHBLOCKPOOL
             )
             pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status="")
-            log.info(f"Attached the PVC {pvc_obj.name} to pod {pod_obj.name}")
+            logger.info(f"Attached the PVC {pvc_obj.name} to pod {pod_obj.name}")
             restore_clone_pod_objs.append(pod_obj)
 
-        log.info("Verify pods are Running")
+        logger.info("Verify pods are Running")
         for pod_obj in restore_clone_pod_objs:
             helpers.wait_for_resource_state(
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
             )
             pod_obj.reload()
-        log.info("Verified: Pods reached Running state")
+        logger.info("Verified: Pods reached Running state")
 
         # Expand PVCs
         pvc_size_expand_4 = pvc_size_expand_3 + 2
-        log.info(f"Expanding restored and cloned PVCs to {pvc_size_expand_4}Gi")
+        logger.info(f"Expanding restored and cloned PVCs to {pvc_size_expand_4}Gi")
         for pvc_obj in restore_objs_new + clone_objs:
-            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expand_4}Gi")
+            logger.debug(
+                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expand_4}Gi"
+            )
             pvc_obj.resize_pvc(pvc_size_expand_4, True)
-        log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_4}Gi")
+        logger.info(f"Verified: Size of all PVCs are expanded to {pvc_size_expand_4}Gi")
 
         # Verify md5sum of both files
-        log.info(f"Verify md5sum of files {filename} and {filename_restore_clone}")
+        logger.info(f"Verify md5sum of files {filename} and {filename_restore_clone}")
         for pod_obj in restore_clone_pod_objs:
             pod.verify_data_integrity(pod_obj, filename, pod_obj.pvc.md5sum)
-            log.info(
+            logger.info(
                 f"Verified: md5sum of {filename} on pod {pod_obj.name} "
                 f"matches with the original md5sum"
             )
             pod.verify_data_integrity(
                 pod_obj, filename_restore_clone, pod_obj.pvc.md5sum_new
             )
-            log.info(
+            logger.info(
                 f"Verified: md5sum of {filename_restore_clone} on pod "
                 f"{pod_obj.name} matches with the original md5sum"
             )
-        log.info(
+        logger.info(
             "Data integrity check passed on all pods where restored and "
             "cloned PVCs are attached"
         )

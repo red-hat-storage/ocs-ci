@@ -25,35 +25,35 @@ class TestCephFileSystemCreation(ManageTest):
         Trying to create more cephfilesystem using the same name.
         Expected Result: It should not create the filesystem and throw error.
         """
-        logger.info("Starting test of Ceph Filesystem Creation")
+        logger.test_step("Create initial CephFileSystem 'test-ceph-fs'")
         try:
             cephFS_obj = create_ceph_file_system(
                 cephfs_name="test-ceph-fs", label={"use": "test"}
             )
 
             if cephFS_obj:
-                logger.info("CephFile System Created. : test-ceph-fs")
+                logger.info("CephFileSystem created: test-ceph-fs")
             else:
-                logger.error("Unable to create the Ceph File System")
+                logger.warning("Unable to create the CephFileSystem")
             ct_pod = pod.get_ceph_tools_pod()
             cmd1 = "ceph fs fail test-ceph-fs"
             ct_pod.exec_cmd_on_pod(cmd1)
             cmd2 = "ceph fs rm test-ceph-fs --yes-i-really-mean-it"
             ct_pod.exec_cmd_on_pod(cmd2)
-            logger.info("Creating CephFileSystem in the namespace")
+            logger.test_step(
+                "Attempt to recreate CephFileSystem with same name and verify AlreadyExists error"
+            )
             new_cephFS_obj = create_ceph_file_system(
                 cephfs_name="test-ceph-fs", label={"use": "test"}
             )
-            logger.info(
-                f"Not able to create a new ceph fs using same name {new_cephFS_obj}"
-            )
+            logger.info(f"CephFileSystem recreation returned: {new_cephFS_obj}")
 
         except CommandFailed as e:
             if "Error from server (AlreadyExists)" in str(e):
-                logger.info("Test success!")
+                logger.info("AlreadyExists error received as expected")
                 assert "Error from server (AlreadyExists)" in str(e)
             else:
-                logger.error(
-                    f"Command Failed, while creating the ceph file system.\n{str(e)}"
+                logger.exception(
+                    f"Command failed while creating the CephFileSystem: {e}"
                 )
                 raise CommandFailed

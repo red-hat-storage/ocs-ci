@@ -9,7 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.resiliency.resiliency_helper import Resiliency
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -91,30 +91,33 @@ class TestStorageClusterComponentFailurescenarios:
             failure_case: Specific failure to inject (e.g., OSD_POD_FAILURES)
             workload_ops: WorkloadOps fixture for workload management
         """
-        log.info(f"Running Scenario: {scenario_name}, Failure Case: {failure_case}")
+        logger.info(f"Running Scenario: {scenario_name}, Failure Case: {failure_case}")
 
         resiliency_runner = None
 
         try:
             # Setup workloads (starts workloads, background ops, and scaling)
-            log.info("Setting up workloads and background operations")
+            logger.test_step("Set up workloads and background operations")
             workload_ops.setup_workloads()
 
             # Start failure injection
-            log.info("Starting failure injection while workloads are running")
+            logger.test_step(
+                f"Inject failure scenario '{failure_case}' while workloads are running"
+            )
             resiliency_runner = Resiliency(scenario_name, failure_method=failure_case)
             resiliency_runner.start()
 
             # Cleanup failure injection
+            logger.test_step("Clean up failure injection resources")
             resiliency_runner.cleanup()
             resiliency_runner = None
 
             # Validate and cleanup workloads
-            log.info("Validating and cleaning up workloads")
+            logger.test_step("Validate workloads and clean up resources")
             workload_ops.validate_and_cleanup()
 
         except UnexpectedBehaviour as e:
-            log.error(f"Test execution failed: {e}")
+            logger.exception(f"Test execution failed: {e}")
             raise
         finally:
             # Cleanup failure injection if not already done
@@ -122,8 +125,8 @@ class TestStorageClusterComponentFailurescenarios:
                 try:
                     resiliency_runner.cleanup()
                 except UnexpectedBehaviour as cleanup_e:
-                    log.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
+                    logger.warning(f"Failed to cleanup resiliency runner: {cleanup_e}")
 
-        log.info(
+        logger.info(
             "Test completed successfully - workloads and failure injection completed"
         )

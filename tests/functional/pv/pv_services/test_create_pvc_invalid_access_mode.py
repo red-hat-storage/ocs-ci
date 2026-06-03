@@ -6,7 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier3
 from ocs_ci.ocs.exceptions import CommandFailed
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -35,6 +35,9 @@ class TestCreatePvcInvalidAccessMode(ManageTest):
         """
         expected_err = 'invalid: spec.accessModes: Unsupported value: "RWO"'
 
+        logger.test_step(
+            f"Attempt to create PVC with invalid access mode 'RWO' using {interface}"
+        )
         # Try to create a PVC by providing invalid value of access mode
         try:
             self.pvc_obj = pvc_factory(
@@ -48,7 +51,12 @@ class TestCreatePvcInvalidAccessMode(ManageTest):
             )
             assert not self.pvc_obj, "Unexpected: PVC creation hasn't failed."
         except CommandFailed as err:
+            logger.assertion(
+                f"PVC creation error contains expected message: expected='{expected_err}', actual='{str(err)}'"
+            )
             assert expected_err in str(
                 err
             ), f"Couldn't verify PVC creation. Unexpected error {str(err)}"
-            log.info("PVC creation failed as expected.")
+            logger.info(
+                "PVC creation failed as expected with invalid access mode 'RWO'."
+            )

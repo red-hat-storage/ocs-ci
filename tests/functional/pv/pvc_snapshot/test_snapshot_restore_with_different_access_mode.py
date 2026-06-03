@@ -18,7 +18,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @provider_mode
@@ -69,7 +69,7 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
         }
 
         # Start IO
-        log.info("Starting IO on all pods")
+        logger.test_step("Run IO on all pods and calculate md5sum")
 
         for pod_obj in self.pods:
             storage_type = (
@@ -85,14 +85,14 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
                 end_fsync=1,
                 direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
-            log.info(f"IO started on pod {pod_obj.name}")
-        log.info("Started IO on all pods")
+            logger.debug(f"IO started on pod {pod_obj.name}")
+        logger.info(f"Started IO on all {len(self.pods)} pods")
 
         # Wait for IO to finish
-        log.info("Wait for IO to finish on pods")
+        logger.info(f"Waiting for IO to finish on {len(self.pods)} pods")
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
-            log.info(f"IO finished on pod {pod_obj.name}")
+            logger.debug(f"IO finished on pod {pod_obj.name}")
             # Calculate md5sum to compare after restoring
             file_name_pod = (
                 file_name
@@ -104,20 +104,22 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
                 file_name_pod,
                 pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
-        log.info("IO finished on all pods")
+        logger.info("IO finished on all pods")
 
         # Create snapshots
-        log.info("Creating snapshot of the PVCs")
+        logger.test_step(
+            f"Create snapshots of {len(self.pvcs)} PVCs and wait for Ready state"
+        )
         snap_objs = []
         for pvc_obj in self.pvcs:
-            log.info(f"Creating snapshot of PVC {pvc_obj.name}")
+            logger.debug(f"Creating snapshot of PVC {pvc_obj.name}")
             snap_obj = snapshot_factory(pvc_obj, wait=False)
             snap_obj.md5sum = pvc_obj.md5sum
             snap_obj.interface = pvc_obj.interface
             snap_objs.append(snap_obj)
-            log.info(f"Created snapshot of PVC {pvc_obj.name}")
+            logger.debug(f"Created snapshot of PVC {pvc_obj.name}")
 
-        log.info("Snapshots are created. Wait for the snapshots to be in Ready state")
+        logger.info(f"Created {len(snap_objs)} snapshots. Waiting for Ready state")
         for snap_obj in snap_objs:
             snap_obj.ocp.wait_for_resource(
                 condition="true",
@@ -126,10 +128,12 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
                 timeout=180,
             )
             snap_obj.reload()
-        log.info("Snapshots are Ready")
+        logger.info("Snapshots are Ready")
 
         # Restore snapshots
-        log.info("Restoring snapshots to create new PVCs")
+        logger.test_step(
+            "Restore snapshots to create new PVCs with different access modes"
+        )
         restore_pvcs = []
         for snap_obj in snap_objs:
             access_modes = access_modes_dict[snap_obj.interface][
@@ -144,26 +148,30 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
                 )
                 restore_obj.interface = snap_obj.interface
                 restore_obj.md5sum = snap_obj.md5sum
-                log.info(
+                logger.debug(
                     f"Created PVC {restore_obj.name} with accessMode "
                     f"{access_mode} from snapshot {snap_obj.name}. "
                     f"Parent PVC accessMode: {snap_obj.parent_access_mode}"
                 )
                 restore_pvcs.append(restore_obj)
-        log.info(
+        logger.info(
             "Restored all the snapshots to create PVCs with different access modes"
         )
 
-        log.info("Verifying restored PVCs are Bound")
+        logger.test_step("Verify restored PVCs are Bound and volume modes match")
         for pvc_obj in restore_pvcs:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=480
             )
             pvc_obj.reload()
-        log.info("Verified: Restored PVCs are Bound")
+        logger.info("Verified: Restored PVCs are Bound")
 
-        # Verify restored PVC volume mode"
+        # Verify restored PVC volume mode
         for pvc_obj in restore_pvcs:
+            logger.assertion(
+                f"PVC {pvc_obj.name} volume mode: expected='{pvc_obj.snapshot.parent_volume_mode}', "
+                f"actual='{pvc_obj.data['spec']['volumeMode']}'"
+            )
             assert (
                 pvc_obj.data["spec"]["volumeMode"]
                 == pvc_obj.snapshot.parent_volume_mode
@@ -173,7 +181,7 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
         nodes_iter = cycle(node.get_worker_nodes())
 
         # Attach the restored PVCs to pods
-        log.info("Attach the restored PVCs to pods")
+        logger.test_step(f"Attach {len(restore_pvcs)} restored PVCs to pods")
         restore_pod_objs = []
         for pvc_obj in restore_pvcs:
             if pvc_obj.data["spec"]["volumeMode"] == "Block":
@@ -196,19 +204,20 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
                     raw_block_pv=pvc_obj.data["spec"]["volumeMode"] == "Block",
                     pvc_read_only_mode=pvc_read_only_mode,
                 )
-                log.info(
+                logger.debug(
                     f"Attaching the PVC {pvc_obj.name} to pod "
                     f"{restore_pod_obj.name}"
                 )
                 restore_pod_objs.append(restore_pod_obj)
 
         # Verify the new pods are running
-        log.info("Verify the new pods are running")
+        logger.test_step("Verify restored pods reach Running state")
         for pod_obj in restore_pod_objs:
             helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
-        log.info("Verified: New pods are running")
+        logger.info("Verified: New pods are running")
 
         # Verify md5sum
+        logger.test_step("Verify data integrity via md5sum on restored pods")
         for pod_obj in restore_pod_objs:
             if pod_obj.pvc.get_pvc_access_mode != constants.ACCESS_MODE_ROX:
                 file_name_pod = (
@@ -226,8 +235,8 @@ class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
                     pod_obj.pvc.data["spec"]["volumeMode"]
                     == constants.VOLUME_MODE_BLOCK,
                 )
-                log.info(
+                logger.debug(
                     f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
                     "matches the original md5sum"
                 )
-        log.info("Data integrity check passed on all pods")
+        logger.info("Data integrity check passed on all pods")

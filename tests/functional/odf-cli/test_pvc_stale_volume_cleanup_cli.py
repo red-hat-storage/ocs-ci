@@ -44,10 +44,11 @@ class TestSubvolumesCommand(ManageTest):
         6. No stale volumes should be present of the deleted PVC.
         """
 
+        logger.test_step("List initial subvolumes and create PVC with retain strategy")
         output = self.odf_cli_runner.run_command("subvolume ls")
 
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
-        logger.info(f"{inital_subvolume_list=}")
+        logger.debug(f"{inital_subvolume_list=}")
         cephfs_sc_obj = storageclass_factory(
             interface=constants.CEPHFILESYSTEM,
             reclaim_policy=constants.RECLAIM_POLICY_RETAIN,
@@ -60,14 +61,19 @@ class TestSubvolumesCommand(ManageTest):
             status=constants.STATUS_BOUND,
         )
 
+        logger.test_step("Verify new PVC subvolume was created")
         output = self.odf_cli_runner.run_command("subvolume ls")
         later_subvolume_list = self.parse_subvolume_ls_output(output)
         new_pvc_list = list(set(later_subvolume_list) - set(inital_subvolume_list))
+        logger.assertion(
+            f"New PVC subvolumes found: expected='>0', actual='{len(new_pvc_list)}'"
+        )
         assert new_pvc_list, "No New PVC found in the cluster."
         new_pvc = new_pvc_list[0]
         logger.info(f"{new_pvc=}")
 
-        # Deleteting PVC and SC
+        # Deleting PVC and SC
+        logger.test_step("Delete PVC/SC and clean up stale subvolumes")
         cephfs_sc_obj.delete()
         pvc_obj.delete()
 
@@ -77,8 +83,12 @@ class TestSubvolumesCommand(ManageTest):
         )
 
         # Checking for stale volumes
+        logger.test_step("Verify no stale volumes remain")
         output = self.odf_cli_runner.run_command("subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
+        logger.assertion(
+            f"Stale volume count: expected='0', actual='{len(stale_volumes)}'"
+        )
         assert len(stale_volumes) == 0  # No stale volumes available
 
     def parse_subvolume_ls_output(self, output):
@@ -116,9 +126,10 @@ class TestSubvolumesCommand(ManageTest):
         6. No stale volumes should be present of the deleted PVC.
         """
 
+        logger.test_step("List initial subvolumes and create PVC with retain strategy")
         output = self.odf_cli_runner.run_command("subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
-        logger.info(f"{inital_subvolume_list=}")
+        logger.debug(f"{inital_subvolume_list=}")
         cephfs_sc_obj = storageclass_factory(
             interface=constants.CEPHFILESYSTEM,
             reclaim_policy=constants.RECLAIM_POLICY_RETAIN,
@@ -133,7 +144,7 @@ class TestSubvolumesCommand(ManageTest):
         )
 
         # Taking snapshot of pvc
-        logger.info("Taking Snapshot of the PVC")
+        logger.test_step("Create snapshot and restore as ROX PVC")
         snapshot_obj = snapshot_factory(pvc_obj, wait=False)
         logger.info("Verify snapshots moved from false state to true state")
 
@@ -148,6 +159,7 @@ class TestSubvolumesCommand(ManageTest):
             timeout=300,
         )
 
+        logger.test_step("Verify new subvolume created and delete all resources")
         output = self.odf_cli_runner.run_command("subvolume ls")
         later_subvolume_list = self.parse_subvolume_ls_output(output)
         old = set(inital_subvolume_list)
@@ -155,7 +167,7 @@ class TestSubvolumesCommand(ManageTest):
         new_pvc = list(new.difference(old))[0]
         logger.info(f"{new_pvc=}")
 
-        # Deleteting original PVC, SC, snapshot created by pvc, pv created by pvc and ROX PVC
+        # Deleting original PVC, SC, snapshot created by pvc, pv created by pvc and ROX PVC
         snapshot_obj.delete(wait=True)
         pv_created_by_original_pvc = pvc_obj.backed_pv_obj
         pvc_obj.delete(wait=True)
@@ -173,8 +185,12 @@ class TestSubvolumesCommand(ManageTest):
         )
 
         # Checking for stale volumes
+        logger.test_step("Verify no stale volumes remain after cleanup")
         output = self.odf_cli_runner.run_command("subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
+        logger.assertion(
+            f"Stale volume count: expected='0', actual='{len(stale_volumes)}'"
+        )
         assert len(stale_volumes) == 0  # No stale volumes available
 
     @skipif_ocs_version("<4.17")
@@ -198,9 +214,12 @@ class TestSubvolumesCommand(ManageTest):
         8. No stale volumes should be present of the deleted PVC and its snapshot.
         """
 
+        logger.test_step(
+            "List initial subvolumes and create PVC with retain strategy and snapshot"
+        )
         output = self.odf_cli_runner.run_command("subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
-        logger.info(f"{inital_subvolume_list=}")
+        logger.debug(f"{inital_subvolume_list=}")
         cephfs_sc_obj = storageclass_factory(
             interface=constants.CEPHFILESYSTEM,
             reclaim_policy=constants.RECLAIM_POLICY_RETAIN,
@@ -226,7 +245,8 @@ class TestSubvolumesCommand(ManageTest):
         new_pvc = list(new.difference(old))[0]
         logger.info(f"{new_pvc=}")
 
-        # Deleteting original PVC, SC, snapshot created by pvc, pv created by pvc and ROX PVC
+        # Deleting original PVC, SC, pv created by pvc
+        logger.test_step("Delete source PVC and PV, verify stale-with-snapshot status")
         pv_created_by_original_pvc = pvc_obj.backed_pv_obj
         pvc_obj.delete(wait=True)
         cephfs_sc_obj.delete(wait=True)
@@ -239,9 +259,13 @@ class TestSubvolumesCommand(ManageTest):
         output = self.odf_cli_runner.run_command("subvolume ls --stale")
         stale_with_snapshot_subvolume = self.parse_subvolume_ls_output(output)[0]
         logger.info(f"{stale_with_snapshot_subvolume=}")
+        logger.assertion(
+            f"Stale volume status: expected='stale-with-snapshot', actual='{stale_with_snapshot_subvolume[3]}'"
+        )
         assert stale_with_snapshot_subvolume[3] == "stale-with-snapshot"
 
         # Delete Snapshot
+        logger.test_step("Delete snapshot and clean up stale subvolumes")
         snapshot_obj.delete(wait=True)
 
         # Deleteing stale subvolume
@@ -252,6 +276,9 @@ class TestSubvolumesCommand(ManageTest):
         # Checking for stale volumes
         output = self.odf_cli_runner.run_command("subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
+        logger.assertion(
+            f"Stale volume count: expected='0', actual='{len(stale_volumes)}'"
+        )
         assert len(stale_volumes) == 0  # No stale volumes available
 
     @skipif_ocs_version("<4.17")
@@ -273,11 +300,12 @@ class TestSubvolumesCommand(ManageTest):
         """
 
         # Get initial subvolume list
+        logger.test_step(
+            "Create PVC with CephFS storageclass and retain deletionPolicy"
+        )
         output = self.odf_cli_runner.run_command("subvolume ls")
         initial_subvolume_list = self.parse_subvolume_ls_output(output)
-        logger.info(f"Initial subvolume list: {initial_subvolume_list}")
-
-        logger.info("Creating PVC with CephFS storageclass and retain deletionPolicy")
+        logger.debug(f"Initial subvolume list: {initial_subvolume_list}")
         cephfs_sc_obj = storageclass_factory(
             interface=constants.CEPHFILESYSTEM,
             reclaim_policy=constants.RECLAIM_POLICY_RETAIN,
@@ -291,8 +319,10 @@ class TestSubvolumesCommand(ManageTest):
         )
 
         # Backup PV yaml, delete PV and remove finalizer
-        logger.info("Backing up PV yaml")
         pv_name = pvc_obj.get().get("spec").get("volumeName")
+        logger.test_step(
+            f"Back up PV yaml, delete PV '{pv_name}', and recreate with modified attributes"
+        )
         backup_file_path = None
         try:
             backup_file = tempfile.NamedTemporaryFile(
@@ -340,10 +370,10 @@ class TestSubvolumesCommand(ManageTest):
                 os.unlink(backup_file_path)
                 logger.info(f"Deleted temp backup file: {backup_file_path}")
 
-        logger.info("Checking stale subvolumes with odf-cli")
+        logger.test_step("Verify PVC subvolume is marked as in-use and not stale")
         output = self.odf_cli_runner.run_command("subvolume ls")
         current_subvolume_list = self.parse_subvolume_ls_output(output)
-        logger.info(f"Current subvolume list: {current_subvolume_list}")
+        logger.debug(f"Current subvolume list: {current_subvolume_list}")
 
         # Find the subvolume for PVC
         new_subvolumes = list(set(current_subvolume_list) - set(initial_subvolume_list))
@@ -359,6 +389,9 @@ class TestSubvolumesCommand(ManageTest):
         logger.info(f"PVC subvolume found: {pvc_subvolume}")
 
         # Verify the volume is marked as "in-use" (not stale)
+        logger.assertion(
+            f"PVC subvolume status: expected='in-use', actual='{pvc_subvolume[3]}'"
+        )
         assert (
             pvc_subvolume[3] == "in-use"
         ), f"Expected volume status to be 'in-use', but got '{pvc_subvolume[3]}'"
@@ -367,7 +400,7 @@ class TestSubvolumesCommand(ManageTest):
         # Check stale volumes - should not include created PVC's volume
         output = self.odf_cli_runner.run_command("subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
-        logger.info(f"Stale volumes: {stale_volumes}")
+        logger.debug(f"Stale volumes: {stale_volumes}")
         if pvc_subvolume is not None:
             pvc_subvolume_identifier = (
                 pvc_subvolume[0],

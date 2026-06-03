@@ -1,7 +1,6 @@
 import pytest
 import logging
 
-log = logging.getLogger(__name__)
 from ocs_ci.framework.pytest_customization.marks import green_squad, tier1
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
@@ -9,6 +8,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -39,7 +40,7 @@ class TestEncryptionConfigurationDashboard:
             .get("encryption", {})
             .get("enabled", False)
         )
-        log.info(f"Encryption details from storagecluster Spec: {self.enc_details}")
+        logger.info(f"Encryption details from storagecluster Spec: {self.enc_details}")
 
         noobaa_obj = OCP(
             kind="noobaa",
@@ -54,7 +55,7 @@ class TestEncryptionConfigurationDashboard:
             .get("connectionDetails", {})
             .get("KMS_PROVIDER", None)  # Provide a default value of None if not found
         )
-        log.info(f"Noobaa Spec has mentioned KMS: {self.noobaa_kms}")
+        logger.info(f"Noobaa Spec has mentioned KMS: {self.noobaa_kms}")
 
     def validate_encryption(
         self, context, actual_status, expected_status, error_message
@@ -67,8 +68,11 @@ class TestEncryptionConfigurationDashboard:
             expected_status (str): Encryption status shown on the dashboard.
             error_message (str): Error message to display.
         """
+        logger.assertion(
+            f"{context}: expected='{expected_status}', actual='{actual_status}'"
+        )
         assert actual_status == expected_status, error_message
-        log.info(f"{context} status is as expected: {actual_status}")
+        logger.info(f"{context} status is as expected: {actual_status}")
 
     @pytest.mark.polarion_id("OCS-6300")
     def test_file_block_encryption_configuration_dashboard(self, setup_ui_class):
@@ -81,13 +85,16 @@ class TestEncryptionConfigurationDashboard:
         """
 
         # Navigate to the block and file page
+        logger.test_step("Navigate to block and file details page")
         block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
         block_and_file_page.validate_block_and_file_tab_active()
 
         # Retrieve encryption summary from the dashboard
+        logger.test_step("Retrieve encryption summary from dashboard")
         encryption_summary = block_and_file_page.get_block_file_encryption_summary()
 
         # Validate cluster-wide encryption
+        logger.test_step("Validate cluster-wide encryption settings on dashboard")
         cluster_wide_details = self.enc_details.get("clusterWide", {})
         if isinstance(cluster_wide_details, dict):
             self.validate_encryption(
@@ -103,11 +110,12 @@ class TestEncryptionConfigurationDashboard:
                 "KMS is not mentioned in the encryption summary.",
             )
         else:
-            log.warning(
+            logger.warning(
                 "ClusterWide Encryption details are not a dictionary, skipping checks."
             )
 
         # Validate storage class encryption
+        logger.test_step("Validate storage class encryption settings on dashboard")
         storage_class_details = self.enc_details.get("storageClass", {})
         if isinstance(storage_class_details, dict):
             self.validate_encryption(
@@ -117,9 +125,12 @@ class TestEncryptionConfigurationDashboard:
                 "StorageClass encryption is not showing correctly in the dashboard.",
             )
         else:
-            log.warning("StorageClass details are not a dictionary, skipping checks.")
+            logger.warning(
+                "StorageClass details are not a dictionary, skipping checks."
+            )
 
         # Validate in-transit encryption
+        logger.test_step("Validate in-transit encryption status on dashboard")
         self.validate_encryption(
             "InTransit Encryption",
             encryption_summary["intransit_encryption"]["status"],
@@ -137,24 +148,38 @@ class TestEncryptionConfigurationDashboard:
             3. verify encryption data with the nooba and storagecluster spec.
         """
         # Navigate to the Object Storage page
+        logger.test_step("Navigate to object storage details page")
         object_details_page = PageNavigator().navigate_object_tab()
 
+        logger.test_step("Retrieve object encryption summary from dashboard")
         encryption_summary = object_details_page.get_object_encryption_summary()
-        log.info(f"Encryption Summary from page : {encryption_summary}")
+        logger.debug(f"Encryption Summary from page: {encryption_summary}")
 
         # Validate Object Encryption Summary
+        logger.test_step("Validate object encryption summary and KMS details")
+        logger.assertion(
+            f"Object storage encryption status: expected='True', "
+            f"actual='{encryption_summary['object_storage']['status']}'"
+        )
         assert encryption_summary["object_storage"][
             "status"
         ], "Object encryption summary is wrong"
 
         if bool(encryption_summary["object_storage"]["kms"]):
-            log.info("Verifying object_storage KMS status")
+            logger.info("Verifying object_storage KMS status")
+            logger.assertion(
+                f"KMS provider in object storage: expected='{self.noobaa_kms}' "
+                f"in '{encryption_summary['object_storage']['kms']}'"
+            )
             assert (
                 self.noobaa_kms.upper()
                 in encryption_summary["object_storage"]["kms"].upper()
             ), "KMS details is not correct"
 
         # Validate in-transit encryption
+        logger.test_step(
+            "Validate in-transit encryption status on object storage dashboard"
+        )
         self.validate_encryption(
             "InTransit Encryption",
             encryption_summary["intransit_encryption"]["status"],

@@ -31,7 +31,7 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @skipif_external_mode
@@ -70,73 +70,96 @@ class TestEncryptionKeyrotation:
         osd_keyrotation.set_keyrotation_defaults()
 
         # Disable keyrotation and verify its enable status at rook and storagecluster end.
-        log.info("Disabling the Keyrotation in storagecluster Spec.")
+        logger.test_step("Disable OSD keyrotation and verify disabled status")
         osd_keyrotation.disable_keyrotation()
 
+        logger.assertion(
+            f"Keyrotation disabled in storagecluster: expected='False', "
+            f"actual='{osd_keyrotation.is_keyrotation_enable()}'"
+        )
         assert (
             not osd_keyrotation.is_keyrotation_enable()
         ), "Keyrotation is Not Disable in the storagecluster object"
+        logger.assertion(
+            f"Keyrotation disabled in Rook: expected='False', actual='{osd_keyrotation.is_osd_keyrotation_enabled()}'"
+        )
         assert (
             not osd_keyrotation.is_osd_keyrotation_enabled()
         ), "KeyRotation is not Disable in the Rook Object."
 
-        # Recored existing OSD keys before rotation is happen.
+        # Record existing OSD keys before rotation is happen.
+        logger.test_step("Record existing OSD keys before rotation")
         osd_keys_before_rotation = {}
         for device in osd_keyrotation.deviceset:
             osd_keys_before_rotation[device] = osd_keyrotation.get_osd_dm_crypt(device)
 
         # Enable Keyrotation and verify its enable status at rook and storagecluster end.
-        log.info("Enabling the Keyrotation in storagecluster Spec.")
+        logger.test_step("Enable OSD keyrotation and verify enabled status")
         osd_keyrotation.enable_keyrotation()
 
+        logger.assertion(
+            f"Keyrotation enabled in storagecluster: expected='True', "
+            f"actual='{osd_keyrotation.is_keyrotation_enable()}'"
+        )
         assert (
             osd_keyrotation.is_keyrotation_enable()
         ), "Keyrotation is Not enabled in the storagecluster object"
+        logger.assertion(
+            f"Keyrotation enabled in Rook: expected='True', actual='{osd_keyrotation.is_osd_keyrotation_enabled()}'"
+        )
         assert (
             osd_keyrotation.is_osd_keyrotation_enabled()
         ), "KeyRotation is not enabled in the Rook Object."
 
         # Set Key Rotation schedule to every 3 minutes.
+        logger.test_step("Set keyrotation schedule to every 3 minutes and verify")
         schedule = "*/3 * * * *"
         osd_keyrotation.set_keyrotation_schedule(schedule)
 
         # Verify Keyrotation schedule changed at storagecluster object and rook object.
+        logger.assertion(
+            f"Keyrotation schedule in storagecluster: expected='{schedule}', "
+            f"actual='{osd_keyrotation.get_keyrotation_schedule()}'"
+        )
         assert (
             osd_keyrotation.get_keyrotation_schedule() == schedule
         ), "Keyrotation schedule is not set to 3 minutes."
+        logger.assertion(
+            f"Keyrotation schedule in Rook: expected='{schedule}', "
+            f"actual='{osd_keyrotation.get_osd_keyrotation_schedule()}'"
+        )
         assert (
             osd_keyrotation.get_osd_keyrotation_schedule() == schedule
         ), "KeyRotation is not enabled in the Rook Object."
 
-        # Wait for 3 minuted and verify the keyrotation is happen for each osd by comparing the old keys with new keys.
-        log.info(
-            "Waiting for 3 minutes to verify the keyrotation is happen for each osd."
+        # Wait for 3 minutes and verify the keyrotation is happen for each osd by comparing the old keys with new keys.
+        logger.test_step(
+            "Wait for keyrotation and verify OSD keys changed for each device"
         )
 
         @retry(UnexpectedBehaviour, tries=10, delay=20)
         def compare_old_with_new_keys():
             for device in osd_keyrotation.deviceset:
                 osd_keys_after_rotation = osd_keyrotation.get_osd_dm_crypt(device)
-                log.info(
+                logger.debug(
                     f"Fetching New Key for device {device}: {osd_keys_after_rotation}"
                 )
                 if osd_keys_before_rotation[device] == osd_keys_after_rotation:
-                    log.info(f"Keyrotation Still not happend for device {device}")
+                    logger.debug(f"Keyrotation still not happened for device {device}")
                     raise UnexpectedBehaviour(
                         f"Keyrotation is not happened for the device {device}"
                     )
-                log.info(f"Keyrotation is happend for device {device}")
+                logger.debug(f"Keyrotation happened for device {device}")
             return True
 
-        # with pytest.raises(UnexpectedBehaviour):
         try:
             compare_old_with_new_keys()
         except UnexpectedBehaviour:
-            log.error("Key rotation is Not happend after schedule is passed. ")
+            logger.exception("Key rotation did not happen after schedule passed")
             assert False
 
         # Change the keyrotation value to default.
-        log.info("Changing the keyrotation value to default.")
+        logger.test_step("Reset keyrotation schedule to default (@weekly)")
         osd_keyrotation.set_keyrotation_schedule("@weekly")
 
     @pytest.mark.polarion_id("OCS-5791")
@@ -158,6 +181,7 @@ class TestEncryptionKeyrotation:
         """
 
         # Get the noobaa object.
+        logger.test_step("Disable NooBaa keyrotation and verify disabled status")
         noobaa_keyrotation = NoobaaKeyrotation()
         noobaa_keyrotation.set_keyrotation_defaults()
 
@@ -171,24 +195,26 @@ class TestEncryptionKeyrotation:
             not noobaa_keyrotation.is_noobaa_keyrotation_enable()
         ), "Keyrotation is not disabled."
 
-        # Recoard Noobaa volume and backend keys before rotation.
+        # Record Noobaa volume and backend keys before rotation.
+        logger.test_step("Record NooBaa backend and volume keys before rotation")
         (
             old_noobaa_backend_key,
             old_noobaa_backend_secret,
         ) = noobaa_keyrotation.get_noobaa_backend_secret()
-        log.info(
-            f" Noobaa backend secrets before Rotation {old_noobaa_backend_key} : {old_noobaa_backend_secret}"
+        logger.debug(
+            f"Noobaa backend secrets before Rotation {old_noobaa_backend_key} : {old_noobaa_backend_secret}"
         )
 
         (
             old_noobaa_volume_key,
             old_noobaa_volume_secret,
         ) = noobaa_keyrotation.get_noobaa_volume_secret()
-        log.info(
+        logger.debug(
             f"Noobaa Volume secrets before Rotation {old_noobaa_volume_key} : {old_noobaa_volume_secret}"
         )
 
         # Enable Keyrotation and verify its enable status at Noobaa and storagecluster end.
+        logger.test_step("Enable NooBaa keyrotation and set schedule")
         noobaa_keyrotation.enable_keyrotation()
 
         assert (
@@ -198,11 +224,14 @@ class TestEncryptionKeyrotation:
             noobaa_keyrotation.is_noobaa_keyrotation_enable
         ), "Keyrotation is not enabled in the noobaa object."
 
-        # Set keyrotatiojn schedule to every given minutes.
+        # Set keyrotation schedule to every given minutes.
         schedule = f"*/{minutes} * * * *"
         noobaa_keyrotation.set_keyrotation_schedule(schedule)
 
         # Verify keyrotation is set for every given minute in storagecluster and noobaa object.
+        logger.test_step(
+            f"Verify keyrotation schedule is set to every {minutes} minutes"
+        )
         assert (
             noobaa_keyrotation.get_keyrotation_schedule() == schedule
         ), f"Keyrotation schedule is not set to every {minutes} minutes in storagecluster object."
@@ -210,16 +239,17 @@ class TestEncryptionKeyrotation:
             noobaa_keyrotation.get_noobaa_keyrotation_schedule() == schedule
         ), f"Keyrotation schedule is not set to every {minutes} minutes in Noobaa object."
 
+        logger.test_step("Compare old NooBaa keys with new keys after rotation")
         try:
             compare_noobaa_old_keys_with_new_keys(
                 noobaa_keyrotation, old_noobaa_backend_key, old_noobaa_volume_key
             )
         except UnexpectedBehaviour:
-            log.info("Noobaa Key Rotation is not happend.")
+            logger.warning("Noobaa Key Rotation did not happen.")
             assert False
 
         # Change the keyrotation value to default.
-        log.info("Changing the keyrotation value to default.")
+        logger.info("Changing the keyrotation value to default.")
         noobaa_keyrotation.set_keyrotation_schedule("@weekly")
 
     @pytest.mark.polarion_id("OCS-5963")
@@ -242,6 +272,7 @@ class TestEncryptionKeyrotation:
             8. Get checksum of the object after key rotation
             9. Compate old and new checksums are same.
         """
+        logger.test_step("Write test objects to bucket and sync before keyrotation")
         data_dir = test_directory_setup.origin_dir
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
@@ -263,9 +294,11 @@ class TestEncryptionKeyrotation:
         )
 
         # do noobaa keyrotation for 5 minutes
+        logger.test_step("Perform NooBaa keyrotation with 5-minute schedule")
         self.test_noobaa_keyrotation(minutes=5)
 
         # object after key rotation to be placed in seperate dir
+        logger.test_step("Sync objects after keyrotation and verify data integrity")
         awscli_pod.exec_cmd_on_pod("mkdir after_keyrotation_dir")
         sync_object_directory(
             awscli_pod,
@@ -331,6 +364,9 @@ class TestOSDKeyrotationWithKMS:
             5. Verify keyrotation operation happening for every 2 minutes.
 
         """
+        logger.test_step(
+            "Create PVCs for CephBlockPool and CephFS with multiple access modes"
+        )
         size = 5
         access_modes = {
             constants.CEPHBLOCKPOOL: [
@@ -355,6 +391,7 @@ class TestOSDKeyrotationWithKMS:
         }
 
         # Create pods for each interface
+        logger.test_step("Create pods for each interface and start IO")
         self.all_pods = []
         for interface, pvcs in pvc_objects.items():
             pods = create_pods(
@@ -365,11 +402,11 @@ class TestOSDKeyrotationWithKMS:
                 status=constants.STATUS_RUNNING,
             )
             assert pods, f"Failed to create pods for {interface}."
-            log.info(f"Created {len(pods)} pods for interface: {interface}")
+            logger.info(f"Created {len(pods)} pods for interface: {interface}")
             self.all_pods.extend(pods)
 
         # Perform I/O on all pods using ThreadPoolExecutor
-        log.info("Starting I/O operations on all pods.")
+        logger.test_step("Run IO on all pods and verify OSD keyrotation for KMS")
         with ThreadPoolExecutor() as executor:
             futures = [
                 executor.submit(
@@ -378,11 +415,12 @@ class TestOSDKeyrotationWithKMS:
                 for pod_obj in self.all_pods
             ]
 
-            log.info("Verifying OSD keyrotation for KMS.")
+            logger.info("Verifying OSD keyrotation for KMS.")
+            logger.assertion("OSD keyrotation for KMS: expected='successful rotation'")
             assert self.keyrotation.verify_osd_keyrotation_for_kms(
                 tries=6, delay=10
             ), "Failed to rotate OSD and NooBaa Keys in KMS."
-            log.info("Keyrotation verification successful.")
+            logger.info("Keyrotation verification successful.")
 
             # Wait for I/O operations to complete
             for future in futures:
@@ -428,6 +466,9 @@ class TestNoobaaKeyrotationWithKMS:
         """
 
         # Get the noobaa object.
+        logger.test_step(
+            "Disable NooBaa keyrotation with KMS and verify disabled status"
+        )
         noobaa_keyrotation = NoobaaKeyrotation()
         noobaa_keyrotation.set_keyrotation_defaults()
 
@@ -441,24 +482,26 @@ class TestNoobaaKeyrotationWithKMS:
             not noobaa_keyrotation.is_noobaa_keyrotation_enable()
         ), "Keyrotation is not disabled."
 
-        # Recoard Noobaa volume and backend keys before rotation.
+        # Record Noobaa volume and backend keys before rotation.
+        logger.test_step("Record NooBaa backend and volume keys before rotation (KMS)")
         (
             old_noobaa_backend_key,
             old_noobaa_backend_secret,
         ) = noobaa_keyrotation.get_noobaa_backend_secret(kms_deployment=True)
-        log.info(
-            f" Noobaa backend secrets before Rotation {old_noobaa_backend_key} : {old_noobaa_backend_secret}"
+        logger.debug(
+            f"Noobaa backend secrets before Rotation {old_noobaa_backend_key} : {old_noobaa_backend_secret}"
         )
 
         (
             old_noobaa_volume_key,
             old_noobaa_volume_secret,
         ) = noobaa_keyrotation.get_noobaa_volume_secret()
-        log.info(
+        logger.debug(
             f"Noobaa Volume secrets before Rotation {old_noobaa_volume_key} : {old_noobaa_volume_secret}"
         )
 
         # Enable Keyrotation and verify its enable status at Noobaa and storagecluster end.
+        logger.test_step("Enable NooBaa keyrotation with KMS and set schedule")
         noobaa_keyrotation.enable_keyrotation()
 
         assert (
@@ -468,7 +511,7 @@ class TestNoobaaKeyrotationWithKMS:
             noobaa_keyrotation.is_noobaa_keyrotation_enable
         ), "Keyrotation is not enabled in the noobaa object."
 
-        # Set keyrotatiojn schedule to every given minutes.
+        # Set keyrotation schedule to every given minutes.
         schedule = f"*/{minutes} * * * *"
         noobaa_keyrotation.set_keyrotation_schedule(schedule)
 
@@ -477,6 +520,9 @@ class TestNoobaaKeyrotationWithKMS:
         )  # adding sleep to compensate the time taken to reflect the schedule on noobaa
 
         # Verify keyrotation is set for every given minute in storagecluster and noobaa object.
+        logger.test_step(
+            f"Verify keyrotation schedule is set to every {minutes} minutes (KMS)"
+        )
         assert (
             noobaa_keyrotation.get_keyrotation_schedule() == schedule
         ), f"Keyrotation schedule is not set to every {minutes} minutes in storagecluster object."
@@ -484,16 +530,17 @@ class TestNoobaaKeyrotationWithKMS:
             noobaa_keyrotation.get_noobaa_keyrotation_schedule() == schedule
         ), f"Keyrotation schedule is not set to every {minutes} minutes in Noobaa object."
 
+        logger.test_step("Compare old NooBaa keys with new keys after rotation (KMS)")
         try:
             compare_noobaa_old_keys_with_new_keys(
                 noobaa_keyrotation, old_noobaa_backend_key, old_noobaa_volume_key
             )
         except UnexpectedBehaviour:
-            log.info("Noobaa Key Rotation is not happend.")
+            logger.warning("Noobaa Key Rotation did not happen.")
             assert False
 
         # Change the keyrotation value to default.
-        log.info("Changing the keyrotation value to default.")
+        logger.info("Changing the keyrotation value to default.")
         noobaa_keyrotation.set_keyrotation_schedule("@weekly")
 
     @pytest.mark.polarion_id("OCS-5963")
@@ -516,6 +563,9 @@ class TestNoobaaKeyrotationWithKMS:
             8. Get checksum of the object after key rotation
             9. Compate old and new checksums are same.
         """
+        logger.test_step(
+            "Write test objects to bucket and sync before keyrotation (KMS)"
+        )
         data_dir = test_directory_setup.origin_dir
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
@@ -537,9 +587,13 @@ class TestNoobaaKeyrotationWithKMS:
         )
 
         # do noobaa keyrotation for 5 minutes
+        logger.test_step("Perform NooBaa keyrotation with 5-minute schedule (KMS)")
         self.test_noobaa_keyrotation(minutes=5)
 
         # object after key rotation to be placed in seperate dir
+        logger.test_step(
+            "Sync objects after keyrotation and verify data integrity (KMS)"
+        )
         awscli_pod.exec_cmd_on_pod("mkdir after_keyrotation_dir")
         sync_object_directory(
             awscli_pod,

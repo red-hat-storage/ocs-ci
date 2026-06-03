@@ -16,7 +16,7 @@ from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.helpers import disruption_helpers
 from ocs_ci.framework import config
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -84,7 +84,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
             if self.provider_index:
                 config.switch_ctx(self.initial_cluster_index)
             assert ceph_health_check(), "Ceph cluster health is not OK"
-            log.info("Ceph cluster health is OK")
+            logger.info("Ceph cluster health is OK")
 
         request.addfinalizer(finalizer)
 
@@ -98,8 +98,7 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
         executor = ThreadPoolExecutor(max_workers=len(self.pvcs))
         disruption_ops = disruption_helpers.Disruptions()
 
-        # Run IO to fill some data
-        log.info("Running IO on all pods to fill some data before PVC expansion.")
+        logger.test_step("Run IO on all pods to fill data before PVC expansion")
         for pod_obj in self.pods:
             storage_type = "block" if pod_obj.pvc.volume_mode == "Block" else "fs"
             pod_obj.run_io(
@@ -112,15 +111,15 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
                 direct=int(storage_type == "block"),
             )
 
-        log.info("Wait for IO to complete on pods")
+        logger.info("Waiting for IO to complete on all pods")
         for pod_obj in self.pods:
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get("jobs")[0].get("error")
             assert err_count == 0, (
                 f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
             )
-            log.info(f"Verified IO on pod {pod_obj.name}.")
-        log.info("IO is successful on all pods before PVC expansion.")
+            logger.debug(f"Verified IO on pod {pod_obj.name}")
+        logger.info("IO is successful on all pods before PVC expansion")
 
         if self.provider_index is not None:
             # Switch to provider cluster context to get ceph pods
@@ -132,9 +131,13 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
         if self.provider_index is not None:
             config.switch_ctx(self.consumer_index)
 
-        log.info("Expanding all PVCs.")
+        logger.test_step(
+            f"Expand all PVCs to {pvc_size_expanded}G while deleting {resource_to_delete} pod"
+        )
         for pvc_obj in self.pvcs:
-            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}G")
+            logger.debug(
+                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}G"
+            )
             pvc_obj.expand_proc = executor.submit(
                 pvc_obj.resize_pvc, pvc_size_expanded, True
             )
@@ -142,23 +145,27 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
         # Delete the pod 'resource_to_delete'
         disruption_ops.delete_resource()
 
-        # Verify pvc expand status
+        logger.test_step("Verify PVC expansion completed successfully")
         for pvc_obj in self.pvcs:
-            assert (
-                pvc_obj.expand_proc.result()
-            ), f"Expansion failed for PVC {pvc_obj.name}"
-        log.info("PVC expansion was successful on all PVCs")
+            expand_result = pvc_obj.expand_proc.result()
+            logger.assertion(
+                f"PVC {pvc_obj.name} expansion: expected=True, actual={expand_result}"
+            )
+            assert expand_result, f"Expansion failed for PVC {pvc_obj.name}"
+        logger.info("PVC expansion was successful on all PVCs")
 
-        log.info("Verifying new size on pods.")
+        logger.test_step(
+            f"Verify expanded size {pvc_size_expanded}G is reflected on pods"
+        )
         for pod_obj in self.pods:
             if pod_obj.pvc.volume_mode == "Block":
-                log.info(
-                    f"Skipping check on pod {pod_obj.name} as volume mode is Block."
+                logger.debug(
+                    f"Skipping size check on pod {pod_obj.name} (volume mode is Block)"
                 )
                 continue
 
             # Wait for 240 seconds to reflect the change on pod
-            log.info(f"Checking pod {pod_obj.name} to verify the change.")
+            logger.debug(f"Checking pod {pod_obj.name} to verify expanded size")
             for df_out in TimeoutSampler(
                 240, 3, pod_obj.exec_cmd_on_pod, command="df -kh"
             ):
@@ -172,23 +179,21 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
                     <= pvc_size_expanded
                     and new_size_mount[-1] == "G"
                 ):
-                    log.info(
+                    logger.info(
                         f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
                         f"is reflected on pod {pod_obj.name}"
                     )
                     break
-                log.info(
-                    f"Expanded size of PVC {pod_obj.pvc.name} is not reflected"
-                    f" on pod {pod_obj.name}. New size on mount is not "
-                    f"{pvc_size_expanded}G as expected, but {new_size_mount}. "
-                    f"Checking again."
+                logger.debug(
+                    f"Expanded size of PVC {pod_obj.pvc.name} not yet reflected"
+                    f" on pod {pod_obj.name}. Current mount size: {new_size_mount},"
+                    f" expected: {pvc_size_expanded}G. Retrying."
                 )
-        log.info(
+        logger.info(
             f"Verified: Modified size {pvc_size_expanded}G is reflected on all pods."
         )
 
-        # Run IO to fill more data
-        log.info("Write more data after PVC expansion.")
+        logger.test_step("Run IO on all pods after PVC expansion to verify usability")
         for pod_obj in self.pods:
             storage_type = "block" if pod_obj.pvc.volume_mode == "Block" else "fs"
             pod_obj.run_io(
@@ -202,12 +207,12 @@ class TestResourceDeletionDuringPvcExpansion(ManageTest):
                 direct=int(storage_type == "block"),
             )
 
-        log.info("Wait for IO to complete on all pods")
+        logger.info("Waiting for IO to complete on all pods")
         for pod_obj in self.pods:
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get("jobs")[0].get("error")
             assert err_count == 0, (
                 f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
             )
-            log.info(f"Verified IO on pod {pod_obj.name}.")
-        log.info("IO is successful on all pods after PVC expansion.")
+            logger.debug(f"Verified IO on pod {pod_obj.name}")
+        logger.info("IO is successful on all pods after PVC expansion")

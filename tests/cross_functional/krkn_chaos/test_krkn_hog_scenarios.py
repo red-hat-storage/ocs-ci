@@ -27,7 +27,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
 )
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -93,7 +93,6 @@ class TestKrKnHogChaosScenarios:
         """
         scenario_dir = krkn_scenario_directory
 
-        # 🧠 HOG SCENARIO ANALYSIS
         hog_helper = HogScenarioHelper(scenario_dir=scenario_dir)
 
         # Use helper function for standardized test start logging
@@ -105,8 +104,7 @@ class TestKrKnHogChaosScenarios:
             safety_info=f"{node_type.upper()} (suitable for multi-stress testing)",
         )
 
-        # WORKLOAD SETUP
-        log.info("Setting up workloads for multi-stress testing")
+        logger.test_step("Set up workloads for multi-stress testing")
         workload_ops.setup_workloads()
 
         # Initialize helpers
@@ -117,25 +115,14 @@ class TestKrKnHogChaosScenarios:
         analyzer = KrknResultAnalyzer()
 
         try:
-            # =================================================================
-            # UNIFIED KRKN CONFIG: All stress levels in ONE configuration
-            # =================================================================
-            log.info(
-                "Creating UNIFIED Krkn configuration with multiple resource stress levels"
+            logger.test_step(
+                "Create unified Krkn configuration with multiple resource stress levels"
             )
-
-            # Create a unified Krkn configuration
             unified_config = KrknConfigGenerator()
 
-            # =================================================================
             # LEVEL 1: BASIC HOG CHAOS SCENARIOS
-            # =================================================================
-            log.info("🟢 Adding BASIC HOG CHAOS scenarios to unified config...")
-
-            # Basic settings for conservative resource hog
             basic_duration = 90  # Conservative duration
-            log.info(f"   • Basic duration: {basic_duration}s")
-            log.info("   • Basic approach: CONSERVATIVE")
+            logger.debug(f"Basic duration: {basic_duration}s, approach: CONSERVATIVE")
 
             # Create and add basic hog scenarios
             basic_scenarios = []
@@ -158,17 +145,11 @@ class TestKrKnHogChaosScenarios:
             basic_scenarios.append(basic_memory)
             unified_config.add_scenario("hog_scenarios", basic_memory)
 
-            log.info(f"Added {len(basic_scenarios)} BASIC hog chaos scenarios")
+            logger.info(f"Added {len(basic_scenarios)} BASIC hog chaos scenarios")
 
-            # =================================================================
             # LEVEL 2: STRENGTH TESTING SCENARIOS
-            # =================================================================
-            log.info("Adding STRENGTH TESTING hog scenarios to unified config")
-
-            # Strength settings for moderate resource stress
             strength_duration = 150  # Moderate duration
-            log.info(f"   • Strength duration: {strength_duration}s")
-            log.info("   • Strength approach: MODERATE")
+            logger.debug(f"Strength duration: {strength_duration}s, approach: MODERATE")
 
             # Create and add strength hog scenarios using helper method
             strength_scenarios = hog_helper.create_strength_test_scenarios(
@@ -180,17 +161,13 @@ class TestKrKnHogChaosScenarios:
             for scenario in strength_scenarios:
                 unified_config.add_scenario("hog_scenarios", scenario)
 
-            log.info(f"Added {len(strength_scenarios)} STRENGTH testing hog scenarios")
+            logger.info(
+                f"Added {len(strength_scenarios)} STRENGTH testing hog scenarios"
+            )
 
-            # =================================================================
             # LEVEL 3: MAXIMUM HOG CHAOS SCENARIOS
-            # =================================================================
-            log.info("🔴 Adding MAXIMUM HOG CHAOS scenarios to unified config...")
-
-            # Maximum settings for ultimate resource exhaustion
             max_duration = 240  # Extended duration
-            log.info(f"   • Maximum duration: {max_duration}s")
-            log.info("   • Maximum approach: ULTIMATE_CHAOS")
+            logger.debug(f"Maximum duration: {max_duration}s, approach: ULTIMATE_CHAOS")
 
             # Create and add maximum chaos hog scenarios
             max_scenarios = hog_helper.create_strength_test_scenarios(
@@ -202,20 +179,17 @@ class TestKrKnHogChaosScenarios:
             for scenario in max_scenarios:
                 unified_config.add_scenario("hog_scenarios", scenario)
 
-            log.info(f"Added {len(max_scenarios)} MAXIMUM hog chaos scenarios")
+            logger.info(f"Added {len(max_scenarios)} MAXIMUM hog chaos scenarios")
 
-            # =================================================================
-            # UNIFIED EXECUTION: Single Krkn run with ALL scenarios
-            # =================================================================
+            logger.test_step("Execute unified multi-stress hog chaos configuration")
             total_scenarios = (
                 len(basic_scenarios) + len(strength_scenarios) + len(max_scenarios)
             )
-            log.info("Executing unified multi-stress hog chaos configuration")
-            log.info(f"   • Total scenarios in config: {total_scenarios}")
-            log.info(f"   • Basic scenarios: {len(basic_scenarios)}")
-            log.info(f"   • Strength scenarios: {len(strength_scenarios)}")
-            log.info(f"   • Maximum scenarios: {len(max_scenarios)}")
-            log.info("   • Execution mode: UNIFIED (all scenarios together)")
+            logger.info(
+                f"Executing unified config: {total_scenarios} total scenarios "
+                f"(basic={len(basic_scenarios)}, strength={len(strength_scenarios)}, "
+                f"max={len(max_scenarios)})"
+            )
 
             # Configure and write Krkn configuration to file
             unified_config.set_tunings(wait_duration=60, iterations=1)
@@ -227,7 +201,7 @@ class TestKrKnHogChaosScenarios:
             krkn_runner.wait_for_completion(check_interval=60)
             chaos_output = krkn_runner.get_chaos_data()
 
-            log.info("Unified multi-stress hog chaos execution completed")
+            logger.info("Unified multi-stress hog chaos execution completed")
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
@@ -238,19 +212,14 @@ class TestKrKnHogChaosScenarios:
             )
             raise
         except Exception as e:
-            log.error(f"❌ Multi-stress hog chaos failed for {node_type}: {e}")
+            logger.exception(f"Multi-stress hog chaos failed for {node_type}: {e}")
             raise
         finally:
             # Cleanup workloads
             workload_ops.validate_and_cleanup()
 
-        # =================================================================
-        # UNIFIED RESULTS ANALYSIS
-        # =================================================================
-        log.info("MULTI-STRESS HOG CHAOS RESULTS:")
-        log.info("=" * 60)
+        logger.test_step("Analyze unified multi-stress hog chaos results")
 
-        # Analyze overall results from unified execution
         total_executed, successful_executed, failing_executed = (
             analyzer.analyze_chaos_results(
                 chaos_output, node_type, detail_level="detailed"
@@ -261,18 +230,15 @@ class TestKrKnHogChaosScenarios:
             (successful_executed / total_executed * 100) if total_executed > 0 else 0
         )
 
-        log.info("🎯 UNIFIED EXECUTION RESULTS:")
-        log.info(f"   • Total scenarios executed: {total_executed}")
-        log.info(f"   • Successful scenarios: {successful_executed}")
-        log.info(f"   • Failed scenarios: {failing_executed}")
-        log.info(f"   • Overall success rate: {overall_success_rate:.1f}%")
-        log.info("=" * 60)
-
-        # Detailed breakdown by stress level (estimated based on scenario counts)
-        log.info("📈 STRESS LEVEL BREAKDOWN (Estimated):")
-        log.info(f"   🟢 Basic scenarios: {len(basic_scenarios)} configured")
-        log.info(f"Strength scenarios: {len(strength_scenarios)} configured")
-        log.info(f"   🔴 Maximum scenarios: {len(max_scenarios)} configured")
+        logger.info(
+            f"Unified execution results: total={total_executed}, "
+            f"successful={successful_executed}, failed={failing_executed}, "
+            f"success_rate={overall_success_rate:.1f}%"
+        )
+        logger.debug(
+            f"Stress level breakdown: basic={len(basic_scenarios)}, "
+            f"strength={len(strength_scenarios)}, max={len(max_scenarios)} configured"
+        )
 
         # Validate overall success rate
         min_success_rate = 70  # Hog chaos testing should maintain good success rate
@@ -291,23 +257,19 @@ class TestKrKnHogChaosScenarios:
             min_success_rate,
         )
 
-        # Final health check
+        logger.test_step("Perform final Ceph health check")
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             "cluster", "multi-stress hog chaos"
         )
+        logger.assertion(
+            f"Ceph crashes after hog chaos: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🏆 Multi-stress hog chaos testing for {node_type} nodes "
-            f"completed successfully!"
-        )
-        log.info(
-            f"   System handled ALL resource stress levels in unified execution "
-            f"with {overall_success_rate:.1f}% success rate"
-        )
-        log.info(
-            f"   ✨ Unified configuration approach: {total_scenarios} scenarios "
-            f"in single Krkn run!"
+        logger.info(
+            f"Multi-stress hog chaos testing for {node_type} nodes completed successfully. "
+            f"System handled all resource stress levels with {overall_success_rate:.1f}% success rate. "
+            f"Unified configuration: {total_scenarios} scenarios in single Krkn run."
         )
 
     @pytest.mark.parametrize(
@@ -373,8 +335,7 @@ class TestKrKnHogChaosScenarios:
             config_info="UNIFIED Krkn config with EXTREME stress levels",
         )
 
-        # WORKLOAD SETUP
-        log.info("Setting up workloads for extreme testing")
+        logger.test_step("Set up workloads for extreme testing")
         workload_ops.setup_workloads()
 
         # Initialize helpers
@@ -385,23 +346,19 @@ class TestKrKnHogChaosScenarios:
         analyzer = KrknResultAnalyzer()
 
         try:
-            # =================================================================
-            # UNIFIED EXTREME KRKN CONFIG: All extreme scenarios in ONE configuration
-            # =================================================================
-            log.info(
-                f"Creating UNIFIED Krkn configuration with {stress_level.upper()} stress levels"
+            logger.test_step(
+                f"Create unified Krkn configuration with {stress_level.upper()} stress levels"
             )
-
-            # Create a unified Krkn configuration
             unified_config = KrknConfigGenerator()
 
             # Calculate extreme durations based on multipliers (capped at 5 minutes)
             base_duration = 120
             extreme_duration = min(300, base_duration * duration_multiplier)
 
-            log.info(f"   • Base duration: {base_duration}s")
-            log.info(f"   • Extreme duration: {extreme_duration}s")
-            log.info(f"   • Approach: {stress_level.upper()}_CHAOS")
+            logger.debug(
+                f"Base duration: {base_duration}s, extreme duration: {extreme_duration}s, "
+                f"approach: {stress_level.upper()}_CHAOS"
+            )
 
             # Create extreme scenarios using strength test scenarios
             extreme_scenarios = hog_helper.create_strength_test_scenarios(
@@ -412,19 +369,17 @@ class TestKrKnHogChaosScenarios:
             for scenario in extreme_scenarios:
                 unified_config.add_scenario("hog_scenarios", scenario)
 
-            log.info(
+            logger.info(
                 f"Added {len(extreme_scenarios)} {stress_level.upper()} chaos scenarios"
             )
 
-            # =================================================================
-            # UNIFIED EXECUTION: Single Krkn run with ALL extreme scenarios
-            # =================================================================
-            log.info(f"Executing unified {stress_level.upper()} chaos configuration")
-            log.info(f"   • Total scenarios in config: {len(extreme_scenarios)}")
-            log.info(f"   • Stress level: {stress_level.upper()}")
-            log.info(f"   • Duration multiplier: {duration_multiplier}x")
-            log.info(f"   • Intensity multiplier: {intensity_multiplier}x")
-            log.info("   • Execution mode: UNIFIED (all scenarios together)")
+            logger.test_step(
+                f"Execute unified {stress_level.upper()} chaos configuration"
+            )
+            logger.info(
+                f"Executing {len(extreme_scenarios)} {stress_level.upper()} scenarios "
+                f"(duration_multiplier={duration_multiplier}x, intensity_multiplier={intensity_multiplier}x)"
+            )
 
             # Configure and write Krkn configuration to file
             unified_config.set_tunings(wait_duration=60, iterations=1)
@@ -436,7 +391,7 @@ class TestKrKnHogChaosScenarios:
             krkn_runner.wait_for_completion(check_interval=60)
             chaos_output = krkn_runner.get_chaos_data()
 
-            log.info(f"Unified {stress_level.upper()} chaos execution completed")
+            logger.info(f"Unified {stress_level.upper()} chaos execution completed")
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
@@ -447,19 +402,18 @@ class TestKrKnHogChaosScenarios:
             )
             raise
         except Exception as e:
-            log.error(f"❌ {stress_level.upper()} cluster strength testing failed: {e}")
+            logger.exception(
+                f"{stress_level.upper()} cluster strength testing failed: {e}"
+            )
             raise
         finally:
             # Cleanup workloads
             workload_ops.validate_and_cleanup()
 
-        # =================================================================
-        # UNIFIED RESULTS ANALYSIS
-        # =================================================================
-        log.info(f"{stress_level.upper()} CLUSTER STRENGTH TESTING RESULTS:")
-        log.info("=" * 60)
+        logger.test_step(
+            f"Analyze {stress_level.upper()} cluster strength testing results"
+        )
 
-        # Analyze overall results from unified execution
         total_executed, successful_executed, failing_executed = (
             analyzer.analyze_chaos_results(
                 chaos_output, stress_level, detail_level="detailed"
@@ -470,20 +424,14 @@ class TestKrKnHogChaosScenarios:
             (successful_executed / total_executed * 100) if total_executed > 0 else 0
         )
 
-        log.info("🎯 UNIFIED EXECUTION RESULTS:")
-        log.info(f"   • Total scenarios executed: {total_executed}")
-        log.info(f"   • Successful scenarios: {successful_executed}")
-        log.info(f"   • Failed scenarios: {failing_executed}")
-        log.info(f"   • Overall success rate: {overall_success_rate:.1f}%")
-        log.info("=" * 60)
-
-        # Detailed breakdown by stress level
-        log.info("📈 EXTREME STRESS BREAKDOWN:")
-        log.info(
-            f"   🚨 {stress_level.upper()} scenarios: {len(extreme_scenarios)} configured"
+        logger.info(
+            f"Execution results: total={total_executed}, successful={successful_executed}, "
+            f"failed={failing_executed}, success_rate={overall_success_rate:.1f}%"
         )
-        log.info(f"   ⚡ Duration multiplier: {duration_multiplier}x")
-        log.info(f"   🔥 Intensity multiplier: {intensity_multiplier}x")
+        logger.debug(
+            f"Stress breakdown: {len(extreme_scenarios)} {stress_level.upper()} scenarios, "
+            f"duration_multiplier={duration_multiplier}x, intensity_multiplier={intensity_multiplier}x"
+        )
 
         # Validate overall success rate (lower threshold for extreme testing)
         if stress_level == "apocalypse":
@@ -508,20 +456,17 @@ class TestKrKnHogChaosScenarios:
             min_success_rate,
         )
 
-        # Final health check
+        logger.test_step("Perform final Ceph health check")
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             "cluster", f"{stress_level} cluster strength testing"
         )
+        logger.assertion(
+            f"Ceph crashes after extreme testing: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🏆 {stress_level.upper()} cluster strength testing completed successfully!"
-        )
-        log.info(
-            f"   Cluster survived {stress_level.upper()} resource exhaustion "
-            f"with {overall_success_rate:.1f}% success rate"
-        )
-        log.info(
-            f"   ✨ Unified configuration approach: {len(extreme_scenarios)} scenarios "
-            f"in single Krkn run!"
+        logger.info(
+            f"{stress_level.upper()} cluster strength testing completed successfully. "
+            f"Cluster survived with {overall_success_rate:.1f}% success rate. "
+            f"Unified configuration: {len(extreme_scenarios)} scenarios in single Krkn run."
         )

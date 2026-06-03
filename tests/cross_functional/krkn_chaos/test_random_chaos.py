@@ -26,7 +26,7 @@ from ocs_ci.krkn_chaos.krknclt_helper import (
 )
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # DFBUGS-6519: exclude only the plan node service-disruption-scenarios_* (name
 # service-disruption-scenarios, LABEL_SELECTOR ""). Do not use the broad
@@ -89,8 +89,8 @@ class TestKrKnctlRandomChaos:
             max_parallel=max_parallel,
         )
 
-        # Generate random plan file (before workload)
-        log.info(
+        logger.test_step("Generate random plan file")
+        logger.info(
             "Generating random plan file (exclude=%s, exclude_bases_exact=%s)",
             DEFAULT_EXCLUDE_SCENARIOS,
             DEFAULT_EXCLUDE_SCENARIO_BASES_EXACT,
@@ -103,10 +103,9 @@ class TestKrKnctlRandomChaos:
         )
         generator.generate()
         plan_path = generator.plan_path
-        log.info("Using plan file: %s", plan_path)
+        logger.info("Using plan file: %s", plan_path)
 
-        # WORKLOAD SETUP - Start workloads and background cluster operations
-        log.info("Setting up workloads for krknctl random chaos")
+        logger.test_step("Set up workloads and execute krknctl random chaos")
         workload_ops.setup_workloads()
 
         run_krknctl_chaos_and_validate(
@@ -117,7 +116,7 @@ class TestKrKnctlRandomChaos:
             failure_context="krknctl random run",
             validation_failure_context="krknctl-random",
         )
-        log.info(
+        logger.info(
             "krknctl random chaos test completed successfully (max_parallel=%s)",
             max_parallel,
         )
@@ -158,7 +157,7 @@ class TestKrKnctlRandomChaos:
         )
 
         node_template_vars = build_krknctl_node_scenario_template_vars()
-        log.info(
+        logger.info(
             f"Generating krknctl plan (include={KRKNCTL_RANDOM_NODE_SCENARIO_BASES}, "
             f"cloud_type={node_template_vars.get('cloud_type')})"
         )
@@ -170,9 +169,9 @@ class TestKrKnctlRandomChaos:
         )
         generator.generate()
         plan_path = generator.plan_path
-        log.info(f"Using plan file: {plan_path}")
+        logger.info(f"Using plan file: {plan_path}")
 
-        log.info("Setting up workloads for krknctl random node-scenarios chaos")
+        logger.info("Setting up workloads for krknctl random node-scenarios chaos")
         workload_ops.setup_workloads()
 
         run_krknctl_chaos_and_validate(
@@ -183,7 +182,7 @@ class TestKrKnctlRandomChaos:
             failure_context="krknctl random node-scenarios run",
             validation_failure_context="krknctl-random-node-scenarios",
         )
-        log.info(
+        logger.info(
             f"krknctl random node-scenarios test completed (max_parallel={max_parallel})"
         )
 
@@ -217,7 +216,7 @@ class TestKrKnctlRandomChaos:
         )
 
         kv_template_vars = build_krknctl_kubevirt_outage_template_vars()
-        log.info(
+        logger.info(
             "Generating krknctl plan (include=%s, namespace=%s, vm=%s)",
             KRKNCTL_RANDOM_KUBEVIRT_OUTAGE_SCENARIO_BASES,
             kv_template_vars.get("kubevirt_namespace"),
@@ -231,9 +230,9 @@ class TestKrKnctlRandomChaos:
         )
         generator.generate()
         plan_path = generator.plan_path
-        log.info("Using plan file: %s", plan_path)
+        logger.info("Using plan file: %s", plan_path)
 
-        log.info("Setting up workloads for krknctl random kubevirt-outage chaos")
+        logger.info("Setting up workloads for krknctl random kubevirt-outage chaos")
         workload_ops.setup_workloads()
 
         run_krknctl_chaos_and_validate(
@@ -244,7 +243,7 @@ class TestKrKnctlRandomChaos:
             failure_context="krknctl random kubevirt-outage run",
             validation_failure_context="krknctl-random-kubevirt-outage",
         )
-        log.info(
+        logger.info(
             "krknctl random kubevirt-outage test completed (max_parallel=%s)",
             max_parallel,
         )
@@ -278,7 +277,7 @@ class TestKrKnctlRandomChaos:
         )
 
         time_template_vars = build_krknctl_time_scenario_template_vars()
-        log.info(
+        logger.info(
             f"Generating krknctl plan (include={KRKNCTL_RANDOM_TIME_SCENARIO_BASES}, "
             f"action={time_template_vars.get('time_action')}, "
             f"label={time_template_vars.get('time_label_selector')})"
@@ -291,9 +290,9 @@ class TestKrKnctlRandomChaos:
         )
         generator.generate()
         plan_path = generator.plan_path
-        log.info(f"Using plan file: {plan_path}")
+        logger.info(f"Using plan file: {plan_path}")
 
-        log.info("Setting up workloads for krknctl random time-scenarios chaos")
+        logger.info("Setting up workloads for krknctl random time-scenarios chaos")
         workload_ops.setup_workloads()
 
         run_krknctl_chaos_and_validate(
@@ -304,7 +303,7 @@ class TestKrKnctlRandomChaos:
             failure_context="krknctl random time-scenarios run",
             validation_failure_context="krknctl-random-time-scenarios",
         )
-        log.info(
+        logger.info(
             f"krknctl random time-scenarios test completed (max_parallel={max_parallel})"
         )
 
@@ -371,13 +370,13 @@ class TestKrKnctlServiceDisruption:
         )
         generator.generate()
         plan_path = generator.plan_path
-        log.info(
+        logger.info(
             "Using plan file: %s (labels=%s)",
             plan_path,
             [label.split("=", 1)[1] for label in APPLICATION_OUTAGES_APP_LABELS],
         )
 
-        log.info("Setting up workloads for service disruption test")
+        logger.info("Setting up workloads for service disruption test")
         workload_ops.setup_workloads()
 
         run_krknctl_chaos_and_validate(
@@ -388,7 +387,7 @@ class TestKrKnctlServiceDisruption:
             failure_context="krknctl service disruption",
             validation_failure_context="krknctl-service-disruption",
         )
-        log.info(
+        logger.info(
             "service disruption test completed successfully (all labels, max_parallel=%s)",
             max_parallel,
         )

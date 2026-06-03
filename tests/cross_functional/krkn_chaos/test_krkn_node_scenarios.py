@@ -32,7 +32,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
 )
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -79,8 +79,7 @@ class TestKrknNodeScenarios:
         )
         analyzer = KrknResultAnalyzer()
 
-        # Setup workloads
-        log.info(f"Setting up workloads for {cloud_type} node scenarios")
+        logger.test_step(f"Set up workloads for {cloud_type} node scenarios")
         workload_ops.setup_workloads()
 
         # Iterate through instance counts of 1, 2, and 3
@@ -106,7 +105,7 @@ class TestKrknNodeScenarios:
                         scenario_dir=scenario_dir, instance_count=instance_count
                     )
 
-                    log.info(
+                    logger.info(
                         f"Generated {cloud_type} node scenario file with "
                         f"instance_count={instance_count}: {scenario_file}"
                     )
@@ -119,7 +118,7 @@ class TestKrknNodeScenarios:
                     krkn_config.write_to_file(location=scenario_dir)
 
                     # Execute Krkn
-                    log.info(
+                    logger.info(
                         f"Executing {cloud_type} node scenarios on {platform} with instance_count={instance_count}"
                     )
                     krkn_runner = KrKnRunner(krkn_config.global_config)
@@ -127,7 +126,7 @@ class TestKrknNodeScenarios:
                     krkn_runner.wait_for_completion(check_interval=60)
                     chaos_output = krkn_runner.get_chaos_data()
 
-                    log.info(
+                    logger.info(
                         f"{cloud_type} node scenarios execution completed for instance_count={instance_count}"
                     )
 
@@ -161,9 +160,13 @@ class TestKrknNodeScenarios:
                         "cluster",
                         f"{cloud_type} node scenarios (instance_count={instance_count})",
                     )
+                    logger.assertion(
+                        f"Ceph crashes after node scenarios (instance_count={instance_count}): "
+                        f"expected=None, actual={'None' if no_crashes else crash_details}"
+                    )
                     assert no_crashes, crash_details
 
-                    log.info(
+                    logger.info(
                         f"{cloud_type} node scenarios completed successfully for instance_count={instance_count}"
                     )
 
@@ -176,27 +179,24 @@ class TestKrknNodeScenarios:
                     )
                     raise
                 except Exception as e:
-                    log.error(
+                    logger.exception(
                         f"{cloud_type} node scenarios failed on {platform} for instance_count={instance_count}: {e}"
                     )
                     raise
 
             # Summary log for all iterations
-            log.info(f"\n{'='*80}")
-            log.info(
-                f"SUMMARY: {cloud_type} node scenarios completed for all instance counts"
+            logger.info(
+                f"Summary: {cloud_type} node scenarios completed for all instance counts"
             )
-            log.info(f"{'='*80}")
             for result in all_results:
-                log.info(
+                logger.debug(
                     f"Instance Count {result['instance_count']}: "
                     f"Total={result['total_executed']}, "
                     f"Successful={result['successful_executed']}, "
                     f"Failed={result['failing_executed']}"
                 )
-            log.info(f"{'='*80}")
 
-            log.info(
+            logger.info(
                 f"{cloud_type} node scenarios completed successfully on {platform} for all instance counts"
             )
 
@@ -255,8 +255,7 @@ class TestKrknNodeScenarios:
         )
         analyzer = KrknResultAnalyzer()
 
-        # Setup workloads
-        log.info(f"Setting up workloads for {action}")
+        logger.test_step(f"Set up workloads for {action}")
         workload_ops.setup_workloads()
 
         try:
@@ -306,7 +305,7 @@ class TestKrknNodeScenarios:
                 scenarios=[scenario_params],
             )
 
-            log.info(f"Generated node scenario file: {scenario_file}")
+            logger.info(f"Generated node scenario file: {scenario_file}")
 
             # Add scenario to Krkn config
             krkn_config.add_scenario("node_scenarios", scenario_file)
@@ -316,13 +315,13 @@ class TestKrknNodeScenarios:
             krkn_config.write_to_file(location=scenario_dir)
 
             # Execute Krkn
-            log.info(f"Executing {action} on {platform} ({cloud_type})")
+            logger.info(f"Executing {action} on {platform} ({cloud_type})")
             krkn_runner = KrKnRunner(krkn_config.global_config)
             krkn_runner.run_async()
             krkn_runner.wait_for_completion(check_interval=60)
             chaos_output = krkn_runner.get_chaos_data()
 
-            log.info(f"{action} execution completed")
+            logger.info(f"{action} execution completed")
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
@@ -330,7 +329,7 @@ class TestKrknNodeScenarios:
             )
             raise
         except Exception as e:
-            log.error(f"{action} failed on {platform}: {e}")
+            logger.exception(f"{action} failed on {platform}: {e}")
             raise
         finally:
             workload_ops.validate_and_cleanup()
@@ -347,11 +346,14 @@ class TestKrknNodeScenarios:
             total_executed, successful_executed, platform, action
         )
 
-        # Check Ceph health
+        logger.test_step("Check Ceph health after node action")
         no_crashes, crash_details = health_helper.check_ceph_crashes("cluster", action)
+        logger.assertion(
+            f"Ceph crashes after {action}: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(f"{action} completed successfully on {platform} ({cloud_type})")
+        logger.info(f"{action} completed successfully on {platform} ({cloud_type})")
 
 
 @green_squad
@@ -457,6 +459,9 @@ class TestKrknAWSNodeScenarios:
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             "cluster", "aws node stop/start"
         )
+        logger.assertion(
+            f"Ceph crashes after AWS node stop/start: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
 
@@ -546,6 +551,9 @@ class TestKrknIBMCloudNodeScenarios:
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             "cluster", "IBM Cloud node scenarios"
         )
+        logger.assertion(
+            f"Ceph crashes after IBM Cloud scenarios: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
 
@@ -628,6 +636,9 @@ class TestKrknVMwareNodeScenarios:
 
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             "cluster", "VMware node scenarios"
+        )
+        logger.assertion(
+            f"Ceph crashes after VMware scenarios: expected=None, actual={'None' if no_crashes else crash_details}"
         )
         assert no_crashes, crash_details
 
@@ -727,5 +738,8 @@ class TestKrknBaremetalNodeScenarios:
 
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             "cluster", "BareMetal node scenarios"
+        )
+        logger.assertion(
+            f"Ceph crashes after BareMetal scenarios: expected=None, actual={'None' if no_crashes else crash_details}"
         )
         assert no_crashes, crash_details

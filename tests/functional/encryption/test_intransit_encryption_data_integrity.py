@@ -18,7 +18,7 @@ from ocs_ci.ocs.constants import STATUS_BOUND, CEPHBLOCKPOOL
 
 from ocs_ci.framework import config
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -52,6 +52,7 @@ class TestDataIntegrityWithInTransitEncryption:
         7. Wait for the storage cluster to become ready.
         8. Check for IO errors and data corruption errors in the fio logs.
         """
+        logger.test_step("Verify in-transit encryption is configured on the cluster")
         if not get_in_transit_encryption_config_state():
             if config.ENV_DATA.get("in_transit_encryption"):
                 pytest.fail(
@@ -60,11 +61,12 @@ class TestDataIntegrityWithInTransitEncryption:
             else:
                 set_in_transit_encryption()
 
-        log.info("Verifying the in-transit encryption is enable on setup.")
+        logger.assertion("In-transit encryption verification: expected='True'")
         assert (
             in_transit_encryption_verification()
         ), "In transit encryption verification failed."
 
+        logger.test_step("Create PVC and pod, then start IO with verify=True")
         pvc_obj = pvc_factory(interface=CEPHBLOCKPOOL, status=STATUS_BOUND)
         pod_obj = pod_factory(interface=CEPHBLOCKPOOL, pvc=pvc_obj)
 
@@ -83,23 +85,27 @@ class TestDataIntegrityWithInTransitEncryption:
         io_thread.start()
 
         # Disable in-transit encryption for 10 seconds.
-        log.info("IO thread started. Disabling in-transit encryption for 10 seconds...")
+        logger.test_step("Disable in-transit encryption while IO is running")
+        logger.info("IO thread started. Disabling in-transit encryption for 10 seconds")
         set_in_transit_encryption(enabled=False)
 
         # Sleeping for 10 seconds to allow some IO workload to occur in the in-transit encryption disabled state.
         time.sleep(10)
 
+        logger.test_step("Re-enable in-transit encryption and wait for IO completion")
         set_in_transit_encryption()
 
         # Wait for IO thread to finish
-        log.info(
-            "In-transit encryption re-enabled. Waiting for the storage cluster to become ready..."
+        logger.info(
+            "In-transit encryption re-enabled. Waiting for the storage cluster to become ready"
         )
         io_thread.join()
 
-        log.info("IO thread finished. Verifying the written data.")
-
+        logger.test_step(
+            "Verify no IO errors or data corruption after encryption toggle"
+        )
         fio_result = pod_obj.get_fio_results()
         err_count = fio_result.get("jobs")[0].get("error")
 
+        logger.assertion(f"FIO error count: expected='0', actual='{err_count}'")
         assert err_count == 0, "Error found in IO"

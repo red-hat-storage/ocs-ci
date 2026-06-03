@@ -30,7 +30,7 @@ from ocs_ci.utility.prometheus import (
     wait_for_alert_firing,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -126,7 +126,7 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
             for snap_data in self.snap_list_names:
                 ceph_name = snap_data["ceph_snap_name"]
                 if ceph_name in existing:
-                    log.info(
+                    logger.info(
                         "Teardown: deleting leftover Ceph snapshot '%s'",
                         ceph_name,
                     )
@@ -149,8 +149,11 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         Args:
             num_snapshots (int): Number of snapshots to create.
         """
+        logger.info(
+            "Creating %d CephFS VolumeSnapshots with Retain policy", num_snapshots
+        )
         for i in range(num_snapshots):
-            log.info(
+            logger.debug(
                 "Creating CephFS VolumeSnapshot %d/%d with Retain policy",
                 i + 1,
                 num_snapshots,
@@ -176,7 +179,11 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
                 f"'{snap_name}'"
             )
             new_entry = new_entries[0]
-            log.info("New Ceph snapshot entry: %s", new_entry)
+            logger.debug("New Ceph snapshot entry: %s", new_entry)
+            logger.assertion(
+                f"Ceph snapshot state: expected='{constants.CEPHFS_SNAPSHOT_STATE_BOUND}', "
+                f"actual='{new_entry['state']}'"
+            )
             assert new_entry["state"] == constants.CEPHFS_SNAPSHOT_STATE_BOUND, (
                 f"Expected state '{constants.CEPHFS_SNAPSHOT_STATE_BOUND}', "
                 f"got '{new_entry['state']}'"
@@ -186,7 +193,7 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
             assert (
                 snapcontent_obj.name
             ), f"VolumeSnapshotContent not found for snap '{snap_name}'"
-            log.info(
+            logger.info(
                 "VolumeSnapshotContent for snap '%s': %s",
                 snap_name,
                 snapcontent_obj.name,
@@ -211,7 +218,7 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
                 contain ``"subvolume"`` and ``"ceph_snap_name"`` keys.
         """
         for snap_data in snap_list_names:
-            log.info(
+            logger.info(
                 "Deleting orphaned Ceph snapshot '%s' from subvolume '%s'",
                 snap_data["ceph_snap_name"],
                 snap_data["subvolume"],
@@ -241,11 +248,15 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         for snap_data in snap_list_names:
             ceph_name = snap_data["ceph_snap_name"]
             entry = get_cephfs_snap_by_name(snap_entries, ceph_name)
+            logger.assertion(
+                f"Snapshot '{ceph_name}' state: expected='{expected_state}', "
+                f"actual='{entry['state']}'"
+            )
             assert entry["state"] == expected_state, (
                 f"Expected state '{expected_state}' for snapshot "
                 f"'{ceph_name}', got '{entry['state']}'"
             )
-            log.info(
+            logger.info(
                 "Snapshot '%s' is in '%s' state as expected",
                 ceph_name,
                 expected_state,
@@ -293,14 +304,14 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         checked.  In standalone mode the single cluster's Prometheus is used.
         """
         if self.provider_api:
-            log.info("Waiting for CephFSOrphanedSnapshot alert to fire on provider")
+            logger.info("Waiting for CephFSOrphanedSnapshot alert to fire on provider")
             wait_for_alert_firing(
                 self.provider_api,
                 constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT,
                 expected_severity="warning",
                 expected_message_substr=constants.CEPHFS_SNAPSHOT_STATE_ORPHANED,
             )
-        log.info("Waiting for CephFSOrphanedSnapshot alert to fire on consumer")
+        logger.info("Waiting for CephFSOrphanedSnapshot alert to fire on consumer")
         wait_for_alert_firing(
             self.api,
             constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT,
@@ -316,11 +327,13 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         checked.  In standalone mode the single cluster's Prometheus is used.
         """
         if self.provider_api:
-            log.info("Waiting for CephFSOrphanedSnapshot alerts to clear on provider")
+            logger.info(
+                "Waiting for CephFSOrphanedSnapshot alerts to clear on provider"
+            )
             wait_for_alert_cleared(
                 self.provider_api, constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT
             )
-        log.info("Waiting for CephFSOrphanedSnapshot alerts to clear on consumer")
+        logger.info("Waiting for CephFSOrphanedSnapshot alerts to clear on consumer")
         wait_for_alert_cleared(self.api, constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT)
 
     def _resolve_svg(self, svg_param):
@@ -339,13 +352,13 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
             storage_client_name = get_storage_client().resource_name
             with config.RunWithProviderConfigContextIfAvailable():
                 svg = get_consumer_svg_on_provider(storage_client_name)
-            log.info("Using consumer SVG on provider: %s", svg)
+            logger.info("Using consumer SVG on provider: %s", svg)
         elif svg_param == "default_svg":
             svg = get_cephfs_subvolumegroup()
-            log.info("Using default CephFS subvolumegroup: %s", svg)
+            logger.info("Using default CephFS subvolumegroup: %s", svg)
         else:
             svg = None
-            log.info("Using no explicit --svg (odf-cli default)")
+            logger.info("Using no explicit --svg (odf-cli default)")
         self._snap_runner.svg = svg
 
     @tier1
@@ -396,19 +409,21 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         """
         seed = int(time.time())
         random.seed(seed)
-        log.info("Random seed for this test run: %d", seed)
+        logger.info("Random seed for this test run: %d", seed)
         num_of_orphaned = random.randint(1, 4)
         num_of_bound = random.randint(4, 7)
 
-        log.test_step("Resolve odf-cli --svg from svg_param=%s", svg_param)
+        logger.test_step("Resolve odf-cli --svg from svg_param=%s", svg_param)
         self._resolve_svg(svg_param)
 
-        log.test_step("Verify no CephFS snapshots exist")
-        assert not get_cephfs_snap_entries(
-            self._snap_runner
-        ), "Expected no CephFS snapshots before the test"
+        logger.test_step("Verify no CephFS snapshots exist")
+        existing_snaps = get_cephfs_snap_entries(self._snap_runner)
+        logger.assertion(
+            f"CephFS snapshot count: expected=0, actual={len(existing_snaps)}"
+        )
+        assert not existing_snaps, "Expected no CephFS snapshots before the test"
 
-        log.test_step(
+        logger.test_step(
             "Create %d CephFS VolumeSnapshots with Retain "
             "policy and verify Kubernetes objects",
             num_of_orphaned + num_of_bound,
@@ -417,13 +432,13 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         orphaned_snaps = self.snap_list_names[:num_of_orphaned]
         bound_snaps = self.snap_list_names[num_of_orphaned:]
 
-        log.test_step(
+        logger.test_step(
             "Delete VolumeSnapshots and VolumeSnapshotContents " "for %d snapshot(s)",
             num_of_orphaned,
         )
         delete_volumesnaps_volumesnapcontents(orphaned_snaps)
 
-        log.test_step(
+        logger.test_step(
             "Verify %d snapshot(s) are orphaned and %d snapshot(s) remain bound",
             num_of_orphaned,
             num_of_bound,
@@ -431,22 +446,25 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         self.verify_cephfs_snapshots_orphaned(orphaned_snaps)
         self.verify_cephfs_snapshots_bound(bound_snaps)
 
-        log.test_step("Wait for CephFSOrphanedSnapshot alert to fire")
+        logger.test_step("Wait for CephFSOrphanedSnapshot alert to fire")
         self._wait_for_orphaned_alert_firing()
 
-        log.test_step(
+        logger.test_step(
             "Delete %d orphaned snapshot(s) via odf CLI",
             num_of_orphaned,
         )
         self.delete_orphaned_cephfs_snapshots(orphaned_snaps)
 
-        log.test_step("Verify %d bound snapshot(s) remain", num_of_bound)
+        logger.test_step("Verify %d bound snapshot(s) remain", num_of_bound)
         snap_entries = get_cephfs_snap_entries(self._snap_runner)
+        logger.assertion(
+            f"Remaining snapshot count: expected={num_of_bound}, actual={len(snap_entries)}"
+        )
         assert len(snap_entries) == num_of_bound, (
             f"Expected {num_of_bound} snapshot(s) after cleanup, "
             f"got {len(snap_entries)}"
         )
         self.verify_cephfs_snapshots_bound(bound_snaps)
 
-        log.test_step("Wait for CephFSOrphanedSnapshot alerts to clear")
+        logger.test_step("Wait for CephFSOrphanedSnapshot alerts to clear")
         self._wait_for_orphaned_alert_cleared()

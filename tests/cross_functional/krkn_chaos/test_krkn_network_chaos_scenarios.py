@@ -33,7 +33,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
     ValidationHelper,  # Validation helper
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -80,13 +80,12 @@ class TestKrKnNetworkChaosScenarios:
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
-        log.info(
+        logger.info(
             f"Testing network outage for Ceph component: {ceph_component_label} "
             f"with instance_count={instance_count}"
         )
 
-        # WORKLOAD SETUP - Start workloads and background cluster operations
-        log.info("Setting up workloads for network outage testing")
+        logger.test_step("Set up workloads and discover dynamic Ceph ports")
         workload_ops.setup_workloads()
 
         try:
@@ -102,12 +101,12 @@ class TestKrKnNetworkChaosScenarios:
             dynamic_ceph_ports = sorted(
                 list(set(dynamic_ceph_ports))
             )  # Remove duplicates and sort
-            log.info(
+            logger.debug(
                 f"Dynamically discovered {len(dynamic_ceph_ports)} Ceph ports "
                 f"from {len(dynamic_port_mapping)} components: {dynamic_ceph_ports}"
             )
         except Exception as e:
-            log.warning(f"Failed to discover dynamic ports, using fallback: {e}")
+            logger.warning(f"Failed to discover dynamic ports, using fallback: {e}")
             # Fallback to common Ceph ports
             dynamic_ceph_ports = [
                 6789,
@@ -191,13 +190,13 @@ class TestKrKnNetworkChaosScenarios:
         config.set_tunings(wait_duration=60, iterations=1)
         config.write_to_file(location=scenario_dir)
 
-        # Execute Krkn chaos scenarios
+        logger.test_step(f"Execute network chaos scenarios for {ceph_component_label}")
         krkn = KrKnRunner(config.global_config)
         try:
-            log.info(f"Starting network chaos test for {ceph_component_label}")
+            logger.info(f"Starting network chaos test for {ceph_component_label}")
             krkn.run_async()
             krkn.wait_for_completion(check_interval=60)
-            log.info(f"Network chaos test completed for {ceph_component_label}")
+            logger.info(f"Network chaos test completed for {ceph_component_label}")
         except CommandFailed as e:
             validator = ValidationHelper()
             health_helper = CephHealthHelper(
@@ -210,15 +209,14 @@ class TestKrKnNetworkChaosScenarios:
                 health_helper=health_helper,
             )
 
-        # Validate workloads and cleanup
+        logger.test_step("Validate workloads and analyze chaos results")
         try:
             workload_ops.validate_and_cleanup()
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.warning(
+            logger.warning(
                 f"Workload validation/cleanup issue for {ceph_component_label}: {str(e)}"
             )
 
-        # Analyze chaos run results
         chaos_run_output = krkn.get_chaos_data()
         failing_scenarios = [
             scenario
@@ -227,24 +225,30 @@ class TestKrKnNetworkChaosScenarios:
         ]
 
         if failing_scenarios:
-            log.error(
+            logger.warning(
                 f"Failed scenarios for {ceph_component_label}: {failing_scenarios}"
             )
 
+        logger.assertion(
+            f"Failing scenarios for {ceph_component_label}: expected=0, actual={len(failing_scenarios)}"
+        )
         assert (
             not failing_scenarios
         ), f"Network outage scenarios failed for {ceph_component_label} with pod errors: {failing_scenarios}"
 
-        # Check for Ceph crashes after network outage chaos injection
+        logger.test_step("Check for Ceph crashes after network outage chaos")
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             ceph_component_label, "network outage chaos"
         )
+        logger.assertion(
+            f"Ceph crashes after network outage: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
+        logger.info(
             f"Network outage test for {ceph_component_label} completed successfully"
         )
 
@@ -331,16 +335,16 @@ class TestKrKnNetworkChaosScenarios:
             egress_config: Egress network impairment configuration
         """
         scenario_dir = krkn_scenario_directory
-        log.info(
+        logger.info(
             f"Testing network chaos for Ceph component: {ceph_component_label} "
             f"with instance_count={instance_count}, duration={duration}s, "
             f"execution={execution}, egress_config={egress_config}"
         )
 
-        # WORKLOAD SETUP - Start workloads and background cluster operations
-        log.info("Setting up workloads for network chaos testing")
+        logger.test_step("Set up workloads for network chaos testing")
         workload_ops.setup_workloads()
 
+        logger.test_step("Discover network interfaces and create scenarios")
         port_helper = NetworkPortHelper(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 
         # Get active network interfaces from worker nodes
@@ -440,13 +444,12 @@ class TestKrKnNetworkChaosScenarios:
         config.set_tunings(wait_duration=60, iterations=1)
         config.write_to_file(location=scenario_dir)
 
-        # Execute Krkn chaos scenarios
+        logger.test_step(f"Execute network chaos test for {ceph_component_label}")
         krkn = KrKnRunner(config.global_config)
         try:
-            log.info(f"Starting network chaos test for {ceph_component_label}")
             krkn.run_async()
             krkn.wait_for_completion(check_interval=60)
-            log.info(f"Network chaos test completed for {ceph_component_label}")
+            logger.info(f"Network chaos test completed for {ceph_component_label}")
         except CommandFailed as e:
             validator = ValidationHelper()
             health_helper = CephHealthHelper(
@@ -459,15 +462,14 @@ class TestKrKnNetworkChaosScenarios:
                 health_helper=health_helper,
             )
 
-        # Validate workloads and cleanup
+        logger.test_step("Validate workloads and analyze chaos results")
         try:
             workload_ops.validate_and_cleanup()
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.warning(
+            logger.warning(
                 f"Workload validation/cleanup issue for {ceph_component_label}: {str(e)}"
             )
 
-        # Analyze chaos run results
         chaos_run_output = krkn.get_chaos_data()
         failing_scenarios = [
             scenario
@@ -476,24 +478,30 @@ class TestKrKnNetworkChaosScenarios:
         ]
 
         if failing_scenarios:
-            log.error(
+            logger.warning(
                 f"Failed scenarios for {ceph_component_label}: {failing_scenarios}"
             )
 
+        logger.assertion(
+            f"Failing network chaos scenarios: expected=0, actual={len(failing_scenarios)}"
+        )
         assert (
             not failing_scenarios
         ), f"Network chaos scenarios failed for {ceph_component_label} with pod errors: {failing_scenarios}"
 
-        # Check for Ceph crashes after network chaos injection
+        logger.test_step("Check for Ceph crashes after network chaos")
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             ceph_component_label, "network chaos"
         )
+        logger.assertion(
+            f"Ceph crashes after network chaos: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
+        logger.info(
             f"Network chaos test for {ceph_component_label} completed successfully"
         )
 
@@ -544,19 +552,18 @@ class TestKrKnNetworkChaosScenarios:
         scenario_dir = krkn_scenario_directory
 
         node_type = "worker" if "worker" in node_label_selector else "master"
-        log.info(
+        logger.info(
             f"Testing network ingress chaos for {node_type} nodes "
             f"with instance_count={instance_count}, execution_type={execution_type}, "
             f"network_params={network_params}"
         )
 
-        # WORKLOAD SETUP - Start workloads and background cluster operations
-        log.info("Setting up workloads for network ingress chaos testing")
+        logger.test_step("Set up workloads for network ingress chaos testing")
         workload_ops.setup_workloads()
 
         # Warning for master node testing
         if node_type == "master":
-            log.warning(
+            logger.warning(
                 "Running network chaos on master nodes - this could affect cluster stability!"
             )
 
@@ -650,19 +657,19 @@ class TestKrKnNetworkChaosScenarios:
         # Execute Krkn chaos scenarios
         krkn = KrKnRunner(config.global_config)
         try:
-            log.info(f"Starting network ingress chaos test for {node_type} nodes")
+            logger.info(f"Starting network ingress chaos test for {node_type} nodes")
             krkn.run_async()
             krkn.wait_for_completion(check_interval=60)
-            log.info(f"Network ingress chaos test completed for {node_type} nodes")
+            logger.info(f"Network ingress chaos test completed for {node_type} nodes")
         except CommandFailed as e:
-            log.error(f"Krkn command failed for {node_type} nodes: {str(e)}")
+            logger.exception(f"Krkn command failed for {node_type} nodes: {str(e)}")
             pytest.fail(f"Krkn command failed for {node_type} nodes: {str(e)}")
 
         # Validate workloads and cleanup
         try:
             workload_ops.validate_and_cleanup()
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.warning(
+            logger.warning(
                 f"Workload validation/cleanup issue for {node_type} nodes: {str(e)}"
             )
 
@@ -675,22 +682,30 @@ class TestKrKnNetworkChaosScenarios:
         ]
 
         if failing_scenarios:
-            log.error(f"Failed scenarios for {node_type} nodes: {failing_scenarios}")
+            logger.warning(
+                f"Failed scenarios for {node_type} nodes: {failing_scenarios}"
+            )
 
+        logger.assertion(
+            f"Failing ingress chaos scenarios: expected=0, actual={len(failing_scenarios)}"
+        )
         assert (
             not failing_scenarios
         ), f"Network ingress chaos scenarios failed for {node_type} nodes with errors: {failing_scenarios}"
 
-        # Check for Ceph crashes after network ingress chaos injection
+        logger.test_step("Check for Ceph crashes after network ingress chaos")
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             f"{node_type} nodes", "network ingress chaos"
         )
+        logger.assertion(
+            f"Ceph crashes after ingress chaos: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
+        logger.info(
             f"Network ingress chaos test for {node_type} nodes completed successfully"
         )
 
@@ -798,14 +813,13 @@ class TestKrKnNetworkChaosScenarios:
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
-        log.info(
+        logger.info(
             f"Testing pod {traffic_direction} shaping for Ceph component: {ceph_component_label} "
             f"with instance_count={instance_count}, execution_type={execution_type}, "
             f"network_params={network_params}"
         )
 
-        # WORKLOAD SETUP - Start workloads and background cluster operations
-        log.info("Setting up workloads for pod traffic shaping testing")
+        logger.test_step("Set up workloads for pod traffic shaping testing")
         workload_ops.setup_workloads()
 
         # Create pod traffic shaping scenarios based on direction
@@ -928,12 +942,12 @@ class TestKrKnNetworkChaosScenarios:
         # Execute Krkn chaos scenarios
         krkn = KrKnRunner(config.global_config)
         try:
-            log.info(
+            logger.info(
                 f"Starting pod {traffic_direction} shaping test for {ceph_component_label}"
             )
             krkn.run_async()
             krkn.wait_for_completion(check_interval=60)
-            log.info(
+            logger.info(
                 f"Pod {traffic_direction} shaping test completed for {ceph_component_label}"
             )
         except CommandFailed as e:
@@ -952,7 +966,7 @@ class TestKrKnNetworkChaosScenarios:
         try:
             workload_ops.validate_and_cleanup()
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.warning(
+            logger.warning(
                 f"Workload validation/cleanup issue for {ceph_component_label}: {str(e)}"
             )
 
@@ -965,25 +979,33 @@ class TestKrKnNetworkChaosScenarios:
         ]
 
         if failing_scenarios:
-            log.error(
+            logger.warning(
                 f"Failed scenarios for {ceph_component_label}: {failing_scenarios}"
             )
 
+        logger.assertion(
+            f"Failing traffic shaping scenarios: expected=0, actual={len(failing_scenarios)}"
+        )
         assert not failing_scenarios, (
             f"Pod {traffic_direction} shaping scenarios failed for {ceph_component_label} "
             f"with pod errors: {failing_scenarios}"
         )
 
-        # Check for Ceph crashes after pod traffic shaping chaos injection
+        logger.test_step(
+            f"Check for Ceph crashes after {traffic_direction} shaping chaos"
+        )
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             ceph_component_label, f"pod {traffic_direction} shaping chaos"
         )
+        logger.assertion(
+            f"Ceph crashes after traffic shaping: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
+        logger.info(
             f"Pod {traffic_direction} shaping test for {ceph_component_label} completed successfully"
         )
 
@@ -1039,12 +1061,11 @@ class TestKrKnNetworkChaosScenarios:
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
-        # WORKLOAD SETUP - Start workloads and background cluster operations
-        log.info("Setting up workloads for targeted port network outage testing")
+        logger.test_step("Set up workloads for targeted port network outage testing")
         workload_ops.setup_workloads()
 
         # Dynamically discover ports for the target service
-        log.info(f"Discovering ports for {service_type} service...")
+        logger.info(f"Discovering ports for {service_type} service...")
         port_helper = NetworkPortHelper(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
         service_ports_map = port_helper.get_ceph_service_ports(service_type)
         target_ports = service_ports_map.get(service_type, [])
@@ -1053,7 +1074,7 @@ class TestKrKnNetworkChaosScenarios:
                 f"No ports discovered for {service_type} service - skipping test"
             )
 
-        log.info(
+        logger.info(
             f"Testing targeted port network outage for: {test_description} "
             f"targeting dynamically discovered ports {target_ports} on component {target_component}"
         )
@@ -1125,17 +1146,17 @@ class TestKrKnNetworkChaosScenarios:
         config_file = config.write_to_file(scenario_dir)
 
         # Run chaos scenarios
-        log.info(f"Starting targeted port chaos scenarios for {target_component}...")
+        logger.info(f"Starting targeted port chaos scenarios for {target_component}...")
         krkn = KrKnRunner(config_file)
         krkn.run_async()
         krkn.wait_for_completion(check_interval=30)
 
         # Validate workload operations after chaos
-        log.info("Validating workload operations after targeted port chaos...")
+        logger.info("Validating workload operations after targeted port chaos...")
         try:
             workload_ops.validate_workload_operations()
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.warning(
+            logger.warning(
                 f"Workload validation issue for {target_component} port test: {str(e)}"
             )
 
@@ -1148,15 +1169,18 @@ class TestKrKnNetworkChaosScenarios:
         ]
 
         if failing_scenarios:
-            log.error(
+            logger.warning(
                 f"Failed scenarios for {target_component} port test: {failing_scenarios}"
             )
 
+        logger.assertion(
+            f"Failing port outage scenarios: expected=0, actual={len(failing_scenarios)}"
+        )
         assert (
             not failing_scenarios
         ), f"Targeted port network outage scenarios failed for {target_component} with errors: {failing_scenarios}"
 
-        log.info(
+        logger.info(
             f"Targeted port network outage test for {target_component} completed successfully"
         )
 
@@ -1202,8 +1226,7 @@ class TestKrKnNetworkChaosScenarios:
         scenario_dir = krkn_scenario_directory
         openshift_storage_ns = constants.OPENSHIFT_STORAGE_NAMESPACE
 
-        # WORKLOAD SETUP - Start workloads and background cluster operations
-        log.info("Setting up workloads for OSD replication port chaos testing")
+        logger.test_step("Set up workloads for OSD replication port chaos testing")
         workload_ops.setup_workloads()
 
         # Dynamically discover OSD ports based on method
@@ -1218,7 +1241,7 @@ class TestKrKnNetworkChaosScenarios:
                 f"No OSD ports discovered using {port_discovery_method} - skipping test"
             )
 
-        log.info(
+        logger.info(
             f"Testing OSD replication port chaos: {test_scenario} "
             f"targeting dynamically discovered ports {osd_port_range}"
         )
@@ -1256,17 +1279,17 @@ class TestKrKnNetworkChaosScenarios:
         config_file = config.write_to_file(scenario_dir)
 
         # Run chaos scenarios
-        log.info("Starting OSD replication port chaos scenarios...")
+        logger.info("Starting OSD replication port chaos scenarios...")
         krkn = KrKnRunner(config_file)
         krkn.run_async()
         krkn.wait_for_completion(check_interval=30)
 
         # Validate workload operations after chaos
-        log.info("Validating workload operations after OSD port chaos...")
+        logger.info("Validating workload operations after OSD port chaos...")
         try:
             workload_ops.validate_workload_operations()
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.warning(f"Workload validation issue for OSD port test: {str(e)}")
+            logger.warning(f"Workload validation issue for OSD port test: {str(e)}")
 
         # Check Ceph cluster health after OSD port chaos
         health_helper = CephHealthHelper(
@@ -1274,6 +1297,9 @@ class TestKrKnNetworkChaosScenarios:
         )
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             "OSD ports", "OSD port chaos"
+        )
+        logger.assertion(
+            f"Ceph crashes after OSD port chaos: expected=None, actual={'None' if no_crashes else crash_details}"
         )
         assert no_crashes, crash_details
 
@@ -1286,13 +1312,16 @@ class TestKrKnNetworkChaosScenarios:
         ]
 
         if failing_scenarios:
-            log.error(f"Failed OSD port chaos scenarios: {failing_scenarios}")
+            logger.warning(f"Failed OSD port chaos scenarios: {failing_scenarios}")
 
+        logger.assertion(
+            f"Failing OSD port chaos scenarios: expected=0, actual={len(failing_scenarios)}"
+        )
         assert (
             not failing_scenarios
         ), f"OSD replication port chaos scenarios failed with errors: {failing_scenarios}"
 
-        log.info("OSD replication port chaos test completed successfully")
+        logger.info("OSD replication port chaos test completed successfully")
 
     @polarion_id("OCS-7345")
     def test_krkn_interface_specific_network_chaos(
@@ -1314,10 +1343,11 @@ class TestKrKnNetworkChaosScenarios:
         """
         scenario_dir = krkn_scenario_directory
 
-        log.info("Testing interface-specific network chaos with detected interfaces")
+        logger.info("Testing interface-specific network chaos with detected interfaces")
 
-        # WORKLOAD SETUP - Start workloads and background cluster operations
-        log.info("Setting up workloads for interface-specific network chaos testing")
+        logger.test_step(
+            "Set up workloads for interface-specific network chaos testing"
+        )
         workload_ops.setup_workloads()
 
         # Get actual network interfaces from the cluster
@@ -1325,7 +1355,7 @@ class TestKrKnNetworkChaosScenarios:
         worker_interfaces = port_helper.get_default_network_interfaces(
             node_type="worker"
         )
-        log.info(f"Detected worker node interfaces: {worker_interfaces}")
+        logger.info(f"Detected worker node interfaces: {worker_interfaces}")
 
         # Initialize NetworkScenarioHelper for interface-level scenarios
         network_helper = NetworkScenarioHelper(
@@ -1381,17 +1411,17 @@ class TestKrKnNetworkChaosScenarios:
         config_file = config.write_to_file(scenario_dir)
 
         # Run chaos scenarios
-        log.info("Starting interface-specific network chaos scenarios...")
+        logger.info("Starting interface-specific network chaos scenarios...")
         krkn = KrKnRunner(config_file)
         krkn.run_async()
         krkn.wait_for_completion(check_interval=30)
 
         # Validate workload operations after chaos
-        log.info("Validating workload operations after interface chaos...")
+        logger.info("Validating workload operations after interface chaos...")
         try:
             workload_ops.validate_workload_operations()
         except (UnexpectedBehaviour, CommandFailed) as e:
-            log.warning(f"Workload validation issue for interface chaos: {str(e)}")
+            logger.warning(f"Workload validation issue for interface chaos: {str(e)}")
 
         # Analyze chaos run results
         chaos_run_output = krkn.get_chaos_data()
@@ -1402,19 +1432,25 @@ class TestKrKnNetworkChaosScenarios:
         ]
 
         if failing_scenarios:
-            log.error(f"Failed interface chaos scenarios: {failing_scenarios}")
+            logger.warning(f"Failed interface chaos scenarios: {failing_scenarios}")
 
+        logger.assertion(
+            f"Failing interface chaos scenarios: expected=0, actual={len(failing_scenarios)}"
+        )
         assert (
             not failing_scenarios
         ), f"Interface-specific network chaos scenarios failed with errors: {failing_scenarios}"
 
-        # Check Ceph cluster health after interface chaos
+        logger.test_step("Check Ceph cluster health after interface chaos")
         health_helper = CephHealthHelper(
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             "network interfaces", "interface chaos"
         )
+        logger.assertion(
+            f"Ceph crashes after interface chaos: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info("Interface-specific network chaos test completed successfully")
+        logger.info("Interface-specific network chaos test completed successfully")

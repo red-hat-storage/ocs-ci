@@ -20,27 +20,39 @@ class TestCSISubvolumeGroup(ManageTest):
         Test that verifies that the pinning value of CephFilesystemSubVolumeGroup is 1
         """
 
+        logger.test_step("Retrieve CephFilesystemSubVolumeGroup resources")
         subvolumegroup = OCP(
             kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
             namespace=config.ENV_DATA["cluster_namespace"],
         ).get()
+
+        logger.test_step(
+            "Verify pinning value is 'distributed=1' for each subvolume group"
+        )
+        logger.info(
+            f"Checking {len(subvolumegroup['items'])} "
+            f"{constants.CEPHFILESYSTEMSUBVOLUMEGROUP} resources"
+        )
         for subvolumegroup_info in subvolumegroup["items"]:
-            logger.info(
-                f"Checking {constants.CEPHFILESYSTEMSUBVOLUMEGROUP} {subvolumegroup_info['metadata']['name']}"
-            )
+            name = subvolumegroup_info["metadata"]["name"]
+            logger.debug(f"Checking {constants.CEPHFILESYSTEMSUBVOLUMEGROUP} {name}")
             try:
                 pinning = subvolumegroup_info["status"]["info"]["pinning"]
                 pinning_key, pinning_val = pinning.strip().split("=")
+                logger.assertion(
+                    f"Pinning key for {name}: expected='distributed', actual='{pinning_key}'"
+                )
                 assert pinning_key == "distributed", "Pinning must be 'distributed'"
                 pinning_val = int(pinning_val)
             except KeyError as e:
                 err_msg = 'Pinning property not found, missing key "%s"' % str(e)
-                logger.error(err_msg)
+                logger.exception(err_msg)
                 raise Exception(err_msg)
 
             if pinning_val != 1:
                 err_msg = f"Expected pinning value 1, got {pinning_val} instead"
-                logger.error(err_msg)
+                logger.warning(err_msg)
                 raise Exception(err_msg)
 
-            logger.info("Pinning value found and it is 1, as expected")
+            logger.debug(f"Pinning value for {name} is 1, as expected")
+        logger.info("All subvolume groups have correct pinning value of 1")

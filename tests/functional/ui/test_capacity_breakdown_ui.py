@@ -82,12 +82,11 @@ class TestCapacityBreakdownUI(ManageTest):
         sc_type (str): storage class [fs, block]
 
         """
+        logger.test_step(
+            f"Create project '{project_name}' and PVC with sc_type={sc_type}"
+        )
         project_obj = helpers.create_project(project_name=project_name)
         teardown_project_factory(project_obj)
-        logger.info(
-            f"Created new pvc sc_name={sc_type} namespace={project_name}, "
-            f"size=6Gi, access_mode={constants.ACCESS_MODE_RWO}"
-        )
         pvc_obj = helpers.create_pvc(
             sc_name=sc_type,
             namespace=project_name,
@@ -96,32 +95,36 @@ class TestCapacityBreakdownUI(ManageTest):
             access_mode=constants.ACCESS_MODE_RWO,
         )
         logger.info(
-            f"Create new pod. Pod name={pod_name},"
-            f"interface_type={constants.CEPHBLOCKPOOL}"
+            f"Created PVC sc_name={sc_type} namespace={project_name}, "
+            f"size=6Gi, access_mode={constants.ACCESS_MODE_RWO}"
         )
+
+        logger.test_step(f"Create pod '{pod_name}' and wait for Running state")
         pod_obj = helpers.create_pod(
             pvc_name=pvc_obj.name,
             namespace=project_obj.namespace,
             interface_type=constants.CEPHBLOCKPOOL,
             pod_name=pod_name,
         )
-        logger.info(f"Wait for pod {pod_name} move to Running state")
         helpers.wait_for_resource_state(
             pod_obj, state=constants.STATUS_RUNNING, timeout=300
         )
-        logger.info("Run fio workload")
+
+        logger.test_step("Run FIO workload on pod")
         pod_obj.run_io(
             storage_type=constants.WORKLOAD_STORAGE_TYPE_FS,
             size="4GB",
         )
         fio_result = pod_obj.get_fio_results()
-        logger.info("IOPs after FIO:")
         reads = fio_result.get("jobs")[0].get("read").get("iops")
         writes = fio_result.get("jobs")[0].get("write").get("iops")
-        logger.info(f"Read: {reads}")
-        logger.info(f"Write: {writes}")
+        logger.info(f"FIO IOPs - Read: {reads}, Write: {writes}")
 
+        logger.test_step("Verify project and pod appear on Capacity Breakdown UI")
         validation_ui_obj = ValidationUI()
+        logger.assertion(
+            f"Capacity Breakdown UI shows project='{project_name}', pod='{pod_name}'"
+        )
         assert validation_ui_obj.check_capacity_breakdown(
             project_name=project_name, pod_name=pod_name
         ), "The Project/Pod not created on Capacity Breakdown"
@@ -146,6 +149,7 @@ class TestCapacityBreakdownUI(ManageTest):
         """
         test_results = dict()
 
+        logger.test_step("Create project and configure storage classes")
         namespace = helpers.create_unique_resource_name("ui", "project")
         project_obj = helpers.create_project(project_name=namespace)
         teardown_project_factory(project_obj)
@@ -189,7 +193,7 @@ class TestCapacityBreakdownUI(ManageTest):
                     capacity,
                 )
 
-        # deploy test app and attach different pvcs to it
+        logger.test_step("Deploy test applications and attach PVCs")
         for data_struct in PvcCapacityDeploymentList():
             _, data_struct.deployment = WorkloadUi().deploy_app(
                 namespace=namespace,
@@ -197,7 +201,7 @@ class TestCapacityBreakdownUI(ManageTest):
                 depl_name=f"ubi8-{data_struct.capacity_size}gi-{time.time_ns() // 1_000_000}",
             )
 
-        # fill attached PVC's with data
+        logger.test_step("Fill attached PVCs with data")
         for data_struct in PvcCapacityDeploymentList():
 
             pod_name = None
@@ -222,11 +226,10 @@ class TestCapacityBreakdownUI(ManageTest):
             if not fill_attached_pv(data_struct, pod):
                 pytest.skip("Failed to fill attached PVC with data")
 
-        # update of the ui comes by portions. For example, the large PVC will be updated by parts, first it's filled
-        # with 1Gi, then 2.5Gi, etc. This process is random, so we give a time to update the UI
-        logger.info(
-            "finished deploying testing apps, wait 180 sec to update the UI of the management-console"
+        logger.test_step(
+            "Wait for UI update and verify capacity breakdown card after creation"
         )
+        logger.info("Waiting 180 seconds for management-console UI to update")
         time.sleep(180)
 
         block_and_file = PageNavigator().nav_storage_cluster_default_page()
@@ -238,19 +241,21 @@ class TestCapacityBreakdownUI(ManageTest):
         if res:
             test_results.update(res)
 
-        logger.info("delete one random deployment")
+        logger.test_step("Delete one random deployment and one random PVC")
         random_deployment_to_delete = random.choice(PvcCapacityDeploymentList())
+        logger.info(
+            f"Deleting deployment {random_deployment_to_delete.deployment.name}"
+        )
         PvcCapacityDeploymentList().delete_deployment(
             random_deployment_to_delete.deployment
         )
 
-        logger.info("delete one random PVC")
         random_pvc_to_delete = random.choice(PvcCapacityDeploymentList())
+        logger.info(f"Deleting PVC {random_pvc_to_delete.pvc_obj.name}")
         PvcCapacityDeploymentList().delete_pvc(random_pvc_to_delete.pvc_obj)
 
-        logger.info(
-            "finished deleting deployment, wait 180 sec to update the UI of the management-console"
-        )
+        logger.test_step("Verify capacity breakdown card after deletion")
+        logger.info("Waiting 180 seconds for management-console UI to update")
         time.sleep(180)
         res = block_and_file.check_pvc_to_namespace_ui_card(
             namespace, "check_PVCs_and_depl_deleted"
@@ -258,15 +263,13 @@ class TestCapacityBreakdownUI(ManageTest):
         if res:
             test_results.update(res)
 
-        logger.info(
-            "delete all mgr pods and verify the Used Capacity card on management-console"
-        )
+        logger.test_step("Delete all mgr pods and verify Used Capacity card")
         mgr_pods = get_mgr_pods()
         for mgr_pods in mgr_pods:
             # pods should redeploy automatically
             mgr_pods.delete(wait=True)
         logger.info(
-            "finished delete mgr pods, wait 180 sec to update the UI of the management-console"
+            "Waiting 180 seconds for management-console UI to update after mgr pod deletion"
         )
         time.sleep(180)
         res = block_and_file.check_pvc_to_namespace_ui_card(

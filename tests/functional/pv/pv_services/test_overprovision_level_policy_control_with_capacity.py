@@ -18,7 +18,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.utility.utils import TimeoutSampler
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(autouse=True, scope="class")
@@ -76,19 +76,22 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         quota_capacity = "100Gi"
         overprovision_resource_name = f"{constants.CEPHBLOCKPOOL_SC}-{quota_name}"
 
+        logger.test_step(
+            "Set overprovision policy with 100Gi capacity and verify storage cluster"
+        )
         clear_overprovision_spec(ignore_errors=True)
         set_overprovision_policy(quota_capacity, quota_name, sc_name, policy_labels)
-        log.info("Verify storagecluster on Ready state")
+        logger.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
 
-        log.info(f"Create Namespace with {policy_labels} label")
+        logger.test_step(f"Create namespace with {policy_labels} label")
         ocp_ns_obj = project_factory()
         ocp_project_label = OCP(kind=constants.NAMESPACE)
         ocp_project_label.add_label(
             resource_name=ocp_ns_obj.namespace, label="storagequota=storagequota"
         )
 
-        log.info(f"Create 50Gi pvc on namespace f{ocp_ns_obj.namespace}")
+        logger.test_step(f"Create 50Gi PVC on namespace {ocp_ns_obj.namespace}")
         sc_obj = setup_sc.get(sc_name)
 
         try:
@@ -100,11 +103,11 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
                 status=constants.STATUS_BOUND,
             )
         except Exception as e:
-            log.error(f"Failed to create PVC {str(e)}")
+            logger.exception(f"Failed to create PVC {str(e)}")
             assert False
 
         # Wait for clusterresourcequota to be created before describing it
-        log.info(
+        logger.info(
             f"Waiting for clusterresourcequota '{overprovision_resource_name}' to be created"
         )
         for sample in TimeoutSampler(
@@ -114,7 +117,9 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
             quota_name=overprovision_resource_name,
         ):
             if sample:
-                log.info(f"ClusterResourceQuota '{overprovision_resource_name}' found")
+                logger.info(
+                    f"ClusterResourceQuota '{overprovision_resource_name}' found"
+                )
                 break
 
         clusterresourcequota_obj = OCP(kind="clusterresourcequota")
@@ -129,17 +134,21 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         used_storage = used.get(quota_key, "0")
         hard_storage = hard.get(quota_key, "0")
 
-        log.info(
+        logger.info(
             f"Cluster Resource Quota {overprovision_resource_name}: "
             f"used={used_storage}, hard={hard_storage}"
         )
 
+        logger.test_step("Verify cluster resource quota reflects 50Gi usage")
+        logger.assertion(
+            f"Quota contains '50Gi': expected=True, used={used_storage}, hard={hard_storage}"
+        )
         assert self.verify_substrings_in_string(
             output_string=f"{used_storage} {hard_storage}", expected_strings=["50Gi"]
         )
 
-        log.info(
-            "Add another pvc with 51Gi capacity and verify it failed [50Gi + 51Gi > 100Gi]"
+        logger.test_step(
+            "Create 51Gi PVC and verify it fails due to exceeded quota [50Gi + 51Gi > 100Gi]"
         )
         try:
             pvc_factory(
@@ -149,16 +158,19 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
                 size=51,
             )
         except Exception as e:
+            logger.assertion(
+                f"PVC creation error contains 'forbidden' and 'exceeded quota': actual='{str(e)}'"
+            )
             assert self.verify_substrings_in_string(
                 output_string=str(e), expected_strings=["forbidden", "exceeded quota"]
             ), f"The error does not contain string:{str(e)}"
 
-        log.info("Removing Labels from namespace.")
+        logger.test_step(f"Remove labels from namespace {ocp_ns_obj.namespace}")
         ocp_project_label.remove_label(
             resource_name=ocp_ns_obj.namespace, label=list(policy_labels.keys())[0]
         )
 
-        """ Adding the new PVC with 51Gi  """
+        logger.test_step("Create 51Gi PVC after removing labels and verify it succeeds")
         try:
             pvc_factory(
                 interface=sc_type,
@@ -167,7 +179,7 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
                 size=51,
             )
         except Exception as e:
-            log.error(f"Failed to create PVC : {e}")
+            logger.exception(f"Failed to create PVC : {e}")
             assert False
 
     def verify_substrings_in_string(self, output_string, expected_strings):
@@ -188,10 +200,14 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
         matched_result = []
         for expected_string in expected_strings:
             if expected_string in output_string:
-                log.info(f"expected string:{expected_string} in {output_string}")
+                logger.debug(
+                    f"Expected string '{expected_string}' found in '{output_string}'"
+                )
                 matched_result.append(True)
                 continue
-            log.error(f"expected string:{expected_string} not in {output_string}")
+            logger.warning(
+                f"Expected string '{expected_string}' not found in '{output_string}'"
+            )
             matched_result.append(False)
 
         return all(matched_result)

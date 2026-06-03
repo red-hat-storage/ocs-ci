@@ -1,3 +1,4 @@
+import logging
 import pytest
 
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
@@ -8,6 +9,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     run_on_all_clients_push_missing_configs,
 )
 from ocs_ci.framework.testlib import ManageTest, tier2
+
+logger = logging.getLogger(__name__)
 
 
 @run_on_all_clients_push_missing_configs
@@ -57,8 +60,10 @@ class TestIOMultiplePods(ManageTest):
         """
         Run IO on multiple regular pods in parallel
         """
+        logger.test_step(f"Start IO on {len(pods)} regular pods")
         for pod in pods:
             pod.run_io(storage_type="fs", size="1G")
+        logger.test_step(f"Verify IO results from {len(pods)} regular pods")
         for pod in pods:
             get_fio_rw_iops(pod)
 
@@ -66,7 +71,11 @@ class TestIOMultiplePods(ManageTest):
         """
         Run IO on multiple deployment pods in parallel
         """
+        logger.test_step(f"Start IO on {len(deployment_pods)} deployment pods")
         for pod in deployment_pods:
             pod.run_io(storage_type="fs", size="1G")
+        logger.test_step(
+            f"Verify IO results from {len(deployment_pods)} deployment pods"
+        )
         for pod in deployment_pods:
             get_fio_rw_iops(pod)
