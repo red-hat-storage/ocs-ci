@@ -410,7 +410,7 @@ class TestObjectBrowserClientProviderUI(ManageTest):
 
             # Navigate into folder1 by clicking on its name
             logger.info("Attempting folder navigation into folder1")
-            bucket_ui.do_click((f"//a[contains(text(), 'folder1')]", By.XPATH))
+            bucket_ui.do_click(("//a[contains(text(), 'folder1')]", By.XPATH))
             time.sleep(2)
             logger.info("✓ Clicked on folder1 link - navigation attempted")
 
