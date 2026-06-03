@@ -4670,7 +4670,7 @@ def get_cephfs_subvolumegroup():
             kind=constants.CONFIGMAP,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        ceph_csi_configmap = configmap_obj.get(resource_name="ceph-csi-configs")
+        ceph_csi_configmap = configmap_obj.get(resource_name="ceph-csi-config")
         json_config = ceph_csi_configmap.get("data").get("config.json")
         json_config_list = json.loads(json_config)
         for dict_item in json_config_list:

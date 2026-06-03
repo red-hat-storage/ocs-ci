@@ -1828,7 +1828,7 @@ def get_vault_cli(bind_dir=None, force_download=False):
         os.chdir(bin_dir)
         url = f"{constants.VAULT_DOWNLOAD_BASE_URL}/{version}/{zip_file}"
         download_file(url, zip_file)
-        run_cmd(f"unzip {zip_file}")
+        run_cmd(f"unzip -o {zip_file}")
         delete_file(zip_file)
         os.chdir(previous_dir)
     vault_ver = run_cmd(f"{vault_binary_path} version")
