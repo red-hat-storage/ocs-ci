@@ -8,9 +8,7 @@ ensuring proper isolation and folder navigation in the UI.
 import logging
 import os
 import pytest
-import tempfile
 import time
-import uuid
 
 from selenium.webdriver.common.by import By
 
@@ -410,11 +408,11 @@ class TestObjectBrowserClientProviderUI(ManageTest):
             assert root_file_elements, "root-file.txt not found in object list"
             logger.info("✓ Found root-file.txt in object list")
 
-            # Navigate into folder1 using first_folder_link
+            # Navigate into folder1 by clicking on its name
             logger.info("Attempting folder navigation into folder1")
-            bucket_ui.do_click(bucket_ui.bucket_tab["first_folder_link"])
+            bucket_ui.do_click((f"//a[contains(text(), 'folder1')]", By.XPATH))
             time.sleep(2)
-            logger.info("✓ Clicked on folder link - navigation attempted")
+            logger.info("✓ Clicked on folder1 link - navigation attempted")
 
             # Verify we're inside folder1 by looking for file1.txt
             file1_locator = format_locator(
