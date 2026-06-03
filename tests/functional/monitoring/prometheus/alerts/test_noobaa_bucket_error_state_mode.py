@@ -1,5 +1,4 @@
 import logging
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -21,8 +20,61 @@ from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
+
+BUCKET_MODE_TIMEOUT = 60 * 10
+BUCKET_MODE_POLL_INTERVAL = 15
+
+
+def _wait_for_bucket_mode(mcg_obj, bucket_name, expected_mode):
+    """
+    Poll NooBaa until the bucket enters the expected mode or timeout.
+
+    Args:
+        mcg_obj: MCG object
+        bucket_name (str): Name of the bucket
+        expected_mode (str): Expected bucket mode (e.g. "EXCEEDING_QUOTA")
+            or "!OPTIMAL" to wait for any non-OPTIMAL mode
+
+    Returns:
+        str: The actual bucket mode once matched
+
+    Raises:
+        AssertionError: If the bucket does not reach the expected mode
+            within the timeout
+    """
+    check_not_optimal = expected_mode == "!OPTIMAL"
+    last_mode = "UNKNOWN"
+
+    try:
+        for mode in TimeoutSampler(
+            timeout=BUCKET_MODE_TIMEOUT,
+            sleep=BUCKET_MODE_POLL_INTERVAL,
+            func=_get_bucket_mode,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket_name,
+        ):
+            last_mode = mode
+            if check_not_optimal and mode != "OPTIMAL":
+                log.info(f"Bucket {bucket_name} entered non-OPTIMAL mode: {mode}")
+                return mode
+            elif not check_not_optimal and mode == expected_mode:
+                log.info(f"Bucket {bucket_name} entered expected mode: {mode}")
+                return mode
+    except TimeoutExpiredError:
+        if check_not_optimal:
+            assert False, (
+                f"Bucket {bucket_name} is still OPTIMAL after "
+                f"{BUCKET_MODE_TIMEOUT}s (last mode: {last_mode})"
+            )
+        else:
+            assert False, (
+                f"Expected bucket mode {expected_mode} for {bucket_name}, "
+                f"got {last_mode} after {BUCKET_MODE_TIMEOUT}s"
+            )
 
 
 def _get_bucket_mode(mcg_obj, bucket_name):
@@ -162,15 +214,7 @@ class TestNooBaaBucketErrorStateMode:
                 f"(quota 2Gi) to trigger EXCEEDING_QUOTA"
             )
 
-            run_time = 60 * 7
-            log.info(f"Waiting {run_time}s for bucket mode to propagate")
-            time.sleep(run_time)
-
-            expected_mode = "EXCEEDING_QUOTA"
-            bucket_mode = _get_bucket_mode(mcg_obj, bucket_name)
-            assert bucket_mode == expected_mode, (
-                f"Expected bucket mode {expected_mode}, " f"got {bucket_mode}"
-            )
+            _wait_for_bucket_mode(mcg_obj, bucket_name, "EXCEEDING_QUOTA")
         finally:
             _delete_data_from_bucket(awscli_pod, bucket_name, mcg_obj, 5)
             bucket.delete()
@@ -227,15 +271,7 @@ class TestNooBaaBucketErrorStateMode:
             f"Deleted target bucket {target_uls_name} " f"to trigger resource error"
         )
 
-        run_time = 60 * 7
-        log.info(f"Waiting {run_time}s for bucket to enter error state")
-        time.sleep(run_time)
-
-        bucket_mode = _get_bucket_mode(mcg_obj, bucket.name)
-        assert bucket_mode != "OPTIMAL", (
-            f"Bucket {bucket.name} is still OPTIMAL after "
-            f"deleting backing store target"
-        )
+        _wait_for_bucket_mode(mcg_obj, bucket.name, "!OPTIMAL")
 
     @skipif_mcg_only
     @polarion_id("OCS-XXXXX")
@@ -289,15 +325,7 @@ class TestNooBaaBucketErrorStateMode:
             f"(PV pool capacity 2Gi) to trigger capacity error"
         )
 
-        run_time = 60 * 7
-        log.info(f"Waiting {run_time}s for bucket to enter capacity error state")
-        time.sleep(run_time)
-
-        bucket_mode = _get_bucket_mode(mcg_obj, bucket.name)
-        assert bucket_mode != "OPTIMAL", (
-            f"Bucket {bucket.name} is still OPTIMAL after "
-            f"exceeding PV pool capacity"
-        )
+        _wait_for_bucket_mode(mcg_obj, bucket.name, "!OPTIMAL")
 
     # ------------------------------------------------------------------
     # Namespace bucket tests
@@ -365,15 +393,7 @@ class TestNooBaaBucketErrorStateMode:
         )
         cld_mgr.aws_client.delete_uls(target_uls_name)
 
-        run_time = 60 * 7
-        log.info(f"Waiting {run_time}s for namespace bucket to enter error state")
-        time.sleep(run_time)
-
-        bucket_mode = _get_bucket_mode(mcg_obj, ns_bucket.name)
-        assert bucket_mode != "OPTIMAL", (
-            f"Namespace bucket {ns_bucket.name} is still OPTIMAL "
-            f"after deleting namespace store target"
-        )
+        _wait_for_bucket_mode(mcg_obj, ns_bucket.name, "!OPTIMAL")
 
     @polarion_id("OCS-XXXXX")
     def test_ns_bucket_quota_error_mode(
@@ -444,15 +464,7 @@ class TestNooBaaBucketErrorStateMode:
             f"(quota 100Mi) to trigger EXCEEDING_QUOTA"
         )
 
-        run_time = 60 * 7
-        log.info(f"Waiting {run_time}s for bucket mode to propagate")
-        time.sleep(run_time)
-
-        expected_mode = "EXCEEDING_QUOTA"
-        bucket_mode = _get_bucket_mode(mcg_obj, ns_bucket.name)
-        assert (
-            bucket_mode == expected_mode
-        ), f"Expected bucket mode {expected_mode}, got {bucket_mode}"
+        _wait_for_bucket_mode(mcg_obj, ns_bucket.name, "EXCEEDING_QUOTA")
 
     @skipif_mcg_only
     @polarion_id("OCS-XXXXX")
@@ -535,15 +547,7 @@ class TestNooBaaBucketErrorStateMode:
             f"(cache PV pool 2Gi) to trigger capacity error"
         )
 
-        run_time = 60 * 7
-        log.info(f"Waiting {run_time}s for namespace bucket to enter error state")
-        time.sleep(run_time)
-
-        bucket_mode = _get_bucket_mode(mcg_obj, ns_bucket.name)
-        assert bucket_mode != "OPTIMAL", (
-            f"Namespace bucket {ns_bucket.name} is still OPTIMAL "
-            f"after exceeding cache PV pool capacity"
-        )
+        _wait_for_bucket_mode(mcg_obj, ns_bucket.name, "!OPTIMAL")
 
 
 def setup_module(module):
