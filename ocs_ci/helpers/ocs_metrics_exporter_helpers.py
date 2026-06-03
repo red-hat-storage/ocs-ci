@@ -20,9 +20,6 @@ from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
-PROMETHEUS_K8S_SA = "prometheus-k8s"
-OPENSHIFT_MONITORING_NS = "openshift-monitoring"
-
 
 def get_ocs_metrics_exporter_pod(namespace=None):
     """
@@ -40,6 +37,9 @@ def get_ocs_metrics_exporter_pod(namespace=None):
         p for p in pods if p.get("status", {}).get("phase") == constants.STATUS_RUNNING
     ]
     if not running:
+        logger.debug(
+            "No running ocs-metrics-exporter pod found in namespace %s", namespace
+        )
         return None
     return Pod(**running[0])
 
@@ -79,28 +79,37 @@ def resolve_metrics_endpoint(pod_obj):
             container_port = port_def.get("containerPort")
             if not container_port:
                 continue
-            if container_port == 8443 or "https" in name:
+            if (
+                container_port == constants.OCS_METRICS_EXPORTER_HTTPS_PORT
+                or name == "https-main"
+            ):
+                https_port = container_port
+            elif "https" in name and https_port is None:
                 https_port = container_port
             elif "metric" in name or name in ("http", "probe"):
                 http_port = container_port
 
     if https_port:
-        return {
-            "url": f"https://127.0.0.1:{https_port}/metrics",
+        endpoint = {
+            "url": f"https://127.0.0.1:{https_port}{constants.OCS_METRICS_EXPORTER_METRICS_PATH}",
             "tls_skip_verify": True,
             "bearer_auth": True,
         }
+        logger.debug("Resolved HTTPS metrics endpoint: %s", endpoint["url"])
+        return endpoint
     port = http_port or 8080
-    return {
-        "url": f"http://127.0.0.1:{port}/metrics",
+    endpoint = {
+        "url": f"http://127.0.0.1:{port}{constants.OCS_METRICS_EXPORTER_METRICS_PATH}",
         "tls_skip_verify": False,
         "bearer_auth": False,
     }
+    logger.debug("Resolved HTTP metrics endpoint: %s", endpoint["url"])
+    return endpoint
 
 
 def create_prometheus_k8s_bearer_token():
     """
-    Create a short-lived token for prometheus-k8s in openshift-monitoring (same as manual QA).
+    Create a short-lived token for prometheus-k8s in openshift-monitoring.
 
     Used to authorize ``curl`` to the exporter's TLS /metrics listener inside the pod.
 
@@ -110,20 +119,32 @@ def create_prometheus_k8s_bearer_token():
     Raises:
         CommandFailed: if ``oc create token`` is not supported or SA is missing.
     """
-    base_cmd = f"oc create token {PROMETHEUS_K8S_SA} -n {OPENSHIFT_MONITORING_NS}"
+    base_cmd = (
+        f"oc create token {constants.PROMETHEUS_K8S_SA} "
+        f"-n {constants.OPENSHIFT_MONITORING_NAMESPACE}"
+    )
     last_exc = None
     for suffix in (" --duration=15m", ""):
         cmd = base_cmd + suffix
         try:
             completed = exec_cmd(cmd, secrets=[])
-            token = (completed.stdout or "").strip()
+            raw_stdout = completed.stdout or b""
+            if isinstance(raw_stdout, bytes):
+                raw_stdout = raw_stdout.decode()
+            token = raw_stdout.strip()
             if token:
+                logger.debug(
+                    "Created bearer token for %s in %s",
+                    constants.PROMETHEUS_K8S_SA,
+                    constants.OPENSHIFT_MONITORING_NAMESPACE,
+                )
                 return token
         except CommandFailed as exc:
             last_exc = exc
             continue
     msg = (
-        "failed to create prometheus-k8s token in openshift-monitoring "
+        f"failed to create {constants.PROMETHEUS_K8S_SA} token in "
+        f"{constants.OPENSHIFT_MONITORING_NAMESPACE} "
         "(tried with and without --duration); check OCP version and RBAC"
     )
     if last_exc:
@@ -168,9 +189,12 @@ def scrape_metrics_text_sample(pod_obj, bearer_token=None, max_bytes=8192):
     parts.append(url)
     inner = " ".join(shlex.quote(p) for p in parts) + f" | head -c {max_bytes}"
     cmd = f"sh -c {shlex.quote(inner)}"
-    return pod_obj.exec_cmd_on_pod(
+    response = pod_obj.exec_cmd_on_pod(
         cmd, out_yaml_format=False, secrets=secrets if secrets else None
     )
+    if isinstance(response, bytes):
+        response = response.decode()
+    return response
 
 
 def assert_prometheus_exposition_text(text):
@@ -186,7 +210,7 @@ def assert_prometheus_exposition_text(text):
     assert text and text.strip(), "metrics endpoint returned an empty body"
     stripped = text.lstrip()
     first_line = stripped.split("\n", 1)[0]
-    prom_comment = first_line.startswith("# HELP") or first_line.startswith("# TYPE")
+    prom_comment = first_line.startswith(("# HELP", "# TYPE"))
     prom_metric = bool(re.match(r"^[a-zA-Z_:][a-zA-Z0-9_:]*(?:\{|\s)", first_line))
     assert prom_comment or prom_metric, (
         "expected Prometheus text format from /metrics (line starting with "
@@ -220,12 +244,15 @@ def check_exporter_readyz(pod_obj, bearer_token=None):
     """
     Probe /readyz on the exporter pod and return the response body.
 
+    The exporter may return HTTP 200 with an empty body when healthy; callers
+    should treat a successful curl (``-f``) as healthy in that case.
+
     Args:
         pod_obj (Pod): ocs-metrics-exporter pod
         bearer_token (str): optional pre-created bearer token
 
     Returns:
-        str: response body (expect ``ok`` or similar)
+        str: response body (may be empty when HTTP 200 indicates healthy)
     """
     endpoint = resolve_metrics_endpoint(pod_obj)
     url = endpoint["url"].replace(
@@ -242,9 +269,12 @@ def check_exporter_readyz(pod_obj, bearer_token=None):
         parts.extend(["-H", f"Authorization: Bearer {token}"])
     parts.append(url)
     cmd = " ".join(shlex.quote(p) for p in parts)
-    return pod_obj.exec_cmd_on_pod(
+    response = pod_obj.exec_cmd_on_pod(
         cmd, out_yaml_format=False, secrets=secrets if secrets else None
     )
+    if isinstance(response, bytes):
+        response = response.decode()
+    return response
 
 
 def assert_exporter_uses_https_port(pod_obj):
@@ -269,6 +299,3 @@ def assert_exporter_uses_https_port(pod_obj):
         f"{constants.OCS_METRICS_EXPORTER_HTTPS_PORT} (HTTPS); "
         f"containers={[c.get('name') for c in pod_obj.pod_data.get('spec', {}).get('containers', [])]}"
     )
-
-
-# Made with Bob
