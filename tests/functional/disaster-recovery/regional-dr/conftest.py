@@ -53,7 +53,7 @@ def pytest_collection_modifyitems(items):
                 items.remove(item)
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=False, scope="session")
 def check_subctl_cli():
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
