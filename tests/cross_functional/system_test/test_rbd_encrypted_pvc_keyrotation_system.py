@@ -222,12 +222,13 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
             is_nfs_pod = pvc_config.get("pod_type") == "nfs"
 
             if is_nfs_pod:
-                # NFS pods: use fio_filename, no verify (to avoid permission issues)
+                # NFS pods: use direct I/O to prevent memory exhaustion
                 pod_obj.run_io(
                     storage_type=io_type,
                     size="500M",
                     runtime=60,
                     fio_filename=pod_obj.name,
+                    direct=1,
                 )
             else:
                 # RBD/CephFS pods: use verify=True
