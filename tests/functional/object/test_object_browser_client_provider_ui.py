@@ -12,6 +12,8 @@ import tempfile
 import time
 import uuid
 
+from selenium.webdriver.common.by import By
+
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
