@@ -8,6 +8,7 @@ import logging
 import os
 from subprocess import PIPE, Popen
 import tempfile
+import fauxfactory
 import time
 from pathlib import Path
 import base64
@@ -3933,30 +3934,139 @@ class MultiClusterDROperatorsDeploy(object):
         mch_resource.wait_for_phase("Running")
         self.backup_pod_status_check()
 
+    def create_odf_bucket_and_get_credentials(self, bucket_name):
+        """
+        Create ODF ObjectBucketClaim on secondary cluster and retrieve credentials.
+
+        This helper function:
+        1. Identifies the secondary cluster
+        2. Switches context to secondary cluster
+        3. Creates an ObjectBucketClaim (OBC) using NooBaa/MCG
+        4. Waits for OBC to be bound
+        5. Retrieves bucket credentials
+        6. Switches back to original context
+
+        Args:
+            bucket_name (str): Name of the bucket to create
+
+        Returns:
+            tuple: (bucket_name, endpoint, access_key, secret_key)
+                - bucket_name (str): Actual bucket name from OBC
+                - endpoint (str): S3-compatible endpoint URL
+                - access_key (str): Access key for the bucket
+                - secret_key (str): Secret key for the bucket
+
+        Raises:
+            TimeoutError: If OBC doesn't become bound within 5 minutes
+        """
+        from ocs_ci.ocs.resources.objectbucket import OBC, MCGOCBucket
+        from ocs_ci.ocs.utils import get_secondary_cluster_config
+
+        logger.info("Creating ODF ObjectBucketClaim on secondary cluster")
+
+        # Get secondary cluster configuration
+        secondary_cluster_config = get_secondary_cluster_config()
+        secondary_cluster_name = secondary_cluster_config.ENV_DATA["cluster_name"]
+        logger.info(f"Secondary cluster identified: {secondary_cluster_name}")
+
+        # Switch to secondary cluster
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+
+        try:
+            # Create OBC using MCGOCBucket class
+            logger.info(f"Creating ObjectBucketClaim: {bucket_name}")
+            mcg_bucket = MCGOCBucket(name=bucket_name)
+
+            # Wait for OBC to be bound (max 5 minutes)
+            logger.info("Waiting for ObjectBucketClaim to be bound...")
+            for attempt in range(30):
+                try:
+                    if mcg_bucket.status == constants.HEALTHY_OBC:
+                        logger.info("ObjectBucketClaim is bound and healthy")
+                        break
+                except KeyError:
+                    logger.debug(
+                        f"OBC status not available yet, attempt {attempt + 1}/30"
+                    )
+                time.sleep(10)
+            else:
+                raise TimeoutError(
+                    f"ObjectBucketClaim {bucket_name} did not become bound within 5 minutes"
+                )
+
+            # Retrieve bucket credentials using OBC class
+            obc_obj = OBC(bucket_name)
+
+            actual_bucket_name = obc_obj.bucket_name
+            endpoint = obc_obj.s3_external_endpoint
+            access_key = obc_obj.access_key_id
+            secret_key = obc_obj.access_key
+
+            # Clean endpoint URL (remove port if present)
+            if endpoint and ":" in endpoint:
+                if "://" in endpoint:
+                    protocol, rest = endpoint.split("://", 1)
+                    host = rest.split(":")[0]
+                    endpoint = f"{protocol}://{host}"
+                else:
+                    endpoint = endpoint.split(":")[0]
+
+            logger.info(
+                f"Successfully created ODF bucket: {actual_bucket_name} @ {endpoint}"
+            )
+
+            return (actual_bucket_name, endpoint, access_key, secret_key)
+
+        finally:
+            # Always switch back to original ACM context
+            config.switch_acm_ctx()
+            logger.info("Switched back to ACM context")
+
     def create_s3_bucket(self, access_key, secret_key, bucket_name):
         """
-        Create s3 bucket
+        Create s3 bucket using AWS S3 or ODF ObjectBucketClaim.
+
+        If config.ENV_DATA.get('use_internal_s3') is True,
+        it will create an ODF ObjectBucketClaim from the secondary cluster
+        using the create_odf_bucket_and_get_credentials() helper.
+        Otherwise, it uses AWS S3 bucket (default behavior).
+
         Args:
-            access_key (str): S3 access key
-            secret_key (str): S3 secret key
-            acm_indexes (list): List of acm indexes
+            access_key (str): S3 access key (not used when use_internal_s3=True)
+            secret_key (str): S3 secret key (not used when use_internal_s3=True)
+            bucket_name (str): Name of the bucket to create
+
+        Returns:
+            tuple: (bucket_name, endpoint, access_key, secret_key) when use_internal_s3=True
+                   None when using AWS S3 (credentials passed as parameters)
         """
-        client = boto3.resource(
-            "s3",
-            verify=True,
-            endpoint_url="https://s3.amazonaws.com",
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-        )
-        try:
-            client.create_bucket(
-                Bucket=bucket_name,
-                CreateBucketConfiguration={"LocationConstraint": constants.AWS_REGION},
+        use_odf_bucket = config.ENV_DATA.get("use_internal_s3", False)
+
+        if use_odf_bucket:
+            logger.info("Using ODF ObjectBucketClaim for backup storage")
+            return self.create_odf_bucket_and_get_credentials(bucket_name)
+        else:
+            # Default AWS S3 bucket behavior
+            logger.info("Using AWS S3 bucket for backup storage")
+            client = boto3.resource(
+                "s3",
+                verify=True,
+                endpoint_url="https://s3.amazonaws.com",
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
             )
-            logger.info(f"Successfully created backup bucket: {bucket_name}")
-        except BotoCoreError as e:
-            logger.error(f"Failed to create s3 bucket {e}")
-            raise
+            try:
+                client.create_bucket(
+                    Bucket=bucket_name,
+                    CreateBucketConfiguration={
+                        "LocationConstraint": constants.AWS_REGION
+                    },
+                )
+                logger.info(f"Successfully created backup bucket: {bucket_name}")
+            except BotoCoreError as e:
+                logger.error(f"Failed to create s3 bucket {e}")
+                raise
+            return None
 
     def build_bucket_name(self, acm_indexes):
         """
@@ -4073,6 +4183,15 @@ class MultiClusterDROperatorsDeploy(object):
             "bucket"
         ] = bucket_name
         oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
+
+        use_odf_bucket = config.ENV_DATA.get("use_internal_s3", False)
+        if use_odf_bucket:
+            oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
+                "region"
+            ] = "noobaa"
+            oadp_data["spec"]["snapshotLocations"][0]["velero"]["config"][
+                "region"
+            ] = "noobaa"
         if version.compare_versions(f"{oadp_version} >= 1.5"):
             # Remove 'restic' under 'configuration' if it exists
             oadp_data["spec"]["configuration"].pop("restic", None)
@@ -4453,15 +4572,34 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             config.switch_ctx(i)
             self.enable_cluster_backup()
         # Configuring s3 bucket
-        self.meta_obj.get_meta_access_secret_keys()
+        # Get AWS credentials only if not using internal ODF bucket
+        use_odf_bucket = config.ENV_DATA.get("use_internal_s3", False)
+        if not use_odf_bucket:
+            self.meta_obj.get_meta_access_secret_keys()
+            access_key = self.meta_obj.access_key
+            secret_key = self.meta_obj.secret_key
+        else:
+            # Placeholder values for ODF - will be replaced by create_s3_bucket
+            access_key = None
+            secret_key = None
+
         # bucket name formed like '{acm_active_cluster}-{acm_passive_cluster}'
         self.meta_obj.bucket_name = self.build_bucket_name(acm_indexes)
-        # create s3 bucket
-        self.create_s3_bucket(
-            self.meta_obj.access_key,
-            self.meta_obj.secret_key,
+
+        # create s3 bucket (AWS or ODF based on use_internal_s3 config)
+        odf_credentials = self.create_s3_bucket(
+            access_key,
+            secret_key,
             self.meta_obj.bucket_name,
         )
+
+        # Use ODF credentials if returned, otherwise use AWS credentials
+        if odf_credentials:
+            bucket_name, endpoint, access_key, secret_key = odf_credentials
+            self.meta_obj.bucket_name = bucket_name
+            self.meta_obj.access_key = access_key
+            self.meta_obj.secret_key = secret_key
+
         self.create_generic_credentials(
             self.meta_obj.access_key, self.meta_obj.secret_key, acm_indexes
         )
@@ -4532,69 +4670,30 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         """
         Create thanos secret yaml by using Noobaa/ODF bucket or AWS bucket
 
-        If config.ENV_DATA.get('use_odf_bucket_for_thanos') is True,
-        it will use ODF ObjectBucketClaim from secondary site using OBC class.
+        If config.ENV_DATA.get('use_internal_s3') is True,
+        it will use ODF ObjectBucketClaim from secondary site using the
+        create_odf_bucket_and_get_credentials() helper function.
         Otherwise, it uses AWS S3 bucket (default behavior).
         """
-        from ocs_ci.ocs.resources.objectbucket import OBC, MCGOCBucket
-
         acm_indexes = get_all_acm_indexes()
         thanos_secret_data = templating.load_yaml(constants.THANOS_PATH)
 
-        # Check if product_type is fdf to use ODF bucket
-        use_odf_bucket = config.ENV_DATA.get("product_type") == "fdf"
+        use_odf_bucket = config.ENV_DATA.get("use_internal_s3", False)
 
         if use_odf_bucket:
             logger.info("Using ODF ObjectBucketClaim for Thanos storage")
 
-            primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
-            config.switch_to_cluster_by_name(primary_cluster_name)
+            # Generate unique bucket name for Thanos
+            thanos_bucket_name = f"thanos-bkt-int-{fauxfactory.gen_alpha(6).lower()}"
 
-            try:
-                # Get bucket name from config or use default
-                thanos_bucket_name = "thanos-bucket-obc"
+            # Use helper function to create OBC and get credentials
+            bucket_name, endpoint, access_key, secret_key = (
+                self.create_odf_bucket_and_get_credentials(thanos_bucket_name)
+            )
 
-                # Create OBC using built-in class
-                logger.info(f"Creating ObjectBucketClaim: {thanos_bucket_name}")
-                mcg_bucket = MCGOCBucket(name=thanos_bucket_name)
-
-                # Wait for OBC to be bound using built-in status check
-                logger.info("Waiting for ObjectBucketClaim to be bound...")
-                for attempt in range(30):
-                    if mcg_bucket.status == constants.HEALTHY_OBC:
-                        logger.info("ObjectBucketClaim is bound and healthy")
-                        break
-                    time.sleep(10)
-                else:
-                    raise TimeoutError("ObjectBucketClaim did not become bound in time")
-
-                # Use OBC class to retrieve bucket credentials and details
-                obc_obj = OBC(thanos_bucket_name)
-
-                bucket_name = obc_obj.bucket_name
-                # Remove port suffix from endpoint if present (e.g., :443)
-                endpoint = obc_obj.s3_external_endpoint
-                if endpoint and ":" in endpoint:
-                    # Split by :// first to preserve protocol
-                    if "://" in endpoint:
-                        protocol, rest = endpoint.split("://", 1)
-                        # Remove port from the rest
-                        host = rest.split(":")[0]
-                        endpoint = f"{protocol}://{host}"
-                    else:
-                        # No protocol, just remove port
-                        endpoint = endpoint.split(":")[0]
-
-                access_key = obc_obj.access_key_id
-                secret_key = obc_obj.access_key
-
-                logger.info(
-                    f"Retrieved ODF bucket credentials: {bucket_name} @ {endpoint}"
-                )
-
-            finally:
-                # Switch back to original context
-                config.switch_acm_ctx()
+            logger.info(
+                f"Retrieved ODF bucket credentials for Thanos: {bucket_name} @ {endpoint}"
+            )
 
         else:
             # Default AWS S3 bucket behavior
