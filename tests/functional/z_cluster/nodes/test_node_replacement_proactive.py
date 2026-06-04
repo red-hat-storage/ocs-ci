@@ -178,6 +178,14 @@ def delete_and_create_osd_node(osd_node_name):
                 new_node_name = node.delete_and_create_osd_node_vsphere_upi(
                     osd_node_name, use_existing_node=use_existing_node
                 )
+        else:
+            msg_invalid_platform = (
+                "ocs-ci config 'platform' value "
+                f"'{config.ENV_DATA['platform']}' is not supported for UPI "
+                f"deployment, results of this test run are all invalid."
+            )
+            logger.error(msg_invalid_platform)
+            pytest.fail(msg_invalid_platform)
     elif dt == constants.MANAGED_CP_DEPL_TYPE:
         new_node_name = node.delete_and_create_osd_node_managed_cp(osd_node_name)
     else:
