@@ -95,7 +95,7 @@ class TestRbDPool(ManageTest):
         pvc_obj = pvc_factory(
             interface=interface_type, storageclass=sc_obj, size=10, status=pvc_status
         )
-        logger.info(f"PVC: {pvc_obj.name} created successfully using " f"{sc_obj.name}")
+        logger.info(f"PVC: {pvc_obj.name} created successfully using {sc_obj.name}")
 
         # Create app pod and mount each PVC
         logger.info(f"Creating an app pod and mount {pvc_obj.name}")

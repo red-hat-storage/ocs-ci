@@ -95,19 +95,26 @@ class TestCustomStorageClassNames:
         logger.info(
             f"Adding custom storageclass '{random_sc_name}' of type '{interface}' in storagecluster spec"
         )
-        logger.assertion(
-            f"Patch StorageCluster for custom SC '{random_sc_name}': expected='True'"
-        )
-        assert patch_storage_cluster_for_custom_storage_class(
+        patch_result = patch_storage_cluster_for_custom_storage_class(
             interface, storage_class_name=random_sc_name
-        ), f"Failed to add custom storageclass '{random_sc_name}' of type '{interface}' in storagecluster spec."
+        )
+        logger.assertion(
+            f"Patch StorageCluster for custom SC '{random_sc_name}': "
+            f"expected='True', actual='{patch_result}'"
+        )
+        assert patch_result, (
+            f"Failed to add custom storageclass '{random_sc_name}' of type "
+            f"'{interface}' in storagecluster spec."
+        )
         self.custom_sc_list.append(random_sc_name)
 
         logger.test_step("Verify custom StorageClass presence")
-        logger.assertion("Custom StorageClass presence check: expected='True'")
-        assert (
-            check_custom_storageclass_presence()
-        ), "Error validating the created storage classes."
+        sc_presence = check_custom_storageclass_presence()
+        logger.assertion(
+            f"Custom StorageClass presence check: expected='True', "
+            f"actual='{sc_presence}'"
+        )
+        assert sc_presence, "Error validating the created storage classes."
 
     @pytest.mark.polarion_id("OCS-5149")
     @pytest.mark.parametrize(

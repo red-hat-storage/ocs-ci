@@ -211,8 +211,8 @@ class TestKrKnHogChaosScenarios:
                 health_helper=health_helper,
             )
             raise
-        except Exception as e:
-            logger.exception(f"Multi-stress hog chaos failed for {node_type}: {e}")
+        except Exception:
+            logger.exception(f"Multi-stress hog chaos failed for {node_type}")
             raise
         finally:
             # Cleanup workloads
@@ -401,10 +401,8 @@ class TestKrKnHogChaosScenarios:
                 health_helper=health_helper,
             )
             raise
-        except Exception as e:
-            logger.exception(
-                f"{stress_level.upper()} cluster strength testing failed: {e}"
-            )
+        except Exception:
+            logger.exception(f"{stress_level.upper()} cluster strength testing failed")
             raise
         finally:
             # Cleanup workloads

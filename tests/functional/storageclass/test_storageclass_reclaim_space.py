@@ -98,6 +98,13 @@ class TestStorageClassReclamespace:
 
         logger.test_step("Verify RBD images show expected size of 2.0GiB after write")
         for pvc_obj in pvc_objs:
+            image_size = get_rbd_image_info(
+                self.pool_name, pvc_obj.get_rbd_image_name
+            ).get("used_size_gib")
+            logger.assertion(
+                f"RBD Image '{pvc_obj.get_rbd_image_name}' size after write: "
+                f"expected='2.0 GiB', actual='{image_size} GiB'"
+            )
             assert self.wait_till_expected_image_size(
                 pvc_obj, 2.0
             ), f"RBD Image '{pvc_obj.get_rbd_image_name}' expected size of '2.0 GiB' does not match the actual size."
@@ -108,6 +115,13 @@ class TestStorageClassReclamespace:
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
         for pvc_obj in pvc_objs:
+            image_size = get_rbd_image_info(
+                self.pool_name, pvc_obj.get_rbd_image_name
+            ).get("used_size_gib")
+            logger.assertion(
+                f"RBD Image '{pvc_obj.get_rbd_image_name}' size after reclaim: "
+                f"expected='0.0 GiB', actual='{image_size} GiB'"
+            )
             assert self.wait_till_expected_image_size(
                 pvc_obj, 0.0
             ), f"RBD Image '{pvc_obj.get_rbd_image_name}' expected size of '0.0 GiB' does not match the actual size."

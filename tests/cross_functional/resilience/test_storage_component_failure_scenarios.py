@@ -116,8 +116,8 @@ class TestStorageClusterComponentFailurescenarios:
             logger.test_step("Validate workloads and clean up resources")
             workload_ops.validate_and_cleanup()
 
-        except UnexpectedBehaviour as e:
-            logger.exception(f"Test execution failed: {e}")
+        except UnexpectedBehaviour:
+            logger.exception("Test execution failed")
             raise
         finally:
             # Cleanup failure injection if not already done

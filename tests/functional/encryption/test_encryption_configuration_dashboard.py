@@ -167,14 +167,13 @@ class TestEncryptionConfigurationDashboard:
 
         if bool(encryption_summary["object_storage"]["kms"]):
             logger.info("Verifying object_storage KMS status")
+            expected_kms = (self.noobaa_kms or "").upper()
+            actual_kms = encryption_summary["object_storage"]["kms"].upper()
             logger.assertion(
-                f"KMS provider in object storage: expected='{self.noobaa_kms}' "
-                f"in '{encryption_summary['object_storage']['kms']}'"
+                f"KMS provider in object storage: expected='{expected_kms}' "
+                f"in '{actual_kms}'"
             )
-            assert (
-                self.noobaa_kms.upper()
-                in encryption_summary["object_storage"]["kms"].upper()
-            ), "KMS details is not correct"
+            assert expected_kms in actual_kms, "KMS details is not correct"
 
         # Validate in-transit encryption
         logger.test_step(

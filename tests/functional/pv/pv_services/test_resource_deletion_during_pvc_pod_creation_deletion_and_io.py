@@ -475,8 +475,12 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         logger.info("Fetching IO results from the pods having PVCs to delete.")
         for pod_obj in pods_for_pvc_io:
             if getattr(pod_obj, "io_running", False):
-                pod_obj.get_fio_results(300)
+                fio_result = pod_obj.get_fio_results(300)
                 pod_obj.io_running = False
+                err_count = fio_result.get("jobs")[0].get("error")
+                assert (
+                    err_count == 0
+                ), f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
         logger.info("Verified IO result on pods having PVCs to delete.")
 
         # Delete pods having PVCs to delete.

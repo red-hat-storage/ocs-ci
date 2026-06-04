@@ -26,34 +26,22 @@ class TestCephFileSystemCreation(ManageTest):
         Expected Result: It should not create the filesystem and throw error.
         """
         logger.test_step("Create initial CephFileSystem 'test-ceph-fs'")
-        try:
-            cephFS_obj = create_ceph_file_system(
-                cephfs_name="test-ceph-fs", label={"use": "test"}
-            )
+        cephFS_obj = create_ceph_file_system(
+            cephfs_name="test-ceph-fs", label={"use": "test"}
+        )
 
-            if cephFS_obj:
-                logger.info("CephFileSystem created: test-ceph-fs")
-            else:
-                logger.warning("Unable to create the CephFileSystem")
-            ct_pod = pod.get_ceph_tools_pod()
-            cmd1 = "ceph fs fail test-ceph-fs"
-            ct_pod.exec_cmd_on_pod(cmd1)
-            cmd2 = "ceph fs rm test-ceph-fs --yes-i-really-mean-it"
-            ct_pod.exec_cmd_on_pod(cmd2)
-            logger.test_step(
-                "Attempt to recreate CephFileSystem with same name and verify AlreadyExists error"
-            )
-            new_cephFS_obj = create_ceph_file_system(
-                cephfs_name="test-ceph-fs", label={"use": "test"}
-            )
-            logger.info(f"CephFileSystem recreation returned: {new_cephFS_obj}")
-
-        except CommandFailed as e:
-            if "Error from server (AlreadyExists)" in str(e):
-                logger.info("AlreadyExists error received as expected")
-                assert "Error from server (AlreadyExists)" in str(e)
-            else:
-                logger.exception(
-                    f"Command failed while creating the CephFileSystem: {e}"
-                )
-                raise CommandFailed
+        if cephFS_obj:
+            logger.info("CephFileSystem created: test-ceph-fs")
+        else:
+            logger.warning("Unable to create the CephFileSystem")
+        ct_pod = pod.get_ceph_tools_pod()
+        cmd1 = "ceph fs fail test-ceph-fs"
+        ct_pod.exec_cmd_on_pod(cmd1)
+        cmd2 = "ceph fs rm test-ceph-fs --yes-i-really-mean-it"
+        ct_pod.exec_cmd_on_pod(cmd2)
+        logger.test_step(
+            "Attempt to recreate CephFileSystem with same name and verify AlreadyExists error"
+        )
+        with pytest.raises(CommandFailed, match=r"Error from server \(AlreadyExists\)"):
+            create_ceph_file_system(cephfs_name="test-ceph-fs", label={"use": "test"})
+        logger.info("AlreadyExists error received as expected")

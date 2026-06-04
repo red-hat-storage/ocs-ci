@@ -208,8 +208,13 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                 actual_md5_sum,
             ) in restore_pod_obj.pvc.snapshot.md5_sum.items():
                 file_path = pod.get_file_path(restore_pod_obj, file_name)
-                assert pod.check_file_existence(
-                    restore_pod_obj, file_path
+                file_exists = pod.check_file_existence(restore_pod_obj, file_path)
+                logger.assertion(
+                    f"File {file_name} exists on pod {restore_pod_obj.name}: "
+                    f"expected=True, actual={file_exists}"
+                )
+                assert (
+                    file_exists
                 ), f"File {file_name} does not exist on pod {restore_pod_obj.name}"
 
                 pod.verify_data_integrity(restore_pod_obj, file_name, actual_md5_sum)

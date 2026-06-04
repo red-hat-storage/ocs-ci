@@ -162,9 +162,9 @@ class TestKrKnContainerChaosScenarios:
                 health_helper=health_helper,
             )
             raise
-        except Exception as e:
+        except Exception:
             logger.exception(
-                f"Multi-component container chaos with {kill_signal} failed: {e}"
+                f"Multi-component container chaos with {kill_signal} failed"
             )
             raise
 
@@ -356,10 +356,8 @@ class TestKrKnContainerChaosScenarios:
                 health_helper=health_helper,
             )
             raise
-        except Exception as e:
-            logger.exception(
-                f"Random pod kill chaos failed for {stress_level} level: {e}"
-            )
+        except Exception:
+            logger.exception(f"Random pod kill chaos failed for {stress_level} level")
             raise
 
         logger.test_step("Analyze pod kill chaos results")

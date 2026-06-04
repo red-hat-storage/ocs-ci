@@ -96,8 +96,8 @@ class TestPlatformFailureScenarios:
             logger.test_step("Validate and clean up workloads")
             workload_ops.validate_and_cleanup()
 
-        except UnexpectedBehaviour as e:
-            logger.exception(f"Test execution failed: {e}")
+        except UnexpectedBehaviour:
+            logger.exception("Test execution failed")
             raise
         finally:
             # Cleanup failure injection if not already done
@@ -190,8 +190,8 @@ class TestPlatformFailureScenarios:
             logger.test_step("Validate and clean up workloads")
             workload_ops.validate_and_cleanup()
 
-        except UnexpectedBehaviour as e:
-            logger.exception(f"Test execution failed: {e}")
+        except UnexpectedBehaviour:
+            logger.exception("Test execution failed")
             raise
         finally:
             # Cleanup failure injection if not already done

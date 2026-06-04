@@ -104,6 +104,10 @@ class TestUpgrade(ManageTest):
                 num_of_pvc=2,
             )
             logger.debug(f"RBD PVCs created for size {size}")
+            logger.assertion(
+                f"RBD PVCs of size {size}: expected=truthy, "
+                f"actual={bool(rbd_pvcs)} (count={len(rbd_pvcs) if rbd_pvcs else 0})"
+            )
             assert rbd_pvcs, f"Failed to create rbd_pvcs of size {size}"
 
             cephfs_pvcs = multi_pvc_factory(
@@ -112,6 +116,10 @@ class TestUpgrade(ManageTest):
                 access_modes=access_modes_cephfs,
                 size=size,
                 num_of_pvc=2,
+            )
+            logger.assertion(
+                f"CephFS PVCs of size {size}: expected=truthy, "
+                f"actual={bool(cephfs_pvcs)} (count={len(cephfs_pvcs) if cephfs_pvcs else 0})"
             )
             assert cephfs_pvcs, "Failed to create cephfs_pvcs PVC"
 
@@ -123,6 +131,11 @@ class TestUpgrade(ManageTest):
                 size=size,
                 num_of_pvc=2,
             )
+            logger.assertion(
+                f"Custom RBD PVCs of size {size}: expected=truthy, "
+                f"actual={bool(custom_rbd_pvcs)} "
+                f"(count={len(custom_rbd_pvcs) if custom_rbd_pvcs else 0})"
+            )
             assert custom_rbd_pvcs, "Failed to create custom_rbd_pvcs PVC"
 
             custom_cephfs_pvcs = multi_pvc_factory(
@@ -132,6 +145,11 @@ class TestUpgrade(ManageTest):
                 storageclass=custom_cephfs_sc,
                 size=size,
                 num_of_pvc=2,
+            )
+            logger.assertion(
+                f"Custom CephFS PVCs of size {size}: expected=truthy, "
+                f"actual={bool(custom_cephfs_pvcs)} "
+                f"(count={len(custom_cephfs_pvcs) if custom_cephfs_pvcs else 0})"
             )
             assert custom_cephfs_pvcs, "Failed to create custom_cephfs_pvcs PVC"
         logger.info(f"All PVCs created successfully for sizes {size_list}")

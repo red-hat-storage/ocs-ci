@@ -89,9 +89,13 @@ class TestCreateStorageClassWithWrongProvisioner(ManageTest):
 
         logger.test_step("Delete PVC and StorageClass")
         logger.info(f"Deleting PVC: {pvc_obj.name}")
-        assert pvc_obj.delete()
+        pvc_deleted = pvc_obj.delete()
+        logger.assertion("PVC deletion", True, pvc_deleted)
+        assert pvc_deleted
         logger.info(f"PVC {pvc_obj.name} deleted successfully")
 
         logger.info(f"Deleting StorageClass: {sc_obj.name}")
-        assert sc_obj.delete()
+        sc_deleted = sc_obj.delete()
+        logger.assertion("StorageClass deletion", True, sc_deleted)
+        assert sc_deleted
         logger.info(f"StorageClass: {sc_obj.name} deleted successfully")

@@ -68,9 +68,11 @@ def create_storageclass(sc_name, expect_fail=False):
         logger.debug(f"Storage class data: {sc_data}")
 
     except CommandFailed as ecf:
+        if not expect_fail:
+            raise
         assert "AlreadyExists" in str(ecf)
         logger.info(
-            f"Cannot create two StorageClasses with same name. " f"Error message: {ecf}"
+            f"Cannot create two StorageClasses with same name. Error message: {ecf}"
         )
 
 

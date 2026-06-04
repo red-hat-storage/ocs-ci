@@ -100,9 +100,11 @@ class TestInTransitEncryptionSanity:
 
         # Toggle encryption state
         logger.test_step("Toggle in-transit encryption state")
-        assert (
-            self.toggle_intransit_encryption_state()
-        ), "Failed to change in-transit encryption state."
+        toggle_result = self.toggle_intransit_encryption_state()
+        logger.assertion(
+            f"In-transit encryption toggle: expected='True', actual='{toggle_result}'"
+        )
+        assert toggle_result, "Failed to change in-transit encryption state."
 
         # Create pods for each interface
         logger.test_step("Create pods for each interface")
@@ -131,9 +133,12 @@ class TestInTransitEncryptionSanity:
             # Toggle encryption state during I/O operations
             for _ in range(2):
                 logger.info("Toggling encryption state during I/O.")
-                assert (
-                    self.toggle_intransit_encryption_state()
-                ), "Failed to change in-transit encryption state."
+                toggle_result = self.toggle_intransit_encryption_state()
+                logger.assertion(
+                    f"In-transit encryption toggle during I/O: "
+                    f"expected='True', actual='{toggle_result}'"
+                )
+                assert toggle_result, "Failed to change in-transit encryption state."
                 time.sleep(5)
 
             # Wait for I/O operations to complete

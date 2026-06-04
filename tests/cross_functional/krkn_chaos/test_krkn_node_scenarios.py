@@ -178,9 +178,10 @@ class TestKrknNodeScenarios:
                         health_helper=health_helper,
                     )
                     raise
-                except Exception as e:
+                except Exception:
                     logger.exception(
-                        f"{cloud_type} node scenarios failed on {platform} for instance_count={instance_count}: {e}"
+                        f"{cloud_type} node scenarios failed on {platform} "
+                        f"for instance_count={instance_count}"
                     )
                     raise
 
@@ -328,8 +329,8 @@ class TestKrknNodeScenarios:
                 e, platform, action, health_helper=health_helper
             )
             raise
-        except Exception as e:
-            logger.exception(f"{action} failed on {platform}: {e}")
+        except Exception:
+            logger.exception(f"{action} failed on {platform}")
             raise
         finally:
             workload_ops.validate_and_cleanup()

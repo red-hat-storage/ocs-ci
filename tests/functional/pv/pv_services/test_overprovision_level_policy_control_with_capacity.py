@@ -102,9 +102,9 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
                 size=50,
                 status=constants.STATUS_BOUND,
             )
-        except Exception as e:
-            logger.exception(f"Failed to create PVC {str(e)}")
-            assert False
+        except Exception:
+            logger.exception("Failed to create PVC")
+            pytest.fail("Failed to create PVC")
 
         # Wait for clusterresourcequota to be created before describing it
         logger.info(
@@ -178,9 +178,9 @@ class TestOverProvisionLevelPolicyControlWithCapacity(ManageTest):
                 storageclass=sc_obj,
                 size=51,
             )
-        except Exception as e:
-            logger.exception(f"Failed to create PVC : {e}")
-            assert False
+        except Exception:
+            logger.exception("Failed to create PVC")
+            pytest.fail("Failed to create PVC")
 
     def verify_substrings_in_string(self, output_string, expected_strings):
         """

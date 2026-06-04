@@ -51,8 +51,8 @@ class TestCephfsFsyncConsistency(ManageTest):
             exec_cmd(
                 cmd=f"oc cp {local_script_path} {client_pod_obj.name}:/tmp/sync_script.py"
             )
-        except Exception as e:
-            logger.error(f"Failed to copy sync script to pod: {e}")
+        except Exception:
+            logger.exception("Failed to copy sync script to pod")
 
         logger.info(
             "Starting 1000 write-and-read cycles between client and server pods"

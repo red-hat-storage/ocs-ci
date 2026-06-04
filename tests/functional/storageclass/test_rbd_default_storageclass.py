@@ -52,13 +52,14 @@ class TestRBDStorageClassAsDefaultStorageClass:
         sc_attached_to_pvc = pvc_obj.get().get("spec").get("storageClassName")
         logger.info(f"Storage class attached to PVC: {sc_attached_to_pvc}")
 
+        is_default = is_rbd_default_storage_class(sc_name=sc_attached_to_pvc)
         logger.assertion(
-            f"RBD default storage class: expected=True, "
-            f"actual=is_rbd_default_storage_class('{sc_attached_to_pvc}')"
+            f"RBD default storage class: expected=True, actual={is_default}"
         )
-        assert is_rbd_default_storage_class(
-            sc_name=sc_attached_to_pvc
-        ), f"RBD storageclass {sc_attached_to_pvc} is not default storageclass for Cluster."
+        assert is_default, (
+            f"RBD storageclass {sc_attached_to_pvc} is not default storageclass "
+            f"for Cluster."
+        )
 
         logger.test_step("Attach PVC to pod and run IO workload")
         pod_obj = pod_factory(pvc=pvc_obj, status=constants.STATUS_RUNNING)

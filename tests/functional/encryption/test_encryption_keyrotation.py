@@ -156,7 +156,7 @@ class TestEncryptionKeyrotation:
             compare_old_with_new_keys()
         except UnexpectedBehaviour:
             logger.exception("Key rotation did not happen after schedule passed")
-            assert False
+            pytest.fail("Key rotation did not happen after schedule passed")
 
         # Change the keyrotation value to default.
         logger.test_step("Reset keyrotation schedule to default (@weekly)")
@@ -246,7 +246,7 @@ class TestEncryptionKeyrotation:
             )
         except UnexpectedBehaviour:
             logger.warning("Noobaa Key Rotation did not happen.")
-            assert False
+            pytest.fail("Noobaa Key Rotation did not happen.")
 
         # Change the keyrotation value to default.
         logger.info("Changing the keyrotation value to default.")
@@ -537,7 +537,7 @@ class TestNoobaaKeyrotationWithKMS:
             )
         except UnexpectedBehaviour:
             logger.warning("Noobaa Key Rotation did not happen.")
-            assert False
+            pytest.fail("Noobaa Key Rotation did not happen.")
 
         # Change the keyrotation value to default.
         logger.info("Changing the keyrotation value to default.")

@@ -73,10 +73,12 @@ class TestMonFailuresWithIntransitEncryption:
 
         ceph_obj = CephCluster()
 
-        logger.assertion("In-transit encryption verification: expected='True'")
-        assert (
-            in_transit_encryption_verification()
-        ), "In transit encryption verification failed"
+        in_transit_verified = in_transit_encryption_verification()
+        logger.assertion(
+            f"In-transit encryption verification: expected='True', "
+            f"actual='{in_transit_verified}'"
+        )
+        assert in_transit_verified, "In transit encryption verification failed"
 
         # Select Two mons
         logger.test_step("Scale down two mons and restart Mgr pod")
@@ -113,21 +115,22 @@ class TestMonFailuresWithIntransitEncryption:
         logger.info("Waiting for mgr pod to move to Running state")
         ceph_obj.scan_cluster()
 
-        logger.assertion("Mgr pod status: expected='Running'")
-        assert ceph_obj.POD.wait_for_resource(
+        mgr_running = ceph_obj.POD.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=constants.MGR_APP_LABEL,
             resource_count=1,
             timeout=100,
-        ), "Mgr pod didn't move to Running state after 100 seconds"
+        )
+        logger.assertion(f"Mgr pod status: expected='Running', actual='{mgr_running}'")
+        assert mgr_running, "Mgr pod didn't move to Running state after 100 seconds"
 
         logger.test_step(
             "Verify in-transit encryption after scaling up mons and restarting mgr pod"
         )
 
+        in_transit_verified = in_transit_encryption_verification()
         logger.assertion(
-            "In-transit encryption verification after recovery: expected='True'"
+            f"In-transit encryption verification after recovery: "
+            f"expected='True', actual='{in_transit_verified}'"
         )
-        assert (
-            in_transit_encryption_verification()
-        ), "In transit encryption verification failed"
+        assert in_transit_verified, "In transit encryption verification failed"

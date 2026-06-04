@@ -61,6 +61,7 @@ class TestMgrPods(BaseTest):
             mgr_metadata = toolbox.exec_cmd_on_pod("ceph mgr metadata")
         except exceptions.CommandFailed:
             logger.exception("Unable to run command on toolbox")
+            raise
 
         mgr_metadata_names = list()
         for data in mgr_metadata:
@@ -117,6 +118,7 @@ class TestMgrPods(BaseTest):
             before_mgr_stat = toolbox.exec_cmd_on_pod("ceph mgr stat")
         except exceptions.CommandFailed:
             logger.exception("Unable to run command on toolbox")
+            raise
 
         logger.info(
             f"Active MGR daemon: {before_mgr_stat.get('active_name')}, "
@@ -134,6 +136,7 @@ class TestMgrPods(BaseTest):
             after_ceph_health = toolbox.exec_cmd_on_pod("ceph health")
         except exceptions.CommandFailed:
             logger.exception("Unable to run command on toolbox")
+            raise
 
         logger.debug(f"Ceph health after failure: {after_ceph_health}")
 
@@ -181,6 +184,7 @@ class TestMgrPods(BaseTest):
             active_mgr_pod_suffix = active_mgr_pod_output.get("active_name")
         except exceptions.CommandFailed:
             logger.exception("Unable to run command on toolbox")
+            raise
 
         logger.info(f"Active MGR pod: {active_mgr_pod_suffix}")
         logger.debug(f"Ceph health before reboot: {before_ceph_health}")
@@ -195,10 +199,12 @@ class TestMgrPods(BaseTest):
                     mgr_pod[index].delete(wait=True)
         except exceptions.CommandFailed:
             logger.exception("Unable to restart mgr pod")
+            raise
 
         logger.test_step("Verify ceph health after MGR pod reboot")
         try:
             after_ceph_health = toolbox.exec_cmd_on_pod("ceph health")
         except exceptions.CommandFailed:
             logger.exception("Unable to run command on toolbox")
+            raise
         logger.info(f"Ceph health after reboot: {after_ceph_health}")

@@ -61,10 +61,12 @@ class TestDataIntegrityWithInTransitEncryption:
             else:
                 set_in_transit_encryption()
 
-        logger.assertion("In-transit encryption verification: expected='True'")
-        assert (
-            in_transit_encryption_verification()
-        ), "In transit encryption verification failed."
+        in_transit_verified = in_transit_encryption_verification()
+        logger.assertion(
+            f"In-transit encryption verification: expected='True', "
+            f"actual='{in_transit_verified}'"
+        )
+        assert in_transit_verified, "In transit encryption verification failed."
 
         logger.test_step("Create PVC and pod, then start IO with verify=True")
         pvc_obj = pvc_factory(interface=CEPHBLOCKPOOL, status=STATUS_BOUND)
