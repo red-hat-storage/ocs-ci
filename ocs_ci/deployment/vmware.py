@@ -164,21 +164,27 @@ class VSPHEREBASE(Deployment):
         self.wait_time = 90
         self.infra_id = None
 
-    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE, ssd=False):
+    def attach_disk(
+        self,
+        size=100,
+        disk_type=constants.VM_DISK_TYPE,
+        ssd=False,
+        include_masters=False,
+    ):
         """
-        Add a new disk to all the workers nodes
+        Add a new disk to worker nodes (and optionally master nodes).
 
         Args:
             size (int): Size of disk in GB (default: 100)
             ssd (bool): if True, mark disk as SSD
+            include_masters (bool): if True, also add disks to control-plane VMs
 
         """
         vms = self.vsphere.get_all_vms_in_pool(
             config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
         )
-        # Add disks to all worker nodes
         for vm in vms:
-            if "compute" in vm.name:
+            if "compute" in vm.name or (include_masters and "control-plane" in vm.name):
                 self.vsphere.add_disks_with_same_size(
                     config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type, ssd
                 )
@@ -273,12 +279,24 @@ class VSPHEREBASE(Deployment):
 
     def delete_disks(self):
         """
-        Delete the extra disks from all the worker nodes and is sno delete it from sno nodes which is compute also
+        Delete the extra disks from all targeted cluster VMs.
+        Includes master VMs when ec_default_pools + mark_masters_schedulable.
         """
-        if config.ENV_DATA["sno"]:
+        if config.ENV_DATA.get("sno"):
             vms = self.get_vms_by_string(self.datacenter, self.cluster, "sno")
         else:
-            vms = self.get_compute_vms(self.datacenter, self.cluster)
+            include_masters = config.DEPLOYMENT.get(
+                "ec_default_pools"
+            ) and config.ENV_DATA.get("mark_masters_schedulable", True)
+            all_vms = self.vsphere.get_all_vms_in_pool(
+                config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
+            )
+            vms = [
+                vm
+                for vm in all_vms
+                if "compute" in vm.name
+                or (include_masters and "control-plane" in vm.name)
+            ]
         if vms:
             for vm in vms:
                 self.vsphere.remove_disks(vm)
@@ -370,7 +388,8 @@ class VSPHEREBASE(Deployment):
 
     def add_vmdk_disks(self):
         """
-        Attach VMDK disks to all worker nodes, skipping if sufficient disks
+        Attach VMDK disks to all worker nodes (and master nodes when EC with
+        schedulable masters is configured), skipping if sufficient disks
         already exist (idempotent).
 
         Reads device_size, provision_type, extra_disks, hdd_disks, and
@@ -386,28 +405,37 @@ class VSPHEREBASE(Deployment):
         multiple_device_classes = config.DEPLOYMENT.get(
             "deploy_multiple_device_classes"
         )
+        include_masters = config.DEPLOYMENT.get(
+            "ec_default_pools"
+        ) and config.ENV_DATA.get("mark_masters_schedulable", True)
 
         # Importing here to avoid circular dependency (baremetal imports lso_helpers)
         from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 
-        workers = get_nodes(node_type="worker")
+        target_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
+        if include_masters:
+            target_nodes += get_nodes(node_type=constants.MASTER_MACHINE)
         extra_disks = config.ENV_DATA.get("extra_disks", 1)
-        total_available_disks = sum(len(disks_available_to_cleanup(w)) for w in workers)
+        total_available_disks = sum(
+            len(disks_available_to_cleanup(n)) for n in target_nodes
+        )
         logger.info(
-            "Total available (non-boot) disks across worker nodes: %s",
+            "Total available (non-boot) disks across %s nodes: %s",
+            "all" if include_masters else constants.WORKER_MACHINE,
             total_available_disks,
         )
 
-        expected_disks = len(workers) * extra_disks
+        expected_disks = len(target_nodes) * extra_disks
         if total_available_disks < expected_disks:
             self.attach_disk(
                 device_size,
                 provision_type,
                 ssd=ssd_disk,
+                include_masters=include_masters,
             )
         else:
             logger.info(
-                "Workers already have %s available disks, skipping first "
+                "Nodes already have %s available disks, skipping first "
                 "disk attachment",
                 total_available_disks,
             )
@@ -422,6 +450,7 @@ class VSPHEREBASE(Deployment):
                     second_device_size,
                     provision_type,
                     ssd=ssd_disk,
+                    include_masters=include_masters,
                 )
             else:
                 logger.info(

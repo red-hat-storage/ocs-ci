@@ -107,6 +107,7 @@ from ocs_ci.ocs.resources import packagemanifest
 from ocs_ci.ocs.resources.catalog_source import (
     CatalogSource,
     disable_specific_source,
+    is_catalog_source_ready,
 )
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -1860,7 +1861,27 @@ class Deployment(object):
 
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         if not live_deployment:
-            create_catalog_source()
+            if is_catalog_source_ready():
+                logger.info(
+                    "CatalogSource %s already exists and is READY, skipping creation",
+                    constants.OPERATOR_CATALOG_SOURCE_NAME,
+                )
+            else:
+                create_catalog_source()
+
+        # Complete all CLI prep work (LSO catalog, disk attachment) before
+        # opening the browser to avoid stale element errors caused by the
+        # console re-rendering while the browser sits idle.
+        if config.DEPLOYMENT.get("local_storage"):
+            from ocs_ci.deployment.helpers.lso_helpers import (
+                add_disk_for_vsphere_platform,
+            )
+            from ocs_ci.utility.operators import LocalStorageOperator
+
+            LocalStorageOperator(create_catalog=True)
+            if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
+                add_disk_for_vsphere_platform()
+
         login_ui()
         deployment_obj = DeploymentUI()
         deployment_obj.install_ocs_ui()

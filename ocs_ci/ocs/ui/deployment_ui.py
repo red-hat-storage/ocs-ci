@@ -1,20 +1,24 @@
 import logging
+import re
 import time
 
 from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STORAGE
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
 from ocs_ci.ocs.resources import csv
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, ConfigurationError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.node import get_worker_nodes
-from ocs_ci.utility.deployment import get_ocp_ga_version
-from ocs_ci.deployment.helpers.lso_helpers import (
-    add_disk_for_vsphere_platform,
-    create_optional_operators_catalogsource_non_ga,
+from ocs_ci.ocs.node import (
+    get_worker_nodes,
+    mark_masters_schedulable,
+    get_all_nodes,
+    get_node_objs,
+    label_nodes,
 )
+from ocs_ci.utility.operators import LocalStorageOperator
 from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
@@ -45,16 +49,52 @@ class DeploymentUI(PageNavigator):
             capacity_str = str(capacity / 1024).rstrip("0").rstrip(".") + " TiB"
         else:
             capacity_str = str(capacity) + " GiB"
-        logger.info(f"Waiting for {capacity_str}")
+        logger.info(f"Waiting for at least {capacity_str}")
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=sleep,
-            func=self.check_element_text,
-            expected_text=capacity_str,
+            func=self._check_disk_capacity,
+            min_capacity_gib=capacity,
             take_screenshot=True,
         )
         if not sample.wait_for_func_status(result=True):
             raise TimeoutExpiredError(f"Disks are not attached after {timeout} seconds")
+
+    def _check_disk_capacity(self, min_capacity_gib, take_screenshot=False):
+        """
+        Check if the displayed disk capacity meets the minimum expected.
+
+        Searches for capacity text (GiB or TiB) on the page and verifies
+        the value is at least min_capacity_gib. This tolerates extra disks
+        from previous runs.
+
+        Args:
+            min_capacity_gib (int): Minimum expected capacity in GiB.
+            take_screenshot (bool): Whether to take a screenshot.
+
+        Returns:
+            bool: True if displayed capacity >= min_capacity_gib.
+        """
+        if take_screenshot:
+            self.take_screenshot("disk_capacity_check")
+        page_text = self.driver.find_elements(
+            By.XPATH, "//*[contains(text(), 'GiB') or contains(text(), 'TiB')]"
+        )
+        for el in page_text:
+            try:
+                text = el.text.strip()
+                parts = text.split()
+                value = float(parts[0])
+                unit = parts[1]
+                capacity_gib = value * 1024 if unit == "TiB" else value
+                if capacity_gib >= min_capacity_gib:
+                    logger.info(
+                        f"Found disk capacity: {text} (>= {min_capacity_gib} GiB)"
+                    )
+                    return True
+            except (ValueError, IndexError):
+                continue
+        return False
 
     def install_ocs_operator(self):
         """
@@ -82,17 +122,37 @@ class DeploymentUI(PageNavigator):
         self.do_click(
             self.dep_loc["click_install_ocs"], enable_screenshot=True, timeout=60
         )
+        self.page_has_loaded()
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.dep_loc["enable_console_plugin"], enable_screenshot=True)
         self.do_click(self.dep_loc["click_install_ocs_page"], enable_screenshot=True)
         if self.operator_name is ODF_OPERATOR:
             try:
-                self.navigate_installed_operators_page()
-                self.do_click(locator=self.dep_loc["refresh_popup"], timeout=500)
-            except Exception as e:
-                logger.error(f"Refresh pop-up does not exist: {e}")
-                self.refresh_page()
+                self.page_has_loaded()
+                self.do_click(
+                    locator=self.dep_loc["view_installed_operators_btn"],
+                    enable_screenshot=True,
+                    timeout=60,
+                )
+                self.do_click(locator=self.dep_loc["refresh_popup"], timeout=30)
+            except Exception:
+                logger.info("Post-install navigation/refresh failed, refreshing page")
+            self.refresh_page()
+            self.page_has_loaded()
+            self._dismiss_welcome_modal()
         self.verify_operator_succeeded(operator=self.operator_name)
+
+    def _dismiss_welcome_modal(self):
+        """
+        Dismiss the ODF welcome modal overlay if present.
+        The modal appears after ODF console plugin loads and blocks
+        sidebar navigation.
+        """
+        close_btn = self.get_elements(locator=self.dep_loc["dismiss_welcome_modal"])
+        if close_btn:
+            logger.info("Dismissing ODF welcome modal")
+            close_btn[0].click()
+            time.sleep(1)
 
     def refresh_popup(self, timeout=30):
         """
@@ -112,16 +172,14 @@ class DeploymentUI(PageNavigator):
             logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
             logger.info("Choose Local Storage Version")
-            ocp_ga_version = get_ocp_ga_version(self.ocp_version_full)
-            if ocp_ga_version:
-                self.do_click(
-                    self.dep_loc["choose_local_storage_version"], enable_screenshot=True
-                )
-            else:
-                self.do_click(
-                    self.dep_loc["choose_local_storage_version_non_ga"],
-                    enable_screenshot=True,
-                )
+            lso = LocalStorageOperator()
+            self.do_click(
+                locator=format_locator(
+                    self.dep_loc["choose_local_storage_version"],
+                    lso.catalog_name,
+                ),
+                enable_screenshot=True,
+            )
 
             logger.info("Click Install LSO")
             self.do_click(self.dep_loc["click_install_lso"], enable_screenshot=True)
@@ -244,6 +302,15 @@ class DeploymentUI(PageNavigator):
         Install LSO cluster via UI
 
         """
+        if config.DEPLOYMENT.get("ec_default_pools"):
+            if config.ENV_DATA.get("mark_masters_schedulable", True):
+                mark_masters_schedulable()
+                logger.info("Labeling all nodes as storage nodes")
+                nodes = get_all_nodes()
+                node_objs = get_node_objs(nodes)
+                label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+                time.sleep(10)
+
         logger.info("Click Internal - Attached Devices")
         if self.operator_name == ODF_OPERATOR:
             self.do_click(self.dep_loc["choose_lso_deployment"], enable_screenshot=True)
@@ -255,13 +322,20 @@ class DeploymentUI(PageNavigator):
             self.do_click(self.dep_loc["all_nodes_lso"], enable_screenshot=True)
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
+        # skipping optional settings such as NFS,
+        # RBD as the default StorageClass, Set default StorageClass for virtualization,
+        # Use external PostgreSQL, Automatic backup
+        # In future we'll need to automate them
+        self.do_click(self.dep_loc["next"], enable_screenshot=True)
+
         logger.info(
             f"Configure Volume Set Name and Storage Class Name as {constants.LOCAL_BLOCK_RESOURCE}"
         )
+        # setting a large
         self.do_send_keys(
             locator=self.dep_loc["lv_name"],
             text=constants.LOCAL_BLOCK_RESOURCE,
-            timeout=300,
+            timeout=600,
         )
         self.take_screenshot()
         self.do_send_keys(
@@ -313,6 +387,27 @@ class DeploymentUI(PageNavigator):
             raise TimeoutExpiredError(
                 "Next button on LSO is not clickable after 700 seconds"
             )
+
+        if config.DEPLOYMENT.get("odf_forceful_deployment"):
+            if "enable_forceful_deployment" not in self.dep_loc:
+                raise ConfigurationError(
+                    "Forceful deployment UI automation is supported only on ODF/OCP 4.22+."
+                )
+            self.enable_forceful_deployment()
+
+        if config.DEPLOYMENT.get("ec_default_pools"):
+            if "use_erasure_coding" not in self.dep_loc:
+                raise ConfigurationError(
+                    "Erasure coding UI automation is supported only on ODF/OCP 4.22+."
+                )
+            if not self.enable_erasure_coding():
+                raise ConfigurationError(
+                    "Erasure coding is unavailable in the Advanced Settings step."
+                )
+
+        self.do_click(
+            locator=self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
+        )
 
         self.configure_encryption()
 
@@ -418,6 +513,190 @@ class DeploymentUI(PageNavigator):
             )
         logger.info("Sleep 10 second after click on 'create storage cluster'")
         time.sleep(10)
+
+    def check_forceful_deployment(self):
+        """
+        Check if the Enable forceful deployment checkbox is currently selected.
+
+        Returns:
+            bool: True if the checkbox is checked, False otherwise.
+        """
+        return self.get_checkbox_status(
+            locator=self.dep_loc["enable_forceful_deployment"]
+        )
+
+    def enable_forceful_deployment(self):
+        """
+        Enable the forceful deployment checkbox and type CONFIRM in the
+        confirmation input that appears.
+        """
+        logger.info("Enable forceful deployment")
+        self.select_checkbox_status(
+            status=True, locator=self.dep_loc["enable_forceful_deployment"]
+        )
+        self.do_send_keys(
+            locator=self.dep_loc["forceful_deployment_confirmation"],
+            text="CONFIRM",
+        )
+        self.take_screenshot("odf_forceful_deployment_enabled")
+
+    def is_element_greyed_out(self, locator):
+        """
+        Check if a UI element is disabled (greyed out).
+
+        Args:
+            locator (tuple): (selector str, By type) of the element to check.
+
+        Returns:
+            bool: True if the element has the disabled attribute, False otherwise.
+        """
+        return self.get_element_attribute(locator, "disabled") is not None
+
+    def check_erasure_coding(self):
+        """
+        Check if the Use erasure coding checkbox is currently selected.
+
+        Returns:
+            bool: True if the checkbox is checked, False otherwise or when
+                ec_default_pools is not set in config.
+        """
+        if not config.DEPLOYMENT.get("ec_default_pools"):
+            return False
+        return self.get_checkbox_status(locator=self.dep_loc["use_erasure_coding"])
+
+    def _select_ec_scheme(self, k, m):
+        """
+        Click the radio button for the EC scheme matching k+m in the scheme table.
+
+        Args:
+            k (int): Number of data chunks (ec_data_chunks).
+            m (int): Number of coding chunks (ec_coding_chunks).
+        """
+        scheme = f"{k}+{m}"
+        logger.info(f"Selecting EC scheme {scheme} from the erasure coding table")
+        self.do_click(
+            locator=format_locator(self.dep_loc["ec_scheme_radio"], scheme),
+            enable_screenshot=True,
+        )
+
+    def _parse_ec_scheme_table(self):
+        """
+        Parse the EC scheme table rows from the UI into structured data.
+
+        Returns:
+            list[tuple]: List of (scheme_text, k, m, capacity_value) for each
+                parseable row. scheme_text is e.g. "2+2", capacity_value is
+                the effective capacity in TiB as a float.
+
+        Raises:
+            ConfigurationError: If the table has no rows.
+        """
+        rows = self.get_elements(locator=self.dep_loc["ec_scheme_table_rows"])
+        if not rows:
+            raise ConfigurationError(
+                "EC scheme table has no rows — cannot verify effective capacity"
+            )
+
+        scheme_cell = self.dep_loc["_ec_row_scheme_cell"]
+        cap_cell = self.dep_loc["_ec_row_effective_capacity_cell"]
+        parsed = []
+        for row in rows:
+            raw_scheme = row.find_element(scheme_cell[1], scheme_cell[0]).text
+            match = re.match(r"(\d+\+\d+)", raw_scheme.strip())
+            if not match:
+                logger.warning(f"Could not parse EC scheme from: '{raw_scheme}'")
+                continue
+            scheme_text = match.group(1)
+            capacity_text = row.find_element(cap_cell[1], cap_cell[0]).text
+            ki, mi = (int(x) for x in scheme_text.split("+"))
+            capacity_value = float(capacity_text.split()[0])
+            parsed.append((scheme_text, ki, mi, capacity_value))
+        return parsed
+
+    def _verify_ec_effective_capacity(self, k, m):
+        """
+        Cross-validate the Effective capacity values shown in the EC scheme
+        table.  Derives total raw capacity from the first row and verifies
+        every other row matches ``total_raw * k_i / (k_i + m_i)`` within
+        0.02 TiB tolerance.
+
+        Args:
+            k (int): Number of data chunks of the selected scheme.
+            m (int): Number of coding chunks of the selected scheme.
+        """
+        scheme = f"{k}+{m}"
+        parsed = self._parse_ec_scheme_table()
+
+        available_schemes = [p[0] for p in parsed]
+        if scheme not in available_schemes:
+            raise ConfigurationError(
+                f"Selected EC scheme {scheme} not found in the table. "
+                f"Available: {available_schemes}"
+            )
+
+        ref_scheme, ref_k, ref_m, ref_cap = parsed[0]
+        total_raw = ref_cap * (ref_k + ref_m) / ref_k
+        logger.info(
+            f"EC table: derived total raw capacity = {total_raw:.2f} TiB "
+            f"(from reference scheme {ref_scheme})"
+        )
+
+        for row_scheme, ki, mi, displayed_cap in parsed:
+            expected_cap = total_raw * ki / (ki + mi)
+            if abs(displayed_cap - expected_cap) > 0.02:
+                raise ConfigurationError(
+                    f"EC scheme {row_scheme}: expected effective capacity "
+                    f"~{expected_cap:.2f} TiB, got {displayed_cap} TiB"
+                )
+            logger.info(
+                f"EC scheme {row_scheme}: effective capacity = {displayed_cap} TiB "
+                f"(expected ~{expected_cap:.2f} TiB)"
+            )
+
+    def is_erasure_coding_disabled(self):
+        """
+        Check whether the Use erasure coding checkbox is greyed out (disabled).
+
+        The checkbox is disabled when the cluster does not meet EC prerequisites,
+        e.g. fewer than 4 nodes or no LSO on the cluster.
+
+        Returns:
+            bool: True if the checkbox is disabled, False if it can be clicked.
+        """
+        disabled = self.is_element_greyed_out(
+            locator=self.dep_loc["use_erasure_coding"]
+        )
+        if disabled:
+            logger.warning(
+                "Use erasure coding checkbox is greyed out — cluster may not meet "
+                "EC prerequisites (e.g. fewer than 4 nodes or no LSO)."
+            )
+        return disabled
+
+    def enable_erasure_coding(self):
+        """
+        Enable the Use erasure coding checkbox, select the EC scheme from config,
+        and verify the displayed effective capacity.
+
+        No-op when the checkbox is greyed out (not enough nodes to support EC or other).
+        EC scheme is derived from ec_data_chunks (k) and ec_coding_chunks (m).
+
+        Returns:
+            bool or None: True if erasure coding was successfully enabled,
+                None if the checkbox is disabled (greyed out).
+        """
+        if self.is_erasure_coding_disabled():
+            return None
+        logger.info("Enable Use erasure coding")
+        self.select_checkbox_status(
+            status=True, locator=self.dep_loc["use_erasure_coding"]
+        )
+        k = config.DEPLOYMENT.get("ec_data_chunks", 2)
+        m = config.DEPLOYMENT.get("ec_coding_chunks", 1)
+        self._select_ec_scheme(k, m)
+        self._verify_ec_effective_capacity(k, m)
+        self.take_screenshot("erasure_coding_enabled")
+        return True
 
     def configure_encryption(self):
         """
@@ -617,10 +896,6 @@ class DeploymentUI(PageNavigator):
         Install OCS/ODF via UI
 
         """
-        if config.DEPLOYMENT.get("local_storage"):
-            create_optional_operators_catalogsource_non_ga()
-            if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
-                add_disk_for_vsphere_platform()
         self.install_local_storage_operator()
         if not csv.get_csvs_start_with_prefix(
             defaults.ODF_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]
