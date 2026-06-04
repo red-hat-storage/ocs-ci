@@ -1392,8 +1392,24 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
     password_el.send_keys(password)
 
     logger.info("Username and password filled in, clicking Log in")
-    confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
-    confirm_login_el.click()
+    # Client clusters have OAuth-based login with different button structure
+    is_client_cluster = (
+        config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+    )
+    if is_client_cluster:
+        logger.info("Client cluster detected, using OAuth login button locator")
+        login_client_oauth_loc = locators_for_current_ocp_version()[
+            "login_client_oauth"
+        ]
+        confirm_login_el = wait_for_element_to_be_clickable(
+            login_client_oauth_loc["click_login"], 60
+        )
+        confirm_login_el.click()
+    else:
+        confirm_login_el = wait_for_element_to_be_clickable(
+            login_loc["click_login"], 60
+        )
+        confirm_login_el.click()
 
     hci_platform_conf = (
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
@@ -1411,7 +1427,8 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
         else:
             logger.info("Skip tour element not found. Continuing without clicking.")
 
-    if hci_platform_conf:
+    # Navigate to local cluster page only for provider clusters, not client clusters
+    if hci_platform_conf and not is_client_cluster:
         dashboard_url = console_url + "/dashboards"
         # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
         # when the hci platform is confirmed and proceed to the client if needed from within the test
