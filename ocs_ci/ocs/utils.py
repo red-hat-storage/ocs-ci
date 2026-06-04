@@ -1934,6 +1934,60 @@ def get_recovery_cluster_config():
             return cluster
 
 
+def get_secondary_cluster_config():
+    """
+    Get the secondary cluster config object in a DR scenario.
+    The secondary cluster is the one that is not primary, not recovery,
+    not active_acm, and not passive_acm.
+
+    If multiple clusters remain after filtering, it uses dr_cluster_relations
+    to identify which one is the secondary (the one that is not primary).
+
+    Return:
+        framework.config: secondary cluster config object from config.clusters
+
+    """
+    # Get primary cluster name
+    primary_cluster = get_primary_cluster_config()
+    primary_cluster_name = (
+        primary_cluster.ENV_DATA["cluster_name"] if primary_cluster else None
+    )
+
+    # Filter out primary, recovery, and ACM clusters
+    candidate_clusters = []
+    for cluster in ocsci_config.clusters:
+        if (
+            not cluster.MULTICLUSTER.get("primary_cluster")
+            and not cluster.MULTICLUSTER.get("recovery_cluster")
+            and not cluster.MULTICLUSTER.get("active_acm_cluster")
+            and not (
+                cluster.MULTICLUSTER.get("acm_cluster")
+                and not cluster.MULTICLUSTER.get("active_acm_cluster")
+            )
+        ):
+            candidate_clusters.append(cluster)
+
+    # If only one candidate, return it
+    if len(candidate_clusters) == 1:
+        return candidate_clusters[0]
+
+    # If multiple candidates, use dr_cluster_relations to find secondary
+    if len(candidate_clusters) > 1 and primary_cluster_name:
+        dr_relations = ocsci_config.MULTICLUSTER.get("dr_cluster_relations", [])
+        for relation in dr_relations:
+            if primary_cluster_name in relation:
+                # Find the other cluster in the relation (the secondary)
+                for cluster_name in relation:
+                    if cluster_name != primary_cluster_name:
+                        # Find the cluster config with this name
+                        for cluster in candidate_clusters:
+                            if cluster.ENV_DATA["cluster_name"] == cluster_name:
+                                return cluster
+
+    # Fallback: return first candidate if no match found
+    return candidate_clusters[0] if candidate_clusters else None
+
+
 def set_recovery_as_primary():
     """
     This function will set recovery cluster as primary cluster
