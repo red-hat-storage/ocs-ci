@@ -184,6 +184,111 @@ class AWS(object):
             )
         return self._sts_client
 
+    def create_iam_user(self, username):
+        """
+        Create a new IAM user.
+
+        Args:
+            username (str): IAM username to create
+
+        Returns:
+            dict: The CreateUser response
+
+        """
+        response = self.iam_client.create_user(UserName=username)
+        logger.info(f"Created IAM user {username}")
+        return response
+
+    def delete_iam_user(self, username):
+        """
+        Delete an IAM user after removing its inline policies and access keys.
+
+        Args:
+            username (str): IAM username to delete
+
+        """
+        for policy_name in self.iam_client.list_user_policies(UserName=username).get(
+            "PolicyNames", []
+        ):
+            self.iam_client.delete_user_policy(
+                UserName=username, PolicyName=policy_name
+            )
+            logger.info(f"Deleted inline policy {policy_name} from user {username}")
+
+        for key in self.iam_client.list_access_keys(UserName=username).get(
+            "AccessKeyMetadata", []
+        ):
+            self.iam_client.delete_access_key(
+                UserName=username, AccessKeyId=key["AccessKeyId"]
+            )
+            logger.info(f"Deleted access key {key['AccessKeyId']} from user {username}")
+
+        self.iam_client.delete_user(UserName=username)
+        logger.info(f"Deleted IAM user {username}")
+
+    def put_user_policy(self, username, policy_name, policy_document):
+        """
+        Create or update an inline policy on an IAM user.
+
+        Args:
+            username (str): IAM username
+            policy_name (str): Name for the inline policy
+            policy_document (str): JSON policy document
+
+        """
+        self.iam_client.put_user_policy(
+            UserName=username,
+            PolicyName=policy_name,
+            PolicyDocument=policy_document,
+        )
+        logger.info(f"Put inline policy {policy_name} on user {username}")
+
+    def create_access_key(self, username):
+        """
+        Create a new IAM access key for the given user.
+
+        Args:
+            username (str): IAM username
+
+        Returns:
+            dict: The CreateAccessKey response containing AccessKey details
+
+        """
+        response = self.iam_client.create_access_key(UserName=username)
+        logger.info(
+            f"Created IAM access key {response['AccessKey']['AccessKeyId']} "
+            f"for user {username}"
+        )
+        return response
+
+    def update_access_key_status(self, username, access_key_id, active):
+        """
+        Activate or deactivate an IAM access key.
+
+        Args:
+            username (str): IAM username
+            access_key_id (str): The access key ID to update
+            active (bool): True to activate, False to deactivate
+
+        """
+        status = "Active" if active else "Inactive"
+        self.iam_client.update_access_key(
+            UserName=username, AccessKeyId=access_key_id, Status=status
+        )
+        logger.info(f"Set IAM access key {access_key_id} to {status}")
+
+    def delete_access_key(self, username, access_key_id):
+        """
+        Delete an IAM access key.
+
+        Args:
+            username (str): IAM username
+            access_key_id (str): The access key ID to delete
+
+        """
+        self.iam_client.delete_access_key(UserName=username, AccessKeyId=access_key_id)
+        logger.info(f"Deleted IAM access key {access_key_id}")
+
     @property
     def cloudfront_client(self):
         """
