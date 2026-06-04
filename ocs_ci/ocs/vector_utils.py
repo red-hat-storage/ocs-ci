@@ -13,13 +13,14 @@ from botocore.config import Config
 logger = logging.getLogger(__name__)
 
 
-def create_s3vectors_client(mcg_obj, obc_obj):
+def create_s3vectors_client(mcg_obj, obc_obj, nsr_name=None):
     """
     Create an S3 Vectors client using OBC credentials
 
     Args:
         mcg_obj (obj): MCG object containing vectors endpoint and region
         obc_obj (obj): OBC object containing access credentials
+        nsr_name (str): Optional NooBaa namespace resource name for x-noobaa-nsr header
 
     Returns:
         boto3.client: S3 Vectors client configured with OBC credentials
@@ -30,7 +31,7 @@ def create_s3vectors_client(mcg_obj, obc_obj):
 
     retry_cfg = Config(retries={"max_attempts": 10, "mode": "standard"})
 
-    return boto3.client(
+    client = boto3.client(
         "s3vectors",
         region_name=mcg_obj.region,
         verify=retrieve_verification_mode(),
@@ -39,6 +40,26 @@ def create_s3vectors_client(mcg_obj, obc_obj):
         aws_secret_access_key=obc_obj.access_key,
         config=retry_cfg,
     )
+
+    # Add custom NooBaa header if NSR name is provided
+    if nsr_name:
+
+        def add_nsr_header(params, **kwargs):
+            params["headers"]["x-noobaa-nsr"] = nsr_name
+
+        client = boto3.client(
+            "s3vectors",
+            region_name=mcg_obj.region,
+            verify=retrieve_verification_mode(),
+            endpoint_url=mcg_obj.vectors_endpoint,
+            aws_access_key_id=mcg_obj.access_key_id,
+            aws_secret_access_key=mcg_obj.access_key,
+            config=retry_cfg,
+        )
+
+        client.meta.events.register("before-call", add_nsr_header)
+
+    return client
 
 
 def generate_test_vectors_with_metadata(
