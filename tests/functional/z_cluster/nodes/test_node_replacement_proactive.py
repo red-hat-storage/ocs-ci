@@ -208,9 +208,12 @@ class TestNodeReplacementWithIO(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self):
-        logger.info("Clear crash warnings and osd removal leftovers")
-        clear_crash_warning_and_osd_removal_leftovers()
+    def teardown(self, request):
+        def finalizer():
+            logger.info("Clear crash warnings and osd removal leftovers")
+            clear_crash_warning_and_osd_removal_leftovers()
+
+        request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
     def init_sanity(self):
@@ -269,7 +272,7 @@ class TestNodeReplacementWithIO(ManageTest):
 
         logger.assertion("Verifying StorageCluster node topology is valid")
         assert (
-            verify_storagecluster_nodetopology
+            verify_storagecluster_nodetopology()
         ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
 
@@ -327,7 +330,7 @@ class TestNodeReplacement(ManageTest):
 
         logger.assertion("Verifying StorageCluster node topology is valid")
         assert (
-            verify_storagecluster_nodetopology
+            verify_storagecluster_nodetopology()
         ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
 
@@ -353,8 +356,11 @@ class TestNodeReplacementTwice(ManageTest):
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
-        logger.info("Clear crash warnings and osd removal leftovers")
-        clear_crash_warning_and_osd_removal_leftovers()
+        def finalizer():
+            logger.info("Clear crash warnings and osd removal leftovers")
+            clear_crash_warning_and_osd_removal_leftovers()
+
+        request.addfinalizer(finalizer)
 
     @skipif_ibm_cloud_managed
     def test_nodereplacement_twice(self):
@@ -375,8 +381,8 @@ class TestNodeReplacementTwice(ManageTest):
             logger.assertion(
                 f"Deleted node '{node_name_to_delete}' not in ceph osd tree"
             )
-            assert not (
-                node_name_to_delete in str(tree_output)
+            assert node_name_to_delete not in str(
+                tree_output
             ), f"Deleted host {node_name_to_delete} still exist in ceph osd tree after node replacement"
 
             logger.assertion("Verifying StorageCluster node topology is valid")
