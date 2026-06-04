@@ -107,20 +107,92 @@ class DeploymentUI(PageNavigator):
         Install local storage operator
 
         """
+        # Named constants for wait times
+        OPERATOR_CATALOG_CHECK_INTERVAL = 5  # Check every 5 seconds
+        OPERATOR_CATALOG_TIMEOUT = 300  # Total timeout 5 minutes
+        OPERATOR_TILE_SETTLING_TIME = 3  # Wait for tile to be fully interactive
+
         if config.DEPLOYMENT.get("local_storage"):
             self.navigate_operatorhub_page()
             logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
-            logger.info("Choose Local Storage Version")
+
+            # Small wait for search to filter results
+            time.sleep(OPERATOR_TILE_SETTLING_TIME)
+
+            # Wait for OperatorHub catalog to load and display operator tiles
+            logger.info(
+                "Waiting for Local Storage operator tile to appear in catalog "
+                f"(timeout: {OPERATOR_CATALOG_TIMEOUT}s, check interval: {OPERATOR_CATALOG_CHECK_INTERVAL}s)"
+            )
             ocp_ga_version = get_ocp_ga_version(self.ocp_version_full)
             if ocp_ga_version:
+                lso_locator = self.dep_loc["choose_local_storage_version"]
+                lso_locator_name = "choose_local_storage_version"
+            else:
+                lso_locator = self.dep_loc["choose_local_storage_version_non_ga"]
+                lso_locator_name = "choose_local_storage_version_non_ga"
+            logger.info(f"Looking for LSO operator with locator: {lso_locator_name}")
+
+            # Wait for operator tile to be available
+            operator_found = False
+            try:
+                for sample in TimeoutSampler(
+                    timeout=OPERATOR_CATALOG_TIMEOUT,
+                    sleep=OPERATOR_CATALOG_CHECK_INTERVAL,
+                    func=self.get_elements,
+                    locator=lso_locator,
+                ):
+                    if sample:
+                        logger.info(
+                            "Local Storage operator tile found in catalog after waiting"
+                        )
+                        operator_found = True
+                        break
+            except TimeoutExpiredError as e:
+                # Take screenshot and copy DOM for debugging
+                logger.error(
+                    "Timeout waiting for Local Storage operator tile to appear. "
+                    "OperatorHub catalog may still be syncing or operator not available."
+                )
+                self.take_screenshot("LSO_operator_tile_timeout")
+                self.copy_dom("LSO_operator_tile_timeout")
+
+                # Log diagnostic information
+                logger.debug(f"Expected locator: {lso_locator}")
+                logger.debug(f"OCP GA Version detected: {ocp_ga_version}")
+
+                raise TimeoutExpiredError(
+                    f"Local Storage operator tile doesn't appear within time limit of "
+                    f"{OPERATOR_CATALOG_TIMEOUT}s. Locator: {lso_locator_name}. "
+                    f"Check screenshot and DOM dump for details."
+                ) from e
+
+            if not operator_found:
+                logger.error("Operator tile not found after timeout sampler completed")
+                self.take_screenshot("LSO_operator_not_found")
+                self.copy_dom("LSO_operator_not_found")
+                raise Exception("Local Storage operator tile not found")
+
+            # Additional short wait for tile to be fully interactive
+            logger.info(
+                f"Waiting {OPERATOR_TILE_SETTLING_TIME}s for tile to be interactive"
+            )
+            time.sleep(OPERATOR_TILE_SETTLING_TIME)
+
+            logger.info("Choose Local Storage Version")
+            CLICK_TIMEOUT = 60  # Timeout for clicking operator tile
+            if ocp_ga_version:
                 self.do_click(
-                    self.dep_loc["choose_local_storage_version"], enable_screenshot=True
+                    self.dep_loc["choose_local_storage_version"],
+                    enable_screenshot=True,
+                    timeout=CLICK_TIMEOUT,
                 )
             else:
                 self.do_click(
                     self.dep_loc["choose_local_storage_version_non_ga"],
                     enable_screenshot=True,
+                    timeout=CLICK_TIMEOUT,
                 )
 
             logger.info("Click Install LSO")
