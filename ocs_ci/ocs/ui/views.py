@@ -3323,6 +3323,7 @@ external_systems = {
 locators = {
     "4.22": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "login_client_oauth": login_client_oauth,
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
         "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
@@ -3395,6 +3396,7 @@ locators = {
     },
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "login_client_oauth": login_client_oauth,
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
         "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
@@ -3464,6 +3466,7 @@ locators = {
     },
     "4.20": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "login_client_oauth": login_client_oauth,
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
         "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
