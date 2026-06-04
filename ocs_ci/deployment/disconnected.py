@@ -331,19 +331,24 @@ def mirror_index_image_via_oc_mirror(
                 exec_cmd(f"sudo mkdir -p {registries_conf_d_dir}")
 
                 # Create temporary file with registry configuration
-                temp_file = tempfile.NamedTemporaryFile(
-                    mode="w", delete=False, suffix=".conf"
-                )
-                temp_file.write(registries_content)
-                temp_file.close()
+                temp_file_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", delete=False, suffix=".conf"
+                    ) as temp_file:
+                        temp_file.write(registries_content)
+                        temp_file_path = temp_file.name
 
-                # Copy to registries.conf.d/ directory and set readable permissions
-                exec_cmd(f"sudo cp {temp_file.name} {ocs_ci_conf_file}")
-                exec_cmd(f"sudo chmod 644 {ocs_ci_conf_file}")
-                os.unlink(temp_file.name)
-                logger.info(
-                    f"Successfully configured registry mirrors at {ocs_ci_conf_file}"
-                )
+                    # Copy to registries.conf.d/ directory and set readable permissions
+                    exec_cmd(f"sudo cp {temp_file_path} {ocs_ci_conf_file}")
+                    exec_cmd(f"sudo chmod 644 {ocs_ci_conf_file}")
+
+                    logger.info(
+                        f"Successfully configured registry mirrors at {ocs_ci_conf_file}"
+                    )
+                finally:
+                    if temp_file_path and os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
             except Exception as e:
                 logger.warning(f"Failed to configure registry mirrors: {e}")
 
