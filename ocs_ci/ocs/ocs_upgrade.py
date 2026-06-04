@@ -568,6 +568,10 @@ class OCSUpgrade(object):
         csv_list = get_csvs_start_with_prefix(resource_name, namespace=self.namespace)
         for csv in csv_list:
             if resource_name in csv.get("metadata").get("name"):
+                logger.info(
+                    "searching for pre-upgrade csv with version: "
+                    f"{config.PREUPGRADE_CONFIG.get('ENV_DATA').get('ocs_version')}"
+                )
                 if config.PREUPGRADE_CONFIG.get("ENV_DATA").get(
                     "ocs_version"
                 ) in csv.get("metadata").get("name"):
