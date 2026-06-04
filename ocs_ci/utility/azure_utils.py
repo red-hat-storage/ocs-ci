@@ -506,6 +506,7 @@ class AZURE:
         1. A user-assigned managed identity named '{cluster_name}-noobaa-mi'
         2. Role assignments: 'Storage Account Contributor' and
            'Storage Blob Data Contributor' scoped to the cluster resource group
+           (and to the test storage account from AUTH config, if available)
         3. Federated credentials for NooBaa service accounts (noobaa,
            noobaa-core, noobaa-endpoint) linked to the cluster's OIDC issuer
 
@@ -543,6 +544,30 @@ class AZURE:
                 f'--assignee-principal-type ServicePrincipal --role "{role}" '
                 f"--scope {scope} --subscription {subscription_id}"
             )
+
+        test_storage_account = config.AUTH.get("AZURE", {}).get(
+            "STORAGE_ACCOUNT_NAME", ""
+        )
+        if test_storage_account:
+            logger.info(
+                f"Looking up resource ID for test storage account '{test_storage_account}'"
+            )
+            sa_result = exec_cmd(
+                f"az storage account show --name {test_storage_account} "
+                f"--subscription {subscription_id} --query id -o tsv"
+            )
+            sa_resource_id = sa_result.stdout.decode().strip()
+            if sa_resource_id:
+                for role in roles:
+                    logger.info(
+                        f"Assigning role '{role}' on test storage account "
+                        f"'{test_storage_account}'"
+                    )
+                    exec_cmd(
+                        f"az role assignment create --assignee-object-id {principal_id} "
+                        f'--assignee-principal-type ServicePrincipal --role "{role}" '
+                        f"--scope {sa_resource_id} --subscription {subscription_id}"
+                    )
 
         logger.info("Retrieving OIDC issuer URL from the cluster")
         auth_result = exec_cmd("oc get authentication cluster -ojson")

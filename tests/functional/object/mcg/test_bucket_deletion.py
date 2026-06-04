@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     mcg,
     sts_deployment_required,
+    aws_platform_required,
     skipif_fips_enabled,
 )
 from ocs_ci.framework.testlib import MCGTest
@@ -101,7 +102,7 @@ class TestBucketDeletion(MCGTest):
                         "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
                     },
                 ],
-                marks=[tier1, sts_deployment_required],
+                marks=[tier1, sts_deployment_required, aws_platform_required],
             ),
         ],
         ids=[

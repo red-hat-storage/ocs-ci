@@ -6,6 +6,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier2,
     sts_deployment_required,
+    aws_platform_required,
+    azure_platform_required,
     red_squad,
     mcg,
     polarion_id,
@@ -36,7 +38,28 @@ class TestSTSBucket:
                         "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
                     },
                 ],
-                marks=[tier2],
+                marks=[tier2, aws_platform_required],
+            ),
+            pytest.param(
+                *[
+                    {
+                        "interface": "CLI",
+                        "backingstore_dict": {"azure-sts": [(1, None)]},
+                    },
+                ],
+                marks=[tier1, azure_platform_required, polarion_id("OCS-7949")],
+            ),
+            pytest.param(
+                *[
+                    {
+                        "interface": "CLI",
+                        "namespace_policy_dict": {
+                            "type": "Single",
+                            "namespacestore_dict": {"azure-sts": [(1, None)]},
+                        },
+                    },
+                ],
+                marks=[tier1, azure_platform_required, polarion_id("OCS-7950")],
             ),
             pytest.param(
                 *[None],
@@ -45,7 +68,12 @@ class TestSTSBucket:
                 ],
             ),
         ],
-        ids=["AWS-STS-NEW", "AWS-STS-DEFAULT"],
+        ids=[
+            "AWS-STS-BS-CLI",
+            "AZURE-STS-BS-CLI",
+            "AZURE-STS-NSS-CLI",
+            "STS-DEFAULT",
+        ],
     )
     def test_sts_bucket_ops(
         self,
@@ -57,7 +85,7 @@ class TestSTSBucket:
     ):
         """
         Test full object round trip verification
-        on  AWS STS bucket
+        on an STS-backed bucket (AWS STS or Azure STS)
 
         """
 
