@@ -35,6 +35,8 @@ from ocs_ci.helpers import helpers
 from ocs_ci.helpers.dr_helpers import (
     check_rbd_mirror_running,
     wait_for_mirroring_status_ok,
+    check_mirroring_status_ok,
+    validate_cluster_odf_cli,
 )
 
 log = logging.getLogger(__name__)
@@ -79,6 +81,8 @@ def rdr_health_check():
     Checks Ceph health, rbd-mirror daemon status, and mirroring health.
 
     """
+    validate_cluster_odf_cli()
+
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
 

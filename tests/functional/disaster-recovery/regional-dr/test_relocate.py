@@ -42,8 +42,6 @@ class TestRelocate:
 
         """
 
-        dr_helpers.validate_cluster_odf_cli()
-
         workloads = dr_workload(
             num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
         )
