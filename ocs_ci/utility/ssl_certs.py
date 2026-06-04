@@ -1073,5 +1073,154 @@ def main():
         cert.save_crt(f"{args.file}.crt")
 
 
+def get_service_ca_certificate():
+    """
+    Get OpenShift service CA certificate from signing-cabundle ConfigMap.
+
+    OpenShift uses this CA to sign certificates for services exposed via routes.
+    This is not specific to any particular service (NooBaa, RGW, etc.) - it's
+    used cluster-wide for all service certificates.
+
+    Returns:
+        str: CA certificate in PEM format
+
+    Raises:
+        Exception: If unable to retrieve the CA certificate
+
+    """
+    try:
+        cm_obj = ocp.OCP(kind="ConfigMap", namespace="openshift-service-ca")
+        cm_data = cm_obj.get(resource_name="signing-cabundle")
+        ca_cert = cm_data.get("data", {}).get("ca-bundle.crt")
+        if ca_cert:
+            logger.info(
+                "Retrieved service CA certificate from signing-cabundle ConfigMap"
+            )
+            return ca_cert
+    except Exception as e:
+        logger.warning("Could not get CA cert from signing-cabundle ConfigMap: %s", e)
+
+    raise Exception(
+        "Could not retrieve service CA certificate. "
+        "Ensure the signing-cabundle ConfigMap exists in openshift-service-ca namespace."
+    )
+
+
+def setup_client_ca_cert_secret(
+    ca_cert,
+    secret_name,
+    cert_key,
+    namespace=constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE,
+):
+    """
+    Create or update a secret with CA certificate on client cluster.
+
+    This is a generic helper for setting up CA trust secrets. Creates/updates
+    a secret with the provided certificate data.
+
+    Args:
+        ca_cert (str): CA certificate in PEM format
+        secret_name (str): Name of the secret to create/update
+        cert_key (str): Key name within the secret data
+        namespace (str): Namespace where to create/update the secret
+
+    """
+    # Encode certificate to base64 for secret
+    ca_cert_b64 = base64.b64encode(ca_cert.encode()).decode()
+
+    # Check if secret exists and create/update accordingly
+    secret_obj = ocp.OCP(kind="Secret", namespace=namespace)
+
+    # Check if secret exists (don't raise if not found)
+    existing_secret = secret_obj.get(resource_name=secret_name, dont_raise=True)
+
+    if existing_secret:
+        # Update existing secret
+        logger.info(
+            "Updating existing secret '%s' in namespace '%s'", secret_name, namespace
+        )
+
+        # Use oc patch to update the secret data
+        import json
+
+        patch_data = {"data": {cert_key: ca_cert_b64}}
+        cmd = f"patch secret {secret_name} -n {namespace} -p '{json.dumps(patch_data)}'"
+        secret_obj.exec_oc_cmd(cmd, out_yaml_format=False)
+        logger.info("Updated secret '%s' with key '%s'", secret_name, cert_key)
+
+    else:
+        # Create new secret using oc command
+        logger.info(
+            "Creating new secret '%s' in namespace '%s'", secret_name, namespace
+        )
+
+        # Write cert to temp file
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".crt", delete=False) as f:
+            f.write(ca_cert)
+            cert_file = f.name
+
+        try:
+            # Create secret using oc create secret generic
+            cmd = (
+                f"create secret generic {secret_name} "
+                f"-n {namespace} "
+                f"--from-file={cert_key}={cert_file}"
+            )
+            secret_obj.exec_oc_cmd(cmd, out_yaml_format=False)
+            logger.info("Created secret '%s' with key '%s'", secret_name, cert_key)
+        finally:
+            # Clean up temp file
+            os.remove(cert_file)
+
+
+def setup_object_browser_ca_cert_on_client(ca_cert):
+    """
+    Setup CA certificate on client cluster for NooBaa object browser.
+
+    Creates or updates the secret required for NooBaa object browser to trust
+    the S3 endpoint certificate. This function handles the specific naming
+    convention required by the object browser.
+
+    For private/custom CA certificates, the object browser needs the CA cert chain
+    to trust the S3 endpoint.
+
+    Args:
+        ca_cert (str): CA certificate in PEM format
+
+    """
+    # Get client operator namespace
+    client_namespace = config.ENV_DATA.get(
+        "cluster_namespace", constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
+    )
+
+    # Get StorageClient UID
+    sc_obj = ocp.OCP(kind="StorageClient", namespace=client_namespace)
+    sc_list = sc_obj.get()
+    if not sc_list.get("items"):
+        raise Exception(
+            "No StorageClient found on client cluster in namespace %s"
+            % client_namespace
+        )
+
+    # Assuming single StorageClient per client cluster
+    storage_client = sc_list["items"][0]
+    sc_uid = storage_client["metadata"]["uid"]
+    sc_name = storage_client["metadata"]["name"]
+
+    logger.info(
+        "Found StorageClient '%s' with UID '%s' on client cluster", sc_name, sc_uid
+    )
+
+    # Prepare secret data with object browser naming convention
+    secret_name = "ocs-client-operator-console-s3-endpoint-ca-certs"
+    cert_key = "ocs-s3-endpoints-list-%s-noobaaS3.crt" % sc_uid
+
+    # Use generic helper to create/update the secret
+    setup_client_ca_cert_secret(ca_cert, secret_name, cert_key, client_namespace)
+    logger.info("Object browser CA certificate setup completed on client cluster")
+
+
 if __name__ == "__main__":
     main()
