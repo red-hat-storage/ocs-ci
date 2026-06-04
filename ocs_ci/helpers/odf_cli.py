@@ -139,6 +139,7 @@ class ODFCLIRetriever:
 
         exec_cmd(
             f"oc image extract --registry-config {pull_secret_path} "
+            f"--filter-by-os=linux/amd64 "
             f"{image} --confirm "
             f"--path {remote_path}:{local_cli_dir}"
         )
