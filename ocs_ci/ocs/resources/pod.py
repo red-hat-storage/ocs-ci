@@ -1129,6 +1129,26 @@ def get_noobaa_endpoint_pods():
     return noobaa_endpoint_pods
 
 
+def get_noobaa_pvpool_pods(backingstore_name, namespace=None):
+    """
+    Fetches the PVPool agent pods for a given NooBaa backingstore.
+
+    Args:
+        backingstore_name (str): Name of the PVPool backingstore
+        namespace (str): Namespace of the backingstore. Defaults to
+            the cluster namespace from ENV_DATA
+
+    Returns:
+        list: List of Pod objects for the given backingstore
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pod_data_list = get_pods_having_label(
+        label=f"pool={backingstore_name}", namespace=namespace
+    )
+    return [Pod(**pod_data) for pod_data in pod_data_list]
+
+
 def get_odf_operator_controller_manager(
     ocs_label=constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL, namespace=None
 ):
