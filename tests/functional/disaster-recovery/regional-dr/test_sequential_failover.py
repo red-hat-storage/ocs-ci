@@ -68,8 +68,6 @@ class TestSequentialFailover:
         when primary cluster is Up/Down
 
         """
-        dr_helpers.validate_cluster_odf_cli()
-
         workloads = dr_workload(
             num_of_subscription=2, num_of_appset=3, pvc_interface=pvc_interface
         )

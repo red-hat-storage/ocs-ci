@@ -42,8 +42,6 @@ class TestNegativeFailoverRelocate:
         Tests to verify if application failover to same cluster where it's running is blocked
 
         """
-        dr_helpers.validate_cluster_odf_cli()
-
         acm_obj = AcmAddClusters()
         rdr_workload = dr_workload(num_of_subscription=1)[0]
 
@@ -83,8 +81,6 @@ class TestNegativeFailoverRelocate:
         Tests to verify if application relocate to same cluster where it's running is blocked
 
         """
-        dr_helpers.validate_cluster_odf_cli()
-
         acm_obj = AcmAddClusters()
         rdr_workload = dr_workload(num_of_subscription=1)[0]
 
