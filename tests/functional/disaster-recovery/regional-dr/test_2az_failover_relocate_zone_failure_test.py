@@ -5,7 +5,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
-from ocs_ci.framework.testlib import acceptance, tier1, tier4
+from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -37,20 +37,19 @@ class Test2AZFailoverAndRelocateZoneFailure:
             pytest.param(
                 constants.CEPHBLOCKPOOL,
                 "arbiter",
-                # marks=[tier1, acceptance],
-                marks=[acceptance],
+                marks=[tier1],
                 id="rbd-zone-arbiter",
             ),
             pytest.param(
                 constants.CEPHFILESYSTEM,
                 "data-1",
-                marks=tier4,
+                marks=[tier1, acceptance],
                 id="cephfs-zone-data-a",
             ),
             pytest.param(
                 constants.CEPHFILESYSTEM,
                 "arbiter",
-                marks=tier4,
+                marks=[tier1],
                 id="cephfs-zone-arbiter",
             ),
         ],
@@ -147,9 +146,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
             logger.info(
                 f"Validating mirroring status for {total_pvc_count} PVCs across {len(flattened_workloads)} workloads"
             )
-            # dr_helpers.wait_for_mirroring_status_ok(
-            #     replaying_images=total_pvc_count, timeout=900
-            # )
+            dr_helpers.wait_for_mirroring_status_ok(
+                replaying_images=total_pvc_count, timeout=900
+            )
             logger.info("Mirroring status validation successful for all workloads")
             # Use flattened list for the rest of the test
             all_workloads = flattened_workloads
