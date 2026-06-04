@@ -76,6 +76,11 @@ login_4_19 = {
     "click_login": ("co-login-button", By.ID),
 }
 
+# Client cluster OAuth login locators (HCI client clusters only)
+login_client_oauth = {
+    "click_login": ("//button[@type='submit']", By.XPATH),
+}
+
 deployment = {
     "click_install_ocs": (
         'a[data-test-id="operator-install-btn"], a[data-test="catalog-details-modal-cta"]',

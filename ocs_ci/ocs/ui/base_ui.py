@@ -1398,8 +1398,11 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
     )
     if is_client_cluster:
         logger.info("Client cluster detected, using OAuth login button locator")
+        login_client_oauth_loc = locators_for_current_ocp_version()[
+            "login_client_oauth"
+        ]
         confirm_login_el = wait_for_element_to_be_clickable(
-            (By.XPATH, "//button[@type='submit']"), 60
+            login_client_oauth_loc["click_login"], 60
         )
         confirm_login_el.click()
     else:
@@ -1410,9 +1413,6 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
 
     hci_platform_conf = (
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
-    )
-    is_client_cluster = (
-        config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
     )
 
     def _skip_tour():
