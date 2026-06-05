@@ -356,13 +356,11 @@ class InfraHealthOverview(PageNavigator):
         """
         logger.info(f"Disabling alert: {alert_check_name}")
         alerts = self.filter_by_name_or_details(alert_check_name)
-        count = 0
-        for alert in alerts:
+        for count, alert in enumerate(alerts):
             if alert.check == alert_check_name and alert.end_time is None:
                 self.do_click(
                     format_locator(self.validation_loc["select_alert"], str(count))
                 )
-            count += 1
         time.sleep(2)
         self.take_screenshot(f"selected_alert_{alert_check_name}")
         logger.info("Clicking 'Silence' button")

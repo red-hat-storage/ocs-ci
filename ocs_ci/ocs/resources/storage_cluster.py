@@ -8,6 +8,7 @@ import logging
 import re
 import tempfile
 import json
+import time
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -3802,8 +3803,6 @@ def trigger_storage_cluster_reconciliation(storage_cluster_name=None, namespace=
         bool: True if annotation was successfully applied
 
     """
-    import time
-
     if storage_cluster_name is None:
         storage_cluster_name = config.ENV_DATA.get(
             "storage_cluster_name", constants.DEFAULT_CLUSTERNAME

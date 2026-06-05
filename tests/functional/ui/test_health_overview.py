@@ -392,7 +392,6 @@ class TestHealthOverview(ManageTest):
 
         Returns:
             list: List of fired alerts
-
         """
         logger.info(f"Mocking alert: {alert_name} using rule file: {alert_yaml}")
         alert_yaml_path = os.path.join(constants.HEALTHALERTS_DIR, alert_yaml)
@@ -791,11 +790,12 @@ class TestHealthOverview(ManageTest):
         logger.info(f"Baseline health score from overview: {baseline_score}")
         page_nav.take_screenshot("initial_health_overview")
         infra_health_overview = df_overview.nav_health_view_checks()
+        mock_alerts = False
         logger.info("Verifying alerts in Active Alerts section")
         infra_health_overview.click_last_24_hours_alerts()
         all_alerts = infra_health_overview.get_all_checks()
         unique_alert_types = list(
-            set(alert.check for alert in all_alerts if alert.end_time is None)
+            {alert.check for alert in all_alerts if alert.end_time is None}
         )
         logger.info(
             f"Found {len(unique_alert_types)} unique active alert types in Active Alerts section"
@@ -805,6 +805,7 @@ class TestHealthOverview(ManageTest):
         if not unique_alert_types:
             logger.warning("No alerts found in Active Alerts section")
             logger.info("Test will verify the disable functionality with mock scenario")
+            mock_alerts = True
             self.mock_alerts(
                 constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES,
                 "custom-odf-latency-rule.yaml",
@@ -812,6 +813,11 @@ class TestHealthOverview(ManageTest):
             )
             unique_alert_types = [constants.ALERT_ODF_NODE_LATENCY_HIGH_OSD_NODES]
             logger.info(f"Using mocked alert: {unique_alert_types}")
+            self.wait_for_health_score_change(
+                expected_delta=10, baseline=baseline_score
+            )
+            baseline_score = self.get_health_score_ui()
+            logger.info(f"Updated baseline after mock alert: {baseline_score}%")
 
         alerts_to_disable = []
         self.update_alert_map(threading_lock)
@@ -824,7 +830,7 @@ class TestHealthOverview(ManageTest):
         current_score = baseline_score
         for idx, alert in enumerate(alerts_to_disable, 1):
             logger.info(f"Processing alert {idx}/{len(alerts_to_disable)}: {alert}")
-            if idx > 1:
+            if idx > 1 or mock_alerts:
                 infra_health_overview = (
                     page_nav.nav_storage_data_foundation_overview_page().nav_health_view_checks()
                 )
@@ -840,7 +846,6 @@ class TestHealthOverview(ManageTest):
                 alert
             ), f"Alert '{alert}' not found in storagecluster spec.monitoring.excludedAlerts"
         logger.info("All selected alerts have been disabled")
-
         page_nav.take_screenshot("final_health_overview_all_disabled")
 
         assert (
