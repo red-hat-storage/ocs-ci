@@ -16,7 +16,7 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 WAIT_FOR_ROTATION_TIME = 1500  # seconds
 SLEEP_BETWEEN_TRIES = 300  # seconds
@@ -46,17 +46,19 @@ class TestPodsCsiLogRotation(BaseTest):
         new_gz_logs_num, new_current_log_file_size = pod_obj.get_csi_pod_log_details(
             logs_dir, log_file_name
         )
-        log.info(
-            f"New number of gz = {new_gz_logs_num}, new current log file size = {new_current_log_file_size}"
+        logger.debug(
+            f"Rotation check for '{log_file_name}' on pod '{pod_obj.name}': "
+            f"gz_logs={new_gz_logs_num} (was {gz_logs_num}), "
+            f"log_size={new_current_log_file_size} (was {current_log_file_size})"
         )
 
-        if gz_logs_num < 7:  # max number of gz logs
-            # test that new compressed file was added
-            return new_gz_logs_num == gz_logs_num + 1
+        if gz_logs_num < 7:
+            rotated = new_gz_logs_num == gz_logs_num + 1
         else:
-            # the number of compressed file was already at maximum, so test that the old current log was compressed
-            # and the new one has smaller size
-            return new_current_log_file_size < current_log_file_size
+            rotated = new_current_log_file_size < current_log_file_size
+
+        logger.debug(f"Rotation detected: {rotated}")
+        return rotated
 
     def pump_logs_and_wait_for_rotation(self, pod_obj, logs_dir, log_file_name):
         """
@@ -68,15 +70,17 @@ class TestPodsCsiLogRotation(BaseTest):
             log_file_name (str) Current log file name
 
         """
-        log.info(f"Testing log {log_file_name} rotation on pod {pod_obj.name}")
+        logger.test_step(
+            f"Pump log file '{log_file_name}' on pod '{pod_obj.name}' and wait for rotation"
+        )
         gz_logs_num, current_log_file_size = pod_obj.get_csi_pod_log_details(
             logs_dir, log_file_name
         )
-        log.info(
-            f"Number of compressed logs = {gz_logs_num}, current log file size = {current_log_file_size}"
+        logger.info(
+            f"Initial state for '{log_file_name}': "
+            f"compressed_logs={gz_logs_num}, current_log_size={current_log_file_size}"
         )
 
-        # Delete log file first to clear any logrotate state
         pod_obj.exec_cmd_on_pod(
             command=f"rm -f {logs_dir + log_file_name}",
             container_name="log-rotator",
@@ -84,7 +88,6 @@ class TestPodsCsiLogRotation(BaseTest):
             shell=True,
         )
 
-        # pump current log file size - truncate now creates a NEW file
         pod_obj.exec_cmd_on_pod(
             command=f"truncate -s 560M {logs_dir + log_file_name}",
             container_name="log-rotator",
@@ -92,11 +95,11 @@ class TestPodsCsiLogRotation(BaseTest):
             shell=True,
         )
 
-        time.sleep(10)  # wait to make sure that the truncate had its effect
+        time.sleep(10)
         current_log_file_size = pod_obj.get_csi_pod_log_details(
             logs_dir, log_file_name
         )[1]
-        log.info(f"Current log file size after truncate is = {current_log_file_size}")
+        logger.info(f"Log file size after truncate: {current_log_file_size}")
 
         try:
             for result in TimeoutSampler(
@@ -111,9 +114,20 @@ class TestPodsCsiLogRotation(BaseTest):
             ):
                 if result:
                     break
-            log.info("The logs were rotated correctly")
+            logger.info(
+                f"Log rotation verified for '{log_file_name}' on pod '{pod_obj.name}'"
+            )
         except TimeoutExpiredError:
-            assert False, "The logs were not rotated"
+            logger.error(
+                f"Log rotation did not occur for '{log_file_name}' on pod "
+                f"'{pod_obj.name}' within {WAIT_FOR_ROTATION_TIME}s"
+            )
+            logger.assertion(
+                f"Log rotation: file='{log_file_name}', pod='{pod_obj.name}', rotated=False"
+            )
+            assert (
+                False
+            ), f"Log rotation did not occur for '{log_file_name}' on pod '{pod_obj.name}'"
 
     @pytest.mark.parametrize(
         argnames=[
@@ -164,6 +178,7 @@ class TestPodsCsiLogRotation(BaseTest):
             additional_log_file_name (str) Additional log file name; empty string if is not relevant
 
         """
+        logger.test_step(f"Determine logs directory for pod selector '{pod_selector}'")
         base_dir = "/csi-logs/"
         suffix_dir = ""
         if pod_selector == "csi-cephfsplugin":
@@ -176,17 +191,25 @@ class TestPodsCsiLogRotation(BaseTest):
             suffix_dir = "openshift-storage.rbd.csi.ceph.com/log/controller-plugin/"
 
         logs_dir = os.path.join(base_dir, suffix_dir)
-        log.debug(f"logs dir: {logs_dir}")
+        logger.info(f"Logs directory: {logs_dir}")
 
+        logger.test_step(f"Get CSI pods with label '{pod_selector}'")
         pod_list = get_pods_having_label(
             namespace=config.ENV_DATA["cluster_namespace"], label=pod_selector
         )
         csi_interface_plugin_pod_objs = [Pod(**pod) for pod in pod_list]
+        logger.info(f"Found {len(csi_interface_plugin_pod_objs)} pods")
 
-        # check on the first pod
         pod_obj = csi_interface_plugin_pod_objs[0]
+        logger.test_step(
+            f"Verify log rotation for '{log_file_name}' on pod '{pod_obj.name}'"
+        )
         self.pump_logs_and_wait_for_rotation(pod_obj, logs_dir, log_file_name)
+
         if additional_log_file_name:
+            logger.test_step(
+                f"Verify log rotation for '{additional_log_file_name}' on pod '{pod_obj.name}'"
+            )
             self.pump_logs_and_wait_for_rotation(
                 pod_obj, logs_dir, additional_log_file_name
             )
