@@ -2482,6 +2482,10 @@ validation_4_21 = {
         " and normalize-space()='Indefinite']/ancestor::label//input[@type='checkbox']",
         By.XPATH,
     ),
+    "all_checks": (
+        "//span[normalize-space()='All checks']",
+        By.XPATH,
+    ),
     "select_alert": (
         "//input[@name='checkrow{}']",
         By.XPATH,
