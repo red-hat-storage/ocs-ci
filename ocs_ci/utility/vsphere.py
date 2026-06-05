@@ -6,6 +6,7 @@ import logging
 import os
 import ssl
 import time
+import shutil
 
 import atexit
 
@@ -31,7 +32,7 @@ from ocs_ci.ocs.constants import (
     VM_DEFAULT_NETWORK_ADAPTER,
 )
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -1907,3 +1908,66 @@ class VSPHERE(object):
         vms = [vm for vm in container_view.view if str_to_match in vm.name]
         container_view.Destroy()
         return vms
+
+    def delete_storage_policy_by_exact_name(self, policy_name):
+        """
+        Delete a storage policy by its exact name using govc.
+
+        Args:
+            policy_name (str): Exact name of the storage policy to delete
+
+        Returns:
+            bool: True if policy was deleted, False otherwise
+
+        """
+        # Check if govc is available using shutil.which
+        govc_path = shutil.which("govc")
+        if not govc_path:
+            logger.warning(
+                f"govc command not found. Storage policy '{policy_name}' leftovers cannot be checked automatically. "
+                f"Please install govc (https://github.com/vmware/govmomi/releases) "
+            )
+            return False
+
+        # Set up govc environment variables
+        # Merge with existing environment to preserve PATH
+        govc_env = os.environ.copy()
+        govc_env.update(
+            {
+                "GOVC_URL": self._host,
+                "GOVC_USERNAME": self._user,
+                "GOVC_PASSWORD": self._password,
+                "GOVC_INSECURE": "true",
+            }
+        )
+
+        try:
+            # List all storage policies to verify the policy exists
+            logger.info(f"Checking if storage policy exists: {policy_name}")
+            list_cmd = "govc storage.policy.ls"
+            result = exec_cmd(list_cmd, env=govc_env, timeout=60)
+            policies_output = result.stdout.decode("utf-8").strip().split("\n")
+
+            # govc output format: "UUID  policy-name"
+            # Check if the policy name exists in any line
+            policy_found = False
+            for policy_line in policies_output:
+                if policy_name in policy_line:
+                    policy_found = True
+                    logger.info(f"Found storage policy in line: {policy_line}")
+                    break
+
+            if not policy_found:
+                logger.info(f"Storage policy not found: {policy_name}")
+                return False
+
+            # Delete the storage policy
+            logger.info(f"Deleting storage policy: {policy_name}")
+            delete_cmd = f"govc storage.policy.rm '{policy_name}'"
+            exec_cmd(delete_cmd, env=govc_env)
+            logger.info(f"Successfully deleted storage policy: {policy_name}")
+            return True
+
+        except Exception as err:
+            logger.warning(f"Failed to delete storage policy {policy_name}: {err}")
+            return False
