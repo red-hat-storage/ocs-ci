@@ -353,7 +353,7 @@ class TestNfsExport(ManageTest):
         for i in range(1, num_iterations + 1):
             io_data = f"IO iteration {i} - {time.time()}"
             write_cmd = f'echo "{io_data}" >> {file_path}'
-            retcode, _, stderr = con.exec_cmd(write_cmd, use_logger=False)
+            retcode, _, stderr = con.exec_cmd(write_cmd)
             if retcode != 0:
                 errors.append(f"Write failed at iteration {i}: {stderr}")
                 log.warning(f"Write error at iteration {i}: {stderr}")
@@ -460,7 +460,7 @@ class TestNfsExport(ManageTest):
 
     def log_nfs_loadbalancer_details(self, stage=""):
         """
-        Log NFS LoadBalancer service details including endpoint and hostname.
+        Log NFS LoadBalancer service details including endpoint, hostname, and IP address.
 
         Args:
             stage (str): Description of when this is being called (e.g., "BEFORE shutdown", "AFTER recovery")
@@ -474,21 +474,53 @@ class TestNfsExport(ManageTest):
                 resource_name="rook-ceph-nfs-my-nfs-load-balancer",
             )
             lb_data = lb_svc.get()
+
+            # Get LoadBalancer ingress details
             lb_ingress = (
                 lb_data.get("status", {}).get("loadBalancer", {}).get("ingress", [])
             )
+
             if lb_ingress:
-                lb_endpoint = lb_ingress[0].get("hostname") or lb_ingress[0].get("ip")
-                log.info(f"  LoadBalancer Endpoint: {lb_endpoint}")
-                log.info(f"  self.hostname_add: {self.hostname_add}")
+                # Extract both hostname and IP if available
+                lb_hostname = lb_ingress[0].get("hostname", "N/A")
+                lb_ip = lb_ingress[0].get("ip", "N/A")
+                lb_endpoint = lb_hostname if lb_hostname != "N/A" else lb_ip
+
+                log.info(f"  LoadBalancer Hostname: {lb_hostname}")
+                log.info(f"  LoadBalancer IP: {lb_ip}")
+                log.info(f"  LoadBalancer Endpoint (used for mount): {lb_endpoint}")
+                log.info(
+                    f"  Expected hostname (self.hostname_add): {self.hostname_add}"
+                )
+
+                # Check if endpoint changed
                 if lb_endpoint != self.hostname_add:
                     log.warning(
                         f"  ⚠ LoadBalancer endpoint changed! Expected: {self.hostname_add}, Got: {lb_endpoint}"
                     )
                 else:
                     log.info("  ✓ LoadBalancer endpoint matches expected value")
+
+                # Get service ports
+                ports = lb_data.get("spec", {}).get("ports", [])
+                if ports:
+                    log.info("  Service Ports:")
+                    for port in ports:
+                        log.info(
+                            f"    - {port.get('name', 'unnamed')}: "
+                            f"{port.get('port', 'N/A')}/{port.get('protocol', 'N/A')}"
+                        )
+
+                # Get external traffic policy
+                external_policy = lb_data.get("spec", {}).get(
+                    "externalTrafficPolicy", "N/A"
+                )
+                log.info(f"  External Traffic Policy: {external_policy}")
+
             else:
                 log.warning("  ⚠ No LoadBalancer ingress found")
+                log.info("  Service may still be provisioning or there's an issue")
+
         except Exception as e:
             log.warning(f"  ⚠ Failed to get LoadBalancer details: {e}")
         log.info("=" * 80)
@@ -744,13 +776,15 @@ class TestNfsExport(ManageTest):
         pvc_name = f"test-pvc-outcluster-{unique_suffix}"
         log.info(f"Using unique names: pod deployment={pod_name}, pvc={pvc_name}")
 
+        # Supported access mode constants.ACCESS_MODE_RWX and constants.ACCESS_MODE_RWO
+
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
             sc_name=self.nfs_sc,
             namespace=self.namespace,
             size="10Gi",
             do_reload=True,
-            access_mode=constants.ACCESS_MODE_RWO,
+            access_mode=constants.ACCESS_MODE_RWX,
             volume_mode="Filesystem",
             pvc_name=pvc_name,
         )
@@ -910,7 +944,7 @@ class TestNfsExport(ManageTest):
                 # Initialize the file with initial content
                 initial_data = f"IO test started at {time.time()}"
                 init_cmd = f'echo "{initial_data}" > {test_file}'
-                retcode, _, stderr = con.exec_cmd(init_cmd, use_logger=False)
+                retcode, _, stderr = con.exec_cmd(init_cmd)
                 if retcode != 0:
                     io_errors.append(f"Failed to initialize test file: {stderr}")
                     log.error(f"Initialization error: {stderr}")
@@ -918,7 +952,7 @@ class TestNfsExport(ManageTest):
 
                 # Get initial file checksum using md5sum
                 checksum_cmd = f"md5sum {test_file}"
-                retcode, stdout, stderr = con.exec_cmd(checksum_cmd, use_logger=False)
+                retcode, stdout, stderr = con.exec_cmd(checksum_cmd)
                 if retcode == 0:
                     previous_checksum = stdout.split()[0]
                     log.info(f"File initialized with checksum: {previous_checksum}")
@@ -931,7 +965,7 @@ class TestNfsExport(ManageTest):
 
                     # Write operation - append to the file
                     write_cmd = f'echo "{test_data}" >> {test_file}'
-                    retcode, _, stderr = con.exec_cmd(write_cmd, use_logger=False)
+                    retcode, _, stderr = con.exec_cmd(write_cmd)
                     if retcode != 0:
                         io_errors.append(
                             f"Write failed at iteration {iteration}: {stderr}"
@@ -941,9 +975,7 @@ class TestNfsExport(ManageTest):
 
                     # Calculate current file checksum using md5sum
                     checksum_cmd = f"md5sum {test_file}"
-                    retcode, stdout, stderr = con.exec_cmd(
-                        checksum_cmd, use_logger=False
-                    )
+                    retcode, stdout, stderr = con.exec_cmd(checksum_cmd)
                     if retcode != 0:
                         io_errors.append(
                             f"Checksum calculation failed at iteration {iteration}: {stderr}"
@@ -966,7 +998,7 @@ class TestNfsExport(ManageTest):
 
                     # Read the last line to verify content
                     read_cmd = f"tail -n 1 {test_file}"
-                    retcode, stdout, stderr = con.exec_cmd(read_cmd, use_logger=False)
+                    retcode, stdout, stderr = con.exec_cmd(read_cmd)
                     if retcode != 0:
                         io_errors.append(
                             f"Read failed at iteration {iteration}: {stderr}"
@@ -1003,16 +1035,14 @@ class TestNfsExport(ManageTest):
                 # Final file statistics
                 try:
                     stat_cmd = f"wc -l {test_file}"
-                    retcode, stdout, _ = con.exec_cmd(stat_cmd, use_logger=False)
+                    retcode, stdout, _ = con.exec_cmd(stat_cmd)
                     if retcode == 0:
                         line_count = stdout.split()[0]
                         log.info(f"Final file statistics: {line_count} lines written")
 
                     # Final checksum using md5sum
                     final_checksum_cmd = f"md5sum {test_file}"
-                    retcode, stdout, _ = con.exec_cmd(
-                        final_checksum_cmd, use_logger=False
-                    )
+                    retcode, stdout, _ = con.exec_cmd(final_checksum_cmd)
                     if retcode == 0:
                         final_checksum = stdout.split()[0]
                         log.info(f"Final file checksum: {final_checksum}")
@@ -1553,22 +1583,12 @@ class TestNfsExport(ManageTest):
         CLONED_IO_FILE_NAME = "io_test_cloned.txt"
         cloned_io_file = f"{cloned_test_folder}/{CLONED_IO_FILE_NAME}"
 
-        # Write initial data to single file
-        initial_cloned_data = f"Cloned PVC IO test started at {time.time()}"
-        init_cloned_cmd = f'echo "{initial_cloned_data}" > {cloned_io_file}'
-        retcode, _, stderr = con.exec_cmd(init_cloned_cmd)
-        assert retcode == 0, f"Failed to initialize cloned IO file: {stderr}"
-
-        # Append multiple lines to the same single file
-        log.info("Writing data to single file...")
-        for i in range(1, 21):
-            io_data = f"Cloned IO iteration {i} - {time.time()}"
-            write_cmd = f'echo "{io_data}" >> {cloned_io_file}'
-            retcode, _, stderr = con.exec_cmd(write_cmd, use_logger=False)
-            if retcode != 0:
-                log.warning(f"Write failed at iteration {i}: {stderr}")
-            time.sleep(0.5)
-
+        # Write IO to single file using common method
+        log.info("Writing data to cloned mount...")
+        success, errors = self.write_io_to_single_file(
+            con, cloned_io_file, num_iterations=20, delay=0.5
+        )
+        assert success, f"Failed to write IO to cloned file: {errors}"
         log.info(
             f"IO operations completed on cloned mount - single file: {CLONED_IO_FILE_NAME}"
         )
@@ -1896,22 +1916,12 @@ class TestNfsExport(ManageTest):
         FINAL_IO_FILE_NAME = "io_test_final.txt"
         final_io_file = f"{final_restored_test_folder}/{FINAL_IO_FILE_NAME}"
 
-        # Write initial data to single file
-        initial_final_data = f"Final restored PVC IO test started at {time.time()}"
-        init_final_cmd = f'echo "{initial_final_data}" > {final_io_file}'
-        retcode, _, stderr = con.exec_cmd(init_final_cmd)
-        assert retcode == 0, f"Failed to initialize final IO file: {stderr}"
-
-        # Append multiple lines to the same single file
-        log.info("Writing data to single file...")
-        for i in range(1, 21):
-            io_data = f"Final IO iteration {i} - {time.time()}"
-            write_cmd = f'echo "{io_data}" >> {final_io_file}'
-            retcode, _, stderr = con.exec_cmd(write_cmd)
-            if retcode != 0:
-                log.warning(f"Write failed at iteration {i}: {stderr}")
-            time.sleep(0.5)
-
+        # Write IO to single file using common method
+        log.info("Writing data to final restored mount...")
+        success, errors = self.write_io_to_single_file(
+            con, final_io_file, num_iterations=20, delay=0.5
+        )
+        assert success, f"Failed to write IO to final restored file: {errors}"
         log.info(
             f"IO operations completed on final restored mount - single file: {FINAL_IO_FILE_NAME}"
         )
@@ -2160,20 +2170,34 @@ class TestNfsExport(ManageTest):
 
         for mount_point in nfs_mount_points:
             mount_accessible = False
+            log.info(f"\nChecking mount point: {mount_point}")
 
             for attempt in range(max_retries):
-                retcode, stdout, _ = con.exec_cmd(f"findmnt -M {mount_point}")
+                retcode, stdout, stderr = con.exec_cmd(f"findmnt -M {mount_point}")
                 if retcode == 0:
                     mount_accessible = True
                     log.info(
                         f"✓ Mount point {mount_point} is accessible after recovery"
                     )
+                    log.info(f"  Mount details: {stdout.strip()}")
                     break
                 else:
                     log.info(
                         f"Attempt {attempt + 1}/{max_retries}: Mount point {mount_point} "
                         f"not yet accessible, waiting for recovery..."
                     )
+
+                    # Add diagnostic check for stale mount on failed attempts
+                    ls_retcode, ls_stdout, ls_stderr = con.exec_cmd(
+                        f"ls {mount_point}", ignore_error=True
+                    )
+                    if "Stale file handle" in ls_stderr:
+                        log.error(f"  ✗ STALE FILE HANDLE detected for {mount_point}")
+                    elif "Transport endpoint is not connected" in ls_stderr:
+                        log.error(
+                            f"  ✗ TRANSPORT ENDPOINT NOT CONNECTED for {mount_point}"
+                        )
+
                     if attempt < max_retries - 1:
                         time.sleep(retry_delay)
 

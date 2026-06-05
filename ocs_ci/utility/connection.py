@@ -104,7 +104,7 @@ class Connection(object):
         logger.debug("SSH Jump host channel were created.")
         return jump_channel
 
-    def exec_cmd(self, cmd, secrets=None, use_logger=True):
+    def exec_cmd(self, cmd, secrets=None):
         """
         Executes command on server
 
@@ -122,8 +122,7 @@ class Connection(object):
         from ocs_ci.utility.utils import mask_secrets
 
         masked_cmd = mask_secrets(cmd, secrets)
-        if use_logger:
-            logger.info(f"Executing cmd: {masked_cmd} on {self.host}")
+        logger.info(f"Executing cmd: {masked_cmd} on {self.host}")
         _, out, err = self.client.exec_command(cmd)
         retcode = out.channel.recv_exit_status()
         stdout = out.read().decode("utf-8").strip("\n")
