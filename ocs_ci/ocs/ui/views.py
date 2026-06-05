@@ -2483,7 +2483,7 @@ validation_4_21 = {
         By.XPATH,
     ),
     "all_checks": (
-        "//span[normalize-space()='All checks']",
+        "//button[.//span[normalize-space()='All checks']]",
         By.XPATH,
     ),
     "select_alert": (
