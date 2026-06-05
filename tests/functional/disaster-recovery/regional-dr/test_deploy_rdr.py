@@ -101,10 +101,10 @@ def test_deploy_rdr():
     )
 
     # ========================================================================
-    # STEP 2: Deploy ACM Hub (if needed)
+    # STEP 2: Detect and Deploy ACM Hub (if needed)
     # ========================================================================
     log.info("\n" + "=" * 80)
-    log.info("STEP 2: Deploying ACM Hub")
+    log.info("STEP 2: Detecting and Deploying ACM Hub")
     log.info("=" * 80)
 
     log.info("Initializing Deployment instance...")
@@ -113,50 +113,60 @@ def test_deploy_rdr():
     # Save current context
     original_ctx_index = config.cur_index
 
-    # Check skip flag
+    # ALWAYS search for ACM cluster across all clusters (regardless of skip flags)
+    # This ensures acm_cluster_index is set for subsequent steps
+    acm_cluster_index = None
+    acm_cluster_name = None
+
+    log.info("Searching for ACM cluster across all clusters...")
+    for cluster in config.clusters:
+        cluster_index = cluster.MULTICLUSTER.get("multicluster_index")
+        # Check if this cluster is marked as ACM hub OR if it's already an ACM cluster
+        if cluster.ENV_DATA.get(
+            "deploy_acm_hub_cluster", False
+        ) or cluster.MULTICLUSTER.get("acm_cluster", False):
+            acm_cluster_index = cluster_index
+            acm_cluster_name = cluster.ENV_DATA.get(
+                "cluster_name", f"cluster-{cluster_index}"
+            )
+            log.info(
+                f"Found ACM cluster: {acm_cluster_name} (index: {acm_cluster_index})"
+            )
+            break
+
+    if acm_cluster_index is None:
+        log.info("No ACM cluster found in configuration")
+        log.info("ACM-dependent steps (import, submariner, gitops) will be skipped")
+    else:
+        log.info(
+            f"ACM cluster identified: {acm_cluster_name} (index: {acm_cluster_index})"
+        )
+
+    # Check skip flag for deployment
     if config.ENV_DATA.get("skip_acm_deployment", False):
         log.info("ACM Hub deployment is disabled (skip_acm_deployment: true)")
-        log.info("Skipping ACM Hub deployment")
-        acm_cluster_index = None
-        acm_cluster_name = None
+        log.info("Skipping ACM Hub deployment (assuming ACM is already deployed)")
+    elif acm_cluster_index is not None:
+        log.info(f"ACM Hub deployment is enabled on cluster: {acm_cluster_name}")
+        log.info(f"Switching to ACM cluster context (index: {acm_cluster_index})")
+        config.switch_ctx(acm_cluster_index)
+
+        log.info("Deploying ACM Hub...")
+        try:
+            deployment.deploy_acm_hub()
+            log.info("✓ ACM Hub deployment completed successfully")
+        except Exception as e:
+            log.error(f"✗ ACM Hub deployment failed with error: {e}")
+            # Restore context before raising
+            config.switch_ctx(original_ctx_index)
+            raise
+        finally:
+            # Restore original context
+            log.info(f"Restoring original context (index: {original_ctx_index})")
+            config.switch_ctx(original_ctx_index)
     else:
-        # Search for ACM cluster across all clusters
-        acm_cluster_index = None
-        acm_cluster_name = None
-
-        for cluster in config.clusters:
-            cluster_index = cluster.MULTICLUSTER.get("multicluster_index")
-            if cluster.ENV_DATA.get("deploy_acm_hub_cluster", False):
-                acm_cluster_index = cluster_index
-                acm_cluster_name = cluster.ENV_DATA.get(
-                    "cluster_name", f"cluster-{cluster_index}"
-                )
-                log.info(
-                    f"Found ACM cluster: {acm_cluster_name} (index: {acm_cluster_index})"
-                )
-                break
-
-        if acm_cluster_index is not None:
-            log.info(f"ACM Hub deployment is enabled on cluster: {acm_cluster_name}")
-            log.info(f"Switching to ACM cluster context (index: {acm_cluster_index})")
-            config.switch_ctx(acm_cluster_index)
-
-            log.info("Deploying ACM Hub...")
-            try:
-                deployment.deploy_acm_hub()
-                log.info("✓ ACM Hub deployment completed successfully")
-            except Exception as e:
-                log.error(f"✗ ACM Hub deployment failed with error: {e}")
-                # Restore context before raising
-                config.switch_ctx(original_ctx_index)
-                raise
-            finally:
-                # Restore original context
-                log.info(f"Restoring original context (index: {original_ctx_index})")
-                config.switch_ctx(original_ctx_index)
-        else:
-            log.info("ACM Hub deployment is not enabled in any cluster configuration")
-            log.info("Skipping ACM Hub deployment")
+        log.info("No ACM cluster configured for deployment")
+        log.info("Skipping ACM Hub deployment")
 
     # ========================================================================
     # STEP 3: Deploy MCE (if needed)
