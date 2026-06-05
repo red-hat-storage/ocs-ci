@@ -129,6 +129,13 @@ def test_deploy_rdr():
             acm_cluster_name = cluster.ENV_DATA.get(
                 "cluster_name", f"cluster-{cluster_index}"
             )
+
+            # IMPORTANT: Ensure the acm_cluster flag is set in MULTICLUSTER config
+            # This is required for get_non_acm_cluster_config() to work correctly
+            if not cluster.MULTICLUSTER.get("acm_cluster", False):
+                log.info(f"Setting acm_cluster flag for cluster: {acm_cluster_name}")
+                cluster.MULTICLUSTER["acm_cluster"] = True
+
             log.info(
                 f"Found ACM cluster: {acm_cluster_name} (index: {acm_cluster_index})"
             )
@@ -141,6 +148,7 @@ def test_deploy_rdr():
         log.info(
             f"ACM cluster identified: {acm_cluster_name} (index: {acm_cluster_index})"
         )
+        log.info("ACM cluster will be excluded from managed cluster operations")
 
     # Check skip flag for deployment
     if config.ENV_DATA.get("skip_acm_deployment", False):
