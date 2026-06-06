@@ -4204,7 +4204,7 @@ class MultiClusterDROperatorsDeploy(object):
                 ] = "true"
                 oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
                     "s3Url"
-                ] = f"https://{s3_endpoint}"
+                ] = s3_endpoint
                 logger.info(
                     f"Configured DPA with ODF S3 endpoint: https://{s3_endpoint}"
                 )
