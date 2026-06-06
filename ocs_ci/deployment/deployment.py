@@ -4264,7 +4264,7 @@ class MultiClusterDROperatorsDeploy(object):
         multicluster_engine.wait_for_phase("Available")
         config.switch_ctx(old_ctx)
 
-    def create_dpa(self, bucket_name):
+    def create_dpa(self, bucket_name, s3_endpoint=None):
         """
         create DPA
         OADP will be already installed when we enable backup flag
@@ -4272,6 +4272,7 @@ class MultiClusterDROperatorsDeploy(object):
         update bucket name and s3 storage link
         Args:
             bucket_name (str): Name of the Bucket
+            s3_endpoint (str, optional): S3 endpoint URL (required for ODF buckets)
         """
         oadp_data = templating.load_yaml(constants.ACM_DPA)
         oadp_data["spec"]["backupLocations"][0]["velero"]["objectStorage"][
@@ -4287,6 +4288,21 @@ class MultiClusterDROperatorsDeploy(object):
             oadp_data["spec"]["snapshotLocations"][0]["velero"]["config"][
                 "region"
             ] = "noobaa"
+
+            # Set S3 endpoint URL for ODF bucket
+            if s3_endpoint:
+                oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
+                    "s3ForcePathStyle"
+                ] = "true"
+                oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
+                    "insecureSkipTLSVerify"
+                ] = "true"
+                oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
+                    "s3Url"
+                ] = f"https://{s3_endpoint}"
+                logger.info(
+                    f"Configured DPA with ODF S3 endpoint: https://{s3_endpoint}"
+                )
         if version.compare_versions(f"{oadp_version} >= 1.5"):
             # Remove 'restic' under 'configuration' if it exists
             oadp_data["spec"]["configuration"].pop("restic", None)
@@ -4692,11 +4708,13 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         )
 
         # Use ODF credentials if returned, otherwise use AWS credentials
+        s3_endpoint = None
         if odf_credentials:
             bucket_name, endpoint, access_key, secret_key = odf_credentials
             self.meta_obj.bucket_name = bucket_name
             self.meta_obj.access_key = access_key
             self.meta_obj.secret_key = secret_key
+            s3_endpoint = endpoint  # Store endpoint for DPA configuration
 
         self.create_generic_credentials(
             self.meta_obj.access_key, self.meta_obj.secret_key, acm_indexes
@@ -4705,7 +4723,10 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Reconfigure OADP on all ACM clusters
         for i in acm_indexes:
             config.switch_ctx(i)
-            self.create_dpa(self.meta_obj.bucket_name)
+            self.create_dpa(
+                self.meta_obj.bucket_name,
+                s3_endpoint=s3_endpoint if odf_credentials else None,
+            )
 
         config.switch_acm_ctx()
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
