@@ -7008,13 +7008,13 @@ def genereate_cred_file_rack():
     This function retrieves the cluster name from config, fetches all kickstart configmaps
     from the ibm-spectrum-fusion-ns namespace, parses the compute node data, fetches
     credentials from node secrets, and generates a dictionary mapping rack serial numbers
-    to node details (OCPRole, ipv4, manufacturer, role, username, password) along with
+    to node details (OCPRole, ipv6, ipv4, manufacturer, role, username, password) along with
     rack information. The file is saved as <cluster_name>.json.
 
     Returns:
         dict: Dictionary with rack serial numbers as keys, each containing nodes and rackInfo.
 
-              - nodes: dict of nodes with their OCPRole, ipv4, manufacturer, role, username,
+              - nodes: dict of nodes with their OCPRole, ipv6, ipv4, manufacturer, role, username,
                 and password information (credentials fetched from node secrets)
               - rackInfo: dict containing rack information including ibmSerialNumber
 
@@ -7024,6 +7024,7 @@ def genereate_cred_file_rack():
                 "l001": {
                     "nodes": {
                         "control-2-ru2": {
+                            "ipv6": "2001:db8::1",
                             "ipv4": "0.0.0.0",
                             "manufacturer": "Lenovo",
                             "role": "master",
@@ -7031,6 +7032,7 @@ def genereate_cred_file_rack():
                             "password": "PASSWORD"
                         },
                         "compute-2-ru3": {
+                            "ipv6": "2001:db8::2",
                             "ipv4": "0.0.0.0",
                             "manufacturer": "Lenovo",
                             "role": "worker",
@@ -7156,11 +7158,12 @@ def genereate_cred_file_rack():
 
         for node in compute_nodes:
             ocp_role = node.get("OCPRole")
+            ipv6 = node.get("ipv6")
             ipv4 = node.get("ipv4")
             manufacturer = node.get("manufacturer")
             secret_name = node.get("secretName")
 
-            if ocp_role and ipv4 and manufacturer:
+            if ocp_role and (ipv6 or ipv4) and manufacturer:
                 # Find the actual node in the cluster by matching the OCPRole name
                 role = "unknown"
                 for k8s_node in all_nodes.get("items", []):
@@ -7188,8 +7191,13 @@ def genereate_cred_file_rack():
                                     break
                         break
 
-                # Initialize node entry
-                node_entry = {"ipv4": ipv4, "manufacturer": manufacturer, "role": role}
+                # Initialize node entry with both IPv6 and IPv4
+                node_entry = {
+                    "ipv6": ipv6,
+                    "ipv4": ipv4,
+                    "manufacturer": manufacturer,
+                    "role": role,
+                }
 
                 # Fetch credentials from the node secret if secret_name is available
                 if secret_name:
@@ -7284,6 +7292,22 @@ def genereate_cred_file_rack():
     with os.fdopen(fd, "w") as f:
         json.dump(rack_dict, f, indent=2)
     log.info(f"Rack details saved to {file_path} with restrictive permissions (0o600)")
+
+    # Also save a timestamped backup copy in home directory
+    try:
+        home_dir = Path.home()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        home_backup_path = home_dir / f"{cluster_name}_rack_backup_{timestamp}.json"
+
+        # Write backup to home directory with restrictive permissions
+        fd_backup = os.open(
+            home_backup_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
+        )
+        with os.fdopen(fd_backup, "w") as f_backup:
+            json.dump(rack_dict, f_backup, indent=2)
+        log.info(f"Backup copy saved to home directory: {home_backup_path}")
+    except Exception as e:
+        log.warning(f"Failed to create backup in home directory: {e}")
 
     # Log summary without exposing credentials
     num_racks = len(rack_dict)
