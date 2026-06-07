@@ -5713,13 +5713,23 @@ def validate_multus_with_odf_cli():
 
     namespace = config.ENV_DATA.get("multus_public_net_namespace", "openshift-storage")
 
+    # Reject mixed NAD namespaces — odf-cli only validates one namespace
+    if config.ENV_DATA.get("multus_create_cluster_net"):
+        cluster_ns = config.ENV_DATA.get("multus_cluster_net_namespace", namespace)
+        if cluster_ns != namespace:
+            raise exceptions.UnexpectedDeploymentConfiguration(
+                "odf-cli multus validation requires public and cluster "
+                f"NADs in the same namespace, got '{namespace}' vs "
+                f"'{cluster_ns}'"
+            )
+
     # Wait for all NNCPs to be SuccessfullyConfigured
     logger.info("Waiting for all NNCPs to be Available before multus validation")
     nncp_ocp = OCP(kind="nncp")
     nncps = nncp_ocp.get().get("items", [])
     if nncps:
         for sample in TimeoutSampler(
-            timeout=300,
+            timeout=600,
             sleep=10,
             func=_check_all_nncps_available,
             nncp_ocp=nncp_ocp,
@@ -5948,7 +5958,7 @@ def setup_multus_networks(patch_storagecluster=False):
             mode="w+", prefix="multus_public", delete=False
         )
         templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
-        run_cmd(f"oc create -f {public_net_yaml.name}")
+        run_cmd(f"oc apply -f {public_net_yaml.name}")
 
     # Create cluster NAD
     if create_cluster_net:
@@ -6022,7 +6032,7 @@ def setup_multus_networks(patch_storagecluster=False):
             mode="w+", prefix="multus_cluster", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_net_data, cluster_net_yaml.name)
-        run_cmd(f"oc create -f {cluster_net_yaml.name}")
+        run_cmd(f"oc apply -f {cluster_net_yaml.name}")
 
     # Validate multus networks with odf-cli before proceeding
     if not config.ENV_DATA.get("multus_skip_odf_cli_validation", False):
