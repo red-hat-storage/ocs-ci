@@ -7,6 +7,7 @@ encrypted-only transport requirements.
 """
 
 import logging
+import time
 
 import boto3
 import botocore.exceptions
@@ -61,7 +62,7 @@ class TestDenyHTTP:
                     )
                     logger.info("Reverting denyHTTP to false on NooBaa CR")
                     noobaa_obj.patch(params=patch_param, format_type="json")
-            except Exception:
+            except KeyError:
                 logger.warning(
                     "denyHTTP field not found on NooBaa CR, no revert needed"
                 )
@@ -292,9 +293,9 @@ class TestDenyHTTP:
                 logger.info("S3 route insecureEdgeTerminationPolicy changed to 'None'")
                 break
 
-        updated_policy = nb_s3_route.data["spec"]["tls"][
-            "insecureEdgeTerminationPolicy"
-        ]
+        # Allow the route to settle to catch reconciliation flaps
+        time.sleep(RECONCILE_INTERVAL)
+        updated_policy = self._get_insecure_policy(nb_s3_route)
         assert (
             updated_policy == "None"
         ), f"Expected insecureEdgeTerminationPolicy to be 'None', got '{updated_policy}'"
