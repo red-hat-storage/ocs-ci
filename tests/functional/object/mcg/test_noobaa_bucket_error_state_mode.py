@@ -39,6 +39,7 @@ def _wait_for_bucket_mode(mcg_obj, bucket_name, expected_mode, timeout=None):
         bucket_name (str): Name of the bucket
         expected_mode (str): Expected bucket mode (e.g. "EXCEEDING_QUOTA")
             or "!OPTIMAL" to wait for any non-OPTIMAL mode
+            (UNKNOWN is excluded to avoid false positives on lookup failures)
         timeout (int): Timeout in seconds (default: BUCKET_MODE_TIMEOUT)
 
     Returns:
@@ -62,7 +63,7 @@ def _wait_for_bucket_mode(mcg_obj, bucket_name, expected_mode, timeout=None):
             bucket_name=bucket_name,
         ):
             last_mode = mode
-            if check_not_optimal and mode != "OPTIMAL":
+            if check_not_optimal and mode not in ("OPTIMAL", "UNKNOWN"):
                 log.info(f"Bucket {bucket_name} entered non-OPTIMAL mode: {mode}")
                 return mode
             elif not check_not_optimal and mode == expected_mode:
