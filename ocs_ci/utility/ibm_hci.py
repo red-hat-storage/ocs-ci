@@ -208,6 +208,23 @@ class IBMHCI(object):
             log.error(f"Error checking/installing ipmitool: {e}")
             return False
 
+    def _format_ip_for_command(self, ip_address):
+        """
+        Format IP address for use in commands. IPv6 addresses need to be wrapped in brackets.
+
+        Args:
+            ip_address (str): IP address (IPv4 or IPv6)
+
+        Returns:
+            str: Formatted IP address
+        """
+        # Check if it's an IPv6 address (contains colons)
+        if ":" in ip_address:
+            # Wrap IPv6 in brackets if not already wrapped
+            if not ip_address.startswith("["):
+                return f"[{ip_address}]"
+        return ip_address
+
     def _power_operation_ipmi_ssh(
         self, rack_ip, node_username, node_password, node_ip, operation, force=False
     ):
@@ -218,7 +235,7 @@ class IBMHCI(object):
             rack_ip (str): IP address of the rack
             node_username (str): IPMI username for the node
             node_password (str): IPMI password for the node
-            node_ip (str): IP address of the node BMC
+            node_ip (str): IP address of the node BMC (IPv4 or IPv6)
             operation (str): Power operation (on, off, cycle, reset, status)
             force (bool): Force operation (for off/reset)
 
@@ -230,6 +247,9 @@ class IBMHCI(object):
         if not self._ensure_ipmitool_installed(rack_ip):
             log.error(f"Cannot proceed without ipmitool on rack {rack_ip}")
             return False
+
+        # Format IP address (wrap IPv6 in brackets)
+        formatted_ip = self._format_ip_for_command(node_ip)
 
         # Map operations to IPMI commands
         ipmi_ops = {
@@ -245,11 +265,11 @@ class IBMHCI(object):
             return False
 
         ipmi_cmd = ipmi_ops[operation]
-        command = f"ipmitool -I lanplus -H {node_ip} -U {node_username} -P {node_password} {ipmi_cmd}"
+        command = f"ipmitool -I lanplus -H {formatted_ip} -U {node_username} -P {node_password} {ipmi_cmd}"
 
         log.info(f"Executing IPMI command via SSH for {operation} on node {node_ip}")
         log.info(
-            f"IPMI Command: ipmitool -I lanplus -H {node_ip} -U <REDACTED> -P <REDACTED> {ipmi_cmd}"
+            f"IPMI Command: ipmitool -I lanplus -H {formatted_ip} -U <REDACTED> -P <REDACTED> {ipmi_cmd}"
         )
         try:
             stdout, stderr, exit_code = self._execute_ssh_command(
@@ -312,7 +332,7 @@ class IBMHCI(object):
             rack_ip (str): IP address of the rack
             node_username (str): Redfish username for the node
             node_password (str): Redfish password for the node
-            node_ip (str): IP address of the node BMC
+            node_ip (str): IP address of the node BMC (IPv4 or IPv6)
             operation (str): Power operation (on, off, cycle, reset, status)
             force (bool): Force operation (for off/reset)
 
@@ -320,6 +340,9 @@ class IBMHCI(object):
             str: Power state ("on", "off") if operation is "status"
             bool: True if successful, False otherwise for other operations
         """
+        # Format IP address (wrap IPv6 in brackets for URL)
+        formatted_ip = self._format_ip_for_command(node_ip)
+
         # Map operations to Redfish reset types
         redfish_ops = {
             "on": "On",
@@ -335,9 +358,10 @@ class IBMHCI(object):
 
         # First, discover the Systems URI
         log.info(f"Discovering Redfish Systems URI for node {node_ip}")
-        discover_cmd = f"curl -k -sS -f -u {node_username}:{node_password} https://{node_ip}/redfish/v1/Systems"
+        discover_cmd = f"curl -k -sS -f -u {node_username}:{node_password} https://{formatted_ip}/redfish/v1/Systems"
         log.info(
-            f"Redfish Discovery Command: curl -k -sS -f -u <REDACTED>:<REDACTED> https://{node_ip}/redfish/v1/Systems"
+            f"Redfish Discovery Command: curl -k -sS -f -u <REDACTED>:<REDACTED> "
+            f"https://{formatted_ip}/redfish/v1/Systems"
         )
 
         try:
@@ -377,23 +401,23 @@ class IBMHCI(object):
                 # Get power status
                 command = (
                     f"curl -k -sS -f -u {node_username}:{node_password} "
-                    f"https://{node_ip}{system_uri} | grep -i powerstate"
+                    f"https://{formatted_ip}{system_uri} | grep -i powerstate"
                 )
                 redacted_command = (
                     f"curl -k -sS -f -u <REDACTED>:<REDACTED> "
-                    f"https://{node_ip}{system_uri} | grep -i powerstate"
+                    f"https://{formatted_ip}{system_uri} | grep -i powerstate"
                 )
             else:
                 reset_type = redfish_ops[operation]
                 command = (
                     f"curl -k -sS -f -u {node_username}:{node_password} -X POST "
-                    f"https://{node_ip}{system_uri}/Actions/ComputerSystem.Reset "
+                    f"https://{formatted_ip}{system_uri}/Actions/ComputerSystem.Reset "
                     f"-H 'Content-Type: application/json' "
                     f'-d \'{{"ResetType": "{reset_type}"}}\''
                 )
                 redacted_command = (
                     f"curl -k -sS -f -u <REDACTED>:<REDACTED> -X POST "
-                    f"https://{node_ip}{system_uri}/Actions/ComputerSystem.Reset "
+                    f"https://{formatted_ip}{system_uri}/Actions/ComputerSystem.Reset "
                     f"-H 'Content-Type: application/json' "
                     f'-d \'{{"ResetType": "{reset_type}"}}\''
                 )
@@ -545,13 +569,20 @@ class IBMHCI(object):
                 log.error(f"Failed to get node details for {node_name}")
                 return False
 
-            node_ip = node_info.get("ipv4")
+            ipv6 = node_info.get("ipv6")
+            ipv4 = node_info.get("ipv4")
             manufacturer = node_info.get("manufacturer", "").lower()
             username = node_info.get("username")
             password = node_info.get("password")
 
-            if not all([node_ip, username, password]):
+            if not all([username, password]):
                 log.error(f"Missing required credentials for node {node_name}")
+                return False
+
+            if not ipv6 and not ipv4:
+                log.error(
+                    f"No IP address (IPv6 or IPv4) available for node {node_name}"
+                )
                 return False
 
             # Detach BareMetalHost AFTER validation, before power off/cycle/reset
@@ -560,20 +591,58 @@ class IBMHCI(object):
                 self._detach_baremetalhost(node_name)
                 detached_bmh = True
 
-            # Determine which protocol to use based on manufacturer
-            if "lenovo" in manufacturer:
-                log.info(f"Using IPMI for Lenovo node {node_name}")
-                result = self._power_operation_ipmi(
-                    rack_ip, username, password, node_ip, operation, force
-                )
-            elif "dell" in manufacturer:
-                log.info(f"Using Redfish for Dell node {node_name}")
-                result = self._power_operation_redfish(
-                    rack_ip, username, password, node_ip, operation, force
-                )
+            # Try IPv6 first, then IPv4 as fallback
+            ip_addresses = []
+            if ipv6:
+                ip_addresses.append(("IPv6", ipv6))
+            if ipv4:
+                ip_addresses.append(("IPv4", ipv4))
+
+            last_error = None
+            for ip_type, node_ip in ip_addresses:
+                try:
+                    log.info(
+                        f"Attempting {operation} using {ip_type} address: {node_ip}"
+                    )
+
+                    # Determine which protocol to use based on manufacturer
+                    if "lenovo" in manufacturer:
+                        log.info(f"Using IPMI for Lenovo node {node_name}")
+                        result = self._power_operation_ipmi(
+                            rack_ip, username, password, node_ip, operation, force
+                        )
+                    elif "dell" in manufacturer:
+                        log.info(f"Using Redfish for Dell node {node_name}")
+                        result = self._power_operation_redfish(
+                            rack_ip, username, password, node_ip, operation, force
+                        )
+                    else:
+                        log.error(f"Unsupported manufacturer: {manufacturer}")
+                        return False
+
+                    # If operation succeeded, break out of retry loop
+                    if result or (operation == "status" and result is not None):
+                        log.info(f"Operation {operation} succeeded using {ip_type}")
+                        break
+                    else:
+                        log.warning(
+                            f"Operation {operation} failed with {ip_type}, will try next IP if available"
+                        )
+                        last_error = f"Operation failed with {ip_type}"
+
+                except Exception as e:
+                    log.warning(f"Exception during {operation} with {ip_type}: {e}")
+                    last_error = str(e)
+                    # Continue to next IP address
+                    continue
             else:
-                log.error(f"Unsupported manufacturer: {manufacturer}")
-                return False
+                # If we exhausted all IP addresses without success
+                error_msg = (
+                    f"Failed to perform {operation} on node {node_name} "
+                    f"with all available IP addresses. Last error: {last_error}"
+                )
+                log.error(error_msg)
+                raise RuntimeError(error_msg)
 
             if wait and result and operation in ["off", "on", "cycle", "reset"]:
                 import time
@@ -683,16 +752,18 @@ class IBMHCI(object):
         node_info = nodes_dict[node_role]
 
         # Get required information
-        node_ip = node_info.get("ipv4")
+        ipv6 = node_info.get("ipv6")
+        ipv4 = node_info.get("ipv4")
         manufacturer = node_info.get("manufacturer", "").lower()
         rack_info = rack_data.get("rackInfo", {})
         rack_ip = rack_info.get("rackIP")
 
-        if not all([node_ip, rack_ip]):
-            log.error(
-                f"Missing required information for node {node_name}: "
-                f"node_ip={node_ip}, rack_ip={rack_ip}"
-            )
+        if not rack_ip:
+            log.error(f"Missing rack IP for node {node_name}")
+            return None
+
+        if not ipv6 and not ipv4:
+            log.error(f"No IP address (IPv6 or IPv4) available for node {node_name}")
             return None
 
         # Get credentials
@@ -701,20 +772,65 @@ class IBMHCI(object):
 
         log.info(f"Checking power status of node {node_name} directly via IPMI/Redfish")
 
-        # Execute power status based on manufacturer
-        if "lenovo" in manufacturer:
-            result = self._power_operation_ipmi(
-                rack_ip, node_username, node_password, node_ip, "status", force=False
-            )
-        elif "dell" in manufacturer:
-            result = self._power_operation_redfish(
-                rack_ip, node_username, node_password, node_ip, "status", force=False
-            )
-        else:
-            log.error(f"Unsupported manufacturer: {manufacturer}")
-            return None
+        # Try IPv6 first, then IPv4 as fallback
+        ip_addresses = []
+        if ipv6:
+            ip_addresses.append(("IPv6", ipv6))
+        if ipv4:
+            ip_addresses.append(("IPv4", ipv4))
 
-        return result
+        last_error = None
+        for ip_type, node_ip in ip_addresses:
+            try:
+                log.info(
+                    f"Attempting power status check using {ip_type} address: {node_ip}"
+                )
+
+                # Execute power status based on manufacturer
+                if "lenovo" in manufacturer:
+                    result = self._power_operation_ipmi(
+                        rack_ip,
+                        node_username,
+                        node_password,
+                        node_ip,
+                        "status",
+                        force=False,
+                    )
+                elif "dell" in manufacturer:
+                    result = self._power_operation_redfish(
+                        rack_ip,
+                        node_username,
+                        node_password,
+                        node_ip,
+                        "status",
+                        force=False,
+                    )
+                else:
+                    log.error(f"Unsupported manufacturer: {manufacturer}")
+                    return None
+
+                # If we got a valid result, return it
+                if result is not None:
+                    log.info(f"Power status check succeeded using {ip_type}")
+                    return result
+                else:
+                    log.warning(
+                        f"Power status check failed with {ip_type}, will try next IP if available"
+                    )
+                    last_error = f"Status check failed with {ip_type}"
+
+            except Exception as e:
+                log.warning(f"Exception during power status check with {ip_type}: {e}")
+                last_error = str(e)
+                continue
+
+        # If we exhausted all IP addresses without success
+        error_msg = (
+            f"Failed to get power status for node {node_name} "
+            f"with all available IP addresses. Last error: {last_error}"
+        )
+        log.error(error_msg)
+        raise RuntimeError(error_msg)
 
     def power_on_direct(self, node_name):
         """
@@ -754,16 +870,18 @@ class IBMHCI(object):
         node_info = nodes_dict[node_role]
 
         # Get required information
-        node_ip = node_info.get("ipv4")
+        ipv6 = node_info.get("ipv6")
+        ipv4 = node_info.get("ipv4")
         manufacturer = node_info.get("manufacturer", "").lower()
         rack_info = rack_data.get("rackInfo", {})
         rack_ip = rack_info.get("rackIP")
 
-        if not all([node_ip, rack_ip]):
-            log.error(
-                f"Missing required information for node {node_name}: "
-                f"node_ip={node_ip}, rack_ip={rack_ip}"
-            )
+        if not rack_ip:
+            log.error(f"Missing rack IP for node {node_name}")
+            return False
+
+        if not ipv6 and not ipv4:
+            log.error(f"No IP address (IPv6 or IPv4) available for node {node_name}")
             return False
 
         # Get credentials from node_info
@@ -771,21 +889,62 @@ class IBMHCI(object):
         node_password = node_info.get("password", "PASSW0RD")
 
         log.info(f"Powering on node {node_name} directly via IPMI/Redfish")
-        log.info(
-            f"Node IP: {node_ip}, Rack IP: {rack_ip}, Manufacturer: {manufacturer}"
+        log.info(f"Rack IP: {rack_ip}, Manufacturer: {manufacturer}")
+
+        # Try IPv6 first, then IPv4 as fallback
+        ip_addresses = []
+        if ipv6:
+            ip_addresses.append(("IPv6", ipv6))
+        if ipv4:
+            ip_addresses.append(("IPv4", ipv4))
+
+        last_error = None
+        for ip_type, node_ip in ip_addresses:
+            try:
+                log.info(f"Attempting power on using {ip_type} address: {node_ip}")
+
+                # Execute power on based on manufacturer
+                if "lenovo" in manufacturer:
+                    result = self._power_operation_ipmi(
+                        rack_ip,
+                        node_username,
+                        node_password,
+                        node_ip,
+                        "on",
+                        force=False,
+                    )
+                elif "dell" in manufacturer:
+                    result = self._power_operation_redfish(
+                        rack_ip,
+                        node_username,
+                        node_password,
+                        node_ip,
+                        "on",
+                        force=False,
+                    )
+                else:
+                    log.error(f"Unsupported manufacturer: {manufacturer}")
+                    return False
+
+                # If operation succeeded, return True
+                if result:
+                    log.info(f"Power on succeeded using {ip_type}")
+                    return True
+                else:
+                    log.warning(
+                        f"Power on failed with {ip_type}, will try next IP if available"
+                    )
+                    last_error = f"Power on failed with {ip_type}"
+
+            except Exception as e:
+                log.warning(f"Exception during power on with {ip_type}: {e}")
+                last_error = str(e)
+                continue
+
+        # If we exhausted all IP addresses without success
+        error_msg = (
+            f"Failed to power on node {node_name} "
+            f"with all available IP addresses. Last error: {last_error}"
         )
-
-        # Execute power on based on manufacturer
-        if "lenovo" in manufacturer:
-            result = self._power_operation_ipmi(
-                rack_ip, node_username, node_password, node_ip, "on", force=False
-            )
-        elif "dell" in manufacturer:
-            result = self._power_operation_redfish(
-                rack_ip, node_username, node_password, node_ip, "on", force=False
-            )
-        else:
-            log.error(f"Unsupported manufacturer: {manufacturer}")
-            result = False
-
-        return result
+        log.error(error_msg)
+        raise RuntimeError(error_msg)
