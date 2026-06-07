@@ -1,9 +1,9 @@
 """
 Tests for NooBaa denyHTTP feature (RHSTOR-8118).
 
-Validates that setting spec.denyHTTP on the NooBaa CR disables HTTP access
-to the S3 route while keeping HTTPS functional, ensuring compliance with
-encrypted-only transport requirements.
+Validates that setting spec.multiCloudGateway.denyHTTP on the StorageCluster CR
+disables HTTP access to the S3 route while keeping HTTPS functional, ensuring
+compliance with encrypted-only transport requirements.
 """
 
 import logging
@@ -44,9 +44,10 @@ class TestDenyHTTP:
     @pytest.fixture()
     def revert_deny_http(self, request):
         """
-        Teardown fixture that reverts spec.denyHTTP on the NooBaa CR
-        back to false and verifies the S3 route is restored to its
-        default insecureEdgeTerminationPolicy of Allow.
+        Teardown fixture that reverts spec.multiCloudGateway.denyHTTP
+        on the StorageCluster CR back to false and verifies the S3
+        route is restored to its default insecureEdgeTerminationPolicy
+        of Allow.
         """
 
         def finalizer():
@@ -207,7 +208,7 @@ class TestDenyHTTP:
     @skipif_ocs_version("<4.22")
     def test_deny_http_noobaa(self, mcg_obj, bucket_factory, revert_deny_http):
         """
-        Test the denyHTTP feature on the NooBaa CR.
+        Test the denyHTTP feature via the StorageCluster CR.
 
         This test validates the happy path for RHSTOR-8118:
 
