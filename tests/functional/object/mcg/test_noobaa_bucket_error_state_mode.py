@@ -7,7 +7,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
 )
 from ocs_ci.framework.testlib import (
-    polarion_id,
     runs_on_provider,
     skipif_aws_creds_are_missing,
     skipif_disconnected_cluster,
@@ -17,7 +16,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import craft_s3_command
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -160,9 +158,7 @@ def _delete_data_from_bucket(awscli_pod, bucket_name, mcg_obj, file_count):
 @red_squad
 @tier2
 @runs_on_provider
-@skipif_managed_service
 @skipif_disconnected_cluster
-@skipif_aws_creds_are_missing
 @skipif_ocs_version("<4.22")
 class TestNooBaaBucketErrorStateMode:
     """
@@ -184,7 +180,8 @@ class TestNooBaaBucketErrorStateMode:
     # Data bucket tests
     # ------------------------------------------------------------------
 
-    @polarion_id("OCS-XXXXX")
+    # TODO: Replace with actual Polarion ID
+    # @polarion_id("OCS-XXXXX")
     def test_data_bucket_quota_error_mode(self, mcg_obj, awscli_pod):
         """
         Trigger a quota-related bucket mode on a data bucket and verify
@@ -219,7 +216,10 @@ class TestNooBaaBucketErrorStateMode:
             _delete_data_from_bucket(awscli_pod, bucket_name, mcg_obj, 5)
             bucket.delete()
 
-    @polarion_id("OCS-XXXXX")
+    @skipif_managed_service
+    @skipif_aws_creds_are_missing
+    # TODO: Replace with actual Polarion ID
+    # @polarion_id("OCS-XXXXX")
     def test_data_bucket_resource_error_mode(
         self, mcg_obj, bucket_factory, cld_mgr, request
     ):
@@ -274,7 +274,8 @@ class TestNooBaaBucketErrorStateMode:
         _wait_for_bucket_mode(mcg_obj, bucket.name, "!OPTIMAL")
 
     @skipif_mcg_only
-    @polarion_id("OCS-XXXXX")
+    # TODO: Replace with actual Polarion ID
+    # @polarion_id("OCS-XXXXX")
     def test_data_bucket_capacity_error_mode(
         self, mcg_obj, awscli_pod, bucket_factory, request
     ):
@@ -331,7 +332,10 @@ class TestNooBaaBucketErrorStateMode:
     # Namespace bucket tests
     # ------------------------------------------------------------------
 
-    @polarion_id("OCS-XXXXX")
+    @skipif_managed_service
+    @skipif_aws_creds_are_missing
+    # TODO: Replace with actual Polarion ID
+    # @polarion_id("OCS-XXXXX")
     def test_ns_bucket_resource_error_mode(
         self,
         mcg_obj,
@@ -395,7 +399,10 @@ class TestNooBaaBucketErrorStateMode:
 
         _wait_for_bucket_mode(mcg_obj, ns_bucket.name, "!OPTIMAL")
 
-    @polarion_id("OCS-XXXXX")
+    @skipif_managed_service
+    @skipif_aws_creds_are_missing
+    # TODO: Replace with actual Polarion ID
+    # @polarion_id("OCS-XXXXX")
     def test_ns_bucket_quota_error_mode(
         self,
         mcg_obj,
@@ -467,7 +474,10 @@ class TestNooBaaBucketErrorStateMode:
         _wait_for_bucket_mode(mcg_obj, ns_bucket.name, "EXCEEDING_QUOTA")
 
     @skipif_mcg_only
-    @polarion_id("OCS-XXXXX")
+    @skipif_managed_service
+    @skipif_aws_creds_are_missing
+    # TODO: Replace with actual Polarion ID
+    # @polarion_id("OCS-XXXXX")
     def test_ns_bucket_capacity_error_mode(
         self,
         mcg_obj,
@@ -548,14 +558,3 @@ class TestNooBaaBucketErrorStateMode:
         )
 
         _wait_for_bucket_mode(mcg_obj, ns_bucket.name, "!OPTIMAL")
-
-
-def setup_module(module):
-    ocs_obj = OCP()
-    module.original_user = ocs_obj.get_user_name()
-
-
-def teardown_module(module):
-    if hasattr(module, "original_user"):
-        ocs_obj = OCP()
-        ocs_obj.login_as_user(module.original_user)
