@@ -4178,19 +4178,9 @@ class IBMHCINode(object):
             raise
 
     def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
-        """
-        Create nodes and attach them to cluster
-        Use this function if you want to do both creation/attachment in
-        a single call
-
-        Args:
-            node_conf (dict): of node configuration
-            node_type (str): type of node to be created RHCOS/RHEL
-            num_nodes (int): Number of node instances to be created
-
-        """
-        node_list = self.create_nodes(node_conf, node_type, num_nodes)
-        self.attach_nodes_to_cluster(node_list)
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
 
     def create_nodes(self, node_conf, node_type, num_nodes):
         raise NotImplementedError("Create nodes functionality not implemented")
