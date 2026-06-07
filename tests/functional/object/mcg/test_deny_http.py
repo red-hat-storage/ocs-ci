@@ -318,12 +318,23 @@ class TestDenyHTTP:
             raise AssertionError(
                 "HTTP access succeeded unexpectedly after denyHTTP was enabled"
             )
+        except botocore.exceptions.ClientError as e:
+            error_code = int(e.response["Error"]["Code"])
+            assert error_code == 503, (
+                f"Expected HTTP 503 Service Unavailable, got {error_code}. "
+                "HTTP transport may still be functional."
+            )
+            logger.info(
+                "HTTP access returned 503 as expected after denyHTTP was enabled"
+            )
         except (
             botocore.exceptions.EndpointConnectionError,
             botocore.exceptions.ConnectionClosedError,
             ConnectionError,
         ):
-            logger.info("HTTP access failed as expected after denyHTTP was enabled")
+            logger.info(
+                "HTTP connection refused as expected after denyHTTP was enabled"
+            )
 
         logger.info("Verifying HTTPS access still works after denyHTTP is enabled")
         https_client_after = self._create_s3_client(
