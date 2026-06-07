@@ -222,6 +222,12 @@ class TestDenyHTTP:
            - Verify S3 route insecureEdgeTerminationPolicy changes to 'None'
            - Verify HTTP access to the bucket fails
            - Verify HTTPS access to the bucket still succeeds
+
+        3. Revert denyHTTP to restore HTTP access:
+           - Patch spec.multiCloudGateway.denyHTTP = false on the StorageCluster CR
+           - Verify S3 route insecureEdgeTerminationPolicy reverts to 'Allow'
+           - Verify HTTP access to the bucket succeeds again
+           - Verify HTTPS access to the bucket still succeeds
         """
 
         # --- Part 1: Verify default state (HTTP allowed) ---
@@ -348,6 +354,61 @@ class TestDenyHTTP:
         logger.info("Verifying access via curl after denyHTTP is enabled")
         self._verify_curl_access(
             mcg_obj.core_pod, f"http://{route_host}:80", should_succeed=False
+        )
+        self._verify_curl_access(
+            mcg_obj.core_pod, f"https://{route_host}:443", should_succeed=True
+        )
+
+        # --- Part 3: Revert denyHTTP and verify HTTP is allowed again ---
+
+        logger.info("Part 3: Reverting denyHTTP to restore HTTP access")
+
+        revert_param = '[{"op": "replace", "path": "/spec/multiCloudGateway/denyHTTP", "value": false}]'
+        storagecluster_obj.patch(params=revert_param, format_type="json")
+        logger.info(
+            "Patched StorageCluster CR with spec.multiCloudGateway.denyHTTP=false"
+        )
+
+        logger.info("Waiting for S3 route to reconcile back to Allow")
+        for sample in TimeoutSampler(
+            timeout=RECONCILE_TIMEOUT,
+            sleep=RECONCILE_INTERVAL,
+            func=self._get_insecure_policy,
+            route_obj=nb_s3_route,
+        ):
+            if sample == "Allow":
+                logger.info(
+                    "S3 route insecureEdgeTerminationPolicy changed back to 'Allow'"
+                )
+                break
+
+        time.sleep(RECONCILE_INTERVAL)
+        reverted_policy = self._get_insecure_policy(nb_s3_route)
+        assert (
+            reverted_policy == "Allow"
+        ), f"Expected insecureEdgeTerminationPolicy to be 'Allow', got '{reverted_policy}'"
+
+        logger.info("Verifying HTTP access works again after reverting denyHTTP")
+        http_client_reverted = self._create_s3_client(
+            http_endpoint, mcg_obj.access_key_id, mcg_obj.access_key
+        )
+        self._verify_s3_put_get(
+            http_client_reverted, bucket_name, object_key="http-reverted-obj"
+        )
+        logger.info("HTTP access succeeded as expected after reverting denyHTTP")
+
+        logger.info("Verifying HTTPS access still works after reverting denyHTTP")
+        https_client_reverted = self._create_s3_client(
+            https_endpoint, mcg_obj.access_key_id, mcg_obj.access_key
+        )
+        self._verify_s3_put_get(
+            https_client_reverted, bucket_name, object_key="https-reverted-obj"
+        )
+        logger.info("HTTPS access succeeded as expected after reverting denyHTTP")
+
+        logger.info("Verifying access via curl after reverting denyHTTP")
+        self._verify_curl_access(
+            mcg_obj.core_pod, f"http://{route_host}:80", should_succeed=True
         )
         self._verify_curl_access(
             mcg_obj.core_pod, f"https://{route_host}:443", should_succeed=True
