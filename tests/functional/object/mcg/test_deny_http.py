@@ -50,21 +50,23 @@ class TestDenyHTTP:
         """
 
         def finalizer():
-            noobaa_obj = ocp.OCP(
-                kind="noobaa",
+            storagecluster_obj = ocp.OCP(
+                kind=constants.STORAGECLUSTER,
                 namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=constants.NOOBAA_RESOURCE_NAME,
+                resource_name=constants.DEFAULT_CLUSTERNAME,
             )
             try:
-                if noobaa_obj.data.get("spec", {}).get("denyHTTP"):
-                    patch_param = (
-                        '[{"op": "replace", "path": "/spec/denyHTTP", "value": false}]'
-                    )
-                    logger.info("Reverting denyHTTP to false on NooBaa CR")
-                    noobaa_obj.patch(params=patch_param, format_type="json")
+                if (
+                    storagecluster_obj.data.get("spec", {})
+                    .get("multiCloudGateway", {})
+                    .get("denyHTTP")
+                ):
+                    patch_param = '[{"op": "replace", "path": "/spec/multiCloudGateway/denyHTTP", "value": false}]'
+                    logger.info("Reverting denyHTTP to false on StorageCluster CR")
+                    storagecluster_obj.patch(params=patch_param, format_type="json")
             except KeyError:
                 logger.warning(
-                    "denyHTTP field not found on NooBaa CR, no revert needed"
+                    "denyHTTP field not found on StorageCluster CR, no revert needed"
                 )
 
             nb_s3_route = ocp.OCP(
@@ -214,8 +216,8 @@ class TestDenyHTTP:
            - HTTP access to a bucket succeeds
            - HTTPS access to a bucket succeeds
 
-        2. Enable denyHTTP on NooBaa CR:
-           - Patch spec.denyHTTP = true on the NooBaa CR
+        2. Enable denyHTTP via StorageCluster CR:
+           - Patch spec.multiCloudGateway.denyHTTP = true on the StorageCluster CR
            - Verify S3 route insecureEdgeTerminationPolicy changes to 'None'
            - Verify HTTP access to the bucket fails
            - Verify HTTPS access to the bucket still succeeds
@@ -271,16 +273,20 @@ class TestDenyHTTP:
 
         # --- Part 2: Enable denyHTTP and verify ---
 
-        logger.info("Part 2: Enabling denyHTTP on the NooBaa CR")
+        logger.info("Part 2: Enabling denyHTTP via the StorageCluster CR")
 
-        noobaa_obj = ocp.OCP(
-            kind="noobaa",
+        storagecluster_obj = ocp.OCP(
+            kind=constants.STORAGECLUSTER,
             namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.NOOBAA_RESOURCE_NAME,
+            resource_name=constants.DEFAULT_CLUSTERNAME,
         )
-        patch_param = '[{"op": "add", "path": "/spec/denyHTTP", "value": true}]'
-        noobaa_obj.patch(params=patch_param, format_type="json")
-        logger.info("Patched NooBaa CR with spec.denyHTTP=true")
+        patch_param = (
+            '[{"op": "add", "path": "/spec/multiCloudGateway/denyHTTP", "value": true}]'
+        )
+        storagecluster_obj.patch(params=patch_param, format_type="json")
+        logger.info(
+            "Patched StorageCluster CR with spec.multiCloudGateway.denyHTTP=true"
+        )
 
         logger.info("Waiting for S3 route to reconcile")
         for sample in TimeoutSampler(
