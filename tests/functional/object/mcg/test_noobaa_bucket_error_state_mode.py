@@ -4,6 +4,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    post_upgrade,
     red_squad,
     skipif_ocs_version,
     skipif_mcg_only,
@@ -164,6 +165,7 @@ def _delete_data_from_bucket(awscli_pod, bucket_name, mcg_obj, file_count):
 @mcg
 @red_squad
 @tier2
+@post_upgrade
 @runs_on_provider
 @skipif_disconnected_cluster
 @skipif_ocs_version("<4.22")
