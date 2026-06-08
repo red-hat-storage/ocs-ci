@@ -4300,9 +4300,7 @@ class MultiClusterDROperatorsDeploy(object):
                 oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
                     "s3Url"
                 ] = s3_endpoint
-                logger.info(
-                    f"Configured DPA with ODF S3 endpoint: https://{s3_endpoint}"
-                )
+                logger.info(f"Configured DPA with ODF S3 endpoint: {s3_endpoint}")
         if version.compare_versions(f"{oadp_version} >= 1.5"):
             # Remove 'restic' under 'configuration' if it exists
             oadp_data["spec"]["configuration"].pop("restic", None)
