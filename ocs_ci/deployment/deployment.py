@@ -3773,7 +3773,7 @@ class MultiClusterDROperatorsDeploy(object):
         ramenctl_repo_url = constants.RAMENCTL_REPO_URL
         ramenctl_branch = constants.RAMENCTL_REPO_BRANCH
 
-        ramenctl_clone_dir = tempfile.mkdtemp(prefix="ramenctl-e2e-")
+        ramenctl_clone_dir = os.path.join(constants.EXTERNAL_DIR, "ramenctl-e2e")
         logger.info(f"[ramenctl-e2e] Using directory: {ramenctl_clone_dir}")
 
         try:
