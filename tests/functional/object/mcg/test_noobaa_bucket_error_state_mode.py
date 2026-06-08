@@ -23,6 +23,7 @@ from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.ocs.resources.pod import get_noobaa_pvpool_pods
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.utility.prometheus import PrometheusAPI, wait_for_alert_firing
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
@@ -673,3 +674,78 @@ class TestNooBaaBucketErrorStateMode:
         )
 
         _wait_for_bucket_mode(mcg_obj, ns_bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
+
+    # ------------------------------------------------------------------
+    # Alert verification test
+    # ------------------------------------------------------------------
+
+    # TODO: Replace with actual Polarion ID
+    # @polarion_id("OCS-XXXXX")
+    def test_bucket_error_state_alert(self, mcg_obj, awscli_pod, threading_lock):
+        """
+        Verify that the NooBaaBucketErrorState Prometheus alert fires
+        with the correct bucket_mode label when a bucket enters an
+        error state.
+
+        Uses a quota-exceeded scenario (fastest to trigger) and waits
+        for the alert to fire after 5+ minutes.
+
+        Steps:
+            1. Create a data bucket with a 2Gi quota
+            2. Upload ~2.5GB to exceed the quota
+            3. Verify bucket enters EXCEEDING_QUOTA mode
+            4. Wait for NooBaaBucketErrorState alert to fire (~5 min)
+            5. Verify alert contains bucket_mode=EXCEEDING_QUOTA
+            6. Clean up
+
+        Args:
+            mcg_obj (MCG): MCG object with S3 connection credentials
+            awscli_pod (Pod): Pod running the AWSCLI tools
+            threading_lock: Threading lock for Prometheus API
+        """
+        bucket_name = create_unique_resource_name(
+            resource_description="bucket", resource_type="alert-quota"
+        )
+        bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj, quota="2Gi")
+        log.info(f"Created bucket {bucket_name} with 2Gi quota")
+
+        try:
+            _upload_data_to_bucket(awscli_pod, bucket_name, mcg_obj, 5, 500)
+            log.info(
+                f"Uploaded ~2.5GB to bucket {bucket_name} "
+                f"(quota 2Gi) to trigger EXCEEDING_QUOTA"
+            )
+
+            _wait_for_bucket_mode(mcg_obj, bucket_name, "EXCEEDING_QUOTA")
+            log.info(
+                f"Bucket {bucket_name} is in EXCEEDING_QUOTA mode, "
+                f"waiting for Prometheus alert to fire (5+ minutes)"
+            )
+
+            prometheus_api = PrometheusAPI(threading_lock=threading_lock)
+            alert_name = "NooBaaBucketErrorState"
+            alerts = wait_for_alert_firing(
+                api=prometheus_api,
+                alert_name=alert_name,
+                timeout=600,
+                expected_message_substr="EXCEEDING_QUOTA",
+            )
+
+            alert_labels = alerts[0]["labels"]
+            log.info(f"Alert {alert_name} fired with labels: {alert_labels}")
+            assert alert_labels.get("bucket_mode") == "EXCEEDING_QUOTA", (
+                f"Expected bucket_mode=EXCEEDING_QUOTA in alert labels, "
+                f"got bucket_mode={alert_labels.get('bucket_mode')}"
+            )
+            assert alert_labels.get("bucket_name") == bucket_name, (
+                f"Expected bucket_name={bucket_name} in alert labels, "
+                f"got bucket_name={alert_labels.get('bucket_name')}"
+            )
+            log.info(
+                f"Alert {alert_name} verified: "
+                f"bucket_name={alert_labels.get('bucket_name')}, "
+                f"bucket_mode={alert_labels.get('bucket_mode')}"
+            )
+        finally:
+            _delete_data_from_bucket(awscli_pod, bucket_name, mcg_obj, 5)
+            bucket.delete()
