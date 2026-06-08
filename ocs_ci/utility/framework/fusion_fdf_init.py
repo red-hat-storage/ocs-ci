@@ -106,12 +106,6 @@ class Initializer(BaseInitializer):
         parser.add_argument("--cluster-name", help="Name of the OCP cluster")
         parser.add_argument("--cluster-path", help="OCP cluster directory")
         parser.add_argument(
-            "--ocsci-conf",
-            action="append",
-            default=[],
-            help="Path to config file. Repeatable.",
-        )
-        parser.add_argument(
             "--conf",
             action="append",
             default=[],
