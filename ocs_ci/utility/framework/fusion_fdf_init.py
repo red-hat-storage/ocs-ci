@@ -70,9 +70,7 @@ class Initializer(object):
 
         """
         framework.config.init_cluster_configs()
-        # Merge both --ocsci-conf and --conf arguments
-        config_files = args.ocsci_conf + args.conf
-        load_config(config_files)
+        load_config(args.conf)
         # Updating resource_checker to False since it's not needed for FDF deployment
         config.RUN["resource_checker"] = False
         logger.debug("Verifying cluster_name and cluster_path")
@@ -128,12 +126,6 @@ class Initializer(object):
         parser = argparse.ArgumentParser()
         parser.add_argument("--cluster-name", help="Name of the OCP cluster")
         parser.add_argument("--cluster-path", help="OCP cluster directory")
-        parser.add_argument(
-            "--ocsci-conf",
-            action="append",
-            default=[],
-            help="Path to config file. Repeatable.",
-        )
         parser.add_argument(
             "--conf",
             action="append",
