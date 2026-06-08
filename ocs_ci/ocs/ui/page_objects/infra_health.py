@@ -404,7 +404,9 @@ class InfraHealthOverview(PageNavigator):
         logger.info("Unsilencing alerts filtered by silence type 'Indefinite'")
         self.click_silenced_alerts()
         self.do_click(self.validation_loc["all_checks"])
-        time.sleep(1)
+        self.wait_for_element_to_be_visible(
+            self.validation_loc["checks_list"], timeout=10
+        )
         indefinite_checkbox = self.validation_loc["filter_indefinite_checkbox"]
         checkbox_element = self.find_an_element_by_xpath(indefinite_checkbox[0])
         is_checked = checkbox_element.is_selected()
@@ -414,7 +416,6 @@ class InfraHealthOverview(PageNavigator):
         else:
             logger.info("Indefinite checkbox already checked")
         self.do_click(self.validation_loc["all_checks"])
-        time.sleep(1)
         logger.info("Selecting all indefinitely silenced alerts")
         self.select_all_alerts()
         self.take_screenshot(f"all_alert_{indefinite_checkbox}")

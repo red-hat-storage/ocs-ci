@@ -2486,6 +2486,10 @@ validation_4_21 = {
         "//button[.//span[normalize-space()='All checks']]",
         By.XPATH,
     ),
+    "checks_list": (
+        "//div[contains(@class,'c-menu__content')]",
+        By.XPATH,
+    ),
     "select_alert": (
         "//input[@name='checkrow{}']",
         By.XPATH,
