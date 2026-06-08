@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@zstream_4_18_1
 class TestNodesRestart(ManageTest):
     """
     Test ungraceful cluster shutdown
