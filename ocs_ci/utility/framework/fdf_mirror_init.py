@@ -93,19 +93,10 @@ class FDFMirrorInitializer:
         parser.add_argument("--cluster-name", help="Name of the OCP cluster")
         parser.add_argument("--cluster-path", help="OCP cluster directory")
         parser.add_argument(
-            "--ocsci-conf",
-            action="append",
-            default=[],
-            help="Path to config file. Repeatable.",
-        )
-        parser.add_argument(
             "--conf",
             action="append",
             default=[],
             help="Path to config file. Repeatable.",
-        )
-        parser.add_argument(
-            "--report", default=None, help="Filepath for generated junit report"
         )
         # FDF Mirror specific args
         parser.add_argument(
