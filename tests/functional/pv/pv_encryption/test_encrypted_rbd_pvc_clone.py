@@ -27,8 +27,7 @@ from ocs_ci.utility import kms
 from semantic_version import Version
 from ocs_ci.ocs.node import verify_crypt_device_present_onnode
 
-
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Set the arg values based on KMS provider.
 if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
@@ -96,9 +95,9 @@ class TestEncryptedRbdClone(ManageTest):
 
         """
 
-        log.info("Setting up csi-kms-connection-details configmap")
+        logger.test_step("Set up csi-kms-connection-details configmap")
         self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
-        log.info("csi-kms-connection-details setup successful")
+        logger.info("csi-kms-connection-details setup successful")
 
         # Create a project
         self.proj_obj = project_factory()
@@ -115,7 +114,7 @@ class TestEncryptedRbdClone(ManageTest):
             self.kms.vault_path_token = self.kms.generate_vault_token()
             self.kms.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
 
-        # Create PVC and Pods
+        logger.test_step("Create encrypted PVCs and pods")
         self.pvc_size = 1
         self.pvc_objs = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
@@ -139,7 +138,7 @@ class TestEncryptedRbdClone(ManageTest):
             status=constants.STATUS_RUNNING,
         )
 
-        # Verify if the key is created in Vault
+        logger.test_step("Verify encryption keys exist in Vault")
         self.vol_handles = []
         for pvc_obj in self.pvc_objs:
             pv_obj = pvc_obj.backed_pv_obj
@@ -150,7 +149,7 @@ class TestEncryptedRbdClone(ManageTest):
                 if kms.is_key_present_in_path(
                     key=vol_handle, path=self.kms.vault_backend_path
                 ):
-                    log.info(f"Vault: Found key for {pvc_obj.name}")
+                    logger.info(f"Vault: Found key for {pvc_obj.name}")
                 else:
                     raise ResourceNotFoundError(
                         f"Vault: Key not found for {pvc_obj.name}"
@@ -163,14 +162,14 @@ class TestEncryptedRbdClone(ManageTest):
 
         """
 
-        log.info("Checking for encrypted device and running IO on all pods")
+        logger.test_step("Verify encrypted devices and run IO on all pods")
         for vol_handle, pod_obj in zip(self.vol_handles, self.pod_objs):
             node = pod_obj.get_node()
             assert verify_crypt_device_present_onnode(
                 node, vol_handle
             ), f"Crypt devicve {vol_handle} not found on node:{node}"
 
-            log.info(f"File created during IO {pod_obj.name}")
+            logger.debug(f"Starting IO on pod {pod_obj.name}")
             pod_obj.run_io(
                 storage_type="block",
                 size="500M",
@@ -179,17 +178,16 @@ class TestEncryptedRbdClone(ManageTest):
                 end_fsync=1,
                 direct=1,
             )
-        log.info("IO started on all pods")
+        logger.info("IO started on all pods")
 
         # Wait for IO completion
         for pod_obj in self.pod_objs:
             pod_obj.get_fio_results()
-        log.info("IO completed on all pods")
+        logger.info("IO completed on all pods")
 
         cloned_pvc_objs, cloned_vol_handles = ([] for i in range(2))
 
-        # Calculate the md5sum value and create clones of exisiting PVCs
-        log.info("Calculate the md5sum after IO and create clone of all PVCs")
+        logger.test_step("Calculate md5sum and create clones of all PVCs")
         for pod_obj in self.pod_objs:
             pod_obj.md5sum_after_io = pod.cal_md5sum(
                 pod_obj=pod_obj,
@@ -209,7 +207,7 @@ class TestEncryptedRbdClone(ManageTest):
             cloned_pvc_obj.reload()
             cloned_pvc_obj.md5sum = pod_obj.md5sum_after_io
             cloned_pvc_objs.append(cloned_pvc_obj)
-        log.info("Clone of all PVCs created")
+        logger.info(f"Created {len(cloned_pvc_objs)} PVC clones")
 
         # Create and attach pod to the pvc
         cloned_pod_objs = helpers.create_pods(
@@ -220,14 +218,14 @@ class TestEncryptedRbdClone(ManageTest):
             status="",
         )
 
-        # Verify the new pods are running
-        log.info("Verify the new pods are running")
+        logger.test_step("Verify cloned pods are running")
         for pod_obj in cloned_pod_objs:
             helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
             pod_obj.reload()
-        log.info("Verified: New pods are running")
+        logger.info("Verified: All cloned pods are running")
 
         # Verify encryption keys are created for cloned PVCs in Vault
+        logger.test_step("Verify encryption keys for cloned PVCs and data integrity")
         for pvc_obj in cloned_pvc_objs:
             pv_obj = pvc_obj.backed_pv_obj
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
@@ -237,7 +235,7 @@ class TestEncryptedRbdClone(ManageTest):
                 if kms.is_key_present_in_path(
                     key=vol_handle, path=self.kms.vault_backend_path
                 ):
-                    log.info(f"Vault: Found key for restore PVC {pvc_obj.name}")
+                    logger.info(f"Vault: Found key for cloned PVC {pvc_obj.name}")
                 else:
                     raise ResourceNotFoundError(
                         f"Vault: Key not found for restored PVC {pvc_obj.name}"
@@ -249,28 +247,25 @@ class TestEncryptedRbdClone(ManageTest):
                 node, vol_handle
             ), f"Crypt devicve {vol_handle} not found on node:{node}"
 
-            log.info(f"Verifying md5sum on pod {pod_obj.name}")
+            logger.debug(f"Verifying md5sum on pod {pod_obj.name}")
             pod.verify_data_integrity(
                 pod_obj=pod_obj,
                 file_name=pod_obj.get_storage_path(storage_type="block"),
                 original_md5sum=pod_obj.pvc.md5sum,
                 block=True,
             )
-            log.info(f"Verified md5sum on pod {pod_obj.name}")
+            logger.debug(f"Verified md5sum on pod {pod_obj.name}")
+        logger.info("Verified encryption keys and data integrity for all cloned PVCs")
 
-        # Run IO on new pods
-        log.info("Starting IO on new pods")
+        logger.test_step("Run IO on cloned pods and wait for completion")
         for pod_obj in cloned_pod_objs:
             pod_obj.run_io(storage_type="block", size="100M", runtime=10)
 
-        # Wait for IO completion on new pods
-        log.info("Waiting for IO completion on new pods")
         for pod_obj in cloned_pod_objs:
             pod_obj.get_fio_results()
-        log.info("IO completed on new pods.")
+        logger.info("IO completed on all cloned pods")
 
-        # Delete the restored pods, PVC and snapshots
-        log.info("Deleting all pods")
+        logger.test_step("Delete all pods and PVCs")
         for pod_obj in cloned_pod_objs + self.pod_objs:
             pod_obj.delete()
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
@@ -279,29 +274,27 @@ class TestEncryptedRbdClone(ManageTest):
         all_pvc_objs = cloned_pvc_objs + self.pvc_objs
         helpers.wait_for_volume_detachment(pvc_objs=all_pvc_objs, timeout=180)
 
-        log.info("Deleting all PVCs")
         for pvc_obj in all_pvc_objs:
             pv_obj = pvc_obj.backed_pv_obj
             pvc_obj.delete()
             # Increased timeout for encrypted volume deletion as it requires
             # additional steps (closing encrypted device, cleaning up secrets)
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
+        logger.info("All pods and PVCs deleted")
 
         if kms_provider == constants.VAULT_KMS_PROVIDER:
             # Verify if the keys for parent and cloned PVCs are deleted from Vault
             if kv_version == "v1" or Version.coerce(
                 config.ENV_DATA["ocs_version"]
             ) >= Version.coerce("4.9"):
-                log.info(
-                    "Verify whether the keys for cloned PVCs are deleted from vault"
-                )
+                logger.test_step("Verify encryption keys are deleted from Vault")
                 for key in cloned_vol_handles + self.vol_handles:
                     if not kms.is_key_present_in_path(
                         key=key, path=self.kms.vault_backend_path
                     ):
-                        log.info(f"Vault: Key deleted for {key}")
+                        logger.debug(f"Vault: Key deleted for {key}")
                     else:
                         raise KMSResourceCleaneupError(
                             f"Vault: Key deletion failed for {key}"
                         )
-                log.info("All keys from vault were deleted")
+                logger.info("All keys from vault were deleted")

@@ -22,7 +22,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers import helpers
 from ocs_ci.framework import config, config_safe_thread_pool_task
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -100,22 +100,23 @@ class TestPvcExpand(ManageTest):
         # Wait some time before starting PVC expansion if needed
         sleep(start_delay)
 
+        logger.info(f"Expanding all PVCs to {pvc_size_new}G")
         for pvc_obj in self.pvcs_cephfs + self.pvcs_rbd:
-            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
+            logger.debug(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
             pvc_obj.resize_pvc(pvc_size_new, True)
 
-        log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_new}G")
+        logger.info(f"Verified: Size of all PVCs are expanded to {pvc_size_new}G")
 
-        log.info("Verifying new size on pods.")
+        logger.info("Verifying new size on pods")
         for pod_obj in self.pods:
             if pod_obj.pvc.volume_mode == "Block":
-                log.info(
-                    f"Skipping check on pod {pod_obj.name} as volume " f"mode is Block."
+                logger.debug(
+                    f"Skipping check on pod {pod_obj.name} as volume mode is Block."
                 )
                 continue
 
             # Wait for 240 seconds to reflect the change on pod
-            log.info(f"Checking pod {pod_obj.name} to verify the change.")
+            logger.debug(f"Checking pod {pod_obj.name} to verify the change.")
             for df_out in TimeoutSampler(
                 240, 3, pod_obj.exec_cmd_on_pod, command="df -kh"
             ):
@@ -127,19 +128,19 @@ class TestPvcExpand(ManageTest):
                     pvc_size_new - 0.5 <= float(new_size_mount[:-1]) <= pvc_size_new
                     and new_size_mount[-1] == "G"
                 ):
-                    log.info(
+                    logger.debug(
                         f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
                         f"is reflected on pod {pod_obj.name}"
                     )
                     break
-                log.info(
+                logger.debug(
                     f"Expanded size of PVC {pod_obj.pvc.name} is not reflected"
                     f" on pod {pod_obj.name}. New size on mount is not "
                     f"{pvc_size_new}G as expected, but {new_size_mount}. "
                     f"Checking again."
                 )
-        log.info(
-            f"Verified: Modified size {pvc_size_new}G is reflected " f"on all pods."
+        logger.info(
+            f"Verified: Modified size {pvc_size_new}G is reflected on all pods."
         )
 
     def run_io_and_verify(self, file_size, io_phase, verify=True):
@@ -152,6 +153,7 @@ class TestPvcExpand(ManageTest):
             verify (bool): True to verify fio, False otherwise
 
         """
+        logger.info(f"Starting {io_phase} IO on {len(self.pods)} pods")
         for pod_obj in self.pods:
             storage_type = "block" if pod_obj.pvc.volume_mode == "Block" else "fs"
 
@@ -161,7 +163,7 @@ class TestPvcExpand(ManageTest):
                 if (pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX)
                 else f"{file_size}G"
             )
-            log.info(f"Starting {io_phase} IO on pod {pod_obj.name}.")
+            logger.debug(f"Starting {io_phase} IO on pod {pod_obj.name}")
             pod_obj.run_io(
                 storage_type=storage_type,
                 size=size,
@@ -170,13 +172,13 @@ class TestPvcExpand(ManageTest):
                 fio_filename=f"{pod_obj.name}_{io_phase}",
                 direct=int(storage_type == "block"),
             )
-            log.info(f"{io_phase} IO started on pod {pod_obj.name}.")
-        log.info(f"{io_phase} IO started on pods.")
+            logger.debug(f"{io_phase} IO started on pod {pod_obj.name}")
+        logger.info(f"{io_phase} IO started on all pods")
 
         if not verify:
             return
 
-        log.info(f"Verifying {io_phase} IO on pods.")
+        logger.info(f"Verifying {io_phase} IO on pods")
         for pod_obj in self.pods:
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get("jobs")[0].get("error")
@@ -184,7 +186,8 @@ class TestPvcExpand(ManageTest):
                 f"{io_phase} IO error on pod {pod_obj.name}. "
                 f"FIO result: {fio_result}"
             )
-            log.info(f"Verified {io_phase} IO on pod {pod_obj.name}.")
+            logger.debug(f"Verified {io_phase} IO on pod {pod_obj.name}")
+        logger.info(f"Verified {io_phase} IO on all pods")
 
     @provider_mode
     @acceptance
@@ -203,8 +206,7 @@ class TestPvcExpand(ManageTest):
         else:
             pvc_size_new = 25
 
-        # Modify size of PVCs and verify the change
-        log.info(f"Expanding PVCs to {pvc_size_new}G")
+        logger.test_step(f"Expand all PVCs to {pvc_size_new}G and verify")
         self.expand_and_verify(pvc_size_new)
 
     @tier2
@@ -222,10 +224,9 @@ class TestPvcExpand(ManageTest):
             pvc_size_expanded_2 = 25
         executor = ThreadPoolExecutor(max_workers=len(self.pods))
 
-        # Do setup on pods for running IO
-        log.info("Setting up pods for running IO.")
+        logger.test_step("Set up pods for running IO")
         for pod_obj in self.pods:
-            log.info(f"Setting up pod {pod_obj.name} for running IO")
+            logger.debug(f"Setting up pod {pod_obj.name} for running IO")
             if pod_obj.pvc.volume_mode == "Block":
                 storage_type = "block"
             else:
@@ -234,21 +235,24 @@ class TestPvcExpand(ManageTest):
 
         # Wait for setup on pods to complete
         for pod_obj in self.pods:
-            log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
+            logger.debug(f"Waiting for IO setup to complete on pod {pod_obj.name}")
             for sample in TimeoutSampler(360, 2, getattr, pod_obj, "wl_setup_done"):
                 if sample:
-                    log.info(
-                        f"Setup for running IO is completed on pod " f"{pod_obj.name}."
+                    logger.debug(
+                        f"Setup for running IO is completed on pod {pod_obj.name}"
                     )
                     break
-        log.info("Setup for running IO is completed on all pods.")
+        logger.info("Setup for running IO is completed on all pods")
 
-        # Run IO and verify
-        log.info("Starting pre-expand IO on all pods.")
+        logger.test_step("Run pre-expand IO on all pods")
         self.run_io_and_verify(7, "pre_expand")
-        log.info("Verified pre-expand IO result on pods.")
 
-        log.info("Expanding all PVCs after 3 seconds. The delay is to start IOs.")
+        logger.test_step(
+            f"Expand PVCs to {pvc_size_expanded_1}G while running IO concurrently"
+        )
+        logger.info(
+            f"Expanding all PVCs to {pvc_size_expanded_1}G after 3 seconds delay"
+        )
         pvc_expand_process = executor.submit(
             config_safe_thread_pool_task,
             config.cur_index,
@@ -257,28 +261,25 @@ class TestPvcExpand(ManageTest):
             start_delay=3,
         )
 
-        log.info(
-            "Running IO on all pods in different iterations when PVCs are being expanded."
-        )
+        logger.info("Running IO on all pods during PVC expansion")
         for process_running in TimeoutSampler(500, 3, pvc_expand_process.running):
             if process_running:
                 self.run_io_and_verify(2, "during_expand")
             else:
                 break
-        log.info(
-            "Verified IO result on all pods which ran during the expansion process."
-        )
+        logger.info("Verified IO on all pods during the expansion process")
 
         # Get PVC expansion result
         pvc_expand_process.result()
 
-        # Run IO and verify
-        log.info("Starting post-expand IO on all pods.")
+        logger.test_step("Run post-expand IO on all pods")
         self.run_io_and_verify(6, "post_expand")
-        log.info("Verified post-expand IO result on pods.")
 
-        log.info(
-            "Expanding all PVCs for the second time after 3 seconds. The delay is to start IOs."
+        logger.test_step(
+            f"Expand PVCs to {pvc_size_expanded_2}G (second expansion) while running IO concurrently"
+        )
+        logger.info(
+            f"Expanding all PVCs to {pvc_size_expanded_2}G after 3 seconds delay"
         )
         pvc_expand_process = executor.submit(
             config_safe_thread_pool_task,
@@ -289,22 +290,16 @@ class TestPvcExpand(ManageTest):
         )
         self.expand_and_verify(pvc_size_expanded_2)
 
-        log.info(
-            "Running IO on all pods in different iterations when PVCs are being expanded second time."
-        )
+        logger.info("Running IO on all pods during second PVC expansion")
         for process_running in TimeoutSampler(500, 3, pvc_expand_process.running):
             if process_running:
                 self.run_io_and_verify(2, "during_second_expand")
             else:
                 break
-        log.info(
-            "Verified IO result on all pods which ran during the second expansion process."
-        )
+        logger.info("Verified IO on all pods during the second expansion process")
 
         # Get PVC expansion result
         pvc_expand_process.result()
 
-        # Run IO and verify
-        log.info("Starting post-second-expand IO on all pods.")
+        logger.test_step("Run post-second-expand IO on all pods")
         self.run_io_and_verify(6, "post_expand")
-        log.info("Verified post-second-expand IO result on pods.")

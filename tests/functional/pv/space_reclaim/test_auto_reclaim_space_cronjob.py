@@ -64,6 +64,9 @@ class TestReclaimSpaceCronJob(ManageTest):
         """
         num_of_pvcs = 10
 
+        logger.test_step(
+            f"Create {num_of_pvcs} RBD PVCs in namespace '{self.namespace}' and verify cronjobs"
+        )
         existing_pvcs_num = 0
         for line in run_oc_command("get pvc", namespace=self.namespace):
             if constants.STATUS_BOUND in line:
@@ -113,6 +116,9 @@ class TestReclaimSpaceCronJob(ManageTest):
             cronjob_for_pvc = [
                 name for name in cronjob_names if name.startswith(f"{pvc_obj.name}-")
             ]
+            logger.assertion(
+                f"Cronjob count for PVC {pvc_obj.name}: expected=1, actual={len(cronjob_for_pvc)}"
+            )
             assert (
                 len(cronjob_for_pvc) == 1
             ), f"Expected exactly one reclaim space cron job for  pvc {pvc_obj.name}, {len(cronjob_for_pvc)} found."
@@ -120,9 +126,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         for pvc_obj in self.pvc_objs_created:
             pvc_obj.delete()
 
-        logger.info(
-            "Validating that all the cron jobs were deleted following deletion of the PVCs"
-        )
+        logger.test_step("Validate all cronjobs are deleted after PVC deletion")
         performance_lib.wait_for_cronjobs(
             self.namespace,
             existing_cronjobs_num,
@@ -130,6 +134,9 @@ class TestReclaimSpaceCronJob(ManageTest):
         )
 
         # create CephFS PVC and test that no reclaim space job created for it
+        logger.test_step(
+            "Create CephFS PVC and verify no reclaim space cronjob is created for it"
+        )
         try:
             pvc_obj = helpers.create_pvc(
                 sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
@@ -158,9 +165,15 @@ class TestReclaimSpaceCronJob(ManageTest):
         """
         Test case to check reclaim space cronjobs are created correctly for rbd pvcs in openshift-* namespace
         """
+        logger.test_step(
+            "Create new openshift-* namespace and verify reclaimspace schedule annotation"
+        )
         namespace = f"openshift-{uuid4().hex}"
         self.namespace = namespace
         result = run_oc_command(cmd=f"create namespace {self.namespace}")
+        logger.assertion(
+            f"Namespace creation: expected no error, actual result='{result[0][:80]}'"
+        )
         assert ERRMSG not in result[0], (
             f"Failed to create namespace with name {namespace}" f"got result: {result}"
         )
@@ -172,6 +185,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         schedule = namespace_dict["metadata"]["annotations"][
             constants.RECLAIMSPACE_SCHEDULE_ANNOTATION
         ]
+        logger.assertion(f"Namespace schedule: expected='@weekly', actual='{schedule}'")
         assert (
             schedule == "@weekly"
         ), f"Namespace {namespace} created with schedule {schedule}, expected @weekly"
@@ -186,6 +200,9 @@ class TestReclaimSpaceCronJob(ManageTest):
         Test case to check reclaim space cronjobs are created correctly for rbd pvcs in existing openshift-* namespaces
         ("openshift-monitoring" is taken as example)
         """
+        logger.test_step(
+            "Verify reclaim space cronjobs on existing 'openshift-monitoring' namespace"
+        )
         self.namespace = "openshift-monitoring"
         self.delete_namespace = False
         self.__reclaim_space_cronjob()
@@ -196,6 +213,9 @@ class TestReclaimSpaceCronJob(ManageTest):
         Test case to check that no reclaim space job is created for rbd pvc
         in the openshift-* namespace if skipReclaimspaceSchedule value is True
         """
+        logger.test_step(
+            "Create namespace with skipReclaimspaceSchedule=True and verify no cronjob is created"
+        )
         namespace = f"openshift-{uuid4().hex}"
         self.namespace = namespace
         with open(
@@ -206,7 +226,7 @@ class TestReclaimSpaceCronJob(ManageTest):
                 namespace_yaml = yaml.safe_load(stream)
                 namespace_yaml["metadata"]["name"] = namespace
             except yaml.YAMLError as exc:
-                logger.error(f"Can not read template yaml file {exc}")
+                logger.warning(f"Cannot read template yaml file: {exc}")
 
         temp_file = NamedTemporaryFile(
             mode="w+", prefix="namespace_skip_reclaim_space", suffix=".yaml"
@@ -217,6 +237,9 @@ class TestReclaimSpaceCronJob(ManageTest):
         self.temp_files_list.append(temp_file.name)
 
         res = run_oc_command(cmd=f"create -f {temp_file.name}")
+        logger.assertion(
+            f"Namespace creation with skip annotation: expected no error, actual result='{res[0][:80]}'"
+        )
         assert ERRMSG not in res[0], (
             f"Failed to create namespace with name {namespace} " f"got result: {res}"
         )

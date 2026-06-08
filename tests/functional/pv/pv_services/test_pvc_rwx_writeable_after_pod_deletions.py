@@ -42,6 +42,7 @@ class TestRWXMountPoint(ManageTest):
         6. Also, access the data written by deleted pods from the Running pod
 
         """
+        logger.test_step("Create a RWX CephFS PVC and retrieve worker nodes")
         worker_nodes_list = node.get_worker_nodes()
 
         # Create a RWX PVC
@@ -52,9 +53,10 @@ class TestRWXMountPoint(ManageTest):
             status=constants.STATUS_BOUND,
         )
         logger.info(
-            f"Creating pods on all worker nodes backed" f"with same pvc {pvc_obj.name}"
+            f"Creating pods on all worker nodes backed with same pvc {pvc_obj.name}"
         )
 
+        logger.test_step("Create pods on all worker nodes backed by the same PVC")
         pod_list = []
 
         for each_node in worker_nodes_list:
@@ -68,7 +70,7 @@ class TestRWXMountPoint(ManageTest):
             pod_list.append(pod_obj)
             teardown_factory(pod_obj)
 
-        # Confirm pods are created and are running on designated nodes
+        logger.test_step("Confirm pods are running on designated worker nodes")
         node_count = 0
         for pod_obj in pod_list:
             helpers.wait_for_resource_state(
@@ -81,10 +83,10 @@ class TestRWXMountPoint(ManageTest):
             )
             node_count = node_count + 1
 
-        # Run IOs on all pods. FIO Filename is kept same as pod name
+        logger.test_step("Run IO on all pods and verify results")
         with ThreadPoolExecutor() as p:
             for pod_obj in pod_list:
-                logger.info(f"Running IO on pod {pod_obj.name}")
+                logger.debug(f"Running IO on pod {pod_obj.name}")
                 p.submit(
                     pod_obj.run_io,
                     storage_type="fs",
@@ -104,25 +106,23 @@ class TestRWXMountPoint(ManageTest):
                 pod.cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
             )
 
-        # Delete all but the last app pod.
+        logger.test_step("Delete all but the last app pod")
         for index in range(node_count - 1):
             pod_list[index].delete()
             pod_list[index].ocp.wait_for_delete(resource_name=pod_list[index].name)
 
-        # Verify presence of files written by each pod
-        logger.info(
-            f"Verify existence of each file from app pod " f"{pod_list[-1].name} "
+        logger.test_step(
+            "Verify presence of files written by each pod from surviving pod"
         )
         for pod_obj in pod_list:
             file_path = pod.get_file_path(pod_list[-1], pod_obj.name)
             assert pod.check_file_existence(
                 pod_list[-1], file_path
             ), f"File {pod_obj.name} doesnt exist"
-            logger.info(f"File {pod_obj.name} exists in {pod_list[-1].name}")
+            logger.debug(f"File {pod_obj.name} exists in {pod_list[-1].name}")
 
-        # From surviving pod, verify data integrity of files
-        # written by deleted pods
-        logger.info(f"verify all data from {pod_list[-1].name}")
+        logger.test_step("Verify data integrity of files written by deleted pods")
+        logger.info(f"Verifying all data from surviving pod {pod_list[-1].name}")
 
         for index, pod_obj in enumerate(pod_list):
             assert pod.verify_data_integrity(
@@ -131,7 +131,7 @@ class TestRWXMountPoint(ManageTest):
                 original_md5sum=md5sum_pod_data[index],
             )
 
-        # From surviving pod, confirm mount point is still write-able
+        logger.test_step("Confirm mount point is still writable by re-running IO")
         logger.info(f"Re-running IO on pod {pod_list[-1].name}")
         fio_new_file = f"{pod_list[-1].name}-new-file"
         pod_list[-1].run_io(

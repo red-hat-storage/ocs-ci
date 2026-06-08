@@ -17,8 +17,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import verify_pvc_size
 
-
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Set the arg values based on KMS provider.
 if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
@@ -86,9 +85,9 @@ class TestEncryptedVolumeExpansion(ManageTest):
         Setup csi-kms-connection-details configmap
 
         """
-        log.info("Setting up csi-kms-connection-details configmap")
+        logger.test_step("Set up csi-kms-connection-details configmap")
         self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
-        log.info("csi-kms-connection-details setup successful")
+        logger.info("csi-kms-connection-details setup successful")
 
     @pytest.mark.parametrize(
         argnames=argnames,
@@ -115,10 +114,9 @@ class TestEncryptedVolumeExpansion(ManageTest):
         6. Check and confirm that the PVC has successfully expanded to a total size of 10GB.
 
         """
-        # Create a project
+        logger.test_step("Create project and encryption-enabled RBD storage class")
         proj_obj = project_factory()
 
-        # Create an encryption enabled storageclass for RBD
         sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
@@ -130,7 +128,7 @@ class TestEncryptedVolumeExpansion(ManageTest):
             self.kms.vault_path_token = self.kms.generate_vault_token()
             self.kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
 
-        # Create RBD PVCs with volume mode Block
+        logger.test_step("Create encrypted PVC and deploy pod")
         pvc_size = 5
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
@@ -142,16 +140,20 @@ class TestEncryptedVolumeExpansion(ManageTest):
 
         pod_obj = pod_factory(pvc=pvc_obj)
         # Verify the pod status
-        log.info("Verifying the pod status.")
+        logger.assertion(
+            f"Pod status: expected='{constants.STATUS_RUNNING}', "
+            f"actual='{pod_obj.data['status']['phase']}'"
+        )
         assert (
             pod_obj.data["status"]["phase"] == constants.STATUS_RUNNING
         ), f"Pod {pod_obj.name} is not in {constants.STATUS_RUNNING} state."
 
-        log.info("Resizing PVC")
+        logger.test_step("Expand encrypted PVC and verify new size")
         new_size = pvc_size + 5
-        log.info(f"Expanding size of PVC {pvc_obj.name} to {new_size}G")
+        logger.info(f"Expanding PVC {pvc_obj.name} from {pvc_size}G to {new_size}G")
         pvc_obj.resize_pvc(new_size, True)
 
+        logger.assertion(f"PVC size after expansion: expected={new_size}G")
         assert verify_pvc_size(
             pod_obj, new_size
         ), f"Expected pvc size {new_size}G is not matched with the attached PVC on pod {pod_obj.name}"
@@ -178,21 +180,20 @@ class TestEncryptedVolumeExpansion(ManageTest):
 
         """
 
-        log.info("Setting up csi-kms-connection-details configmap")
+        logger.test_step("Set up csi-kms-connection-details configmap for KMIP")
         kms = pv_encryption_kmip_setup_factory()
-        log.info("csi-kms-connection-details setup successful")
+        logger.info("csi-kms-connection-details setup successful")
 
-        # Create a project
+        logger.test_step("Create project and encryption-enabled RBD storage class")
         proj_obj = project_factory()
 
-        # Create an encryption enabled storageclass for RBD
         sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
             encryption_kms_id=kms.kmsid,
         )
 
-        # Create RBD PVCs with volume mode Block
+        logger.test_step("Create encrypted PVC and deploy pod")
         pvc_size = 5
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
@@ -204,15 +205,19 @@ class TestEncryptedVolumeExpansion(ManageTest):
 
         pod_obj = pod_factory(pvc=pvc_obj)
         # Verify the pod status
-        log.info("Verifying the pod status.")
+        logger.assertion(
+            f"Pod status: expected='{constants.STATUS_RUNNING}', "
+            f"actual='{pod_obj.data['status']['phase']}'"
+        )
         assert (
             pod_obj.data["status"]["phase"] == constants.STATUS_RUNNING
         ), f"Pod {pod_obj.name} is not in {constants.STATUS_RUNNING} state."
 
-        log.info("Resizing PVC")
+        logger.test_step("Expand encrypted PVC and verify new size")
         new_size = pvc_size + 5
-        log.info(f"Expanding size of PVC {pvc_obj.name} to {new_size}G")
+        logger.info(f"Expanding PVC {pvc_obj.name} from {pvc_size}G to {new_size}G")
         pvc_obj.resize_pvc(new_size, True)
+        logger.assertion(f"PVC size after expansion: expected={new_size}G")
         assert verify_pvc_size(
             pod_obj, new_size
         ), f"Expected pvc size {new_size}G is not matched with the attached PVC on pod {pod_obj.name}"

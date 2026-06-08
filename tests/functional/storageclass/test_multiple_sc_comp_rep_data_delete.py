@@ -21,7 +21,7 @@ from ocs_ci.ocs.resources.pvc import (
 from ocs_ci.ocs.defaults import MAX_BYTES_IN_POOL_AFTER_DATA_DELETE
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -50,7 +50,9 @@ class TestMultipleScCompRepDataDelete(ManageTest):
         *. Verify that the data is deleted
 
         """
-        log.info("Creating storageclasses with compression and replica3")
+        logger.test_step(
+            "Create storage classes with compression and different replica counts"
+        )
         interface_type = constants.CEPHBLOCKPOOL
         sc_obj1 = storageclass_factory(
             interface=interface_type,
@@ -58,28 +60,35 @@ class TestMultipleScCompRepDataDelete(ManageTest):
             replica=3,
             compression="aggressive",
         )
-        log.info("Creating storageclasses with compression and replica2")
+        logger.info(
+            f"Created storageclass {sc_obj1.name} with replica=3, compression=aggressive"
+        )
         sc_obj2 = storageclass_factory(
             interface=interface_type,
             new_rbd_pool=True,
             replica=2,
             compression="aggressive",
         )
+        logger.info(
+            f"Created storageclass {sc_obj2.name} with replica=2, compression=aggressive"
+        )
 
         sc_obj_list = [sc_obj1, sc_obj2]
         pod_obj_list = []
         pvc_obj_list = []
 
-        log.info("Creating PVCs and PODs")
+        logger.test_step("Create PVCs and pods for each storage class")
         for sc_obj in sc_obj_list:
             pvc_obj = pvc_factory(
                 interface=interface_type, storageclass=sc_obj, size=10
             )
             pvc_obj_list.append(pvc_obj)
             pod_obj_list.append(pod_factory(interface=interface_type, pvc=pvc_obj))
+        logger.info(f"Created {len(pvc_obj_list)} PVCs and {len(pod_obj_list)} pods")
 
-        log.info("Running IO on pods")
+        logger.test_step("Run IO on all pods")
         for pod_obj in pod_obj_list:
+            logger.debug(f"Running IO on pod {pod_obj.name}")
             pod_obj.run_io(
                 "fs",
                 size="1G",
@@ -92,19 +101,20 @@ class TestMultipleScCompRepDataDelete(ManageTest):
                 readwrite="readwrite",
             )
 
-        log.info("deleting PODs and PVCs")
+        logger.test_step("Delete pods and PVCs")
         delete_pods(pod_obj_list, wait=True)
         delete_pvcs(pvc_obj_list, concurrent=True)
 
-        log.info("Wait for 15 seconds for all data to delete")
+        logger.info("Waiting 15 seconds for data deletion to complete")
         sleep(15)
-        log.info("Checking stats after deleting PODs and PVCs")
+
+        logger.test_step("Verify pool data is erased after PVC deletion")
         for sc_obj in sc_obj_list:
             pvc_list = get_all_pvcs_in_storageclass(sc_obj.name)
             if len(pvc_list) == 0:
                 cbp_name = sc_obj.get()["parameters"]["pool"]
                 ceph_pool_byte_used = get_byte_used_by_pool(cbp_name)
-                log.info(f"pool {cbp_name} has {ceph_pool_byte_used} bytes used")
+                logger.debug(f"Pool {cbp_name} has {ceph_pool_byte_used} bytes used")
                 if ceph_pool_byte_used > MAX_BYTES_IN_POOL_AFTER_DATA_DELETE:
                     raise PoolDataNotErased(
                         f"Pool {cbp_name} has {ceph_pool_byte_used} bytes which were not deleted"

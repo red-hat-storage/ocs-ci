@@ -24,7 +24,7 @@ from ocs_ci.ocs.resources.pod import get_file_path, check_file_existence
 from ocs_ci.helpers.helpers import fetch_used_size, create_unique_resource_name
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -82,9 +82,11 @@ class TestRbdSpaceReclaim(ManageTest):
         schedule = ["hourly", "midnight", "weekly"]
         # Fetch the used size of pool
         cbp_name = self.sc_obj.get().get("parameters").get("pool")
-        log.info(f"Cephblock pool name {cbp_name}")
+        logger.test_step(
+            f"Create four 4GiB files on pod and verify pool '{cbp_name}' used size increases"
+        )
         used_size_before_io = fetch_used_size(cbp_name)
-        log.info(f"Used size before IO is {used_size_before_io}")
+        logger.info(f"Used size before IO is {used_size_before_io}")
 
         # Create four 4 GB file
         for filename in [fio_filename1, fio_filename2, fio_filename3, fio_filename4]:
@@ -100,10 +102,11 @@ class TestRbdSpaceReclaim(ManageTest):
             # Verify used size after IO
             exp_used_size_after_io = used_size_before_io + (4 * self.pool_replica)
             used_size_after_io = fetch_used_size(cbp_name, exp_used_size_after_io)
-            log.info(f"Used size after IO is in {filename} {used_size_after_io}")
+            logger.debug(f"Used size after IO in {filename}: {used_size_after_io}")
             used_size_before_io = used_size_after_io
 
         # Delete the file and validate the reclaimspace cronjob
+        logger.test_step("Delete three files and verify deletion")
         for filename in [fio_filename1, fio_filename2, fio_filename3]:
             file_path = get_file_path(pod_obj, filename)
             pod_obj.exec_cmd_on_pod(
@@ -116,9 +119,12 @@ class TestRbdSpaceReclaim(ManageTest):
             except CommandFailed as cmdfail:
                 if "No such file or directory" not in str(cmdfail):
                     raise
-                log.info(f"Verified: File {file_path} deleted.")
+                logger.info(f"Verified: File {file_path} deleted.")
 
         # Create ReclaimSpaceCronJob
+        logger.test_step(
+            f"Create ReclaimSpaceCronJob with schedules {schedule} and verify success"
+        )
         for type in schedule:
             reclaim_space_job = pvc_obj.create_reclaim_space_cronjob(schedule=type)
 
@@ -129,10 +135,12 @@ class TestRbdSpaceReclaim(ManageTest):
                 ):
                     result = reclaim_space_job_yaml["spec"]["schedule"]
                     if result == "@" + type:
-                        log.info(f"ReclaimSpaceJob {reclaim_space_job.name} succeeded")
+                        logger.info(
+                            f"ReclaimSpaceJob {reclaim_space_job.name} succeeded"
+                        )
                         break
                     else:
-                        log.info(
+                        logger.debug(
                             f"Waiting for the Succeeded result of the ReclaimSpaceCronJob {reclaim_space_job.name}. "
                             f"Present value of result is {result}"
                         )
@@ -142,11 +150,11 @@ class TestRbdSpaceReclaim(ManageTest):
                 )
 
         # Verify the presence of another file in the directory
-        log.info("Verifying the existence of remaining file in the directory")
+        logger.test_step(f"Verify file '{fio_filename4}' still exists in the pod")
         file_path = get_file_path(pod_obj, fio_filename4)
-        log.info(check_file_existence(pod_obj=pod_obj, file_path=file_path))
+        logger.info(check_file_existence(pod_obj=pod_obj, file_path=file_path))
         if check_file_existence(pod_obj=pod_obj, file_path=file_path):
-            log.info(f"{fio_filename4} is intact")
+            logger.info(f"{fio_filename4} is intact")
 
     @tier2
     @skipif_hci_provider_and_client
@@ -196,7 +204,9 @@ class TestRbdSpaceReclaim(ManageTest):
         6. Validate the reclaim space cronjob
         """
 
-        # get random size for pvc
+        logger.test_step(
+            "Create project, storage class, and PVC with reclaim space annotation"
+        )
         ceph_cluster = CephCluster()
         pvc_size = random.randint(1, int(ceph_cluster.get_ceph_free_capacity()))
 
@@ -231,12 +241,20 @@ class TestRbdSpaceReclaim(ManageTest):
 
         helpers.wait_for_resource_state(pvc_obj, pvc_status)
 
-        log.info("add reclaimspace.csiaddons.openshift.io/schedule label to PVC ")
+        logger.test_step(
+            f"Add reclaimspace schedule annotation '@{schedule}' to PVC {pvc_obj.name}"
+        )
         OCP(kind=constants.PVC, namespace=self.namespace).annotate(
             f"reclaimspace.csiaddons.openshift.io/schedule=@{schedule}", pvc_obj.name
         )
 
+        logger.test_step(
+            "Verify reclaim space cronjob is created with correct schedule"
+        )
         pvc_to_chron_job_dict = self.wait_for_cronjobs(True, 60)
+        logger.assertion(
+            f"Reclaim space cron job existence: expected=True, actual={pvc_to_chron_job_dict is not None}"
+        )
         assert pvc_to_chron_job_dict, "Reclaim space cron job does not exist"
 
         chron_job_name = (
@@ -252,6 +270,10 @@ class TestRbdSpaceReclaim(ManageTest):
             .get(constants.RECLAIMSPACE_SCHEDULE_ANNOTATION)
         )
 
+        logger.assertion(
+            f"Cronjob schedule: expected='{chron_job_schedule}', "
+            f"actual='{pvc_to_chron_job_dict.get(chron_job_name)}'"
+        )
         assert (
             pvc_to_chron_job_dict[chron_job_name] == chron_job_schedule
         ), "Reclaim space cron job does not exist, or schedule is not correct"

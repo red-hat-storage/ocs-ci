@@ -41,7 +41,7 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
 from ocs_ci.krkn_chaos.krkn_scenario_generator import ContainerScenarios
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -112,7 +112,7 @@ class TestKrKnNooBaaContainerChaos:
         )
 
         # WORKLOAD SETUP - Start Warp S3 workloads before chaos
-        log.info(
+        logger.info(
             f"Setting up Warp S3 workloads for NooBaa container chaos testing with {kill_signal}"
         )
         workload_ops.setup_workloads()
@@ -131,7 +131,7 @@ class TestKrKnNooBaaContainerChaos:
             # =================================================================
             # NOOBAA CONTAINER KILL SCENARIOS
             # =================================================================
-            log.info(
+            logger.info(
                 f"Creating NooBaa container kill configuration with {kill_signal} signal"
             )
 
@@ -168,7 +168,7 @@ class TestKrKnNooBaaContainerChaos:
                 scenarios=noobaa_scenarios,
             )
 
-            log.info(f"Created NooBaa container kill scenario file: {scenario_file}")
+            logger.info(f"Created NooBaa container kill scenario file: {scenario_file}")
 
             # Create Krkn configuration
             config = KrknConfigGenerator()
@@ -177,7 +177,7 @@ class TestKrKnNooBaaContainerChaos:
             # =================================================================
             # EXECUTION: Single Krkn run with specified kill signal
             # =================================================================
-            log.info(f"Executing NooBaa container chaos with {kill_signal}")
+            logger.info(f"Executing NooBaa container chaos with {kill_signal}")
 
             # Configure and write Krkn configuration to file
             config.set_tunings(wait_duration=60, iterations=1)
@@ -189,7 +189,7 @@ class TestKrKnNooBaaContainerChaos:
             krkn_runner.wait_for_completion(check_interval=60)
             chaos_output = krkn_runner.get_chaos_data()
 
-            log.info(f"NooBaa container chaos with {kill_signal} completed")
+            logger.info(f"NooBaa container chaos with {kill_signal} completed")
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
@@ -199,13 +199,13 @@ class TestKrKnNooBaaContainerChaos:
             )
             raise
         except Exception as e:
-            log.error(f"❌ NooBaa container chaos with {kill_signal} failed: {e}")
+            logger.exception(f"NooBaa container chaos with {kill_signal} failed: {e}")
             raise
 
         # =================================================================
         # RESULTS ANALYSIS
         # =================================================================
-        log.info(f"NOOBAA CONTAINER CHAOS RESULTS ({kill_signal}):")
+        logger.info(f"NOOBAA CONTAINER CHAOS RESULTS ({kill_signal}):")
 
         # Analyze results
         total_executed, successful_executed, failing_executed = (
@@ -220,7 +220,7 @@ class TestKrKnNooBaaContainerChaos:
             (successful_executed / total_executed * 100) if total_executed > 0 else 0
         )
 
-        log.info(
+        logger.info(
             f"EXECUTION RESULTS: Signal: {kill_signal}, "
             f"Total scenarios: {total_executed}, "
             f"Successful: {successful_executed}, "
@@ -249,10 +249,14 @@ class TestKrKnNooBaaContainerChaos:
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             None, f"NooBaa container chaos ({kill_signal})"
         )
+        logger.assertion(
+            f"Ceph crashes after NooBaa container chaos ({kill_signal}): "
+            f"expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🏆 NooBaa container chaos testing with {kill_signal} completed successfully! "
+        logger.info(
+            f"NooBaa container chaos testing with {kill_signal} completed successfully. "
             f"All NooBaa containers handled {kill_signal} with {overall_success_rate:.1f}% success rate."
         )
 
@@ -342,7 +346,7 @@ class TestKrKnNooBaaContainerChaos:
         )
 
         # WORKLOAD SETUP
-        log.info(
+        logger.info(
             f"Setting up Warp S3 workloads for {component} container chaos testing"
         )
         workload_ops.setup_workloads()
@@ -361,7 +365,7 @@ class TestKrKnNooBaaContainerChaos:
             # =================================================================
             # COMPONENT-SPECIFIC CONTAINER KILL SCENARIO
             # =================================================================
-            log.info(
+            logger.info(
                 f"Creating {component} container kill configuration with {kill_signal} signal, "
                 f"{iterations} iterations"
             )
@@ -378,7 +382,7 @@ class TestKrKnNooBaaContainerChaos:
                 "description": f"{component} component",
             }
 
-            log.info(
+            logger.info(
                 f"Scenario: {scenario['name']}, "
                 f"Label: {label_selector}, "
                 f"Signal: {kill_signal}, "
@@ -391,7 +395,7 @@ class TestKrKnNooBaaContainerChaos:
                 scenarios=[scenario],
             )
 
-            log.info(f"Created scenario file: {scenario_file}")
+            logger.info(f"Created scenario file: {scenario_file}")
 
             # Create Krkn configuration
             config = KrknConfigGenerator()
@@ -400,7 +404,7 @@ class TestKrKnNooBaaContainerChaos:
             # =================================================================
             # EXECUTION: Repeated chaos with specified iterations
             # =================================================================
-            log.info(
+            logger.info(
                 f"Executing {component} container chaos: {iterations} iterations with {kill_signal}"
             )
 
@@ -414,7 +418,7 @@ class TestKrKnNooBaaContainerChaos:
             krkn_runner.wait_for_completion(check_interval=60)
             chaos_output = krkn_runner.get_chaos_data()
 
-            log.info(f"{component} container chaos completed")
+            logger.info(f"{component} container chaos completed")
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
@@ -424,13 +428,15 @@ class TestKrKnNooBaaContainerChaos:
             )
             raise
         except Exception as e:
-            log.error(f"❌ {component} container chaos with {kill_signal} failed: {e}")
+            logger.exception(
+                f"{component} container chaos with {kill_signal} failed: {e}"
+            )
             raise
 
         # =================================================================
         # RESULTS ANALYSIS
         # =================================================================
-        log.info(f"{component.upper()} CONTAINER CHAOS RESULTS ({kill_signal}):")
+        logger.info(f"{component.upper()} CONTAINER CHAOS RESULTS ({kill_signal}):")
 
         # Analyze results
         total_executed, successful_executed, failing_executed = (
@@ -445,7 +451,7 @@ class TestKrKnNooBaaContainerChaos:
             (successful_executed / total_executed * 100) if total_executed > 0 else 0
         )
 
-        log.info(
+        logger.info(
             f"EXECUTION RESULTS: Component: {component}, "
             f"Signal: {kill_signal}, "
             f"Total iterations: {total_executed}, "
@@ -482,10 +488,14 @@ class TestKrKnNooBaaContainerChaos:
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             None, f"{component} container chaos ({kill_signal})"
         )
+        logger.assertion(
+            f"Ceph crashes after {component} container chaos ({kill_signal}): "
+            f"expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🏆 {component} container chaos testing with {kill_signal} completed successfully! "
+        logger.info(
+            f"{component} container chaos testing with {kill_signal} completed successfully. "
             f"Executed {iterations} iterations with {overall_success_rate:.1f}% success rate."
         )
 
@@ -546,14 +556,13 @@ class TestKrKnNooBaaContainerChaos:
             signals=", ".join(signals),
         )
 
-        log.info(
-            f"⚠️  {stress_level.upper()} STRENGTH TESTING: Multiple signals across all NooBaa components"
+        logger.info(
+            f"{stress_level.upper()} strength testing: {len(signals)} signals, "
+            f"duration_multiplier={duration_multiplier}x"
         )
-        log.info(f"🔥 Signals to test: {', '.join(signals)}")
-        log.info(f"⏱️  Duration multiplier: {duration_multiplier}x")
 
         # WORKLOAD SETUP
-        log.info("Setting up Warp S3 workloads for multi-signal strength testing")
+        logger.info("Setting up Warp S3 workloads for multi-signal strength testing")
         workload_ops.setup_workloads()
 
         # Register finalizer for cleanup
@@ -575,9 +584,7 @@ class TestKrKnNooBaaContainerChaos:
             # MULTI-SIGNAL STRENGTH TEST
             # =================================================================
             for signal in signals:
-                log.info("=" * 80)
-                log.info(f"Testing with signal: {signal}")
-                log.info("=" * 80)
+                logger.info(f"Testing with signal: {signal}")
 
                 # NooBaa components to test
                 noobaa_components = [
@@ -608,7 +615,7 @@ class TestKrKnNooBaaContainerChaos:
                 base_iterations = 2
                 iterations = base_iterations * duration_multiplier
 
-                log.info(
+                logger.info(
                     f"Executing {iterations} iterations of NooBaa container kill with {signal}"
                 )
 
@@ -622,7 +629,7 @@ class TestKrKnNooBaaContainerChaos:
                 krkn_runner.wait_for_completion(check_interval=60)
                 chaos_output = krkn_runner.get_chaos_data()
 
-                log.info(f"Completed testing with {signal}")
+                logger.info(f"Completed testing with {signal}")
 
                 # Analyze results for this signal
                 total_executed, successful_executed, failing_executed = (
@@ -649,7 +656,7 @@ class TestKrKnNooBaaContainerChaos:
                     }
                 )
 
-                log.info(
+                logger.info(
                     f"Signal {signal} results: {successful_executed}/{total_executed} "
                     f"({signal_success_rate:.1f}% success)"
                 )
@@ -662,17 +669,17 @@ class TestKrKnNooBaaContainerChaos:
             )
             raise
         except Exception as e:
-            log.error(
-                f"❌ NooBaa multi-signal strength test ({stress_level}) failed: {e}"
+            logger.exception(
+                f"NooBaa multi-signal strength test ({stress_level}) failed: {e}"
             )
             raise
 
         # =================================================================
         # COMPREHENSIVE RESULTS ANALYSIS
         # =================================================================
-        log.info("=" * 80)
-        log.info(f"MULTI-SIGNAL STRENGTH TEST RESULTS ({stress_level.upper()})")
-        log.info("=" * 80)
+        logger.test_step(
+            f"Analyze multi-signal strength test results ({stress_level.upper()})"
+        )
 
         # Calculate overall statistics
         total_all_signals = sum(r["total"] for r in all_results)
@@ -683,18 +690,16 @@ class TestKrKnNooBaaContainerChaos:
             else 0
         )
 
-        log.info("Overall Statistics:")
-        log.info(f"  Total scenarios across all signals: {total_all_signals}")
-        log.info(f"  Successful scenarios: {successful_all_signals}")
-        log.info(f"  Overall success rate: {overall_success_rate:.1f}%")
-        log.info("")
-        log.info("Per-Signal Breakdown:")
+        logger.info(
+            f"Overall statistics: total={total_all_signals}, "
+            f"successful={successful_all_signals}, success_rate={overall_success_rate:.1f}%"
+        )
 
         for result in all_results:
-            log.info(
+            status = "PASS" if result["success_rate"] >= 60 else "MARGINAL"
+            logger.debug(
                 f"  {result['signal']:10s}: {result['successful']:3d}/{result['total']:3d} "
-                f"({result['success_rate']:5.1f}%) - "
-                f"{'✅ PASS' if result['success_rate'] >= 60 else '⚠️  MARGINAL'}"
+                f"({result['success_rate']:5.1f}%) - {status}"
             )
 
         # Validate overall success rate based on stress level
@@ -705,7 +710,7 @@ class TestKrKnNooBaaContainerChaos:
         }
         min_success_rate = min_success_rates.get(stress_level, 60)
 
-        log.info(f"Minimum required success rate: {min_success_rate}%")
+        logger.info(f"Minimum required success rate: {min_success_rate}%")
 
         validator.validate_chaos_execution(
             total_all_signals,
@@ -723,14 +728,17 @@ class TestKrKnNooBaaContainerChaos:
         )
 
         # Final health check
-        log.info("Performing final NooBaa health validation")
+        logger.info("Performing final NooBaa health validation")
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             None, f"NooBaa multi-signal strength test ({stress_level})"
         )
+        logger.assertion(
+            f"Ceph crashes after multi-signal test: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🏆 NooBaa multi-signal strength test ({stress_level.upper()}) completed successfully! "
+        logger.info(
+            f"NooBaa multi-signal strength test ({stress_level.upper()}) completed successfully. "
             f"Tested {len(signals)} signals with {overall_success_rate:.1f}% overall success rate. "
             f"Total scenarios executed: {total_all_signals}"
         )

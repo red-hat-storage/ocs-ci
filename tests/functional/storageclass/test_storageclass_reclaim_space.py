@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -30,7 +30,7 @@ class TestStorageClassReclamespace:
             raise UnexpectedBehaviour(
                 f"RBD image {rbd_image_name} size is not expected as {expected_size}GiB"
             )
-        log.info(f" RBD Image { rbd_image_name} is size of {image_size}GiB")
+        logger.info(f"RBD Image {rbd_image_name} is size of {image_size}GiB")
         return True
 
     @tier2
@@ -52,18 +52,19 @@ class TestStorageClassReclamespace:
         6. verify reclaimspace Job ran successfully for the storageclass.
         """
 
-        # Storegeclass ReclaimSpace annotations.
+        logger.test_step("Create StorageClass with reclaimspace annotations")
         reclaimspace_annotations = {
             constants.RECLAIMSPACE_SCHEDULE_ANNOTATION: "*/3 * * * *"
         }
-
-        # Creating StorageClass with reclaimspace annotations.
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL, annotations=reclaimspace_annotations
         )
         self.pool_name = self.sc_obj.data["parameters"]["pool"]
+        logger.info(
+            f"Created StorageClass {self.sc_obj.name} with reclaimspace schedule"
+        )
 
-        # Create a PVC's with volume block mode
+        logger.test_step("Create PVCs with volume block mode")
         pvc_objs = multi_pvc_factory(
             size=5,
             storageclass=self.sc_obj,
@@ -71,11 +72,10 @@ class TestStorageClassReclamespace:
             access_modes=[f"{constants.ACCESS_MODE_RWO}-Block"],
             wait_each=True,
         )
+        logger.info(f"Created {len(pvc_objs)} PVCs with block volume mode")
 
-        # Create POds
+        logger.test_step("Create pods for each PVC")
         self.pod_objs = []
-
-        # Create pods
         for pvc in pvc_objs:
             pod_obj = pod_factory(
                 pvc=pvc,
@@ -83,31 +83,47 @@ class TestStorageClassReclamespace:
                 raw_block_pv=True,
             )
             self.pod_objs.append(pod_obj)
+        logger.info(f"Created {len(self.pod_objs)} pods")
 
-        # Writing data to the block device
+        logger.test_step("Write 2.0GiB of data to block devices on each pod")
         for pod_obj, pvc_obj in zip(self.pod_objs, pvc_objs):
             storage_path = pod_obj.get_storage_path("block")
-            log.info("Writing 2.0GiB of data to the block device")
+            logger.debug(
+                f"Writing 2.0GiB of data to block device on pod {pod_obj.name}"
+            )
             pod_obj.exec_cmd_on_pod(
                 f"dd if=/dev/zero of={storage_path} bs=1M count=2048 oflag=direct > /dev/null 2>&1 &",
                 shell=True,
             )
 
-        # Wait until all writes are complete and the RBD image shows the expected size.
+        logger.test_step("Verify RBD images show expected size of 2.0GiB after write")
         for pvc_obj in pvc_objs:
+            image_size = get_rbd_image_info(
+                self.pool_name, pvc_obj.get_rbd_image_name
+            ).get("used_size_gib")
+            logger.assertion(
+                f"RBD Image '{pvc_obj.get_rbd_image_name}' size after write: "
+                f"expected='2.0 GiB', actual='{image_size} GiB'"
+            )
             assert self.wait_till_expected_image_size(
                 pvc_obj, 2.0
             ), f"RBD Image '{pvc_obj.get_rbd_image_name}' expected size of '2.0 GiB' does not match the actual size."
 
-        # Delete all pods
+        logger.test_step("Delete all pods and verify reclaimspace reclaims storage")
         for pod_obj in self.pod_objs:
             pod_obj.delete()
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
-        # Wait till reclaim space operations is complete
         for pvc_obj in pvc_objs:
+            image_size = get_rbd_image_info(
+                self.pool_name, pvc_obj.get_rbd_image_name
+            ).get("used_size_gib")
+            logger.assertion(
+                f"RBD Image '{pvc_obj.get_rbd_image_name}' size after reclaim: "
+                f"expected='0.0 GiB', actual='{image_size} GiB'"
+            )
             assert self.wait_till_expected_image_size(
                 pvc_obj, 0.0
             ), f"RBD Image '{pvc_obj.get_rbd_image_name}' expected size of '0.0 GiB' does not match the actual size."
 
-        log.info("ReclaimSpace JOB has ran successfully. ")
+        logger.info("ReclaimSpace job has run successfully")

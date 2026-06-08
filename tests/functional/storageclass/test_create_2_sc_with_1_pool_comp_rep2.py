@@ -13,7 +13,7 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.ocs.constants import CEPHBLOCKPOOL
 from ocs_ci.ocs.exceptions import PoolNotReplicatedAsNeeded, PoolNotCompressedAsExpected
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -50,21 +50,25 @@ class TestMultipleScOnePoolRep2Comp(ManageTest):
 
         """
 
-        log.info("Creating new pool with replica2 and compression")
+        logger.test_step(
+            f"Create RBD pool with replica {self.replica} and aggressive compression"
+        )
         pool_obj = ceph_pool_factory(
             interface=CEPHBLOCKPOOL,
             replica=self.replica,
             compression="aggressive",
         )
 
-        log.info(f"Creating first storageclass with pool {pool_obj.name}")
+        logger.test_step(
+            f"Create two storage classes attached to pool '{pool_obj.name}'"
+        )
         sc_obj1 = storageclass_factory(
             interface=CEPHBLOCKPOOL,
             new_rbd_pool=False,
             pool_name=pool_obj.name,
         )
 
-        log.info(f"Creating second storageclass with pool {pool_obj.name}")
+        logger.info(f"Creating second storage class with pool {pool_obj.name}")
         sc_obj2 = storageclass_factory(
             interface=CEPHBLOCKPOOL,
             new_rbd_pool=False,
@@ -74,12 +78,12 @@ class TestMultipleScOnePoolRep2Comp(ManageTest):
         sc_obj_list = [sc_obj1, sc_obj2]
         pod_obj_list = []
 
-        log.info("Creating PVCs and PODs")
+        logger.test_step("Create PVCs and pods for each storage class and run IO")
         for sc_obj in sc_obj_list:
             pvc_obj = pvc_factory(interface=CEPHBLOCKPOOL, storageclass=sc_obj, size=10)
             pod_obj_list.append(pod_factory(interface=CEPHBLOCKPOOL, pvc=pvc_obj))
 
-        log.info("Running IO on pods")
+        logger.info("Running IO on pods")
         for pod_obj in pod_obj_list:
             pod_obj.run_io(
                 "fs",
@@ -93,7 +97,9 @@ class TestMultipleScOnePoolRep2Comp(ManageTest):
                 readwrite="readwrite",
             )
 
-        log.info(f"validating info on pool {pool_obj.name}")
+        logger.test_step(
+            f"Validate compression and replication on pool '{pool_obj.name}'"
+        )
         validate_rep_result = validate_replica_data(pool_obj.name, self.replica)
         if validate_rep_result is False:
             raise PoolNotReplicatedAsNeeded(

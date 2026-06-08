@@ -92,7 +92,10 @@ class TestPvcUserInterface(object):
 
         pvc_ui_obj = PvcUI()
 
-        # Creating PVC via UI
+        logger.test_step(
+            f"Create PVC via UI with sc={sc_name}, access_mode={access_mode}, "
+            f"size={pvc_size}, vol_mode={vol_mode}"
+        )
         pvc_name = create_unique_resource_name("test", "pvc")
 
         if config.DEPLOYMENT["external_mode"]:
@@ -109,31 +112,41 @@ class TestPvcUserInterface(object):
             condition=constants.STATUS_BOUND, resource_name=pvc_name, timeout=120
         )
 
+        logger.test_step("Verify PVC properties match expected values")
         pvc_objs = get_all_pvc_objs(namespace=project_name)
         pvc = [pvc_obj for pvc_obj in pvc_objs if pvc_obj.name == pvc_name]
 
+        logger.assertion(f"PVC size: expected={pvc_size}, actual={pvc[0].size}")
         assert pvc[0].size == int(pvc_size), (
             f"size error| expected size:{pvc_size} \n "
             f"actual size:{str(pvc[0].size)}"
         )
 
+        logger.assertion(
+            f"PVC access mode: expected='{access_mode}', actual='{pvc[0].get_pvc_access_mode}'"
+        )
         assert pvc[0].get_pvc_access_mode == access_mode, (
             f"access mode error| expected access mode:{access_mode} "
             f"\n actual access mode:{pvc[0].get_pvc_access_mode}"
         )
 
+        logger.assertion(
+            f"PVC storage class: expected='{sc_name}', actual='{pvc[0].backed_sc}'"
+        )
         assert pvc[0].backed_sc == sc_name, (
             f"storage class error| expected storage class:{sc_name} "
             f"\n actual storage class:{pvc[0].backed_sc}"
         )
 
+        logger.assertion(
+            f"PVC volume mode: expected='{vol_mode}', actual='{pvc[0].get_pvc_vol_mode}'"
+        )
         assert pvc[0].get_pvc_vol_mode == vol_mode, (
             f"volume mode error| expected volume mode:{vol_mode} "
             f"\n actual volume mode:{pvc[0].get_pvc_vol_mode}"
         )
 
-        # Verifying PVC via UI
-        logger.info("Verifying PVC Details via UI")
+        logger.test_step("Verify PVC details via UI")
         pvc_ui_obj.verify_pvc_ui(
             pvc_size=pvc_size,
             access_mode=access_mode,
@@ -142,10 +155,9 @@ class TestPvcUserInterface(object):
             pvc_name=pvc_name,
             project_name=project_name,
         )
-        logger.info("PVC Details Verified via UI..!!")
+        logger.info("PVC details verified via UI")
 
-        # Creating Pod via CLI
-        logger.info("Creating Pod")
+        logger.test_step("Create pod and wait for Running state")
         if sc_name in constants.DEFAULT_STORAGECLASS_RBD:
             interface_type = constants.CEPHBLOCKPOOL
         elif sc_name in constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
@@ -160,7 +172,9 @@ class TestPvcUserInterface(object):
             raw_block_pv=vol_mode == constants.VOLUME_MODE_BLOCK,
         )
 
-        logger.info(f"Waiting for Pod: state= {constants.STATUS_RUNNING}")
+        logger.info(
+            f"Waiting for pod {new_pod.name} to reach {constants.STATUS_RUNNING} state"
+        )
         wait_for_resource_state(
             resource=new_pod, state=constants.STATUS_RUNNING, timeout=120
         )
@@ -168,21 +182,22 @@ class TestPvcUserInterface(object):
         # Calling the Teardown Factory Method to make sure Pod is deleted
         teardown_factory(new_pod)
 
-        # Expanding the PVC
-        logger.info("Pvc Resizing")
+        logger.test_step(f"Resize PVC from {pvc_size} to {int(pvc_size) + 3} GiB")
         new_size = int(pvc_size) + 3
         pvc_ui_obj.pvc_resize_ui(
             pvc_name=pvc_name, new_size=new_size, project_name=project_name
         )
 
+        logger.assertion(
+            f"PVC new size > old size: expected={new_size} > {pvc_size}, actual={new_size > int(pvc_size)}"
+        )
         assert new_size > int(
             pvc_size
         ), f"New size of the PVC cannot be less than existing size: new size is {new_size})"
 
         self.pvc_loc = locators_for_current_ocp_version()["pvc"]
 
-        # Verifying PVC expansion
-        logger.info("Verifying PVC resize")
+        logger.info("Verifying PVC resize via UI")
         expected_capacity = f"{new_size} GiB"
         pvc_resize = pvc_ui_obj.verify_pvc_resize_ui(
             project_name=project_name,
@@ -190,14 +205,11 @@ class TestPvcUserInterface(object):
             expected_capacity=expected_capacity,
         )
 
+        logger.assertion(f"PVC resize result: expected=True, actual={pvc_resize}")
         assert pvc_resize, "PVC resize failed"
-        logger.info(
-            "Pvc resize verified..!!"
-            f"New Capacity after PVC resize is {expected_capacity}"
-        )
+        logger.info(f"PVC resize verified. New capacity: {expected_capacity}")
 
-        # Running FIO
-        logger.info("Execute FIO on a Pod")
+        logger.test_step("Run FIO on pod")
         if vol_mode == constants.VOLUME_MODE_BLOCK:
             storage_type = constants.WORKLOAD_STORAGE_TYPE_BLOCK
         else:
@@ -211,14 +223,13 @@ class TestPvcUserInterface(object):
         )
 
         get_fio_rw_iops(new_pod)
-        logger.info("FIO execution on Pod successfully completed..!!")
+        logger.info("FIO execution on pod completed successfully")
 
-        # Checking if the Pod is deleted or not
+        logger.test_step("Delete pod and PVC via UI")
         new_pod.delete(wait=True)
         new_pod.ocp.wait_for_delete(resource_name=new_pod.name)
 
-        # Deleting the PVC via UI
-        logger.info(f"Delete {pvc_name} pvc")
+        logger.info(f"Deleting PVC {pvc_name} via UI")
         pvc_ui_obj.delete_pvc_ui(pvc_name, project_name)
 
         pvc[0].ocp.wait_for_delete(pvc_name, timeout=120)
@@ -277,16 +288,15 @@ class TestPvcUserInterface(object):
             elif sc_name == constants.CEPHBLOCKPOOL_SC:
                 sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
 
-        # Creating PVC from UI
         pvc_name = create_unique_resource_name("test", "pvc")
+        logger.test_step(f"Create PVC '{pvc_name}' via UI with sc={sc_name}")
         pvc_ui_obj.create_pvc_ui(
             project_name, sc_name, pvc_name, access_mode, pvc_size, vol_mode
         )
 
         teardown_factory(get_pvc_objs(pvc_names=[pvc_name], namespace=project_name)[0])
 
-        # Verifying PVC details in UI
-        logger.info("Verifying PVC details in UI")
+        logger.test_step("Verify PVC details in UI")
         pvc_ui_obj.verify_pvc_ui(
             pvc_size=pvc_size,
             access_mode=access_mode,
@@ -295,9 +305,9 @@ class TestPvcUserInterface(object):
             pvc_name=pvc_name,
             project_name=project_name,
         )
-        logger.info("Verified PVC details in UI")
+        logger.info(f"PVC {pvc_name} details verified in UI")
 
-        # Clone PVC from UI
+        logger.test_step("Clone PVC from UI")
         clone_pvc_name = f"{pvc_name}-clone"
         pvc_ui_obj.pvc_clone_ui(
             project_name=project_name,
@@ -310,8 +320,7 @@ class TestPvcUserInterface(object):
             get_pvc_objs(pvc_names=[clone_pvc_name], namespace=project_name)[0]
         )
 
-        # Verifying cloned PVC details in UI
-        logger.info("Verifying cloned PVC details in UI")
+        logger.test_step("Verify cloned PVC details in UI")
         pvc_ui_obj.verify_pvc_ui(
             pvc_size=pvc_size,
             access_mode=clone_access_mode,
@@ -320,4 +329,4 @@ class TestPvcUserInterface(object):
             pvc_name=clone_pvc_name,
             project_name=project_name,
         )
-        logger.info("Verified cloned PVC details in UI")
+        logger.info(f"Cloned PVC {clone_pvc_name} details verified in UI")

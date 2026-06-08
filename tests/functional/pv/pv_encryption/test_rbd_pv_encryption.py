@@ -27,7 +27,7 @@ from semantic_version import Version
 from ocs_ci.ocs.node import verify_crypt_device_present_onnode
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Set the arg values based on KMS provider.
 if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
@@ -99,9 +99,9 @@ class TestRbdPvEncryption(ManageTest):
         Setup csi-kms-connection-details configmap
 
         """
-        log.info("Setting up csi-kms-connection-details configmap")
+        logger.info("Setting up csi-kms-connection-details configmap")
         self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
-        log.info("csi-kms-connection-details setup successful")
+        logger.info("csi-kms-connection-details setup successful")
 
     def test_rbd_pv_encryption(
         self,
@@ -116,6 +116,7 @@ class TestRbdPvEncryption(ManageTest):
         Test to verify creation and deletion of encrypted RBD PVC
 
         """
+        logger.test_step("Create project and encryption-enabled RBD storage class")
         # Create a project
         proj_obj = project_factory()
 
@@ -131,6 +132,7 @@ class TestRbdPvEncryption(ManageTest):
             self.kms.vault_path_token = self.kms.generate_vault_token()
             self.kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
 
+        logger.test_step("Create RBD PVCs with volume mode Block and create pods")
         # Create RBD PVCs with volume mode Block
         pvc_size = 5
         pvc_objs = multi_pvc_factory(
@@ -156,6 +158,7 @@ class TestRbdPvEncryption(ManageTest):
             status=constants.STATUS_RUNNING,
         )
 
+        logger.test_step("Verify encryption keys are created in Vault for each PVC")
         # Verify if the key is created in Vault
         vol_handles = []
         for pvc_obj in pvc_objs:
@@ -168,12 +171,13 @@ class TestRbdPvEncryption(ManageTest):
                 if kms.is_key_present_in_path(
                     key=vol_handle, path=self.kms.vault_backend_path
                 ):
-                    log.info(f"Vault: Found key for {pvc_obj.name}")
+                    logger.info(f"Vault: Found key for {pvc_obj.name}")
                 else:
                     raise ResourceNotFoundError(
                         f"Vault: Key not found for {pvc_obj.name}"
                     )
 
+        logger.test_step("Verify encrypted devices on nodes and run IO on all pods")
         # Verify whether encrypted device is present inside the pod and run IO
         for vol_handle, pod_obj in zip(vol_handles, pod_objs):
             node = pod_obj.get_node()
@@ -187,13 +191,14 @@ class TestRbdPvEncryption(ManageTest):
                 io_direction="write",
                 runtime=60,
             )
-        log.info("IO started on all pods")
+        logger.info("IO started on all pods")
 
         # Wait for IO completion
         for pod_obj in pod_objs:
             pod_obj.get_fio_results()
-        log.info("IO completed on all pods")
+        logger.info("IO completed on all pods")
 
+        logger.test_step("Delete pods and PVCs")
         # Delete the pod
         for pod_obj in pod_objs:
             pod_obj.delete()
@@ -205,6 +210,7 @@ class TestRbdPvEncryption(ManageTest):
             pvc_obj.delete()
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name)
 
+        logger.test_step("Verify Vault encryption keys are deleted after PVC removal")
         if kms_provider == constants.VAULT_KMS_PROVIDER:
             # Verify whether the key is deleted in Vault
             if kv_version == "v1" or Version.coerce(
@@ -214,7 +220,7 @@ class TestRbdPvEncryption(ManageTest):
                     if not kms.is_key_present_in_path(
                         key=vol_handle, path=self.kms.vault_backend_path
                     ):
-                        log.info(f"Vault: Key deleted for {vol_handle}")
+                        logger.info(f"Vault: Key deleted for {vol_handle}")
                     else:
                         raise KMSResourceCleaneupError(
                             f"Vault: Key deletion failed for {vol_handle}"

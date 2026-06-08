@@ -13,7 +13,7 @@ from tests.fixtures import (
     create_cephfs_secret,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 SC_OBJ = None
 
@@ -44,7 +44,7 @@ class TestVerifyAllFieldsInScYamlWithOcDescribe(ManageTest):
         Test function to create RBD and CephFS SC, and match with oc describe sc
         output
         """
-        log.info(f"Creating a {interface} storage class")
+        logger.test_step(f"Create {interface} storage class")
         self.sc_data = templating.load_yaml(
             getattr(constants, f"CSI_{interface}_STORAGECLASS_YAML")
         )
@@ -53,22 +53,29 @@ class TestVerifyAllFieldsInScYamlWithOcDescribe(ManageTest):
         )
         global SC_OBJ
         SC_OBJ = OCS(**self.sc_data)
-        assert SC_OBJ.create()
-        log.info(f"{interface}Storage class: {SC_OBJ.name} created successfully")
-        log.info(self.sc_data)
+        create_result = SC_OBJ.create()
+        logger.assertion(
+            f"Storage class creation: expected=truthy, actual={bool(create_result)}"
+        )
+        assert create_result
+        logger.info(f"{interface} Storage class {SC_OBJ.name} created successfully")
+        logger.debug(f"Storage class data: {self.sc_data}")
 
-        # Get oc describe sc output
+        logger.test_step("Get oc describe output and compare with SC yaml")
         describe_out = SC_OBJ.get("sc")
-        log.info(describe_out)
+        logger.debug(f"oc describe sc output: {describe_out}")
 
-        # Confirm that sc yaml details matches oc describe sc output
         value = {k: describe_out[k] for k in set(describe_out) - set(self.sc_data)}
+        logger.assertion(
+            f"SC yaml vs oc describe diff: expected=only volumeBindingMode=Immediate, "
+            f"actual={value}"
+        )
         assert (
             len(value) == 1 and value["volumeBindingMode"] == "Immediate"
         ), "OC describe sc output didn't match storage class yaml"
-        log.info("OC describe sc output matches storage class yaml")
-        # Delete Storage Class
-        log.info(f"Deleting Storageclass: {SC_OBJ.name}")
+        logger.info("OC describe sc output matches storage class yaml")
+
+        logger.test_step(f"Delete storage class {SC_OBJ.name}")
         assert SC_OBJ.delete()
-        log.info(f"Storage Class: {SC_OBJ.name} deleted successfully")
+        logger.info(f"Storage class {SC_OBJ.name} deleted successfully")
         del SC_OBJ

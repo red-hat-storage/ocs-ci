@@ -17,7 +17,7 @@ from ocs_ci.helpers import disruption_helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.framework import config
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -66,8 +66,7 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
         disruption_ops = [disruption_helpers.Disruptions() for _ in pods_to_delete]
         file_name = "file_snap"
 
-        # Run IO
-        log.info("Running fio on all pods to create a file")
+        logger.test_step(f"Run IO on all {len(self.pods)} pods and calculate md5sum")
         for pod_obj in self.pods:
             storage_type = (
                 "block"
@@ -83,10 +82,10 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
 
-        log.info("Wait for IO to complete on pods")
+        logger.info("Waiting for IO to complete on all pods")
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
-            log.info(f"Verified IO on pod {pod_obj.name}")
+            logger.debug(f"IO completed on pod {pod_obj.name}")
             # Calculate md5sum
             file_name_pod = (
                 file_name
@@ -98,8 +97,8 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 file_name_pod,
                 pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
-            log.info(f"md5sum obtained from pod {pod_obj.name}")
-        log.info("IO is successful on all pods")
+            logger.debug(f"md5sum obtained from pod {pod_obj.name}")
+        logger.info("IO is successful on all pods")
 
         # Select the pods to be deleted
         for disruption, pod_type in zip(disruption_ops, pods_to_delete):
@@ -109,14 +108,14 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 leader_type="snapshotter" if "provisioner" in pod_type else "",
             )
 
-        log.info("Start taking snapshot of all PVCs.")
+        logger.test_step("Take snapshots of all PVCs while deleting csi/rook pods")
         for pvc_obj in self.pvcs:
-            log.info(f"Taking snapshot of PVC {pvc_obj.name}")
+            logger.debug(f"Taking snapshot of PVC {pvc_obj.name}")
             pvc_obj.snap_proc = executor.submit(snapshot_factory, pvc_obj, wait=False)
-        log.info("Started taking snapshot of all PVCs.")
+        logger.info(f"Started taking snapshot of all {len(self.pvcs)} PVCs")
 
         # Delete the pods 'pods_to_delete'
-        log.info(f"Deleting pods {pods_to_delete}")
+        logger.info(f"Deleting pods {pods_to_delete}")
         for disruption in disruption_ops:
             disruption.delete_proc = executor.submit(disruption.delete_resource)
 
@@ -130,8 +129,7 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
             snap_obj.md5sum = pvc_obj.md5sum
             snap_objs.append(snap_obj)
 
-        # Wait for snapshots to be Ready
-        log.info("Waiting for all snapshots to be Ready")
+        logger.test_step("Wait for all snapshots to reach Ready state")
         for snap_obj in snap_objs:
             snap_obj.ocp.wait_for_resource(
                 condition="true",
@@ -139,9 +137,9 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 column=constants.STATUS_READYTOUSE,
                 timeout=300,
             )
-            log.info(f"Snapshot {snap_obj.name} is Ready")
+            logger.debug(f"Snapshot {snap_obj.name} is Ready")
             snap_obj.reload()
-        log.info("All snapshots are Ready")
+        logger.info(f"All {len(snap_objs)} snapshots are Ready")
 
         # Select the pods to be deleted
         for disruption, pod_type in zip(disruption_ops, pods_to_delete):
@@ -149,10 +147,9 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
 
         restore_pvc_objs = []
 
-        # Create PVCs out of the snapshots
-        log.info("Start creating new PVCs from snapshots")
+        logger.test_step("Restore PVCs from snapshots while deleting csi/rook pods")
         for snap_obj in snap_objs:
-            log.info(f"Creating a PVC from snapshot {snap_obj.name}")
+            logger.debug(f"Creating a PVC from snapshot {snap_obj.name}")
             snap_obj.restore_proc = executor.submit(
                 snapshot_restore_factory,
                 snapshot_obj=snap_obj,
@@ -161,10 +158,10 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 access_mode=snap_obj.parent_access_mode,
                 status="",
             )
-        log.info("Started creating new PVCs from snapshots")
+        logger.info("Started creating new PVCs from snapshots")
 
         # Delete the pods 'pods_to_delete'
-        log.info(f"Deleting pods {pods_to_delete}")
+        logger.info(f"Deleting pods {pods_to_delete}")
         for disruption in disruption_ops:
             disruption.delete_proc = executor.submit(disruption.delete_resource)
 
@@ -175,25 +172,23 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
         for snap_obj in snap_objs:
             restore_pvc_obj = snap_obj.restore_proc.result()
             restore_pvc_objs.append(restore_pvc_obj)
-            log.info(
-                f"Created PVC {restore_pvc_obj.name} from snapshot " f"{snap_obj.name}"
+            logger.debug(
+                f"Created PVC {restore_pvc_obj.name} from snapshot {snap_obj.name}"
             )
-        log.info("Created new PVCs from all the snapshots")
+        logger.info(f"Created {len(restore_pvc_objs)} new PVCs from snapshots")
 
-        # Confirm that the restored PVCs are Bound
-        log.info("Verifying the restored PVCs are Bound")
+        logger.test_step("Verify restored PVCs reach Bound state")
         for pvc_obj in restore_pvc_objs:
             wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=300
             )
             pvc_obj.reload()
             pvc_obj.volume_mode = pvc_obj.data["spec"]["volumeMode"]
-        log.info("Verified: Restored PVCs are Bound.")
+        logger.info("Verified: Restored PVCs are Bound.")
 
         restore_pod_objs = []
 
-        # Attach the restored PVCs to pods
-        log.info("Attach the restored PVCs to pods")
+        logger.test_step("Attach restored PVCs to pods and verify Running state")
         for pvc_obj in restore_pvc_objs:
             if pvc_obj.volume_mode == constants.VOLUME_MODE_BLOCK:
                 pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
@@ -207,16 +202,14 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 raw_block_pv=pvc_obj.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
             restore_pod_objs.append(restore_pod_obj)
-        log.info("Attach the restored PVCs to pods")
+        logger.info(f"Attached {len(restore_pod_objs)} restored PVCs to pods")
 
-        # Verify the new pods are running
-        log.info("Verify the new pods are running")
+        logger.info("Verifying new pods are running")
         for pod_obj in restore_pod_objs:
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
-        log.info("Verified: New pods are running")
+        logger.info("Verified: New pods are running")
 
-        # Verify md5sum
-        log.info("Verify md5sum")
+        logger.test_step("Verify md5sum data integrity on restored pods")
         for pod_obj in restore_pod_objs:
             file_name_pod = (
                 file_name
@@ -229,14 +222,13 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 pod_obj.pvc.snapshot.md5sum,
                 pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
-            log.info(
+            logger.debug(
                 f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
-                f"matches with the original md5sum"
+                f"matches the original md5sum"
             )
-        log.info("Data integrity check passed on all pods")
+        logger.info("Data integrity check passed on all pods")
 
-        # Run IO
-        log.info("Running IO on new pods")
+        logger.test_step("Run IO on restored pods to verify usability")
         for pod_obj in restore_pod_objs:
             storage_type = (
                 "block"
@@ -252,8 +244,8 @@ class TestResourceDeletionDuringSnapshotRestore(ManageTest):
                 direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
 
-        log.info("Wait for IO to complete on new pods")
+        logger.info("Waiting for IO to complete on new pods")
         for pod_obj in restore_pod_objs:
             pod_obj.get_fio_results()
-            log.info(f"Verified IO on new pod {pod_obj.name}")
-        log.info("IO to completed on new pods")
+            logger.debug(f"IO completed on new pod {pod_obj.name}")
+        logger.info("IO completed on all restored pods")

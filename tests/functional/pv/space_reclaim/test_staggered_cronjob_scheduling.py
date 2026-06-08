@@ -112,9 +112,12 @@ class TestStaggeredCronjobScheduling(ManageTest):
 
         """
         # Step 1: Verify default stagger window
-        logger.info("Step 1: Verifying default stagger window value")
+        logger.test_step("Verify default stagger window value in ConfigMap")
         current_window = get_csi_addons_config_value(
             CRONJOB_STAGGER_WINDOW_KEY, default=CRONJOB_STAGGER_WINDOW_DEFAULT
+        )
+        logger.assertion(
+            f"Stagger window: expected='{CRONJOB_STAGGER_WINDOW_DEFAULT}', actual='{current_window}'"
         )
         assert current_window == CRONJOB_STAGGER_WINDOW_DEFAULT, (
             f"Expected default stagger window '{CRONJOB_STAGGER_WINDOW_DEFAULT}', "
@@ -122,7 +125,9 @@ class TestStaggeredCronjobScheduling(ManageTest):
         )
 
         # Step 2: Create StorageClass with short-interval schedule
-        logger.info("Step 2: Creating StorageClass with schedule: %s", SHORT_SCHEDULE)
+        logger.test_step(
+            f"Create StorageClass with short-interval schedule: {SHORT_SCHEDULE}"
+        )
         sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             annotations={
@@ -131,7 +136,9 @@ class TestStaggeredCronjobScheduling(ManageTest):
         )
 
         # Step 3: Create PVCs and pods
-        logger.info("Step 3: Creating %d RBD PVCs (size=%dGiB)", NUM_PVCS, PVC_SIZE_GIB)
+        logger.test_step(
+            f"Create {NUM_PVCS} RBD PVCs (size={PVC_SIZE_GIB}GiB) and attach pods"
+        )
         pvc_objs = multi_pvc_factory(
             size=PVC_SIZE_GIB,
             num_of_pvc=NUM_PVCS,
@@ -140,7 +147,7 @@ class TestStaggeredCronjobScheduling(ManageTest):
             wait_each=True,
         )
 
-        logger.info("Step 3: Creating pods for PVCs")
+        logger.info(f"Creating pods for {len(pvc_objs)} PVCs")
         for pvc_obj in pvc_objs:
             pod_factory(
                 interface=constants.CEPHBLOCKPOOL,
@@ -150,18 +157,23 @@ class TestStaggeredCronjobScheduling(ManageTest):
             )
 
         # Step 4: Wait for ReclaimSpaceCronJob creation per PVC
-        logger.info("Step 4: Waiting for ReclaimSpaceCronJob creation")
+        logger.test_step(
+            "Wait for ReclaimSpaceCronJob creation and verify schedule and UIDs"
+        )
         cronjob_map = {}
         for pvc_obj in pvc_objs:
             cronjob_obj = self._wait_for_cronjob(pvc_obj)
             cronjob_map[pvc_obj.name] = cronjob_obj
 
         # Steps 5-6: Verify spec.schedule unchanged and collect unique UIDs
-        logger.info("Steps 5-6: Verifying schedule and collecting CronJob UIDs")
+        logger.info("Verifying schedule and collecting CronJob UIDs")
         uids = set()
         for pvc_name, cj_obj in cronjob_map.items():
             cj_data = cj_obj.get()
             actual_schedule = cj_data["spec"]["schedule"]
+            logger.assertion(
+                f"CronJob schedule for PVC '{pvc_name}': expected='{SHORT_SCHEDULE}', actual='{actual_schedule}'"
+            )
             assert actual_schedule == SHORT_SCHEDULE, (
                 f"CronJob for PVC '{pvc_name}' has schedule '{actual_schedule}', "
                 f"expected '{SHORT_SCHEDULE}'"
@@ -174,12 +186,17 @@ class TestStaggeredCronjobScheduling(ManageTest):
                 uid,
             )
             uids.add(uid)
+        logger.assertion(
+            f"Unique CronJob UIDs: expected={NUM_PVCS}, actual={len(uids)}"
+        )
         assert (
             len(uids) == NUM_PVCS
         ), f"Expected {NUM_PVCS} unique CronJob UIDs, got {len(uids)}: {uids}"
 
         # Step 7: Wait for ReclaimSpaceJobs and compare timestamps
-        logger.info("Step 7: Waiting for ReclaimSpaceJobs to appear")
+        logger.test_step(
+            "Wait for ReclaimSpaceJobs and verify staggered execution timestamps"
+        )
         pvc_namespace = pvc_objs[0].namespace
         cronjob_names = [cj_obj.resource_name for cj_obj in cronjob_map.values()]
 
@@ -187,17 +204,20 @@ class TestStaggeredCronjobScheduling(ManageTest):
         self._assert_stagger_spread(timestamps)
 
         # Step 8: Disable stagger and verify CronJobs survive
-        logger.info("Step 8: Disabling stagger (window=0)")
+        logger.test_step("Disable stagger (window=0) and verify CronJobs survive")
         update_csi_addons_config(CRONJOB_STAGGER_WINDOW_KEY, "0")
 
         readback = get_csi_addons_config_value(
             CRONJOB_STAGGER_WINDOW_KEY, default=CRONJOB_STAGGER_WINDOW_DEFAULT
         )
+        logger.assertion(
+            f"Stagger window after disable: expected='0', actual='{readback}'"
+        )
         assert (
             readback == "0"
         ), f"Expected stagger window '0' after disable, got '{readback}'"
 
-        logger.info("Step 8: Verifying CronJobs survive stagger disable")
+        logger.info("Verifying CronJobs survive stagger disable")
         for pvc_name, cj_obj in cronjob_map.items():
             cj_data = cj_obj.get()
             assert (

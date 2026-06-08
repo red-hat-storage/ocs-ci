@@ -61,11 +61,10 @@ def preconditions_rbd_pool_created_associated_to_sc(
         size=10,
         status=pvc_status,
     )
-    logger.info(f"PVC: {pvc_obj.name} created successfully using " f"{sc_obj.name}")
-    logger.info(f"Creating an app pod and mount {pvc_obj.name}")
+    logger.info(f"PVC: {pvc_obj.name} created successfully using {sc_obj.name}")
+    logger.info(f"Creating an app pod and mounting {pvc_obj.name}")
     pod_obj = pod_factory(interface=interface_type, pvc=pvc_obj)
     logger.info(f"{pod_obj.name} created successfully and mounted {pvc_obj.name}")
-    # Run IO on each app pod for sometime
     logger.info(f"Running FIO on {pod_obj.name}")
     pod_obj.run_io(
         "fs",
@@ -81,7 +80,7 @@ def preconditions_rbd_pool_created_associated_to_sc(
     cluster_used_space = get_percent_used_capacity()
     logger.info(
         f"Cluster used space with replica size {replica}, "
-        f"compression mode {compression}={cluster_used_space}"
+        f"compression mode {compression} = {cluster_used_space}"
     )
     cbp_name = sc_obj.get().get("parameters").get("pool")
     return cbp_name
@@ -152,6 +151,10 @@ class TestDeleteRbdPool(ManageTest):
 
         """
 
+        logger.test_step(
+            f"Create StorageClass with pool (replica={replica}, "
+            f"compression={compression}, binding={volume_binding_mode})"
+        )
         cbp_name = preconditions_rbd_pool_created_associated_to_sc(
             compression,
             pod_factory,
@@ -162,14 +165,19 @@ class TestDeleteRbdPool(ManageTest):
             volume_binding_mode,
         )
 
+        logger.test_step("Distribute storage classes to all consumers")
         distr_res = distribute_storage_classes_to_all_consumers_factory()
         if isinstance(distr_res, bool):
+            logger.assertion(
+                f"Storage classes distribution: expected='True', actual='{distr_res}'"
+            )
             assert distr_res, (
                 "After distribution storage classes in clients inventories and on provider are not "
                 "matching"
             )
 
-        logger.info(f"cephblockpool name is {cbp_name}. Deleting it now with CLI")
+        logger.test_step(f"Attempt to delete CephBlockPool {cbp_name}")
+        logger.info(f"CephBlockPool name is {cbp_name}. Attempting deletion via CLI")
         try:
             OCP().exec_oc_cmd(
                 f"delete cephblockpool {cbp_name} -n {config.ENV_DATA.get('cluster_namespace')}",
@@ -177,10 +185,11 @@ class TestDeleteRbdPool(ManageTest):
             )
         except subprocess.TimeoutExpired:
             logger.info(
-                f"cephblockpool {cbp_name} deletion failed as expected as it is referenced by storageclass "
-                "and data loss may happen"
+                f"CephBlockPool {cbp_name} deletion timed out as expected - "
+                f"it is referenced by a StorageClass and data loss may happen"
             )
 
+        logger.test_step(f"Verify CephBlockPool {cbp_name} is still Ready")
         ceph_cluster = CephCluster()
         res = ceph_cluster.get_blockpool_status(cbp_name)
         if not res:
@@ -188,9 +197,14 @@ class TestDeleteRbdPool(ManageTest):
                 f"cephblockpool '{cbp_name}' state is not ready after deletion. "
                 "cephblockpool deletion should fail if referenced by storageclass"
             )
+        logger.info(f"CephBlockPool {cbp_name} is still in Ready state")
 
+        logger.test_step("Verify storage classes distribution after deletion attempt")
         distr_res = distribute_storage_classes_to_all_consumers_factory()
         if isinstance(distr_res, bool):
+            logger.assertion(
+                f"Storage classes distribution after deletion: expected='True', actual='{distr_res}'"
+            )
             assert distr_res, (
                 "After distribution storage classes in clients inventories and on provider are not "
                 "matching"
@@ -224,6 +238,10 @@ class TestDeleteRbdPool(ManageTest):
         pod_factory,
         setup_ui,
     ):
+        logger.test_step(
+            f"Create StorageClass with pool for UI test (replica={replica}, "
+            f"compression={compression})"
+        )
         cbp_name = preconditions_rbd_pool_created_associated_to_sc(
             compression,
             pod_factory,
@@ -233,26 +251,35 @@ class TestDeleteRbdPool(ManageTest):
             storageclass_factory_class,
             volume_binding_mode,
         )
+
+        logger.test_step(f"Attempt to delete block pool {cbp_name} via UI")
         blocking_pool_tab = PageNavigator().navigate_storage_pools_page()
+        logger.assertion(
+            f"UI block pool deletion for {cbp_name}: expected='False' (cannot be deleted)"
+        )
         assert not blocking_pool_tab.delete_block_pool(
             cbp_name, cannot_be_deleted=True
         ), "blocking pool attached by storage class was deleted, no Warning message was shown"
 
         sleep_time = 15
-        logger.info(
-            f"Let UI update the pool in case it is removed from interface {sleep_time}s"
-        )
+        logger.info(f"Waiting {sleep_time}s for UI to update pool state")
         time.sleep(sleep_time)
 
-        logger.info("Verify that the pool is still in UI")
+        logger.test_step(f"Verify block pool {cbp_name} still exists in UI and CLI")
         block_pool_present_ui = blocking_pool_tab.is_block_pool_exist(cbp_name)
+        logger.info(f"Block pool present in UI: {block_pool_present_ui}")
 
-        logger.info("Verify that the pool is still in CLI")
         ceph_cluster = CephCluster()
         block_pool_present_cli = ceph_cluster.get_blockpool_status(cbp_name)
+        logger.info(f"Block pool present in CLI: {block_pool_present_cli}")
 
+        logger.assertion(
+            f"Block pool {cbp_name} existence: "
+            f"expected_ui='True', actual_ui='{block_pool_present_ui}', "
+            f"expected_cli='True', actual_cli='{block_pool_present_cli}'"
+        )
         assert block_pool_present_ui and block_pool_present_cli, (
-            "blocking pool attached by storage class was deleted"
+            "blocking pool attached by storage class was deleted "
             f"UI: {block_pool_present_ui}, "
             f"CLI: {block_pool_present_cli}"
         )

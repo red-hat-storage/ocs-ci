@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers.helpers import wait_for_resource_state
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def validate_permissions(pod_obj):
@@ -22,7 +22,7 @@ def validate_permissions(pod_obj):
     cmd_output = cmd_output.split()
     assert "root" in cmd_output[4] and cmd_output[13], "Owner is not set to root "
     assert "9999" in cmd_output[5] and cmd_output[14], "Owner group is not set to 9999"
-    log.info("FSGroup is correctly set on subPath volume for CephFS CSI ")
+    logger.info("FSGroup is correctly set on subPath volume for CephFS CSI ")
 
 
 @green_squad
@@ -44,6 +44,7 @@ class TestToVerifyfsgroupSetOnSubpathVolumeForCephfsPVC(ManageTest):
 
         """
 
+        logger.test_step("Create CephFS PVC and pod with SCC permissions")
         command = [
             "sh",
             "-c",
@@ -96,13 +97,14 @@ class TestToVerifyfsgroupSetOnSubpathVolumeForCephfsPVC(ManageTest):
             timeout=360,
             sleep=3,
         )
+        logger.test_step("Validate owner/group permissions on subPath volume")
         validate_permissions(pod)
 
-        # Respin app pod and validate the permissions again
-        log.info(f"Deleting pod {pod.name}")
+        logger.test_step("Respin pod and validate permissions again")
+        logger.info(f"Deleting pod {pod.name}")
         pod.delete()
         pod.ocp.wait_for_delete(resource_name=pod.name)
-        log.info("Creating pod and mounting the same PVC")
+        logger.info("Creating pod and mounting the same PVC")
         pod.create()
         wait_for_resource_state(
             resource=pod, state=constants.STATUS_RUNNING, timeout=300

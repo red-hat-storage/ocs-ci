@@ -45,7 +45,7 @@ from ocs_ci.krkn_chaos.noobaa_chaos_helper import (
     get_unique_noobaa_nodes,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -113,7 +113,7 @@ class TestKrknNooBaaNodeDisruption:
         cloud_type = get_krkn_cloud_type()
 
         # Get node hosting the target component
-        log.info(f"Identifying node hosting NooBaa {target_component}")
+        logger.info(f"Identifying node hosting NooBaa {target_component}")
 
         if target_component == "db_primary":
             target_node = get_node_hosting_noobaa_db_primary()
@@ -130,7 +130,7 @@ class TestKrknNooBaaNodeDisruption:
         else:
             raise ValueError(f"Unknown target component: {target_component}")
 
-        log.info(f"Target node for {target_component}: {target_node}")
+        logger.info(f"Target node for {target_component}: {target_node}")
 
         # Use helper function for standardized test start logging
         log_test_start(
@@ -143,7 +143,7 @@ class TestKrknNooBaaNodeDisruption:
         )
 
         # WORKLOAD SETUP - Start Warp S3 workloads before disruption
-        log.info("Setting up Warp S3 workloads for NooBaa node disruption testing")
+        logger.info("Setting up Warp S3 workloads for NooBaa node disruption testing")
         workload_ops.setup_workloads()
 
         # Register finalizer for cleanup
@@ -160,7 +160,7 @@ class TestKrknNooBaaNodeDisruption:
             # =================================================================
             # NODE DISRUPTION SCENARIO CONFIGURATION
             # =================================================================
-            log.info(
+            logger.info(
                 f"Creating node disruption configuration: {action} on node {target_node}"
             )
 
@@ -210,7 +210,7 @@ class TestKrknNooBaaNodeDisruption:
                 scenarios=[scenario_params],
             )
 
-            log.info(f"Created scenario file: {scenario_file}")
+            logger.info(f"Created scenario file: {scenario_file}")
 
             # Add scenario to Krkn config
             krkn_config.add_scenario("node_scenarios", scenario_file)
@@ -218,7 +218,7 @@ class TestKrknNooBaaNodeDisruption:
             # =================================================================
             # EXECUTION: Node disruption
             # =================================================================
-            log.info(
+            logger.info(
                 f"Executing node disruption: {action} on {target_node} hosting {target_component}"
             )
 
@@ -232,7 +232,7 @@ class TestKrknNooBaaNodeDisruption:
             krkn_runner.wait_for_completion(check_interval=60)
             chaos_output = krkn_runner.get_chaos_data()
 
-            log.info(f"Node disruption completed for {target_component}")
+            logger.info(f"Node disruption completed for {target_component}")
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
@@ -242,15 +242,15 @@ class TestKrknNooBaaNodeDisruption:
             )
             raise
         except Exception as e:
-            log.error(
-                f"❌ NooBaa node disruption failed for {target_component} with {action}: {e}"
+            logger.exception(
+                f"NooBaa node disruption failed for {target_component} with {action}: {e}"
             )
             raise
 
         # =================================================================
         # RESULTS ANALYSIS
         # =================================================================
-        log.info(f"NOOBAA NODE DISRUPTION RESULTS ({target_component}):")
+        logger.info(f"NOOBAA NODE DISRUPTION RESULTS ({target_component}):")
 
         # Analyze results
         total_executed, successful_executed, failing_executed = (
@@ -265,7 +265,7 @@ class TestKrknNooBaaNodeDisruption:
             (successful_executed / total_executed * 100) if total_executed > 0 else 0
         )
 
-        log.info(
+        logger.info(
             f"EXECUTION RESULTS: Component: {target_component}, "
             f"Action: {action}, "
             f"Node: {target_node}, "
@@ -303,10 +303,14 @@ class TestKrknNooBaaNodeDisruption:
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             None, f"NooBaa node disruption ({target_component})"
         )
+        logger.assertion(
+            f"Ceph crashes after NooBaa node disruption ({target_component}): "
+            f"expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🏆 NooBaa node disruption test for {target_component} completed successfully! "
+        logger.info(
+            f"NooBaa node disruption test for {target_component} completed successfully. "
             f"Node {target_node} recovered with {overall_success_rate:.1f}% success rate."
         )
 
@@ -349,9 +353,9 @@ class TestKrknNooBaaNodeDisruption:
         cloud_type = get_krkn_cloud_type()
 
         # Get node hosting NooBaa DB primary
-        log.info("Identifying node hosting NooBaa database primary pod")
+        logger.info("Identifying node hosting NooBaa database primary pod")
         target_node = get_node_hosting_noobaa_db_primary()
-        log.info(f"Target node: {target_node}")
+        logger.info(f"Target node: {target_node}")
 
         # Use helper function for standardized test start logging
         log_test_start(
@@ -363,7 +367,7 @@ class TestKrknNooBaaNodeDisruption:
         )
 
         # WORKLOAD SETUP
-        log.info("Setting up Warp S3 workloads for repeated node reboot testing")
+        logger.info("Setting up Warp S3 workloads for repeated node reboot testing")
         workload_ops.setup_workloads()
 
         # Register finalizer for cleanup
@@ -380,7 +384,7 @@ class TestKrknNooBaaNodeDisruption:
             # =================================================================
             # REPEATED NODE REBOOT SCENARIO
             # =================================================================
-            log.info(
+            logger.info(
                 f"Creating repeated node reboot configuration: {iterations} iterations on {target_node}"
             )
 
@@ -424,7 +428,7 @@ class TestKrknNooBaaNodeDisruption:
                 scenarios=[scenario_params],
             )
 
-            log.info(f"Created scenario file: {scenario_file}")
+            logger.info(f"Created scenario file: {scenario_file}")
 
             # Add scenario to Krkn config
             krkn_config.add_scenario("node_scenarios", scenario_file)
@@ -432,7 +436,7 @@ class TestKrknNooBaaNodeDisruption:
             # =================================================================
             # EXECUTION: Repeated node reboots
             # =================================================================
-            log.info(
+            logger.info(
                 f"Executing repeated node reboot: {iterations} iterations on {target_node}"
             )
 
@@ -446,7 +450,7 @@ class TestKrknNooBaaNodeDisruption:
             krkn_runner.wait_for_completion(check_interval=60)
             chaos_output = krkn_runner.get_chaos_data()
 
-            log.info(f"Repeated node reboot completed: {iterations} iterations")
+            logger.info(f"Repeated node reboot completed: {iterations} iterations")
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
@@ -456,15 +460,15 @@ class TestKrknNooBaaNodeDisruption:
             )
             raise
         except Exception as e:
-            log.error(
-                f"❌ NooBaa DB primary repeated node reboot failed ({iterations}x): {e}"
+            logger.exception(
+                f"NooBaa DB primary repeated node reboot failed ({iterations}x): {e}"
             )
             raise
 
         # =================================================================
         # RESULTS ANALYSIS
         # =================================================================
-        log.info(f"REPEATED NODE REBOOT RESULTS ({iterations} iterations):")
+        logger.info(f"REPEATED NODE REBOOT RESULTS ({iterations} iterations):")
 
         # Analyze results
         total_executed, successful_executed, failing_executed = (
@@ -479,7 +483,7 @@ class TestKrknNooBaaNodeDisruption:
             (successful_executed / total_executed * 100) if total_executed > 0 else 0
         )
 
-        log.info(
+        logger.info(
             f"EXECUTION RESULTS: "
             f"Iterations requested: {iterations}, "
             f"Total executed: {total_executed}, "
@@ -515,10 +519,14 @@ class TestKrknNooBaaNodeDisruption:
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             None, f"NooBaa DB primary repeated reboot ({iterations}x)"
         )
+        logger.assertion(
+            f"Ceph crashes after repeated reboot ({iterations}x): "
+            f"expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🏆 NooBaa DB primary repeated node reboot test completed successfully! "
+        logger.info(
+            f"NooBaa DB primary repeated node reboot test completed successfully. "
             f"Node {target_node} recovered from {iterations} reboots with {overall_success_rate:.1f}% success rate."
         )
 
@@ -551,13 +559,13 @@ class TestKrknNooBaaNodeDisruption:
         cloud_type = get_krkn_cloud_type()
 
         # Get all nodes hosting NooBaa components
-        log.info("Identifying all nodes hosting NooBaa components")
+        logger.info("Identifying all nodes hosting NooBaa components")
 
         # Use helper function to get unique nodes
         all_nodes = list(get_unique_noobaa_nodes())
 
-        log.info(f"Total unique nodes hosting NooBaa: {len(all_nodes)}")
-        log.info(f"Nodes: {', '.join(all_nodes)}")
+        logger.info(f"Total unique nodes hosting NooBaa: {len(all_nodes)}")
+        logger.info(f"Nodes: {', '.join(all_nodes)}")
 
         if len(all_nodes) == 0:
             pytest.skip("No nodes found hosting NooBaa components")
@@ -571,12 +579,12 @@ class TestKrknNooBaaNodeDisruption:
             nodes=all_nodes,
         )
 
-        log.warning(
-            f"⚠️  EXTREME TEST: This will stop ALL {len(all_nodes)} nodes hosting NooBaa simultaneously"
+        logger.warning(
+            f"EXTREME TEST: This will stop ALL {len(all_nodes)} nodes hosting NooBaa simultaneously"
         )
 
         # WORKLOAD SETUP
-        log.info("Setting up Warp S3 workloads (will fail during total outage)")
+        logger.info("Setting up Warp S3 workloads (will fail during total outage)")
         workload_ops.setup_workloads()
 
         # Register finalizer for cleanup
@@ -593,7 +601,7 @@ class TestKrknNooBaaNodeDisruption:
             # =================================================================
             # ALL NODES STOP/START SCENARIO
             # =================================================================
-            log.info(
+            logger.info(
                 f"Creating all-nodes stop/start configuration for {len(all_nodes)} nodes"
             )
 
@@ -642,7 +650,7 @@ class TestKrknNooBaaNodeDisruption:
                 scenarios=scenarios,
             )
 
-            log.info(f"Created scenario file with {len(scenarios)} node disruptions")
+            logger.info(f"Created scenario file with {len(scenarios)} node disruptions")
 
             # Add scenario to Krkn config
             krkn_config.add_scenario("node_scenarios", scenario_file)
@@ -650,7 +658,7 @@ class TestKrknNooBaaNodeDisruption:
             # =================================================================
             # EXECUTION: Stop/start all NooBaa nodes
             # =================================================================
-            log.info(
+            logger.info(
                 f"Executing all-nodes stop/start: {len(all_nodes)} nodes simultaneously"
             )
 
@@ -664,7 +672,7 @@ class TestKrknNooBaaNodeDisruption:
             krkn_runner.wait_for_completion(check_interval=60)
             chaos_output = krkn_runner.get_chaos_data()
 
-            log.info("All-nodes stop/start completed")
+            logger.info("All-nodes stop/start completed")
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
@@ -674,13 +682,13 @@ class TestKrknNooBaaNodeDisruption:
             )
             raise
         except Exception as e:
-            log.error(f"❌ NooBaa all nodes stop/start failed: {e}")
+            logger.exception(f"NooBaa all nodes stop/start failed: {e}")
             raise
 
         # =================================================================
         # RESULTS ANALYSIS
         # =================================================================
-        log.info("ALL NODES STOP/START RESULTS:")
+        logger.info("ALL NODES STOP/START RESULTS:")
 
         # Analyze results
         total_executed, successful_executed, failing_executed = (
@@ -695,7 +703,7 @@ class TestKrknNooBaaNodeDisruption:
             (successful_executed / total_executed * 100) if total_executed > 0 else 0
         )
 
-        log.info(
+        logger.info(
             f"EXECUTION RESULTS: "
             f"Nodes disrupted: {len(all_nodes)}, "
             f"Total scenarios: {total_executed}, "
@@ -726,10 +734,12 @@ class TestKrknNooBaaNodeDisruption:
         no_crashes, crash_details = health_helper.check_ceph_crashes(
             None, "NooBaa all nodes stop/start"
         )
+        logger.assertion(
+            f"Ceph crashes after all-nodes stop/start: expected=None, actual={'None' if no_crashes else crash_details}"
+        )
         assert no_crashes, crash_details
 
-        log.info(
-            f"🏆 NooBaa all nodes stop/start test completed successfully! "
-            f"All {len(all_nodes)} nodes recovered with {overall_success_rate:.1f}% success rate. "
-            f"✨ NooBaa survived catastrophic infrastructure failure!"
+        logger.info(
+            f"NooBaa all nodes stop/start test completed successfully. "
+            f"All {len(all_nodes)} nodes recovered with {overall_success_rate:.1f}% success rate."
         )

@@ -51,17 +51,19 @@ class TestCephfsFsyncConsistency(ManageTest):
             exec_cmd(
                 cmd=f"oc cp {local_script_path} {client_pod_obj.name}:/tmp/sync_script.py"
             )
-        except Exception as e:
-            logger.error("ERROR: Failed to execute command on pod.")
-            logger.error(f"Error details: {e}")
+        except Exception:
+            logger.exception("Failed to copy sync script to pod")
 
+        logger.info(
+            "Starting 1000 write-and-read cycles between client and server pods"
+        )
         for i in range(1, 1001):
             # Write lines to client pod
             execution_command = f"python3 /tmp/sync_script.py {i}"
             client_pod_obj.exec_cmd_on_pod(
                 command=execution_command, out_yaml_format=False
             )
-            logger.info(f"Wrote line to client pod: Test fsync {i}")
+            logger.debug(f"Wrote line to client pod: Test fsync {i}")
 
             # Read line from server pod
             self.server_read_output.append(
@@ -69,7 +71,7 @@ class TestCephfsFsyncConsistency(ManageTest):
                     command="tail -n 1 /mnt/shared_filed.html"
                 )
             )
-            logger.info(f"Read line from server pod: Test fsync {i}")
+            logger.debug(f"Read line from server pod: Test fsync {i}")
 
     def test_cephfs_fsync_consistency(
         self,
@@ -87,6 +89,7 @@ class TestCephfsFsyncConsistency(ManageTest):
             5.Server Pod Read the file
         """
 
+        logger.test_step("Create CephFS PVC with RWX access mode")
         self.pvc_size = 10
         self.server_read_output = []
 
@@ -100,6 +103,7 @@ class TestCephfsFsyncConsistency(ManageTest):
             status=constants.STATUS_BOUND,
         )
 
+        logger.test_step("Deploy client and server pods on separate worker nodes")
         worker_node_names = get_worker_nodes()
 
         pod_obj_client = deployment_pod_factory(
@@ -112,12 +116,22 @@ class TestCephfsFsyncConsistency(ManageTest):
             node_name=worker_node_names[1],
         )
 
+        logger.test_step(
+            "Perform 1000 write-and-read cycles with fsync between client and server pods"
+        )
         self.write_and_read(pod_obj_client, pod_obj_server)
 
+        logger.test_step("Verify all 1000 lines were read correctly by the server pod")
+        logger.assertion(
+            f"Server read output count: expected=1000, actual={len(self.server_read_output)}"
+        )
         assert (
             len(self.server_read_output) == 1000
         ), f"Failed validation: expected 1000 got {len(self.server_read_output)}"
         last_string = self.server_read_output[-1]
+        logger.assertion(
+            f"Last line content: expected='Test fsync 1000', actual='{last_string}'"
+        )
         assert (
             last_string == "Test fsync 1000"
-        ), f"Last line doesn't match, last line {last_string}, expected: Test fsync 1000\n"
+        ), f"Last line doesn't match, last line {last_string}, expected: Test fsync 1000"

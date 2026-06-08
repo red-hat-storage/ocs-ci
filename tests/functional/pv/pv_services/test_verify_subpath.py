@@ -11,7 +11,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.resources.pod import check_file_existence
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -55,6 +55,7 @@ class TestVerifySubpath(ManageTest):
         filename2 = "file2frompod1"
         filename3 = "file1frompod2"
 
+        logger.test_step("Create a subdirectory and file from the first pod")
         # Create a sub directory
         self.pod_obj.exec_cmd_on_pod(
             command=f"mkdir -p {os.path.join(self.pod_obj.get_storage_path(), subdir)}"
@@ -65,6 +66,7 @@ class TestVerifySubpath(ManageTest):
             command=f"touch {os.path.join(self.pod_obj.get_storage_path(), os.path.join(subdir, filename1))}"
         )
 
+        logger.test_step("Create second pod with subpath mounting the subdirectory")
         # Create another pod which can use the sub directory
         pod_obj2 = pod_factory(
             interface=constants.CEPHFILESYSTEM,
@@ -73,30 +75,45 @@ class TestVerifySubpath(ManageTest):
             subpath=subdir,
         )
 
+        logger.test_step("Verify file created from first pod is visible on second pod")
         # On the second pod, verify the presence the file created from the first pod
-        assert check_file_existence(
+        file1_exists = check_file_existence(
             pod_obj2, os.path.join(pod_obj2.get_storage_path(), filename1)
-        ), f"File {filename1} not found on pod {pod_obj2.name}"
+        )
+        logger.assertion(
+            f"File {filename1} exists on pod {pod_obj2.name}: expected=True, actual={file1_exists}"
+        )
+        assert file1_exists, f"File {filename1} not found on pod {pod_obj2.name}"
 
+        logger.test_step("Create another file from first pod and verify on second pod")
         # Create another file from the first pod
         self.pod_obj.exec_cmd_on_pod(
             command=f"touch {os.path.join(self.pod_obj.get_storage_path(), os.path.join(subdir, filename2))}"
         )
 
         # On the second pod, verify the presence the new file created from the first pod
-        assert check_file_existence(
+        file2_exists = check_file_existence(
             pod_obj2, os.path.join(pod_obj2.get_storage_path(), filename2)
-        ), f"File {filename2} not found on pod {pod_obj2.name}"
+        )
+        logger.assertion(
+            f"File {filename2} exists on pod {pod_obj2.name}: expected=True, actual={file2_exists}"
+        )
+        assert file2_exists, f"File {filename2} not found on pod {pod_obj2.name}"
 
+        logger.test_step("Create file from second pod and verify on first pod")
         # Create a file from the second pod
         pod_obj2.exec_cmd_on_pod(
             command=f"touch {os.path.join(self.pod_obj.get_storage_path(), filename3)}"
         )
 
         # On the first pod, verify the presence the file created from the second pod
-        assert check_file_existence(
+        file3_exists = check_file_existence(
             self.pod_obj,
             os.path.join(
                 self.pod_obj.get_storage_path(), os.path.join(subdir, filename3)
             ),
-        ), f"File {filename3} not found on pod {self.pod_obj.name}"
+        )
+        logger.assertion(
+            f"File {filename3} exists on pod {self.pod_obj.name}: expected=True, actual={file3_exists}"
+        )
+        assert file3_exists, f"File {filename3} not found on pod {self.pod_obj.name}"

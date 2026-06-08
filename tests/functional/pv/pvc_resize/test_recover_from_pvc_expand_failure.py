@@ -65,7 +65,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         expand request. Test this scenario on PVCs created from snapshots also.
 
         """
-        # Create file on the pods
+        logger.test_step("Run IO on all pods to create test data")
         for pod_obj in self.pods:
             pod_obj.run_io(
                 storage_type="fs",
@@ -78,17 +78,16 @@ class TestRecoverPvcExpandFailure(ManageTest):
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
 
-        # Create snapshots
-        logger.info("Creating snapshot of all the PVCs")
+        logger.test_step(f"Create snapshots of all {len(self.pvcs)} PVCs")
         snap_objs = []
         for pvc_obj in self.pvcs:
-            logger.info(f"Creating snapshot of the PVC {pvc_obj.name}")
+            logger.debug(f"Creating snapshot of PVC {pvc_obj.name}")
             snap_obj = snapshot_factory(pvc_obj, wait=False)
             snap_obj.interface = pvc_obj.interface
             snap_objs.append(snap_obj)
-            logger.info(f"Created snapshot of PVC {pvc_obj.name}")
+            logger.debug(f"Created snapshot of PVC {pvc_obj.name}")
 
-        logger.info("Wait for the snapshots to be in Ready")
+        logger.test_step("Wait for snapshots to reach Ready state")
         for snap_obj in snap_objs:
             snap_obj.ocp.wait_for_resource(
                 condition="true",
@@ -97,9 +96,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 timeout=360,
             )
             snap_obj.reload()
-        logger.info("Snapshots are in Ready state")
+        logger.info("All snapshots are in Ready state")
 
-        logger.info("Restoring the snapshots to create new PVCs")
+        logger.test_step("Restore snapshots to create new PVCs")
         restore_pvcs = []
         for snap_obj in snap_objs:
             restore_obj = snapshot_restore_factory(
@@ -108,14 +107,14 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 access_mode=snap_obj.parent_access_mode,
                 status="",
             )
-            logger.info(
-                f"Created PVC {restore_obj.name} from snapshot {snap_obj.name}."
+            logger.debug(
+                f"Created PVC {restore_obj.name} from snapshot {snap_obj.name}"
             )
             restore_obj.interface = snap_obj.interface
             restore_pvcs.append(restore_obj)
-        logger.info("Restored all the snapshots to create new PVCs")
+        logger.info(f"Restored all {len(snap_objs)} snapshots to create new PVCs")
 
-        logger.info("Verifying that the restored PVCs are Bound")
+        logger.test_step("Verify restored PVCs reach Bound state")
         for pvc_obj in restore_pvcs:
             wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=480
@@ -123,8 +122,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
             pvc_obj.reload()
         logger.info("Verified that the PVCs created from the snapshots are Bound")
 
-        # Attach the restored PVCs to pods
-        logger.info("Attach the restored PVCs to pods")
+        logger.test_step("Attach restored PVCs to pods")
         restore_pod_objs = []
         for restore_pvc_obj in restore_pvcs:
             restore_pod_obj = pod_factory(
@@ -132,12 +130,13 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 pvc=restore_pvc_obj,
                 status="",
             )
-            logger.info(
-                f"Attached the PVC {restore_pvc_obj.name} to pod {restore_pod_obj.name}"
+            logger.debug(
+                f"Attached PVC {restore_pvc_obj.name} to pod {restore_pod_obj.name}"
             )
             restore_pod_objs.append(restore_pod_obj)
+        logger.info(f"Attached {len(restore_pod_objs)} restored PVCs to pods")
 
-        # Find initial md5sum of file from pods
+        logger.test_step("Calculate initial md5sum of test file from all pods")
         all_pods = self.pods + restore_pod_objs
         for pod_obj in all_pods:
             pod_obj.orig_md5_sum = cal_md5sum(
@@ -149,7 +148,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         pvc_size_reduced_final = 10
         reduce_size_step = -10
 
-        # Test recover from pending PVC expansion 3 times on each PVC
+        logger.test_step("Test recover from pending PVC expansion (3 iterations)")
         for count in range(3):
             logger.info(
                 f"Iteration {count + 1} of recovering from pending PVC expansion"
@@ -157,7 +156,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
             # Scale down rbd and cephfs ctrlplugin pod. To do this scale down operator deployments first
             logger.info(
-                "Scale down operator deployments first to avoid reconciling ctrlplugin deployments after scaled down"
+                "Scaling down operator deployments to avoid reconciling ctrlplugin deployments"
             )
             dep_ocp = OCP(
                 kind=constants.DEPLOYMENT,
@@ -169,7 +168,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 f"{config.ENV_DATA['cluster_namespace']}.rbd.csi.ceph.com-ctrlplugin",
             ]
             for dep in deployments:
-                logger.info(f"Scaling deployment {dep} to replica 0")
+                logger.debug(f"Scaling deployment {dep} to replica 0")
                 dep_ocp.exec_oc_cmd(f"scale deployment {dep} --replicas=0")
                 time.sleep(10)
 
@@ -185,9 +184,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 reduce_size_step,
             ):
                 for pvc_obj in all_pvcs:
-                    logger.info(
-                        f"Change the size of the PVC {pvc_obj.name} to {size}Gi"
-                    )
+                    logger.debug(f"Changing the size of PVC {pvc_obj.name} to {size}Gi")
                     try:
                         assert not pvc_obj.resize_pvc(
                             size, True, timeout=60
@@ -207,7 +204,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
             # Verify that the size cannot be reduced below the current capacity
             logger.info(
-                "Verify that the size of the PVCs cannot be reduced below the current capacity"
+                f"Verifying PVCs cannot be reduced below current capacity of {self.pvc_size}Gi"
             )
             for pvc_obj in all_pvcs:
                 try:
@@ -215,9 +212,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 except CommandFailed as err:
                     expected_error = "field can not be less than status.capacity"
                     if expected_error in str(err):
-                        logger.info(
-                            f"Verified: The size of the PVC {pvc_obj.name} cannot be reduced to {self.pvc_size - 1}Gi "
-                            f"which is below its current capacity of {self.pvc_size}Gi"
+                        logger.debug(
+                            f"Verified: PVC {pvc_obj.name} cannot be reduced to {self.pvc_size - 1}Gi "
+                            f"(below current capacity of {self.pvc_size}Gi)"
                         )
                     else:
                         raise
@@ -233,13 +230,13 @@ class TestRecoverPvcExpandFailure(ManageTest):
                     capacity = pvc_data.get("status").get("capacity").get("storage")
                     if capacity == f"{pvc_size_reduced_final}Gi":
                         break
-                    logger.info(
-                        f"Capacity of PVC {pvc_obj.name} is not {pvc_size_reduced_final}Gi as "
-                        f"expected, but {capacity}. Retrying."
+                    logger.debug(
+                        f"Capacity of PVC {pvc_obj.name} is {capacity}, "
+                        f"expected {pvc_size_reduced_final}Gi. Retrying."
                     )
                 logger.info(
-                    f"Verified that the capacity of PVC {pvc_obj.name} is changed to "
-                    f"{pvc_size_reduced_final}Gi."
+                    f"Verified capacity of PVC {pvc_obj.name} changed to "
+                    f"{pvc_size_reduced_final}Gi"
                 )
 
             logger.info(
@@ -250,7 +247,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
             )
             pvc_size_reduced_final += abs(reduce_size_step)
 
-        # Verify md5sum
+        logger.test_step("Verify md5sum data integrity on all pods")
         for pod_obj in all_pods:
             verify_data_integrity(
                 pod_obj=pod_obj,

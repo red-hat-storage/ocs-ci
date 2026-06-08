@@ -6,7 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import ManageTest, tier1, polarion_id
 from ocs_ci.ocs.exceptions import CommandFailed
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @tier1
@@ -43,6 +43,9 @@ class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
             "fsGroup": 12574,
         }
 
+        logger.test_step(
+            "Create PVCs with CephFS storage class using RWX and RWO access modes"
+        )
         # Create pvcs with different access_modes
         size = 5
         access_modes = [constants.ACCESS_MODE_RWX, constants.ACCESS_MODE_RWO]
@@ -54,6 +57,7 @@ class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
             num_of_pvc=2,
         )
 
+        logger.test_step("Create pods with runAsNonRoot and runAsUser security context")
         # Create pods with all the above security context
         pod_objs = list()
         for pvc_obj in pvc_objs:
@@ -68,6 +72,7 @@ class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
 
             teardown_factory(pod_objs)
 
+        logger.info("Waiting for all pods to reach Running state")
         for pod in pod_objs:
             pod.ocp.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
@@ -76,6 +81,9 @@ class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
                 sleep=3,
             )
 
+        logger.test_step(
+            "Attempt file creation without fsGroup - expecting permission denied"
+        )
         # Try to perform IO, expected to fail, Recreate pod by setting fsGroup
         # Try to run IO again, It should pass
 
@@ -85,12 +93,15 @@ class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
             for pod in pod_objs:
                 pod.exec_cmd_on_pod(f'bash -c "touch {file_path}sample"')
         except CommandFailed as err:
-            assert err_msg in str(err), f"Unexpected error {str(err)}"
-            log.info(
-                f"The file creation failed with a permission denied error, as expected. Error: {err}"
+            logger.assertion(
+                f"Permission denied in error message: expected=True, actual={'Permission denied' in str(err)}"
             )
-            log.info(
-                "Recreating the pod with added fsgroup permission and trying to create the file again"
+            assert err_msg in str(err), f"Unexpected error {str(err)}"
+            logger.info(
+                f"File creation failed with permission denied as expected. Error: {err}"
+            )
+            logger.test_step(
+                "Recreate pods with fsGroup permission and retry file creation"
             )
             scc.update(new_scc)
             for pod in pod_objs:
@@ -113,4 +124,4 @@ class TestToWriteToCephfsPVCWithNonRootUser(ManageTest):
                     sleep=3,
                 )
                 pod.exec_cmd_on_pod(f'bash -c "touch {file_path}sample"')
-            log.info("IO runs successfully")
+            logger.info("IO runs successfully with fsGroup permission")

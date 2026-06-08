@@ -5,7 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import E2ETest, tier1
 from ocs_ci.ocs import constants
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @tier1
@@ -35,8 +35,13 @@ class TestPvcCreationInMegabytes(E2ETest):
         mega_bytes_to_bytes = 1000 * 1000
         # conversion formulae for 'Mi' to bytes
         mebi_bytes_to_bytes = 1024 * 1024
+        logger.test_step(
+            f"Create CephFS PVCs with sizes {given_pvc_sizes_mb}M and validate capacity"
+        )
         for size_mb in given_pvc_sizes_mb:
-            log.info(f"Creating {interface} based PVC with the given size {size_mb}M")
+            logger.debug(
+                f"Creating {interface} based PVC with the given size {size_mb}M"
+            )
             # Creating PVC using pvc_factory
             pvc_obj = pvc_factory(
                 interface=interface,
@@ -46,13 +51,17 @@ class TestPvcCreationInMegabytes(E2ETest):
             )
             # getting pvc yaml using pvc_obj.get() and getting the pvc capacity from the yaml
             actual_pvc_size = pvc_obj.get().get("status").get("capacity").get("storage")
-            log.info(f"PVC created with the capacity of size {actual_pvc_size} ")
+            logger.debug(f"PVC created with the capacity of size {actual_pvc_size}")
             created_pvc_size_bytes = int(actual_pvc_size[:-2]) * mebi_bytes_to_bytes
             requested_pvc_size_bytes = int(size_mb) * mega_bytes_to_bytes
+            logger.assertion(
+                f"PVC size: expected>={requested_pvc_size_bytes} bytes, actual={created_pvc_size_bytes} bytes"
+            )
             assert created_pvc_size_bytes >= requested_pvc_size_bytes, (
                 f"Actual PVC size {created_pvc_size_bytes} bytes is less"
                 f" than the given PVC size {requested_pvc_size_bytes}"
             )
-            log.info(
+            logger.debug(
                 f"Created PVC {created_pvc_size_bytes} bytes where the requested was {requested_pvc_size_bytes} bytes"
             )
+        logger.info(f"All {len(given_pvc_sizes_mb)} PVCs created with valid capacity")

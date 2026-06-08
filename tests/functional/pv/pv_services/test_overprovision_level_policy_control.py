@@ -24,7 +24,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(autouse=True, scope="class")
@@ -61,7 +61,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def finalizer():
-            log.info("Delete overprovisionControl from storage cluster yaml file")
+            logger.info("Delete overprovisionControl from storage cluster yaml file")
             storagecluster_obj = OCP(
                 resource_name=constants.DEFAULT_CLUSTERNAME,
                 namespace=config.ENV_DATA["cluster_namespace"],
@@ -72,11 +72,11 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
                 params=params,
                 format_type="merge",
             )
-            log.info("Verify storagecluster on Ready state")
+            logger.info("Verify storagecluster on Ready state")
             verify_storage_cluster()
 
             if verify_quota_resource_exist(quota_name=self.quota_name):
-                log.info(f"Delete quota resource {self.quota_name}")
+                logger.info(f"Delete quota resource {self.quota_name}")
                 clusterresourcequota_obj = OCP(kind="clusterresourcequota")
                 clusterresourcequota_obj.delete(resource_name=self.quota_name)
 
@@ -129,7 +129,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             constants.CEPHBLOCKPOOL_SC: "ocs-storagecluster-ceph-rbd-quota-sc-test",
             constants.CEPHFILESYSTEM_SC: "ocs-storagecluster-cephfs-quota-sc-test",
         }
-        log.info('Create project with "openshift-quota" label')
+        logger.test_step('Create project with "openshift-quota" label')
         project_name = "ocs-quota-sc-test"
         ocp_project_label = OCP(kind=constants.NAMESPACE)
         ocp_project_label.new_project(project_name=project_name)
@@ -156,7 +156,9 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             f"{actual_sc_name}.storageclass.storage.k8s.io/requests.storage"
         )
 
-        log.info("Add 'overprovisionControl' section to storagecluster yaml file")
+        logger.test_step(
+            f"Add 'overprovisionControl' section to storagecluster yaml for SC '{actual_sc_name}'"
+        )
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -174,7 +176,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             format_type="merge",
         )
 
-        log.info("Verify storagecluster on Ready state")
+        logger.info("Verify storagecluster on Ready state")
         verify_storage_cluster()
 
         clusterresourcequota_obj = OCP(kind="clusterresourcequota")
@@ -188,10 +190,10 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             err_str = (
                 f"Quota resource {self.quota_name} does not exist after 60 seconds"
             )
-            log.error(err_str)
+            logger.error(err_str)
             raise TimeoutExpiredError(err_str)
 
-        log.info("Waiting for clusterresourcequota hard limit to be set")
+        logger.info("Waiting for clusterresourcequota hard limit to be set")
         # Wait for the hard limit to be properly configured
         sample = TimeoutSampler(
             timeout=120,
@@ -204,18 +206,18 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             try:
                 hard = quota_resource.get("spec", {}).get("quota", {}).get("hard", {})
                 hard_storage = hard.get(self.quota_key, "0")
-                log.info(
+                logger.debug(
                     f"Checking quota {self.quota_name}, hard limit: {hard_storage}"
                 )
                 if hard_storage == "8Gi":
-                    log.info("Hard limit is correctly set to 8Gi")
+                    logger.info("Hard limit is correctly set to 8Gi")
                     break
             except (KeyError, AttributeError) as e:
-                log.warning(f"Failed to parse quota resource: {e}")
+                logger.warning(f"Failed to parse quota resource: {e}")
                 continue
         else:
             err_str = f"Quota resource {self.quota_name} hard limit was not set to 8Gi after 120 seconds"
-            log.error(err_str)
+            logger.error(err_str)
             raise TimeoutExpiredError(err_str)
 
         # Extract quota values for final verification
@@ -224,16 +226,19 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         used_storage = used.get(self.quota_key, "0")
         hard_storage = hard.get(self.quota_key, "0")
 
-        log.info(
+        logger.info(
             f"Cluster Resource Quota {self.quota_name}: "
             f"used={used_storage}, hard={hard_storage}"
+        )
+        logger.assertion(
+            f"Quota values contain '8Gi' and '0': used={used_storage}, hard={hard_storage}"
         )
         assert verify_substrings_in_string(
             output_string=f"{used_storage} {hard_storage}",
             expected_strings=["8Gi", "0"],
         ), f"Expected strings not found. Used: {used_storage}, Hard: {hard_storage}"
 
-        log.info("Create 5Gi pvc on project ocs-quota-sc-test")
+        logger.test_step("Create 5Gi PVC on project ocs-quota-sc-test")
         pvc_obj = pvc_factory(
             interface=sc_type,
             project=ocp_project_obj,
@@ -254,8 +259,8 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             status=constants.STATUS_RUNNING,
         )
 
-        log.info(
-            "Create new pvc with 6Gi capacity and verify it failed [6Gi + 5Gi > 8Gi]"
+        logger.test_step(
+            "Create 6Gi PVC and verify it fails due to exceeded quota [6Gi + 5Gi > 8Gi]"
         )
         try:
             pvc_factory(
@@ -265,21 +270,27 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
                 size=6,
             )
         except Exception as e:
-            log.info(e)
+            logger.debug(f"Expected PVC creation failure: {e}")
+            logger.assertion(
+                f"PVC creation error contains '5Gi', '6Gi', '8Gi': actual='{str(e)}'"
+            )
             assert verify_substrings_in_string(
                 output_string=str(e), expected_strings=["5Gi", "6Gi", "8Gi"]
             ), f"The error does not contain strings:{str(e)}"
 
-        log.info("Resize PVC to 20Gi and verify it failed [20Gi > 8Gi]")
+        logger.test_step("Resize PVC to 20Gi and verify it fails [20Gi > 8Gi]")
         try:
             pvc_obj.resize_pvc(new_size=20, verify=True)
         except Exception as e:
-            log.info(e)
+            logger.debug(f"Expected PVC resize failure: {e}")
+            logger.assertion(
+                f"PVC resize error contains '15Gi', '5Gi', '8Gi': actual='{str(e)}'"
+            )
             assert verify_substrings_in_string(
                 output_string=str(e), expected_strings=["15Gi", "5Gi", "8Gi"]
             ), f"The error does not contain strings:{str(e)}"
 
-        log.info("Resize the PVC to 6Gi and verify it is working [8Gi > 6Gi]")
+        logger.test_step("Resize PVC to 6Gi and verify it succeeds [8Gi > 6Gi]")
         pvc_obj.resize_pvc(new_size=6, verify=True)
         wait_for_quota_usage_update(
             clusterresourcequota_obj,
@@ -289,9 +300,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             "PVC resize",
         )
 
-        log.info(
-            "Create New PVC with 1G capacity and verify it is working [8Gi > 1Gi + 6Gi]"
-        )
+        logger.test_step("Create 1Gi PVC and verify it succeeds [8Gi > 1Gi + 6Gi]")
         pvc_factory(
             interface=sc_type,
             project=ocp_project_obj,

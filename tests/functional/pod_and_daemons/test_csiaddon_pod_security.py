@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.ocs.resources.pod import get_csi_addons_pod
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @tier1
@@ -42,37 +42,41 @@ class TestCSIAddonPodSecurity:
         - The pod should reject insecure HTTP (non-TLS) connections.
         """
 
-        log.info("Validating CSI Addon pod security standards")
-
-        # Find a pod with the 'csi-addons' container (handles both old and new pod structures)
+        logger.test_step("Find a CSI addon pod with the 'csi-addons' container")
         pod_obj = get_csi_addons_pod()
-        log.info(f"Using CSI addon pod: {pod_obj.name}")
+        logger.info(f"Using CSI addon pod: {pod_obj.name}")
 
         csi_addon_container = pod_obj.get_container_data("csi-addons")
 
+        logger.assertion(
+            f"CSI Addon container exists in pod {pod_obj.name}: "
+            f"expected=True, actual={bool(csi_addon_container)}"
+        )
         assert (
             csi_addon_container
         ), f"No CSI Addon container found in pod {pod_obj.name}"
 
         port_used_by_csi_addon = csi_addon_container[0]["ports"][0]["containerPort"]
 
-        # Querying to the container port with HTTPS
+        logger.test_step(
+            f"Verify CSI Addon pod is reachable via HTTPS on port {port_used_by_csi_addon}"
+        )
         try:
             pod_obj.exec_cmd_on_pod(
                 command=f"curl -k -s https://localhost:{port_used_by_csi_addon}/healthz",
                 container_name="csi-addons",
                 out_yaml_format=False,
             )
-            log.info(
+            logger.info(
                 f"CSI Addon pod is reachable securely on port {port_used_by_csi_addon}"
             )
         except CommandFailed as e:
-            log.error(
+            logger.error(
                 f"CSI Addon pod is not reachable securely on port {port_used_by_csi_addon}: {str(e)}"
             )
             pytest.fail(f"CSI Addon pod HTTPS connection failed: {str(e)}")
 
-        # Now check if the pod is rejecting insecure HTTP (without TLS)
+        logger.test_step("Verify CSI Addon pod rejects insecure HTTP connections")
         with pytest.raises(CommandFailed) as exc_info:
             pod_obj.exec_cmd_on_pod(
                 command=f"curl -s http://localhost:{port_used_by_csi_addon}/healthz",
@@ -80,7 +84,11 @@ class TestCSIAddonPodSecurity:
                 out_yaml_format=False,
             )
 
+        logger.assertion(
+            f"HTTP connection rejected with 'command terminated': "
+            f"expected='command terminated' in error, actual='{str(exc_info.value)}'"
+        )
         assert "command terminated" in str(
             exc_info.value
         ), "CSI Addon pod should not allow connection without TLS"
-        log.info("CSI Addon pod correctly refused HTTP (insecure) connection")
+        logger.info("CSI Addon pod correctly refused HTTP (insecure) connection")

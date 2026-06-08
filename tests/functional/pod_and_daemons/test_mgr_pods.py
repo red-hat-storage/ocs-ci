@@ -14,7 +14,7 @@ from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.pytest_customization.marks import green_squad
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @tier4a
@@ -44,43 +44,55 @@ class TestMgrPods(BaseTest):
         - check mgr metadata
             ceph mgr metadata
         """
-        log.info("Testing mgr pods in the openshift-storage namespace.")
+        logger.test_step("Verify two MGR pods are deployed")
         mgr_pods = pod.get_mgr_pods()
+        logger.assertion(f"Number of MGR pods: expected=2, actual={len(mgr_pods)}")
         assert len(mgr_pods) == 2, "There should be 2 mgr pods"
         mgr_pods_names = set([pod.name for pod in mgr_pods])
-        assert len(mgr_pods_names) == 2, "There should be two distinct mgr pod names"
-        log.info(
-            f"There are two different distinct mgr pods with names: {', '.join(mgr_pods_names)}"
+        logger.assertion(
+            f"Distinct MGR pod names count: expected=2, actual={len(mgr_pods_names)}"
         )
+        assert len(mgr_pods_names) == 2, "There should be two distinct mgr pod names"
+        logger.info(f"Found two distinct mgr pods: {', '.join(mgr_pods_names)}")
 
-        log.info("Checking mgr metadata.")
+        logger.test_step("Check MGR metadata via ceph tools pod")
         toolbox = pod.get_ceph_tools_pod()
         try:
             mgr_metadata = toolbox.exec_cmd_on_pod("ceph mgr metadata")
         except exceptions.CommandFailed:
-            log.error("Unable to run command on toolbox")
+            logger.exception("Unable to run command on toolbox")
+            raise
 
         mgr_metadata_names = list()
         for data in mgr_metadata:
             if data.get("pod_name") not in mgr_pods_names:
-                log.error(
+                logger.warning(
                     f"Different pod name found: {data.get('pod_name')} "
                     f"not in mgr pod name list: {', '.join(mgr_pods_names)}"
                 )
             mgr_metadata_names.append(
                 {"name": data.get("name"), "pod_name": data.get("pod_name")}
             )
+
+        logger.test_step("Validate MGR metadata contains exactly 2 distinct entries")
+        logger.assertion(
+            f"MGR metadata entry count: expected=2, actual={len(mgr_metadata_names)}"
+        )
         assert (
             len(mgr_metadata_names) == 2
         ), f"The metadata contains more than 2 entries of mgr: {mgr_metadata_names}"
+        logger.assertion(
+            f"MGR metadata names are distinct: "
+            f"name[0]='{mgr_metadata_names[0]['name']}', name[1]='{mgr_metadata_names[1]['name']}'"
+        )
         assert (
             mgr_metadata_names[0]["name"] != mgr_metadata_names[1]["name"]
         ), f"The mgr metadata has two entries with same name: {mgr_metadata_names}"
 
-        log.info(
+        logger.info(
             "Mgr metadata is correct with two distinct entries with two distinct names."
         )
-        log.info(f"Name entries in mgr metadata: {mgr_metadata_names}")
+        logger.debug(f"Name entries in mgr metadata: {mgr_metadata_names}")
 
     @green_squad
     @skipif_mcg_only
@@ -99,39 +111,47 @@ class TestMgrPods(BaseTest):
         - check mgr stat again and the passive(standby) should be active.
             ceph mgr stat
         """
-        log.info("Testing the mgr daemon stats")
-
-        log.info("Checking mgr stat.")
+        logger.test_step("Retrieve MGR daemon stats before failure")
         toolbox = pod.get_ceph_tools_pod()
         try:
             before_ceph_health = toolbox.exec_cmd_on_pod("ceph health")
             before_mgr_stat = toolbox.exec_cmd_on_pod("ceph mgr stat")
         except exceptions.CommandFailed:
-            log.error("Unable to run command on toolbox")
+            logger.exception("Unable to run command on toolbox")
+            raise
 
-        log.info(
-            f"Currently mgr daemon {before_mgr_stat.get('active_name')} is set at "
+        logger.info(
+            f"Active MGR daemon: {before_mgr_stat.get('active_name')}, "
             f"available: {before_mgr_stat.get('available')}"
         )
-        log.info(f"Ceph health Status is at: {before_ceph_health}")
+        logger.debug(f"Ceph health before failure: {before_ceph_health}")
 
-        log.info(f"Failing the active mgr dameon: {before_mgr_stat.get('active_name')}")
+        logger.test_step(
+            f"Fail the active MGR daemon: {before_mgr_stat.get('active_name')}"
+        )
         try:
             toolbox.exec_cmd_on_pod(
                 f"ceph mgr fail {before_mgr_stat.get('active_name')}"
             )
             after_ceph_health = toolbox.exec_cmd_on_pod("ceph health")
         except exceptions.CommandFailed:
-            log.error("Unable to run command on toolbox")
+            logger.exception("Unable to run command on toolbox")
+            raise
 
-        log.info(f"Ceph health status is at: {after_ceph_health}")
-        log.info("Checking mgr stat again.")
+        logger.debug(f"Ceph health after failure: {after_ceph_health}")
+
+        logger.test_step("Verify standby MGR daemon became active after failure")
         after_mgr_stat = toolbox.exec_cmd_on_pod("ceph mgr stat")
-        log.info(
-            f"Currently mgr daemon {after_mgr_stat.get('active_name')} is set at "
+        logger.info(
+            f"Active MGR daemon after failure: {after_mgr_stat.get('active_name')}, "
             f"available: {after_mgr_stat.get('available')}"
         )
 
+        logger.assertion(
+            f"Active MGR changed after failure: "
+            f"before='{before_mgr_stat.get('active_name')}', "
+            f"after='{after_mgr_stat.get('active_name')}'"
+        )
         assert before_mgr_stat.get("active_name") != after_mgr_stat.get(
             "active_name"
         ), (
@@ -156,31 +176,35 @@ class TestMgrPods(BaseTest):
         - Check for the acitve mgr
                 ceph mgr stat
         """
-        log.info("Testing the mgr daemon stats")
-
-        log.info("Checking mgr stat.")
+        logger.test_step("Retrieve active MGR pod before reboot")
         toolbox = pod.get_ceph_tools_pod()
         try:
             before_ceph_health = toolbox.exec_cmd_on_pod("ceph health")
             active_mgr_pod_output = toolbox.exec_cmd_on_pod("ceph mgr stat")
             active_mgr_pod_suffix = active_mgr_pod_output.get("active_name")
         except exceptions.CommandFailed:
-            log.error("Unable to run command on toolbox")
+            logger.exception("Unable to run command on toolbox")
+            raise
 
-        log.info(f"The active MGR pod is {active_mgr_pod_suffix}")
-        log.info(f"Ceph health Status is at: {before_ceph_health}")
+        logger.info(f"Active MGR pod: {active_mgr_pod_suffix}")
+        logger.debug(f"Ceph health before reboot: {before_ceph_health}")
 
-        log.info(f"Restarting mgr pod, rook-ceph-mgr-{active_mgr_pod_suffix}")
+        logger.test_step(
+            f"Restart active MGR pod: rook-ceph-mgr-{active_mgr_pod_suffix}"
+        )
         mgr_pod = pod.get_mgr_pods()
         try:
             for index, pod_name in enumerate(mgr_pod):
                 if f"rook-ceph-mgr-{active_mgr_pod_suffix}" in pod_name.name:
                     mgr_pod[index].delete(wait=True)
         except exceptions.CommandFailed:
-            log.error("Unable to restart mgr pod")
+            logger.exception("Unable to restart mgr pod")
+            raise
 
+        logger.test_step("Verify ceph health after MGR pod reboot")
         try:
             after_ceph_health = toolbox.exec_cmd_on_pod("ceph health")
         except exceptions.CommandFailed:
-            log.error("Unable to run command on toolbox")
-        log.info(f"Ceph health after reboot {after_ceph_health}")
+            logger.exception("Unable to run command on toolbox")
+            raise
+        logger.info(f"Ceph health after reboot: {after_ceph_health}")

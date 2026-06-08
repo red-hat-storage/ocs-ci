@@ -12,7 +12,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import run_cmd
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize(
@@ -59,11 +59,15 @@ class TestMigrateRWO2RWOP(ManageTest):
             one running pod this pvc, and the second pod created on this pvc will be in the 'Pending' state
 
         """
+        logger.test_step("Create PVC with RWO access mode")
         pvc_obj = pvc_factory(
             interface=interface, access_mode=constants.ACCESS_MODE_RWO
         )
         pvc_obj.reload()
 
+        logger.assertion(
+            f"PVC access mode: expected='{constants.ACCESS_MODE_RWO}', actual='{pvc_obj.get_pvc_access_mode}'"
+        )
         assert pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWO, (
             f"PVC object {pvc_obj.name} has access mode {pvc_obj.get_pvc_access_mode}, "
             f"expected {constants.ACCESS_MODE_RWO}"
@@ -74,6 +78,9 @@ class TestMigrateRWO2RWOP(ManageTest):
         namespace = pvc_obj.namespace
         pv = pvc_obj.backed_pv
 
+        logger.test_step(
+            f"Delete PVC {pvc_name} and change PV {pv} access mode to RWOP"
+        )
         # ensures that pv is not deleted when pvc is deleted
         patch = '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
         self.run_pv_patch(pv, namespace, patch)
@@ -89,6 +96,7 @@ class TestMigrateRWO2RWOP(ManageTest):
         patch = '{"spec":{"accessModes":["ReadWriteOncePod"]}}'
         self.run_pv_patch(pv, namespace, patch)
 
+        logger.test_step(f"Create new PVC with RWOP access mode bound to PV {pv}")
         pvc_obj2 = helpers.create_pvc(
             sc_name=sc_name,
             pvc_name=pvc_name,
@@ -97,38 +105,46 @@ class TestMigrateRWO2RWOP(ManageTest):
             namespace=namespace,
         )
         helpers.wait_for_resource_state(pvc_obj2, "Bound")
-        log.info(f"pvc {pvc_obj2.name} reached Bound state")
+        logger.info(f"pvc {pvc_obj2.name} reached Bound state")
 
+        logger.assertion(
+            f"PVC access mode: expected='{constants.ACCESS_MODE_RWOP}', actual='{pvc_obj2.get_pvc_access_mode}'"
+        )
         assert pvc_obj2.get_pvc_access_mode == constants.ACCESS_MODE_RWOP, (
             f"PVC object {pvc_obj2.name} has access mode {pvc_obj2.get_pvc_access_mode}, "
             f"expected {constants.ACCESS_MODE_RWOP}"
         )
 
+        logger.test_step(
+            "Create first pod on RWOP PVC and verify it reaches Running state"
+        )
         node0_name = node.get_worker_nodes()[0]
 
         pod_obj1 = pod_factory(pvc=pvc_obj2, node_name=node0_name)
-        log.info(f"First pod with name {pod_obj1.name} created and running")
+        logger.info(f"First pod with name {pod_obj1.name} created and running")
 
-        # create second pod and validate that it is in the 'Pending' state
+        logger.test_step(
+            "Create second pod on RWOP PVC and verify it stays in Pending state"
+        )
         pod_obj2 = helpers.create_pods(
             [pvc_obj2], pod_factory, interface, nodes=[node0_name]
         )[0]
         time.sleep(60)
 
-        log.info(f"Second pod with name {pod_obj2.name} created")
+        logger.info(f"Second pod with name {pod_obj2.name} created")
 
         # Validating the pod status
         yaml_output = run_cmd(
             "oc get pod " + str(pod_obj2.name) + f" -n {namespace} -o yaml", timeout=60
         )
         results = yaml.safe_load(yaml_output)
-        log.info(f"Status of the Pod : {results['status']['phase']}")
+        logger.info(f"Status of the Pod : {results['status']['phase']}")
         if results["status"]["phase"] != "Pending":
             raise UnexpectedBehaviour(
                 f"Pod {pod_obj2.name} using RWOP pvc {pvc_obj.name} is not in Pending state"
             )
 
-        # return the original volume reclaim policy
+        logger.test_step("Clean up: restore reclaim policy and delete resources")
         patch = '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
         self.run_pv_patch(pv, namespace, patch)
 

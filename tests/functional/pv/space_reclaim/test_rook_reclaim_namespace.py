@@ -18,7 +18,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -38,7 +38,7 @@ class TestRookReclaimNamespace(ManageTest):
                 self.reclaim_job_after_pod_delete.delete()
                 self.reclaim_job_before_pod_delete.delete()
             except Exception as e:
-                log.info(f"Exception: {e}")
+                logger.warning(f"Cleanup exception during teardown: {e}")
 
         request.addfinalizer(finalizer)
 
@@ -58,7 +58,7 @@ class TestRookReclaimNamespace(ManageTest):
         10.Sleep 120 seconds so the logs in csi-rbdplugin-provisioner-xxx/csi-rbdplugin will be updated
         11.Verify logs does not show 'skipping sparsify operation' message.
         """
-        log.info("Create RBD PVC with filesystem mode")
+        logger.test_step("Create RBD PVC with filesystem mode and attach pod")
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             status=constants.STATUS_BOUND,
@@ -67,9 +67,9 @@ class TestRookReclaimNamespace(ManageTest):
         pod_dict_path = constants.NGINX_POD_YAML
         raw_block_pv = False
 
-        log.info(
-            f"Created new pod sc_name={constants.CEPHFILESYSTEM} size=10Gi, "
-            f"access_mode={constants.ACCESS_MODE_RWX}, volume_mode={constants.VOLUME_MODE_FILESYSTEM}"
+        logger.info(
+            f"Creating pod for PVC {pvc_obj.name} with "
+            f"volume_mode={constants.VOLUME_MODE_FILESYSTEM}"
         )
         pod_obj = pod_factory(
             interface=constants.CEPHFILESYSTEM,
@@ -79,15 +79,17 @@ class TestRookReclaimNamespace(ManageTest):
             raw_block_pv=raw_block_pv,
         )
 
-        log.info(f"Create reclaimspacejob CR to run on pvc {pvc_obj.name}")
+        logger.test_step(
+            f"Create reclaimspacejob CR for PVC {pvc_obj.name} and verify sparsify is skipped"
+        )
         self.reclaim_job_before_pod_delete = create_reclaim_space_job(
             pvc_name=pvc_obj.name
         )
         expected_log = "skipping sparsify operation"
         pod_names = get_csi_provisioner_pod(interface=constants.CEPHBLOCKPOOL)
 
-        log.info(
-            f"Check logs of csi-rbdplugin-provisioner-xxx/csi-rbdplugin pods {pod_names}"
+        logger.info(
+            f"Checking logs of csi-rbdplugin-provisioner pods {pod_names} for '{expected_log}'"
         )
         sample = TimeoutSampler(
             timeout=100,
@@ -101,21 +103,28 @@ class TestRookReclaimNamespace(ManageTest):
                 f"The expected log '{expected_log}' does not exist in {pod_names} pods"
             )
 
-        log.info(f"Delete pod {pod_obj.name}")
+        logger.test_step(
+            "Delete pod and reclaimspacejob CR, then recreate reclaimspacejob"
+        )
+        logger.info(f"Deleting pod {pod_obj.name}")
         pod_obj.delete()
 
-        log.info(f"Delete reclaimspacejob CR {self.reclaim_job_before_pod_delete.name}")
+        logger.info(
+            f"Deleting reclaimspacejob CR {self.reclaim_job_before_pod_delete.name}"
+        )
         self.reclaim_job_before_pod_delete.delete()
 
-        log.info("Recreate reclaimspacejob CR")
+        logger.info("Recreating reclaimspacejob CR")
         self.reclaim_job_after_pod_delete = create_reclaim_space_job(
             pvc_name=pvc_obj.name
         )
 
-        log.info(f"Sleep 120 seconds so the logs in {pod_names} will be updated")
+        logger.info(f"Waiting 120 seconds for logs in {pod_names} to update")
         time.sleep(120)
 
-        log.info("Verify logs does not show 'skipping sparsify operation' message.")
+        logger.test_step(
+            "Verify logs do not show 'skipping sparsify operation' after pod deletion"
+        )
         log_exist = verify_log_exist_in_pods_logs(
             pod_names=pod_names, expected_log=expected_log, since="120s"
         )

@@ -9,7 +9,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 SC_OBJ = None
 
@@ -29,9 +29,9 @@ def teardown():
 
     """
     if SC_OBJ:
-        log.info(f"Deleting created storage class: {SC_OBJ.name}")
+        logger.info(f"Deleting created storage class: {SC_OBJ.name}")
         SC_OBJ.delete()
-        log.info(f"Storage class: {SC_OBJ.name} deleted successfully")
+        logger.info(f"Storage class: {SC_OBJ.name} deleted successfully")
 
 
 def create_storageclass(sc_name, expect_fail=False):
@@ -60,16 +60,19 @@ def create_storageclass(sc_name, expect_fail=False):
     # Check for expected failure with duplicate SC name
     try:
         SC_OBJ.create()
+        logger.assertion(
+            f"SC creation with name '{sc_name}': expected_fail='{expect_fail}', actual_fail='False'"
+        )
         assert not expect_fail, "SC creation with same name passed. Expected to fail !"
-        log.info(f"Storage class: {SC_OBJ.name} created successfully !")
-        log.debug(sc_data)
+        logger.info(f"Storage class: {SC_OBJ.name} created successfully")
+        logger.debug(f"Storage class data: {sc_data}")
 
     except CommandFailed as ecf:
+        if not expect_fail:
+            raise
         assert "AlreadyExists" in str(ecf)
-        log.info(
-            f"Cannot create two StorageClasses with same name !"
-            f" Error message:  \n"
-            f"{ecf}"
+        logger.info(
+            f"Cannot create two StorageClasses with same name. Error message: {ecf}"
         )
 
 
@@ -86,9 +89,9 @@ class TestCreateSCSameName(ManageTest):
         """
 
         sc_name = "ocs-322-sc"
+        logger.test_step(f"Create StorageClass with name '{sc_name}'")
         create_storageclass(sc_name)
-        log.info(
-            f"Attempting to create another storageclass "
-            f"with duplicate name {sc_name}"
+        logger.test_step(
+            f"Attempt to create another StorageClass with duplicate name '{sc_name}'"
         )
         create_storageclass(sc_name, expect_fail=True)

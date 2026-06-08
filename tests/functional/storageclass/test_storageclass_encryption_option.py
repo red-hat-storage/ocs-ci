@@ -7,7 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class TestStorageClassEncryptionOptions:
@@ -36,18 +36,20 @@ class TestStorageClassEncryptionOptions:
         # Create a project
         proj_obj = project_factory()
 
-        # Create a storage class with encryption set to false
-        log.info("Creating a storage class with encryption='false'.")
+        logger.test_step("Create storage class with encryption='false'")
         sc_obj = storageclass_factory(encrypted=False)
+        logger.info(f"Created storage class {sc_obj.name} with encryption=false")
 
-        # Verify the storage class encryption option
-        log.info("Verifying the storage class encryption option.")
+        logger.test_step("Verify storage class has encrypted='false' parameter")
+        encrypted_value = sc_obj.data["parameters"]["encrypted"]
+        logger.assertion(
+            f"Storageclass encrypted parameter: expected='false', actual='{encrypted_value}'"
+        )
         assert (
-            sc_obj.data["parameters"]["encrypted"] == "false"
+            encrypted_value == "false"
         ), f"Storageclass {sc_obj.name} does not have encrypted='false' option."
 
-        # Create PVC
-        log.info("Creating a PVC using the storage class.")
+        logger.test_step(f"Create PVC using storage class {sc_obj.name}")
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=proj_obj,
@@ -56,12 +58,14 @@ class TestStorageClassEncryptionOptions:
             status=constants.STATUS_BOUND,
         )
 
-        # Create a POD
-        log.info("Creating a pod and attaching the PVC.")
+        logger.test_step("Create pod and attach the PVC")
         pod_obj = pod_factory(pvc=pvc_obj)
 
-        # Verify the pod status
-        log.info("Verifying the pod status.")
+        logger.test_step("Verify pod reaches Running state")
+        pod_phase = pod_obj.data["status"]["phase"]
+        logger.assertion(
+            f"Pod {pod_obj.name} phase: expected='{constants.STATUS_RUNNING}', actual='{pod_phase}'"
+        )
         assert (
-            pod_obj.data["status"]["phase"] == constants.STATUS_RUNNING
+            pod_phase == constants.STATUS_RUNNING
         ), f"Pod {pod_obj.name} is not in {constants.STATUS_RUNNING} state."

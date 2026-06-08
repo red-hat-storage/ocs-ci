@@ -50,6 +50,7 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         Delete PVC while IO is in progress
 
         """
+        logger.test_step("Start background IO on pod and delete PVC during IO")
         thread = pod.run_io_in_bg(self.pod_obj, expect_to_fail=True)
         self.pvc_obj.delete(wait=False)
         self.pvc_obj.ocp.wait_for_resource(
@@ -57,6 +58,7 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         )
         thread.join(timeout=15)
 
+        logger.test_step("Delete the pod and verify PVC is cleaned up")
         self.pod_obj.delete()
 
         # The PVC will no longer exist because the pod got deleted while it was

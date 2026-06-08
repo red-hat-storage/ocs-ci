@@ -11,7 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -32,38 +32,38 @@ class TestRbdImageMetadata:
         """
 
         rbd_images = []
-        # create a pvc with ceph-rbd sc
+        logger.test_step("Create a PVC with ceph-rbd storage class")
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             status=constants.STATUS_BOUND,
             volume_mode="Block",
         )
-        log.info(f"PVC {pvc_obj.name} created!")
+        logger.info(f"PVC {pvc_obj.name} created!")
         rbd_images.append(pvc_obj.get_rbd_image_name)
 
-        # create a snapshot of the PVC
+        logger.test_step("Create a snapshot of the PVC")
         snap_obj = pvc_obj.create_snapshot(
             snapshot_name=create_unique_resource_name("test", "snapshot"),
             wait=True,
         )
-        log.info(f"Snapshot of PVC {pvc_obj.name} created!")
+        logger.info(f"Snapshot of PVC {pvc_obj.name} created!")
         snapshot_content = get_snapshot_content_obj(snap_obj=snap_obj)
         snap_handle = snapshot_content.get().get("status").get("snapshotHandle")
         snap_image_name = f'csi-snap-{snap_handle.split("-", 5)[5]}'
         rbd_images.append(snap_image_name)
 
-        # restore the snapshot
+        logger.test_step("Restore the snapshot")
         restored_pvc = snapshot_restore_factory(
             snapshot_obj=snap_obj, volume_mode=pvc_obj.get_pvc_vol_mode, timeout=600
         )
-        log.info(f"restored the snapshot {restored_pvc.name} created!")
+        logger.info(f"restored the snapshot {restored_pvc.name} created!")
 
-        # create a clone of the PVC
+        logger.test_step("Create a clone of the PVC")
         clone_obj = pvc_clone_factory(pvc_obj)
-        log.info(f"Clone of PVC {pvc_obj.name} created!")
+        logger.info(f"Clone of PVC {pvc_obj.name} created!")
         rbd_images.append(clone_obj.get_rbd_image_name)
 
-        # check the metadata on each images
+        logger.test_step("Verify metadata is not set on each RBD image")
         rbd_pool_name = (
             (config.ENV_DATA.get("rbd_name") or RBD_NAME)
             if config.DEPLOYMENT["external_mode"]
@@ -73,8 +73,11 @@ class TestRbdImageMetadata:
         for image in rbd_images:
             cmd = f"rbd image-meta list {rbd_pool_name}/{image}"
             metadata = ceph_tool_pod.exec_cmd_on_pod(command=cmd, out_yaml_format=False)
-            log.info(f"Metdata for {image}\n{metadata}")
+            logger.debug(f"Metadata for {image}: {metadata}")
+            logger.assertion(
+                f"RBD image {image} metadata: expected='There are 0 metadata on this image', actual='{metadata}'"
+            )
             assert (
                 "There are 0 metadata on this image" in metadata
             ), f"Not expected, Metadata is being set for the rbd image - {image}!"
-        log.info("Metadata is not being set for the rbd images as expected!")
+        logger.info("Verified: Metadata is not being set for any of the RBD images")

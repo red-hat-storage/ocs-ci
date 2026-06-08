@@ -115,6 +115,9 @@ class TestPoolUserInterface(ManageTest):
 
         """
 
+        logger.test_step(
+            f"Verify pool '{self.pool_name}' compression and replica settings at Ceph level"
+        )
         if not check_pool_compression_replica_ceph_level(
             self.pool_name, compression, replica
         ):
@@ -122,6 +125,7 @@ class TestPoolUserInterface(ManageTest):
                 f"Pool {self.pool_name} values do not match configuration"
             )
         # Running IO on POD
+        logger.test_step(f"Run IO on pod '{self.pod_obj.name}' and collect FIO results")
         self.pod_obj.run_io(
             "fs",
             size="100m",
@@ -138,17 +142,25 @@ class TestPoolUserInterface(ManageTest):
         get_fio_rw_iops(self.pod_obj)
 
         # Checking the raw capcity is loaded on the UI or not.
+        logger.test_step(f"Verify block pool '{self.pool_name}' raw capacity on UI")
         blockpool_ui_object = BlockPoolUI()
+        logger.assertion(f"Block pool '{self.pool_name}' raw capacity visible on UI")
         assert blockpool_ui_object.pool_raw_capacity_loaded(
             self.pool_name
         ), "Block pool raw capacity is not visible on UI"
 
         # Cross checking the raw capacity of the blockpool between CLI and UI
+        logger.assertion(
+            f"Block pool '{self.pool_name}' raw capacity matches between CLI and UI"
+        )
         assert blockpool_ui_object.cross_check_raw_capacity(
             self.pool_name
         ), "Block pool raw capacity did not matched with UI"
 
         # Checking Results for compression and replication
+        logger.test_step(
+            f"Validate compression and replication for pool '{self.pool_name}'"
+        )
         if compression:
             compression_result = validate_compression(self.pool_name)
             if compression_result is False:
@@ -162,6 +174,9 @@ class TestPoolUserInterface(ManageTest):
             )
 
         # Check pg_num and osd_pool_default_pg_num matches
+        logger.test_step(
+            f"Check pg_num matches osd_pool_default_pg_num for pool '{self.pool_name}'"
+        )
         ct_pod = get_ceph_tools_pod()
         osd_pool_default_pg_num = ct_pod.exec_ceph_cmd(
             ceph_cmd="ceph config get mon osd_pool_default_pg_num"
@@ -170,6 +185,9 @@ class TestPoolUserInterface(ManageTest):
         expected_pgs = {
             self.pool_name: osd_pool_default_pg_num,
         }
+        logger.assertion(
+            f"pg_num for pool '{self.pool_name}': expected='{osd_pool_default_pg_num}'"
+        )
         assert validate_num_of_pgs(
             expected_pgs
         ), "pg_num is not equal to the osd pool default pg num"
@@ -179,6 +197,7 @@ class TestPoolUserInterface(ManageTest):
         )
 
         # Check if the pg-autoscale is ON
+        logger.test_step(f"Verify PG autoscale mode is ON for pool '{self.pool_name}'")
         pool_autoscale_status = ct_pod.exec_ceph_cmd(
             ceph_cmd="ceph osd pool autoscale-status"
         )
@@ -188,12 +207,17 @@ class TestPoolUserInterface(ManageTest):
         logger.info(f"{self.pool_name} autoscale mode is on")
 
         # Check the pool is not none
+        logger.test_step(f"Verify pool '{self.pool_name}' has a non-blank deviceClass")
         oc_obj = OCP(kind=constants.CEPHBLOCKPOOL)
         cbp_output = run_cmd(
             cmd=f"oc get cephblockpool/{self.pool_name} -n {config.ENV_DATA['cluster_namespace']} -o yaml"
         )
         cbp_output = oc_obj.exec_oc_cmd(
             command=f"get cephblockpool/{self.pool_name} -n {config.ENV_DATA['cluster_namespace']} -o yaml"
+        )
+        logger.assertion(
+            f"deviceClass for pool '{self.pool_name}': expected='not None', "
+            f"actual='{cbp_output['spec']['deviceClass']}'"
         )
         assert cbp_output["spec"]["deviceClass"] is not None, "The Deviceclass is none"
         logger.info(

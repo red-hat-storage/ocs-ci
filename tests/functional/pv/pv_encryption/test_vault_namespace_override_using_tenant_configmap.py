@@ -19,7 +19,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_pods
 from ocs_ci.utility import kms
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 kmsprovider = constants.VAULT_KMS_PROVIDER
 argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
@@ -82,11 +82,11 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         Setup csi-kms-connection-details configmap
         """
 
-        log.info("Setting up csi-kms-connection-details configmap")
+        logger.info("Setting up csi-kms-connection-details configmap")
         self.kms_vault = pv_encryption_kms_setup_factory(
             kv_version, use_vault_namespace
         )
-        log.info("csi-kms-connection-details setup successful")
+        logger.info("csi-kms-connection-details setup successful")
         # Create a project
         self.proj_obj = project_factory()
 
@@ -123,6 +123,7 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         use_vault_namespace,
     ):
 
+        logger.test_step("Create Vault backend path and policy for tenant override")
         self.kms_obj = kms.Vault()
         vault_resource_name = create_unique_resource_name("test", "vault")
         if use_vault_namespace:
@@ -132,6 +133,9 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         )
         self.kms_obj.vault_create_policy(policy_name=vault_resource_name)
 
+        logger.test_step(
+            "Create tenant configmap and ceph-csi-kms-token in tenant namespace"
+        )
         # Create a configmap in the tenant namespace to override the vault namespace as shown below:
         if use_vault_namespace:
             self.kms_obj.create_tenant_configmap(
@@ -149,6 +153,7 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
         self.kms_obj.vault_path_token = self.kms_obj.generate_vault_token()
         self.kms_obj.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
 
+        logger.test_step("Create encrypted RBD PVCs and verify Bound status")
         # Create New PVC and check status
         self.pvc_size = 1
         self.pvc_obj = multi_pvc_factory(
@@ -165,6 +170,9 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
             wait_each=False,
         )
 
+        logger.test_step(
+            "Verify encryption keys exist in overridden Vault backend path"
+        )
         # Verify if the key is created in Vault
         self.vol_handles = []
         for pvc_obj in self.pvc_obj:
@@ -172,10 +180,15 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             self.vol_handles.append(vol_handle)
 
-            assert kms.is_key_present_in_path(
+            key_present = kms.is_key_present_in_path(
                 key=vol_handle, path=self.kms_obj.vault_backend_path
-            ), f"Vault: Key not found for {pvc_obj.name}"
+            )
+            logger.assertion(
+                f"Vault key for PVC {pvc_obj.name}: expected=present, actual={'present' if key_present else 'missing'}"
+            )
+            assert key_present, f"Vault: Key not found for {pvc_obj.name}"
 
+        logger.test_step("Create pods and run IO on encrypted PVCs")
         self.pod_objs = create_pods(
             self.pvc_obj,
             pod_factory,
@@ -184,7 +197,7 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
             status=constants.STATUS_RUNNING,
         )
 
-        log.info("Running IO on all pods")
+        logger.info("Running IO on all pods")
         for pod_obj in self.pod_objs:
             pod_obj.run_io(
                 storage_type="block",
@@ -194,14 +207,15 @@ class TestEncryptedRbdTenantConfigmapOverride(ManageTest):
                 end_fsync=1,
                 direct=1,
             )
-        log.info("IO started on all pods")
+        logger.info("IO started on all pods")
 
         # Wait for IO completion
         for pod_obj in self.pod_objs:
             pod_obj.get_fio_results()
-        log.info("IO completed on all pods")
+        logger.info("IO completed on all pods")
 
-        log.info(f"Deleting pod {pod_obj.name}")
+        logger.test_step(f"Delete pod {pod_obj.name} and verify cleanup")
+        logger.info(f"Deleting pod {pod_obj.name}")
         pod_obj.delete()
         pod_obj.ocp.wait_for_delete(
             pod_obj.name, 180

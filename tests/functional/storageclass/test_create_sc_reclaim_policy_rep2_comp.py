@@ -25,7 +25,7 @@ from ocs_ci.helpers.helpers import (
     delete_volume_in_backend,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -63,10 +63,9 @@ class TestScReclaimPolicyRetainRep2Comp(ManageTest):
         *. Delete Pod, Pvc, Pv, Rbd image
         """
 
-        log.info(
-            f"Creating storageclass with replica {self.replica}"
-            f", compression {self.compression} and"
-            f"reclaim policy {self.reclaim_policy}"
+        logger.test_step(
+            f"Create StorageClass with replica={self.replica}, "
+            f"compression={self.compression}, reclaim_policy={self.reclaim_policy}"
         )
         sc_obj = storageclass_factory(
             interface=CEPHBLOCKPOOL,
@@ -76,12 +75,14 @@ class TestScReclaimPolicyRetainRep2Comp(ManageTest):
             reclaim_policy=self.reclaim_policy,
         )
         pool = sc_obj.get()["parameters"]["pool"]
+        logger.info(f"StorageClass {sc_obj.name} created with pool {pool}")
 
-        log.info("Creating PVCs and PODs")
+        logger.test_step("Create PVC and pod")
         pvc_obj = pvc_factory(interface=CEPHBLOCKPOOL, storageclass=sc_obj, size=10)
         pod_obj = pod_factory(interface=CEPHBLOCKPOOL, pvc=pvc_obj)
+        logger.info(f"PVC {pvc_obj.name} and pod {pod_obj.name} created")
 
-        log.info("Running IO on pod")
+        logger.test_step(f"Run IO on pod {pod_obj.name}")
         pod_obj.run_io(
             "fs",
             size="1G",
@@ -94,19 +95,20 @@ class TestScReclaimPolicyRetainRep2Comp(ManageTest):
             readwrite="readwrite",
         )
 
-        log.info(f"validating info on pool {pool}")
+        logger.test_step(f"Validate replica and compression on pool {pool}")
         validate_rep_result = validate_replica_data(pool, self.replica)
         if validate_rep_result is False:
             raise PoolNotReplicatedAsNeeded(f"pool {pool} not replicated as expected")
         validate_comp_result = validate_compression(pool)
         if validate_comp_result is False:
             raise PoolNotCompressedAsExpected(f"pool {pool} not compressed as expected")
+        logger.info(f"Pool {pool} replica and compression validated successfully")
 
-        log.info("Deleting pod")
+        logger.test_step("Delete pod, PVC, PV, and RBD image")
         pod_obj_list = [pod_obj]
         delete_pods(pod_obj_list, wait=True)
+        logger.info(f"Pod {pod_obj.name} deleted")
 
-        log.info("Deleting pvc, pv and rbd image")
         pvc_obj.reload()
         pvc_uuid_map = pvc_obj.image_uuid
         pv_obj = pvc_obj.backed_pv_obj
@@ -117,3 +119,4 @@ class TestScReclaimPolicyRetainRep2Comp(ManageTest):
             raise ImageIsNotDeletedOrNotFound(
                 f"Could not delete or find image csi-vol-{pvc_uuid_map}"
             )
+        logger.info(f"PVC, PV, and RBD image csi-vol-{pvc_uuid_map} deleted")

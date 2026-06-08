@@ -83,6 +83,7 @@ class TestCRRsourcesValidation(ManageTest):
             namespace (str): namespace in which CR object should be created
 
         """
+        logger.info(f"Creating {cr_object_kind} resource from {cr_resource_yaml}")
         res = run_oc_command(cmd=f"create -f {cr_resource_yaml}", namespace=namespace)
         assert (
             ERRMSG not in res[0]
@@ -98,6 +99,9 @@ class TestCRRsourcesValidation(ManageTest):
         )
 
         # test to verify that all the non-editable properties are really not editable
+        logger.info(
+            f"Testing {len(non_editable_patches)} non-editable properties on {cr_object_kind}"
+        )
         non_editable_properties_errors = {}
         cr_resource_prev_yaml = cr_resource_original_yaml
         for patch in non_editable_patches:
@@ -113,7 +117,7 @@ class TestCRRsourcesValidation(ManageTest):
                 t_file.writelines(command)
             self.temp_files_list.append(temp_file.name)
             run_cmd(f"chmod 777 {temp_file.name}")
-            logger.info(f"Trying to edit property {patch}")
+            logger.debug(f"Trying to edit non-editable property {patch}")
 
             try:
                 run_cmd(f"sh {temp_file.name}")
@@ -128,7 +132,7 @@ class TestCRRsourcesValidation(ManageTest):
             except (
                 CommandFailed
             ):  # some properties are not editable and CommandFailed exception is thrown
-                logger.info(
+                logger.debug(
                     f"Property {patch} is not editable, patch command failed, continue to the next"
                 )
                 continue  # just continue to the next property
@@ -151,6 +155,9 @@ class TestCRRsourcesValidation(ManageTest):
             raise Exception(err_msg)
 
         # test that all editable properties are really editable
+        logger.info(
+            f"Testing {len(editable_patches)} editable properties on {cr_object_kind}"
+        )
         editable_properties_errors = {}
         cr_resource_prev_yaml = cr_resource_original_yaml
         for patch in editable_patches:
@@ -166,7 +173,7 @@ class TestCRRsourcesValidation(ManageTest):
                 t_file.writelines(command)
             self.temp_files_list.append(temp_file.name)
             run_cmd(f"chmod 777 {temp_file.name}")
-            logger.info(f"Trying to edit property {patch}")
+            logger.debug(f"Trying to edit editable property {patch}")
 
             try:
                 run_cmd(f"sh {temp_file.name}")
@@ -182,12 +189,15 @@ class TestCRRsourcesValidation(ManageTest):
             except (
                 CommandFailed
             ):  # some properties are not editable and CommandFailed exception is thrown
-                logger.info(
+                logger.warning(
                     f"Property {patch} should be editable, but patch command failed, continue to the next"
                 )
                 editable_properties_errors[patch] = cr_resource_modified_yaml
                 continue  # just continue to the next property
 
+        logger.assertion(
+            f"Editable properties errors: expected=empty, actual={list(editable_properties_errors.keys())}"
+        )
         assert not editable_properties_errors, (
             f"{cr_object_kind} object has not been edited but it should be. \n"
             f"Unchanged properties: {list(editable_properties_errors.keys())}"
@@ -197,6 +207,9 @@ class TestCRRsourcesValidation(ManageTest):
         """
         Test case to check that some properties of network fence object are not editable once the object is created
         """
+        logger.test_step(
+            "Verify non-editable properties of NetworkFence CR cannot be modified"
+        )
 
         non_editable_patches = {  # dictionary: patch_name --> patch
             "apiVersion": {"apiVersion": "csiaddons.openshift.io/v1alpha2"},
@@ -226,6 +239,9 @@ class TestCRRsourcesValidation(ManageTest):
         """
         Test case to check that some properties reclaim space cron job object are not editable once object is created
         """
+        logger.test_step(
+            "Verify non-editable properties of ReclaimSpaceCronJob CR cannot be modified"
+        )
 
         non_editable_patches = {  # dictionary: patch_name --> patch
             "persistentVolumeClaim": '{"spec": {"jobTemplate": {"spec": {"target" :{"persistentVolumeClaim": "pv"}}}}}',
@@ -242,6 +258,9 @@ class TestCRRsourcesValidation(ManageTest):
         """
         Test case to check that some properties of reclaim space job object are not editable once object is created
         """
+        logger.test_step(
+            "Verify non-editable properties of ReclaimSpaceJob CR cannot be modified"
+        )
 
         non_editable_patches = {  # dictionary: patch_name --> patch
             "persistentVolumeClaim": '{"spec": {"target" :{"persistentVolumeClaim": "pv"}}}',
@@ -259,6 +278,9 @@ class TestCRRsourcesValidation(ManageTest):
         Test case to check that some properties of volume replication class object are not editable
         once object is created
         """
+        logger.test_step(
+            "Verify non-editable properties of VolumeReplicationClass CR cannot be modified"
+        )
 
         non_editable_patches = {  # dictionary: patch_name --> patch
             "provisioner": '{"spec": {"provisioner": "edited.provisioner.io"}}',
@@ -283,6 +305,9 @@ class TestCRRsourcesValidation(ManageTest):
         Test case to check that some properties of volume replication class object are not editable
         once object is created
         """
+        logger.test_step(
+            "Create PVC and verify non-editable properties of VolumeReplication CR"
+        )
 
         with open(
             os.path.join(constants.TEMPLATE_CSI_ADDONS_DIR, "volumeReplicationCR.yaml")

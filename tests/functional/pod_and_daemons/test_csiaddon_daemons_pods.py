@@ -73,16 +73,21 @@ class TestCSIADDonDaemonset(ManageTest):
         pod_label = config_data["pod_label"]
 
         daemonsets = DaemonSet(namespace=config.ENV_DATA["cluster_namespace"])
-        logger.info("Validating existence of CSI Addon daemonset")
+        logger.test_step(f"Verify CSI addon daemonset '{daemonset_name}' exists")
 
         # Verify Daemonset exists
+        logger.assertion(
+            f"CSI addon daemonset '{daemonset_name}' existence: expected='True'"
+        )
         assert daemonsets.check_resource_existence(
             should_exist=True, resource_name=daemonset_name
         ), f"CSI addon daemonset '{daemonset_name}' does not exist"
         logger.info(f"CSIaddon daemonset '{daemonset_name}' exists")
 
         # Verify daemonset configuration
-        logger.info("Validating configuration of CSI Addon daemonset")
+        logger.test_step(
+            f"Validate daemonset '{daemonset_name}' labels match expected pod label"
+        )
         daemonset_info = daemonsets.get(resource_name=daemonset_name)
 
         actual_labels = (
@@ -135,7 +140,9 @@ class TestCSIADDonDaemonset(ManageTest):
         OCS-7503 is part verification of DFBUGS_5082 automation
 
         """
-        logger.info("Validating containers in csi addon pods having ready status")
+        logger.test_step(
+            "Validate all containers in CSI-addon pods are in ready status"
+        )
         namespace = config.ENV_DATA["cluster_namespace"]
         csi_addon_pods = get_pods_having_label(pod_label, namespace)
         for pod in csi_addon_pods:
@@ -166,8 +173,8 @@ class TestCSIADDonDaemonset(ManageTest):
 
         """
 
-        logger.info(
-            "Validating csi addon pod using pod-network instead of host network"
+        logger.test_step(
+            "Validate CSI-addon pods use pod network instead of host network"
         )
         namespace = config.ENV_DATA["cluster_namespace"]
         csi_addon_pods = get_pods_having_label(pod_label, namespace)
@@ -203,8 +210,8 @@ class TestCSIADDonDaemonset(ManageTest):
         OCS-7504 is part verification of DFBUGS_5082 automation
 
         """
-        logger.info(
-            "Validating CSI-addon DaemonSet has correct number of Desired, ready and available pods"
+        logger.test_step(
+            f"Validate CSI-addon DaemonSet '{daemonset_name}' desired vs ready vs available pod counts"
         )
         csi_addon_daemonset = DaemonSet(
             resource_name=daemonset_name,
@@ -216,9 +223,15 @@ class TestCSIADDonDaemonset(ManageTest):
         number_available = csi_addon_daemonset_status["numberAvailable"]
         desired_number_ready = csi_addon_daemonset_status["desiredNumberScheduled"]
 
+        logger.assertion(
+            f"Ready pods: expected='{desired_number_ready}', actual='{number_ready}'"
+        )
         assert (
             number_ready == desired_number_ready
         ), f"Expected {desired_number_ready} pods to be ready, but found {number_ready} pods ready"
+        logger.assertion(
+            f"Available pods: expected='{desired_number_ready}', actual='{number_available}'"
+        )
         assert (
             number_available == desired_number_ready
         ), f"Expected {desired_number_ready} pods to be available, but found {number_available} pods available"
@@ -253,7 +266,7 @@ class TestCSIADDonDaemonset(ManageTest):
         OCS-7505 is part verification of DFBUGS_5082 automation
 
         """
-        logger.info("Validating csi addon pods on each worker node")
+        logger.test_step("Get all worker nodes and verify CSI addon pods on each")
         namespace = config.ENV_DATA["cluster_namespace"]
 
         # Get all nodes with worker role, including master nodes that also have worker role
@@ -267,9 +280,16 @@ class TestCSIADDonDaemonset(ManageTest):
         )
 
         csi_addon_pods = get_pods_having_label(pod_label, namespace)
+        logger.assertion(
+            f"CSI addon pod count: expected='>0', actual='{len(csi_addon_pods)}'"
+        )
         assert len(csi_addon_pods) > 0, "csi addon pods not found"
         logger.info(f"Found {len(csi_addon_pods)} csi addon pods")
 
+        logger.assertion(
+            f"CSI addon pods count matches worker nodes: "
+            f"expected='{len(worker_nodes_names)}', actual='{len(csi_addon_pods)}'"
+        )
         assert len(csi_addon_pods) == len(worker_nodes_names), (
             f"Expected {len(worker_nodes_names)} csi addon pods, one per worker node, "
             f"found {len(csi_addon_pods)}"
@@ -309,11 +329,15 @@ class TestCSIADDonDaemonset(ManageTest):
         OCS-7506 is part verification of DFBUGS_5082 automation
 
         """
+        logger.test_step(
+            "Delete a random CSI-addon pod and verify it restores to Running state"
+        )
         namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         pod_obj = ocp.OCP(kind="Pod", namespace=namespace)
 
         csi_addons_pod_objs = get_pods_having_label(pod_label, namespace)
         pod_data = random.choice(csi_addons_pod_objs)
+        logger.info(f"Deleting CSI-addon pod: {pod_data['metadata']['name']}")
         pod_obj.delete(resource_name=pod_data["metadata"]["name"])
         time.sleep(5)
 
@@ -322,9 +346,12 @@ class TestCSIADDonDaemonset(ManageTest):
             pod_data["metadata"]["name"] for pod_data in csi_addon_pod_new
         ]
 
+        logger.assertion(
+            f"CSI-addon pods restored to Running state: pods={csi_addon_pod_names_list}"
+        )
         assert wait_for_pods_to_be_running(
             namespace=namespace, pod_names=csi_addon_pod_names_list
-        ), "CSI-addons pod didn't came up is running status "
+        ), "CSI-addons pod didn't come up in running status"
 
     @pytest.mark.parametrize(
         argnames=["storage_system"],
@@ -369,8 +396,8 @@ class TestCSIADDonDaemonset(ManageTest):
         plugin_dir = config_data["plugin_dir"]
         socket_name = config_data["socket_name"]
 
-        logger.info(
-            "Validating csi-addons socket creation on nodes of each csi-addons pod"
+        logger.test_step(
+            f"Validate csi-addons socket creation on nodes for {storage_system} pods"
         )
         namespace = config.ENV_DATA["cluster_namespace"]
         # 1. Get all csi-addons pods
@@ -415,8 +442,8 @@ class TestCSIADDonDaemonset(ManageTest):
         OCS-7511 is part verification of DFBUGS_5082 automation
 
         """
-        logger.info(
-            "Validating csi-addons pod recovery after pod crash with increase in restart count."
+        logger.test_step(
+            "Crash a random CSI-addon pod and verify recovery with increased restart count"
         )
         namespace = config.ENV_DATA["cluster_namespace"]
 
@@ -439,6 +466,10 @@ class TestCSIADDonDaemonset(ManageTest):
         time.sleep(10)
 
         # 4. Wait for pod to be Running and check restart count
+        logger.test_step(
+            f"Wait for pod '{pod_name}' to be Running and verify restart count increased"
+        )
+        logger.assertion(f"CSI-addon pod '{pod_name}' restored to Running state")
         assert wait_for_pods_to_be_running(
             namespace=namespace, pod_names=[pod_name]
         ), f"CSI-addons pod {pod_name} didn't come up to running status"
@@ -446,6 +477,9 @@ class TestCSIADDonDaemonset(ManageTest):
         pod_obj = ocp_pod.get(resource_name=pod_name)
         restart_count_after = (
             pod_obj.get("status").get("containerStatuses")[0].get("restartCount")
+        )
+        logger.assertion(
+            f"Restart count for pod '{pod_name}': expected='>{restart_count_before}', actual='{restart_count_after}'"
         )
         assert (
             restart_count_after > restart_count_before

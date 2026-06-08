@@ -36,10 +36,10 @@ class TestSecretsAndSecurityContext(ManageTest):
         """
         Testing if secrets are used in env variables of pods
         """
-        logger.info("Checking pods with security refrence in them.")
+        logger.test_step("Retrieve all pods with secretKeyRef in environment variables")
         cmd = "oc get all -o jsonpath='{range .items[?(@..secretKeyRef)]} {.kind} {.metadata.name}{end}' -A"
         output = run_cmd(cmd).strip().split()
-        logger.info("Checking securityKeyRef in pods")
+        logger.test_step("Validate secretKeyRef keys and names in rook-ceph pods")
         for i in range(0, len(output), 2):
             if output[i] == "Pod":
                 pod = output[i + 1]
@@ -50,10 +50,16 @@ class TestSecretsAndSecurityContext(ManageTest):
                     yaml_data = yaml.safe_load(data)
                     k, n = self.checking_securtiyKeyRef(yaml_data)
                     for value in k:
+                        logger.assertion(
+                            f"secretKeyRef key: expected one of {EXPECTED_KEYS}, actual='{value}'"
+                        )
                         assert (
                             value in EXPECTED_KEYS
                         ), f"Key: {value} is not expected in securityKeyRef, may be secrutiy breach please check"
                     for value in n:
+                        logger.assertion(
+                            f"secretKeyRef name: expected to match one of {EXPECTED_NAMES}, actual='{value}'"
+                        )
                         assert any(
                             value == key or value.startswith(key)
                             for key in EXPECTED_NAMES
@@ -70,10 +76,12 @@ class TestSecretsAndSecurityContext(ManageTest):
         Testing security context of rook-ceph-crash-collector pods, in a
         normal cluster
         """
-        logger.info("Checking security context on rook-ceph-crashcollector pods")
+        logger.test_step("Retrieve rook-ceph-crashcollector pods")
         cmd = f"oc --namespace={config.ENV_DATA['cluster_namespace']} get pods -l app=rook-ceph-crashcollector -o name"
         output = run_cmd(cmd).strip().split("\n")
-        logger.info("Checking securityContext in ceph-crash container")
+        logger.test_step(
+            f"Validate securityContext in {len(output)} crashcollector pods"
+        )
         for pod in output:
             data = run_cmd(
                 f"oc --namespace={config.ENV_DATA['cluster_namespace']} get {pod} -o yaml"
@@ -83,14 +91,23 @@ class TestSecretsAndSecurityContext(ManageTest):
                 yaml_data
             )
 
+            logger.assertion(
+                f"runAsGroup in pod {pod}: expected=167, actual={securityContext['runAsGroup']}"
+            )
             assert (
                 securityContext["runAsGroup"] == 167
             ), f"Security Context key runAsGroup value is not as expected in pod {pod} \
                 expected value is 167"
+            logger.assertion(
+                f"runAsNonRoot in pod {pod}: expected=True, actual={securityContext['runAsNonRoot']}"
+            )
             assert securityContext[
                 "runAsNonRoot"
             ], f"Security Context key runAsNonRoot value is not as expected in pod {pod} \
                 expected value is True"
+            logger.assertion(
+                f"runAsUser in pod {pod}: expected=167, actual={securityContext['runAsUser']}"
+            )
             assert (
                 securityContext["runAsUser"] == 167
             ), f"Security Context key runAsUser value is not as expected in pod {pod} \
@@ -130,6 +147,6 @@ class TestSecretsAndSecurityContext(ManageTest):
         """
         logger.info("Checking the security Context of the container ceph-crash")
         container = yaml_data["spec"]["containers"][0]
-        logger.info(f"checking security context of container {container}")
+        logger.debug(f"checking security context of container {container}")
         securityContext = container["securityContext"]
         return securityContext

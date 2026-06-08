@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -65,18 +65,18 @@ class TestPvcClonedStatusOfSmallSizeFiles(E2ETest):
 
         rsh_cmd = f"ls -laR {self.pod_path}/tmp/linux*|wc -l"
         self.original_total_files = self.pod_obj.exec_sh_cmd_on_pod(command=rsh_cmd)
-        log.info(f"original_total_files: {self.original_total_files}")
+        logger.info(f"original_total_files: {self.original_total_files}")
 
     @pytest.fixture()
     def create_snapshot(self, snapshot_factory):
-        log.info(f"Creating snapshot from {self.pvc_obj.name}")
+        logger.info(f"Creating snapshot from {self.pvc_obj.name}")
         self.snapshot = snapshot_factory(
             self.pvc_obj, snapshot_name=f"{self.pvc_obj.name}--snapshot"
         )
 
     @pytest.fixture()
     def snapshot_restore(self, snapshot_restore_factory):
-        log.info(f"Creating restore from snapshot {self.snapshot.name}")
+        logger.info(f"Creating restore from snapshot {self.snapshot.name}")
         self.pvc_restore = snapshot_restore_factory(
             snapshot_obj=self.snapshot,
             restore_pvc_name=f"{self.pvc_obj.name}--restore",
@@ -107,16 +107,20 @@ class TestPvcClonedStatusOfSmallSizeFiles(E2ETest):
             snapshot_restore: A fixture to restore pvc from snapshot
         """
 
-        log.info(f"Attaching pod to pvc restore {self.pvc_restore.name}")
+        logger.test_step(f"Attach pod to restored PVC {self.pvc_restore.name}")
         restored_pod_obj = pod_factory(
             pvc=self.pvc_restore, pod_dict_path=constants.PERF_POD_YAML
         )
 
+        logger.test_step("Verify file count matches between original and restored pod")
         command = f"ls -laR {self.pod_path}/tmp/linux*|wc -l"
         restored_total_files = restored_pod_obj.exec_sh_cmd_on_pod(command=command)
-        log.info(f"restored_total_files: {restored_total_files}")
+        logger.debug(f"restored_total_files: {restored_total_files}")
+        logger.debug(f"original_total_files: {self.original_total_files}")
 
-        log.info(f"original_total_files: {self.original_total_files}")
+        logger.assertion(
+            f"File count: expected={self.original_total_files}, actual={restored_total_files}"
+        )
         assert (
             self.original_total_files == restored_total_files
         ), f"Total number of files present in {self.pod_obj} are not same as {restored_pod_obj}"

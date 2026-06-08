@@ -81,6 +81,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             tuple: containing the params used in test cases
 
         """
+        logger.test_step("Identify nodes and set up app pods for fencing test")
         ocs_nodes, non_ocs_nodes = self.identify_and_add_nodes(scenario, num_of_nodes)
         test_nodes = ocs_nodes if (scenario == "colocated") else non_ocs_nodes
         logger.info(f"Using nodes {test_nodes} for running test")
@@ -123,7 +124,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             scenario, ceph_cluster, ocs_nodes, non_ocs_nodes, num_of_fail_nodes
         )
 
-        # Create multiple RBD and CephFS backed PVCs with RWO accessmode
+        logger.test_step("Create RBD and CephFS PVCs with RWO access mode")
         num_of_pvcs = self.num_of_app_pods_per_node * num_of_fail_nodes
         rbd_pvcs = multi_pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
@@ -140,7 +141,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             num_of_pvc=num_of_pvcs,
         )
 
-        # Create deploymentconfig based pods
+        logger.test_step("Create DeploymentConfig pods on selected nodes")
         dc_pods = []
         # Start app-pods on selected node(s)
         for node_name in app_pod_nodes:
@@ -410,7 +411,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         logger.info(f"Starting IO on {len(pod_list)} app pods")
         with ThreadPoolExecutor(max_workers=4) as executor:
             for pod_obj in pod_list:
-                logger.info(f"Starting IO on pod {pod_obj.name}")
+                logger.debug(f"Starting IO on pod {pod_obj.name}")
                 executor.submit(
                     pod_obj.run_io,
                     storage_type="fs",
@@ -427,7 +428,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         if run_io_in_bg:
             logger.info(f"Starting IO in background on {len(pod_list)} app pods")
             for pod_obj in pod_list:
-                logger.info(f"Starting IO on pod {pod_obj.name}")
+                logger.debug(f"Starting background IO on pod {pod_obj.name}")
                 pod_obj.run_io(
                     storage_type="fs",
                     size="256M",
@@ -612,7 +613,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         """
         ceph_cluster, dc_pods, ceph_pods, app_pod_nodes, test_nodes, disruptor = setup
 
-        # Run IO on pods
+        logger.test_step("Run IO on pods and verify results")
         md5sum_data = self.run_and_verify_io(
             pod_list=dc_pods, fio_filename="io_file1", run_io_in_bg=True
         )
@@ -622,7 +623,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         if disruptor:
             [disruption.delete_resource() for disruption in disruptor]
 
-        # Induce network failure on the nodes
+        logger.test_step(f"Induce short network failure on nodes {app_pod_nodes}")
         node.node_network_failure(app_pod_nodes)
         logger.info(f"Waiting for {self.short_nw_fail_time} seconds")
         sleep(self.short_nw_fail_time)
@@ -636,7 +637,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 sleep=30,
             )
 
-        # Fetch info of new pods and verify Multi-Attach error
+        logger.test_step("Verify new pods have Multi-Attach error")
         new_dc_pods = self.get_new_pods(dc_pods)
         assert len(new_dc_pods) == len(dc_pods), "Unexpected number of app pods"
         self.verify_multi_attach_error(new_dc_pods)
@@ -646,7 +647,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             assert len(new_ceph_pods) > 0, "Unexpected number of osd pods"
             self.verify_multi_attach_error(new_ceph_pods)
 
-        # Reboot the unresponsive node(s)
+        logger.test_step("Reboot unresponsive nodes and wait for recovery")
         logger.info(f"Rebooting the unresponsive node(s): {app_pod_nodes}")
         nodes.restart_nodes_by_stop_and_start(node.get_node_objs(app_pod_nodes))
         node.wait_for_nodes_status(
@@ -765,7 +766,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         ceph_cluster, dc_pods, ceph_pods, app_pod_nodes, test_nodes, disruptor = setup
 
         external_mode = helpers.storagecluster_independent_check()
-        # Run IO on pods
+        logger.test_step("Run IO on pods and verify results")
         md5sum_data = self.run_and_verify_io(
             pod_list=dc_pods, fio_filename="io_file1", run_io_in_bg=True
         )
@@ -775,7 +776,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         if disruptor:
             [disruption.delete_resource() for disruption in disruptor]
 
-        # Induce network failure on the nodes
+        logger.test_step(f"Induce prolonged network failure on nodes {app_pod_nodes}")
         node.node_network_failure(app_pod_nodes)
         logger.info(f"Waiting for {self.prolong_nw_fail_time} seconds")
         sleep(self.prolong_nw_fail_time)
@@ -786,7 +787,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 condition=constants.STATUS_TERMINATING, resource_name=pod_obj.name
             )
 
-        # Fetch info of new pods and verify Multi-Attach error
+        logger.test_step("Verify new pods have Multi-Attach error")
         new_dc_pods = self.get_new_pods(dc_pods)
         assert len(new_dc_pods) == len(dc_pods), "Unexpected number of app pods"
         self.verify_multi_attach_error(new_dc_pods)
@@ -796,7 +797,9 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             assert len(new_ceph_pods) > 0, "Unexpected number of osd pods"
             self.verify_multi_attach_error(new_ceph_pods)
 
-        logger.info("Executing manual recovery steps")
+        logger.test_step(
+            "Execute manual recovery - power off unresponsive nodes and force delete pods"
+        )
         # Power off the unresponsive node(s)
         logger.info(f"Powering off the unresponsive node(s): {app_pod_nodes}")
         nodes.stop_nodes(node.get_node_objs(app_pod_nodes))
@@ -916,7 +919,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             node_list=extra_nodes[:-1], label_key="nodetype"
         )
 
-        # Run IO on pods
+        logger.test_step("Run IO on pods and verify results")
         md5sum_data = self.run_and_verify_io(
             pod_list=dc_pods, fio_filename="io_file1", run_io_in_bg=True
         )
@@ -925,7 +928,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         if disruptor:
             [disruption.delete_resource() for disruption in disruptor]
 
-        # Induce network failure on the nodes
+        logger.test_step(f"Induce prolonged network failure on nodes {app_pod_nodes}")
         node.node_network_failure(app_pod_nodes)
         logger.info(f"Waiting for {self.prolong_nw_fail_time} seconds")
         sleep(self.prolong_nw_fail_time)
@@ -936,7 +939,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 condition=constants.STATUS_TERMINATING, resource_name=pod_obj.name
             )
 
-        # Fetch info of new pods and verify Multi-Attach error
+        logger.test_step("Verify new pods have Multi-Attach error")
         new_dc_pods = self.get_new_pods(dc_pods)
         assert len(new_dc_pods) == len(dc_pods), "Unexpected number of app pods"
         self.verify_multi_attach_error(new_dc_pods)
@@ -947,7 +950,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             assert len(new_ceph_pods) > 0, "Unexpected number of osd pods"
             self.verify_multi_attach_error(new_ceph_pods)
 
-        logger.info("Executing manual recovery steps")
+        logger.test_step("Execute manual recovery - power off and force delete pods")
         # Power off the unresponsive node
         logger.info(f"Powering off the unresponsive node: {app_pod_nodes}")
         nodes.stop_nodes(node.get_node_objs(app_pod_nodes))
@@ -1006,7 +1009,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             node_list=extra_nodes[:-1], label_key="nodetype", label_value="app-pod"
         )
 
-        # Induce network failure on the node
+        logger.test_step(f"Induce short network failure on node {extra_nodes[-1]}")
         node.node_network_failure(extra_nodes[-1])
         logger.info(f"Waiting for {self.short_nw_fail_time} seconds")
         sleep(self.short_nw_fail_time)
@@ -1025,7 +1028,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         assert len(new_dc_pods2) == len(new_dc_pods), "Unexpected number of app pods"
         self.verify_multi_attach_error(new_dc_pods2)
 
-        # Reboot the unresponsive node
+        logger.test_step("Reboot unresponsive node and verify recovery")
         logger.info(f"Rebooting the unresponsive node: {extra_nodes[-1]}")
         nodes.restart_nodes_by_stop_and_start(node.get_node_objs([extra_nodes[-1]]))
         node.wait_for_nodes_status(

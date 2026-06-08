@@ -29,7 +29,7 @@ from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check_base
 
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def check_health_status():
@@ -43,13 +43,13 @@ def check_health_status():
     try:
         status = ceph_health_check_base()
         if status:
-            log.info("Health check passed")
+            logger.info("Health check passed")
         else:
-            log.info("Health check failed")
+            logger.info("Health check failed")
         return status
     except CephHealthException as e:
         # skip because ceph is not in good health
-        log.info(f"Ceph health exception received: {e}")
+        logger.info(f"Ceph health exception received: {e}")
         return False
 
 
@@ -65,7 +65,7 @@ class TestCephCapacityRecovery(PASTest):
         """
         Setting up test parameters
         """
-        log.info("Starting the test setup")
+        logger.info("Starting the test setup")
         # Run the test in its own project (namespace)
         self.create_test_project()
 
@@ -78,10 +78,10 @@ class TestCephCapacityRecovery(PASTest):
             self.ceph_capacity = int(self.ceph_cluster.get_ceph_capacity())
         except Exception as err:
             err_msg = f"Failed to get Storage capacity : {err}"
-            log.error(err_msg)
+            logger.exception(err_msg)
             raise Exception(err_msg)
 
-        log.info(
+        logger.info(
             f"Working on cluster {self.ceph_cluster.cluster_name} with capacity {self.ceph_capacity}"
         )
 
@@ -89,7 +89,7 @@ class TestCephCapacityRecovery(PASTest):
         """
         Cleanup the test environment
         """
-        log.info("Starting the test cleanup")
+        logger.info("Starting the test cleanup")
 
         if self.benchmark_obj is not None:
             self.benchmark_obj.cleanup()
@@ -102,7 +102,7 @@ class TestCephCapacityRecovery(PASTest):
     def test_capacity_recovery(
         self,
     ):
-        log.info("Ceph Recovery test start")
+        logger.test_step("Pull performance image and prepare cluster for capacity test")
         get_used_capacity("Before pulling perf image")
 
         helpers.pull_images(constants.PERF_IMAGE)
@@ -126,8 +126,11 @@ class TestCephCapacityRecovery(PASTest):
             self.ceph_capacity * (1 - used_now / 100 - 0.15) / self.num_of_pvcs
         )
         self.pvc_size_str = str(self.pvc_size) + "Gi"
-        log.info(f"Creating pvs of {self.pvc_size_str} size")
+        logger.info(f"Creating pvs of {self.pvc_size_str} size")
 
+        logger.test_step(
+            f"Create {int(self.num_of_pvcs / 2)} PVCs with pods and clones, filling each to 95%"
+        )
         pvc_list = []
         pod_list = []
         for i in range(
@@ -135,7 +138,7 @@ class TestCephCapacityRecovery(PASTest):
         ):  # on each loop cycle 1 pvc and 1 clone
             index = i + 1
 
-            log.info("Start creating PVC")
+            logger.debug(f"Start creating PVC {index}/{int(self.num_of_pvcs / 2)}")
             pvc_obj = helpers.create_pvc(
                 sc_name=self.sc_obj.name,
                 size=self.pvc_size_str,
@@ -144,11 +147,11 @@ class TestCephCapacityRecovery(PASTest):
             )
             helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
 
-            log.info(
+            logger.debug(
                 f"PVC {pvc_obj.name} was successfully created in namespace {self.namespace}."
             )
             # Create a pod on one node
-            log.info(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
+            logger.debug(f"Creating Pod with pvc {pvc_obj.name} on node {node_one}")
 
             pvc_obj.reload()
 
@@ -161,7 +164,7 @@ class TestCephCapacityRecovery(PASTest):
                     pod_dict_path=constants.PERF_POD_YAML,
                 )
             except Exception as e:
-                log.error(
+                logger.exception(
                     f"Pod on PVC {pvc_obj.name} was not created, exception {str(e)}"
                 )
                 raise PodNotCreated("Pod on PVC was not created.")
@@ -174,13 +177,13 @@ class TestCephCapacityRecovery(PASTest):
             pod_list.append(pod_obj)
 
             file_name = f"{pod_obj.name}-ceph_capacity_recovery"
-            log.info(f"Starting IO on the POD {pod_obj.name}")
+            logger.debug(f"Starting IO on the POD {pod_obj.name}")
 
             filesize = int(float(self.pvc_size_str[:-2]) * 0.95)
             # Change the file size to MB for the FIO function
             file_size = f"{filesize * constants.GB2MB}M"
 
-            log.info(f"Going to write file of size  {file_size}")
+            logger.debug(f"Going to write file of size {file_size}")
             pod_obj.fillup_fs(
                 size=file_size, fio_filename=file_name, performance_pod=True
             )
@@ -189,7 +192,7 @@ class TestCephCapacityRecovery(PASTest):
 
             get_used_capacity(f"After creation of pvc {index}")
 
-            log.info(f"Start creation of clone for pvc number {index}.")
+            logger.debug(f"Start creation of clone for pvc number {index}.")
             cloned_pvc_obj = pvc.create_pvc_clone(
                 sc_name=pvc_obj.backed_sc,
                 parent_pvc=pvc_obj.name,
@@ -201,15 +204,18 @@ class TestCephCapacityRecovery(PASTest):
             helpers.wait_for_resource_state(
                 cloned_pvc_obj, constants.STATUS_BOUND, 3600
             )
-            log.info(f"Finished successfully creation of clone for pvc number {index}.")
+            logger.debug(
+                f"Finished successfully creation of clone for pvc number {index}."
+            )
             get_used_capacity(f"After creation of clone {index}")
 
+        logger.test_step("Run FIO benchmark to fill cluster capacity above 85%")
         size = get_file_size(100)
         self.benchmark_obj = BenchmarkOperatorFIO()
         self.benchmark_obj.setup_benchmark_fio(total_size=size)
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
 
-        log.info("Verify used capacity bigger than 85%")
+        logger.info("Verify used capacity bigger than 85%")
         sample = TimeoutSampler(
             timeout=2500,
             sleep=40,
@@ -217,39 +223,41 @@ class TestCephCapacityRecovery(PASTest):
             expected_used_capacity=85.0,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error("The after 2500 seconds the used capacity smaller than 85%")
+            logger.error("The after 2500 seconds the used capacity smaller than 85%")
             raise TimeoutExpiredError
 
+        logger.test_step(f"Delete {len(pod_list)} pods and PVCs to recover capacity")
         get_used_capacity("Before PVCs deletion")
         check_health_status()
 
         for pod_obj, pvc_obj in zip(pod_list, pvc_list):
-            log.info(f"Deleting the test POD : {pod_obj.name}")
+            logger.debug(f"Deleting the test POD : {pod_obj.name}")
             try:
                 pod_obj.delete()
-                log.info("Wait until the pod is deleted.")
+                logger.debug("Wait until the pod is deleted.")
                 pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
             except Exception as ex:
-                log.error(f"Cannot delete the test pod : {ex}")
+                logger.warning(f"Cannot delete the test pod : {ex}")
 
             # Deleting the PVC which used in the test.
-            log.info(f"Delete the PVC : {pvc_obj.name}")
+            logger.debug(f"Delete the PVC : {pvc_obj.name}")
             try:
                 pvc_obj.delete()
-                log.info("Wait until the pvc is deleted.")
+                logger.debug("Wait until the pvc is deleted.")
                 pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
             except Exception as ex:
-                log.error(f"Cannot delete the test pvc : {ex}")
+                logger.warning(f"Cannot delete the test pvc : {ex}")
 
             get_used_capacity(f"After deletion of pvc  {pvc_obj.name}")
             check_health_status()
             time.sleep(600)
 
+        logger.test_step("Wait for Ceph cluster health to recover after PVC deletion")
         get_used_capacity("After PVCs deletion")
 
         sample = TimeoutSampler(timeout=1800, sleep=30, func=check_health_status)
         if not sample.wait_for_func_status(result=True):
-            log.error("The after 1800 seconds the cluster health is still not OK")
+            logger.error("The after 1800 seconds the cluster health is still not OK")
             raise TimeoutExpiredError
         else:
             get_used_capacity("After cluster health returned to be OK")

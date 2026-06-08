@@ -14,7 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import skipif_disconnected_cluster
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Constants
 kmsprovider = constants.VAULT_KMS_PROVIDER
@@ -53,17 +53,15 @@ class PVKeyrotationTestBase:
         """
         Common setup for CSI-KMS connection details, storage class, and PVCs.
         """
-        log.info(
-            "Starting setup: Configuring CSI-KMS connection details and resources."
-        )
+        logger.test_step("Configure CSI-KMS connection details and resources")
 
         # Set up KMS configuration
         self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
-        log.info("KMS setup successful.")
+        logger.info("KMS setup successful.")
 
         # Create a project
         self.proj_obj = project_factory()
-        log.info(f"Project {self.proj_obj.namespace} created.")
+        logger.info(f"Project {self.proj_obj.namespace} created.")
 
         # Key rotation annotations
         keyrotation_annotations = {
@@ -77,14 +75,14 @@ class PVKeyrotationTestBase:
             encryption_kms_id=self.kms.kmsid,
             annotations=keyrotation_annotations,
         )
-        log.info("Encryption-enabled storage class created.")
+        logger.info("Encryption-enabled storage class created.")
 
         # Create Vault CSI KMS token in tenant namespace
         self.kms.vault_path_token = self.kms.generate_vault_token()
         self.kms.create_vault_csi_kms_token(namespace=self.proj_obj.namespace)
-        log.info("Vault CSI KMS token created.")
+        logger.info("Vault CSI KMS token created.")
 
-        # Create PVCs with encryption enabled
+        logger.test_step("Create encrypted PVCs and pods")
         self.pvc_objs = multi_pvc_factory(
             size=5,
             num_of_pvc=3,
@@ -96,9 +94,8 @@ class PVKeyrotationTestBase:
             wait_each=True,
             project=self.proj_obj,
         )
-        log.info("PVCs created successfully.")
+        logger.info(f"Created {len(self.pvc_objs)} PVCs successfully.")
 
-        # Create pods for the PVCs
         self.pod_objs = create_pods(
             self.pvc_objs,
             pod_factory,
@@ -106,7 +103,7 @@ class PVKeyrotationTestBase:
             pods_for_rwx=1,
             status=constants.STATUS_RUNNING,
         )
-        log.info("Pods created and running.")
+        logger.info(f"Created {len(self.pod_objs)} pods, all running.")
 
         # Initialize the PVKeyrotation helper
         self.pv_keyrotation_obj = PVKeyrotation(self.sc_obj)
@@ -115,12 +112,12 @@ class PVKeyrotationTestBase:
         self.original_precedence = (
             get_schedule_precedance_value_from_csi_addons_configmap()
         )
-        log.info(f"Original schedule precedence: {self.original_precedence}")
+        logger.debug(f"Original schedule precedence: {self.original_precedence}")
 
         if self.original_precedence != "pvc":
-            log.info("Setting schedule precedence to 'pvc' for test...")
+            logger.info("Setting schedule precedence to 'pvc' for test...")
             set_schedule_precedence("pvc")
-            log.info(
+            logger.info(
                 "Schedule precedence set to 'pvc' and CSI Addons controller restarted."
             )
 
@@ -129,11 +126,13 @@ class PVKeyrotationTestBase:
         # Teardown: Restore original schedule precedence
         current_precedence = get_schedule_precedance_value_from_csi_addons_configmap()
         if current_precedence != self.original_precedence:
-            log.info(
+            logger.info(
                 f"Restoring schedule precedence to '{self.original_precedence}'..."
             )
             set_schedule_precedence(self.original_precedence)
-            log.info(f"Schedule precedence restored to '{self.original_precedence}'.")
+            logger.info(
+                f"Schedule precedence restored to '{self.original_precedence}'."
+            )
 
 
 @tier2
@@ -156,36 +155,40 @@ class TestDisablePVKeyrotationOperation(PVKeyrotationTestBase):
         3. Remove the annotation from the storage class.
         4. Verify key rotation cronjobs are recreated.
         """
-        log.info("Starting test: Disable PV key rotation globally.")
-
-        # Disable key rotation globally
+        logger.test_step("Disable key rotation globally via storage class annotation")
         self.pv_keyrotation_obj.set_keyrotation_state_by_annotation(False)
-        log.info("Key rotation disabled globally via storage class annotation.")
+        logger.info("Key rotation disabled globally via storage class annotation.")
 
-        # Wait for key rotation cronjobs to be deleted
+        logger.test_step("Verify key rotation cronjobs are deleted")
+        logger.assertion("Key rotation cronjobs deletion: expected=True")
         assert self.pv_keyrotation_obj.wait_for_keyrotation_cronjobs_deletion(
             self.pvc_objs
         ), "Failed to delete key rotation cronjobs after disabling."
-        log.info("Verified key rotation cronjobs are removed.")
+        logger.info("Verified key rotation cronjobs are removed.")
 
-        # Enable key rotation globally
+        logger.test_step("Re-enable key rotation globally via storage class annotation")
         self.pv_keyrotation_obj.set_keyrotation_state_by_annotation(True)
-        log.info("Key rotation re-enabled globally via storage class annotation.")
+        logger.info("Key rotation re-enabled globally via storage class annotation.")
 
-        # Wait for key rotation cronjobs to be recreated and active
+        logger.test_step(
+            "Verify key rotation cronjobs are recreated and keys are rotated"
+        )
+        logger.assertion("Key rotation cronjobs recreation: expected=True")
         assert self.pv_keyrotation_obj.wait_for_keyrotation_cronjobs_recreation(
             self.pvc_objs
         ), "Failed to recreate key rotation cronjobs after re-enabling."
-        log.info("Key rotation cronjobs successfully recreated and active.")
+        logger.info("Key rotation cronjobs successfully recreated and active.")
 
         # Reset baseline to capture keys after re-enabling, before waiting for rotation
         self.pv_keyrotation_obj.reset_keyrotation_baseline()
 
-        # Verify key rotation cronjobs are recreated and keys are rotated
+        logger.assertion(
+            "PV key rotation on Vault KMS after re-enabling: expected=True"
+        )
         assert self.pv_keyrotation_obj.wait_till_all_pv_keyrotation_on_vault_kms(
             self.pvc_objs
         ), "Failed to re-enable PV key rotation."
-        log.info("Key rotation successfully re-enabled globally.")
+        logger.info("Key rotation successfully re-enabled globally.")
 
     @pytest.mark.polarion_id("OCS-6324")
     def test_disable_pv_keyrotation_by_rbac_user(self, setup_common):
@@ -198,34 +201,39 @@ class TestDisablePVKeyrotationOperation(PVKeyrotationTestBase):
         3. Re-enable key rotation for specific PVCs.
         4. Verify key rotation cronjobs are recreated.
         """
-        log.info("Starting test: Disable PV key rotation by RBAC user.")
-
-        # Disable key rotation for specific PVCs
+        logger.test_step("Disable key rotation for specific PVCs")
         self.pv_keyrotation_obj.change_pvc_keyrotation_cronjob_state(
             self.pvc_objs, disable=True
         )
-        log.info("Key rotation disabled for specific PVCs.")
+        logger.info("Key rotation disabled for specific PVCs.")
 
-        # Verify Keyrotation is disabled for the PVC.
+        logger.test_step("Verify key rotation cronjobs are in suspended state")
         for pvc in self.pvc_objs:
             cron_obj = self.pv_keyrotation_obj.get_keyrotation_cronjob_for_pvc(pvc)
+            logger.assertion(
+                f"PVC {pvc.name} keyrotation cronjob suspended: "
+                f"expected=True, actual={cron_obj.data['spec'].get('suspend', False)}"
+            )
             assert cron_obj.data["spec"].get(
                 "suspend", False
             ), "PVC keyrotation cronjob is not in 'suspend' state."
 
-        log.info("Keyrotation is Disabled for all PVC")
+        logger.info("Keyrotation is disabled for all PVCs")
 
-        # Re-enable key rotation for specific PVCs
+        logger.test_step("Re-enable key rotation for specific PVCs")
         self.pv_keyrotation_obj.change_pvc_keyrotation_cronjob_state(
             self.pvc_objs, disable=False
         )
-        log.info("Key rotation re-enabled for specific PVCs.")
+        logger.info("Key rotation re-enabled for specific PVCs.")
 
         # Reset baseline to capture keys after re-enabling, before waiting for rotation
         self.pv_keyrotation_obj.reset_keyrotation_baseline()
 
-        # Verify key rotation cronjobs are recreated
+        logger.test_step("Verify key rotation is functional after re-enabling")
+        logger.assertion(
+            "PV key rotation on Vault KMS after re-enabling for specific PVCs: expected=True"
+        )
         assert self.pv_keyrotation_obj.wait_till_all_pv_keyrotation_on_vault_kms(
             self.pvc_objs
         ), "Failed to re-enable PV key rotation for specific PVCs."
-        log.info("Key rotation successfully re-enabled for specific PVCs.")
+        logger.info("Key rotation successfully re-enabled for specific PVCs.")

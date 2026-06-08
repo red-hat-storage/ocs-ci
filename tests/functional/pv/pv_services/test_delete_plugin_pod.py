@@ -8,7 +8,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import disruption_helpers
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 DISRUPTION_OPS = disruption_helpers.Disruptions()
 
@@ -50,37 +50,47 @@ class TestDeletePluginPod(ManageTest):
         Test case to verify the impact of plugin pod deletion on app pod.
         Verifies bug 1970352.
         """
+        logger.test_step(
+            f"Select {resource_to_delete} pod running on same node as app pod"
+        )
         resource_id = None
 
         DISRUPTION_OPS.set_resource(resource=resource_to_delete)
         pod_node = self.pod_obj.get_node()
 
-        log.info(
+        logger.info(
             f"Selecting {resource_to_delete} pod which is running on the same "
             f"node as that of the app pod"
         )
         for index, res_obj in enumerate(DISRUPTION_OPS.resource_obj):
             if res_obj.get_node() == pod_node:
                 resource_id = index
-                log.info(f"Selected the pod {res_obj.name}")
+                logger.info(f"Selected the pod {res_obj.name}")
                 break
+        logger.assertion(
+            f"{resource_to_delete} pod found on node {pod_node}: expected=not None, actual={resource_id}"
+        )
         assert (
             resource_id is not None
         ), f"No {resource_to_delete} pod is running on the node {pod_node}"
 
-        log.info(
+        logger.test_step(f"Delete {resource_to_delete} plugin pod and verify recovery")
+        logger.info(
             f"Deleting the pod {DISRUPTION_OPS.resource_obj[resource_id].name}"
             f" which is running on the node {pod_node}"
         )
         DISRUPTION_OPS.delete_resource(resource_id=resource_id)
-        log.info(
+        logger.info(
             f"Deleted {DISRUPTION_OPS.resource_obj[resource_id].name} pod and "
             f"new {resource_to_delete} pod reached Running state"
         )
 
+        logger.test_step(
+            "Run IO on app pod to verify it is unaffected by plugin pod deletion"
+        )
         # Run IO
         self.pod_obj.run_io(storage_type="fs", size="1G", runtime=20)
-        log.info("FIO started on pod")
-        log.info("Waiting for fio result")
+        logger.info("FIO started on pod")
+        logger.info("Waiting for FIO result")
         pod.get_fio_rw_iops(self.pod_obj)
-        log.info("Fio completed on pod")
+        logger.info("Fio completed on pod")

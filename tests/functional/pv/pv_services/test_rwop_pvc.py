@@ -21,7 +21,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources import pvc
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize(
@@ -59,22 +59,22 @@ class TestRwopPvc(ManageTest):
         Test RBD Block volume mode RWOP PVC
 
         """
+        logger.test_step("Create first pod with RWOP PVC")
         self.node0_name = node.get_worker_nodes()[0]
-        # Creating a pod
         pod_obj1 = pod_factory(pvc=self.pvc_obj, node_name=self.node0_name)
 
-        # Verify that PVCs are reusable by creating new pods
-        log.info(f"PVC obj {self.pvc_obj}")
+        logger.test_step("Create second pod and verify it is in Pending state")
+        logger.debug(f"PVC obj {self.pvc_obj}")
         pod_obj2 = self.create_pod_and_validate_pending(pod_factory, interface)
 
-        # delete the first pod
+        logger.test_step("Delete first pod and verify second pod reaches Running state")
         pod_obj1.delete()
         pod_obj1.ocp.wait_for_delete(resource_name=pod_obj1.name)
 
-        # verify that the second pod is now in the Running state
         time.sleep(60)
         self.validate_pod_status(pod_obj2, constants.STATUS_RUNNING)
 
+        logger.test_step("Resize PVC and create another pod to verify Pending state")
         self.pvc_obj.resize_pvc(20, True)
 
         self.create_pod_and_validate_pending(pod_factory, interface)
@@ -91,32 +91,40 @@ class TestRwopPvc(ManageTest):
 
         """
 
+        logger.test_step("Create pod and run IO on RWOP PVC")
         pod_obj = pod_factory(pvc=self.pvc_obj, interface=interface)
-        log.info(f"{pod_obj.name} created successfully and mounted {self.pvc_obj.name}")
+        logger.info(
+            f"{pod_obj.name} created successfully and mounted {self.pvc_obj.name}"
+        )
 
-        # Run IO on each app pod for sometime
-        log.info(f"Running FIO on {pod_obj.name}")
+        logger.info(f"Running FIO on {pod_obj.name}")
         pod_obj.run_io("fs", size="500M")
 
+        logger.test_step("Clone PVC and verify RWOP access mode on clone")
         clone_pvc_obj = pvc_clone_factory(
             self.pvc_obj,
             clone_name=f"{self.pvc_obj.name}-{interface.lower()}-clone",
         )
-        log.info(f"Clone {clone_pvc_obj.name} created successfully")
+        logger.info(f"Clone {clone_pvc_obj.name} created successfully")
+        logger.assertion(
+            f"Clone PVC access mode: expected='{constants.ACCESS_MODE_RWOP}', "
+            f"actual='{clone_pvc_obj.get_pvc_access_mode}'"
+        )
         assert clone_pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWOP, (
             f"Cloned PVC has {clone_pvc_obj.get_pvc_access_mode} access mode instead "
             f"of expected {constants.ACCESS_MODE_RWOP}"
         )
 
+        logger.test_step("Create snapshot, restore PVC, and verify RWOP access mode")
         snap_name = f"{self.pvc_obj.name}-{interface.lower()}-snapshot"
         snap_obj = snapshot_factory(self.pvc_obj, snap_name)
-        log.info(f"Snapshot {snap_name} successfully created")
+        logger.info(f"Snapshot {snap_name} successfully created")
 
         restore_pvc_yaml = constants.CSI_RBD_PVC_RESTORE_YAML
         if interface == constants.CEPHFILESYSTEM:
             restore_pvc_yaml = constants.CSI_CEPHFS_PVC_RESTORE_YAML
 
-        log.info("Restoring the PVC from snapshot")
+        logger.info("Restoring the PVC from snapshot")
         restored_pvc_obj = pvc.create_restore_pvc(
             sc_name=self.pvc_obj.backed_sc,
             snap_name=snap_obj.name,
@@ -130,7 +138,11 @@ class TestRwopPvc(ManageTest):
             restored_pvc_obj, constants.STATUS_BOUND, timeout=600
         )
         restored_pvc_obj.reload()
-        log.info("PVC was restored from the snapshot")
+        logger.info("PVC was restored from the snapshot")
+        logger.assertion(
+            f"Restored PVC access mode: expected='{constants.ACCESS_MODE_RWOP}', "
+            f"actual='{restored_pvc_obj.get_pvc_access_mode}'"
+        )
         assert restored_pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWOP, (
             f"Restored PVC has {restored_pvc_obj.get_pvc_access_mode} access mode "
             f"instead of expected {constants.ACCESS_MODE_RWOP}"
@@ -149,11 +161,11 @@ class TestRwopPvc(ManageTest):
         yaml_output = run_cmd(
             "oc get pod " + str(pod_obj.name) + " -o yaml", timeout=60
         )
-        log.info(f"yaml_output of the pod {pod_obj.name} - {yaml_output}")
+        logger.debug(f"yaml_output of the pod {pod_obj.name} - {yaml_output}")
 
         # Validating the pod status
         results = yaml.safe_load(yaml_output)
-        log.info(f"Status of the Pod : {results['status']['phase']}")
+        logger.info(f"Status of the Pod : {results['status']['phase']}")
         if results["status"]["phase"] != status:
             raise UnexpectedBehaviour(
                 f"Pod {pod_obj.name} using RWOP pvc {self.pvc_obj.name} is not in {status} state"
@@ -184,19 +196,19 @@ class TestRwopPvc(ManageTest):
         Test RBD Block volume access mode RWOP between priority pods
         """
 
-        log.info("Creating high value Priority class")
+        logger.test_step("Create high priority class and a low priority pod")
         priority_class_obj = helpers.create_priority_class(priority="high", value=100)
 
-        # creating a low priority pod
-        log.info("creating a pod")
+        logger.info("Creating a low priority pod")
         self.low_pod_obj = pod_factory(
             pvc=self.pvc_obj,
         )
 
         time.sleep(60)
 
-        # creating a high priority pod
-        log.info("creating a high priority pod")
+        logger.test_step(
+            "Create high priority pod and verify it preempts the low priority pod"
+        )
         self.high_pod_obj = pod_factory(
             pvc=self.pvc_obj,
             priorityClassName=priority_class_obj.name,
@@ -205,11 +217,11 @@ class TestRwopPvc(ManageTest):
         self.low_pod_obj.ocp.wait_for_delete(resource_name=self.low_pod_obj.name)
 
         yaml_output = yaml.dump(self.high_pod_obj.get())
-        log.info(f"yaml_output of the pod {self.high_pod_obj.name} - {yaml_output}")
+        logger.debug(f"yaml_output of the pod {self.high_pod_obj.name} - {yaml_output}")
 
         # Validating the pod status
         results = yaml.safe_load(yaml_output)
-        log.info(f"Status of the Pod : {results['status']['phase']}")
+        logger.info(f"Status of the Pod : {results['status']['phase']}")
         if results["status"]["phase"] != "Running":
             raise UnexpectedBehaviour(
                 f"Pod {self.high_pod_obj.name} using RWOP pvc {self.pvc_obj.name} is not in Running state"
@@ -217,7 +229,7 @@ class TestRwopPvc(ManageTest):
 
         self.low_pod_obj.set_deleted()
 
-        log.info("Deleting the priority class")
+        logger.info("Deleting the priority class")
         teardown_factory(priority_class_obj)
 
     @polarion_id("OCS-5470")
@@ -226,7 +238,7 @@ class TestRwopPvc(ManageTest):
         Test RBD Block volume access mode RWOP between priority pods
         """
 
-        log.info("Creating higher value Priority class")
+        logger.test_step("Create high priority class and high priority pod")
         high_priority_class_obj = helpers.create_priority_class(
             priority="high", value=100
         )
@@ -237,7 +249,7 @@ class TestRwopPvc(ManageTest):
             priorityClassName=high_priority_class_obj.name,
         )
 
-        log.info("Creating lower value Priority class")
+        logger.test_step("Create low priority pod and verify it stays Pending")
         low_priority_class_obj = helpers.create_priority_class(priority="low", value=10)
 
         # creating a low priority pod
@@ -249,16 +261,16 @@ class TestRwopPvc(ManageTest):
         time.sleep(60)
 
         yaml_output = yaml.dump(self.low_pod_obj.get())
-        log.info(f"yaml_output of the pod {self.low_pod_obj.name} - {yaml_output}")
+        logger.debug(f"yaml_output of the pod {self.low_pod_obj.name} - {yaml_output}")
 
         # Validating the pod status
         results = yaml.safe_load(yaml_output)
-        log.info(f"Status of the Pod : {results['status']['phase']}")
+        logger.info(f"Status of the Pod : {results['status']['phase']}")
         if results["status"]["phase"] != "Pending":
             raise UnexpectedBehaviour(
                 f"Pod {self.low_pod_obj.name} using RWOP pvc {self.pvc_obj.name} is not in Pending state"
             )
-        log.info("Deleting the priority classes")
+        logger.info("Deleting the priority classes")
         teardown_factory([high_priority_class_obj, low_priority_class_obj])
 
     @polarion_id("OCS-5472")
@@ -267,15 +279,19 @@ class TestRwopPvc(ManageTest):
         Test RBD Block volume access mode by creating pods on different nodes
         """
 
+        logger.test_step("Create pod on first worker node")
         worker_nodes_list = node.get_worker_nodes()
-        log.info(f"Creating pod on {worker_nodes_list[0]}")
+        logger.info(f"Creating pod on {worker_nodes_list[0]}")
         pod_factory(
             interface=interface,
             pvc=self.pvc_obj,
             node_name=worker_nodes_list[0],
         )
 
-        log.info(f"Creating second pod on {worker_nodes_list[1]}")
+        logger.test_step(
+            "Create second pod on a different worker node and verify Pending state"
+        )
+        logger.info(f"Creating second pod on {worker_nodes_list[1]}")
         second_pod_obj = pod_factory(
             interface=interface,
             pvc=self.pvc_obj,
@@ -286,7 +302,7 @@ class TestRwopPvc(ManageTest):
         # Validating the pod status
         yaml_output = yaml.dump(second_pod_obj.get())
         results = yaml.safe_load(yaml_output)
-        log.info(f"Status of the Pod : {results['status']['phase']}")
+        logger.info(f"Status of the Pod : {results['status']['phase']}")
         if results["status"]["phase"] != "Pending":
             raise UnexpectedBehaviour(
                 f"Pod {self.pod_obj.name} using RWOP pvc {self.pvc_obj.name} is not in Pending state"

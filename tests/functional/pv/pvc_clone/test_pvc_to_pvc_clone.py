@@ -86,26 +86,30 @@ class TestClone(ManageTest):
         Create a clone from an existing pvc,
         verify data is preserved in the cloning.
         """
+        logger.test_step("Run IO on source pod and calculate md5sum")
         logger.info(f"Running IO on pod {self.pod_obj.name}")
         file_name = self.pod_obj.name
-        logger.info(f"File created during IO {file_name}")
+        logger.debug(f"File created during IO: {file_name}")
         self.pod_obj.run_io(storage_type="fs", size="500M", fio_filename=file_name)
 
         # Wait for fio to finish
         self.pod_obj.get_fio_results()
-        logger.info(f"Io completed on pod {self.pod_obj.name}.")
+        logger.info(f"IO completed on pod {self.pod_obj.name}")
 
         # Verify presence of the file
         file_path = pod.get_file_path(self.pod_obj, file_name)
-        logger.info(f"Actual file path on the pod {file_path}")
-        assert pod.check_file_existence(
-            self.pod_obj, file_path
-        ), f"File {file_name} does not exist"
+        logger.debug(f"Actual file path on the pod: {file_path}")
+        file_exists = pod.check_file_existence(self.pod_obj, file_path)
+        logger.assertion(
+            f"File {file_name} exists on pod {self.pod_obj.name}: expected=True, actual={file_exists}"
+        )
+        assert file_exists, f"File {file_name} does not exist"
         logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
         # Calculate md5sum of the file.
         orig_md5_sum = pod.cal_md5sum(self.pod_obj, file_name)
 
+        logger.test_step("Create a clone of the existing PVC")
         # Create a clone of the existing pvc.
         sc_name = self.pvc_obj.backed_sc
         parent_pvc = self.pvc_obj.name
@@ -122,6 +126,7 @@ class TestClone(ManageTest):
         )
         cloned_pvc_obj.reload()
 
+        logger.test_step("Attach clone PVC to a new pod and verify it is running")
         # Create and attach pod to the pvc
         clone_pod_obj = helpers.create_pod(
             interface_type=interface_type,
@@ -136,14 +141,17 @@ class TestClone(ManageTest):
         clone_pod_obj.reload()
         teardown_factory(clone_pod_obj)
 
+        logger.test_step("Verify file presence and data integrity on clone pod")
         # Verify file's presence on the new pod
         logger.info(
             f"Checking the existence of {file_name} on cloned pod "
             f"{clone_pod_obj.name}"
         )
-        assert pod.check_file_existence(
-            clone_pod_obj, file_path
-        ), f"File {file_path} does not exist"
+        clone_file_exists = pod.check_file_existence(clone_pod_obj, file_path)
+        logger.assertion(
+            f"File {file_path} exists on clone pod {clone_pod_obj.name}: expected=True, actual={clone_file_exists}"
+        )
+        assert clone_file_exists, f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
 
         # Verify Contents of a file in the cloned pvc
@@ -153,12 +161,16 @@ class TestClone(ManageTest):
             f"on pod {self.pod_obj.name} matches with md5sum "
             f"of the same file on restore pod {clone_pod_obj.name}"
         )
-        assert pod.verify_data_integrity(
+        data_integrity = pod.verify_data_integrity(
             clone_pod_obj, file_name, orig_md5_sum
-        ), "Data integrity check failed"
+        )
+        logger.assertion(
+            f"Data integrity check (md5sum match): expected=True, actual={data_integrity}"
+        )
+        assert data_integrity, "Data integrity check failed"
         logger.info("Data integrity check passed, md5sum are same")
 
-        logger.info("Run IO on new pod")
+        logger.test_step("Run IO on clone pod to verify write capability")
         clone_pod_obj.run_io(storage_type="fs", size="100M", runtime=10)
 
         # Wait for IO to finish on the new pod
@@ -205,22 +217,27 @@ class TestClone(ManageTest):
             status=constants.STATUS_RUNNING,
             pod_dict_path=constants.CSI_CEPHFS_ROX_POD_YAML,
         )
+
+        logger.test_step("Run IO on source pod and verify file creation")
         logger.info(f"Running IO on pod {self.pod_obj.name}")
         file_name = f"{self.pod_obj.name}.txt"
         self.pod_obj.exec_cmd_on_pod(
             command=f"dd if=/dev/zero of=/mnt/{file_name} bs=1M count=1"
         )
 
-        logger.info(f"File Created. /mnt/{file_name}")
+        logger.info(f"File Created: /mnt/{file_name}")
 
         # Verify presence of the file
         file_path = pod.get_file_path(self.pod_obj, file_name)
-        logger.info(f"Actual file path on the pod {file_path}")
-        assert pod.check_file_existence(
-            self.pod_obj, file_path
-        ), f"File {file_name} does not exist"
+        logger.debug(f"Actual file path on the pod: {file_path}")
+        file_exists = pod.check_file_existence(self.pod_obj, file_path)
+        logger.assertion(
+            f"File {file_name} exists on pod {self.pod_obj.name}: expected=True, actual={file_exists}"
+        )
+        assert file_exists, f"File {file_name} does not exist"
         logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
+        logger.test_step("Take snapshot of PVC and restore to ROX PVC")
         # Taking snapshot of pvc
         logger.info("Taking Snapshot of the PVC")
         snapshot_obj = snapshot_factory(self.pvc_obj, wait=False)
@@ -239,6 +256,7 @@ class TestClone(ManageTest):
         )
         teardown_factory(restore_snapshot_obj)
 
+        logger.test_step("Attach restored ROX PVC to pod and verify file presence")
         # Create and attach pod to the pvc
         clone_pod_obj = helpers.create_pod(
             interface_type=constants.CEPHFILESYSTEM,
@@ -259,9 +277,11 @@ class TestClone(ManageTest):
             f"Checking the existence of {file_name} on cloned pod "
             f"{clone_pod_obj.name}"
         )
-        assert pod.check_file_existence(
-            clone_pod_obj, file_path
-        ), f"File {file_path} does not exist"
+        clone_file_exists = pod.check_file_existence(clone_pod_obj, file_path)
+        logger.assertion(
+            f"File {file_path} exists on clone pod {clone_pod_obj.name}: expected=True, actual={clone_file_exists}"
+        )
+        assert clone_file_exists, f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
 
     @jira("DFBUGS-3740")
@@ -313,32 +333,36 @@ class TestClone(ManageTest):
             status=constants.STATUS_RUNNING,
             pod_dict_path=constants.CSI_CEPHFS_ROX_POD_YAML,
         )
+
+        logger.test_step("Run IO on source pod and verify file creation")
         logger.info(f"Running IO on pod {self.pod_obj.name}")
         file_name = f"{self.pod_obj.name}.txt"
         self.pod_obj.exec_cmd_on_pod(
             command=f"dd if=/dev/zero of=/mnt/{file_name} bs=1M count=1"
         )
 
-        logger.info(f"File Created. /mnt/{file_name}")
+        logger.info(f"File Created: /mnt/{file_name}")
 
         # Verify presence of the file
         file_path = pod.get_file_path(self.pod_obj, file_name)
-        logger.info(f"Actual file path on the pod {file_path}")
-        assert pod.check_file_existence(
-            self.pod_obj, file_path
-        ), f"File {file_name} does not exist"
+        logger.debug(f"Actual file path on the pod: {file_path}")
+        file_exists = pod.check_file_existence(self.pod_obj, file_path)
+        logger.assertion(
+            f"File {file_name} exists on pod {self.pod_obj.name}: expected=True, actual={file_exists}"
+        )
+        assert file_exists, f"File {file_name} does not exist"
         logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
         cephfs_name = config.ENV_DATA.get("cephfs_name") or helpers.get_cephfs_name()
 
-        # Checking out subvolumes before taking snapshot
-        logger.info("Checking subvolumes before snapshots.")
+        logger.test_step("Check subvolumes before taking snapshot")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_before_snapshot = toolbox.exec_ceph_cmd(
             f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
-        logger.info(f"Subvolumes before snapshots are:\n{subvolumes_before_snapshot}")
+        logger.debug(f"Subvolumes before snapshots: {subvolumes_before_snapshot}")
 
+        logger.test_step("Take snapshot and restore to ROX PVC")
         # Taking snapshot of pvc
         logger.info("Taking Snapshot of the PVC")
         snapshot_obj = snapshot_factory(self.pvc_obj, wait=False)
@@ -357,17 +381,21 @@ class TestClone(ManageTest):
         )
         teardown_factory(restore_snapshot_obj)
 
-        # Checking out subvolumes after restore of snapshot
-        logger.info("Checking subvolumes before snapshots.")
+        logger.test_step("Verify subvolume count unchanged after snapshot restore")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_after_snapshot = toolbox.exec_ceph_cmd(
             f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
-        logger.info(f"Subvolumes before snapshots are:\n{subvolumes_after_snapshot}")
+        logger.debug(f"Subvolumes after snapshot restore: {subvolumes_after_snapshot}")
+        logger.assertion(
+            f"Subvolume count: expected={len(subvolumes_before_snapshot)}, "
+            f"actual={len(subvolumes_after_snapshot)}"
+        )
         assert (
             subvolumes_before_snapshot == subvolumes_after_snapshot
         ), "The subvolumes before and after snapshot doesnt match, thus there must be new subvolumes"
 
+        logger.test_step("Attach restored PVC to pod and verify file presence")
         # Create and attach pod to the pvc
         snapshot_restore_pod_obj = helpers.create_pod(
             interface_type=constants.CEPHFILESYSTEM,
@@ -388,9 +416,14 @@ class TestClone(ManageTest):
             f"Checking the existence of {file_name} on cloned pod "
             f"{snapshot_restore_pod_obj.name}"
         )
-        assert pod.check_file_existence(
+        restore_file_exists = pod.check_file_existence(
             snapshot_restore_pod_obj, file_path
-        ), f"File {file_path} does not exist"
+        )
+        logger.assertion(
+            f"File {file_path} exists on restored pod {snapshot_restore_pod_obj.name}: "
+            f"expected=True, actual={restore_file_exists}"
+        )
+        assert restore_file_exists, f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {snapshot_restore_pod_obj.name}")
 
     @jira("DFBUGS-3740")
@@ -449,32 +482,36 @@ class TestClone(ManageTest):
             status=constants.STATUS_RUNNING,
             pod_dict_path=constants.CSI_CEPHFS_ROX_POD_YAML,
         )
+
+        logger.test_step("Run IO on source pod and verify file creation")
         logger.info(f"Running IO on pod {self.pod_obj.name}")
         file_name = f"{self.pod_obj.name}.txt"
         self.pod_obj.exec_cmd_on_pod(
             command=f"dd if=/dev/zero of=/mnt/{file_name} bs=1M count=1"
         )
 
-        logger.info(f"File Created. /mnt/{file_name}")
+        logger.info(f"File Created: /mnt/{file_name}")
 
         # Verify presence of the file
         file_path = pod.get_file_path(self.pod_obj, file_name)
-        logger.info(f"Actual file path on the pod {file_path}")
-        assert pod.check_file_existence(
-            self.pod_obj, file_path
-        ), f"File {file_name} does not exist"
+        logger.debug(f"Actual file path on the pod: {file_path}")
+        file_exists = pod.check_file_existence(self.pod_obj, file_path)
+        logger.assertion(
+            f"File {file_name} exists on pod {self.pod_obj.name}: expected=True, actual={file_exists}"
+        )
+        assert file_exists, f"File {file_name} does not exist"
         logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
         cephfs_name = config.ENV_DATA.get("cephfs_name") or helpers.get_cephfs_name()
 
-        # Checking out subvolumes before taking snapshot
-        logger.info("Checking subvolumes before snapshots.")
+        logger.test_step("Check subvolumes before taking snapshot")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_before_snapshot = toolbox.exec_ceph_cmd(
             f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
-        logger.info(f"Subvolumes before snapshots are:\n{subvolumes_before_snapshot}")
+        logger.debug(f"Subvolumes before snapshots: {subvolumes_before_snapshot}")
 
+        logger.test_step("Take snapshot and restore to ROX PVC")
         # Taking snapshot of pvc
         logger.info("Taking Snapshot of the PVC")
         parent_pvc_snapshot_obj = snapshot_factory(
@@ -498,17 +535,21 @@ class TestClone(ManageTest):
         )
         teardown_factory(restore_snapshot_obj)
 
-        # Checking out subvolumes after restore of snapshot
-        logger.info("Checking subvolumes after snapshots.")
+        logger.test_step("Verify subvolume count unchanged after snapshot restore")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_after_snapshot = toolbox.exec_ceph_cmd(
             f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
-        logger.info(f"Subvolumes after snapshots are:\n{subvolumes_after_snapshot}")
+        logger.debug(f"Subvolumes after snapshot restore: {subvolumes_after_snapshot}")
+        logger.assertion(
+            f"Subvolume count: expected={len(subvolumes_before_snapshot)}, "
+            f"actual={len(subvolumes_after_snapshot)}"
+        )
         assert (
             subvolumes_before_snapshot == subvolumes_after_snapshot
         ), "The subvolumes before and after snapshot doesnt match, thus there must be new subvolumes"
 
+        logger.test_step("Attach restored ROX PVC to pod and verify file presence")
         # Create and attach pod to the pvc
         snapshot_restore_pod_obj = helpers.create_pod(
             interface_type=constants.CEPHFILESYSTEM,
@@ -530,13 +571,19 @@ class TestClone(ManageTest):
             f"Checking the existence of {file_name} on cloned pod "
             f"{snapshot_restore_pod_obj.name}"
         )
-        assert pod.check_file_existence(
+        restore_file_exists = pod.check_file_existence(
             snapshot_restore_pod_obj, file_path
-        ), f"File {file_path} does not exist"
+        )
+        logger.assertion(
+            f"File {file_path} exists on restored pod {snapshot_restore_pod_obj.name}: "
+            f"expected=True, actual={restore_file_exists}"
+        )
+        assert restore_file_exists, f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {snapshot_restore_pod_obj.name}")
 
-        # Creating RWX PVC-PVC clone of ROX PVC (restored snapshot of parent PVC)
-        logger.info("Start creating clone of PVC")
+        logger.test_step(
+            "Create RWX PVC-PVC clone of ROX PVC and verify subvolume count increases by one"
+        )
         logger.info(f"Creating RWX PVC-PVC clone of PVC {restore_snapshot_obj.name}")
         rwx_pvc_clone_of_restored_snapshot_obj = pvc_clone_factory(
             pvc_obj=restore_snapshot_obj,
@@ -549,16 +596,20 @@ class TestClone(ManageTest):
         teardown_factory(rwx_pvc_clone_of_restored_snapshot_obj)
 
         # Checking out subvolumes after rwx pvc-pvc clone of restored rox snapshot
-        logger.info("Checking subvolumes after PVC clone.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_after_pvc_clone = toolbox.exec_ceph_cmd(
             f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
-        logger.info(f"Subvolumes after PVC clone are:\n{subvolumes_after_pvc_clone}")
+        logger.debug(f"Subvolumes after PVC clone: {subvolumes_after_pvc_clone}")
+        logger.assertion(
+            f"Subvolume count after PVC clone: expected={len(subvolumes_after_snapshot) + 1}, "
+            f"actual={len(subvolumes_after_pvc_clone)}"
+        )
         assert (
             len(subvolumes_after_pvc_clone) == len(subvolumes_after_snapshot) + 1
         ), "There should be one more subvolume after the pvc pvc clone"
 
+        logger.test_step("Attach RWX clone PVC to pod and verify file presence")
         # Create and attach pod to the rwx pvc
         clone_pod_obj = helpers.create_pod(
             interface_type=constants.CEPHFILESYSTEM,
@@ -579,11 +630,16 @@ class TestClone(ManageTest):
             f"Checking the existence of {file_name} on cloned pod "
             f"{clone_pod_obj.name}"
         )
-        assert pod.check_file_existence(
-            clone_pod_obj, file_path
-        ), f"File {file_path} does not exist"
+        clone_file_exists = pod.check_file_existence(clone_pod_obj, file_path)
+        logger.assertion(
+            f"File {file_path} exists on clone pod {clone_pod_obj.name}: expected=True, actual={clone_file_exists}"
+        )
+        assert clone_file_exists, f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")
 
+        logger.test_step(
+            "Verify snapshot of ROX PVC is blocked and ROX PVC-PVC clone is blocked"
+        )
         # Taking snapshot of rox pvc
         logger.info("Taking Snapshot of the cloned RWX PVC")
         # we shouldnt be able to create the snapshot
@@ -593,22 +649,29 @@ class TestClone(ManageTest):
         test_pvc_snapshot_obj_status = test_pvc_snapshot_obj.ocp.get_resource_status(
             test_pvc_snapshot_obj.name, "READYTOUSE"
         )
-        logger.info("Snapshot creation failed.")
+        logger.assertion(
+            f"Snapshot {test_pvc_snapshot_obj.name} READYTOUSE status: "
+            f"expected='false', actual='{test_pvc_snapshot_obj_status}'"
+        )
         assert (
             test_pvc_snapshot_obj_status == "false"
         ), f"Snapshot {test_pvc_snapshot_obj.name} is created"
+        logger.info("Snapshot creation blocked as expected")
         teardown_factory(test_pvc_snapshot_obj)
 
         # Taking rox pvc-pvc clone of rox pvc
-        logger.info("Taking rox pvc clone of the rox pvc")
+        logger.info("Taking ROX PVC clone of the ROX PVC")
         test_rox_pvc_clone_obj = pvc_clone_factory(
             pvc_obj=restore_snapshot_obj,
             status=constants.STATUS_PENDING,
             access_mode=constants.ACCESS_MODE_ROX,
         )
-        logger.info(f"{test_rox_pvc_clone_obj}")
+        logger.debug(f"ROX PVC clone result: {test_rox_pvc_clone_obj}")
         teardown_factory(test_rox_pvc_clone_obj)
 
+        logger.test_step(
+            "Delete parent snapshot, ROX PVC, and verify data persists on RWX clone"
+        )
         # deleting parent rox pvc snapshot, failed snapshots and failed pvc
         parent_pvc_snapshot_obj.delete()
         parent_pvc_snapshot_obj.ocp.wait_for_delete(
@@ -640,7 +703,10 @@ class TestClone(ManageTest):
             f"Checking the existence of {file_name} on cloned pod "
             f"{clone_pod_obj.name}"
         )
-        assert pod.check_file_existence(
-            clone_pod_obj, file_path
-        ), f"File {file_path} does not exist"
+        final_file_exists = pod.check_file_existence(clone_pod_obj, file_path)
+        logger.assertion(
+            f"File {file_path} exists on clone pod {clone_pod_obj.name} after parent deletion: "
+            f"expected=True, actual={final_file_exists}"
+        )
+        assert final_file_exists, f"File {file_path} does not exist"
         logger.info(f"File {file_name} exists in {clone_pod_obj.name}")

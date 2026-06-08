@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers import helpers
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -27,16 +27,19 @@ class TestRwopPvcReclaimSpace(ManageTest):
         Test to verify creation of reclaim space job and reclaim space cron job on RWOP pvc
         """
 
+        logger.test_step("Create RWOP RBD PVC")
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             access_mode=constants.ACCESS_MODE_RWOP,
             size=10,
         )
 
+        logger.test_step("Create and verify reclaim space cron job")
         schedule = "weekly"
         reclaim_space_job = pvc_obj.create_reclaim_space_cronjob(schedule)
         helpers.wait_for_reclaim_space_cronjob(reclaim_space_job, schedule)
 
+        logger.test_step("Create and verify reclaim space job")
         reclaim_space_job = pvc_obj.create_reclaim_space_job()
 
         helpers.wait_for_reclaim_space_job(reclaim_space_job)

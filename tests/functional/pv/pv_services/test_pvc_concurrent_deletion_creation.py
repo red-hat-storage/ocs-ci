@@ -21,7 +21,7 @@ from ocs_ci.helpers.helpers import (
     default_ceph_block_pool,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @provider_mode
@@ -76,6 +76,9 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
 
         executor = ThreadPoolExecutor(max_workers=1)
 
+        logger.test_step(
+            f"Collect PV objects and image UUIDs for {self.num_of_pvcs} PVCs"
+        )
         # Get PVs
         pv_objs = []
         for pvc in self.pvc_objs:
@@ -85,14 +88,16 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         pvc_uuid_map = {}
         for pvc_obj in self.pvc_objs:
             pvc_uuid_map[pvc_obj.name] = pvc_obj.image_uuid
-        log.info("Fetched image uuid associated with each PVC")
+        logger.info(f"Fetched image uuid associated with {len(pvc_uuid_map)} PVCs")
 
-        # Start deleting 100 PVCs
-        log.info("Start deleting PVCs.")
+        logger.test_step(
+            f"Concurrently delete {self.num_of_pvcs} PVCs and create {self.num_of_pvcs} new PVCs"
+        )
+        logger.info("Start deleting PVCs.")
         pvc_delete = executor.submit(delete_pvcs, self.pvc_objs)
 
         # Create 100 PVCs
-        log.info("Start creating new PVCs")
+        logger.info("Start creating new PVCs")
         self.new_pvc_objs = multi_pvc_factory(
             interface=interface,
             project=proj_obj,
@@ -106,22 +111,25 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         for pvc_obj in self.new_pvc_objs:
             wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
             pvc_obj.reload()
-        log.info(f"Newly created {self.num_of_pvcs} PVCs are in Bound state.")
+        logger.info(f"Newly created {self.num_of_pvcs} PVCs are in Bound state.")
 
-        # Verify PVCs are deleted
+        logger.test_step("Verify initial PVCs and PVs are deleted")
         res = pvc_delete.result()
+        logger.assertion(f"PVC deletion result: expected=True, actual={res}")
         assert res, "Deletion of PVCs failed"
-        log.info("PVC deletion was successful.")
+        logger.info("PVC deletion was successful.")
         for pvc in self.pvc_objs:
             pvc.ocp.wait_for_delete(resource_name=pvc.name)
-        log.info(f"Successfully deleted initial {self.num_of_pvcs} PVCs")
+        logger.info(f"Successfully deleted initial {self.num_of_pvcs} PVCs")
 
         # Verify PVs are deleted
         for pv_obj in pv_objs:
             pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
-        log.info(f"Successfully deleted initial {self.num_of_pvcs} PVs")
+        logger.info(f"Successfully deleted initial {self.num_of_pvcs} PVs")
 
-        # Verify PV using ceph toolbox. Image/Subvolume should be deleted.
+        logger.test_step(
+            f"Verify {len(pvc_uuid_map)} volumes are deleted in Ceph backend"
+        )
         for pvc_name, uuid in pvc_uuid_map.items():
             pool_name = None
             if interface == constants.CEPHBLOCKPOOL:
@@ -133,7 +141,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
                 f"Volume associated with PVC {pvc_name} still exists " f"in backend"
             )
 
-        # Verify status of nodes
+        logger.test_step("Verify all nodes are in Ready state")
         for node in get_node_objs():
             node_status = node.ocp.get_resource_status(node.name)
             assert (

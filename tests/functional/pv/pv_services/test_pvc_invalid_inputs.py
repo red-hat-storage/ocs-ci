@@ -11,7 +11,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 SC_OBJ = None
 
@@ -35,7 +35,7 @@ def setup(self):
     Setting up the environment for the test
     """
     # Create a storage class
-    log.info("Creating a Storage Class")
+    logger.info("Creating a Storage Class")
     self.sc_data = templating.load_yaml(constants.CSI_RBD_STORAGECLASS_YAML)
     self.sc_data["metadata"]["name"] = helpers.create_unique_resource_name(
         "test", "csi-rbd"
@@ -43,8 +43,8 @@ def setup(self):
     global SC_OBJ
     SC_OBJ = OCS(**self.sc_data)
     assert SC_OBJ.create()
-    log.info(f"Storage class: {SC_OBJ.name} created successfully")
-    log.debug(self.sc_data)
+    logger.info(f"Storage class: {SC_OBJ.name} created successfully")
+    logger.debug(self.sc_data)
 
 
 def teardown():
@@ -52,9 +52,9 @@ def teardown():
     Tearing down the environment
 
     """
-    log.info(f"Deleting created storage class: {SC_OBJ.name}")
+    logger.info(f"Deleting created storage class: {SC_OBJ.name}")
     SC_OBJ.delete()
-    log.info(f"Storage class: {SC_OBJ.name} deleted successfully")
+    logger.info(f"Storage class: {SC_OBJ.name} deleted successfully")
 
 
 @green_squad
@@ -70,7 +70,9 @@ class TestPvcCreationInvalidInputs(ManageTest):
         """
         Calling functions for pvc invalid name and size
         """
+        logger.test_step("Verify PVC creation fails with invalid name '@123'")
         create_pvc_invalid_name(pvcname="@123")
+        logger.test_step("Verify PVC creation fails with invalid size 't@st'")
         create_pvc_invalid_size(pvcsize="t@st")
 
 
@@ -88,7 +90,7 @@ def create_pvc_invalid_name(pvcname):
     pvc_data["metadata"]["name"] = pvcname
     pvc_data["spec"]["storageClassName"] = SC_OBJ.name
     pvc_obj = PVC(**pvc_data)
-    log.info(f"Creating a pvc with name {pvcname}")
+    logger.info(f"Creating a pvc with name {pvcname}")
     try:
         pvc_obj.create()
     except CommandFailed as ex:
@@ -98,9 +100,8 @@ def create_pvc_invalid_name(pvcname):
             "an alphanumeric character"
         )
         if error in str(ex):
-            log.info(
-                f"PVC creation failed with error \n {ex} \n as "
-                "invalid pvc name is provided. EXPECTED"
+            logger.info(
+                f"PVC creation with invalid name '{pvcname}' failed as expected: {ex}"
             )
         else:
             assert "PVC creation with invalid name succeeded : " "NOT expected"
@@ -121,7 +122,7 @@ def create_pvc_invalid_size(pvcsize):
     pvc_data["spec"]["resources"]["requests"]["storage"] = pvcsize
     pvc_data["spec"]["storageClassName"] = SC_OBJ.name
     pvc_obj = PVC(**pvc_data)
-    log.info(f"Creating a PVC with size {pvcsize}")
+    logger.info(f"Creating a PVC with size {pvcsize}")
     try:
         pvc_obj.create()
     except CommandFailed as ex:
@@ -130,9 +131,8 @@ def create_pvc_invalid_size(pvcsize):
             "+)([eEinumkKMGTP]*[-+]?[0-9]*)$'"
         )
         if error in str(ex):
-            log.info(
-                f"PVC creation failed with error \n {ex} \n as "
-                "invalid pvc size is provided. EXPECTED"
+            logger.info(
+                f"PVC creation with invalid size '{pvcsize}' failed as expected: {ex}"
             )
         else:
             assert "PVC creation with invalid size succeeded : " "NOT expected"

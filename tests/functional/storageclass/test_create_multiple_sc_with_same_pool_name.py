@@ -19,7 +19,7 @@ from tests.fixtures import (
     create_project,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture()
@@ -94,7 +94,9 @@ class TestCreateMultipleScWithSamePoolName(ManageTest):
         # Unpack resources
         pods, pvcs, storageclasses = resources
 
-        # Create 3 Storage Classes with same pool name
+        logger.test_step(
+            f"Create 3 storage classes with the same pool name for {interface_type}"
+        )
         if interface_type == constants.CEPHBLOCKPOOL:
             secret = self.rbd_secret_obj.name
             interface_name = self.cbp_obj.name
@@ -103,7 +105,7 @@ class TestCreateMultipleScWithSamePoolName(ManageTest):
             secret = self.cephfs_secret_obj.name
             interface_name = helpers.get_cephfs_data_pool_name()
         for i in range(3):
-            log.info(f"Creating a {interface_type} storage class")
+            logger.debug(f"Creating a {interface_type} storage class (iteration {i})")
             storageclasses.append(
                 helpers.create_storage_class(
                     interface_type=interface_type,
@@ -111,22 +113,27 @@ class TestCreateMultipleScWithSamePoolName(ManageTest):
                     secret_name=secret,
                 )
             )
-            log.info(
-                f"{interface_type}StorageClass: {storageclasses[i].name} "
+            logger.debug(
+                f"{interface_type} StorageClass: {storageclasses[i].name} "
                 f"created successfully"
             )
+        logger.info(
+            f"Created 3 storage classes with same pool: "
+            f"{[sc.name for sc in storageclasses]}"
+        )
 
-        # Create PVCs using each SC
+        logger.test_step("Create PVCs using each storage class")
         for i in range(3):
-            log.info(f"Creating a PVC using {storageclasses[i].name}")
+            logger.debug(f"Creating a PVC using {storageclasses[i].name}")
             pvcs.append(helpers.create_pvc(storageclasses[i].name))
         for pvc in pvcs:
             helpers.wait_for_resource_state(pvc, constants.STATUS_BOUND)
             pvc.reload()
+        logger.info(f"Created 3 PVCs: {[pvc.name for pvc in pvcs]}")
 
-        # Create app pod and mount each PVC
+        logger.test_step("Create app pods and mount each PVC")
         for i in range(3):
-            log.info(f"Creating an app pod and mount {pvcs[i].name}")
+            logger.debug(f"Creating an app pod and mounting {pvcs[i].name}")
             pods.append(
                 helpers.create_pod(
                     interface_type=interface_type,
@@ -137,14 +144,16 @@ class TestCreateMultipleScWithSamePoolName(ManageTest):
             for pod in pods:
                 helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
                 pod.reload()
-            log.info(
-                f"{pods[i].name} created successfully and " f"mounted {pvcs[i].name}"
+            logger.debug(
+                f"{pods[i].name} created successfully and mounted {pvcs[i].name}"
             )
+        logger.info(f"Created 3 app pods: {[pod.name for pod in pods]}")
 
-        # Run IO on each app pod for sometime
+        logger.test_step("Run IO on each app pod")
         for pod in pods:
-            log.info(f"Running FIO on {pod.name}")
+            logger.debug(f"Running FIO on {pod.name}")
             pod.run_io("fs", size="2G")
 
         for pod in pods:
             get_fio_rw_iops(pod)
+        logger.info("FIO completed on all pods")

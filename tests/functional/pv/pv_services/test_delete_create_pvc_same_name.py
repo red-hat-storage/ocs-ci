@@ -42,6 +42,7 @@ class TestDeleteCreatePVCSameName(ManageTest):
         """
         Delete PVC and create a new PVC with same name
         """
+        logger.test_step(f"Create a PVC with {interface} and RWO access mode")
         # Create a PVC
         pvc_obj1 = pvc_factory(
             interface=interface,
@@ -49,12 +50,14 @@ class TestDeleteCreatePVCSameName(ManageTest):
             status=constants.STATUS_BOUND,
         )
 
+        logger.test_step(f"Delete PVC {pvc_obj1.name}")
         # Delete the PVC
         logger.info(f"Deleting PVC {pvc_obj1.name}")
         pvc_obj1.delete()
         pvc_obj1.ocp.wait_for_delete(pvc_obj1.name)
         logger.info(f"Deleted PVC {pvc_obj1.name}")
 
+        logger.test_step(f"Create a new PVC with the same name '{pvc_obj1.name}'")
         # Create a new PVC with same name
         logger.info(f"Creating new PVC with same name {pvc_obj1.name}")
         pvc_obj2 = helpers.create_pvc(

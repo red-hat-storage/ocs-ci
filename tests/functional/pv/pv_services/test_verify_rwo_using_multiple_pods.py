@@ -11,7 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.helpers.helpers import wait_for_resource_state
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @provider_mode
@@ -67,23 +67,22 @@ class TestRwoUsingMultiplePods(ManageTest):
         PVC on different pods, delete running pods one by one and ensure that
         only one pod is running at a time
         """
+        logger.test_step("Create 5 additional pods using the same RWO PVC")
         pod_objs_running = [self.pod_obj]
         pod_objs_not_running = []
 
-        # Create 5 new pods using same PVC
         for _ in range(5):
             pod_obj = pod_factory(
                 interface=interface, pvc=self.pvc_obj, custom_data=None, status=""
             )
             pod_objs_not_running.append(pod_obj)
 
-        # Check the status of pods, delete running pod and verify new pod is
-        # coming up running
+        logger.test_step("Verify only one pod runs at a time with RWO PVC")
         while pod_objs_running:
             pod_running_node = pod_objs_running[0].get()["spec"]["nodeName"]
 
             # Verify status of pods
-            log.info("Check the status of pods")
+            logger.debug("Checking the status of pods")
             for pod_obj in pod_objs_not_running:
                 try:
                     wait_for_resource_state(
@@ -94,37 +93,37 @@ class TestRwoUsingMultiplePods(ManageTest):
                         f"RWO PVC {self.pvc_obj.name} is mounted on pods "
                         f"which are on different nodes."
                     )
-                    log.info(
+                    logger.debug(
                         f"Expected: Pod {pod_obj.name} is in Running. "
                         f"Pods which are running are on the same node "
                         f"{pod_running_node}"
                     )
                     pod_objs_running.append(pod_obj)
                 except ResourceWrongStatusException:
-                    log.info(f"Verified: Pod {pod_obj.name} is not Running")
+                    logger.debug(f"Verified: Pod {pod_obj.name} is not Running")
 
             pod_objs_not_running = [
                 pod for pod in pod_objs_not_running if (pod not in pod_objs_running)
             ]
 
             if not pod_objs_not_running:
-                log.info("Verified all pods.")
+                logger.info("Verified all pods.")
                 break
 
             # Delete running pods
-            log.info("Deleting pods which are in Running state.")
+            logger.info("Deleting pods which are in Running state.")
             for pod_obj in pod_objs_running:
                 pod_obj.delete()
 
             # Confirm that pods are deleted
             for pod_obj in pod_objs_running:
                 pod_obj.ocp.wait_for_delete(pod_obj.name)
-            log.info("All running pods are deleted.")
+            logger.info("All running pods are deleted.")
 
             pod_objs_running.clear()
 
             # Wait for a pod to come up running
-            log.info("Waiting for a pod to be up and running")
+            logger.info("Waiting for a pod to be up and running")
             for pod_obj in pod_objs_not_running:
                 try:
                     wait_for_resource_state(
@@ -133,9 +132,9 @@ class TestRwoUsingMultiplePods(ManageTest):
                     pod_objs_running.append(pod_obj)
                     break
                 except ResourceWrongStatusException:
-                    log.info(
+                    logger.debug(
                         f"{pod_obj.name} is not running. Checking status "
-                        f"of other nodes."
+                        f"of other pods."
                     )
 
             pod_objs_not_running = [

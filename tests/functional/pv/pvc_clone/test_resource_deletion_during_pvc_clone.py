@@ -16,7 +16,7 @@ from ocs_ci.helpers import disruption_helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.framework import config
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -82,8 +82,8 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
         disruption_ops = [disruption_helpers.Disruptions() for _ in pods_to_delete]
         file_name = "file_clone"
 
-        # Run IO
-        log.info("Running fio on all pods to create a file")
+        logger.test_step("Run IO on all pods to create test files")
+        logger.info(f"Running fio on {len(self.pods)} pods to create a file")
         for pod_obj in self.pods:
             storage_type = (
                 "block"
@@ -99,10 +99,10 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
                 direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
 
-        log.info("Wait for IO to complete on pods")
+        logger.test_step("Wait for IO to complete and calculate md5sum")
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
-            log.info(f"Verified IO on pod {pod_obj.name}")
+            logger.debug(f"Verified IO on pod {pod_obj.name}")
             # Calculate md5sum
             file_name_pod = (
                 file_name
@@ -114,8 +114,8 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
                 file_name_pod,
                 pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
-            log.info(f"md5sum obtained from pod {pod_obj.name}")
-        log.info("IO is successful on all pods")
+            logger.debug(f"md5sum obtained from pod {pod_obj.name}")
+        logger.info("IO completed and md5sum calculated on all pods")
 
         # Select the pods to be deleted
         for disruption, pod_type in zip(disruption_ops, pods_to_delete):
@@ -135,10 +135,10 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
         if self.provider_index is not None:
             config.switch_ctx(self.consumer_index)
 
-        # Clone PVCs
-        log.info("Start creating clone of PVCs")
+        logger.test_step("Create PVC clones while deleting rook-ceph and CSI pods")
+        logger.info(f"Start creating clone of {len(self.pvcs)} PVCs")
         for pvc_obj in self.pvcs:
-            log.info(f"Creating clone of PVC {pvc_obj.name}")
+            logger.debug(f"Creating clone of PVC {pvc_obj.name}")
             pvc_obj.clone_proc = executor.submit(
                 pvc_clone_factory,
                 pvc_obj=pvc_obj,
@@ -146,10 +146,9 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
                 access_mode=pvc_obj.get_pvc_access_mode,
                 volume_mode=pvc_obj.volume_mode,
             )
-        log.info("Started creating clone")
 
         # Delete the pods 'pods_to_delete'
-        log.info(f"Deleting pods {pods_to_delete}")
+        logger.info(f"Deleting pods: {pods_to_delete}")
         for disruption in disruption_ops:
             disruption.delete_proc = executor.submit(disruption.delete_resource)
 
@@ -161,23 +160,22 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
         for pvc_obj in self.pvcs:
             clone_obj = pvc_obj.clone_proc.result()
             clone_pvc_objs.append(clone_obj)
-            log.info(f"Created clone {clone_obj.name} of PVC {pvc_obj.name}")
-        log.info("Created clone of all PVCs")
+            logger.debug(f"Created clone {clone_obj.name} of PVC {pvc_obj.name}")
+        logger.info(f"Created clones of all {len(self.pvcs)} PVCs")
 
-        # Confirm that the cloned PVCs are Bound
-        log.info("Verifying the cloned PVCs are Bound")
+        logger.test_step("Verify cloned PVCs are Bound and attach to pods")
+        logger.info(f"Verifying {len(clone_pvc_objs)} cloned PVCs are Bound")
         for pvc_obj in clone_pvc_objs:
             wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=300
             )
             pvc_obj.reload()
             pvc_obj.volume_mode = pvc_obj.data["spec"]["volumeMode"]
-        log.info("Verified: Cloned PVCs are Bound.")
+        logger.info("Verified: Cloned PVCs are Bound")
 
         clone_pod_objs = []
 
         # Attach the cloned PVCs to pods
-        log.info("Attach the cloned PVCs to pods")
         for pvc_obj in clone_pvc_objs:
             if pvc_obj.volume_mode == constants.VOLUME_MODE_BLOCK:
                 pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
@@ -193,13 +191,11 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
             clone_pod_objs.append(restore_pod_obj)
 
         # Verify the new pods are running
-        log.info("Verify the new pods are running")
         for pod_obj in clone_pod_objs:
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
-        log.info("Verified: New pods are running")
+        logger.info(f"All {len(clone_pod_objs)} new pods are running")
 
-        # Verify md5sum
-        log.info("Verify md5sum")
+        logger.test_step("Verify data integrity using md5sum on clone pods")
         for pod_obj in clone_pod_objs:
             file_name_pod = (
                 file_name
@@ -212,14 +208,14 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
                 pod_obj.pvc.parent.md5sum,
                 pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
-            log.info(
+            logger.debug(
                 f"Verified: md5sum of {file_name_pod} on pod {pod_obj.name} "
                 f"matches with the original md5sum"
             )
-        log.info("Data integrity check passed on all pods")
+        logger.info("Data integrity check passed on all pods")
 
-        # Run IO
-        log.info("Running IO on new pods")
+        logger.test_step("Run IO on clone pods and verify completion")
+        logger.info(f"Running IO on {len(clone_pod_objs)} new pods")
         for pod_obj in clone_pod_objs:
             storage_type = (
                 "block"
@@ -235,8 +231,7 @@ class TestResourceDeletionDuringPvcClone(ManageTest):
                 direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
 
-        log.info("Wait for IO to complete on new pods")
         for pod_obj in clone_pod_objs:
             pod_obj.get_fio_results()
-            log.info(f"Verified IO on new pod {pod_obj.name}")
-        log.info("IO to completed on new pods")
+            logger.debug(f"Verified IO on new pod {pod_obj.name}")
+        logger.info("IO completed on all new pods")

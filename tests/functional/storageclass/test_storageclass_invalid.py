@@ -101,27 +101,30 @@ class TestStorageClassInvalid(ManageTest):
         Test that Persistent Volume Claim can not be created from misconfigured
         CephFS Storage Class.
         """
+        logger.test_step(
+            f"Create PVC with invalid storageclass {invalid_storageclass['metadata']['name']}"
+        )
         pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
         pvc_name = helpers.create_unique_resource_name("test", "pvc")
         pvc_data["metadata"]["name"] = pvc_name
         pvc_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         pvc_data["spec"]["storageClassName"] = invalid_storageclass["metadata"]["name"]
         logger.info(
-            f"Create PVC {pvc_name} "
-            f"with storageClassName "
+            f"Creating PVC {pvc_name} with storageClassName "
             f"{invalid_storageclass['metadata']['name']}"
         )
         pvc = PVC(**pvc_data)
         pvc.create()
 
+        logger.test_step("Verify PVC stays in Pending state after creation")
         pvc_status = pvc.status
         logger.debug(f"Status of PVC {pvc_name} after creation: {pvc_status}")
+        logger.assertion(
+            f"PVC {pvc_name} status: expected='{constants.STATUS_PENDING}', actual='{pvc_status}'"
+        )
         assert pvc_status == constants.STATUS_PENDING
 
-        logger.info(
-            f"Waiting for status '{constants.STATUS_BOUND}' "
-            f"for 60 seconds (it shouldn't change)"
-        )
+        logger.test_step("Verify PVC does not transition to Bound within 60 seconds")
         with pytest.raises(TimeoutExpiredError):
             # raising TimeoutExpiredError is expected behavior
             pvc_status_changed = pvc.ocp.wait_for_resource(
@@ -130,15 +133,19 @@ class TestStorageClassInvalid(ManageTest):
                 timeout=60,
                 sleep=20,
             )
-            logger.debug("Check that PVC status did not changed")
+            logger.debug("Check that PVC status did not change")
             assert not pvc_status_changed
 
         pvc_status = pvc.status
         logger.info(f"Status of PVC {pvc_name} after 60 seconds: {pvc_status}")
+        logger.assertion(
+            f"PVC {pvc_name} still pending: expected='{constants.STATUS_PENDING}', "
+            f"actual='{pvc_status}'"
+        )
         assert_msg = (
             f"PVC {pvc_name} hasn't reached status " f"{constants.STATUS_PENDING}"
         )
         assert pvc_status == constants.STATUS_PENDING, assert_msg
 
-        logger.info(f"Deleting PVC {pvc_name}")
+        logger.test_step(f"Delete PVC {pvc_name}")
         pvc.delete()

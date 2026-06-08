@@ -94,7 +94,7 @@ class TestPvcDeleteSubVolumeGroup(ManageTest):
         Delete PVC subvolumegroup and make sure PVC reaches bound state
         """
 
-        logger.info("Creating pvc")
+        logger.test_step("Create and delete a CephFS PVC to prepare subvolumegroup")
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             size=5,
@@ -108,19 +108,24 @@ class TestPvcDeleteSubVolumeGroup(ManageTest):
             timeout=60, sleep=5, func=self.is_volumegroup_empty
         ):
             if sampler:
-                logger.info("volumegroup is empty!")
+                logger.info("Volumegroup is empty")
                 break
 
-        # Remove subvolumegroup
+        logger.test_step("Remove 'csi' subvolumegroup and verify it is deleted")
         self.tool_pod.exec_ceph_cmd(
             ceph_cmd=f"ceph fs subvolumegroup rm {self.cephfs_name} csi",
             format=None,
         )
-        # 'csi' should be removed
-        assert not self.csi_exist(), "Subvolumegroup should contain 'csi'"
-        logger.info("Subvolumegroup contain 'csi' as expected")
+        csi_exists = self.csi_exist()
+        logger.assertion(
+            f"Subvolumegroup 'csi' removed: expected=False, actual={csi_exists}"
+        )
+        assert not csi_exists, "Subvolumegroup should not contain 'csi'"
+        logger.info("Subvolumegroup 'csi' removed as expected")
 
-        logger.info("Creating pvc")
+        logger.test_step(
+            "Create a new CephFS PVC and verify 'csi' subvolumegroup is recreated"
+        )
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             size=5,
@@ -128,5 +133,9 @@ class TestPvcDeleteSubVolumeGroup(ManageTest):
         )
 
         # List subvolumegroup (should NOT be empty and contain 'csi')
-        assert self.csi_exist(), "Subvolumegroup should contain 'csi'"
+        csi_exists = self.csi_exist()
+        logger.assertion(
+            f"Subvolumegroup 'csi' recreated: expected=True, actual={csi_exists}"
+        )
+        assert csi_exists, "Subvolumegroup should contain 'csi'"
         logger.info("Subvolumegroup contains 'csi' as expected")

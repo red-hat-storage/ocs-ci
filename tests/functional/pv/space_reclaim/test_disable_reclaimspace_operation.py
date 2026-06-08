@@ -14,7 +14,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources.pod import delete_pods
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -60,7 +60,7 @@ class TestDisableReclaimSpaceOperation:
                 f"RBD image {rbd_image_name} size mismatch: {image_size}GiB, "
                 f"expected {expected_size}GiB (tolerance: ±{tolerance}GiB)"
             )
-        log.info(
+        logger.info(
             f"RBD Image {rbd_image_name} is size of {image_size}GiB (within tolerance ±{tolerance}GiB)"
         )
         return True
@@ -78,9 +78,12 @@ class TestDisableReclaimSpaceOperation:
 
         # Write data to block devices
         actual_data_written = 1.0  # 1 GiB
+        logger.info(f"Writing {actual_data_written}GiB of data to {len(pod_objs)} pods")
         for pod_obj in pod_objs:
             storage_path = pod_obj.get_storage_path("block")
-            log.info(f"Writing {actual_data_written}GiB of data to the block device")
+            logger.debug(
+                f"Writing {actual_data_written}GiB of data to pod {pod_obj.name} at {storage_path}"
+            )
             pod_obj.exec_cmd_on_pod(
                 f"dd if=/dev/zero of={storage_path} bs=1M count=1024 oflag=direct > /dev/null 2>&1 &",
                 shell=True,
@@ -112,26 +115,46 @@ class TestDisableReclaimSpaceOperation:
             6. Verify reclaimspace Operation is enabled for the PVC.
         """
 
-        log.info("Disabling reclaim space operation for all PVCs.")
+        logger.test_step(
+            f"Disable reclaim space operation for {len(self.pvc_objs)} PVCs"
+        )
         change_reclaimspacecronjob_state_for_pvc(self.pvc_objs, suspend=True)
 
-        log.info("Verifying ReclaimSpaceCronJob suspend state (suspend=true).")
+        logger.test_step("Verify ReclaimSpaceCronJob is suspended for all PVCs")
         for pvc_obj in self.pvc_objs:
-            assert verify_reclaimspacecronjob_suspend_state_for_pvc(
-                pvc_obj
+            suspend_state = verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj)
+            logger.assertion(
+                f"ReclaimSpaceCronJob suspend state for PVC {pvc_obj.name}: "
+                f"expected=True, actual={suspend_state}"
+            )
+            assert (
+                suspend_state
             ), f"Reclaimspace cronjob is not suspended for PVC: {pvc_obj.name}"
 
-        log.info("Validating ReclaimSpace operation is disabled.")
+        logger.test_step(
+            "Validate ReclaimSpace operation is disabled (data should persist)"
+        )
         self.execute_reclaimspace_test(pod_factory, suspend_state=True)
 
-        log.info("Re-enabling reclaim space cronjob for all PVCs.")
+        logger.test_step(
+            f"Re-enable reclaim space cronjob for {len(self.pvc_objs)} PVCs"
+        )
         change_reclaimspacecronjob_state_for_pvc(self.pvc_objs, suspend=False)
 
-        log.info("Verifying ReclaimSpaceCronJob suspend state (suspend=false).")
+        logger.test_step(
+            "Verify ReclaimSpaceCronJob is no longer suspended for all PVCs"
+        )
         for pvc_obj in self.pvc_objs:
-            assert not verify_reclaimspacecronjob_suspend_state_for_pvc(
-                pvc_obj
+            suspend_state = verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj)
+            logger.assertion(
+                f"ReclaimSpaceCronJob suspend state for PVC {pvc_obj.name}: "
+                f"expected=False, actual={suspend_state}"
+            )
+            assert (
+                not suspend_state
             ), f"Reclaimspace cronjob is still suspended for PVC: {pvc_obj.name}"
 
-        log.info("Validating ReclaimSpace operation is enabled.")
+        logger.test_step(
+            "Validate ReclaimSpace operation is enabled (data should be reclaimed)"
+        )
         self.execute_reclaimspace_test(pod_factory, suspend_state=False)

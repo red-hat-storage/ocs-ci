@@ -46,6 +46,7 @@ class TestPvcEvictCephClients:
         ],
     )
     def test_pvc_evict_ceph_clients(self, node, pvc_factory, pod_factory):
+        logger.test_step("Create a RWX CephFS PVC and a pod on a selected worker node")
         worker_nodes = get_worker_nodes()
 
         # create a RWX PVC
@@ -72,8 +73,8 @@ class TestPvcEvictCephClients:
             "csi"
         ]["volumeAttributes"]["subvolumePath"]
 
-        # evict ceph-fs clients
-        logger.info("Evicting ceph-fs clients!")
+        logger.test_step("Evict CephFS clients for the mounted subvolume")
+        logger.info("Evicting ceph-fs clients")
         ceph_tools_pod_obj = get_ceph_tools_pod()
         cmd_ls = "ceph tell mds.0 client ls"
         output_ls_cmd = json.loads(
@@ -91,9 +92,9 @@ class TestPvcEvictCephClients:
         except CommandFailed as e:
             raise ValueError(f"[Error] Client eviction failed: {e}")
         else:
-            logger.info("Clients are evicted successfully!")
+            logger.info("Clients are evicted successfully")
 
-        # running second pod on same/different node
+        logger.test_step(f"Create second pod on {node} node and run IO")
         if node == "different":
             worker_nodes.remove(selected_node)
             selected_node = random.choice(worker_nodes)
@@ -117,4 +118,4 @@ class TestPvcEvictCephClients:
             logger.exception(f"IO failed: {e}")
             raise
         else:
-            logger.info("FIO is successful!!")
+            logger.info("FIO completed successfully")

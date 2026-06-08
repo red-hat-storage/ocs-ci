@@ -26,7 +26,7 @@ from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Expected CSI volume attribute for Performance Plus
 PERFPLUS_CSI_ATTRIBUTE = "enablePerformancePlus"
@@ -63,34 +63,41 @@ class TestAzurePerformancePlusCSIParameters(ManageTest):
             - All OSD PVCs should use the Performance Plus storage class
             - All OSD PVs should have enablePerformancePlus=true in volumeAttributes
         """
-        log.info(
-            "Starting verification of Azure Performance Plus CSI volume parameters"
-        )
-
+        logger.test_step("Retrieve all OSD PVCs from the cluster")
         # Get all OSD PVCs
         osd_pvc_objs = get_all_pvc_objs(
             namespace=config.ENV_DATA["cluster_namespace"],
             selector=constants.OSD_PVC_GENERIC_LABEL,
         )
 
+        logger.assertion(
+            f"OSD PVC count: expected=non-empty, actual={len(osd_pvc_objs) if osd_pvc_objs else 0}"
+        )
         assert osd_pvc_objs, "No OSD PVCs found in the cluster"
 
-        log.info(f"Found {len(osd_pvc_objs)} OSD PVCs to verify")
+        logger.info(f"Found {len(osd_pvc_objs)} OSD PVCs to verify")
 
+        logger.test_step(
+            f"Verify Performance Plus CSI attributes on {len(osd_pvc_objs)} OSD PVCs"
+        )
         # Verify each OSD PVC
         for osd_pvc_obj in osd_pvc_objs:
             pvc_name = osd_pvc_obj.name
-            log.info(f"Verifying OSD PVC: {pvc_name}")
+            logger.debug(f"Verifying OSD PVC: {pvc_name}")
 
             # Verify storage class
             pvc_storage_class = (
                 osd_pvc_obj.get().get("spec", {}).get("storageClassName")
             )
-            log.info(
+            logger.debug(
                 f"PVC {pvc_name} storage class: {pvc_storage_class}, "
                 f"expected: {constants.AZURE_PERFORMANCE_PLUS_STORAGECLASS}"
             )
 
+            logger.assertion(
+                f"PVC {pvc_name} storage class: expected='{constants.AZURE_PERFORMANCE_PLUS_STORAGECLASS}', "
+                f"actual='{pvc_storage_class}'"
+            )
             assert pvc_storage_class == constants.AZURE_PERFORMANCE_PLUS_STORAGECLASS, (
                 f"OSD PVC {pvc_name} is not using Performance Plus storage class. "
                 f"Expected: {constants.AZURE_PERFORMANCE_PLUS_STORAGECLASS}, Actual: {pvc_storage_class}"
@@ -99,40 +106,43 @@ class TestAzurePerformancePlusCSIParameters(ManageTest):
             # Get the backed PV object
             pv_obj = osd_pvc_obj.backed_pv_obj
             pv_name = pv_obj.name
-            log.info(f"Verifying PV: {pv_name} for PVC: {pvc_name}")
+            logger.debug(f"Verifying PV: {pv_name} for PVC: {pvc_name}")
 
             # Get PV CSI volume attributes
             pv_data = pv_obj.get()
             csi_spec = pv_data.get("spec", {}).get("csi", {})
             volume_attributes = csi_spec.get("volumeAttributes", {})
 
-            log.info(
+            logger.debug(
                 f"PV {pv_name} CSI volume attributes: {list(volume_attributes.keys())}"
             )
 
             # Verify enablePerformancePlus is present and set to true
+            logger.assertion(
+                f"PV {pv_name} {PERFPLUS_CSI_ATTRIBUTE} presence: expected=present, "
+                f"actual={'present' if PERFPLUS_CSI_ATTRIBUTE in volume_attributes else 'missing'}"
+            )
             assert PERFPLUS_CSI_ATTRIBUTE in volume_attributes, (
                 f"PV {pv_name} does not have {PERFPLUS_CSI_ATTRIBUTE} "
                 f"in CSI volumeAttributes. Available attributes: {list(volume_attributes.keys())}"
             )
 
             perf_opt_value = volume_attributes.get(PERFPLUS_CSI_ATTRIBUTE)
-            log.info(
-                f"PV {pv_name} {PERFPLUS_CSI_ATTRIBUTE} value: {perf_opt_value}, "
-                f"expected: {PERFPLUS_CSI_ATTRIBUTE_VALUE}"
+            logger.assertion(
+                f"PV {pv_name} {PERFPLUS_CSI_ATTRIBUTE}: expected='{PERFPLUS_CSI_ATTRIBUTE_VALUE}', "
+                f"actual='{perf_opt_value}'"
             )
-
             assert perf_opt_value == PERFPLUS_CSI_ATTRIBUTE_VALUE, (
                 f"PV {pv_name} has {PERFPLUS_CSI_ATTRIBUTE}={perf_opt_value}, "
                 f"expected {PERFPLUS_CSI_ATTRIBUTE_VALUE}"
             )
 
-            log.info(
+            logger.debug(
                 f"Successfully verified PV {pv_name} has "
                 f"{PERFPLUS_CSI_ATTRIBUTE}={PERFPLUS_CSI_ATTRIBUTE_VALUE}"
             )
 
-        log.info(
+        logger.info(
             f"Successfully verified all {len(osd_pvc_objs)} OSD PVCs have "
             f"Performance Plus CSI parameters configured correctly"
         )

@@ -17,8 +17,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.resources import pod as res_pod
 
-
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -57,8 +56,8 @@ class TestCloneWhenFull(ManageTest):
         file_name = "fio_full"
         prometheus_api = PrometheusAPI(threading_lock=threading_lock)
 
-        # Run IO to utilize 100% of volume
-        log.info("Run IO on all pods to utilise 100% of PVCs")
+        logger.test_step("Run IO on all pods to utilize 100% of PVC capacity")
+        logger.info(f"Running IO on {len(self.pods)} pods to utilize 100% of PVCs")
         for pod_obj in self.pods:
             # Get available free space in M
             df_avail_size = pod_obj.exec_cmd_on_pod(
@@ -74,26 +73,30 @@ class TestCloneWhenFull(ManageTest):
                 fio_filename=file_name,
                 end_fsync=1,
             )
-        log.info("Started IO on all pods to utilise 100% of PVCs")
+        logger.info("Started IO on all pods to utilize 100% of PVCs")
 
-        # Wait for IO to finish
-        log.info("Wait for IO to finish on pods")
+        logger.test_step("Wait for IO to finish and verify 100% utilization")
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
-            log.info(f"IO finished on pod {pod_obj.name}")
+            logger.debug(f"IO finished on pod {pod_obj.name}")
 
             # Verify used space on pod is 100%
             used_space = pod.get_used_space_on_mount_point(pod_obj)
+            logger.assertion(
+                f"Used space on pod {pod_obj.name}: expected='100%', actual='{used_space}'"
+            )
             assert used_space == "100%", (
                 f"The used space on pod {pod_obj.name} is not 100% " f"but {used_space}"
             )
-            log.info(f"Verified: Used space on pod {pod_obj.name} is 100%")
             # Calculate md5sum of the file
             pod_obj.pvc.md5sum = pod.cal_md5sum(pod_obj, file_name)
+        logger.info("IO finished and 100% utilization verified on all pods")
 
-        log.info("Creating clone of the PVCs")
+        logger.test_step("Create clones of the PVCs")
         cloned_pvcs = [pvc_clone_factory(pvc_obj) for pvc_obj in self.pvcs]
-        log.info("Created clone of the PVCs. Cloned PVCs are Bound")
+        logger.info(
+            f"Created {len(cloned_pvcs)} clones of the PVCs. Cloned PVCs are Bound"
+        )
         for pvc_obj in self.pvcs:
             if pvc_obj.backed_sc == constants.CEPHFILESYSTEM_SC:
                 pv_obj = pvc_obj.backed_pv_obj
@@ -125,18 +128,25 @@ class TestCloneWhenFull(ManageTest):
 
                 if pv in pod_log:
                     relevant_pod_logs = pod_log
-                    log.info(f"Found '{pv}' on pod {pod_obj.name}")
+                    logger.info(f"Found '{pv}' on pod {pod_obj.name}")
                     break
+        logger.assertion(
+            f"Error message '{error_msg}' present in logs: expected=True, "
+            f"actual={error_msg in relevant_pod_logs if relevant_pod_logs else False}"
+        )
         assert (
             error_msg in relevant_pod_logs
         ), f"Logs should contain the error message '{error_msg}'"
+        logger.assertion(
+            f"Pending message '{pend_msg}' present in logs: expected=True, "
+            f"actual={pend_msg in relevant_pod_logs if relevant_pod_logs else False}"
+        )
         assert (
             pend_msg in relevant_pod_logs
         ), f"Logs should contain the pending message'{pend_msg}'"
-        log.info(f"Logs contain the messages '{error_msg}' and '{pend_msg}'")
+        logger.info(f"Logs contain the messages '{error_msg}' and '{pend_msg}'")
 
-        # Attach the cloned PVCs to pods
-        log.info("Attach the cloned PVCs to pods")
+        logger.test_step("Attach cloned PVCs to pods and verify they are running")
         clone_pod_objs = []
         for clone_pvc_obj in cloned_pvcs:
             interface = (
@@ -147,13 +157,12 @@ class TestCloneWhenFull(ManageTest):
             clone_pod_obj = pod_factory(
                 interface=interface, pvc=clone_pvc_obj, status=""
             )
-            log.info(
-                f"Attached the PVC {clone_pvc_obj.name} to pod " f"{clone_pod_obj.name}"
+            logger.debug(
+                f"Attached the PVC {clone_pvc_obj.name} to pod {clone_pod_obj.name}"
             )
             clone_pod_objs.append(clone_pod_obj)
 
         # Verify the new pods are running
-        log.info("Verify the new pods are running")
         for pod_obj in clone_pod_objs:
             timeout = (
                 300
@@ -161,17 +170,19 @@ class TestCloneWhenFull(ManageTest):
                 else 60
             )
             wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout)
-        log.info("Verified: New pods are running")
+        logger.info(f"All {len(clone_pod_objs)} clone pods are running")
 
-        # Verify that the md5sum matches
+        logger.test_step("Verify data integrity on cloned PVCs using md5sum")
         for pod_obj in clone_pod_objs:
-            log.info(f"Verifying md5sum of {file_name} " f"on pod {pod_obj.name}")
+            logger.debug(f"Verifying md5sum of {file_name} on pod {pod_obj.name}")
             pod.verify_data_integrity(pod_obj, file_name, pod_obj.pvc.parent.md5sum)
-            log.info(
+            logger.debug(
                 f"Verified: md5sum of {file_name} on pod {pod_obj.name} "
                 f"matches with the original md5sum"
             )
+        logger.info("Data integrity check passed on all clone pods")
 
+        logger.test_step("Wait for utilization alerts to start firing on cloned PVCs")
         # Wait till utilization alerts starts
         for response in TimeoutSampler(180, 5, prometheus_api.get, "alerts"):
             alerts = response.json()["data"]["alerts"]
@@ -189,7 +200,7 @@ class TestCloneWhenFull(ManageTest):
                 # Verify 'PersistentVolumeUsageNearFull' alert is firing
                 if not getattr(pvc_obj, "near_full_alert", False):
                     try:
-                        log.info(
+                        logger.debug(
                             f"Checking 'PersistentVolumeUsageNearFull' alert "
                             f"for PVC {pvc_obj.name}"
                         )
@@ -206,7 +217,7 @@ class TestCloneWhenFull(ManageTest):
                         )
                         pvc_obj.near_full_alert = True
                     except AssertionError:
-                        log.info(
+                        logger.debug(
                             f"'PersistentVolumeUsageNearFull' alert not "
                             f"started firing for PVC {pvc_obj.name}"
                         )
@@ -214,7 +225,7 @@ class TestCloneWhenFull(ManageTest):
                 # Verify 'PersistentVolumeUsageCritical' alert is firing
                 if not getattr(pvc_obj, "critical_alert", False):
                     try:
-                        log.info(
+                        logger.debug(
                             f"Checking 'PersistentVolumeUsageCritical' alert "
                             f"for PVC {pvc_obj.name}"
                         )
@@ -231,7 +242,7 @@ class TestCloneWhenFull(ManageTest):
                         )
                         pvc_obj.critical_alert = True
                     except AssertionError:
-                        log.info(
+                        logger.debug(
                             f"'PersistentVolumeUsageCritical' alert not "
                             f"started firing for PVC {pvc_obj.name}"
                         )
@@ -249,22 +260,24 @@ class TestCloneWhenFull(ManageTest):
             ]
 
             if (not not_near_full_pvc) and (not not_critical_pvc):
-                log.info(
+                logger.info(
                     "'PersistentVolumeUsageNearFull' and "
                     "'PersistentVolumeUsageCritical' alerts are firing "
                     "for all cloned PVCs."
                 )
                 break
-        log.info("Verified: Utilization alerts are firing")
+        logger.info("Verified: Utilization alerts are firing")
 
-        log.info("Expanding cloned PVCs.")
+        logger.test_step(f"Expand cloned PVCs to {pvc_size_expanded}Gi")
         for pvc_obj in cloned_pvcs:
-            log.info(
-                f"Expanding size of PVC {pvc_obj.name} to " f"{pvc_size_expanded}Gi"
+            logger.debug(
+                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi"
             )
             # Expand PVC
             pvc_obj.resize_pvc(pvc_size_expanded, True)
+        logger.info(f"All cloned PVCs expanded to {pvc_size_expanded}Gi")
 
+        logger.test_step("Verify utilization alerts stop firing after PVC expansion")
         # Verify utilization alerts are stopped
         for response in TimeoutSampler(180, 5, prometheus_api.get, "alerts"):
             alerts = response.json()["data"]["alerts"]
@@ -283,8 +296,8 @@ class TestCloneWhenFull(ManageTest):
                 # Verify 'PersistentVolumeUsageNearFull' alert stopped firing
                 if getattr(pvc_obj, "near_full_alert"):
                     try:
-                        log.info(
-                            f"Checking 'PrsistentVolumeUsageNearFull' alert "
+                        logger.debug(
+                            f"Checking 'PersistentVolumeUsageNearFull' alert "
                             f"is cleared for PVC {pvc_obj.name}"
                         )
                         near_full_msg = (
@@ -298,13 +311,13 @@ class TestCloneWhenFull(ManageTest):
                             states=["firing"],
                             severity="warning",
                         )
-                        log.info(
+                        logger.debug(
                             f"'PersistentVolumeUsageNearFull' alert is not "
                             f"stopped for PVC {pvc_obj.name}"
                         )
                     except AssertionError:
                         pvc_obj.near_full_alert = False
-                        log.info(
+                        logger.debug(
                             f"'PersistentVolumeUsageNearFull' alert stopped "
                             f"firing for PVC {pvc_obj.name}"
                         )
@@ -312,7 +325,7 @@ class TestCloneWhenFull(ManageTest):
                 # Verify 'PersistentVolumeUsageCritical' alert stopped firing
                 if getattr(pvc_obj, "critical_alert"):
                     try:
-                        log.info(
+                        logger.debug(
                             f"Checking 'PersistentVolumeUsageCritical' alert "
                             f"is cleared for PVC {pvc_obj.name}"
                         )
@@ -327,13 +340,13 @@ class TestCloneWhenFull(ManageTest):
                             states=["firing"],
                             severity="error",
                         )
-                        log.info(
+                        logger.debug(
                             f"'PersistentVolumeUsageCritical' alert is not "
                             f"stopped for PVC {pvc_obj.name}"
                         )
                     except AssertionError:
                         pvc_obj.critical_alert = False
-                        log.info(
+                        logger.debug(
                             f"'PersistentVolumeUsageCritical' alert stopped "
                             f"firing for PVC {pvc_obj.name}"
                         )
@@ -351,11 +364,11 @@ class TestCloneWhenFull(ManageTest):
             ]
 
             if (not near_full_pvcs) and (not critical_pvcs):
-                log.info(
+                logger.info(
                     "'PersistentVolumeUsageNearFull' and "
                     "'PersistentVolumeUsageCritical' alerts are cleared for "
                     "all cloned PVCs."
                 )
                 break
 
-        log.info("Verified: Utilization alerts stopped firing")
+        logger.info("Verified: Utilization alerts stopped firing")

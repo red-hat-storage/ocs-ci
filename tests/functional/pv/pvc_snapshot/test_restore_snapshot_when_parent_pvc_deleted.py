@@ -13,7 +13,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @green_squad
@@ -67,8 +67,7 @@ class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
             },
         }
 
-        # Start IO
-        log.info("Starting IO on all pods")
+        logger.test_step(f"Run IO on all {len(self.pods)} pods and calculate md5sum")
         for pod_obj in self.pods:
             storage_type = (
                 "block"
@@ -83,14 +82,12 @@ class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
                 end_fsync=1,
                 direct=int(pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK),
             )
-            log.info(f"IO started on pod {pod_obj.name}")
-        log.info("Started IO on all pods")
+            logger.debug(f"IO started on pod {pod_obj.name}")
 
-        # Wait for IO to finish
-        log.info("Wait for IO to finish on pods")
+        logger.info("Waiting for IO to finish on all pods")
         for pod_obj in self.pods:
             pod_obj.get_fio_results()
-            log.info(f"IO finished on pod {pod_obj.name}")
+            logger.debug(f"IO finished on pod {pod_obj.name}")
             # Calculate md5sum to compare after restoring
             file_name_pod = (
                 file_name
@@ -102,20 +99,17 @@ class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
                 file_name_pod,
                 pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
             )
-        log.info("IO finished on all pods")
+        logger.info("IO finished on all pods")
 
-        # Create snapshots
-        log.info("Creating snapshot of the PVCs")
+        logger.test_step("Create snapshots of all PVCs and wait for Ready state")
         snap_objs = []
         for pvc_obj in self.pvcs:
-            log.info(f"Creating snapshot of PVC {pvc_obj.name}")
+            logger.debug(f"Creating snapshot of PVC {pvc_obj.name}")
             snap_obj = snapshot_factory(pvc_obj, wait=False)
             snap_obj.md5sum = pvc_obj.md5sum
             snap_obj.interface = pvc_obj.interface
             snap_objs.append(snap_obj)
-            log.info(f"Created snapshot of PVC {pvc_obj.name}")
 
-        log.info("Snapshots are created. Wait for the snapshots to be in Ready state")
         for snap_obj in snap_objs:
             snap_obj.ocp.wait_for_resource(
                 condition="true",
@@ -124,20 +118,18 @@ class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
                 timeout=180,
             )
             snap_obj.reload()
-        log.info("Snapshots are Ready")
+        logger.info(f"All {len(snap_objs)} snapshots are Ready")
 
-        # Delete the parent PVCs
-        log.info("Deleting the Parent PVCs and it's attached pod")
+        logger.test_step("Delete parent PVCs and their attached pods")
         for pod_obj in self.pods:
             pod_obj.delete()
             pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
         for pvc_obj in self.pvcs:
-            log.info(f"Deleting PVC {pvc_obj.name}")
+            logger.debug(f"Deleting PVC {pvc_obj.name}")
             pvc_obj.delete()
             pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
 
-        # Restore snapshots with same and different access mode
-        log.info("Restoring snapshots to create new PVCs")
+        logger.test_step("Restore snapshots with same and different access modes")
         restore_pvcs = []
         for snap_obj in snap_objs:
             access_modes = access_modes_dict[snap_obj.interface][
@@ -152,51 +144,49 @@ class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
                 )
                 restore_obj.interface = snap_obj.interface
                 restore_obj.md5sum = snap_obj.md5sum
-                log.info(
+                logger.debug(
                     f"Created PVC {restore_obj.name} with accessMode "
-                    f"{access_mode} from snapshot {snap_obj.name}. "
-                    f"Parent PVC accessMode: {snap_obj.parent_access_mode}"
+                    f"{access_mode} from snapshot {snap_obj.name} "
+                    f"(parent accessMode: {snap_obj.parent_access_mode})"
                 )
                 restore_pvcs.append(restore_obj)
-        log.info(
-            "Restored all the snapshots to create PVCs with different access modes"
+        logger.info(
+            f"Restored {len(restore_pvcs)} PVCs from snapshots with various access modes"
         )
 
-        log.info("Verifying restored PVCs are Bound")
+        logger.test_step("Verify restored PVCs reach Bound state")
         for pvc_obj in restore_pvcs:
             helpers.wait_for_resource_state(
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=200
             )
             pvc_obj.reload()
-        log.info("Verified: Restored PVCs are Bound")
+        logger.info("Verified: Restored PVCs are Bound")
 
-        # Delete snapshots
-        log.info("Deleting snapshots")
+        logger.test_step("Delete snapshots and clone restored PVCs")
         for snap_obj in snap_objs:
-            log.info(f"Deleting snapshot {snap_obj.name}")
+            logger.debug(f"Deleting snapshot {snap_obj.name}")
             snap_obj.delete()
             snap_obj.ocp.wait_for_delete(resource_name=snap_obj.name)
+        logger.info(f"Deleted {len(snap_objs)} snapshots")
 
-        # Clone PVC from the restored PVCs
-        log.info("Creating clone of the restored PVCs")
+        logger.info("Creating clones of the restored PVCs")
         for restore_obj in restore_pvcs:
             if restore_obj.get_pvc_access_mode != constants.ACCESS_MODE_ROX:
                 pvc_clone_factory(restore_obj, timeout=360)
-        log.info("Created clone of the PVCs. Cloned PVCs are Bound")
+        logger.info("Created clone of the PVCs. Cloned PVCs are Bound")
 
-        # Create Snapshot2 of restored PVCs
-        log.info("Creating snapshot of the restored PVCs")
+        logger.test_step(
+            "Create new snapshots of restored PVCs, delete them, and restore again"
+        )
         new_snap_objs = []
         for restore_obj in restore_pvcs:
-            log.info(f"Creating snapshot of restored PVC {restore_obj.name}")
             if restore_obj.get_pvc_access_mode != constants.ACCESS_MODE_ROX:
                 snap_obj = snapshot_factory(restore_obj, wait=False)
                 snap_obj.md5sum = restore_obj.md5sum
                 snap_obj.interface = restore_obj.interface
                 new_snap_objs.append(snap_obj)
-                log.info(f"Created snapshot of PVC {restore_obj.name}")
-
-        log.info("Snapshots are created. Wait for the snapshots to be in Ready state")
+                logger.debug(f"Created snapshot of restored PVC {restore_obj.name}")
+        logger.info(f"Created {len(new_snap_objs)} snapshots of restored PVCs")
         for snap_obj in new_snap_objs:
             snap_obj.ocp.wait_for_resource(
                 condition="true",
@@ -205,16 +195,16 @@ class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
                 timeout=180,
             )
             snap_obj.reload()
-        log.info("Snapshots are Ready")
+        logger.info("Snapshots are Ready")
 
         # Delete restored PVCs
         for restore_obj in restore_pvcs:
-            log.info(f"Deleting restore PVC {restore_obj.name}")
+            logger.debug(f"Deleting restore PVC {restore_obj.name}")
             restore_obj.delete()
             restore_obj.ocp.wait_for_delete(resource_name=restore_obj.name)
+        logger.info(f"Deleted {len(restore_pvcs)} restored PVCs")
 
-        # Create pvc-restore2 from snapshots
-        log.info("Restoring snapshots to create new PVCs")
+        logger.info("Restoring second-generation snapshots to create new PVCs")
         for snap_obj in new_snap_objs:
             snapshot_restore_factory(
                 snapshot_obj=snap_obj,
@@ -222,6 +212,6 @@ class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
                 status=constants.STATUS_BOUND,
                 timeout=360,
             )
-        log.info(
+        logger.info(
             "Restored all the snapshots to create PVCs with different access modes"
         )

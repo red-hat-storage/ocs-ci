@@ -18,7 +18,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.utility import version
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 upgrade_ocs_version = config.UPGRADE.get("upgrade_ocs_version")
 
 
@@ -54,7 +54,7 @@ class TestUpgrade(ManageTest):
         """
         Delete storageclass
         """
-        log.info("Teardown for custome sc")
+        logger.info(f"Teardown: deleting {len(self.all_sc_obj)} custom storage classes")
         for instance in self.all_sc_obj:
             instance.delete(wait=True)
 
@@ -77,8 +77,9 @@ class TestUpgrade(ManageTest):
             f"{constants.ACCESS_MODE_RWX}-Block",
         ]
 
-        # Create custom storage class
-
+        logger.test_step(
+            "Create custom storage classes without expansion and allowExpansion=false"
+        )
         custom_cephfs_sc = storageclass_factory(
             interface=constants.CEPHFILESYSTEM, allow_volume_expansion=False
         )
@@ -90,7 +91,9 @@ class TestUpgrade(ManageTest):
         self.all_sc_obj.append(custom_cephfs_sc)
         self.all_sc_obj.append(custom_rbd_sc)
 
-        log.info("Create pvcs for custom sc as well as for default sc")
+        logger.test_step(
+            f"Create PVCs for custom and default storage classes with sizes {size_list}"
+        )
         project_obj = project_factory()
         for size in size_list:
             rbd_pvcs = multi_pvc_factory(
@@ -100,7 +103,11 @@ class TestUpgrade(ManageTest):
                 size=size,
                 num_of_pvc=2,
             )
-            log.info(f"rbd_pvc created for size {size}")
+            logger.debug(f"RBD PVCs created for size {size}")
+            logger.assertion(
+                f"RBD PVCs of size {size}: expected=truthy, "
+                f"actual={bool(rbd_pvcs)} (count={len(rbd_pvcs) if rbd_pvcs else 0})"
+            )
             assert rbd_pvcs, f"Failed to create rbd_pvcs of size {size}"
 
             cephfs_pvcs = multi_pvc_factory(
@@ -109,6 +116,10 @@ class TestUpgrade(ManageTest):
                 access_modes=access_modes_cephfs,
                 size=size,
                 num_of_pvc=2,
+            )
+            logger.assertion(
+                f"CephFS PVCs of size {size}: expected=truthy, "
+                f"actual={bool(cephfs_pvcs)} (count={len(cephfs_pvcs) if cephfs_pvcs else 0})"
             )
             assert cephfs_pvcs, "Failed to create cephfs_pvcs PVC"
 
@@ -120,6 +131,11 @@ class TestUpgrade(ManageTest):
                 size=size,
                 num_of_pvc=2,
             )
+            logger.assertion(
+                f"Custom RBD PVCs of size {size}: expected=truthy, "
+                f"actual={bool(custom_rbd_pvcs)} "
+                f"(count={len(custom_rbd_pvcs) if custom_rbd_pvcs else 0})"
+            )
             assert custom_rbd_pvcs, "Failed to create custom_rbd_pvcs PVC"
 
             custom_cephfs_pvcs = multi_pvc_factory(
@@ -130,7 +146,13 @@ class TestUpgrade(ManageTest):
                 size=size,
                 num_of_pvc=2,
             )
+            logger.assertion(
+                f"Custom CephFS PVCs of size {size}: expected=truthy, "
+                f"actual={bool(custom_cephfs_pvcs)} "
+                f"(count={len(custom_cephfs_pvcs) if custom_cephfs_pvcs else 0})"
+            )
             assert custom_cephfs_pvcs, "Failed to create custom_cephfs_pvcs PVC"
+        logger.info(f"All PVCs created successfully for sizes {size_list}")
 
     @post_ocs_upgrade
     def test_logs_pod_status_after_upgrade(self):
@@ -139,13 +161,22 @@ class TestUpgrade(ManageTest):
         2. Verify that logs should not found related to ocs operator trying to patch non expandable PVC.
         """
 
+        logger.test_step("Verify all storage pods are running after upgrade")
         wait_for_storage_pods(timeout=10), "Some pods were not in expected state"
+
+        logger.test_step(
+            "Verify OCS operator logs do not contain expansion secret errors"
+        )
         pod_name = get_ocs_operator_pod().name
         unexpected_log_after_upgrade = (
             "spec.csi.controllerExpandSecretRef.name: Required value,"
             " spec.csi.controllerExpandSecretRef.namespace: Required value"
         )
         pod_logs = get_pod_logs(pod_name=pod_name, all_containers=True)
-        assert not (
-            unexpected_log_after_upgrade in pod_logs
+        has_unexpected_log = unexpected_log_after_upgrade in pod_logs
+        logger.assertion(
+            f"Unexpected expansion log in pod {pod_name}: expected=False, actual={has_unexpected_log}"
+        )
+        assert (
+            not has_unexpected_log
         ), f"The unexpected log after upgrade exist on pod {pod_name}"

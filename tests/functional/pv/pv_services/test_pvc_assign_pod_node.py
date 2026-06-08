@@ -44,6 +44,9 @@ class TestPvcAssignPodNode(ManageTest):
         pod_log = res_pod.get_pod_logs(
             pod_name=odf_operator_pod_objs[0].name, container="kube-rbac-proxy"
         )
+        logger.assertion(
+            f"ODF operator pod logs do not contain access token: contains_token={error_msg in pod_log}"
+        )
         assert not (
             error_msg in pod_log
         ), f"Logs should not contain the error message '{error_msg}'"
@@ -67,6 +70,7 @@ class TestPvcAssignPodNode(ManageTest):
         """
         Test assign nodeName to a pod using RWO pvc
         """
+        logger.test_step("Create RWO PVC and assign pod to a specific worker node")
         worker_nodes_list = get_worker_nodes()
 
         # Create a RWO PVC
@@ -89,7 +93,7 @@ class TestPvcAssignPodNode(ManageTest):
         )
         teardown_factory(pod_obj)
 
-        # Confirm that the pod is running on the selected_node
+        logger.test_step(f"Verify pod is running on selected node {selected_node}")
         timeout = 120
         if (
             config.ENV_DATA["platform"].lower()
@@ -100,11 +104,14 @@ class TestPvcAssignPodNode(ManageTest):
             resource=pod_obj, state=constants.STATUS_RUNNING, timeout=timeout
         )
         pod_obj.reload()
+        logger.assertion(
+            f"Pod {pod_obj.name} is on expected node: expected='{selected_node}'"
+        )
         assert pod.verify_node_name(
             pod_obj, selected_node
         ), "Pod is running on a different node than the selected node"
 
-        # Run IO
+        logger.test_step(f"Run IO on pod {pod_obj.name}")
         logger.info(f"Running IO on pod {pod_obj.name}")
         pod_obj.run_io(storage_type="fs", size="512M", runtime=30, invalidate=0)
         pod.get_fio_rw_iops(pod_obj)
@@ -136,6 +143,7 @@ class TestPvcAssignPodNode(ManageTest):
         """
         Test assign nodeName to a pod using RWX pvc
         """
+        logger.test_step("Create RWX PVC and configure volume mode based on interface")
         worker_nodes_list = get_worker_nodes()
         if interface == constants.CEPHBLOCKPOOL:
             volume_mode = "Block"
@@ -157,11 +165,12 @@ class TestPvcAssignPodNode(ManageTest):
         )
 
         # Create two pods on selected nodes
+        logger.test_step("Create two pods on different selected worker nodes")
         pod_list = []
         selected_nodes = random.sample(worker_nodes_list, k=2)
         logger.info(f"Creating {len(selected_nodes)} pods with pvc {pvc_obj.name}")
         for node in selected_nodes:
-            logger.info(f"Creating pod on node: {node}")
+            logger.debug(f"Creating pod on node: {node}")
             pod_obj = helpers.create_pod(
                 interface_type=interface,
                 pvc_name=pvc_obj.name,
@@ -174,7 +183,7 @@ class TestPvcAssignPodNode(ManageTest):
             teardown_factory(pod_obj)
 
         # Confirm that both pods are running on the selected_nodes
-        logger.info("Checking whether pods are running on the selected nodes")
+        logger.test_step("Verify both pods are running on their selected nodes")
         for index in range(0, len(selected_nodes)):
             pod_obj = pod_list[index]
             selected_node = selected_nodes[index]
@@ -188,15 +197,19 @@ class TestPvcAssignPodNode(ManageTest):
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=timeout
             )
             pod_obj.reload()
+            logger.assertion(
+                f"Pod {pod_obj.name} is on expected node: expected='{selected_node}'"
+            )
             assert pod.verify_node_name(pod_obj, selected_node), (
                 f"Pod {pod_obj.name} is running on a different node "
                 "than the selected node"
             )
 
         # Run IOs on all pods. FIO Filename is kept same as pod name
+        logger.test_step(f"Run IO on all {len(pod_list)} pods in parallel")
         with ThreadPoolExecutor() as p:
             for pod_obj in pod_list:
-                logger.info(f"Running IO on pod {pod_obj.name}")
+                logger.debug(f"Running IO on pod {pod_obj.name}")
                 p.submit(
                     pod_obj.run_io,
                     storage_type=storage_type,
