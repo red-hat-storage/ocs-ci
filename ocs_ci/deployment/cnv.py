@@ -347,8 +347,14 @@ class CNVInstaller(object):
             else:
                 logger.warning("Not all nodes are in 'Ready' state")
                 return False
+        if config.DEPLOYMENT.get("disconnected"):
+            skip_for_status = ["Init:ImagePullBackOff", "ImagePullBackOff"]
+        else:
+            skip_for_status = None
 
-        if wait_for_pods_to_be_running(namespace=self.namespace, timeout=600):
+        if wait_for_pods_to_be_running(
+            namespace=self.namespace, timeout=600, skip_for_status=skip_for_status
+        ):
             logger.info("All CNV pods are running")
         else:
             if raise_exception:
