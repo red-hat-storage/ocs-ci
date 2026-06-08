@@ -208,19 +208,35 @@ class IBMHCI(object):
             log.error(f"Error checking/installing ipmitool: {e}")
             return False
 
-    def _format_ip_for_command(self, ip_address):
+    def _format_ip_for_ipmi(self, ip_address):
         """
-        Format IP address for use in commands. IPv6 addresses need to be wrapped in brackets.
+        Format IP address for IPMI commands. IPv6 addresses need to be quoted.
 
         Args:
             ip_address (str): IP address (IPv4 or IPv6)
 
         Returns:
-            str: Formatted IP address
+            str: Formatted IP address for IPMI
         """
         # Check if it's an IPv6 address (contains colons)
         if ":" in ip_address:
-            # Wrap IPv6 in brackets if not already wrapped
+            # Quote IPv6 addresses for IPMI
+            return f'"{ip_address}"'
+        return ip_address
+
+    def _format_ip_for_redfish(self, ip_address):
+        """
+        Format IP address for Redfish URLs. IPv6 addresses need to be wrapped in brackets.
+
+        Args:
+            ip_address (str): IP address (IPv4 or IPv6)
+
+        Returns:
+            str: Formatted IP address for Redfish URLs
+        """
+        # Check if it's an IPv6 address (contains colons)
+        if ":" in ip_address:
+            # Wrap IPv6 in brackets for URLs if not already wrapped
             if not ip_address.startswith("["):
                 return f"[{ip_address}]"
         return ip_address
@@ -248,8 +264,8 @@ class IBMHCI(object):
             log.error(f"Cannot proceed without ipmitool on rack {rack_ip}")
             return False
 
-        # Format IP address (wrap IPv6 in brackets)
-        formatted_ip = self._format_ip_for_command(node_ip)
+        # Format IP address (quote IPv6 for IPMI)
+        formatted_ip = self._format_ip_for_ipmi(node_ip)
 
         # Map operations to IPMI commands
         ipmi_ops = {
@@ -340,8 +356,8 @@ class IBMHCI(object):
             str: Power state ("on", "off") if operation is "status"
             bool: True if successful, False otherwise for other operations
         """
-        # Format IP address (wrap IPv6 in brackets for URL)
-        formatted_ip = self._format_ip_for_command(node_ip)
+        # Format IP address (wrap IPv6 in brackets for Redfish URLs)
+        formatted_ip = self._format_ip_for_redfish(node_ip)
 
         # Map operations to Redfish reset types
         redfish_ops = {
