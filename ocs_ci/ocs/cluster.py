@@ -2407,14 +2407,22 @@ def is_ec_pool_supported():
     from ocs_ci.helpers.helpers import get_failure_domin
     from ocs_ci.ocs.resources import pod
 
+    cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
+    if cluster_type == "provider":
+        return False
+
     platform = config.ENV_DATA["platform"].lower()
     if platform not in constants.ON_PREM_PLATFORMS:
         return False
     if not is_lso_cluster():
         return False
-    if get_failure_domin() != "host":
-        return False
-    if len(pod.get_osd_pods()) < 3:
+    try:
+        if get_failure_domin() != "host":
+            return False
+        if len(pod.get_osd_pods()) < 3:
+            return False
+    except Exception:
+        logger.debug("is_ec_pool_supported: cluster not ready, returning False")
         return False
     return True
 
