@@ -2,8 +2,7 @@ import sys
 import logging
 
 from ocs_ci.deployment.disconnected import mirror_fdf_catalog_via_oc_mirror
-from ocs_ci.utility.framework.fusion_fdf_init import Initializer, create_junit_report
-from ocs_ci.framework import config
+from ocs_ci.utility.framework.fdf_mirror_init import FDFMirrorInitializer
 
 logger = logging.getLogger(__name__)
 
@@ -23,52 +22,18 @@ def main(argv=None):
     # Retrieve provided args from CLI
     args = argv or sys.argv[1:]
 
-    # Framework initialization
-    init = Initializer("fdf-mirror")
-    parsed_args = init.init_cli(args)
-    init.init_config(parsed_args)
-    init.init_logging()
-    init.set_cluster_connection()
+    try:
+        # Initialize FDF mirror with all configuration
+        initializer = FDFMirrorInitializer()
+        initializer.initialize(args)
 
-    # JUnit report custom properties
-    suite_props = init.get_test_suite_props()
-    case_props = init.get_test_case_props()
-
-    @create_junit_report(
-        "FDFCatalogMirroring",
-        "fdf_catalog_mirroring",
-        suite_props,
-        case_props,
-    )
-    def fdf_mirror():
-        """
-        Mirror FDF catalog and related images to mirror registry.
-        """
-        catalog_image = parsed_args.catalog_image
-
-        # Try to get mirror_registry from CLI args first, then from config
-        mirror_registry = parsed_args.mirror_registry
-        if not mirror_registry:
-            mirror_registry = config.DEPLOYMENT.get("mirror_registry")
-            logger.debug(f"Reading mirror_registry from config: {mirror_registry}")
-        else:
-            logger.debug(f"Using mirror_registry from CLI args: {mirror_registry}")
-
-        configure_registries = parsed_args.configure_registries
+        # Get configuration from initializer
+        catalog_image = initializer.get_catalog_image()
+        mirror_registry = initializer.get_mirror_registry()
+        configure_registries = initializer.get_configure_registries()
 
         logger.info(f"Starting FDF catalog mirroring for: {catalog_image}")
         logger.info(f"Target mirror registry: {mirror_registry}")
-
-        # Debug: Log all DEPLOYMENT config keys
-        logger.debug(
-            f"Available DEPLOYMENT config keys: {list(config.DEPLOYMENT.keys())}"
-        )
-
-        if not mirror_registry:
-            raise ValueError(
-                "Mirror registry not specified. Please provide --mirror-registry "
-                "or configure it in your config file under DEPLOYMENT.mirror_registry"
-            )
 
         # Mirror the FDF catalog
         mirrored_image = mirror_fdf_catalog_via_oc_mirror(
@@ -80,8 +45,12 @@ def main(argv=None):
         logger.info(f"FDF catalog successfully mirrored to: {mirrored_image}")
         logger.info("Mirroring completed successfully!")
 
-        return mirrored_image
+        return 0
 
-    # Execute FDF mirroring
-    exit_code = fdf_mirror()
-    sys.exit(exit_code)
+    except Exception as e:
+        logger.exception(f"FDF catalog mirroring failed: {e}")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

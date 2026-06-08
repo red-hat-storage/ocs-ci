@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 LOG_NAMES = {
     "fusion": "fusion_deployment",
     "fdf": "fusion_data_foundation_deployment",
-    "fdf-mirror": "fdf_catalog_mirroring",
 }
 
 
@@ -68,11 +67,6 @@ class Initializer(object):
         Raises:
             FileNotFoundError: If the provided cluster_path is not found
             ClusterNameNotProvidedError: If the cluster_name isn't provided or found
-
-        Note:
-            For fdf-mirror deployment type, CLI arguments (--mirror-registry, --mirror-registry-user,
-            --mirror-registry-password) are stored in config.DEPLOYMENT to make them available to
-            the mirroring functions. CLI arguments take precedence over config file values.
 
         """
         framework.config.init_cluster_configs()
@@ -118,20 +112,6 @@ class Initializer(object):
                 config.DEPLOYMENT["fdf_image_tag"] = args.fdf_image_tag
             if args.live_deploy:
                 config.DEPLOYMENT["live_deployment"] = args.live_deploy
-
-        if self.deployment_type == "fdf-mirror":
-            # Store mirror registry and credentials from CLI args if provided
-            if args.mirror_registry:
-                config.DEPLOYMENT["mirror_registry"] = args.mirror_registry
-                logger.info("Using mirror_registry from CLI argument")
-            if args.mirror_registry_user:
-                config.DEPLOYMENT["mirror_registry_user"] = args.mirror_registry_user
-                logger.info("Using mirror_registry_user from CLI argument")
-            if args.mirror_registry_password:
-                config.DEPLOYMENT["mirror_registry_password"] = (
-                    args.mirror_registry_password
-                )
-                logger.info("Using mirror_registry_password from CLI argument")
 
     def init_cli(self, args: list) -> list:
         """
@@ -186,34 +166,6 @@ class Initializer(object):
                 action="store_true",
                 default=False,
                 help="Deploy FDF from live registry (GA)",
-            )
-        # FDF Mirror specific args
-        elif self.deployment_type == "fdf-mirror":
-            parser.add_argument(
-                "--catalog-image",
-                required=True,
-                help="FDF catalog image to mirror (e.g., cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20)",
-            )
-            parser.add_argument(
-                "--mirror-registry",
-                default=None,
-                help="Target mirror registry (e.g., registry.example.com:5000). If not provided, uses config value.",
-            )
-            parser.add_argument(
-                "--mirror-registry-user",
-                default=None,
-                help="Mirror registry username. If not provided, uses config value or pull secret.",
-            )
-            parser.add_argument(
-                "--mirror-registry-password",
-                default=None,
-                help="Mirror registry password. If not provided, uses config value or pull secret.",
-            )
-            parser.add_argument(
-                "--configure-registries",
-                action="store_true",
-                default=False,
-                help="Configure /etc/containers/registries.conf for internal FDF images",
             )
 
         parsed_args, _ = parser.parse_known_args(args)
