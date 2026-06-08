@@ -52,25 +52,33 @@ class TestReplicaOneExternal(ManageTest):
         self.created_rules = []
         self.applied_resources = {"secrets": [], "configmaps": []}
 
+        def _force_delete_resource(kind, name, namespace):
+            """Delete a resource, stripping finalizers if deletion blocks."""
+            ocp_obj = OCP(kind=kind, namespace=namespace)
+            try:
+                ocp_obj.delete(resource_name=name, wait=False, timeout=60)
+                log.info(f"Deleted {kind}: {name}")
+            except CommandFailed as e:
+                log.warning(f"Normal delete failed for {kind}/{name}: {e}")
+            try:
+                ocp_obj.patch(
+                    resource_name=name,
+                    params='{"metadata":{"finalizers":null}}',
+                    format_type="merge",
+                )
+                log.info(f"Stripped finalizers from {kind}/{name}")
+            except CommandFailed:
+                pass
+
         def finalizer():
             log.info("Starting external replica-1 teardown")
             namespace = config.ENV_DATA["cluster_namespace"]
 
             for name in self.applied_resources.get("secrets", []):
-                try:
-                    OCP(kind="Secret", namespace=namespace).delete(resource_name=name)
-                    log.info(f"Deleted Secret: {name}")
-                except CommandFailed as e:
-                    log.warning(f"Failed to delete Secret {name}: {e}")
+                _force_delete_resource("Secret", name, namespace)
 
             for name in self.applied_resources.get("configmaps", []):
-                try:
-                    OCP(kind="ConfigMap", namespace=namespace).delete(
-                        resource_name=name
-                    )
-                    log.info(f"Deleted ConfigMap: {name}")
-                except CommandFailed as e:
-                    log.warning(f"Failed to delete ConfigMap {name}: {e}")
+                _force_delete_resource("ConfigMap", name, namespace)
 
             try:
                 if self.created_pools:
