@@ -5,10 +5,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
     green_squad,
+    ec_allowed,
 )
 from ocs_ci.ocs.cluster import (
     validate_compression,
     validate_replica_data,
+    is_ec_pool_supported,
+    get_ec_metadata_pool_name,
 )
 from ocs_ci.ocs.constants import CEPHBLOCKPOOL
 from ocs_ci.ocs.exceptions import PoolNotReplicatedAsNeeded, PoolNotCompressedAsExpected
@@ -20,7 +23,6 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
-@pytest.mark.polarion_id("OCS-2391")
 class TestMultipleScOnePoolRep2Comp(ManageTest):
     """
     Create new rbd pool with replica 2 and compression.
@@ -33,8 +35,26 @@ class TestMultipleScOnePoolRep2Comp(ManageTest):
 
     replica = 2
 
+    @pytest.mark.parametrize(
+        "erasure_coded",
+        [
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-2391")]),
+            pytest.param(
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7979"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
     def test_multiple_sc_one_pool_rep2_comp(
         self,
+        erasure_coded,
         ceph_pool_factory,
         storageclass_factory,
         pvc_factory,
@@ -46,30 +66,54 @@ class TestMultipleScOnePoolRep2Comp(ManageTest):
         *. Creates PVCs using new Storage Classes
         *. Mount PVC to an app pod
         *. Run IO on an app pod
-        *. Verify compression and replication
+        *. Verify compression and replication (skipped for EC pools)
 
         """
 
-        log.info("Creating new pool with replica2 and compression")
-        pool_obj = ceph_pool_factory(
-            interface=CEPHBLOCKPOOL,
-            replica=self.replica,
-            compression="aggressive",
-        )
+        if erasure_coded:
+            log.info("Creating new EC pool")
+            pool_obj = ceph_pool_factory(
+                interface=CEPHBLOCKPOOL,
+                erasure_coded=True,
+            )
+            metadata_pool_name = get_ec_metadata_pool_name()
 
-        log.info(f"Creating first storageclass with pool {pool_obj.name}")
-        sc_obj1 = storageclass_factory(
-            interface=CEPHBLOCKPOOL,
-            new_rbd_pool=False,
-            pool_name=pool_obj.name,
-        )
+            log.info(f"Creating first storageclass with EC pool {pool_obj.name}")
+            sc_obj1 = storageclass_factory(
+                interface=CEPHBLOCKPOOL,
+                new_rbd_pool=False,
+                pool_name=metadata_pool_name,
+                data_pool_name=pool_obj.name,
+            )
 
-        log.info(f"Creating second storageclass with pool {pool_obj.name}")
-        sc_obj2 = storageclass_factory(
-            interface=CEPHBLOCKPOOL,
-            new_rbd_pool=False,
-            pool_name=pool_obj.name,
-        )
+            log.info(f"Creating second storageclass with EC pool {pool_obj.name}")
+            sc_obj2 = storageclass_factory(
+                interface=CEPHBLOCKPOOL,
+                new_rbd_pool=False,
+                pool_name=metadata_pool_name,
+                data_pool_name=pool_obj.name,
+            )
+        else:
+            log.info("Creating new pool with replica2 and compression")
+            pool_obj = ceph_pool_factory(
+                interface=CEPHBLOCKPOOL,
+                replica=self.replica,
+                compression="aggressive",
+            )
+
+            log.info(f"Creating first storageclass with pool {pool_obj.name}")
+            sc_obj1 = storageclass_factory(
+                interface=CEPHBLOCKPOOL,
+                new_rbd_pool=False,
+                pool_name=pool_obj.name,
+            )
+
+            log.info(f"Creating second storageclass with pool {pool_obj.name}")
+            sc_obj2 = storageclass_factory(
+                interface=CEPHBLOCKPOOL,
+                new_rbd_pool=False,
+                pool_name=pool_obj.name,
+            )
 
         sc_obj_list = [sc_obj1, sc_obj2]
         pod_obj_list = []
@@ -93,14 +137,15 @@ class TestMultipleScOnePoolRep2Comp(ManageTest):
                 readwrite="readwrite",
             )
 
-        log.info(f"validating info on pool {pool_obj.name}")
-        validate_rep_result = validate_replica_data(pool_obj.name, self.replica)
-        if validate_rep_result is False:
-            raise PoolNotReplicatedAsNeeded(
-                f"pool {pool_obj.name} not replicated as expected"
-            )
-        validate_comp_result = validate_compression(pool_obj.name)
-        if validate_comp_result is False:
-            raise PoolNotCompressedAsExpected(
-                f"pool {pool_obj.name} not compressed as expected"
-            )
+        if not erasure_coded:
+            log.info(f"validating info on pool {pool_obj.name}")
+            validate_rep_result = validate_replica_data(pool_obj.name, self.replica)
+            if validate_rep_result is False:
+                raise PoolNotReplicatedAsNeeded(
+                    f"pool {pool_obj.name} not replicated as expected"
+                )
+            validate_comp_result = validate_compression(pool_obj.name)
+            if validate_comp_result is False:
+                raise PoolNotCompressedAsExpected(
+                    f"pool {pool_obj.name} not compressed as expected"
+                )

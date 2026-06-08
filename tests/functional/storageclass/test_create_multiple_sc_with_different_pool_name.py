@@ -3,13 +3,14 @@ import logging
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, ec_allowed
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     skipif_external_mode,
     skipif_hci_provider_and_client,
 )
+from ocs_ci.ocs.cluster import is_ec_pool_supported, get_ec_metadata_pool_name
 from tests.fixtures import create_rbd_secret, create_project
 
 log = logging.getLogger(__name__)
@@ -23,13 +24,31 @@ log = logging.getLogger(__name__)
     create_project.__name__,
     create_rbd_secret.__name__,
 )
-@pytest.mark.polarion_id("OCS-624")
 class TestCreateMultipleScWithDifferentPoolName(ManageTest):
     """
     Create Multiple Storage Class with different pool name
     """
 
-    def test_create_multiple_sc_with_different_pool_name(self, teardown_factory):
+    @pytest.mark.parametrize(
+        "erasure_coded",
+        [
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-624")]),
+            pytest.param(
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7980"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_create_multiple_sc_with_different_pool_name(
+        self, erasure_coded, teardown_factory
+    ):
         """
         This test function does below,
         *. Creates multiple Storage Classes with different pool name
@@ -43,20 +62,34 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
         sc_list = []
         for i in range(2):
             log.info("Creating cephblockpool")
-            cbp_obj = helpers.create_ceph_block_pool()
+            cbp_obj = helpers.create_ceph_block_pool(erasure_coded=erasure_coded)
             log.info(f"{cbp_obj.name} created successfully")
-            log.info(f"Creating a RBD storage class using {cbp_obj.name}")
-            cbp_list.append(cbp_obj)
-            sc_obj = helpers.create_storage_class(
-                interface_type=constants.CEPHBLOCKPOOL,
-                interface_name=cbp_obj.name,
-                secret_name=self.rbd_secret_obj.name,
-            )
+
+            if erasure_coded:
+                metadata_pool_name = get_ec_metadata_pool_name()
+                log.info(
+                    f"Creating a RBD EC storage class using data pool {cbp_obj.name} "
+                    f"and metadata pool {metadata_pool_name}"
+                )
+                sc_obj = helpers.create_storage_class(
+                    interface_type=constants.CEPHBLOCKPOOL,
+                    interface_name=metadata_pool_name,
+                    secret_name=self.rbd_secret_obj.name,
+                    data_pool_name=cbp_obj.name,
+                )
+            else:
+                log.info(f"Creating a RBD storage class using {cbp_obj.name}")
+                sc_obj = helpers.create_storage_class(
+                    interface_type=constants.CEPHBLOCKPOOL,
+                    interface_name=cbp_obj.name,
+                    secret_name=self.rbd_secret_obj.name,
+                )
 
             log.info(
                 f"StorageClass: {sc_obj.name} "
                 f"created successfully using {cbp_obj.name}"
             )
+            cbp_list.append(cbp_obj)
             sc_list.append(sc_obj)
             teardown_factory(cbp_obj)
             teardown_factory(sc_obj)

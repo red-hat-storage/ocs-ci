@@ -1,7 +1,8 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, ec_allowed
+from ocs_ci.ocs.cluster import is_ec_pool_supported
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -112,10 +113,26 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
     @skipif_ocs_version("<4.6")
     @skipif_ocp_version("<4.6")
     @pytest.mark.parametrize(
-        argnames=["replica", "compression"],
+        argnames=["replica", "compression", "erasure_coded"],
         argvalues=[
-            pytest.param(*[3, "aggressive"], marks=pytest.mark.polarion_id("OCS-2536")),
-            pytest.param(*[2, "aggressive"], marks=pytest.mark.polarion_id("OCS-2305")),
+            pytest.param(
+                *[3, "aggressive", False], marks=pytest.mark.polarion_id("OCS-2536")
+            ),
+            pytest.param(
+                *[2, "aggressive", False], marks=pytest.mark.polarion_id("OCS-2305")
+            ),
+            pytest.param(
+                *[3, "none", True],
+                marks=[
+                    ec_allowed,
+                    tier2,
+                    pytest.mark.polarion_id("OCS-7963"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
         ],
     )
     def test_compressed_sc_and_support_snap_clone(
@@ -128,6 +145,7 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
         pgsql_teardown,
         replica,
         compression,
+        erasure_coded,
     ):
         """
         1. Create new sc with compression
@@ -148,6 +166,7 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
             new_rbd_pool=True,
             replica=replica,
             compression=compression,
+            erasure_coded=erasure_coded,
         )
 
         # Deploy PGSQL workload
