@@ -8,7 +8,6 @@ gets its own single-replica pool with a dedicated CRUSH rule.
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     external_mode_required,
@@ -19,7 +18,6 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
     get_external_cluster_instance,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterExporterRunFailed
-from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -50,35 +48,9 @@ class TestReplicaOneExternal(ManageTest):
         self.topology_config = self._build_topology_config_or_skip()
         self.created_pools = []
         self.created_rules = []
-        self.applied_resources = {"secrets": [], "configmaps": []}
-
-        def _force_delete_resource(kind, name, namespace):
-            """Delete a resource, stripping finalizers if deletion blocks."""
-            ocp_obj = OCP(kind=kind, namespace=namespace)
-            try:
-                ocp_obj.delete(resource_name=name, wait=False, timeout=60)
-                log.info(f"Deleted {kind}: {name}")
-            except CommandFailed as e:
-                log.warning(f"Normal delete failed for {kind}/{name}: {e}")
-            try:
-                ocp_obj.patch(
-                    resource_name=name,
-                    params='{"metadata":{"finalizers":null}}',
-                    format_type="merge",
-                )
-                log.info(f"Stripped finalizers from {kind}/{name}")
-            except CommandFailed:
-                pass
 
         def finalizer():
             log.info("Starting external replica-1 teardown")
-            namespace = config.ENV_DATA["cluster_namespace"]
-
-            for name in self.applied_resources.get("secrets", []):
-                _force_delete_resource("Secret", name, namespace)
-
-            for name in self.applied_resources.get("configmaps", []):
-                _force_delete_resource("ConfigMap", name, namespace)
 
             try:
                 if self.created_pools:
@@ -150,7 +122,6 @@ class TestReplicaOneExternal(ManageTest):
             # Step 6: Apply exported resources to ODF cluster
             log.info("Applying exported resources to ODF")
             applied = self.ext_cluster.apply_topology_export_resources(export_resources)
-            self.applied_resources = applied
 
             log.info(f"Applied secrets: {applied['secrets']}")
             log.info(f"Applied configmaps: {applied['configmaps']}")
