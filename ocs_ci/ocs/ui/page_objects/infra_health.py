@@ -418,7 +418,7 @@ class InfraHealthOverview(PageNavigator):
         self.do_click(self.validation_loc["all_checks"])
         logger.info("Selecting all indefinitely silenced alerts")
         self.select_all_alerts()
-        self.take_screenshot(f"all_alert_{indefinite_checkbox}")
+        self.take_screenshot("all_alerts_indefinite_filter")
         self.unsilence_alerts()
 
     def silence_all_alerts(self, silent_duration: int):

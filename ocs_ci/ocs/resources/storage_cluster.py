@@ -3816,7 +3816,7 @@ def trigger_storage_cluster_reconciliation(storage_cluster_name=None, namespace=
         f"in namespace '{namespace}'"
     )
     sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
-    timestamp = str(int(time.time()))
+    timestamp = str(time.time_ns())
     annotation_cmd = (
         f"annotate storagecluster {storage_cluster_name} "
         f"-n {namespace} "

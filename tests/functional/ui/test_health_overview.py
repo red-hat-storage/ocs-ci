@@ -854,7 +854,11 @@ class TestHealthOverview(ManageTest):
 
         logger.info("Triggering StorageCluster reconciliation")
         trigger_storage_cluster_reconciliation()
-        time.sleep(2)
+        sc_obj = get_default_storagecluster()
+        for sample in TimeoutSampler(120, 10, sc_obj.get):
+            if sample.get("status", {}).get("phase") == "Ready":
+                logger.info("StorageCluster reconciliation complete")
+                break
 
         logger.info("Verifying excluded alerts are maintained after reconciliation")
         for alert in alerts_to_disable:
@@ -883,9 +887,10 @@ class TestHealthOverview(ManageTest):
                 severity = SEVERITY_BY_CHECK.get(alert)
                 expected_score_drop += SEVERITY_DROP_MAP.get(severity, 0)
         expected_score = 100 - expected_score_drop
-        logger.info(
-            f"Expected health score based on active alerts: {expected_score}% "
-            f"(drop of {expected_score_drop}%)"
+        self.wait_for_health_score_change(
+            expected_delta=expected_score_drop, baseline=100
         )
-        self.wait_for_health_score_recovery(expected_score)
+        assert (
+            current_score == expected_score
+        ), f"Expected health score {expected_score}%, got {current_score}%"
         logger.info("SUCCESS: Health score correctly reflects active alerts.")
