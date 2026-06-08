@@ -20,14 +20,13 @@ from ocs_ci.framework.testlib import (
     tier1,
 )
 from ocs_ci.helpers.ols_helpers import (
-    do_deploy_ols,
-    create_ols_secret,
-    create_ols_config,
-    verify_ols_connects_to_llm,
+    ensure_ols_fully_configured,
     verify_ols_connection_fails,
     verify_ols_pod_logs_contain_expected_errors,
     delete_ols_config_and_secret,
     wait_for_ols_config_status_after_apply,
+    create_ols_secret,
+    create_ols_config,
 )
 from ocs_ci.helpers.ols_qa_answer_validations import (
     load_test_data,
@@ -57,11 +56,12 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
     """
 
-    def _ensure_ols_operator_installed(self):
+    def _ensure_ols_fully_configured(self):
         """
-        Ensure OLS operator is present before executing each test.
+        Ensure OLS is fully configured (operator, secret, config, LLM connection) before executing each test.
         """
-        assert do_deploy_ols(), "Failed to install/verify OLS Operator"
+        log.info("Ensuring OLS is fully configured before test execution")
+        assert ensure_ols_fully_configured(), "Failed to fully configure OLS (operator, secret, config, LLM connection)"
 
     @pytest.mark.order("first")
     @pytest.mark.polarion_id("OCS-7483")
@@ -79,20 +79,8 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
         """
 
-        # Deploy OLS operator
-        assert do_deploy_ols(), "Failed to install OLS Operator"
-
-        # Create credential secret for LLM provider IBM watsonx
-        assert (
-            create_ols_secret()
-        ), "Failed to create credential secret for LLM provider"
-
-        # Create custom resource "ols-config"
-        assert create_ols_config(), "Failed to create ols-config"
-
-        # Verify OLS successfully connects to and utilizes the specified IBM watsonx LLM provider
-        # Verify all the OLS pods are up and running (polls ApiReady; do not use fixed sleeps)
-        verify_ols_connects_to_llm()
+        # Ensure OLS is fully configured (operator, secret, config, LLM connection)
+        self._ensure_ols_fully_configured()
 
     @pytest.mark.polarion_id("OCS-7484")
     def test_data_foundation_answers(self, setup_ui):
@@ -108,7 +96,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
 
         """
 
-        self._ensure_ols_operator_installed()
+        self._ensure_ols_fully_configured()
         results = []
         failures = []
         test_data = load_test_data()
@@ -172,7 +160,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
         4. Validate the OLS response contains the expected terms from the YAML.
 
         """
-        self._ensure_ols_operator_installed()
+        self._ensure_ols_fully_configured()
         pvc_yaml_path = constants.OLS_ATTACHED_PVC_YAML
         with open(pvc_yaml_path, encoding="utf-8") as f:
             pvc_yaml_content = f.read()
@@ -224,7 +212,7 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
            (code 404, Failed to retrieve project, not_found, Resource requested by the client was not found).
 
         """
-        self._ensure_ols_operator_installed()
+        self._ensure_ols_fully_configured()
         delete_ols_config_and_secret()
 
         # ---------- Phase 1: Invalid URL (valid secret / projectID) ----------

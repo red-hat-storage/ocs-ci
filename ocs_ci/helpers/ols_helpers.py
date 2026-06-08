@@ -107,6 +107,57 @@ def do_deploy_ols():
         return False
 
 
+def ensure_ols_fully_configured():
+    """
+
+    Ensure OLS is fully configured and ready for use.
+
+    This function performs the complete OLS setup if not already done:
+    1. Install OLS operator (if not already installed)
+    2. Create credential secret for LLM provider (IBM watsonx)
+    3. Create OLSConfig custom resource
+    4. Verify OLS successfully connects to LLM
+
+    Returns:
+        bool: True if OLS is fully configured and connected to LLM, False otherwise
+
+    """
+    log.info("Ensuring OLS is fully configured")
+
+    # Step 1: Install OLS operator
+    log.info("Step 1: Installing/verifying OLS operator")
+    if not do_deploy_ols():
+        log.error("Failed to install/verify OLS operator")
+        return False
+    log.info("OLS operator is installed and ready")
+
+    # Step 2: Create credential secret
+    log.info("Step 2: Creating credential secret for LLM provider")
+    if not create_ols_secret():
+        log.error("Failed to create credential secret for LLM provider")
+        return False
+    log.info("Credential secret created successfully")
+
+    # Step 3: Create OLSConfig
+    log.info("Step 3: Creating OLSConfig custom resource")
+    if not create_ols_config():
+        log.error("Failed to create OLSConfig")
+        return False
+    log.info("OLSConfig created successfully")
+
+    # Step 4: Verify LLM connection
+    log.info("Step 4: Verifying OLS connects to LLM")
+    try:
+        verify_ols_connects_to_llm()
+        log.info("OLS successfully connected to LLM")
+    except Exception as ex:
+        log.error("Failed to verify OLS connection to LLM: %s", ex)
+        return False
+
+    log.info("OLS is fully configured and ready")
+    return True
+
+
 def validate_ols_operator_installed(
     namespace=constants.OLS_OPERATOR_NAMESPACE,
     operator_name=constants.OLS_OPERATOR_NAME,
