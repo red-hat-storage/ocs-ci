@@ -1027,23 +1027,77 @@ def pagerduty_integration(request, pagerduty_service):
 
 
 @pytest.fixture(scope="class")
-def ceph_pool_factory_class(request, replica=3, compression=None):
-    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
-
-
-@pytest.fixture(scope="session")
-def ceph_pool_factory_session(request, replica=3, compression=None):
-    return ceph_pool_factory_fixture(request, replica=replica, compression=compression)
-
-
-@pytest.fixture(scope="function")
-def ceph_pool_factory(request, replica=3, compression=None, pool_name=None):
+def ceph_pool_factory_class(
+    request,
+    replica=3,
+    compression=None,
+    pool_name=None,
+    erasure_coded=False,
+    data_chunks=None,
+    coding_chunks=None,
+):
     return ceph_pool_factory_fixture(
-        request, replica=replica, compression=compression, pool_name=pool_name
+        request,
+        replica=replica,
+        compression=compression,
+        pool_name=pool_name,
+        erasure_coded=erasure_coded,
+        data_chunks=data_chunks,
+        coding_chunks=coding_chunks,
     )
 
 
-def ceph_pool_factory_fixture(request, replica=3, compression=None, pool_name=None):
+@pytest.fixture(scope="session")
+def ceph_pool_factory_session(
+    request,
+    replica=3,
+    compression=None,
+    pool_name=None,
+    erasure_coded=False,
+    data_chunks=None,
+    coding_chunks=None,
+):
+    return ceph_pool_factory_fixture(
+        request,
+        replica=replica,
+        compression=compression,
+        pool_name=pool_name,
+        erasure_coded=erasure_coded,
+        data_chunks=data_chunks,
+        coding_chunks=coding_chunks,
+    )
+
+
+@pytest.fixture(scope="function")
+def ceph_pool_factory(
+    request,
+    replica=3,
+    compression=None,
+    pool_name=None,
+    erasure_coded=False,
+    data_chunks=None,
+    coding_chunks=None,
+):
+    return ceph_pool_factory_fixture(
+        request,
+        replica=replica,
+        compression=compression,
+        pool_name=pool_name,
+        erasure_coded=erasure_coded,
+        data_chunks=data_chunks,
+        coding_chunks=coding_chunks,
+    )
+
+
+def ceph_pool_factory_fixture(
+    request,
+    replica=3,
+    compression=None,
+    pool_name=None,
+    erasure_coded=False,
+    data_chunks=None,
+    coding_chunks=None,
+):
     """
     Create a Ceph pool factory.
     Calling this fixture creates new Ceph pool instance.
@@ -1057,10 +1111,18 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None, pool_name=No
         replica=replica,
         compression=compression,
         pool_name=pool_name,
+        erasure_coded=erasure_coded,
+        data_chunks=data_chunks,
+        coding_chunks=coding_chunks,
     ):
         if interface == constants.CEPHBLOCKPOOL:
             ceph_pool_obj = helpers.create_ceph_block_pool(
-                replica=replica, compression=compression, pool_name=pool_name
+                replica=replica,
+                compression=compression,
+                pool_name=pool_name,
+                erasure_coded=erasure_coded,
+                data_chunks=data_chunks,
+                coding_chunks=coding_chunks,
             )
         elif interface == constants.CEPHFILESYSTEM:
             cfs = ocp.OCP(
@@ -1211,6 +1273,8 @@ def storageclass_factory_fixture(
         annotations=None,
         mapOptions=None,
         mounter=None,
+        erasure_coded=False,
+        data_pool_name=None,
     ):
         """
         Args:
@@ -1239,6 +1303,11 @@ def storageclass_factory_fixture(
             annotations (dict): dict of annotation to be added to the storageclass.
             mapOptions (str): mapOtions match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
             mounter (str): mounter to match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
+            erasure_coded (bool): True to create an erasure coded RBD pool backed StorageClass.
+                Requires new_rbd_pool=True. The StorageClass will have pool set to the shared
+                metadata pool and dataPool set to the new EC data pool.
+            data_pool_name (str): Explicit EC data pool name to set as dataPool in the StorageClass.
+                Use when sharing an existing EC pool across multiple SCs without creating a new one.
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -1248,6 +1317,7 @@ def storageclass_factory_fixture(
             sc_obj = helpers.create_resource(**custom_data)
         else:
             secret = secret or secret_factory(interface=interface)
+            ec_data_pool_name = None
             if interface == constants.CEPHBLOCKPOOL:
                 if ocsci_config.ENV_DATA.get("new_rbd_pool") or new_rbd_pool:
                     pool_obj = ceph_pool_factory(
@@ -1256,8 +1326,15 @@ def storageclass_factory_fixture(
                         compression=ocsci_config.ENV_DATA.get("compression")
                         or compression,
                         pool_name=pool_name,
+                        erasure_coded=erasure_coded,
                     )
-                    interface_name = pool_obj.name
+                    if erasure_coded:
+                        from ocs_ci.ocs.cluster import get_ec_metadata_pool_name
+
+                        interface_name = get_ec_metadata_pool_name()
+                        ec_data_pool_name = pool_obj.name
+                    else:
+                        interface_name = pool_obj.name
                 else:
                     if pool_name is None:
                         interface_name = helpers.default_ceph_block_pool()
@@ -1281,6 +1358,7 @@ def storageclass_factory_fixture(
                 annotations=annotations,
                 mapOptions=mapOptions,
                 mounter=mounter,
+                data_pool_name=data_pool_name or ec_data_pool_name,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret

@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, ec_allowed
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -11,16 +11,22 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
     skipif_external_mode,
 )
+from ocs_ci.ocs.cluster import is_ec_pool_supported
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture
+def erasure_coded():
+    """Default pool type: replicated. Overridden per-test via parametrize."""
+    return False
+
+
 @green_squad
 @tier2
 @skipif_ocs_version("<4.8")
-@pytest.mark.polarion_id("OCS-2595")
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @skipif_external_mode
@@ -36,6 +42,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
         storageclass_factory,
         multi_pvc_factory,
         snapshot_factory,
+        erasure_coded,
     ):
         """
         Create RBD pool, storage class, PVCs and snapshots
@@ -47,6 +54,7 @@ class TestVerifyRbdTrashPurge(ManageTest):
         self.sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             new_rbd_pool=True,
+            erasure_coded=erasure_coded,
         )
 
         # Create PVC
@@ -75,7 +83,24 @@ class TestVerifyRbdTrashPurge(ManageTest):
                 timeout=600,
             )
 
-    def test_verify_rbd_trash_purge_when_snapshots_present(self):
+    @pytest.mark.parametrize(
+        "erasure_coded",
+        [
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-2595")]),
+            pytest.param(
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7977"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_verify_rbd_trash_purge_when_snapshots_present(self, erasure_coded):
         """
         Verify RBD trash purge command when the RBD image in trash have snapshots. Verifies bug 1964373.
 
