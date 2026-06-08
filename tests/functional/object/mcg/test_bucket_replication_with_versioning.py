@@ -18,6 +18,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     get_obj_versions,
     put_bucket_versioning_via_awscli,
+    s3_get_bucket_versioning,
     update_replication_policy,
     upload_obj_versions,
     wait_for_object_versions_match,
@@ -290,6 +291,18 @@ class TestReplicationWithVersioning(MCGTest):
         put_bucket_versioning_via_awscli(
             mcg_obj, awscli_pod, target_bucket.name, status="Suspended"
         )
+
+        # Verify target versioning is actually Suspended before proceeding
+        for target_versioning in TimeoutSampler(
+            timeout=60,
+            sleep=5,
+            func=s3_get_bucket_versioning,
+            s3_obj=mcg_obj,
+            bucketname=target_bucket.name,
+        ):
+            if target_versioning.get("Status") == "Suspended":
+                logger.info("Target bucket versioning is confirmed Suspended")
+                break
 
         # 7. Write versions to the source bucket under a different object key
         obj_key = "test_obj_" + str(uuid4())[:4]
