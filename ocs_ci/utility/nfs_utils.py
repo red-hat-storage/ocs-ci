@@ -7,6 +7,7 @@ import json
 import logging
 import yaml
 import pytest
+import time
 from ocs_ci.ocs import constants, resources, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
@@ -225,7 +226,12 @@ def create_nfs_load_balancer_service(
             configure_nfs_lb_security_group,
         )
 
+        log.info("Configuring IBM Cloud security group for NFS LoadBalancer...")
         configure_nfs_lb_security_group()
+        log.info(
+            "Security group configured. Waiting 60 seconds for rules to propagate..."
+        )
+        time.sleep(60)
 
     return hostname_add
 

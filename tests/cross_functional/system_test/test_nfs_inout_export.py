@@ -317,11 +317,16 @@ class TestNfsExport(ManageTest):
         """
 
         def _do_mount():
-            retcode, _, stderr = self.con.exec_cmd(cmd)
+            retcode, stdout, stderr = self.con.exec_cmd(cmd)
             if retcode != 0:
+                log.warning(
+                    f"NFS mount attempt failed (retcode {retcode}): {stderr}. "
+                    f"Will retry..."
+                )
                 raise CommandFailed(
                     f"NFS mount command failed with retcode {retcode}: {stderr}"
                 )
+            log.info("NFS mount successful")
 
         retry(CommandFailed, tries=tries, delay=delay)(_do_mount)()
 
@@ -362,13 +367,13 @@ class TestNfsExport(ManageTest):
         log.info(f"Completed {num_iterations} IO iterations on {file_path}")
         return len(errors) == 0, errors
 
-    def calculate_checksum_and_lines(self, con, file_path):
+    def calculate_checksum_and_lines_from_nfs_mount(self, con, file_path):
         """
-        Calculate MD5 checksum and line count for a file.
+        Calculate MD5 checksum and line count for a file on NFS mount (out-of-cluster).
 
         Args:
-            con: Connection object (NFS client or pod)
-            file_path (str): Full path to the file
+            con: Connection object to NFS client VM
+            file_path (str): Full path to the file on NFS mount
 
         Returns:
             dict: {'checksum': str, 'line_count': int, 'success': bool, 'error': str}
@@ -548,6 +553,16 @@ class TestNfsExport(ManageTest):
         )
 
         log.info(f"Mounting NFS export: {mount_cmd}")
+
+        # For IBM Cloud, add additional wait to ensure security group rules are fully active
+        platform = config.ENV_DATA.get("platform", "").lower()
+        if platform == constants.IBMCLOUD_PLATFORM:
+            log.info(
+                "IBM Cloud platform detected. Waiting 30 seconds before mount attempt "
+                "to ensure security group rules and DNS resolution are fully active..."
+            )
+            time.sleep(30)
+
         self._mount_nfs_with_retry(mount_cmd)
 
         # Verify mount
@@ -557,9 +572,9 @@ class TestNfsExport(ManageTest):
 
         return True
 
-    def verify_data_from_pod(self, pod_obj, file_path_in_pod):
+    def calculate_checksum_and_lines_from_pod(self, pod_obj, file_path_in_pod):
         """
-        Verify data integrity from within the pod.
+        Calculate MD5 checksum and line count for a file from within the pod (in-cluster).
 
         Args:
             pod_obj: Pod object
@@ -626,11 +641,13 @@ class TestNfsExport(ManageTest):
         log.info("=" * 80)
 
         # Get data from pod
-        pod_data = self.verify_data_from_pod(pod_obj, file_path_in_pod)
+        pod_data = self.calculate_checksum_and_lines_from_pod(pod_obj, file_path_in_pod)
         assert pod_data["success"], f"Failed to get data from pod: {pod_data['error']}"
 
         # Get data from NFS mount
-        nfs_data = self.calculate_checksum_and_lines(con, file_path_on_nfs)
+        nfs_data = self.calculate_checksum_and_lines_from_nfs_mount(
+            con, file_path_on_nfs
+        )
         assert nfs_data["success"], f"Failed to get data from NFS: {nfs_data['error']}"
 
         # Compare pod and NFS data
@@ -842,25 +859,9 @@ class TestNfsExport(ManageTest):
         log.info(f"Share details is, {share_details}")
 
         con = self.con
-        retcode, _, _ = con.exec_cmd("mkdir -p " + test_folder_for_pod)
-        assert retcode == 0
 
-        export_nfs_external_cmd = (
-            "mount -t nfs4 -o proto=tcp "
-            + self.hostname_add
-            + ":"
-            + share_details
-            + " "
-            + test_folder_for_pod
-        )
-
-        log.info(f"Mounting NFS export: {export_nfs_external_cmd}")
-        self._mount_nfs_with_retry(export_nfs_external_cmd)
-
-        # Verify mount is successful
-        retcode, stdout, _ = con.exec_cmd(f"findmnt -M {test_folder_for_pod}")
-        assert retcode == 0, f"Mount verification failed for {test_folder_for_pod}"
-        log.info(f"Successfully mounted NFS export at {test_folder_for_pod}")
+        # Mount NFS export using the wrapper method
+        self.mount_nfs_export(con, share_details, test_folder_for_pod)
 
         # Add finalizer for complete cleanup after all resources are created
         def cleanup_all_resources():
@@ -1384,28 +1385,9 @@ class TestNfsExport(ManageTest):
         restored_share_details = self.pv_obj.exec_oc_cmd(fetch_restored_pv_share_cmd)
         log.info(f"Restored share details is, {restored_share_details}")
 
-        # Create mount point for restored NFS export
+        # Mount restored NFS export using the wrapper method
         restored_test_folder = f"{self.test_folder}-restored"
-        retcode, _, _ = con.exec_cmd(f"mkdir -p {restored_test_folder}")
-        assert retcode == 0, f"Failed to create mount point {restored_test_folder}"
-
-        # Mount restored NFS export
-        export_restored_nfs_cmd = (
-            "mount -t nfs4 -o proto=tcp "
-            + self.hostname_add
-            + ":"
-            + restored_share_details
-            + " "
-            + restored_test_folder
-        )
-
-        log.info(f"Mounting restored NFS export: {export_restored_nfs_cmd}")
-        self._mount_nfs_with_retry(export_restored_nfs_cmd)
-
-        # Verify mount is successful
-        retcode, stdout, _ = con.exec_cmd(f"findmnt -M {restored_test_folder}")
-        assert retcode == 0, f"Mount verification failed for {restored_test_folder}"
-        log.info(f"Successfully mounted restored NFS export at {restored_test_folder}")
+        self.mount_nfs_export(con, restored_share_details, restored_test_folder)
 
         # Add restored mount to cleanup
         def cleanup_restored_mount():
@@ -1865,33 +1847,10 @@ class TestNfsExport(ManageTest):
         final_restored_share_details = self.pv_obj.exec_oc_cmd(fetch_final_pv_share_cmd)
         log.info(f"Final restored NFS share: {final_restored_share_details}")
 
-        # Create mount point for final restored NFS export
+        # Mount final restored NFS export using the wrapper method
         final_restored_test_folder = f"{self.test_folder}-final"
-        retcode, _, _ = con.exec_cmd(f"mkdir -p {final_restored_test_folder}")
-        assert (
-            retcode == 0
-        ), f"Failed to create mount point {final_restored_test_folder}"
-
-        # Mount final restored NFS export on client
-        mount_final_restored_cmd = (
-            "mount -t nfs4 -o proto=tcp "
-            + self.hostname_add
-            + ":"
-            + final_restored_share_details
-            + " "
-            + final_restored_test_folder
-        )
-
-        log.info(f"Mounting final restored NFS export: {mount_final_restored_cmd}")
-        self._mount_nfs_with_retry(mount_final_restored_cmd)
-
-        # Verify mount is successful
-        retcode, stdout, _ = con.exec_cmd(f"findmnt -M {final_restored_test_folder}")
-        assert (
-            retcode == 0
-        ), f"Mount verification failed for {final_restored_test_folder}"
-        log.info(
-            f"Successfully mounted final restored NFS export at {final_restored_test_folder}"
+        self.mount_nfs_export(
+            con, final_restored_share_details, final_restored_test_folder
         )
 
         # Add final restored mount to cleanup
