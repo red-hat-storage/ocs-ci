@@ -1,0 +1,30 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: odf-node-latency-high-non-osd
+  namespace: openshift-storage
+spec:
+  groups:
+    - name: odf-node-latency.rules
+      rules:
+        - alert: ODFNodeLatencyHighOnNonOSDNodes
+          expr: |
+            max_over_time(
+              probe_icmp_duration_seconds{
+                phase="rtt",
+                job="odf-blackbox-exporter",
+                daemon_type="mon"
+              }[24h:]
+            ) > 0.005
+          for: 1m
+          labels:
+            component: odf
+            severity: warning
+          annotations:
+            description: >
+              Node {{ $labels.instance }} has max ICMP RTT latency > 5ms
+              over the last 24h. Investigate network health.
+            summary: >
+              High ICMP latency (>5ms) detected on ODF non-OSD node(s)
+            runbook_url: >
+              https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator/ODFNodeLatencyHighOnNONOSDNodes.md

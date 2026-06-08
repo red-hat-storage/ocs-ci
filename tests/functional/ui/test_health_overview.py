@@ -41,6 +41,8 @@ ALERT_MAP = {
     constants.ALERT_ODF_CORE_POD_RESTART: 0,
     constants.ALERT_ODF_DISK_UTILIZATION_HIGH: 0,
     constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: 0,
+    constants.ALERT_CLUSTERWARNINGSTATE: 0,
+    constants.ALERT_CLUSTERERRORSTATE: 0,
 }
 
 SEVERITY_DROP_MAP = {
@@ -301,6 +303,9 @@ class TestHealthOverview(ManageTest):
                 f"Deployment '{deployment}' ready replicas: {ready}, "
                 f"waiting for {expected_replicas}"
             )
+        raise TimeoutError(
+            f"Deployment '{deployment}' did not reach {expected_replicas} ready replica(s) within {timeout}s"
+        )
 
     @pytest.fixture
     def scale_exporters_teardown(self, request):
@@ -341,6 +346,27 @@ class TestHealthOverview(ManageTest):
                     )
                 except Exception as ex:
                     logger.warning(f"[CLEANUP] Failed to scale up {deployment}: {ex}")
+
+        request.addfinalizer(finalizer)
+
+    @pytest.fixture
+    def scale_mon_teardown(self, request):
+        """
+        Teardown fixture to scale up mon after mock critical alert test completes.
+        """
+
+        def finalizer():
+            if getattr(self, "mon_scaling", False):
+                logger.info("[CLEANUP] Ensuring mon scaling is done")
+                try:
+                    ocp = OCP(namespace=config.ENV_DATA.get("cluster_namespace"))
+                    scale_cmd = "scale deployment rook-ceph-mon-a --replicas=1"
+                    ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+                    self.wait_for_deployment_ready_replicas(
+                        "rook-ceph-mon-a", expected_replicas=1
+                    )
+                except Exception as ex:
+                    logger.warning(f"Failed to scale mon during cleanup: {ex}")
 
         request.addfinalizer(finalizer)
 
@@ -443,6 +469,20 @@ class TestHealthOverview(ManageTest):
                 constants.ALERT_ODF_CORE_POD_RESTART,
                 "custom-odf-core-pod-restarted.yaml",
             ),
+            (
+                constants.ALERT_ODF_NODE_LATENCY_HIGH_NON_OSD_NODES,
+                "custom-odf-node-latency-high-non-osd.yaml",
+            ),
+            pytest.param(
+                constants.ALERT_CLUSTERERRORSTATE,
+                "custom-ceph-cluster-error.yaml",
+                marks=skipif_ocs_version("<4.22"),
+            ),
+            pytest.param(
+                constants.ALERT_CLUSTERWARNINGSTATE,
+                "custom-ceph-cluster-warn.yaml",
+                marks=skipif_ocs_version("<4.22"),
+            ),
         ],
     )
     def test_health_score_changes_based_on_alert_severity(
@@ -453,6 +493,7 @@ class TestHealthOverview(ManageTest):
         threading_lock,
         unsilence_alerts_teardown,
         alert_rule_teardown,
+        scale_mon_teardown,
     ):
         """
         Test to decrease health score based on alert severity and recover after alert is reversed.
@@ -465,6 +506,8 @@ class TestHealthOverview(ManageTest):
         7. Verify health score is recovered
         """
         self.rule = None
+        ocp = OCP(namespace=config.ENV_DATA.get("cluster_namespace"))
+        self.mon_scaling = False
         if alert_name == constants.ALERT_ODF_CORE_POD_RESTART:
             self.restart_pod()
             logger.info("Waiting for 120 sec for pod to restart")
@@ -482,7 +525,6 @@ class TestHealthOverview(ManageTest):
         assert (
             baseline_score == self.get_health_score_ui()
         ), "Full health score not recovered"
-
         severity = SEVERITY_BY_CHECK.get(alert_name)
         PageNavigator().take_screenshot(f"severity_of_alert_{alert_name}")
         assert severity, f"Severity not defined for alert {alert_name}"
@@ -492,6 +534,19 @@ class TestHealthOverview(ManageTest):
             f"expected drop={expected_drop}%"
         )
         if ALERT_MAP[alert_name] == 0 and alert_name != "ODFCorePodRestarted":
+            if alert_name in {
+                constants.ALERT_CLUSTERWARNINGSTATE,
+                constants.ALERT_CLUSTERERRORSTATE,
+            }:
+                logger.info(
+                    "Scaling down rook-ceph-mon-a deployment to 0 replicas to mock up alert"
+                )
+                scale_cmd = "scale deployment rook-ceph-mon-a --replicas=0 "
+                ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+                self.wait_for_deployment_ready_replicas(
+                    "rook-ceph-mon-a", expected_replicas=0
+                )
+                self.mon_scaling = True
             logger.info(f"Applying alert rule YAML: {alert_yaml}")
             alert_yaml_load = load_yaml(
                 os.path.join(constants.HEALTHALERTS_DIR, alert_yaml)
@@ -508,13 +563,18 @@ class TestHealthOverview(ManageTest):
                 "Waiting for 120 sec to update health score after alert is triggered"
             )
             time.sleep(120)
-            self.wait_for_health_score_change(
-                len(alerts) * expected_drop, baseline_score
-            )
+            self.wait_for_health_score_change(expected_drop, baseline_score)
 
             logger.info("Deleting alert rule to resolve alert")
             self.rule.delete()
             self.rule = None
+            if self.mon_scaling:
+                scale_cmd = "scale deployment rook-ceph-mon-a --replicas=1 "
+                ocp.exec_oc_cmd(command=scale_cmd, out_yaml_format=False)
+                self.wait_for_deployment_ready_replicas(
+                    "rook-ceph-mon-a", expected_replicas=1
+                )
+                self.mon_scaling = False
             logger.info("Waiting for alert to be resolved...")
             api.refresh_connection()
             alerts = api.wait_for_alert(name=alert_name, timeout=180, sleep=60)
@@ -529,9 +589,7 @@ class TestHealthOverview(ManageTest):
             logger.info("Alert already present no need to trigger again")
             infra_health_overview = df_overview.nav_health_view_checks()
             infra_health_overview.unsilence_alert_by_name(alert_name)
-            self.wait_for_health_score_change(
-                ALERT_MAP[alert_name] * expected_drop, baseline_score
-            )
+            self.wait_for_health_score_change(expected_drop, baseline_score)
 
     @tier2
     @polarion_id("OCS-7731")
