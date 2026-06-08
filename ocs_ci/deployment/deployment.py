@@ -219,15 +219,19 @@ def _wait_for_multus_pods_ready(timeout=1200, interval=30):
     Wait for Ceph pods to restart with multus network annotations after
     the StorageCluster is patched with multus selectors.
 
-    Polls all Ceph daemon pods (OSD, MON, MGR, MDS) and CSI controller
-    pods until they all have the ``k8s.v1.cni.cncf.io/networks``
-    annotation, indicating multus has attached network interfaces. Then
-    waits for all storage pods to be Running and runs verify_multus_network.
+    Rook automatically restarts OSD, MON, MGR, and CSI pods after the
+    patch, but MDS pods are not restarted. This function waits for the
+    auto-restarted pods first, then explicitly deletes MDS pods so they
+    are recreated with multus network interfaces, and finally verifies
+    the full multus network configuration.
     """
+    from ocs_ci.ocs.resources.pod import get_mds_pods
+
     public_net_name = config.ENV_DATA.get("multus_public_net_name", "public-net")
 
     logger.info(
-        "Waiting for all Ceph pods to have multus network annotations (timeout=%ds)",
+        "Waiting for Ceph pods (excluding MDS) to have multus annotations "
+        "(timeout=%ds)",
         timeout,
     )
     for sample in TimeoutSampler(
@@ -239,7 +243,7 @@ def _wait_for_multus_pods_ready(timeout=1200, interval=30):
         if sample:
             break
 
-    logger.info("All Ceph pods have multus annotations, waiting for all pods Running")
+    logger.info("Non-MDS Ceph pods have multus annotations, waiting for pods Running")
     if not wait_for_pods_to_be_running(
         timeout=600,
         sleep=20,
@@ -253,9 +257,27 @@ def _wait_for_multus_pods_ready(timeout=1200, interval=30):
             "Not all storage pods reached Running state after multus restart"
         )
 
+    # MDS pods are not restarted by Rook after multus patch — delete them
+    # so they are recreated with multus network interfaces
+    mds_pods = get_mds_pods()
+    if mds_pods:
+        mds_names = [p.name for p in mds_pods]
+        logger.info("Restarting MDS pods for multus: %s", mds_names)
+        for pod in mds_pods:
+            pod.delete(wait=False)
+        logger.info("Waiting for MDS pods to be Running with multus")
+        if not wait_for_pods_to_be_running(
+            timeout=300,
+            sleep=10,
+            skip_for_status=[
+                constants.STATUS_COMPLETED,
+                "Succeeded",
+                "Terminating",
+            ],
+        ):
+            raise Exception("MDS pods did not reach Running state after restart")
+
     logger.info("Verifying multus network configuration")
-    # Ceph internal state (MDS map, OSD map) may take additional time to
-    # reflect the new multus IPs even after pods are Running with annotations.
     _verify_multus_with_retry()
 
 
@@ -271,12 +293,16 @@ def _verify_multus_with_retry():
 
 
 def _ceph_pods_have_multus_annotation(public_net_name):
-    """Check if all Ceph daemon and CSI controller pods have multus annotations."""
+    """Check if Ceph daemon (excluding MDS) and CSI controller pods have multus annotations.
+
+    MDS pods are excluded because Rook does not automatically restart
+    them after the StorageCluster multus patch. They are handled
+    separately in _wait_for_multus_pods_ready().
+    """
     from ocs_ci.ocs.resources.pod import (
         get_osd_pods,
         get_mon_pods,
         get_mgr_pods,
-        get_mds_pods,
         get_cephfsplugin_provisioner_pods,
         get_rbdfsplugin_provisioner_pods,
     )
@@ -287,7 +313,6 @@ def _ceph_pods_have_multus_annotation(public_net_name):
             (get_osd_pods, "OSD"),
             (get_mon_pods, "MON"),
             (get_mgr_pods, "MGR"),
-            (get_mds_pods, "MDS"),
             (get_cephfsplugin_provisioner_pods, "CephFS CSI"),
             (get_rbdfsplugin_provisioner_pods, "RBD CSI"),
         ]:
