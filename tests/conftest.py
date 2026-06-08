@@ -1257,6 +1257,8 @@ def storageclass_factory_fixture(
                         or compression,
                         pool_name=pool_name,
                     )
+                    pool_obj.ocp.resource_name = pool_obj.name
+                    pool_obj.ocp.wait_for_phase(phase="Ready", timeout=300)
                     interface_name = pool_obj.name
                 else:
                     if pool_name is None:
