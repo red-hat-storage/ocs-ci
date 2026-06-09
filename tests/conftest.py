@@ -10343,33 +10343,104 @@ def setup_nfs(request, setup_rbac):
 
         # Update the deployment with ocs-ci noobaa nfs server
         # noobaa nfs mount path and create the deployment
+        nfs_server = config.ENV_DATA.get("nb_nfs_server")
+        nfs_mount = config.ENV_DATA.get("nb_nfs_mount")
+        if not nfs_server or not nfs_mount:
+            raise ValueError(
+                f"NFS config not set: nb_nfs_server={nfs_server}, nb_nfs_mount={nfs_mount}"
+            )
+
+        log.info(f"Checking DNS resolution of NFS server '{nfs_server}' from cluster")
+        try:
+            node_name = (
+                exec_cmd("oc get nodes -o jsonpath='{.items[0].metadata.name}'")
+                .stdout.decode()
+                .strip()
+                .strip("'")
+            )
+            result = exec_cmd(
+                f"oc debug node/{node_name} --to-namespace=default "
+                f"-- chroot /host getent hosts {nfs_server}",
+                ignore_error=True,
+            )
+            if not result.stdout or not result.stdout.decode().strip():
+                pytest.skip(
+                    f"NFS server '{nfs_server}' is not DNS-resolvable from "
+                    f"cluster node {node_name}; skipping NFS test"
+                )
+        except Exception:
+            log.warning(
+                f"Could not verify DNS resolution of '{nfs_server}' from cluster, "
+                f"proceeding with test"
+            )
+
         log.info(
             "Updating NFS client provisioner data with Noobaa NFS server and NFS mount path info"
         )
         nfs_client_prov_dep_data = templating.load_yaml(
             constants.NFS_DEPLOYMENT_YAML_DIR
         )
-        nfs_client_prov_dep_data["spec"]["template"]["spec"]["containers"][0]["env"][1][
-            "value"
-        ] = config.ENV_DATA.get("nb_nfs_server")
-        nfs_client_prov_dep_data["spec"]["template"]["spec"]["containers"][0]["env"][2][
-            "value"
-        ] = config.ENV_DATA.get("nb_nfs_mount")
-        nfs_client_prov_dep_data["spec"]["template"]["spec"]["volumes"][0]["nfs"][
-            "server"
-        ] = config.ENV_DATA.get("nb_nfs_server")
-        nfs_client_prov_dep_data["spec"]["template"]["spec"]["volumes"][0]["nfs"][
-            "path"
-        ] = config.ENV_DATA.get("nb_nfs_mount")
+        container = nfs_client_prov_dep_data["spec"]["template"]["spec"]["containers"][
+            0
+        ]
+        env_by_name = {e.get("name"): e for e in container.get("env", [])}
+        missing_env = [k for k in ("NFS_SERVER", "NFS_PATH") if k not in env_by_name]
+        if missing_env:
+            raise ValueError(
+                f"NFS deployment template missing env vars: {', '.join(missing_env)}"
+            )
+        env_by_name["NFS_SERVER"]["value"] = nfs_server
+        env_by_name["NFS_PATH"]["value"] = nfs_mount
+
+        nfs_volume = next(
+            (
+                v
+                for v in nfs_client_prov_dep_data["spec"]["template"]["spec"]["volumes"]
+                if v.get("name") == "nfs-client-root"
+            ),
+            None,
+        )
+        if nfs_volume is None:
+            raise ValueError("NFS deployment template missing volume 'nfs-client-root'")
+        if "nfs" not in nfs_volume:
+            raise ValueError(
+                "NFS deployment template volume 'nfs-client-root' is missing 'nfs' section"
+            )
+        nfs_volume["nfs"]["server"] = nfs_server
+        nfs_volume["nfs"]["path"] = nfs_mount
         log.info("Creating NFS client provisioner deployment")
         create_resource(**nfs_client_prov_dep_data)
         nfs_client_dep_obj = OCS(**nfs_client_prov_dep_data)
 
         log.info("Waiting for NFS client provisioner pods to be running")
-        assert wait_for_pods_to_be_in_statuses(
+        pods_running = wait_for_pods_to_be_in_statuses(
             expected_statuses=constants.STATUS_RUNNING,
             namespace=constants.NFS_NAMESPACE_NAME,
-        ), "NFS provisioner pods didn't start up successfully"
+            timeout=600,
+        )
+        if not pods_running:
+            ocp_pod = OCP(kind=constants.POD, namespace=constants.NFS_NAMESPACE_NAME)
+            try:
+                pod_data = ocp_pod.get()
+                for pod in pod_data.get("items", []):
+                    pod_name = pod["metadata"]["name"]
+                    phase = pod.get("status", {}).get("phase")
+                    log.error(f"NFS provisioner pod {pod_name} phase: {phase}")
+                    for cond in pod.get("status", {}).get("conditions", []):
+                        log.error(
+                            f"  Condition {cond.get('type')}: "
+                            f"{cond.get('status')} - {cond.get('message', '')}"
+                        )
+            except Exception:
+                log.exception("Failed to get NFS pod details for diagnostics")
+            try:
+                ocp_event = OCP(kind="Event", namespace=constants.NFS_NAMESPACE_NAME)
+                event_data = ocp_event.get()
+                for event in event_data.get("items", []):
+                    log.error(f"  Event: {event.get('reason')}: {event.get('message')}")
+            except Exception:
+                log.exception("Failed to get NFS namespace events for diagnostics")
+        assert pods_running, "NFS provisioner pods didn't start up successfully"
 
     finally:
 
