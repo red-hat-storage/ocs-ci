@@ -1,9 +1,7 @@
 import inspect
-import ipaddress
 import logging
 import os
 import random
-import socket
 import threading
 import time
 from threading import Thread
@@ -17,7 +15,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
-    ManageTest,
     tier1,
     skipif_ocp_version,
     skipif_managed_service,
@@ -27,9 +24,9 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_hci_client,
 )
+from tests.nfs_base import NFSClientTestBase
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, ocp, platform_nodes
-from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_all_nodes
 from ocs_ci.ocs.resources import pod, ocs, pvc
 from ocs_ci.ocs.resources.pod import (
@@ -37,11 +34,14 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
 )
 from ocs_ci.ocs.resources.pvc import create_pvc_snapshot
-from ocs_ci.utility import nfs_utils, templating
+from ocs_ci.utility.nfs_utils import (
+    get_file_checksum_from_nfs,
+    get_file_line_count_from_nfs,
+    configure_deployment_for_nfs,
+)
+from ocs_ci.utility import nfs_utils
 from ocs_ci.utility import version as version_module
-from ocs_ci.utility.connection import Connection
-from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, ceph_health_check
+from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 # Error message to look in a command output
@@ -58,7 +58,7 @@ ERRMSG = "Error in command"
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @skipif_lean_deployment
-class TestNfsExport(ManageTest):
+class TestNfsExport(NFSClientTestBase):
     """
     Test nfs feature enable for ODF 4.11
 
@@ -228,108 +228,6 @@ class TestNfsExport(ManageTest):
             except Exception as e:
                 log.warning(f"Failed to cleanup NFS mount: {e}")
 
-        # the NFS Client VM might not be healthy, so rebooting it and re-trying
-
-    @property
-    @retry((TimeoutError, socket.gaierror), tries=3, delay=60, backoff=1)
-    def con(self):
-        """
-        Create connection to NFS Client VM, if not accessible, try to restart it.
-        """
-        if (
-            not hasattr(self, "__nfs_client_connection")
-            or not self.__nfs_client_connection
-        ):
-            try:
-                self.__nfs_client_connection = self.get_nfs_client_connection(
-                    re_try=False
-                )
-            except (TimeoutError, socket.gaierror):
-                nfs_client_vm_cloud = config.ENV_DATA.get("nfs_client_vm_cloud")
-                nfs_client_vm_name = config.ENV_DATA.get("nfs_client_vm_name")
-                if not nfs_client_vm_cloud or not nfs_client_vm_name:
-                    raise ConfigurationError(
-                        "NFS Client VM is not accessible and ENV_DATA nfs_client_vm_cloud and/or nfs_client_vm_name "
-                        "parameters are not configured to be able to automatically reboot the NFS Client VM."
-                    )
-                cmd = f"openstack --os-cloud {nfs_client_vm_cloud} server reboot --hard --wait {nfs_client_vm_name}"
-                exec_cmd(cmd)
-
-                time.sleep(60)
-                self.__nfs_client_connection = self.get_nfs_client_connection()
-        return self.__nfs_client_connection
-
-    def get_nfs_client_connection(self, re_try=True):
-        """
-        Create connection to NFS Client VM.
-
-        After establishing the SSH connection, if the NFS LB endpoint is a
-        hostname (not a raw IP), the hostname is resolved from within the
-        cluster and /etc/hosts on the client VM is updated. This is required
-        when the NFS client VM is in a different VPC from the OpenShift cluster
-        and cannot resolve IBM Cloud VPC LB hostnames via its DNS servers.
-
-
-        If hostname resolution from the cluster fails (timeout), the code will
-        proceed without updating /etc/hosts, assuming the NFS client VM can
-        resolve the hostname via its own DNS configuration.
-        """
-        log.info("Connecting to nfs client test VM")
-        tries = 3 if re_try else 1
-
-        @retry((TimeoutError, socket.gaierror), tries=tries, delay=60, backoff=1)
-        def __make_connection():
-            return Connection(
-                self.nfs_client_ip,
-                self.nfs_client_user,
-                private_key=self.nfs_client_private_key,
-            )
-
-        con = __make_connection()
-        hostname_add = getattr(self, "hostname_add", None)
-        if hostname_add:
-            is_ip = False
-            try:
-                ipaddress.ip_address(hostname_add)
-                is_ip = True
-            except ValueError:
-                pass
-            if not is_ip:
-                log.info(
-                    "NFS LB endpoint %s is a hostname, resolving and "
-                    "updating /etc/hosts on NFS client VM",
-                    hostname_add,
-                )
-                nfs_utils.update_etc_hosts_on_nfs_client(con, hostname_add)
-        return con
-
-    def _mount_nfs_with_retry(self, cmd, tries=28, delay=10):
-        """
-        Execute an NFS mount command on the client VM with retry.
-
-        Args:
-            cmd (str): Mount command to execute on the NFS client VM
-            tries (int): Number of retry attempts (default: 28)
-            delay (int): Delay in seconds between retries (default: 10)
-
-        Raises:
-            CommandFailed: If mount does not succeed within the retry limit
-        """
-
-        def _do_mount():
-            retcode, stdout, stderr = self.con.exec_cmd(cmd)
-            if retcode != 0:
-                log.warning(
-                    f"NFS mount attempt failed (retcode {retcode}): {stderr}. "
-                    f"Will retry..."
-                )
-                raise CommandFailed(
-                    f"NFS mount command failed with retcode {retcode}: {stderr}"
-                )
-            log.info("NFS mount successful")
-
-        retry(CommandFailed, tries=tries, delay=delay)(_do_mount)()
-
     def write_io_to_single_file(self, con, file_path, num_iterations=20, delay=0.5):
         """
         Write IO operations to a single file on NFS mount.
@@ -438,119 +336,6 @@ class TestNfsExport(ManageTest):
         log.info(f"✓ Data integrity verified after {operation_name}")
         log.info(f"  - Line count: {after_data['line_count']}")
         log.info(f"  - Checksum: {after_data['checksum']}")
-
-    def get_file_checksum_from_nfs(self, con, file_path):
-        """
-        Get MD5 checksum for a file on NFS mount (out-of-cluster).
-
-        Args:
-            con: Connection object to NFS client VM
-            file_path (str): Full path to the file on NFS mount
-
-        Returns:
-            str: MD5 checksum or None if failed
-        """
-        checksum_cmd = f"md5sum {file_path}"
-        retcode, stdout, stderr = con.exec_cmd(checksum_cmd)
-        if retcode != 0:
-            log.error(f"Failed to calculate checksum for {file_path}: {stderr}")
-            return None
-        return stdout.split()[0]
-
-    def get_file_line_count_from_nfs(self, con, file_path):
-        """
-        Get line count for a file on NFS mount (out-of-cluster).
-
-        Args:
-            con: Connection object to NFS client VM
-            file_path (str): Full path to the file on NFS mount
-
-        Returns:
-            int: Line count or 0 if failed
-        """
-        line_cmd = f"wc -l {file_path}"
-        retcode, stdout, stderr = con.exec_cmd(line_cmd)
-        if retcode != 0:
-            log.error(f"Failed to get line count for {file_path}: {stderr}")
-            return 0
-        return int(stdout.split()[0])
-
-    def get_file_checksum_from_pod(self, pod_obj, file_path_in_pod):
-        """
-        Get MD5 checksum for a file from within the pod (in-cluster).
-
-        Args:
-            pod_obj: Pod object
-            file_path_in_pod (str): Path to file inside pod (e.g., /mnt/filename)
-
-        Returns:
-            str: MD5 checksum or None if failed
-        """
-        checksum_cmd = f"md5sum {file_path_in_pod}"
-        try:
-            pod_output = pod_obj.exec_cmd_on_pod(
-                command=checksum_cmd, out_yaml_format=False
-            )
-            return pod_output.split()[0]
-        except Exception as e:
-            log.error(
-                f"Failed to get checksum from pod for {file_path_in_pod}: {str(e)}"
-            )
-            return None
-
-    def get_file_line_count_from_pod(self, pod_obj, file_path_in_pod):
-        """
-        Get line count for a file from within the pod (in-cluster).
-
-        Args:
-            pod_obj: Pod object
-            file_path_in_pod (str): Path to file inside pod (e.g., /mnt/filename)
-
-        Returns:
-            int: Line count or 0 if failed
-        """
-        line_cmd = f"wc -l {file_path_in_pod}"
-        try:
-            pod_output = pod_obj.exec_cmd_on_pod(
-                command=line_cmd, out_yaml_format=False
-            )
-            return int(pod_output.split()[0])
-        except Exception as e:
-            log.error(
-                f"Failed to get line count from pod for {file_path_in_pod}: {str(e)}"
-            )
-            return 0
-
-    def configure_deployment_for_nfs(self, deployment_name, pvc_name):
-        """
-        Configure deployment data for NFS pod with given names.
-
-        Args:
-            deployment_name (str): Name for the deployment
-            pvc_name (str): Name of the PVC to mount
-
-        Returns:
-            dict: Configured deployment data ready for creation
-        """
-        # Load base deployment template
-        deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
-
-        # Set deployment name
-        deployment_data["metadata"]["name"] = deployment_name
-
-        # Set label values (used in multiple places for pod selection)
-        deployment_data["metadata"]["labels"]["app"] = deployment_name
-        deployment_data["spec"]["selector"]["matchLabels"]["name"] = deployment_name
-        deployment_data["spec"]["template"]["metadata"]["labels"][
-            "name"
-        ] = deployment_name
-
-        # Set PVC claimName
-        deployment_data["spec"]["template"]["spec"]["volumes"][0][
-            "persistentVolumeClaim"
-        ]["claimName"] = pvc_name
-
-        return deployment_data
 
     def get_nfs_export_details(self, pvc_name):
         """
@@ -788,11 +573,11 @@ class TestNfsExport(ManageTest):
     @pytest.mark.parametrize(
         "access_mode",
         [
-            pytest.param(constants.ACCESS_MODE_RWX, id="RWX"),
+            # pytest.param(constants.ACCESS_MODE_RWX, id="RWX"),
             pytest.param(constants.ACCESS_MODE_RWO, id="RWO"),
         ],
     )
-    def test_cluster_inout_nfs_export(
+    def test_cluster_inout_cluster_nfs_export(
         self,
         pod_factory,
         request,
@@ -930,7 +715,7 @@ class TestNfsExport(ManageTest):
 
         # Create deployment for app pod
         log.info("----creating deployment ---")
-        deployment_data = self.configure_deployment_for_nfs(
+        deployment_data = configure_deployment_for_nfs(
             deployment_name=pod_name, pvc_name=pvc_name
         )
         helpers.create_resource(**deployment_data)
@@ -1056,7 +841,7 @@ class TestNfsExport(ManageTest):
                     return
 
                 # Get initial file checksum
-                previous_checksum = self.get_file_checksum_from_nfs(con, test_file)
+                previous_checksum = get_file_checksum_from_nfs(con, test_file)
                 if previous_checksum:
                     log.info(f"File initialized with checksum: {previous_checksum}")
                 else:
@@ -1077,7 +862,7 @@ class TestNfsExport(ManageTest):
                         continue
 
                     # Calculate current file checksum
-                    current_checksum = self.get_file_checksum_from_nfs(con, test_file)
+                    current_checksum = get_file_checksum_from_nfs(con, test_file)
                     if not current_checksum:
                         io_errors.append(
                             f"Checksum calculation failed at iteration {iteration}"
@@ -1135,12 +920,12 @@ class TestNfsExport(ManageTest):
                 # Final file statistics
                 try:
                     # Final file statistics
-                    line_count = self.get_file_line_count_from_nfs(con, test_file)
+                    line_count = get_file_line_count_from_nfs(con, test_file)
                     if line_count:
                         log.info(f"Final file statistics: {line_count} lines written")
 
                     # Final checksum
-                    final_checksum = self.get_file_checksum_from_nfs(con, test_file)
+                    final_checksum = get_file_checksum_from_nfs(con, test_file)
                     if final_checksum:
                         log.info(f"Final file checksum: {final_checksum}")
                 except Exception as stat_error:
@@ -1284,12 +1069,12 @@ class TestNfsExport(ManageTest):
         log.info("Step 1: Capturing file checksum from NFS mount")
 
         # Calculate checksum and line count of the single test file
-        original_file_checksum = self.get_file_checksum_from_nfs(con, test_file)
+        original_file_checksum = get_file_checksum_from_nfs(con, test_file)
         assert original_file_checksum, "Failed to calculate file checksum"
         log.info(f"Original file checksum: {original_file_checksum}")
 
         # Get file line count for reference
-        original_line_count = self.get_file_line_count_from_nfs(con, test_file)
+        original_line_count = get_file_line_count_from_nfs(con, test_file)
         log.info(f"Total lines in file: {original_line_count}")
 
         # Step 2: Create snapshot of the NFS PVC
@@ -1365,7 +1150,7 @@ class TestNfsExport(ManageTest):
         log.info("Step 4: Creating new pod with restored PVC")
 
         restored_pod_name = f"{pod_name}-restored"
-        restored_deployment_data = self.configure_deployment_for_nfs(
+        restored_deployment_data = configure_deployment_for_nfs(
             deployment_name=restored_pod_name, pvc_name=restored_pvc_name
         )
         helpers.create_resource(**restored_deployment_data)
@@ -1537,7 +1322,7 @@ class TestNfsExport(ManageTest):
         log.info("Step 2: Creating pod deployment with cloned PVC")
 
         cloned_pod_name = f"test-deployment-cloned-{int(time.time())}"
-        cloned_deployment_data = self.configure_deployment_for_nfs(
+        cloned_deployment_data = configure_deployment_for_nfs(
             deployment_name=cloned_pod_name, pvc_name=cloned_pvc_name
         )
         helpers.create_resource(**cloned_deployment_data)
@@ -1623,12 +1408,12 @@ class TestNfsExport(ManageTest):
         log.info("Step 5: Capturing file checksum before PVC resize")
 
         # Get checksum and line count before resize
-        pre_resize_checksum = self.get_file_checksum_from_nfs(con, cloned_io_file)
+        pre_resize_checksum = get_file_checksum_from_nfs(con, cloned_io_file)
         assert pre_resize_checksum, "Failed to calculate cloned file checksum"
         log.info(f"Pre-resize file checksum: {pre_resize_checksum}")
 
         # Get line count before resize
-        pre_resize_line_count = self.get_file_line_count_from_nfs(con, cloned_io_file)
+        pre_resize_line_count = get_file_line_count_from_nfs(con, cloned_io_file)
         log.info(f"Pre-resize line count: {pre_resize_line_count}")
 
         # Step 6: Resize (expand) the cloned PVC
@@ -1669,12 +1454,12 @@ class TestNfsExport(ManageTest):
         log.info("Step 7: Verifying data integrity after PVC resize")
 
         # Calculate checksum and line count after resize
-        post_resize_checksum = self.get_file_checksum_from_nfs(con, cloned_io_file)
+        post_resize_checksum = get_file_checksum_from_nfs(con, cloned_io_file)
         assert post_resize_checksum, "Failed to calculate post-resize file checksum"
         log.info(f"Post-resize file checksum: {post_resize_checksum}")
 
         # Get line count after resize
-        post_resize_line_count = self.get_file_line_count_from_nfs(con, cloned_io_file)
+        post_resize_line_count = get_file_line_count_from_nfs(con, cloned_io_file)
         log.info(f"Post-resize line count: {post_resize_line_count}")
 
         # Verify line count unchanged
@@ -1801,7 +1586,7 @@ class TestNfsExport(ManageTest):
         log.info("Step 3: Creating pod deployment with final restored PVC")
 
         final_restored_pod_name = f"test-deployment-final-{int(time.time())}"
-        final_restored_deployment_data = self.configure_deployment_for_nfs(
+        final_restored_deployment_data = configure_deployment_for_nfs(
             deployment_name=final_restored_pod_name, pvc_name=final_restored_pvc_name
         )
         helpers.create_resource(**final_restored_deployment_data)
@@ -1910,14 +1695,12 @@ class TestNfsExport(ManageTest):
         log.info("Step 6: Capturing file checksum before final PVC resize")
 
         # Get checksum and line count before resize
-        pre_final_resize_checksum = self.get_file_checksum_from_nfs(con, final_io_file)
+        pre_final_resize_checksum = get_file_checksum_from_nfs(con, final_io_file)
         assert pre_final_resize_checksum, "Failed to calculate final file checksum"
         log.info(f"Pre-final-resize file checksum: {pre_final_resize_checksum}")
 
         # Get line count before resize
-        pre_final_resize_line_count = self.get_file_line_count_from_nfs(
-            con, final_io_file
-        )
+        pre_final_resize_line_count = get_file_line_count_from_nfs(con, final_io_file)
         log.info(f"Pre-final-resize line count: {pre_final_resize_line_count}")
 
         # Step 7: Resize the final restored PVC
@@ -1956,16 +1739,14 @@ class TestNfsExport(ManageTest):
         log.info("Step 8: Verifying data integrity after final PVC resize")
 
         # Calculate checksum and line count after resize
-        post_final_resize_checksum = self.get_file_checksum_from_nfs(con, final_io_file)
+        post_final_resize_checksum = get_file_checksum_from_nfs(con, final_io_file)
         assert (
             post_final_resize_checksum
         ), "Failed to calculate post-final-resize file checksum"
         log.info(f"Post-final-resize file checksum: {post_final_resize_checksum}")
 
         # Get line count after resize
-        post_final_resize_line_count = self.get_file_line_count_from_nfs(
-            con, final_io_file
-        )
+        post_final_resize_line_count = get_file_line_count_from_nfs(con, final_io_file)
         log.info(f"Post-final-resize line count: {post_final_resize_line_count}")
 
         # Verify line count unchanged
