@@ -1434,11 +1434,17 @@ def validate_pdb_creation():
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
 
-    if odf_running_version >= version.VERSION_4_19:
+    if odf_running_version >= version.VERSION_4_19 and not config.COMPONENTS.get(
+        "disable_noobaa", False
+    ):
         pdb_count += 1
         pdb_required.append(constants.NOOBAA_DB_PG_PDB)
     else:
         logger.info(f"Required PDB count is {pdb_count}")
+
+    if config.COMPONENTS.get("disable_cephfs", False):
+        pdb_required.remove(constants.MDS_PDB)
+        pdb_count -= 1
 
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
