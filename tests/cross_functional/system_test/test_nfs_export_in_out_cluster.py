@@ -24,7 +24,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_hci_client,
 )
-from tests.nfs_base import NFSClientTestBase
+from ocs_ci.helpers.nfs_helpers import NFSClientTestBase
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, ocp, platform_nodes
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_all_nodes
