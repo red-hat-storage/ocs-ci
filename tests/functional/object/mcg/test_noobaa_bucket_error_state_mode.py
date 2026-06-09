@@ -177,10 +177,18 @@ class TestNooBaaBucketErrorStateMode:
     via NooBaa's get_bucket_info that the bucket enters the expected
     error mode.
 
-    Covers three error categories for both data and namespace buckets:
-    - Quota-related: EXCEEDING_QUOTA
-    - Resource-related: NOT_ENOUGH_HEALTHY_RESOURCES
-    - Capacity-related: NOT_ENOUGH_HEALTHY_RESOURCES
+    Covers three error categories:
+    - Quota-related (data buckets): EXCEEDING_QUOTA
+    - Resource-related (data and namespace buckets):
+      NOT_ENOUGH_HEALTHY_RESOURCES
+    - Capacity-related (data buckets): capacity exhaustion modes
+
+    Also verifies that the NooBaaBucketErrorState Prometheus alert
+    fires with the correct bucket_mode label.
+
+    Note: Namespace buckets are only tested for resource errors,
+    as they act as proxies and do not enforce quota or track
+    capacity internally.
     """
 
     # ------------------------------------------------------------------
