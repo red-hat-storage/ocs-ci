@@ -24,7 +24,6 @@ from ocs_ci.framework.testlib import (
     skip_for_provider_or_client_if_ocs_version,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
-    polarion_id,
     skipif_external_mode,
     skipif_hci_client,
 )
@@ -786,12 +785,19 @@ class TestNfsExport(ManageTest):
         return {"pod_data": pod_data, "nfs_data": nfs_data}
 
     @tier1
-    @polarion_id("OCS-4272")
+    @pytest.mark.parametrize(
+        "access_mode",
+        [
+            pytest.param(constants.ACCESS_MODE_RWX, id="RWX"),
+            pytest.param(constants.ACCESS_MODE_RWO, id="RWO"),
+        ],
+    )
     def test_cluster_inout_nfs_export(
         self,
         pod_factory,
         request,
         nodes,
+        access_mode,
     ):
         """
         Comprehensive NFS export test with in-cluster and out-cluster mounts,
@@ -917,7 +923,7 @@ class TestNfsExport(ManageTest):
             namespace=self.namespace,
             size="10Gi",
             do_reload=True,
-            access_mode=constants.ACCESS_MODE_RWX,
+            access_mode=access_mode,
             volume_mode="Filesystem",
             pvc_name=pvc_name,
         )
@@ -1339,7 +1345,7 @@ class TestNfsExport(ManageTest):
             pvc_name=restored_pvc_name,
             volume_mode="Filesystem",
             restore_pvc_yaml=constants.CSI_CEPHFS_PVC_RESTORE_YAML,
-            access_mode=constants.ACCESS_MODE_RWX,
+            access_mode=access_mode,
         )
 
         log.info(f"Restored PVC {restored_pvc_name} created from snapshot")
@@ -1773,7 +1779,7 @@ class TestNfsExport(ManageTest):
             pvc_name=final_restored_pvc_name,
             volume_mode="Filesystem",
             restore_pvc_yaml=constants.CSI_CEPHFS_PVC_RESTORE_YAML,
-            access_mode=constants.ACCESS_MODE_RWX,
+            access_mode=access_mode,
         )
 
         log.info(f"Restored PVC {final_restored_pvc_name} created from snapshot")
