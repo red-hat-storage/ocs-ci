@@ -91,14 +91,8 @@ class TestSTSClient:
         logger.info("Changed the sts token expiration time to 10 minutes")
 
         # create a bucket using noobaa admin creds
-        bucket_1 = "first-bucket"
-        try:
-            retry(ClientError, tries=5, delay=5)(new_bucket)(bucket_name=bucket_1)
-        except ClientError as e:
-            if "BucketAlreadyExists" in str(e):
-                logger.info(f"Bucket {bucket_1} already exists")
-            else:
-                raise
+        bucket_1 = f"first-bucket-{uuid4().hex[:8]}"
+        retry(ClientError, tries=5, delay=5)(new_bucket)(bucket_name=bucket_1)
         logger.info(f"Created bucket {bucket_1}")
 
         # create a noobaa account
@@ -129,7 +123,7 @@ class TestSTSClient:
         logger.info(f"Assigned the assume role policy to the user {user_2}")
 
         # noobaa admin assumes the above role
-        creds_generated = sts_assume_role(
+        creds_generated = retry(CommandFailed, tries=5, delay=30)(sts_assume_role)(
             awscli_pod_session,
             role_name,
             nb_user_access_key_id,
@@ -140,7 +134,7 @@ class TestSTSClient:
         )
 
         # perform io to validate the role assumption
-        bucket_2 = "second-bucket"
+        bucket_2 = f"second-bucket-{uuid4().hex[:8]}"
         try:
             new_bucket(bucket_2, assumed_user_s3client)
             assert (
