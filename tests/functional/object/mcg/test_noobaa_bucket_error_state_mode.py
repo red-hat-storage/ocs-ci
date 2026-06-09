@@ -1,8 +1,5 @@
 import logging
 
-import pytest
-
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     red_squad,
@@ -225,85 +222,6 @@ class TestNooBaaBucketErrorStateMode:
         finally:
             _delete_data_from_bucket(awscli_pod, bucket_name, mcg_obj, 5)
             bucket.delete()
-
-    @pytest.mark.skip(
-        reason="NS buckets don't keep metadata and act as a proxy — "
-        "quota is not supported for namespace buckets. "
-        "Confirmed by Eran Tamir on RHSTOR-7732."
-    )
-    @skipif_managed_service
-    @skipif_aws_creds_are_missing
-    # TODO: Replace with actual Polarion ID
-    # @polarion_id("OCS-XXXXX")
-    def test_ns_bucket_quota_error_mode(
-        self,
-        mcg_obj,
-        awscli_pod,
-        bucket_factory,
-        namespace_store_factory,
-        request,
-    ):
-        """
-        Trigger a quota-related bucket mode on a namespace bucket and
-        verify the bucket enters EXCEEDING_QUOTA mode.
-
-        Steps:
-            1. Create an AWS-backed namespace store
-            2. Create a namespace bucket (Single policy) using the
-               namespace store
-            3. Set a 1Gi quota on the namespace bucket
-            4. Upload data exceeding the quota
-            5. Wait for bucket mode to propagate
-            6. Verify bucket mode is EXCEEDING_QUOTA via NooBaa
-            7. Clean up
-
-        Args:
-            mcg_obj (MCG): MCG object with S3 connection credentials
-            awscli_pod (Pod): Pod running the AWSCLI tools
-            bucket_factory (func): Factory for creating MCG buckets
-            namespace_store_factory (func): Factory for creating namespace stores
-            request: Pytest request object for finalizer registration
-        """
-        nss_tup = ("oc", {"aws": [(1, "us-east-2")]})
-        ns_stores = namespace_store_factory(*nss_tup)
-
-        bucketclass_dict = {
-            "interface": "OC",
-            "namespace_policy_dict": {
-                "type": "Single",
-                "namespacestores": ns_stores,
-            },
-        }
-        ns_bucket = bucket_factory(
-            amount=1,
-            interface=bucketclass_dict["interface"],
-            bucketclass=bucketclass_dict,
-        )[0]
-
-        def cleanup():
-            ns_bucket.delete()
-            ns_bucket.bucketclass.delete()
-            ns_stores[0].delete()
-
-        request.addfinalizer(cleanup)
-
-        log.info(f"Created namespace store: {ns_stores[0].name}")
-        log.info(f"Created namespace bucket {ns_bucket.name} (Single policy)")
-
-        mcg_obj.exec_mcg_cmd(
-            cmd=f"bucket update --max-size=1Gi {ns_bucket.name}",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            use_yes=True,
-        )
-        log.info(f"Set 1Gi quota on namespace bucket {ns_bucket.name}")
-
-        _upload_data_to_bucket(awscli_pod, ns_bucket.name, mcg_obj, 3, 500)
-        log.info(
-            f"Uploaded ~1.5GB to namespace bucket {ns_bucket.name} "
-            f"(quota 1Gi) to trigger EXCEEDING_QUOTA"
-        )
-
-        _wait_for_bucket_mode(mcg_obj, ns_bucket.name, "EXCEEDING_QUOTA")
 
     # ------------------------------------------------------------------
     # Resource error mode tests (NOT_ENOUGH_HEALTHY_RESOURCES)
@@ -584,96 +502,6 @@ class TestNooBaaBucketErrorStateMode:
         assert (
             final_mode in capacity_error_modes
         ), f"Expected one of {capacity_error_modes}, got {final_mode}"
-
-    @pytest.mark.skip(
-        reason="NS buckets don't keep metadata and act as a proxy — "
-        "capacity tracking is not supported for namespace buckets. "
-        "Confirmed by Eran Tamir on RHSTOR-7732."
-    )
-    @skipif_mcg_only
-    @skipif_managed_service
-    @skipif_aws_creds_are_missing
-    # TODO: Replace with actual Polarion ID
-    # @polarion_id("OCS-XXXXX")
-    def test_ns_bucket_capacity_error_mode(
-        self,
-        mcg_obj,
-        awscli_pod,
-        bucket_factory,
-        backingstore_factory,
-        namespace_store_factory,
-        request,
-    ):
-        """
-        Trigger a capacity-related bucket mode on a namespace bucket
-        and verify the bucket enters NOT_ENOUGH_HEALTHY_RESOURCES mode.
-
-        Uses a Cache namespace bucket where the cache layer is a small
-        PV pool backing store (17Gi). Filling the cache beyond its
-        capacity triggers a capacity error mode.
-
-        Steps:
-            1. Create a PV pool backing store (17Gi) for the cache layer
-            2. Create an AWS-backed namespace store for the hub
-            3. Create a Cache namespace bucket with the AWS hub and
-               PV pool cache
-            4. Upload data exceeding PV pool capacity
-            5. Wait for bucket to detect the capacity exhaustion
-            6. Verify bucket mode is NOT_ENOUGH_HEALTHY_RESOURCES
-            7. Clean up
-
-        Args:
-            mcg_obj (MCG): MCG object with S3 connection credentials
-            awscli_pod (Pod): Pod running the AWSCLI tools
-            bucket_factory (func): Factory for creating MCG buckets
-            backingstore_factory (func): Factory for creating backing stores
-            namespace_store_factory (func): Factory for creating namespace stores
-            request: Pytest request object for finalizer registration
-        """
-        pv_backingstore = backingstore_factory(
-            "oc", {"pv": [(1, 17, constants.DEFAULT_STORAGECLASS_RBD)]}
-        )[0]
-
-        nss_tup = ("oc", {"aws": [(1, "us-east-2")]})
-        ns_stores = namespace_store_factory(*nss_tup)
-
-        cache_bucketclass = {
-            "interface": "OC",
-            "namespace_policy_dict": {
-                "type": "Cache",
-                "ttl": 300000,
-                "namespacestores": ns_stores,
-            },
-            "placement_policy": {"tiers": [{"backingStores": [pv_backingstore.name]}]},
-        }
-        ns_bucket = bucket_factory(
-            amount=1,
-            interface=cache_bucketclass["interface"],
-            bucketclass=cache_bucketclass,
-        )[0]
-
-        def cleanup():
-            ns_bucket.delete()
-            ns_bucket.bucketclass.delete()
-            pv_backingstore.delete()
-            ns_stores[0].delete()
-
-        request.addfinalizer(cleanup)
-
-        log.info(
-            f"Created PV pool backing store {pv_backingstore.name} "
-            f"(17Gi) for cache layer"
-        )
-        log.info(f"Created namespace store (hub): {ns_stores[0].name}")
-        log.info(f"Created Cache namespace bucket {ns_bucket.name} with PV pool cache")
-
-        _upload_data_to_bucket(awscli_pod, ns_bucket.name, mcg_obj, 4, 5000)
-        log.info(
-            f"Uploaded ~20GB to cache namespace bucket {ns_bucket.name} "
-            f"(cache PV pool 17Gi) to trigger capacity error"
-        )
-
-        _wait_for_bucket_mode(mcg_obj, ns_bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
 
     # ------------------------------------------------------------------
     # Alert verification test
