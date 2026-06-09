@@ -119,19 +119,7 @@ class NFSClientTestBase(ManageTest):
         hostname_add = getattr(self, "hostname_add", None)
         if hostname_add:
             try:
-                resolved_ip = nfs_utils.resolve_hostname_from_cluster(hostname_add)
-                if resolved_ip:
-                    log.info(
-                        f"Resolved NFS hostname {hostname_add} to {resolved_ip} from cluster"
-                    )
-                    con.exec_cmd(
-                        f"grep -q ' {hostname_add}$' /etc/hosts && "
-                        f"sed -i.bak '/ {hostname_add}$/d' /etc/hosts || true"
-                    )
-                    con.exec_cmd(f"echo '{resolved_ip} {hostname_add}' >> /etc/hosts")
-                    log.info(
-                        f"Added '{resolved_ip} {hostname_add}' to /etc/hosts on NFS client VM"
-                    )
+                nfs_utils.update_etc_hosts_on_nfs_client(con, hostname_add)
             except TimeoutError:
                 log.warning(
                     f"Timed out resolving hostname {hostname_add} from cluster; "

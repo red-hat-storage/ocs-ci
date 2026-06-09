@@ -445,12 +445,12 @@ class TestNfsExport(NFSClientTestBase):
         assert retcode == 0, f"Failed to create mount point {mount_point}"
 
         # Mount NFS export
-        mount_cmd = (
-            f"mount -t nfs4 -o proto=tcp "
-            f"{self.hostname_add}:{share_details} {mount_point}"
-        )
+        export_path = f"{self.hostname_add}:{share_details}"
+        mount_options = "-o proto=tcp"
 
-        log.info(f"Mounting NFS export: {mount_cmd}")
+        log.info(
+            f"Mounting NFS export: mount -t nfs {mount_options} {export_path} {mount_point}"
+        )
 
         # For IBM Cloud, add additional wait to ensure security group rules are fully active
         platform = config.ENV_DATA.get("platform", "").lower()
@@ -461,7 +461,11 @@ class TestNfsExport(NFSClientTestBase):
             )
             time.sleep(30)
 
-        self._mount_nfs_with_retry(mount_cmd)
+        self._mount_nfs_with_retry(
+            mount_dir=mount_point,
+            export_path=export_path,
+            options=mount_options,
+        )
 
         # Verify mount
         retcode, stdout, _ = con.exec_cmd(f"findmnt -M {mount_point}")
@@ -1947,7 +1951,7 @@ class TestNfsExport(NFSClientTestBase):
 
                     # Add diagnostic check for stale mount on failed attempts
                     ls_retcode, ls_stdout, ls_stderr = con.exec_cmd(
-                        f"ls {mount_point}", ignore_error=True
+                        f"ls {mount_point} 2>&1 || true"
                     )
                     if "Stale file handle" in ls_stderr:
                         log.error(f"  ✗ STALE FILE HANDLE detected for {mount_point}")
