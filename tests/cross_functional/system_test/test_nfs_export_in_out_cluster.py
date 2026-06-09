@@ -577,7 +577,7 @@ class TestNfsExport(NFSClientTestBase):
     @pytest.mark.parametrize(
         "access_mode",
         [
-            # pytest.param(constants.ACCESS_MODE_RWX, id="RWX"),
+            pytest.param(constants.ACCESS_MODE_RWX, id="RWX"),
             pytest.param(constants.ACCESS_MODE_RWO, id="RWO"),
         ],
     )
@@ -1926,8 +1926,8 @@ class TestNfsExport(NFSClientTestBase):
         # Verify all mount points are accessible after recovery
         log.info("Verifying all mount points are accessible after recovery")
 
-        max_retries = 20
-        retry_delay = 30
+        max_retries = 10
+        retry_delay = 20
         mount_recovery_status = {}
 
         for mount_point in nfs_mount_points:
