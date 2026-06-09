@@ -577,7 +577,7 @@ class TestNfsExport(NFSClientTestBase):
             pytest.param(constants.ACCESS_MODE_RWO, id="RWO"),
         ],
     )
-    def test_cluster_inout_cluster_nfs_export(
+    def test_nfs_export_operations_in_out_cluster(
         self,
         pod_factory,
         request,
