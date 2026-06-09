@@ -294,6 +294,7 @@ def create_drs_machine_config():
     to be updated. The timeout is calculated as 15 minutes per worker node.
     """
     from ocs_ci.ocs.resources.machineconfig import machineconfig_exists
+    from ocs_ci.utility.utils import wait_for_machineconfigpool_status
 
     mc_name = "99-br-storage-nmstate-worker"
     if machineconfig_exists(mc_name):
@@ -330,37 +331,9 @@ def create_drs_machine_config():
             f"Waiting for all {num_workers} worker nodes to be updated (timeout: {timeout} seconds)"
         )
 
-        # Use wait_for_resource to properly wait for MachineConfigPool to be updated
-        # This checks the UPDATED column (condition) rather than status.updatedMachineCount
-        mcp_ocp = OCP(kind=constants.MACHINECONFIGPOOL, resource_name="worker")
-
-        # First wait for the pool to start updating (UPDATING=True)
-        logger.info("Waiting for MachineConfigPool to start updating")
-        mcp_ocp.wait_for_resource(
-            resource_count=1,
-            condition="True",
-            column="UPDATING",
-            sleep=5,
-            timeout=120,
-        )
-
-        # Now wait for the pool to be fully updated (UPDATED=True)
-        logger.info("Waiting for MachineConfigPool to be fully updated")
-        mcp_ocp.wait_for_resource(
-            resource_count=1,
-            condition="True",
-            column="UPDATED",
-            sleep=60,
-            timeout=timeout,
-        )
-
-        # Also check that the pool is not degraded
-        mcp_ocp.wait_for_resource(
-            resource_count=1,
-            condition="False",
-            column="DEGRADED",
-            sleep=10,
-            timeout=120,
+        # Use wait_for_machineconfigpool_status to properly wait for worker pool update
+        wait_for_machineconfigpool_status(
+            node_type=constants.WORKER_MACHINE, timeout=timeout
         )
 
         logger.info("All worker nodes have been updated successfully")
