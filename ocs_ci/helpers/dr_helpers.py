@@ -291,6 +291,13 @@ def failover(
     )
 
     drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=360, sleep=10)
+
+    validate_application_odf_cli(
+        drpc_name=drpc_obj.resource_name,
+        namespace=namespace,
+        dr_action="app-failover",
+    )
+
     config.switch_ctx(restore_index)
 
 
@@ -4454,7 +4461,10 @@ def create_cdi_cert_configmap(namespace, configmap_name="user-ca-bundle"):
     logger.info(
         f"CDI cert ConfigMap '{configmap_name}' created in namespace '{namespace}'"
     )
-def validate_application_odf_cli(drpc_name, namespace, action="validate"):
+
+def validate_application_odf_cli(
+    drpc_name, namespace, action="validate", dr_action=None
+):
     """
     Validate DR application using the ODF CLI tool.
 
@@ -4469,6 +4479,9 @@ def validate_application_odf_cli(drpc_name, namespace, action="validate"):
         drpc_name (str): Name of the DRPC resource
         namespace (str): Namespace of the application
         action (str): Action to perform - "validate" or "gather"
+        dr_action (str): Label for the output directory
+            (e.g., "app-failover", "app-relocate"). Defaults to
+            "{action}-app" if not provided.
 
     Returns:
         str or None: The stdout output from the command,
@@ -4478,10 +4491,11 @@ def validate_application_odf_cli(drpc_name, namespace, action="validate"):
         CommandFailed: If the ODF CLI command fails (validate only)
 
     """
+    dir_label = dr_action or f"{action}-app"
     output_dir = os.path.join(
         os.path.expanduser(config.RUN["log_dir"]),
-        f"odf_dr_{action}_app_{config.RUN['run_id']}",
-        f"{action}_app_{drpc_name}",
+        f"odf_dr_{dir_label}_{config.RUN['run_id']}",
+        f"{dir_label}_{drpc_name}",
     )
     odf_cli_runner = ODFCliRunner()
     cmd_args = (
