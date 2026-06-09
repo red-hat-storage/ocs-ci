@@ -1244,7 +1244,36 @@ class HostedClients(HyperShiftBase):
 
         check_odf_prerequisites()
 
-        # stage 3.5: Setup VPC peering, routing, and security groups for AWS HCP clusters
+        # stage 3.5: Setup data replication separation network configuration
+        # This must be done before ODF deployment to avoid node reboots after ODF is deployed
+        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+            log_step(
+                "Setup data replication separation (MachineConfig and NetworkAttachmentDefinition)"
+            )
+            create_drs_machine_config()
+            for cluster_name in cluster_names:
+                create_drs_nad(cluster_name)
+
+            # Re-verify only this job's hosted clusters after MachineConfig-induced node reboots
+            # to avoid race conditions with parallel jobs
+            log_step(
+                "Re-verify hosted OCP clusters after data replication separation setup"
+            )
+            logger.info(
+                "Waiting for hosted clusters to recover after networking changes"
+            )
+            drs_verification_results = []
+            for cluster_name in cluster_names:
+                drs_verification_results.append(
+                    self.verify_hosted_ocp_cluster_from_provider(
+                        cluster_name, timeout_hosted_cluster_completed_min=45
+                    )
+                )
+            # Update hosted_ocp_verification_passed only if all clusters verified
+            if all(drs_verification_results):
+                hosted_ocp_verification_passed = True
+
+        # stage 3.6: Setup VPC peering, routing, and security groups for AWS HCP clusters
         # This must be done before ODF deployment to ensure network connectivity
         log_step(
             "Setup network for AWS HCP clusters (VPC peering, routing, security groups)"
@@ -1355,11 +1384,6 @@ class HostedClients(HyperShiftBase):
                 ]
             )
         )
-
-        if config.DEPLOYMENT.get("enable_data_replication_separation"):
-            create_drs_machine_config()
-            for cluster_name in cluster_names:
-                create_drs_nad(cluster_name)
 
         log_step("Verify storage is available on all hosted ODF clusters")
         hosted_odf_storage_verified = []

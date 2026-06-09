@@ -951,21 +951,26 @@ class HyperShiftBase:
 
         return name
 
-    def verify_hosted_ocp_cluster_from_provider(self, name):
+    def verify_hosted_ocp_cluster_from_provider(
+        self,
+        name,
+        timeout_pods_wait_min=30,
+        timeout_hosted_cluster_completed_min=20,
+        timeout_worker_nodes_ready_min=30,
+    ):
         """
         Verify HyperShift hosted cluster from provider
 
         Args:
             name (str): hosted OCP cluster name
+            timeout_pods_wait_min (int): timeout in minutes for pods to be ready (default: 30)
+            timeout_hosted_cluster_completed_min (int): timeout in minutes for hosted cluster completion (default: 20)
+            timeout_worker_nodes_ready_min (int): timeout in minutes for worker nodes to be ready (default: 30)
 
         Returns:
             bool: True if hosted OCP cluster is verified, False otherwise
 
         """
-
-        timeout_pods_wait_min = 30
-        timeout_hosted_cluster_completed_min = 20
-        timeout_worker_nodes_ready_min = 30
 
         namespace = f"clusters-{name}"
         logger.info(
