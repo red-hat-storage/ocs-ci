@@ -1948,6 +1948,10 @@ class TestNfsExport(NFSClientTestBase):
                         f"Attempt {attempt + 1}/{max_retries}: Mount point {mount_point} "
                         f"not yet accessible, waiting for recovery..."
                     )
+                    log.error(
+                        f"findmnt failed for mount_point={mount_point}, "
+                        f"retcode={retcode}, stdout={stdout!r}, stderr={stderr!r}"
+                    )
 
                     # Add diagnostic check for stale mount on failed attempts
                     ls_retcode, ls_stdout, ls_stderr = con.exec_cmd(
