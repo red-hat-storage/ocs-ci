@@ -47,12 +47,11 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     exec_cmd,
 )
-from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.constants import CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
 
 logger = logging.getLogger(__name__)
-FIO_TIMEOUT = 900
+FIO_TIMEOUT = 600
 
 TEXT_CONTENT = (
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
@@ -1376,14 +1375,15 @@ def check_file_existence(pod_obj, file_path):
     Returns:
         bool: True if the file exist, False otherwise
     """
-    # try:
-    #     check_if_executable_in_path(pod_obj.exec_cmd_on_pod("which find"))
-    # except CommandFailed:
-    #     pod_obj.install_packages("findutils")
-    ret = pod_obj.exec_cmd_on_pod(f'bash -c "ls {file_path}"')
-    if re.search(file_path, ret):
-        return True
-    return False
+    try:
+        ret = pod_obj.exec_cmd_on_pod(
+            f'bash -c "ls {file_path}"', out_yaml_format=False
+        )
+        if file_path in ret:
+            return True
+        return False
+    except CommandFailed:
+        return False
 
 
 def get_file_path(pod_obj, file_name):
