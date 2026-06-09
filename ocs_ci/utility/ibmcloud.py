@@ -36,9 +36,7 @@ from ocs_ci.utility import version as util_version
 from ocs_ci.utility.utils import get_infra_id, get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
 
-
-logger = logging.getLogger(name=__file__)
-ibm_config = config.AUTH.get("ibmcloud", {})
+logger = logging.getLogger(__name__)
 
 
 def login(region=None, resource_group=None):
@@ -50,6 +48,13 @@ def login(region=None, resource_group=None):
         resource_group (str): resource group to log in, if not specified it will use one from config
             or nothing if not defined
     """
+    platform = config.ENV_DATA["platform"]
+    if platform != constants.IBMCLOUD_PLATFORM:
+        logger.info(
+            f"Skipping IBM Cloud login as platform: {platform} is not IBM Cloud"
+        )
+        return
+    ibm_config = config.AUTH.get("ibmcloud", {})
     api_key = ibm_config["api_key"]
     login_cmd = f"ibmcloud login --apikey {api_key}"
     account_id = ibm_config.get("account_id")
@@ -85,7 +90,9 @@ def set_region(region=None):
         region (str): region to set, if not defined it will try to get from metadata.json
 
     """
-    if not config.ENV_DATA.get("enable_region_dynamic_switching"):
+    if not config.ENV_DATA.get("enable_region_dynamic_switching") or (
+        config.ENV_DATA["platform"] != constants.IBMCLOUD_PLATFORM
+    ):
         return
     if not region:
         region = get_region(config.ENV_DATA["cluster_path"])
@@ -125,6 +132,27 @@ def get_region(cluster_path):
     if ibm_cloud_managed:
         return metadata["region"]
     return metadata["ibmcloud"]["region"]
+
+
+def get_ibmcloud_cluster_region():
+    """
+    Get IBM Cloud region from the cluster's infrastructure object.
+
+    This function queries the live cluster to retrieve the IBM Cloud region
+    from the infrastructure status, which may differ from the metadata.json file.
+
+    Returns:
+        str: IBM Cloud region where the cluster is deployed
+
+    Raises:
+        CommandFailed: If the oc command fails
+    """
+    ocp_obj = OCP()
+    region = ocp_obj.exec_oc_cmd(
+        "get infrastructure cluster -o jsonpath='{.status.platformStatus.ibmcloud.location}'"
+    )
+    logger.info(f"IBM Cloud cluster region: {region}")
+    return region.strip()
 
 
 def get_resource_group_name(cluster_path):
@@ -505,7 +533,7 @@ class IBMCloud(object):
 
         for node in nodes:
             worker_id = node.get()["spec"]["providerID"].split("/")[-1]
-            cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {worker_id} -f --hard"
+            cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {worker_id} -f"
             out = run_ibmcloud_cmd(cmd)
             logger.info(f"Node restart command output: {out}")
 
@@ -734,7 +762,7 @@ class IBMCloud(object):
 
         if len(worker_nodes_not_ready) > 0:
             for not_ready_node in worker_nodes_not_ready:
-                cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {not_ready_node} -f --hard"
+                cmd = f"ibmcloud ks worker reboot --cluster {cluster_id} --worker {not_ready_node} -f"
                 out = run_ibmcloud_cmd(cmd)
                 logger.info(f"Node restart command output: {out}")
 
@@ -1150,7 +1178,9 @@ def delete_account_policy(policy_id, token=None):
         token = get_api_token()
     url = f"https://iam.cloud.ibm.com/v1/policies/{policy_id}"
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.delete(url.format("YOUR_POLICY_ID_HERE"), headers=headers)
+    response = requests.delete(
+        url.format("YOUR_POLICY_ID_HERE"), headers=headers, timeout=120
+    )
     if response.status_code == 204:  # 204 means success (No Content)
         logger.info(f"Policy id: {policy_id} deleted successfully.")
     else:
@@ -1208,16 +1238,68 @@ def create_vpc(cluster_name, resource_group):
     )
 
 
-def get_used_subnets():
+def get_used_subnets(vpc_id=""):
     """
     Get currently used subnets in IBM Cloud
+
+    Args:
+        vpc_id (str): VPC ID to filter subnets. Empty string means all VPCs.
 
     Returns:
         list: subnets
 
     """
-    subnets_data = json.loads(run_ibmcloud_cmd("ibmcloud is subnets --output json"))
+    subnets_data = json.loads(
+        run_ibmcloud_cmd(f"ibmcloud is subnets --vpc '{vpc_id}' --output json")
+    )
     return [subnet["ipv4_cidr_block"] for subnet in subnets_data]
+
+
+def get_security_groups(vpc_id="", resource_group_id="", resource_group_name=""):
+    """
+    Get security groups in IBM Cloud
+
+    Args:
+        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs.
+        resource_group_id (str): Resource group ID to filter security groups.
+        resource_group_name (str): Resource group name to filter security groups.
+
+    Returns:
+        list: security groups
+
+    """
+    cmd = "ibmcloud is security-groups --output json"
+    if vpc_id:
+        cmd += f" --vpc '{vpc_id}'"
+    if resource_group_id:
+        cmd += f" --resource-group-id '{resource_group_id}'"
+    if resource_group_name:
+        cmd += f" --resource-group-name '{resource_group_name}'"
+    sg_data = json.loads(run_ibmcloud_cmd(cmd))
+    return sg_data
+
+
+def get_security_group_id(
+    sg_name, vpc_id="", resource_group_id="", resource_group_name=""
+):
+    """
+    Get security group ID by name
+
+    Args:
+        sg_name (str): security group name
+        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs.
+        resource_group_id (str): Resource group ID to filter security groups.
+        resource_group_name (str): Resource group name to filter security groups
+
+    Returns:
+        str: security group ID or empty string if not found
+
+    """
+    sgs = get_security_groups(vpc_id, resource_group_id, resource_group_name)
+    for sg in sgs:
+        if sg["name"] == sg_name:
+            return sg["id"]
+    return ""
 
 
 def add_security_group_rule(
@@ -1243,6 +1325,53 @@ def add_security_group_rule(
     for key, value in kwargs.items():
         cmd += f" {key} '{value}'"
     run_ibmcloud_cmd(cmd)
+
+
+def get_security_group_name_by_pattern(
+    sg_name_pattern, vpc_id="", resource_group_id="", resource_group_name=""
+):
+    """
+    Get security group name by pattern
+
+    Args:
+        sg_name_pattern (str): security group name pattern (regular expression)
+        vpc_id (str): VPC ID to filter security groups, if empty it will return security groups for all VPCs
+        resource_group_id (str): Resource group ID to filter security groups
+        resource_group_name (str): Resource group name to filter security groups
+
+    Returns:
+        str: security group name or empty string if not found
+
+    """
+    sgs = get_security_groups(vpc_id, resource_group_id, resource_group_name)
+    for sg in sgs:
+        if re.search(sg_name_pattern, sg["name"]):
+            return sg["name"]
+    return ""
+
+
+def open_ports_on_ibmcloud_hub_cluster():
+    """
+    Add the inbound rules for these cluster security configs `-cluster-wide` and `-openshift-net` to open the
+    following ports: 3300, 6789, 9283, 6800-7300 and 31659
+    """
+    rg_name = get_resource_group_name(config.ENV_DATA["cluster_path"])
+    sg_names = [
+        get_security_group_name_by_pattern(
+            r"cluster-wide$", resource_group_name=rg_name
+        ),
+        get_security_group_name_by_pattern(
+            r"openshift-net$", resource_group_name=rg_name
+        ),
+    ]
+
+    for sg_name in sg_names:
+        add_security_group_rule(sg_name, "inbound", "tcp", 3300, 3300)
+        add_security_group_rule(sg_name, "inbound", "tcp", 6789, 6789)
+        add_security_group_rule(sg_name, "inbound", "tcp", 9283, 9283)
+        add_security_group_rule(sg_name, "inbound", "tcp", 6800, 7300)
+        add_security_group_rule(sg_name, "inbound", "tcp", 31659, 31659)
+    logger.info("Inbound rules added successfully")
 
 
 def configure_ingress_load_balancer_security_group():
@@ -1345,6 +1474,134 @@ def configure_ingress_load_balancer_security_group():
     except Exception as e:
         logger.error(f"Failed to configure ingress load balancer security group: {e}")
         raise
+
+
+def _get_lb_security_groups(svc_name, namespace):
+    """
+    Look up the IBM Cloud VPC load balancer backing a Kubernetes
+    LoadBalancer Service and return its security groups.
+
+    Args:
+        svc_name (str): Kubernetes Service name
+        namespace (str): Kubernetes namespace
+
+    Returns:
+        list: security group dicts from the VPC LB, empty list on
+            failure
+
+    """
+    rg_name = get_resource_group_name(config.ENV_DATA["cluster_path"])
+
+    svc_ocp = OCP(
+        kind="Service",
+        namespace=namespace,
+        resource_name=svc_name,
+    )
+    svc_data = svc_ocp.get()
+
+    lb_ingress = svc_data.get("status", {}).get("loadBalancer", {}).get("ingress", [])
+    if not lb_ingress:
+        logger.warning(
+            f"No LB ingress on service {svc_name}, cannot configure " f"security group"
+        )
+        return []
+
+    lb_hostname = lb_ingress[0].get("hostname") or lb_ingress[0].get("ip")
+    if not lb_hostname:
+        logger.warning(f"No hostname/IP in LB ingress for service {svc_name}")
+        return []
+
+    logger.debug(f"LB endpoint for {svc_name}: {lb_hostname}")
+
+    cmd = f"ibmcloud is lbs --resource-group-name {rg_name} " f"--output json"
+    out = run_ibmcloud_cmd(cmd)
+    load_balancers = json.loads(out)
+
+    matching_lb = None
+    for lb in load_balancers:
+        if lb.get("hostname") == lb_hostname:
+            matching_lb = lb
+            break
+
+    if not matching_lb:
+        logger.error(f"Could not find IBM Cloud VPC LB with hostname {lb_hostname}")
+        return []
+
+    security_groups = matching_lb.get("security_groups", [])
+    if not security_groups:
+        logger.warning(f"No security groups on LB {matching_lb.get('name')}")
+    return security_groups
+
+
+def configure_nfs_lb_security_group():
+    """
+    Add an inbound TCP rule for port 2049 (NFS) to the security
+    groups attached to the NFS LoadBalancer on IBM Cloud VPC.
+
+    Must be called after the ``rook-ceph-nfs-my-nfs-load-balancer``
+    Service has an ingress address assigned.
+    """
+    svc_name = "rook-ceph-nfs-my-nfs-load-balancer"
+    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    logger.info("Configuring NFS LB security group for port 2049")
+
+    security_groups = _get_lb_security_groups(svc_name, namespace)
+    for sg in security_groups:
+        sg_name = sg.get("name")
+        try:
+            logger.info(f"Adding inbound TCP 2049 to {sg_name}")
+            add_security_group_rule(sg_name, "inbound", "tcp", 2049, 2049)
+        except Exception as e:
+            logger.warning(
+                f"Failed to add port 2049 rule to {sg_name} "
+                f"(may already exist): {e}"
+            )
+
+    logger.info("NFS LB security group configuration done")
+
+
+def remove_nfs_lb_security_group_rules():
+    """
+    Remove inbound TCP 2049 rules from the security groups attached
+    to the NFS LoadBalancer on IBM Cloud VPC.
+
+    Should be called before deleting the NFS LoadBalancer Service so
+    the VPC LB is still present for look-up.
+    """
+    svc_name = "rook-ceph-nfs-my-nfs-load-balancer"
+    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    logger.info("Removing NFS LB security group rules for port 2049")
+
+    security_groups = _get_lb_security_groups(svc_name, namespace)
+    for sg in security_groups:
+        sg_id = sg.get("id")
+        sg_name = sg.get("name")
+        try:
+            cmd = f"ibmcloud is security-group {sg_id} " f"--output json"
+            out = run_ibmcloud_cmd(cmd)
+            sg_detail = json.loads(out)
+        except Exception as e:
+            logger.warning(f"Could not fetch rules for {sg_name}: {e}")
+            continue
+
+        for rule in sg_detail.get("rules", []):
+            if (
+                rule.get("direction") == "inbound"
+                and rule.get("protocol") == "tcp"
+                and rule.get("port_min") == 2049
+                and rule.get("port_max") == 2049
+            ):
+                rule_id = rule.get("id")
+                logger.info(f"Deleting rule {rule_id} from {sg_name}")
+                try:
+                    run_ibmcloud_cmd(
+                        f"ibmcloud is security-group-rule-delete "
+                        f"{sg_id} {rule_id} --force"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to delete rule {rule_id}: {e}")
+
+    logger.info("NFS LB security group cleanup done")
 
 
 def create_address_prefix(prefix_name, vpc, zone, cidr):
