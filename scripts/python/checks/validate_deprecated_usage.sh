@@ -17,8 +17,12 @@ case "$MODE" in
         DIFF_CMD="git diff --cached --diff-filter=ACM --unified=0"
         ;;
     ci)
-        BASE="${2:-origin/master}"
-        DIFF_CMD="git diff ${BASE}...HEAD --diff-filter=ACM --unified=0"
+        BASE="${2:-${GITHUB_BASE_REF:-master}}"
+        # In GitHub Actions (shallow clone), fetch the base branch if missing
+        if [ -n "${GITHUB_BASE_REF:-}" ] && ! git rev-parse --verify "origin/${BASE}" >/dev/null 2>&1; then
+            git fetch --depth=1 origin "${BASE}"
+        fi
+        DIFF_CMD="git diff origin/${BASE}...HEAD --diff-filter=ACM --unified=0"
         ;;
     *)
         echo "Usage: $0 {precommit|ci [base_ref]}" >&2
