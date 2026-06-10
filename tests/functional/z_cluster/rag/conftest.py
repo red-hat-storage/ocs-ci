@@ -3,6 +3,7 @@ Pytest configuration and fixtures for OLS RAG tests.
 
 This module provides fixtures for OLS test setup and teardown.
 """
+
 import logging
 import pytest
 

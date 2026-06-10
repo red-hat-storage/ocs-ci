@@ -10,6 +10,7 @@ This module contains tests that verify:
 
 Tests use the setup_ui fixture from tests/conftest.py for browser-based UI interactions.
 """
+
 import logging
 import pytest
 import uuid
@@ -61,7 +62,9 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
         Ensure OLS is fully configured (operator, secret, config, LLM connection) before executing each test.
         """
         log.info("Ensuring OLS is fully configured before test execution")
-        assert ensure_ols_fully_configured(), "Failed to fully configure OLS (operator, secret, config, LLM connection)"
+        assert (
+            ensure_ols_fully_configured()
+        ), "Failed to fully configure OLS (operator, secret, config, LLM connection)"
 
     @pytest.mark.order("first")
     @pytest.mark.polarion_id("OCS-7483")
