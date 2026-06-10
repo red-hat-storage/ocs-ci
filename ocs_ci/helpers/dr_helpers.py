@@ -1783,7 +1783,6 @@ def get_all_drclusters():
     return drclusters
 
 
-
 def get_managed_cluster_node_ips():
     """
     Gets worker node IPs of individual managed clusters for enabling fencing on MDR DRCluster configuration
@@ -1792,6 +1791,7 @@ def get_managed_cluster_node_ips():
         list: [[managed_cluster_name, multicluster_index, [cidr, ...]], ...]
 
     """
+    restore_index = config.cur_index
     primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
     secondary_index = [
         s.MULTICLUSTER["multicluster_index"]
@@ -1804,21 +1804,30 @@ def get_managed_cluster_node_ips():
         [cluster_name_primary, primary_index],
         [cluster_name_secondary, secondary_index],
     ]
-    for cluster in cluster_data:
-        config.switch_ctx(cluster[1])
-        logger.info(f"Getting worker node IPs on managed cluster: {cluster[0]}")
-        node_obj = ocp.OCP(kind=constants.NODE).get()
-        external_ips = []
-        for node in node_obj.get("items"):
-            # Check if node has worker role
-            labels = node.get("metadata", {}).get("labels", {})
-            if "node-role.kubernetes.io/worker" in labels:
-                addresses = node.get("status", {}).get("addresses", [])
-                for address in addresses:
-                    if address.get("type") == "ExternalIP":
-                        external_ips.append(address.get("address"))
-        external_ips_with_cidr = [f"{ip}/32" for ip in external_ips]
-        cluster.append(external_ips_with_cidr)
+    try:
+        for cluster in cluster_data:
+            config.switch_ctx(cluster[1])
+            logger.info(f"Getting worker node IPs on managed cluster: {cluster[0]}")
+            node_obj = ocp.OCP(kind=constants.NODE).get()
+            external_ips = []
+            for node in node_obj.get("items", []):
+                # Check if node has worker role
+                labels = node.get("metadata", {}).get("labels", {})
+                if "node-role.kubernetes.io/worker" in labels:
+                    addresses = node.get("status", {}).get("addresses", [])
+                    for address in addresses:
+                        if address.get("type") == "ExternalIP" and address.get(
+                            "address"
+                        ):
+                            external_ips.append(address["address"])
+            external_ips_with_cidr = [f"{ip}/32" for ip in dict.fromkeys(external_ips)]
+            if not external_ips_with_cidr:
+                raise UnexpectedBehaviour(
+                    f"No worker ExternalIP addresses found on managed cluster {cluster[0]}"
+                )
+            cluster.append(external_ips_with_cidr)
+    finally:
+        config.switch_ctx(restore_index)
     return cluster_data
 
 
