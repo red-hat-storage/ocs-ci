@@ -5077,7 +5077,7 @@ def verify_storagecluster_nodetopology():
     ocs_node_names = []
     for node_obj in ocs_node_objs:
         ocs_node_names.append(node_obj.name)
-    return ocs_node_names.sort() == nodes_storage_cluster.sort()
+    return sorted(ocs_node_names) == sorted(nodes_storage_cluster)
 
 
 def get_noobaa_metrics_token_from_secret():
