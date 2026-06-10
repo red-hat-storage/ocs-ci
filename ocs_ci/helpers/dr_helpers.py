@@ -1783,68 +1783,10 @@ def get_all_drclusters():
     return drclusters
 
 
-def ordered_unique_cidrs(cidrs):
-    """
-    Preserve order while removing duplicates
-    """
-    seen = set()
-    ordered = []
-    for cidr in cidrs:
-        if not cidr or cidr in seen:
-            continue
-        seen.add(cidr)
-        ordered.append(cidr)
-    return ordered
-
-
-@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
-def get_fencing_cidrs_from_drclusterconfig(cluster_name):
-    """
-    Read fencing CIDRs from DRClusterConfig.status.storageAccessDetails on the
-    current (managed) cluster context (ODF 4.21+ / Ramen).
-
-    Prefers the DRClusterConfig named like the managed cluster, then RBD CSI
-    provisioner entries, with sensible fallbacks.
-
-    Args:
-        cluster_name (str): Managed cluster name (matches DRCluster / DRClusterConfig name on hub)
-
-    Returns:
-        list: CIDR strings for hub DRCluster.spec.cidrs
-
-    Raises:
-        UnexpectedBehaviour: If CIDRs are not yet published or cannot be determined
-    """
-    drc_ocp = ocp.OCP(kind=constants.DRCLUSTERCONFIG)
-    items = (drc_ocp.get(silent=True) or {}).get("items") or []
-    if not items:
-        raise UnexpectedBehaviour(
-            "No DRClusterConfig resources found on managed cluster"
-        )
-    configs = [i for i in items if i.get("metadata", {}).get("name") == cluster_name]
-
-    cidrs = []
-    for item in configs:
-        details = (item.get("status") or {}).get("storageAccessDetails") or []
-        for detail in details:
-            detail_cidrs = detail.get("cidrs") or []
-            cidrs.extend(detail_cidrs)
-
-    cidrs = ordered_unique_cidrs(cidrs)
-    if not cidrs:
-        raise UnexpectedBehaviour(
-            f"DRClusterConfig on cluster {cluster_name} has no status.storageAccessDetails.cidrs yet"
-        )
-    logger.info(
-        f"Collected {len(cidrs)} fencing CIDR(s) from DRClusterConfig for {cluster_name}"
-    )
-
-    return cidrs
-
 
 def get_managed_cluster_node_ips():
     """
-    Gets node ips of individual managed clusters for enabling fencing from each managed cluster's DRClusterConfig
+    Gets worker node IPs of individual managed clusters for enabling fencing on MDR DRCluster configuration
 
     Returns:
         list: [[managed_cluster_name, multicluster_index, [cidr, ...]], ...]
@@ -1864,10 +1806,19 @@ def get_managed_cluster_node_ips():
     ]
     for cluster in cluster_data:
         config.switch_ctx(cluster[1])
-        logger.info(
-            f"Reading fencing CIDRs from DRClusterConfig on managed cluster {cluster[0]}"
-        )
-        cluster.append(get_fencing_cidrs_from_drclusterconfig(cluster[0]))
+        logger.info(f"Getting worker node IPs on managed cluster: {cluster[0]}")
+        node_obj = ocp.OCP(kind=constants.NODE).get()
+        external_ips = []
+        for node in node_obj.get("items"):
+            # Check if node has worker role
+            labels = node.get("metadata", {}).get("labels", {})
+            if "node-role.kubernetes.io/worker" in labels:
+                addresses = node.get("status", {}).get("addresses", [])
+                for address in addresses:
+                    if address.get("type") == "ExternalIP":
+                        external_ips.append(address.get("address"))
+        external_ips_with_cidr = [f"{ip}/32" for ip in external_ips]
+        cluster.append(external_ips_with_cidr)
     return cluster_data
 
 
@@ -1942,7 +1893,7 @@ def configure_drcluster_for_fencing():
             f"oc patch drcluster {drcluster_name} --type merge -p '{fence_ip_data}'"
         )
         logger.info(
-            f"Patching hub DRCluster {drcluster_name} with CIDRs from managed-cluster DRClusterConfig"
+            f"Patching hub DRCluster {drcluster_name} with CIDRs from worker node IPs"
         )
         run_cmd(fence_ip_cmd)
 
