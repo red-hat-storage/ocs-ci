@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     rgw,
     tier3,
+    zstream_4_20_14,
 )
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 @red_squad
 @rgw
+@zstream_4_20_14
 class TestObjectStoreUserCaps:
     @pytest.fixture()
     def create_test_cosu(self, request):
