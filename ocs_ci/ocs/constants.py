@@ -1809,6 +1809,7 @@ IBM_POWER_PLATFORM = "powervs"
 IBM_CLOUD_BAREMETAL_PLATFORM = "ibm_cloud_baremetal"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
 RGW_PLATFORM = "rgw"
+SELF_REF_MCG_PLATFORM = "self-ref-mcg"
 IBMCLOUD_PLATFORM = "ibm_cloud"
 IBM_COS_PLATFORM = "ibmcos"
 IBM_PLATFORM = "ibm"
@@ -2936,6 +2937,7 @@ CLOUD_MNGR_PLATFORMS = [
     "IBMCOS",
     "AWS_STS",
     "AZURE_STS",
+    "SELF_REF_MCG",
 ]
 
 # Vault related configurations
