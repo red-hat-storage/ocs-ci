@@ -1277,6 +1277,17 @@ class VSPHEREUPI(VSPHEREBASE):
         """
         previous_dir = os.getcwd()
 
+        # Get infra_id before destroy operations (metadata.json will be deleted)
+        try:
+            self.infra_id = get_infra_id(self.cluster_path)
+            logger.info(f"Captured infra_id for cleanup: {self.infra_id}")
+        except (FileNotFoundError, KeyError) as err:
+            logger.warning(
+                f"Failed to get infra_id from metadata.json: {err}. "
+                f"Storage policy cleanup may not work."
+            )
+            self.infra_id = None
+
         # Download terraform binary based on terraform version
         # in terraform.log
 
