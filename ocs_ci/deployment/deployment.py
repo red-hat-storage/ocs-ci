@@ -1885,19 +1885,6 @@ class Deployment(object):
             if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
                 add_disk_for_vsphere_platform()
 
-            if config.ENV_DATA.get("simulate_bluestore_label_dmcrypt"):
-                from ocs_ci.deployment.helpers.ceph_cluster import (
-                    simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes,
-                )
-
-                log_step(
-                    "Simulate encrypted Ceph OSD bluestore (dm-crypt) "
-                    "on worker nodes"
-                )
-                simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
-                    add_disks=False, clear_signatures=False
-                )
-
         login_ui()
         deployment_obj = DeploymentUI()
         deployment_obj.install_ocs_ui()
