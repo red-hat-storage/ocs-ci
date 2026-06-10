@@ -1385,11 +1385,6 @@ class HostedClients(HyperShiftBase):
             )
         )
 
-        if config.DEPLOYMENT.get("enable_data_replication_separation_public"):
-            create_drs_machine_config()
-            for cluster_name in cluster_names:
-                create_drs_nad(cluster_name)
-
         log_step("Verify storage is available on all hosted ODF clusters")
         hosted_odf_storage_verified = []
 
