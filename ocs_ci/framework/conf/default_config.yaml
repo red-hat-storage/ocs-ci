@@ -137,6 +137,8 @@ DEPLOYMENT:
   enable_data_replication_separation: False # separates client data path from data replication
   # Erasure Coding: deploy ODF with EC as default pool type instead of replication
   ec_default_pools: False
+  # FDF
+  fdf_upgrade_registry: "cp.stg.icr.io/cp/df"
 
 # Section for reporting configuration
 REPORTING:

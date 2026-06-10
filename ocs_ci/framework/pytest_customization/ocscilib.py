@@ -273,6 +273,19 @@ def pytest_addoption(parser):
         ),
     )
     parser.addoption(
+        "--fdf-upgrade-registry",
+        dest="fdf_upgrade_registry",
+        help=(
+            "FDF upgrade registry for pre-release catalog image "
+            "(e.g. cp.stg.icr.io/cp/df)"
+        ),
+    )
+    parser.addoption(
+        "--fdf-upgrade-image-tag",
+        dest="fdf_upgrade_image_tag",
+        help=("FDF upgrade image tag for pre-release catalog (e.g. v4.22)"),
+    )
+    parser.addoption(
         "--acm-version",
         dest="acm_version",
         help="acm version(e.g. 2.8) to be used for the current run",
@@ -722,6 +735,12 @@ def process_cluster_cli_params(config):
     upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
     if upgrade_ocs_registry_image:
         ocsci_config.UPGRADE["upgrade_ocs_registry_image"] = upgrade_ocs_registry_image
+    fdf_upgrade_registry = get_cli_param(config, "fdf_upgrade_registry")
+    if fdf_upgrade_registry:
+        ocsci_config.DEPLOYMENT["fdf_upgrade_registry"] = fdf_upgrade_registry
+    fdf_upgrade_image_tag = get_cli_param(config, "fdf_upgrade_image_tag")
+    if fdf_upgrade_image_tag:
+        ocsci_config.DEPLOYMENT["fdf_upgrade_image_tag"] = fdf_upgrade_image_tag
     ocsci_config.ENV_DATA["cluster_name"] = cluster_name
     ocsci_config.ENV_DATA["cluster_path"] = cluster_path
     get_cli_param(config, "collect-logs")
