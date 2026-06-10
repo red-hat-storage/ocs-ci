@@ -79,7 +79,11 @@ class GCPBase(CloudDeploymentBase):
 
 class GCPIPI(GCPBase):
     """
-    A class to handle GCP IPI specific deployment
+    A class to handle GCP IPI specific deployment.
+
+    Supports both standard and STS (Workload Identity Federation)
+    deployments. STS behavior is activated when
+    config.DEPLOYMENT["sts_enabled"] is True.
     """
 
     def __init__(self):
@@ -87,15 +91,32 @@ class GCPIPI(GCPBase):
         super(GCPIPI, self).__init__()
 
     class OCPDeployment(IPIOCPDeployment):
+        """
+        GCP-specific OCP deployment that adds Workload Identity
+        Federation (WIF) setup when STS mode is enabled.
+
+        For non-STS deployments, behaves identically to the
+        base IPIOCPDeployment.
+        """
+
         def deploy_prereq(self):
+            """Run base prerequisites, then WIF setup if STS is enabled."""
             super().deploy_prereq()
             if config.DEPLOYMENT.get("sts_enabled"):
                 self.sts_setup()
 
         def sts_setup(self):
             """
-            Perform setup procedure for STS Mode (Workload Identity
-            Federation) deployments on GCP.
+            Set up GCP Workload Identity Federation via ccoctl.
+
+            Steps:
+                1. Set GCP authentication for ccoctl
+                2. Extract ccoctl binary from the release image
+                3. Extract CredentialsRequest manifests
+                4. Configure manual credentials mode
+                5. Generate install manifests
+                6. Run ccoctl gcp create-all to create WIF resources
+                7. Copy generated manifests and TLS into the cluster dir
             """
             cluster_path = config.ENV_DATA["cluster_path"]
             output_dir = os.path.join(cluster_path, "output-dir")
@@ -103,10 +124,12 @@ class GCPIPI(GCPBase):
             credentials_requests_dir = os.path.join(cluster_path, "creds_reqs")
             install_config = os.path.join(cluster_path, "install-config.yaml")
 
+            # 1. Set GCP authentication
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT_KEY_FILEPATH
             sa_dict = load_service_account_key_dict()
             gcp_project = config.ENV_DATA.get("gcp_project_id") or sa_dict["project_id"]
 
+            # 2-3. Extract ccoctl binary and CredentialsRequest manifests
             release_image = get_ocp_release_image_from_installer()
             cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
             cco.extract_ccoctl_binary(cco_image, pull_secret_path)
@@ -116,8 +139,12 @@ class GCPIPI(GCPBase):
                 pull_secret_path,
                 credentials_requests_dir,
             )
+
+            # 4-5. Configure manual credentials mode and generate manifests
             cco.set_credentials_mode_manual(install_config)
             cco.create_manifests(self.installer, cluster_path)
+
+            # 6. Run ccoctl gcp create-all
             infra_id = get_infra_id_from_openshift_install_state(cluster_path)
             cco.process_credentials_requests_gcp(
                 infra_id,
@@ -126,6 +153,8 @@ class GCPIPI(GCPBase):
                 credentials_requests_dir,
                 output_dir,
             )
+
+            # 7. Copy generated manifests and TLS into the cluster dir
             manifests_source_dir = os.path.join(output_dir, "manifests")
             manifests_target_dir = os.path.join(cluster_path, "manifests")
             file_names = os.listdir(manifests_source_dir)
@@ -140,7 +169,10 @@ class GCPIPI(GCPBase):
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
-        Destroy OCP cluster specific to GCP IPI.
+        Destroy OCP cluster on GCP.
+
+        For STS deployments, deletes the WIF resources created by
+        ccoctl before running the standard cluster destroy.
 
         Args:
             log_level (str): log level openshift-installer (default: DEBUG)
