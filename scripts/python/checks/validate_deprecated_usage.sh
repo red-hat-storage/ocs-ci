@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+#
+# Detect new usage of deprecated functions in added lines.
+#
+# Modes:
+#   precommit  – check staged changes (git diff --cached)
+#   ci         – check branch changes vs origin/master
+#
+# Exit 0 if clean, 1 if violations found.
+
+set -euo pipefail
+
+MODE="${1:-precommit}"
+
+case "$MODE" in
+    precommit)
+        DIFF_CMD="git diff --cached --diff-filter=ACM --unified=0"
+        ;;
+    ci)
+        BASE="${2:-origin/master}"
+        DIFF_CMD="git diff ${BASE}...HEAD --diff-filter=ACM --unified=0"
+        ;;
+    *)
+        echo "Usage: $0 {precommit|ci [base_ref]}" >&2
+        exit 2
+        ;;
+esac
+
+# Deprecated patterns: "import <name>" or "<name>(" in added lines.
+# Each entry: grep_pattern|human_readable_name|replacement
+DEPRECATED_FUNCTIONS=(
+    "run_cmd|run_cmd|exec_cmd"
+    "download_file|download_file|download_with_retries"
+    "log_step|log_step|logger.test_step()"
+    "system_test|system_test mark|system mark"
+)
+
+# Build a single grep pattern for all deprecated names
+NAMES=()
+for entry in "${DEPRECATED_FUNCTIONS[@]}"; do
+    IFS='|' read -r pattern _ _ <<< "$entry"
+    NAMES+=("$pattern")
+done
+COMBINED=$(IFS='|'; echo "${NAMES[*]}")
+
+# Run diff command separately so failures aren't masked by || true
+DIFF_OUTPUT=$($DIFF_CMD -- '*.py') || {
+    echo "ERROR: diff command failed: $DIFF_CMD" >&2
+    exit 2
+}
+
+# Extract added Python lines from the diff
+VIOLATIONS=$(echo "$DIFF_OUTPUT" | awk '
+    /^diff --git/ {
+        file = $NF
+        sub("^b/", "", file)
+    }
+    /^@@ / {
+        # Parse the +line from hunk header (e.g., @@ -10,3 +20,5 @@)
+        # Match " +NNN" (space before +) to avoid greedy match on + in function context
+        s = $0
+        sub(/.* \+/, "", s)
+        sub(/[,@ ].*/, "", s)
+        line = s + 0
+        next
+    }
+    /^\+[^+]/ {
+        # Added line (skip the +++ header)
+        code = substr($0, 2)
+        printf "%s:%d: %s\n", file, line, code
+        line++
+    }
+    /^ / { line++ }
+' | grep -E "(from\s+\S+\s+import\s+.*\b(${COMBINED})\b|\b(${COMBINED})\s*\()" | \
+    grep -vE "def (${COMBINED})\s*\(" || true)
+
+if [ -z "$VIOLATIONS" ]; then
+    exit 0
+fi
+
+echo ""
+echo "========================================================"
+echo " DEPRECATED FUNCTION USAGE DETECTED IN NEW CODE"
+echo "========================================================"
+echo ""
+echo "The following added lines use deprecated functions."
+echo "Please use the recommended replacements:"
+echo ""
+
+for entry in "${DEPRECATED_FUNCTIONS[@]}"; do
+    IFS='|' read -r pattern name replacement <<< "$entry"
+    echo "  - ${name}  →  ${replacement}"
+done
+
+echo ""
+echo "Violations:"
+echo "--------------------------------------------------------"
+echo "$VIOLATIONS"
+echo "--------------------------------------------------------"
+echo ""
+exit 1
