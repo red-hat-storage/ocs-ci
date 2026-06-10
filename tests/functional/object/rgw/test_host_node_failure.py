@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import red_squad, rgw, runs_on_provider
+from ocs_ci.framework.pytest_customization.marks import red_squad, rgw, runs_on_provider, zstream_4_20_14
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
@@ -42,6 +42,7 @@ log = logging.getLogger(__name__)
 @on_prem_platform_required
 @skipif_external_mode
 @skipif_vsphere_ipi
+@zstream_4_20_14
 class TestRGWAndNoobaaDBHostNodeFailure(ManageTest):
     """
     Test to verify fail node hosting
