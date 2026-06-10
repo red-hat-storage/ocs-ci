@@ -23,6 +23,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_client,
     brown_squad,
     skipif_ibm_cloud_managed,
+    zstream_4_20_14,
 )
 from ocs_ci.helpers.helpers import (
     verify_storagecluster_nodetopology,
@@ -196,6 +197,7 @@ def delete_and_create_osd_node(osd_node_name):
 @skipif_hci_provider_and_client
 @skipif_bmpsi
 @skipif_external_mode
+@zstream_4_20_14
 class TestNodeReplacementWithIO(ManageTest):
     """
     Knip-894 Node replacement proactive with IO
@@ -280,6 +282,7 @@ class TestNodeReplacementWithIO(ManageTest):
 @skipif_external_mode
 @skipif_ms_consumer
 @skipif_hci_client
+@zstream_4_20_14
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement proactive
@@ -336,6 +339,7 @@ class TestNodeReplacement(ManageTest):
 @skipif_external_mode
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@zstream_4_20_14
 class TestNodeReplacementTwice(ManageTest):
     """
     Node replacement twice:
