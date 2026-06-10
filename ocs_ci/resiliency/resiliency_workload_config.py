@@ -122,6 +122,82 @@ class ResiliencyWorkloadConfig:
         resiliency_config = self.config.ENV_DATA.get("resiliency_config", {})
         return resiliency_config.get("background_cluster_operations", {})
 
+    def is_background_cluster_operations_enabled(self) -> bool:
+        """
+        Check if background cluster operations are enabled.
+
+        Returns:
+            bool: True if background cluster operations are enabled
+        """
+        return self.get_background_operations_config().get("enabled", False)
+
+    def get_background_operations_interval(self) -> int:
+        """
+        Get background operations interval in seconds.
+
+        Returns:
+            int: Operation interval in seconds (default: 60)
+        """
+        return self.get_background_operations_config().get("operation_interval", 60)
+
+    def get_background_operations_max_concurrent(self) -> int:
+        """
+        Get maximum concurrent background operations.
+
+        Returns:
+            int: Maximum concurrent operations (default: 3)
+        """
+        return self.get_background_operations_config().get(
+            "max_concurrent_operations", 3
+        )
+
+    def get_enabled_background_operations(self) -> List[str]:
+        """
+        Get list of enabled background operation types.
+
+        Returns:
+            list: List of enabled operation type names
+        """
+        return self.get_background_operations_config().get("enabled_operations", [])
+
+    def is_cephx_keyrotation_enabled(self) -> bool:
+        """
+        Check if CephX key rotation background operations are enabled.
+
+        Returns:
+            bool: True if CephX key rotation is enabled in config
+        """
+        return self.get_background_operations_config().get(
+            "enable_cephx_keyrotation", False
+        )
+
+    def get_cephx_keys(self) -> List[str]:
+        """
+        Get CephX key components to rotate in background operations.
+
+        Returns:
+            list: Component names (daemon, csi, rbdMirrorPeer)
+        """
+        cephx_keys = self.get_background_operations_config().get(
+            "cephx_keys", ["rook_daemon"]
+        )
+        if isinstance(cephx_keys, dict):
+            return list(cephx_keys.get("components", ["rook_daemon"]))
+        return list(cephx_keys or ["rook_daemon"])
+
+    def get_cephx_keyrotation_interval(self) -> int:
+        """
+        Get minimum interval between CephX key rotation iterations.
+
+        Returns:
+            int: Interval in seconds (default: 180)
+        """
+        return int(
+            self.get_background_operations_config().get(
+                "cephx_keyrotation_interval", 180
+            )
+        )
+
     def get_scaling_config(self) -> Dict[str, Any]:
         """
         Get workload scaling configuration.
