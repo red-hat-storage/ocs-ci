@@ -149,6 +149,7 @@ class VSPHEREBASE(Deployment):
         config.ENV_DATA["version_4_9_object"] = version.VERSION_4_9
 
         self.wait_time = 90
+        self.infra_id = None
 
     def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE, ssd=False):
         """
@@ -405,6 +406,30 @@ class VSPHEREBASE(Deployment):
         # destroy the folder in templates
         template_folder = get_infra_id(self.cluster_path)
         self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
+        # Use infra_id captured before destroy operation
+        if self.infra_id:
+            template_folder = self.infra_id
+            self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
+
+            # delete storage policy created by OCP installer
+            # Storage policy name format: openshift-storage-policy-<infraID>
+            storage_policy_name = f"openshift-storage-policy-{self.infra_id}"
+            logger.info(f"Deleting storage policy: {storage_policy_name}")
+            deleted = self.vsphere.delete_storage_policy_by_exact_name(
+                storage_policy_name
+            )
+            if deleted:
+                logger.info(
+                    f"Successfully deleted storage policy: {storage_policy_name}"
+                )
+            else:
+                logger.info(
+                    f"Storage policy not found or failed to delete: {storage_policy_name}"
+                )
+        else:
+            logger.warning(
+                "infra_id not available, skipping folder and storage policy deletion"
+            )
 
         # remove .terraform directory ( this is only to reclaim space )
         terraform_plugins_dir = os.path.join(
