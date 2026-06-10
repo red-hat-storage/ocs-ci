@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     run_on_all_clients_push_missing_configs,
     runs_on_provider,
     mcg,
+    pc_or_ms_provider_required,
     provider_client_ms_platform_required,
 )
 from ocs_ci.ocs import constants
@@ -32,7 +33,7 @@ def return_to_original_context():
 @mcg
 @red_squad
 @runs_on_provider
-@provider_client_ms_platform_required
+@pc_or_ms_provider_required
 @tier1
 @polarion_id("OCS-5415")
 def test_verify_backingstore_uses_rgw(mcg_obj_session):
