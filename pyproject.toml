@@ -17,7 +17,7 @@ dependencies = [
     "azure-mgmt-resource==23.2.0",
     "azure-mgmt-storage==21.0.0",
     "azure-storage-blob==12.23.1",
-    "boto3==1.38.31",
+    "boto3==1.43.9",
     "bs4==0.0.1",
     "certbot==3.0.0",
     "certbot-dns-route53==3.0.0",

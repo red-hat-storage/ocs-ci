@@ -4,7 +4,7 @@ import pytest
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, ec_allowed
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -13,7 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_hci_provider_and_client,
 )
-from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.cluster import CephCluster, is_ec_pool_supported
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -152,7 +152,13 @@ class TestRbdSpaceReclaim(ManageTest):
     @skipif_hci_provider_and_client
     @skipif_external_mode
     @pytest.mark.parametrize(
-        argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
+        argnames=[
+            "replica",
+            "compression",
+            "volume_binding_mode",
+            "pvc_status",
+            "erasure_coded",
+        ],
         argvalues=[
             pytest.param(
                 *[
@@ -160,6 +166,7 @@ class TestRbdSpaceReclaim(ManageTest):
                     "aggressive",
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
+                    False,
                 ],
                 marks=pytest.mark.polarion_id("OCS-4587"),
             ),
@@ -169,8 +176,27 @@ class TestRbdSpaceReclaim(ManageTest):
                     "none",
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
+                    False,
                 ],
                 marks=pytest.mark.polarion_id("OCS-4587"),
+            ),
+            pytest.param(
+                *[
+                    3,
+                    "none",
+                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                    constants.STATUS_BOUND,
+                    True,
+                ],
+                marks=[
+                    ec_allowed,
+                    tier2,
+                    pytest.mark.polarion_id("OCS-7962"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
             ),
         ],
     )
@@ -180,6 +206,7 @@ class TestRbdSpaceReclaim(ManageTest):
         compression,
         volume_binding_mode,
         pvc_status,
+        erasure_coded,
         project_factory,
         storageclass_factory_class,
         pvc_factory,
@@ -217,6 +244,7 @@ class TestRbdSpaceReclaim(ManageTest):
             compression=compression,
             volume_binding_mode=volume_binding_mode,
             pool_name="test-pool-cronjob",
+            erasure_coded=erasure_coded,
         )
 
         pvc_obj = pvc_factory(

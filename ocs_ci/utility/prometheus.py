@@ -90,6 +90,56 @@ def check_alert_list(
     logger.info("Alerts were triggered correctly during utilization")
 
 
+def validate_alert(
+    threading_lock,
+    alert_constant,
+    message,
+    description,
+    runbook,
+    severity="warning",
+    state="pending",
+    timeout=1200,
+    sleep=None,
+):
+    """
+    Wait for an alert and validate its properties.
+
+    Args:
+        threading_lock: Threading lock object for thread-safe Prometheus API operations
+        alert_constant (str): Alert name constant
+        message (str): Expected alert message
+        description (str): Expected alert description
+        runbook (str): Expected runbook URL
+        severity (str): Expected severity
+        state (str): Alert state to wait for
+        timeout (int): Timeout in seconds to wait for the alert
+        sleep (int): Optional polling interval for alert wait
+
+    Returns:
+        bool: True if alert is validated successfully, False otherwise
+    """
+    api = PrometheusAPI(threading_lock=threading_lock)
+    wait_kwargs = {"name": alert_constant, "state": state, "timeout": timeout}
+    if sleep is not None:
+        wait_kwargs["sleep"] = sleep
+    alerts = api.wait_for_alert(**wait_kwargs)
+
+    try:
+        check_alert_list(
+            label=alert_constant,
+            msg=message,
+            description=description,
+            runbook=runbook,
+            states=[state],
+            severity=severity,
+            alerts=alerts,
+        )
+        logger.info("Alert verified successfully")
+        return True
+    except AssertionError:
+        return False
+
+
 def check_query_range_result_viafunction(
     result,
     is_value_good,
@@ -515,6 +565,7 @@ class PrometheusAPI(object):
                 namespace=defaults.OCS_MONITORING_NAMESPACE,
                 threading_lock=self._threading_lock,
                 cluster_kubeconfig=kubeconfig,
+                skip_tls_verify=config.ENV_DATA.get("skip_tls_verify", False),
             )
             kube_data = ""
             with open(kubeconfig, "r") as kube_file:
@@ -830,6 +881,33 @@ class PrometheusAPI(object):
                 time.sleep(sleep)
                 timeout -= sleep
         return alerts
+
+    def get_alerts_by_labels(self, alert_name, labels_dict):
+        """
+        Get alerts (pending or firing) matching a specific alert name and
+        label values.
+
+        Args:
+            alert_name (str): Alert name to match.
+            labels_dict (dict): Label key-value pairs to filter by
+                (e.g. {"source_bucket": "my-bucket"}).
+
+        Returns:
+            list: Matching alert records, empty if none found.
+        """
+        with self._cluster_context():
+            response = self.get(
+                "alerts",
+                payload={"silenced": False, "inhibited": False},
+            )
+            if not response.ok:
+                raise AlertingError(f"Request {response.request.url} failed")
+            return [
+                alert
+                for alert in response.json()["data"]["alerts"]
+                if alert["labels"].get("alertname") == alert_name
+                and all(alert["labels"].get(k) == v for k, v in labels_dict.items())
+            ]
 
     def check_alert_cleared(self, label, measure_end_time, time_min=120):
         """

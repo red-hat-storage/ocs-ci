@@ -11,6 +11,7 @@ import re
 
 from ocs_ci.framework import config
 from ocs_ci.utility.templating import load_yaml
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP
@@ -18,6 +19,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     CommandFailed,
+    TimeoutExpiredError,
 )
 
 
@@ -304,12 +306,16 @@ def create_drs_machine_config():
 
     If the MachineConfig '99-br-storage-nmstate-worker' already exists,
     this function will skip creation and return early.
+
+    After creating the MachineConfig, this function waits for all worker nodes
+    to be updated. The timeout is calculated as 15 minutes per worker node.
     """
     from ocs_ci.ocs.resources.machineconfig import machineconfig_exists
+    from ocs_ci.utility.utils import wait_for_machineconfigpool_status
 
     mc_name = "99-br-storage-nmstate-worker"
     if machineconfig_exists(mc_name):
-        logger.info("MachineConfig %s already exists, skipping creation", mc_name)
+        logger.info(f"MachineConfig {mc_name} already exists, skipping creation")
         return
 
     interfaces_path = os.path.join(
@@ -333,6 +339,64 @@ def create_drs_machine_config():
         machineconfigurations_obj = OCS(**machineconfigurations_yaml)
         machineconfigurations_obj.apply(**machineconfigurations_yaml)
 
+        # Wait for all worker nodes to be updated
+        worker_nodes = get_worker_nodes()
+        num_workers = len(worker_nodes)
+        timeout = num_workers * 15 * 60  # 15 minutes per worker node in seconds
+
+        logger.info(
+            f"Waiting for all {num_workers} worker nodes to be updated (timeout: {timeout} seconds)"
+        )
+
+        # Use wait_for_machineconfigpool_status to properly wait for worker pool update
+        wait_for_machineconfigpool_status(
+            node_type=constants.WORKER_MACHINE, timeout=timeout
+        )
+
+        logger.info("All worker nodes have been updated successfully")
+
+        # Verify HCP hosted clusters are operational after node reboots
+        logger.info(
+            "Verifying HCP hosted clusters are operational after MachineConfig update"
+        )
+        from ocs_ci.deployment.helpers.hypershift_base import get_hosted_cluster_names
+        from ocs_ci.ocs.resources.pod import (
+            wait_for_pods_to_be_in_statuses_concurrently,
+        )
+
+        hosted_clusters = get_hosted_cluster_names()
+        if hosted_clusters:
+            logger.info(
+                f"Found {len(hosted_clusters)} hosted clusters to verify: {hosted_clusters}"
+            )
+            for cluster_name in hosted_clusters:
+                namespace = f"clusters-{cluster_name}"
+                logger.info(
+                    f"Checking critical HCP pods in namespace '{namespace}' are running"
+                )
+
+                # Check critical HCP control plane pods
+                app_selectors_to_resource_count_list = [
+                    {"app=capi-provider-controller-manager": 1},
+                    {"app=catalog-operator": 1},
+                    {"app=cluster-api": 1},
+                ]
+
+                if not wait_for_pods_to_be_in_statuses_concurrently(
+                    app_selectors_to_resource_count_list,
+                    namespace,
+                    timeout=600,  # 10 minutes timeout for pods to recover
+                ):
+                    logger.warning(
+                        f"HCP pods in cluster '{cluster_name}' are not running yet after MachineConfig update"
+                    )
+                else:
+                    logger.info(
+                        f"HCP pods in cluster '{cluster_name}' are running successfully"
+                    )
+        else:
+            logger.info("No hosted clusters found, skipping HCP verification")
+
 
 def create_drs_nad(cluster_name):
     """
@@ -344,23 +408,66 @@ def create_drs_nad(cluster_name):
 
     Args:
         cluster_name (str): cluster name used to construct the namespace on provider cluster
+
+    Raises:
+        TimeoutError: If NAD creation verification times out
     """
     namespace = f"clusters-{cluster_name}"
+    nad_name = "storage"  # From template
 
     # Check if namespace exists, create if it doesn't
     ocp_ns = OCP(kind="namespace")
     if not ocp_ns.is_exist(resource_name=namespace):
-        logger.info("Namespace %s does not exist, creating it", namespace)
+        logger.info(f"Namespace {namespace} does not exist, creating it")
         ocp_ns.new_project(namespace)
     else:
-        logger.info("Namespace %s already exists", namespace)
+        logger.info(f"Namespace {namespace} already exists")
 
     nad_path = os.path.join(constants.TEMPLATE_DEPLOYMENT_DIR, "drs_nad.yaml")
     nad_yaml = load_yaml(nad_path)
     nad_yaml["metadata"]["namespace"] = namespace
+
     with config.RunWithProviderConfigContextIfAvailable():
         nad_obj = OCS(**nad_yaml)
         nad_obj.apply(**nad_yaml)
+
+        logger.info(
+            f"Verifying NetworkAttachmentDefinition '{nad_name}' "
+            f"creation in namespace '{namespace}'"
+        )
+
+        # Verify NAD exists with timeout
+        nad_ocp = OCP(kind="NetworkAttachmentDefinition", namespace=namespace)
+
+        try:
+            for sample in TimeoutSampler(
+                timeout=120, sleep=5, func=nad_ocp.is_exist, resource_name=nad_name
+            ):
+                if sample:
+                    logger.info(
+                        f"NetworkAttachmentDefinition '{nad_name}' "
+                        f"successfully created in namespace '{namespace}'"
+                    )
+                    break
+        except TimeoutExpiredError as e:
+            raise TimeoutError(
+                f"Timeout waiting for NetworkAttachmentDefinition '{nad_name}' "
+                f"to be created in namespace '{namespace}'"
+            ) from e
+
+        # Verify NAD configuration
+        nad_data = nad_ocp.get(resource_name=nad_name)
+        nad_config = nad_data.get("spec", {}).get("config")
+
+        if not nad_config:
+            logger.warning(
+                f"NetworkAttachmentDefinition '{nad_name}' has no config specification"
+            )
+        else:
+            logger.info(
+                f"NetworkAttachmentDefinition '{nad_name}' verified with config: "
+                f"{nad_config[:100]}..."  # Log first 100 chars
+            )
 
 
 def get_pod_ips(pod_selector, namespace):

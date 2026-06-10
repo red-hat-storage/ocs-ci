@@ -5,8 +5,8 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import get_snapshot_content_obj
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import templating
-from ocs_ci.ocs.managedservice import get_consumer_names
 from ocs_ci.ocs.resources import ocs
+from ocs_ci.ocs.resources.storageconsumer import find_consumer_for_storage_client
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
@@ -91,24 +91,15 @@ def create_provider_retain_cephfs_snapclass(snapclass_name, storage_client_name)
         ), f"Failed to create VolumeSnapshotClass {snapclass_name} on provider"
         log.info("Created VolumeSnapshotClass %s on provider", snapclass_name)
 
-        consumer_ns = config.ENV_DATA["cluster_namespace"]
-        consumer_ocp = ocp.OCP(kind=constants.STORAGECONSUMER, namespace=consumer_ns)
-        consumer_name = None
-        current_snapclasses = []
-        for name in get_consumer_names():
-            consumer_data = consumer_ocp.get(resource_name=name)
-            if (
-                consumer_data.get("status", {}).get("client", {}).get("name")
-                == storage_client_name
-            ):
-                consumer_name = name
-                current_snapclasses = consumer_data.get("spec", {}).get(
-                    "volumeSnapshotClasses", []
-                )
-                break
-        assert consumer_name, (
-            f"StorageConsumer for storage client '{storage_client_name}' "
-            "not found on provider"
+        consumer_name, consumer_data = find_consumer_for_storage_client(
+            storage_client_name
+        )
+        consumer_ocp = ocp.OCP(
+            kind=constants.STORAGECONSUMER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        current_snapclasses = consumer_data.get("spec", {}).get(
+            "volumeSnapshotClasses", []
         )
 
         updated_snapclasses = [*current_snapclasses, {"name": snapclass_name}]

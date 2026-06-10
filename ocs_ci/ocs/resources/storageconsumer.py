@@ -974,6 +974,60 @@ def get_ready_consumers_names():
     return [consumer.name for consumer in ready_consumers]
 
 
+def find_consumer_for_storage_client(storage_client_name):
+    """
+    Find the StorageConsumer CR on the provider that owns ``storage_client_name``.
+
+    Must be called within an active provider config context.
+
+    Args:
+        storage_client_name (str): StorageClient CR name on the client cluster.
+
+    Returns:
+        tuple[str, dict]: ``(consumer_name, consumer_data)`` for the matching
+            StorageConsumer.
+
+    Raises:
+        AssertionError: If no matching StorageConsumer is found.
+    """
+    consumer_ns = config.ENV_DATA["cluster_namespace"]
+    consumer_ocp = ocp.OCP(kind=constants.STORAGECONSUMER, namespace=consumer_ns)
+    for name in get_consumer_names():
+        consumer_data = consumer_ocp.get(resource_name=name)
+        if (
+            consumer_data.get("status", {}).get("client", {}).get("name")
+            == storage_client_name
+        ):
+            return name, consumer_data
+    raise AssertionError(
+        f"No StorageConsumer found for storage client '{storage_client_name}'"
+    )
+
+
+def get_consumer_svg_on_provider(storage_client_name):
+    """
+    Return the CephFS subvolume group name for a storage client on the
+    provider cluster.
+
+    The SVG name equals the StorageConsumer CR name on the provider.
+    Must be called within an active provider config context.
+
+    Args:
+        storage_client_name (str): StorageClient CR name on the client
+            cluster.
+
+    Returns:
+        str: Subvolume group name on the provider cluster.
+
+    Raises:
+        AssertionError: If no matching StorageConsumer is found.
+    """
+    consumer_name, _ = find_consumer_for_storage_client(storage_client_name)
+    # The CephFS subvolume group name on the provider equals the
+    # StorageConsumer CR name (this mapping may change in future versions).
+    return consumer_name
+
+
 def check_consumer_rns(consumer_name, pool_list, rns_list):
     """
     Verify that the Rados namespaces on the consumer match the expected ones.

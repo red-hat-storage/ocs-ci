@@ -761,6 +761,8 @@ class OCP(object):
 
         """
         command = ["oc", "login", "-u", user, "-p", password]
+        if self.skip_tls_verify:
+            command.append("--insecure-skip-tls-verify")
         status = exec_cmd(
             command, secrets=[password], threading_lock=self.threading_lock
         )

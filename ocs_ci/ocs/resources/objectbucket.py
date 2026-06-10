@@ -169,6 +169,7 @@ class ObjectBucket(ABC):
     """
 
     mcg, name = (None,) * 2
+    _verify_s3_listing = True  # Set to False in subclasses to skip S3 bucket check
 
     def __init__(
         self,
@@ -313,7 +314,11 @@ class ObjectBucket(ABC):
             ):
                 if not health_check:
                     logger.info(f"{self.name} is unhealthy. Rechecking.")
-                elif self.mcg and not self.mcg.s3_verify_bucket_exists(self.name):
+                elif (
+                    self._verify_s3_listing
+                    and self.mcg
+                    and not self.mcg.s3_verify_bucket_exists(self.name)
+                ):
                     logger.info(
                         f"{self.name} is healthy, but not found in S3. Rechecking."
                     )
@@ -627,6 +632,36 @@ class MCGOCBucket(OCBucket):
         create_resource(**obc_data)
 
 
+class VectorOCBucket(OCBucket):
+    """
+    Implementation of an MCG Vector bucket using the OC CLI
+    """
+
+    _verify_s3_listing = False  # Skip S3 bucket existence check for vector buckets
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        obc_data = templating.load_yaml(constants.VECTOR_OBC_YAML)
+        if self.name is None:
+            self.name = create_unique_resource_name("vector-oc", "obc")
+        obc_data["metadata"]["name"] = self.name
+        obc_data["spec"]["bucketName"] = self.name
+        obc_data["spec"]["storageClassName"] = f"{self.namespace}.noobaa.io"
+        obc_data["metadata"]["namespace"] = self.namespace
+
+        # Ensure additionalConfig exists
+        obc_data.setdefault("spec", {}).setdefault("additionalConfig", {})
+
+        # Always set bucketType to vector
+        obc_data["spec"]["additionalConfig"]["bucketType"] = "vector"
+
+        # Add bucketclass if specified
+        if self.bucketclass:
+            obc_data["spec"]["additionalConfig"]["bucketclass"] = self.bucketclass.name
+
+        create_resource(**obc_data)
+
+
 class RGWOCBucket(OCBucket):
     """
     Implementation of an RGW bucket using the S3 API
@@ -744,4 +779,123 @@ BUCKET_MAP = {
     "cli": MCGCLIBucket,
     "rgw-oc": RGWOCBucket,
     "mcg-namespace": MCGNamespaceBucket,
+    "vector-oc": VectorOCBucket,
 }
+
+
+def wait_for_obc_phase(obc_name, namespace, phase, timeout=300):
+    """
+    Wait for ObjectBucketClaim to reach specified phase.
+
+    This is a generic helper for waiting on OBC phase transitions, particularly
+    useful for client cluster scenarios where OCP.wait_for_phase() doesn't work
+    due to ObjectBucketClaim not having _has_phase=True.
+
+    Args:
+        obc_name (str): Name of the ObjectBucketClaim
+        namespace (str): Namespace containing the OBC
+        phase (str): Desired phase (e.g., "Bound")
+        timeout (int): Timeout in seconds (default: 300)
+
+    Raises:
+        TimeoutExpiredError: If OBC doesn't reach desired phase within timeout
+
+    Example:
+        >>> from ocs_ci.ocs.resources.objectbucket import wait_for_obc_phase
+        >>> from ocs_ci.ocs import constants
+        >>> wait_for_obc_phase("my-obc", "openshift-storage", constants.STATUS_BOUND)
+
+    """
+    logger.info(f"Waiting for OBC '{obc_name}' to reach phase '{phase}'")
+    obc_obj = OCP(kind="ObjectBucketClaim", namespace=namespace, resource_name=obc_name)
+
+    def _check_phase():
+        """Check if OBC has reached the desired phase."""
+        try:
+            obc_data = obc_obj.get()
+            current_phase = obc_data.get("status", {}).get("phase")
+            logger.debug(f"OBC {obc_name} current phase: {current_phase}")
+            return current_phase == phase
+        except Exception as e:
+            logger.warning(f"Error checking OBC phase: {e}")
+            return False
+
+    sample = TimeoutSampler(timeout=timeout, sleep=10, func=_check_phase)
+    if not sample.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            f"OBC '{obc_name}' did not reach phase '{phase}' within {timeout} seconds"
+        )
+
+    logger.info(f"OBC '{obc_name}' reached phase '{phase}'")
+
+
+def get_s3_credentials_from_obc(obc_name, namespace):
+    """
+    Extract S3 credentials from ObjectBucketClaim Secret and ConfigMap.
+
+    This helper extracts all necessary information to create an S3 client
+    from an OBC's associated Secret and ConfigMap resources.
+
+    Args:
+        obc_name (str): Name of the ObjectBucketClaim
+        namespace (str): Namespace containing the OBC
+
+    Returns:
+        dict: Dictionary containing S3 connection details:
+            - bucket_name (str): Name of the S3 bucket
+            - endpoint (str): S3 endpoint URL
+            - access_key_id (str): AWS access key ID
+            - secret_access_key (str): AWS secret access key
+            - region (str): AWS region (if available)
+
+    Raises:
+        AssertionError: If bucket name is not found in ConfigMap
+
+    Example:
+        >>> from ocs_ci.ocs.resources.objectbucket import get_s3_credentials_from_obc
+        >>> import boto3
+        >>> creds = get_s3_credentials_from_obc("my-obc", "openshift-storage")
+        >>> s3_client = boto3.client(
+        ...     "s3",
+        ...     aws_access_key_id=creds["access_key_id"],
+        ...     aws_secret_access_key=creds["secret_access_key"],
+        ...     endpoint_url=f"https://{creds['endpoint']}",
+        ...     verify=False
+        ... )
+
+    """
+    logger.info(
+        "Extracting S3 credentials from OBC '%s' in namespace '%s'", obc_name, namespace
+    )
+
+    configmap_obj = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+    secret_obj = OCP(kind=constants.SECRET, namespace=namespace)
+
+    configmap_data = configmap_obj.get(resource_name=obc_name)
+    secret_data = secret_obj.get(resource_name=obc_name)
+
+    bucket_name = configmap_data["data"].get("BUCKET_NAME")
+    endpoint = configmap_data["data"]["BUCKET_HOST"]
+    access_key_id = base64.b64decode(secret_data["data"]["AWS_ACCESS_KEY_ID"]).decode(
+        "utf-8"
+    )
+    secret_access_key = base64.b64decode(
+        secret_data["data"]["AWS_SECRET_ACCESS_KEY"]
+    ).decode("utf-8")
+
+    # Region is optional
+    region = configmap_data["data"].get("BUCKET_REGION")
+
+    assert bucket_name, f"Bucket name not found in ConfigMap for OBC {obc_name}"
+
+    logger.info(
+        "Retrieved credentials for bucket '%s' at endpoint '%s'", bucket_name, endpoint
+    )
+
+    return {
+        "bucket_name": bucket_name,
+        "endpoint": endpoint,
+        "access_key_id": access_key_id,
+        "secret_access_key": secret_access_key,
+        "region": region,
+    }

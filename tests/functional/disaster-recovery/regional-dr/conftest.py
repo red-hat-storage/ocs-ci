@@ -1,5 +1,7 @@
 import logging
 import platform
+import os
+from ocs_ci.utility import templating
 import pytest
 import time
 
@@ -9,9 +11,17 @@ from ocs_ci.ocs import constants
 from ocs_ci.deployment import acm
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    run_cmd,
+)
+from ocs_ci.helpers.dr_helpers import (
+    apply_itms_to_managed_clusters,
+    generate_rdr_mirror_images,
+)
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    ResourceNotFoundError,
     CephHealthException,
     CephHealthNotRecoveredException,
     CephHealthRecoveredException,
@@ -242,3 +252,58 @@ def scale_deployments(request):
 
     request.addfinalizer(teardown)
     return _scale
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mirror_rdr_images():
+    """
+    Mirror RDR images to disconnected registry and apply ITMS to managed clusters.
+    """
+    if not config.DEPLOYMENT.get("disconnected"):
+        return
+
+    imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG_V2)
+
+    # Get RDR images and add to additionalImages
+    rdr_images = generate_rdr_mirror_images()
+    if not rdr_images:
+        log.warning("No RDR images found to mirror. Exiting function.")
+        return
+
+    imageset_config_data["mirror"]["additionalImages"] = rdr_images
+    log.info(f"Added {len(rdr_images)} RDR images to mirror configuration")
+
+    # Mirror required images
+    log.info(
+        f"Mirror required images to mirror registry {config.DEPLOYMENT['mirror_registry']}"
+    )
+    imageset_config_file = os.path.join(
+        config.ENV_DATA["cluster_path"],
+        f"imageset-config-{config.RUN['run_id']}.yaml",
+    )
+    templating.dump_data_to_temp_yaml(imageset_config_data, imageset_config_file)
+
+    cmd = (
+        f"oc mirror --config {imageset_config_file} "
+        f"docker://{config.DEPLOYMENT['mirror_registry']} "
+        "--workspace file://oc-mirror-workspace/results-files --v2"
+    )
+
+    try:
+        exec_cmd(cmd, timeout=18000)
+    except CommandFailed as e:
+        # if itms is configured, the oc mirror command might fail (return non 0 rc),
+        # but we want to continue to try to mirror the images manually with applied the itms rules
+        log.warning(f"oc mirror command failed: {e}")
+        # Continue to apply ITMS rules and mirror images manually
+
+    # Look for itms file in the workspace
+    itms_file_path = "oc-mirror-workspace/results-files/working-dir/cluster-resources/itms-oc-mirror.yaml"
+
+    if os.path.exists(itms_file_path):
+        log.info(f"Found ITMS file at {itms_file_path}")
+        apply_itms_to_managed_clusters(itms_file_path)
+    else:
+        error_msg = f"ITMS file not found at expected location: {itms_file_path}"
+        log.error(error_msg)
+        raise ResourceNotFoundError(error_msg)

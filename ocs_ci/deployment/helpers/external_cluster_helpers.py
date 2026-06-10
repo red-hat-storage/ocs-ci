@@ -41,6 +41,7 @@ from ocs_ci.utility.utils import (
     encode,
     decode,
     download_file,
+    exec_cmd,
     wait_for_machineconfigpool_status,
     create_config_ini_file,
 )
@@ -120,14 +121,11 @@ class ExternalCluster(object):
                 "No SSH Auth to connect to external RHCS cluster provided! "
                 "Either password or SSH key is missing in EXTERNAL_MODE['login'] section!"
             )
-        # adding jump host configuration to connect to external RHCS cluster on ibmcloud via jump host
-        self.jump_host = None
-        if config.ENV_DATA.get("platform") == constants.IBMCLOUD_PLATFORM:
-            self.jump_host = config.DEPLOYMENT.get("ssh_jump_host", None)
-            if self.jump_host and not self.jump_host.get("private_key"):
-                self.jump_host["private_key"] = os.path.expanduser(
-                    config.DEPLOYMENT["ssh_key_private"]
-                )
+        self.jump_host = config.DEPLOYMENT.get("ssh_jump_host")
+        if self.jump_host and not self.jump_host.get("private_key"):
+            ssh_key_private = config.DEPLOYMENT.get("ssh_key_private")
+            if ssh_key_private:
+                self.jump_host["private_key"] = os.path.expanduser(ssh_key_private)
 
         self.rhcs_conn = Connection(
             host=self.host,
@@ -169,30 +167,33 @@ class ExternalCluster(object):
             raise exception_class(f"{error_msg}: {err}")
         return retcode, out, err
 
-    def get_external_cluster_details(self):
+    def build_exporter_base_params(self, include_rgw=True):
         """
-        Gets the external RHCS cluster details and updates to config.EXTERNAL_MODE
+        Build the base parameter string for the exporter script.
 
-        Raises:
-            ExternalClusterExporterRunFailed: If exporter script failed to run on external RHCS cluster
+        Reads cluster config to construct the flags needed by
+        create-external-cluster-resources.py. This method has no side effects
+        (does not modify config, delete users, or create namespaces).
+
+        Args:
+            include_rgw (bool): If True (default), include --rgw-endpoint.
+                Set to False for clusters without RGW deployed.
+
+        Returns:
+            str: Parameter string for run_exporter_script().
 
         """
-        # get rgw endpoint port
-        rgw_endpoint_port = self.get_rgw_endpoint_api_port()
-
-        # get rgw endpoint
-        rgw_endpoint = get_rgw_endpoint()
-        rgw_endpoint_with_port = f"{rgw_endpoint}:{rgw_endpoint_port}"
-
-        # get ceph filesystem
-        ceph_fs_name = config.ENV_DATA.get("cephfs_name") or self.get_ceph_fs()
-
         rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
         cluster_name = config.ENV_DATA.get("cluster_name") or defaults.RHCS_CLUSTER_NAME
 
-        params = (
-            f"--rbd-data-pool-name {rbd_name} --rgw-endpoint {rgw_endpoint_with_port}"
-        )
+        params = f"--rbd-data-pool-name {rbd_name}"
+
+        if include_rgw:
+            rgw_endpoint_port = self.get_rgw_endpoint_api_port()
+            rgw_endpoint = get_rgw_endpoint()
+            params += f" --rgw-endpoint {rgw_endpoint}:{rgw_endpoint_port}"
+
+        ceph_fs_name = config.ENV_DATA.get("cephfs_name") or self.get_ceph_fs()
 
         if config.ENV_DATA["restricted-auth-permission"]:
             if config.ENV_DATA["use_k8s_cluster_name"]:
@@ -207,8 +208,6 @@ class ExternalCluster(object):
                 f"{params} --restricted-auth-permission true --cluster-name {cluster_name} "
                 f"--alias-rbd-data-pool-name {alias_rbd_name}"
             )
-            config.ENV_DATA["restricted-auth-permission"] = True
-            config.ENV_DATA["alias_rbd_name"] = alias_rbd_name
 
         if config.ENV_DATA.get("rgw-realm"):
             rgw_realm = config.ENV_DATA["rgw-realm"]
@@ -218,6 +217,42 @@ class ExternalCluster(object):
                 f"{params} --rgw-realm-name {rgw_realm} --rgw-zonegroup-name {rgw_zonegroup} "
                 f"--rgw-zone-name {rgw_zone}"
             )
+
+        if config.EXTERNAL_MODE.get("run_as_user"):
+            ceph_user = config.EXTERNAL_MODE["run_as_user"]
+            params = f"{params} --run-as-user {ceph_user}"
+
+        if config.EXTERNAL_MODE.get("use_rbd_namespace"):
+            rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
+            if rbd_namespace:
+                params = f"{params} --rados-namespace {rbd_namespace}"
+                if "restricted-auth-permission" not in params:
+                    params += " --restricted-auth-permission true"
+                if "cluster-name" not in params:
+                    params += f" --k8s-cluster-name {cluster_name}"
+
+        return params
+
+    def get_external_cluster_details(self):
+        """
+        Gets the external RHCS cluster details and updates to config.EXTERNAL_MODE
+
+        Raises:
+            ExternalClusterExporterRunFailed: If exporter script failed to run on external RHCS cluster
+
+        """
+        rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
+        cluster_name = config.ENV_DATA.get("cluster_name") or defaults.RHCS_CLUSTER_NAME
+
+        # Side effects that must run before building params so that
+        # build_exporter_base_params() sees restricted-auth and alias flags
+        if "." in rbd_name or "_" in rbd_name:
+            config.ENV_DATA["restricted-auth-permission"] = True
+            config.ENV_DATA["alias_rbd_name"] = rbd_name.replace(".", "-").replace(
+                "_", "-"
+            )
+
+        params = self.build_exporter_base_params()
 
         # remove user 'rgw-admin-ops-user' if it exists since user creation is handled by
         # external python script with necessary caps
@@ -230,22 +265,21 @@ class ExternalCluster(object):
         else:
             self.remove_rgw_user()
 
-        if config.EXTERNAL_MODE.get("run_as_user"):
-            ceph_user = config.EXTERNAL_MODE["run_as_user"]
-            params = f"{params} --run-as-user {ceph_user}"
-
         if config.EXTERNAL_MODE.get("use_rbd_namespace"):
             rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
             if not rbd_namespace:
                 rbd_namespace = self.create_rbd_namespace(rbd=rbd_name)
                 config.EXTERNAL_MODE["rbd_namespace"] = rbd_namespace
+                # Append params that build_exporter_base_params skipped
+                # (namespace didn't exist in config yet when it ran)
+                params += f" --rados-namespace {rbd_namespace}"
+                if "restricted-auth-permission" not in params:
+                    params += " --restricted-auth-permission true"
+                if "cluster-name" not in params:
+                    params += f" --k8s-cluster-name {cluster_name}"
 
-            params = f"{params} --rados-namespace {rbd_namespace}"
-            if "restricted-auth-permission" not in params:
-                params += " --restricted-auth-permission true"
+            if not config.ENV_DATA.get("restricted-auth-permission"):
                 config.ENV_DATA["restricted-auth-permission"] = True
-            if "cluster-name" not in params:
-                params += f" --k8s-cluster-name {cluster_name}"
 
         out = self.run_exporter_script(params=params)
 
@@ -269,16 +303,17 @@ class ExternalCluster(object):
         if ocs_version <= version.VERSION_4_18:
             use_configmap = False
         script_path = generate_exporter_script(use_configmap=use_configmap)
+        remote_script_path = f"/tmp/{os.path.basename(script_path)}"
         upload_file(
             self.host,
             script_path,
-            script_path,
+            remote_script_path,
             self.user,
             self.password,
             self.ssh_key,
             ssh_connection=self.rhcs_conn if self.jump_host else None,
         )
-        return script_path
+        return remote_script_path
 
     def upload_rgw_cert_ca(self):
         """
@@ -1020,6 +1055,148 @@ class ExternalCluster(object):
                 logger.warning(f"Failed to delete CRUSH rule {rule_name}: {err}")
 
         logger.info("Cleanup of CRUSH rules completed")
+
+    def create_topology_pools(
+        self,
+        pool_names: list[str],
+        pool_size: int = 3,
+        pg_num: int = 32,
+    ) -> list[str]:
+        """
+        Create replicated RBD pools for topology-aware provisioning.
+
+        Unlike create_replica_one_pools(), this creates standard replicated pools
+        (size >= 2) without per-zone CRUSH rules — the default replicated_rule
+        distributes replicas across hosts automatically.
+
+        For each pool executes:
+        - ceph osd pool create <pool-name> <pg_num> <pg_num> replicated
+        - ceph osd pool set <pool-name> size <pool_size>
+        - ceph osd pool application enable <pool-name> rbd
+
+        Args:
+            pool_names (list[str]): List of pool names to create.
+            pool_size (int): Replication factor (default 3).
+            pg_num (int): Placement groups per pool (default 32).
+
+        Returns:
+            list[str]: List of created pool names.
+
+        Raises:
+            ExternalClusterPoolCreationFailed: If pool creation fails.
+
+        """
+        if not pool_names:
+            raise ValueError("pool_names cannot be empty")
+
+        _, out, _ = self.exec_external_ceph_cmd(
+            cmd="ceph osd pool ls",
+            error_msg="Failed to list existing pools",
+            exception_class=ExternalClusterPoolCreationFailed,
+        )
+        existing_pools = out.strip().split("\n") if out.strip() else []
+
+        created_pools = []
+        for pool_name in pool_names:
+            if pool_name in existing_pools:
+                logger.info(f"Pool {pool_name} already exists, skipping creation")
+                created_pools.append(pool_name)
+                continue
+
+            logger.info(
+                f"Creating topology pool: {pool_name} (size={pool_size}, pg_num={pg_num})"
+            )
+
+            self.exec_external_ceph_cmd(
+                cmd=f"ceph osd pool create {pool_name} {pg_num} {pg_num} replicated",
+                error_msg=f"Failed to create pool {pool_name}",
+                exception_class=ExternalClusterPoolCreationFailed,
+            )
+
+            self.exec_external_ceph_cmd(
+                cmd=f"ceph osd pool set {pool_name} size {pool_size}",
+                error_msg=f"Failed to set size {pool_size} for pool {pool_name}",
+                exception_class=ExternalClusterPoolCreationFailed,
+            )
+
+            self.exec_external_ceph_cmd(
+                cmd=f"ceph osd pool application enable {pool_name} rbd",
+                error_msg=f"Failed to enable rbd for pool {pool_name}",
+                exception_class=ExternalClusterPoolCreationFailed,
+            )
+
+            logger.info(f"Created topology pool: {pool_name}")
+            created_pools.append(pool_name)
+
+        return created_pools
+
+
+def save_external_cluster_secret():
+    """
+    Save the current external cluster secret data for later restoration.
+
+    Returns:
+        str: The base64-encoded external_cluster_details value.
+
+    """
+    ns = config.ENV_DATA["cluster_namespace"]
+    secret_ocp = OCP(kind="Secret", namespace=ns)
+    secret_data = secret_ocp.get(resource_name="rook-ceph-external-cluster-details")
+    return secret_data["data"]["external_cluster_details"]
+
+
+def patch_external_cluster_secret(exporter_json_output):
+    """
+    Patch the rook-ceph-external-cluster-details secret with new exporter output.
+
+    Args:
+        exporter_json_output (str): Raw JSON output from the exporter script.
+
+    """
+    ns = config.ENV_DATA["cluster_namespace"]
+    with tempfile.NamedTemporaryFile(
+        mode="w", prefix="external-cluster-details-", suffix=".json", delete=False
+    ) as fd:
+        fd.write(exporter_json_output)
+        tmp_path = fd.name
+
+    try:
+        cmd = (
+            f"oc set data secret/rook-ceph-external-cluster-details -n {ns} "
+            f"--from-file=external_cluster_details={tmp_path}"
+        )
+        exec_cmd(cmd)
+        logger.info("Patched rook-ceph-external-cluster-details secret")
+    finally:
+        os.unlink(tmp_path)
+
+
+def restore_external_cluster_secret(original_b64_value):
+    """
+    Restore the external cluster secret to its original value.
+
+    Args:
+        original_b64_value (str): The original base64-encoded value
+            from save_external_cluster_secret().
+
+    """
+    ns = config.ENV_DATA["cluster_namespace"]
+    secret_ocp = OCP(kind="Secret", namespace=ns)
+    params = json.dumps(
+        [
+            {
+                "op": "replace",
+                "path": "/data/external_cluster_details",
+                "value": original_b64_value,
+            }
+        ]
+    )
+    secret_ocp.patch(
+        resource_name="rook-ceph-external-cluster-details",
+        params=params,
+        format_type="json",
+    )
+    logger.info("Restored rook-ceph-external-cluster-details secret")
 
 
 def get_exporter_script_from_configmap():

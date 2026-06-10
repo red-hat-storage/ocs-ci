@@ -728,6 +728,9 @@ def create_ceph_block_pool(
     namespace=None,
     device_class=None,
     yaml_file=None,
+    erasure_coded=False,
+    data_chunks=None,
+    coding_chunks=None,
 ):
     """
     Create a Ceph block pool with optional parameters.
@@ -741,20 +744,34 @@ def create_ceph_block_pool(
         namespace (str): The pool namespace (optional).
         device_class (str): The device class name (optional).
         yaml_file (str): The name of the YAML file for the Ceph block pool (optional).
+        erasure_coded (bool): True to create an erasure coded pool instead of replicated.
+        data_chunks (int): Number of data chunks for the EC profile (optional).
+            When None and erasure_coded=True, resolved automatically via get_ec_profile().
+            Pass explicit int to override auto-selection.
+        coding_chunks (int): Number of coding chunks for the EC profile (optional).
+            When None and erasure_coded=True, resolved automatically via get_ec_profile().
 
     Returns:
         OCS: The OCS instance for the Ceph block pool.
 
     """
-    # Load the YAML template
     if yaml_file:
         cbp_data = templating.load_yaml(yaml_file)
+    elif erasure_coded:
+        from ocs_ci.ocs.cluster import get_ec_profile
+
+        resolved_data_chunks, resolved_coding_chunks = (
+            (data_chunks, coding_chunks)
+            if data_chunks is not None and coding_chunks is not None
+            else get_ec_profile()
+        )
+        cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_EC_YAML)
+        cbp_data["spec"]["erasureCoded"]["dataChunks"] = resolved_data_chunks
+        cbp_data["spec"]["erasureCoded"]["codingChunks"] = resolved_coding_chunks
     elif device_class:
-        # Use the appropriate yaml for the device class CephBlockPool
         cbp_data = templating.load_yaml(constants.DEVICECLASS_CEPHBLOCKPOOL_YAML)
         cbp_data["spec"]["deviceClass"] = device_class
     else:
-        # Use the appropriate yaml for the CephBlockPool
         cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
 
     cbp_data["metadata"]["name"] = (
@@ -764,12 +781,18 @@ def create_ceph_block_pool(
         namespace or config.ENV_DATA["cluster_namespace"]
     )
 
-    cbp_data["spec"]["replicated"]["size"] = replica
-    cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
+    if not erasure_coded:
+        cbp_data["spec"]["replicated"]["size"] = replica
+        cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
 
     if compression:
         cbp_data["spec"]["compressionMode"] = compression
-        cbp_data["spec"]["parameters"]["compression_mode"] = compression
+        cbp_data["spec"].setdefault("parameters", {})["compression_mode"] = compression
+
+    if erasure_coded:
+        from ocs_ci.ocs.cluster import ensure_ec_metadata_pool_exists
+
+        ensure_ec_metadata_pool_exists()
 
     cbp_obj = create_resource(**cbp_data)
     cbp_obj.reload()
@@ -963,6 +986,7 @@ def create_storage_class(
     annotations=None,
     mapOptions=None,
     mounter=None,
+    data_pool_name=None,
 ):
     """
     Create a storage class
@@ -989,6 +1013,8 @@ def create_storage_class(
         annotations(dict): dict of annotations to be added to the storageclass.
         mapOptions (str): mapOtions match the configuration of ocs-storagecluster-ceph-rbd-virtualization storage class
         mounter (str): mounter to match the configuration of ocs-storagecluster-ceph-rbd-virtualization storage class
+        data_pool_name (str): EC data pool name; sets dataPool in StorageClass parameters (optional).
+            Required when creating an EC-backed StorageClass where interface_name is the metadata pool.
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -1025,6 +1051,8 @@ def create_storage_class(
             provisioner if provisioner else defaults.CEPHFS_PROVISIONER
         )
     sc_data["parameters"]["pool"] = interface_name
+    if data_pool_name:
+        sc_data["parameters"]["dataPool"] = data_pool_name
 
     sc_data["metadata"]["name"] = (
         sc_name
@@ -1393,7 +1421,7 @@ def get_all_storageclass_names():
 
 
 def delete_storageclasses(sc_objs):
-    """ "
+    """
     Function for Deleting storageclasses
 
     Args:
@@ -1402,10 +1430,11 @@ def delete_storageclasses(sc_objs):
     Returns:
         bool: True if deletion is successful
     """
+    from ocs_ci.ocs.resources.storage_cluster import delete_storageclass_and_deregister
 
     for sc in sc_objs:
         logger.info("Deleting StorageClass with name %s", sc.name)
-        sc.delete()
+        delete_storageclass_and_deregister(sc_name=sc.name, sc_ocp=sc.ocp)
     return True
 
 
@@ -4669,7 +4698,7 @@ def get_cephfs_subvolumegroup():
             kind=constants.CONFIGMAP,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        ceph_csi_configmap = configmap_obj.get(resource_name="ceph-csi-configs")
+        ceph_csi_configmap = configmap_obj.get(resource_name="ceph-csi-config")
         json_config = ceph_csi_configmap.get("data").get("config.json")
         json_config_list = json.loads(json_config)
         for dict_item in json_config_list:

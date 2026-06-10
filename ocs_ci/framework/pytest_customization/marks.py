@@ -106,6 +106,7 @@ rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
 chaos = pytest.mark.chaos
+ec_allowed = pytest.mark.ec_allowed
 
 tier_marks = [
     tier1,

@@ -1173,6 +1173,12 @@ class HostedClients(HyperShiftBase):
         # stage 2 download all available kubeconfig files
         log_step("Download kubeconfig for all clusters")
         kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
+        password_paths = self.download_hosted_clusters_kubeadmin_password_files()
+        if not password_paths or not all(password_paths):
+            logger.warning(
+                "kubeadmin-password could not be downloaded for one or more "
+                "hosted clusters"
+            )
 
         # stage 3 verify OCP clusters are ready
         log_step(
@@ -1238,7 +1244,36 @@ class HostedClients(HyperShiftBase):
 
         check_odf_prerequisites()
 
-        # stage 3.5: Setup VPC peering, routing, and security groups for AWS HCP clusters
+        # stage 3.5: Setup data replication separation network configuration
+        # This must be done before ODF deployment to avoid node reboots after ODF is deployed
+        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+            log_step(
+                "Setup data replication separation (MachineConfig and NetworkAttachmentDefinition)"
+            )
+            create_drs_machine_config()
+            for cluster_name in cluster_names:
+                create_drs_nad(cluster_name)
+
+            # Re-verify only this job's hosted clusters after MachineConfig-induced node reboots
+            # to avoid race conditions with parallel jobs
+            log_step(
+                "Re-verify hosted OCP clusters after data replication separation setup"
+            )
+            logger.info(
+                "Waiting for hosted clusters to recover after networking changes"
+            )
+            drs_verification_results = []
+            for cluster_name in cluster_names:
+                drs_verification_results.append(
+                    self.verify_hosted_ocp_cluster_from_provider(
+                        cluster_name, timeout_hosted_cluster_completed_min=45
+                    )
+                )
+            # Update hosted_ocp_verification_passed only if all clusters verified
+            if all(drs_verification_results):
+                hosted_ocp_verification_passed = True
+
+        # stage 3.6: Setup VPC peering, routing, and security groups for AWS HCP clusters
         # This must be done before ODF deployment to ensure network connectivity
         log_step(
             "Setup network for AWS HCP clusters (VPC peering, routing, security groups)"
@@ -1508,6 +1543,49 @@ class HostedClients(HyperShiftBase):
             )
 
         return self.kubeconfig_paths
+
+    def download_hosted_clusters_kubeadmin_password_files(
+        self, cluster_names_paths_dict=None
+    ):
+        """
+        Download kubeadmin-password for multiple HyperShift hosted clusters.
+
+        Args:
+            cluster_names_paths_dict (dict): Optional mapping of cluster name
+                to cluster path. If omitted, uses clusters from config.
+
+        Returns:
+            list: paths to downloaded kubeadmin-password files
+
+        """
+        if cluster_names_paths_dict is None:
+            cluster_names_paths_dict = dict()
+
+        cluster_names = (
+            list(cluster_names_paths_dict.keys())
+            if cluster_names_paths_dict
+            else list(config.ENV_DATA.get("clusters", {}).keys())
+        )
+        cluster_names = [
+            name
+            for name in cluster_names
+            if (
+                config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+                is None
+                or config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+                == "hci_client"
+            )
+        ]
+
+        password_paths = []
+        for name in cluster_names:
+            path = cluster_names_paths_dict.get(name) or config.ENV_DATA.setdefault(
+                "clusters", {}
+            ).setdefault(name, {}).get("hosted_cluster_path")
+            password_paths.append(
+                self.download_hosted_cluster_kubeadmin_password(name, path)
+            )
+        return password_paths
 
     def get_kubeconfig_path(self, cluster_name):
         """
@@ -7901,6 +7979,15 @@ def hypershift_cluster_factory(
                         {cluster_name: cluster_path}, from_hcp=False
                     )
                 )
+                pw_paths = hosted_clients_obj.download_hosted_clusters_kubeadmin_password_files(
+                    {cluster_name: cluster_path}
+                )
+                if not pw_paths or not all(pw_paths):
+                    logger.warning(
+                        "kubeadmin-password could not be downloaded for "
+                        "hosted cluster %s",
+                        cluster_name,
+                    )
                 if not kubeconf_paths:
                     logger.warning(
                         "kubeconfig was not found after download attempt; "

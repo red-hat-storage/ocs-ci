@@ -2391,6 +2391,148 @@ def is_lso_cluster():
     return config.DEPLOYMENT.get("local_storage", False)
 
 
+def is_ec_pool_supported():
+    """
+    Check if erasure coded RBD pools are supported on this cluster.
+
+    All conditions must be met:
+    - Platform is vSphere or baremetal
+    - Cluster uses local storage (LSO / no-provisioner / localblock)
+    - Failure domain is 'host'
+    - At least 3 OSDs are running
+
+    Returns:
+        bool: True if EC pools are supported, False otherwise
+    """
+    from ocs_ci.helpers.helpers import get_failure_domin
+    from ocs_ci.ocs.resources import pod
+
+    cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
+    if cluster_type == "provider":
+        return False
+
+    platform = config.ENV_DATA["platform"].lower()
+    if platform not in constants.ON_PREM_PLATFORMS:
+        return False
+    if not is_lso_cluster():
+        return False
+    try:
+        if get_failure_domin() != "host":
+            return False
+        if len(pod.get_osd_pods()) < 3:
+            return False
+    except Exception:
+        logger.debug("is_ec_pool_supported: cluster not ready, returning False")
+        return False
+    return True
+
+
+def get_ec_metadata_pool_name():
+    """
+    Return the name of the replicated metadata pool for EC RBD StorageClasses
+    as configured in the StorageCluster spec.
+
+    Returns:
+        str: pool name, or empty string if not configured
+    """
+    sc_obj = storage_cluster.get_storage_cluster()
+    sc_data = sc_obj.get()["items"][0]
+    return (
+        sc_data.get("spec", {})
+        .get("managedResources", {})
+        .get("cephBlockPools", {})
+        .get("erasureCodedMetadataPool", "")
+    )
+
+
+def ensure_ec_metadata_pool_exists(
+    metadata_pool_name="replicated-metadata-pool", timeout=300
+):
+    """
+    Ensure the replicated metadata pool for EC RBD exists and is Ready.
+
+    If the StorageCluster does not yet have erasureCodedMetadataPool set,
+    patches it and waits for the pool to be created and reach Ready phase.
+
+    If the StorageCluster already has the field set but the pool does NOT exist
+    or is NOT Ready, this is a critical failure — raises an exception.
+
+    Args:
+        metadata_pool_name (str): Name of the metadata pool
+        timeout (int): Seconds to wait for pool to become Ready after patch
+
+    Raises:
+        AssertionError: If pool is expected to exist but is not Ready (critical failure path)
+        TimeoutExpiredError: If pool does not become Ready within timeout after patching
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    configured_name = get_ec_metadata_pool_name()
+    pool_ocp = OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+
+    def pool_is_ready():
+        try:
+            pool = pool_ocp.get(resource_name=metadata_pool_name)
+            return pool.get("status", {}).get("phase") == "Ready"
+        except Exception:
+            return False
+
+    if configured_name:
+        assert pool_is_ready(), (
+            f"StorageCluster has erasureCodedMetadataPool='{configured_name}' "
+            f"but CephBlockPool '{metadata_pool_name}' is not Ready. "
+            "This is a critical failure — inspect the cluster."
+        )
+        return
+
+    logger.info(
+        f"Patching StorageCluster to add erasureCodedMetadataPool: {metadata_pool_name}"
+    )
+    sc_obj = storage_cluster.get_storage_cluster()
+    sc_data = sc_obj.get()["items"][0]
+    sc_name = sc_data["metadata"]["name"]
+    patch = {
+        "spec": {
+            "managedResources": {
+                "cephBlockPools": {"erasureCodedMetadataPool": metadata_pool_name}
+            }
+        }
+    }
+    sc_obj.patch(
+        resource_name=sc_name,
+        params=patch,
+        format_type="merge",
+    )
+
+    logger.info(f"Waiting up to {timeout}s for {metadata_pool_name} to become Ready")
+    for sample in TimeoutSampler(timeout=timeout, sleep=10, func=pool_is_ready):
+        if sample:
+            logger.info(f"Pool {metadata_pool_name} is Ready")
+            return
+
+
+def get_ec_profile():
+    """
+    Return the EC profile (data_chunks, coding_chunks) appropriate for this cluster.
+
+    Selection:
+    - 6+ storage nodes → k=2, m=2
+    - 3-5 storage nodes → k=2, m=1
+
+    Returns:
+        tuple[int, int]: (data_chunks, coding_chunks)
+    """
+    from ocs_ci.ocs.node import get_osd_running_nodes
+
+    osd_node_count = len(get_osd_running_nodes())
+    if osd_node_count >= 6:
+        return 2, 2
+    return 2, 1
+
+
 def is_flexible_scaling_enabled():
     """
     Check if flexible scaling is enabled

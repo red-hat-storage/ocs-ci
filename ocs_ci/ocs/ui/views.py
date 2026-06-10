@@ -76,6 +76,11 @@ login_4_19 = {
     "click_login": ("co-login-button", By.ID),
 }
 
+# Client cluster OAuth login locators (HCI client clusters only)
+login_client_oauth = {
+    "click_login": ("//button[@type='submit']", By.XPATH),
+}
+
 deployment = {
     "click_install_ocs": (
         'a[data-test-id="operator-install-btn"], a[data-test="catalog-details-modal-cta"]',
@@ -136,8 +141,8 @@ deployment = {
     ),
     "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
     "choose_local_storage_version": (
-        'a[data-test="local-storage-operator-redhat-operators-openshift-marketplace"]',
-        By.CSS_SELECTOR,
+        "//button[@aria-labelledby='local-storage-operator-{}-openshift-marketplace']",
+        By.XPATH,
     ),
     "click_install_lso": (
         'a[data-test-id="operator-install-btn"], a[data-test="catalog-details-modal-cta"]',
@@ -145,10 +150,6 @@ deployment = {
     ),
     "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
     "next": ("//*[contains(text(), 'Next')]", By.XPATH),
-    "choose_local_storage_version_non_ga": (
-        'a[data-test="local-storage-operator-optional-operators-openshift-marketplace"]',
-        By.CSS_SELECTOR,
-    ),
     "enable_in_transit_encryption": (
         'input[data-test="in-transit-encryption-checkbox"]',
         By.CSS_SELECTOR,
@@ -227,11 +228,24 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
-    "create_storage_system": ("//button[text()='Create storage system']", By.XPATH),
+    "create_storage_system": (
+        "//button[.//span[text()='Create storage system']]",
+        By.XPATH,
+    ),
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
     "refresh_popup": (
-        "//button[text()='Refresh web console']|//button[contains(.,'Refresh web console')]",
+        "//button[normalize-space()='Refresh web console']",
         By.XPATH,
+    ),
+    "view_installed_operators_btn": (
+        "a[data-test='view-installed-operators-btn']",
+        By.CSS_SELECTOR,
+    ),
+    "dismiss_welcome_modal": (
+        "button[aria-label='Close'], "
+        "[class*='c-modal-box'] button[class*='m-plain'], "
+        "[class*='l-bullseye'] button[class*='m-plain']",
+        By.CSS_SELECTOR,
     ),
     "odf_operator_row_succeeded": (
         "//tr[.//a[contains(@data-test-operator-row,'{}')]]"
@@ -369,6 +383,15 @@ deployment_4_21 = {
 }
 
 deployment_4_22 = {
+    "enable_forceful_deployment": (
+        "input#enable-forceful-deployment",
+        By.CSS_SELECTOR,
+    ),
+    "forceful_deployment_confirmation": (
+        "input#forceful-deployment-confirmation",
+        By.CSS_SELECTOR,
+    ),
+    "use_erasure_coding": ("input#use-erasure-coding", By.CSS_SELECTOR),
     # Perspective switcher for ACM hub cluster (PF v6)
     "perspective_switcher_toggle": (
         'button[data-test-id="perspective-switcher-toggle"]',
@@ -376,7 +399,7 @@ deployment_4_22 = {
     ),
     "select_core_platform": (
         "//h2[normalize-space()='Core platform']"
-        "/ancestor::button[contains(@class, 'pf-v6-c-menu__item')]",
+        "/ancestor::button[contains(@class, 'c-menu__item')]",
         By.XPATH,
     ),
     # PF v6 sidebar navigation locators
@@ -432,6 +455,24 @@ deployment_4_22 = {
     ),
     "operator_installed_version": (
         "//dt[text()='Installed Version']/following-sibling::dd",
+        By.XPATH,
+    ),
+    "ec_scheme_table_rows": (
+        "//table[@aria-label='Erasure coding scheme selection']//tbody/tr",
+        By.XPATH,
+    ),
+    "ec_scheme_radio": (
+        "//tr[.//td[@data-label='Scheme (k+m)' and "
+        "starts-with(normalize-space(.), '{}')]]"
+        "//input[@name='radioGroup']",
+        By.XPATH,
+    ),
+    "_ec_row_scheme_cell": (
+        ".//td[@data-label='Scheme (k+m)']",
+        By.XPATH,
+    ),
+    "_ec_row_effective_capacity_cell": (
+        ".//td[@data-label='Effective capacity']",
         By.XPATH,
     ),
 }
@@ -1644,7 +1685,7 @@ add_capacity = {
     "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
     "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
     "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
-    "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
+    "localblock_sc": ("a[id='localblock-link'], #localblock-link", By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
@@ -2722,7 +2763,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "storage_class_dropdown": (
-        "//button[@data-test='sc-dropdown']",
+        "//button[@data-test='sc-dropdown']| //button[@data-test='storage-class-dropdown']",
         By.XPATH,
     ),
     "storage_class_noobaa_option": (
@@ -3318,6 +3359,7 @@ external_systems = {
 locators = {
     "4.22": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "login_client_oauth": login_client_oauth,
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
         "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
@@ -3390,6 +3432,7 @@ locators = {
     },
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "login_client_oauth": login_client_oauth,
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
         "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
@@ -3459,6 +3502,7 @@ locators = {
     },
     "4.20": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "login_client_oauth": login_client_oauth,
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
         "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},

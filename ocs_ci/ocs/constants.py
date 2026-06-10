@@ -59,6 +59,9 @@ TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
 TEMPLATE_COUCHBASE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "pillowfight")
 TEMPLATE_CEPHFS_STRESS_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "cephfs_stress")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
+TEMPLATE_BLOCK_NB_EGRESS_NETWORK_POLICY = os.path.join(
+    TEMPLATE_MCG_DIR, "block_egress_network_policy.yaml"
+)
 TEMPLATE_RGW_DIR = os.path.join(TEMPLATE_DIR, "rgw")
 TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(TEMPLATE_DIR, "openshift-infra/")
@@ -269,8 +272,12 @@ MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
 CEPH_CLUSTER = "CephCluster"
 EXTERNAL_CEPHCLUSTER_NAME = "ocs-external-storagecluster-cephcluster"
 EXTERNAL_RGW_SC_NAME = "ocs-external-storagecluster-ceph-rgw"
+EXTERNAL_VIRT_SC_NAME = "ocs-external-storagecluster-ceph-rbd-virtualization"
 CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
 REPLICA1_STORAGECLASS = "ocs-storagecluster-ceph-non-resilient-rbd"
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_NON_RESILIENT_RBD = (
+    "ocs-external-storagecluster-ceph-non-resilient-rbd"
+)
 ENDPOINTS = "Endpoints"
 WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
@@ -605,6 +612,10 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE_PREFIX = (
     f"{DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD}-rados-namespace"
 )
 
+# Label on RBD/CephFS StorageClasses (all deployment types; provider/consumer model).
+OCS_EXTERNAL_STORAGECLASS_LABEL = "storageclass.ocs.openshift.io/is-external"
+OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE = "true"
+
 # Default StorageClass for Provider-mode
 DEFAULT_STORAGECLASS_CLIENT_CEPHFS = f"{STORAGE_CLIENT_NAME}-cephfs"
 DEFAULT_STORAGECLASS_CLIENT_RBD = f"{STORAGE_CLIENT_NAME}-ceph-rbd"
@@ -857,6 +868,7 @@ TOOL_POD_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "toolbox_pod.yaml")
 CEPHFILESYSTEM_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "CephFileSystem.yaml")
 
 CEPHBLOCKPOOL_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "cephblockpool.yaml")
+CEPHBLOCKPOOL_EC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "cephblockpool_ec.yaml")
 
 VSPHERE_THICK_STORAGECLASS_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "vsphere_storageclass_thick.yaml"
@@ -890,6 +902,8 @@ SCC_YAML = os.path.join(TEMPLATE_SECURITY_DIR, "scc.yaml")
 CSI_PVC_YAML = os.path.join(TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml")
 
 MCG_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml")
+
+VECTOR_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "VectorObjectBucketClaim.yaml")
 
 RGW_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim-RGW.yaml")
 
@@ -1124,6 +1138,7 @@ OC_MIRROR_IMAGESET_CONFIG = os.path.join(
 OC_MIRROR_IMAGESET_CONFIG_V2 = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config-v2.yaml"
 )
+OC_INGRESS_CERT_YAML = os.path.join(TEMPLATE_DIR, "ocp-deployment", "ingress_cert.yaml")
 
 CSI_CEPHFS_ROX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "csi-cephfs-rox.yaml")
 
@@ -1576,6 +1591,7 @@ ALERT_BUCKETEXCEEDINGQUOTASTATE = "NooBaaBucketExceedingQuotaState"
 ALERT_BUCKETEXCEEDINGSIZEQUOTASTATE = "NooBaaBucketExceedingSizeQuotaState"
 ALERT_NAMESPACERESOURCEERRORSTATE = "NooBaaNamespaceResourceErrorState"
 ALERT_NAMESPACEBUCKETERRORSTATE = "NooBaaNamespaceBucketErrorState"
+ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE = "NooBaaReplicationTargetUnreachable"
 ALERT_NODEDOWN = "CephNodeDown"
 ALERT_CLUSTERNEARFULL = "CephClusterNearFull"
 ALERT_CLUSTERCRITICALLYFULL = "CephClusterCriticallyFull"
@@ -1627,6 +1643,7 @@ ALERT_ODF_NODE_MTU_LESS_THAN_9000 = "ODFNodeMTULessThan9000"
 ALERT_CEPHFS_ORPHANED_SNAPSHOT = "CephFSOrphanedSnapshot"
 CEPHFS_SNAPSHOT_STATE_ORPHANED = "orphaned"
 CEPHFS_SNAPSHOT_STATE_BOUND = "bound"
+ALERT_MDSXATTR = "CephXattrSetLatency"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -1783,6 +1800,7 @@ PSA_RESTRICTED = "restricted"
 AWS_PLATFORM = "aws"
 AZURE_PLATFORM = "azure"
 AZURE_WITH_LOGS_PLATFORM = "azure-with-logs"
+AZURE_STS_PLATFORM = "azure-sts"
 GCP_PLATFORM = "gcp"
 VSPHERE_PLATFORM = "vsphere"
 BAREMETAL_PLATFORM = "baremetal"
@@ -2418,6 +2436,7 @@ CLI_TOOL_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
 ODF_CLI_LOCAL_PATH = os.path.join(DATA_DIR, "odf-cli")
 DEFAULT_INGRESS_CRT = "router-ca.crt"
 DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
+DEFAULT_INGRESS_CRT_OPENSHIFT = "default-ingress-cert"
 SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_MONITORS = "servicemonitors"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
@@ -2472,6 +2491,7 @@ FLEXY_DEFAULT_PRIVATE_CONF_REPO = (
 FLEXY_JENKINS_USER = "jenkins"
 FLEXY_DEFAULT_PRIVATE_CONF_BRANCH = "master"
 OPENSHIFT_CONFIG_NAMESPACE = "openshift-config"
+OPENSHIFT_CONFIG_MANAGED_NAMESPACE = "openshift-config-managed"
 FLEXY_RELATIVE_CLUSTER_DIR = "flexy/workdir/install-dir"
 FLEXY_IMAGE_URL = "images.paas.redhat.com/dno-ood/ocp4:latest"
 FLEXY_ENV_FILE_UPDATED_NAME = "ocs-flexy-env-file-updated.env"
@@ -2683,6 +2703,8 @@ RHEL_OS = "RHEL"
 RHCOS = "RHCOS"
 
 # Scale constants
+IBM_STORAGE_SCALE_NAMESPACE = "ibm-spectrum-scale"
+REMOTE_CLUSTER = "RemoteCluster"
 SCALE_NODE_SELECTOR = {"scale-label": "app-scale"}
 SCALE_LABEL = "scale-label=app-scale"
 # TODO: Revisit the dict value once there is change in instance/vm/server type
@@ -2906,7 +2928,15 @@ SQUAD_CHECK_IGNORED_MARKERS = ["ignore_owner", "libtest"]
 PRODUCTION_JOBS_PREFIX = ["jnk"]
 
 # Cloud Manager available platforms
-CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "AZURE_WITH_LOGS", "IBMCOS", "AWS_STS"]
+CLOUD_MNGR_PLATFORMS = [
+    "AWS",
+    "GCP",
+    "AZURE",
+    "AZURE_WITH_LOGS",
+    "IBMCOS",
+    "AWS_STS",
+    "AZURE_STS",
+]
 
 # Vault related configurations
 VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"
@@ -3681,6 +3711,9 @@ METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
 FILE_CREATOR_IO = os.path.join(
     TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
 )
+EXTENDED_ATTRIBUTES = os.path.join(
+    TEMPLATE_WORKLOAD_DIR, "helper_scripts/check_xattr.py"
+)
 
 # workaround: marking disks as ssd
 MC_WORKAROUND_SSD = os.path.join(
@@ -3698,7 +3731,8 @@ SPECTRUM_FUSION_CR = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_FUSION, "spectrum-fusion.yaml"
 )
 FDF_ODFCLUSTER_CR = os.path.join(FDF_TEMPLATE_DIR, "odfcluster.yaml")
-
+FDF_CATSRC_CR = os.path.join(FDF_TEMPLATE_DIR, "isf_datafoundation_catsrc.yaml")
+FDF_CATSRC_IMAGE_PATH = "icr.io/cpopen/isf-data-foundation-catalog"
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
 ISF_CATALOG_SOURCE_NAME = "isf-catalog"
 ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"
@@ -3893,6 +3927,8 @@ BLACKBOX_POD_LABEL_422_AND_ABOVE = "app=odf-blackbox-exporter"
 
 # ODF 4.21 health overview mock alerts dir
 HEALTHALERTS_DIR = os.path.join(TEMPLATE_DIR, "health_overview_alerts")
+FDF_CATALOG_NAME = "isf-data-foundation-catalog"
+FDF_OPERATOR_SELECTOR = "fdf-operator-internal=true"
 
 # CSI PORTS
 CEPH_NODE_PORT = 31659

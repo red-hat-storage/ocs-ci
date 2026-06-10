@@ -73,7 +73,9 @@ class MCG:
         noobaa_user,
         noobaa_password,
         data_to_mask,
-    ) = (None,) * 12
+        vectors_endpoint,
+        vectors_internal_endpoint,
+    ) = (None,) * 14
 
     def __init__(self, *args, **kwargs):
         """
@@ -157,6 +159,24 @@ class MCG:
                 .get("serviceMgmt")
                 .get("externalDNS")[0]
             ) + "/rpc"
+
+            # serviceVectors is for S3 Vectors operations
+            service_vectors = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceVectors")
+            )
+            if service_vectors:
+                self.vectors_endpoint = service_vectors.get("externalDNS")[0]
+                self.vectors_internal_endpoint = service_vectors.get("internalDNS")[0]
+                logger.info(f"S3 Vectors endpoint: {self.vectors_endpoint}")
+            else:
+                logger.warning(
+                    "serviceVectors not found in NooBaa services - S3 Vectors endpoint will not be available"
+                )
+                self.vectors_endpoint = None
+                self.vectors_internal_endpoint = None
 
             # serviceIam is not available on some platforms (e.g., Azure ARO)
             service_iam = (
@@ -651,15 +671,19 @@ class MCG:
         placement_policy,
         namespace_policy,
         replication_policy,
+        vector_policy=None,
     ):
         """
         Creates a new NooBaa bucket class using a template YAML
+
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy
             placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
             replication_policy (dict): The replication policy dictionary
+            vector_policy (dict): The vector policy for vector buckets with
+                resource and vectorDBType fields
 
         Returns:
             OCS: The bucket class resource
@@ -711,6 +735,12 @@ class MCG:
                     else json.dumps({"rules": replication_policy})
                 ),
             )
+
+        if vector_policy:
+            bc_data["spec"]["vectorPolicy"] = {
+                "resource": vector_policy["resource"],
+                "vectorDBType": vector_policy["vectorDBType"],
+            }
 
         return create_resource(**bc_data)
 
@@ -807,7 +837,7 @@ class MCG:
                 f"with policy {namespace_policy_type} is not supported"
             )
 
-    def check_if_mirroring_is_done(self, bucket_name, timeout=300):
+    def check_if_mirroring_is_done(self, bucket_name, timeout=900):
         """
         Check whether all object chunks in a bucket
         are mirrored across all backing stores.
@@ -823,30 +853,42 @@ class MCG:
 
         def _get_mirroring_percentage():
             results = []
-            obj_list = (
-                self.send_rpc_query(
-                    "object_api", "list_objects", params={"bucket": bucket_name}
-                )
-                .json()
-                .get("reply")
-                .get("objects")
-            )
-
-            for written_object in obj_list:
-                object_chunks = (
+            try:
+                obj_list = (
                     self.send_rpc_query(
-                        "object_api",
-                        "read_object_mapping",
-                        params={
-                            "bucket": bucket_name,
-                            "key": written_object.get("key"),
-                            "obj_id": written_object.get("obj_id"),
-                        },
+                        "object_api", "list_objects", params={"bucket": bucket_name}
                     )
                     .json()
-                    .get("reply")
-                    .get("chunks")
+                    .get("reply", {})
+                    .get("objects", [])
                 )
+            except Exception as e:
+                logger.warning(f"Failed to list objects for mirroring check: {e}")
+                raise
+
+            for written_object in obj_list:
+                try:
+                    object_chunks = (
+                        self.send_rpc_query(
+                            "object_api",
+                            "read_object_mapping",
+                            params={
+                                "bucket": bucket_name,
+                                "key": written_object.get("key"),
+                                "obj_id": written_object.get("obj_id"),
+                            },
+                        )
+                        .json()
+                        .get("reply", {})
+                        .get("chunks", [])
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to read object mapping for "
+                        f"{written_object.get('key')}: {e}"
+                    )
+                    results.append(False)
+                    continue
 
                 for object_chunk in object_chunks:
                     mirror_blocks = object_chunk.get("frags")[0].get("blocks")
@@ -858,29 +900,38 @@ class MCG:
                         results.append(True)
                     else:
                         results.append(False)
+            if not results:
+                return 0.0
             current_percentage = (results.count(True) / len(results)) * 100
             return current_percentage
 
-        mirror_percentage = _get_mirroring_percentage()
-        logger.info(f"{mirror_percentage}% mirroring is done.")
-        previous_percentage = 0
-        while mirror_percentage < 100:
-            previous_percentage = mirror_percentage
-            try:
-                for mirror_percentage in TimeoutSampler(
-                    timeout, 5, _get_mirroring_percentage
+        max_mirror_percentage = None
+        try:
+            for mirror_percentage in TimeoutSampler(
+                timeout, 30, _get_mirroring_percentage
+            ):
+                if (
+                    max_mirror_percentage is None
+                    or mirror_percentage > max_mirror_percentage
                 ):
-                    if previous_percentage == mirror_percentage:
-                        logger.warning("The mirroring process is stuck.")
-                    else:
-                        break
-            except TimeoutExpiredError:
-                logger.error(
-                    f"The mirroring process is stuck from last {timeout} seconds."
-                )
-                assert False
-            mirror_percentage = _get_mirroring_percentage()
-        logger.info("All objects mirrored successfully.")
+                    max_mirror_percentage = mirror_percentage
+                logger.info(f"Mirroring is {mirror_percentage}% done.")
+                if mirror_percentage >= 100:
+                    logger.info("All objects mirrored successfully.")
+                    return
+        except TimeoutExpiredError as err:
+            observed = (
+                f"{max_mirror_percentage}%"
+                if max_mirror_percentage is not None
+                else "unknown"
+            )
+            logger.error(
+                f"Mirroring did not complete within {timeout}s. "
+                f"Max percentage reached: {observed}"
+            )
+            raise AssertionError(
+                f"Mirroring reached {observed} but did not complete after {timeout}s"
+            ) from err
 
     def check_backingstore_state(self, backingstore_name, desired_state, timeout=600):
         """

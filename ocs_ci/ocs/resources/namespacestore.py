@@ -147,14 +147,16 @@ class NamespaceStore:
             bool: Based on whether the namespace store is healthy or not
 
         """
-        return (
-            OCP(
+        try:
+            nss_data = OCP(
                 kind="namespacestore",
                 namespace=config.ENV_DATA["cluster_namespace"],
                 resource_name=self.name,
-            ).get()["status"]["phase"]
-            == constants.STATUS_READY
-        )
+            ).get()
+            return nss_data.get("status", {}).get("phase") == constants.STATUS_READY
+        except CommandFailed:
+            log.info(f"Namespacestore {self.name} not found or not accessible yet")
+            return False
 
     def verify_health(self, timeout=360, interval=5):
         """
@@ -180,6 +182,19 @@ class NamespaceStore:
                 else:
                     log.info(f"{self.name} is unhealthy. Rechecking.")
         except TimeoutExpiredError:
+            try:
+                nss_data = OCP(
+                    kind="namespacestore",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    resource_name=self.name,
+                ).get()
+                phase = nss_data.get("status", {}).get("phase", "N/A")
+                conditions = nss_data.get("status", {}).get("conditions", [])
+                log.error(
+                    f"{self.name} stuck in phase '{phase}', conditions: {conditions}"
+                )
+            except Exception:
+                log.exception(f"Failed to retrieve status for {self.name}")
             log.error(
                 f"{self.name} did not reach a healthy state within {timeout} seconds."
             )
@@ -249,6 +264,13 @@ def cli_create_namespacestore(
             f"google-cloud-storage {nss_name} "
             f"--private-key-json-file {constants.GOOGLE_CREDS_JSON_PATH} "
             f"--target-bucket {uls_name}"
+        ),
+        constants.AZURE_STS_PLATFORM: lambda: (
+            f"azure-sts-blob {nss_name} "
+            f"--target-blob-container {uls_name} "
+            f"--tenant-id {get_attr_chain(cld_mgr, 'azure_sts_client.tenant_id')} "
+            f"--client-id {get_attr_chain(cld_mgr, 'azure_sts_client.client_id')} "
+            f"--account-name {get_attr_chain(cld_mgr, 'azure_sts_client.account_name')}"
         ),
         constants.NAMESPACE_FILESYSTEM: lambda: (
             f"nsfs {nss_name} "
@@ -354,6 +376,17 @@ def oc_create_namespacestore(
                 },
             },
         },
+        constants.AZURE_STS_PLATFORM: lambda: {
+            "type": "azure-blob",
+            "azureBlob": {
+                "targetBlobContainer": uls_name,
+                "clientId": get_attr_chain(cld_mgr, "azure_sts_client.client_id"),
+                "secret": {
+                    "name": get_attr_chain(cld_mgr, "azure_sts_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
+            },
+        },
     }
 
     if (
@@ -452,9 +485,14 @@ def namespace_store_factory(
                 for nss_tup in nss_lst:
                     for _ in range(nss_tup[0] if isinstance(nss_tup[0], int) else 1):
                         if platform.lower() == "nsfs":
-                            uls_name = nss_tup[0] or create_unique_resource_name(
-                                constants.PVC.lower(), platform
-                            )
+                            # Use nss_tup[0] as PVC name only if it's a string
+                            # If it's an int (amount) or None, generate a unique name
+                            if isinstance(nss_tup[0], str) and nss_tup[0].strip():
+                                uls_name = nss_tup[0].strip()
+                            else:
+                                uls_name = create_unique_resource_name(
+                                    constants.PVC.lower(), platform
+                                )
                             pvc_factory_session(
                                 custom_data=template_pvc(uls_name, size=nss_tup[1])
                             )
