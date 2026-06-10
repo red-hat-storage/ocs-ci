@@ -168,6 +168,12 @@ class DeploymentUI(PageNavigator):
 
         """
         if config.DEPLOYMENT.get("local_storage"):
+            if csv.get_csvs_start_with_prefix(
+                constants.LOCAL_STORAGE_OPERATOR_NAME,
+                constants.LOCAL_STORAGE_NAMESPACE,
+            ):
+                logger.info("Local Storage operator already installed, skipping")
+                return
             self.navigate_operatorhub_page()
             logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
