@@ -1933,10 +1933,13 @@ class Deployment(object):
             )
             raise
 
-    def deploy_with_external_mode(self):
+    def deploy_with_external_mode(self, image=None):
         """
         This function handles the deployment of OCS on
         external/indpendent RHCS cluster
+
+        Args:
+            image (str): Image of ocs registry.
 
         """
         if config.EXTERNAL_MODE.get("rgw_secure"):
@@ -1950,7 +1953,7 @@ class Deployment(object):
                 logger.info("Creating namespace and operator group.")
                 run_cmd(f"oc apply -f {constants.OLM_YAML}")
             if not live_deployment:
-                create_catalog_source()
+                create_catalog_source(image)
             self.subscribe_ocs()
             operator_selector = get_selector_for_ocs_operator()
             subscription_plan_approval = config.DEPLOYMENT.get(
@@ -2195,7 +2198,7 @@ class Deployment(object):
                 label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
 
         if config.DEPLOYMENT["external_mode"]:
-            self.deploy_with_external_mode()
+            self.deploy_with_external_mode(image)
         else:
             self.deploy_ocs_via_operator(image)
             if config.ENV_DATA["mcg_only_deployment"]:
