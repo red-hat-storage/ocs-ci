@@ -193,6 +193,9 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
 
     """
 
+    def __init__(self):
+        super().__init__(namespace=config.ENV_DATA["cluster_namespace"])
+
     def run_provider_upgrade(self):
         """
         This method is for running the upgrade of ocs, metallb, acm and cnv opertaors
