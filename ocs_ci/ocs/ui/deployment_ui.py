@@ -918,9 +918,9 @@ class DeploymentUI(PageNavigator):
                 "Simulating encrypted Ceph OSD bluestore (dm-crypt) "
                 "on worker nodes after LSO installation"
             )
-            simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
+            assert simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
                 add_disks=False, clear_signatures=False
-            )
+            ), "Encrypted BlueStore (dm-crypt) simulation failed on worker nodes"
         if not csv.get_csvs_start_with_prefix(
             defaults.ODF_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]
         ):
