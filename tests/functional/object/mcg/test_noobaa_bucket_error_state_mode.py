@@ -238,9 +238,7 @@ class TestNooBaaBucketErrorStateMode:
     @skipif_mcg_only
     # TODO: Replace with actual Polarion ID
     # @polarion_id("OCS-XXXXX")
-    def test_data_bucket_resource_error_mode(
-        self, mcg_obj, awscli_pod, bucket_factory, request
-    ):
+    def test_data_bucket_resource_error_mode(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Trigger a resource-related bucket mode on a data bucket and
         verify the bucket enters NOT_ENOUGH_HEALTHY_RESOURCES mode.
@@ -260,7 +258,6 @@ class TestNooBaaBucketErrorStateMode:
             mcg_obj (MCG): MCG object with S3 connection credentials
             awscli_pod (Pod): Pod running the AWSCLI tools
             bucket_factory (func): Factory for creating MCG buckets
-            request: Pytest request object for finalizer registration
         """
         bucketclass_dict = {
             "interface": "OC",
@@ -272,13 +269,6 @@ class TestNooBaaBucketErrorStateMode:
             bucketclass=bucketclass_dict,
         )[0]
         backingstore = bucket.bucketclass.backingstores[0]
-
-        def cleanup():
-            bucket.delete()
-            bucket.bucketclass.delete()
-            backingstore.delete()
-
-        request.addfinalizer(cleanup)
 
         log.info(
             f"Created data bucket {bucket.name} with "
@@ -313,7 +303,6 @@ class TestNooBaaBucketErrorStateMode:
         bucket_factory,
         namespace_store_factory,
         cld_mgr,
-        request,
     ):
         """
         Trigger a resource-related bucket mode on a namespace bucket
@@ -334,7 +323,6 @@ class TestNooBaaBucketErrorStateMode:
             bucket_factory (func): Factory for creating MCG buckets
             namespace_store_factory (func): Factory for creating namespace stores
             cld_mgr (CloudManager): Cloud manager for cloud operations
-            request: Pytest request object for finalizer registration
         """
         nss_tup = ("oc", {"aws": [(2, "us-east-2")]})
         ns_stores = namespace_store_factory(*nss_tup)
@@ -351,14 +339,6 @@ class TestNooBaaBucketErrorStateMode:
             interface=bucketclass_dict["interface"],
             bucketclass=bucketclass_dict,
         )[0]
-
-        def cleanup():
-            ns_bucket.delete()
-            ns_bucket.bucketclass.delete()
-            for ns_store in ns_stores:
-                ns_store.delete()
-
-        request.addfinalizer(cleanup)
 
         log.info(f"Created namespace stores: {[ns.name for ns in ns_stores]}")
         log.info(f"Created namespace bucket {ns_bucket.name} with Multi policy")
@@ -385,9 +365,7 @@ class TestNooBaaBucketErrorStateMode:
     @skipif_mcg_only
     # TODO: Replace with actual Polarion ID
     # @polarion_id("OCS-XXXXX")
-    def test_data_bucket_capacity_error_mode(
-        self, mcg_obj, awscli_pod, bucket_factory, request
-    ):
+    def test_data_bucket_capacity_error_mode(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Gradually fill a data bucket's PV pool backing store and track
         bucket mode transitions through capacity error states.
@@ -407,7 +385,6 @@ class TestNooBaaBucketErrorStateMode:
             mcg_obj (MCG): MCG object with S3 connection credentials
             awscli_pod (Pod): Pod running the AWSCLI tools
             bucket_factory (func): Factory for creating MCG buckets
-            request: Pytest request object for finalizer registration
         """
         capacity_error_modes = {
             "LOW_CAPACITY",
@@ -431,13 +408,6 @@ class TestNooBaaBucketErrorStateMode:
             bucketclass=bucketclass_dict,
         )[0]
         backingstore = bucket.bucketclass.backingstores[0]
-
-        def cleanup():
-            bucket.delete()
-            bucket.bucketclass.delete()
-            backingstore.delete()
-
-        request.addfinalizer(cleanup)
 
         log.info(
             f"Created data bucket {bucket.name} with "
