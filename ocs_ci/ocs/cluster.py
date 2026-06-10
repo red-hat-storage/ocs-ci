@@ -313,7 +313,6 @@ class CephCluster(object):
         expected_mon_count = self.mon_count
         expected_mds_count = self.mds_count
 
-
         # If the monCount is updated to five, then change expected_mon_count value to five
         cephcluster_data = self.CEPHCLUSTER.get()
         monCount_val = cephcluster_data["items"][0]["spec"]["mon"]["count"]

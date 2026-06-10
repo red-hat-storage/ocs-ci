@@ -110,7 +110,7 @@ class TestFiveMonInCluster(ManageTest):
         return all_workers_labeled and sufficient_racks
 
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self, request):
         """
         Label each node in different failure domain, Here we make use of rack based failure domains
 
@@ -130,14 +130,8 @@ class TestFiveMonInCluster(ManageTest):
             self.racks = ["rack{}".format(i) for i in range(0, len(self.nodes))]
             self.assign_dummy_racks()
 
-    @pytest.fixture(autouse=True)
-    def teardown_fixture(self):
-        """
-        Fixture to ensure teardown runs after each test
+        request.addfinalizer(self.teardown)
 
-        """
-        yield
-        self.teardown()
 
     def teardown(self):
         """
@@ -157,21 +151,22 @@ class TestFiveMonInCluster(ManageTest):
                     log.error("Failed to scale mon count back to 3 during teardown")
                 else:
                     log.info("Successfully scaled mon count back to 3")
-        except Exception as e:
-            log.error(f"Error during mon count teardown: {e}")
+        except Exception:
+            log.error(f"Error during mon count teardown")
+            raise
 
         try:
             if self.are_rack_labels_present():
                 self.nodes = get_worker_nodes()
                 # We will scaledown the total racks back to three during teardown
-                self.racks = [
-                    "rack{}".format(i % (len(self.nodes) // 2))
-                    for i in range(len(self.nodes))
-                ]
+                target_racks = 3
+                self.racks = [f"rack{i % target_racks}" for i in range(len(self.nodes))]
                 log.info("Teardown: Reassigning rack labels")
                 self.assign_dummy_racks()
-        except Exception as e:
-            log.error(f"Error during rack label teardown: {e}")
+        except Exception:
+            log.error(f"Error during rack label teardown")
+            raise
+
 
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-5664")
@@ -365,23 +360,26 @@ class TestFiveMonInCluster(ManageTest):
 
         # Maintenance of the node (unschedule and drain)
         log.info(f"Chosen nodes for draining are {mon_nodes[0:2]} ")
-        drain_nodes(mon_nodes[0:2])
+        drained_nodes = mon_nodes[0:2]
+        drain_nodes(drained_nodes)
+        
+        try:
+            # avoid scenario when provisioners yet not been created (6 sec for creation)
+            retry(ResourceNotFoundError, tries=3, delay=3, backoff=3)(
+                pod.wait_for_pods_to_be_running
+            )(pod_names=provis_pod_names, raise_pod_not_found_error=True)
 
-        # avoid scenario when provisioners yet not been created (6 sec for creation)
-        retry(ResourceNotFoundError, tries=3, delay=3, backoff=3)(
-            pod.wait_for_pods_to_be_running
-        )(pod_names=provis_pod_names, raise_pod_not_found_error=True)
-
-        # Check basic cluster functionality by creating resources
-        # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
-        # run IO and delete the resources
-        self.sanity_helpers.create_resources(
-            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
-        )
-        self.sanity_helpers.delete_resources()
-
-        # Mark the node back to schedulable
-        schedule_nodes(mon_nodes[0:2])
+            # Check basic cluster functionality by creating resources
+            # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
+            # run IO and delete the resources
+            self.sanity_helpers.create_resources(
+                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+            )
+            self.sanity_helpers.delete_resources()
+        
+        finally:
+            # Mark the node back to schedulable
+            schedule_nodes(mon_nodes[0:2])
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check(tries=HEALTH_CHECK_RETRIES)
