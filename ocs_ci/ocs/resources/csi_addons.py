@@ -22,14 +22,17 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
-def _restart_csi_addons_controller(namespace: str) -> None:
+def restart_csi_addons_controller(namespace: str = "") -> None:
     """
     Restart the CSI Addons controller manager and wait for it to be Ready.
 
     Args:
         namespace (str): The namespace where the controller runs.
+            Defaults to the cluster namespace from config.
 
     """
+    if not namespace:
+        namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
     logger.info("Restarting CSI Addons controller manager pods...")
     pod.restart_pods_having_label(
         label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
@@ -50,10 +53,12 @@ def _restart_csi_addons_controller(namespace: str) -> None:
             break
 
 
-def update_csi_addons_config(key: str, value: str) -> None:
+def update_csi_addons_config(key: str, value: str, *, restart: bool = True) -> None:
     """
-    Create or update a key in the 'csi-addons-config' ConfigMap and restart
-    the CSI Addons controller manager so the change is picked up.
+    Create or update a key in the 'csi-addons-config' ConfigMap.
+
+    Optionally restarts the CSI Addons controller manager so the change
+    is picked up immediately.
 
     Handles both cases: ConfigMap exists / does not exist.
     Uses JSON merge patch to preserve existing keys.
@@ -61,6 +66,8 @@ def update_csi_addons_config(key: str, value: str) -> None:
     Args:
         key (str): The ConfigMap data key to set (e.g. 'cronjob-stagger-window').
         value (str): The value to assign to the key.
+        restart (bool): Whether to restart the controller after updating.
+            Defaults to True.
 
     Raises:
         CommandFailed: If the ConfigMap patch or create operation fails.
@@ -110,7 +117,10 @@ def update_csi_addons_config(key: str, value: str) -> None:
                 pass
 
     logger.info("ConfigMap '%s' updated: %s=%s", configmap_name, key, value)
-    _restart_csi_addons_controller(namespace)
+    if restart:
+        restart_csi_addons_controller(namespace)
+    else:
+        logger.info("Skipping controller restart (restart=False)")
 
 
 def remove_csi_addons_config_key(key: str) -> None:
@@ -163,7 +173,7 @@ def remove_csi_addons_config_key(key: str) -> None:
     )
 
     logger.info("Key '%s' removed from ConfigMap '%s'", key, configmap_name)
-    _restart_csi_addons_controller(namespace)
+    restart_csi_addons_controller(namespace)
 
 
 def get_csi_addons_config_value(key: str, default: str = "") -> str:
