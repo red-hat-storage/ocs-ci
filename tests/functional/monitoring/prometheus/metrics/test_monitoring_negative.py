@@ -8,7 +8,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import blue_squad, jira
+from ocs_ci.framework.pytest_customization.marks import blue_squad, jira, zstream_4_20_14
 from ocs_ci.framework.testlib import (
     tier3,
     skipif_managed_service,
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-1306")
 @skipif_managed_service
 @skipif_external_mode
+@zstream_4_20_14
 def test_monitoring_shows_mon_down(measure_stop_ceph_mon, threading_lock):
     """
     Make sure simple problems with MON daemons are reported via OCP Prometheus.
@@ -100,6 +101,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon, threading_lock):
 @pytest.mark.polarion_id("OCS-1307")
 @skipif_managed_service
 @skipif_external_mode
+@zstream_4_20_14
 def test_monitoring_shows_osd_down(measure_stop_ceph_osd, threading_lock):
     """
     Make sure simple problems with OSD daemons are reported via OCP Prometheus.
@@ -171,6 +173,7 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd, threading_lock):
 @tier3
 @pytest.mark.polarion_id("OCS-2734")
 @skipif_managed_service
+@zstream_4_20_14
 def test_ceph_metrics_presence_when_osd_down(measure_stop_ceph_osd, threading_lock):
     """
     Since ODF 4.9 ceph metrics covering disruptions will be available only
