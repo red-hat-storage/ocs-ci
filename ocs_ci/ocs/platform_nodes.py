@@ -113,6 +113,7 @@ class PlatformNodesFactory:
             "kubevirt_vm": KubevirtVMNodes,
             "ibm_cloud_ipi": IBMCloudIPI,
             "baremetal_ai": IBMCloudBMNodes,
+            "ibm_hci_ipi": IBMHCINode,
         }
 
     def get_nodes_platform(self):
@@ -142,6 +143,9 @@ class PlatformNodesFactory:
         if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ai":
                 platform += "_ai"
+        if config.ENV_DATA["platform"] == constants.IBM_HCI_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "ipi":
+                platform += "_ipi"
 
         return self.cls_map[platform]()
 
@@ -3874,3 +3878,355 @@ class HypershiftAWSNode(AWSNodes):
             node_list.append(HypershiftAWSNode(node_conf, constants.RHCOS))
 
         return node_list
+
+
+class IBMHCINode(object):
+    """
+    A base class for nodes related operations.
+    Should be inherited by specific platform classes
+
+    """
+
+    def __init__(self):
+        from ocs_ci.utility.ibm_hci import IBMHCI
+
+        self.ibm_hci = IBMHCI()
+
+        # Derive domain suffix from rack details
+        self.domain_suffix = self._get_domain_suffix()
+
+    def _get_domain_suffix(self):
+        """
+        Derive domain suffix automatically from existing cluster nodes
+
+        Returns:
+            str: Domain suffix for node names
+        """
+        # Try to derive from existing cluster nodes
+        try:
+            from ocs_ci.ocs.node import get_all_nodes
+
+            nodes = get_all_nodes()
+            if nodes:
+                # Get first node's FQDN and extract domain
+                first_node_name = nodes[0].name
+                # Node name format: nodename.domain.suffix
+                parts = first_node_name.split(".", 1)
+                if len(parts) > 1:
+                    # Return everything after the first dot
+                    return parts[1]
+        except Exception as e:
+            logger.debug(f"Could not derive domain from cluster nodes: {e}")
+
+        # Try to derive from rack details metadata
+        if self.ibm_hci.rack_details:
+            for rack_serial, rack_data in self.ibm_hci.rack_details.items():
+                rack_info = rack_data.get("rackInfo", {})
+                if "domain" in rack_info:
+                    return rack_info["domain"]
+
+        # Default fallback for IBM Fusion environments
+        return "fusion.tadn.ibm.com"
+
+    def get_data_volumes(self):
+        raise NotImplementedError("Get data volume functionality is not implemented")
+
+    def get_node_by_attached_volume(self, volume):
+        raise NotImplementedError(
+            "Get node by attached volume functionality is not implemented"
+        )
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop IBM HCI nodes using power management
+
+        Args:
+            nodes (list): The OCS objects of the nodes to stop
+            force (bool): True for force Node stop, False otherwise
+
+        """
+        logger.info(f"Stopping IBM HCI nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self.ibm_hci.power_off(node.name, force=force)
+            logger.info(f"Successfully stopped node: {node.name}")
+
+    def start_nodes(self, nodes):
+        """
+        Start IBM HCI nodes using power management
+
+        Args:
+            nodes (list): The OCS objects of the nodes to start
+
+        """
+        logger.info(f"Starting IBM HCI nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self.ibm_hci.power_on(node.name)
+            logger.info(f"Successfully started node: {node.name}")
+
+    def restart_nodes(self, nodes, wait=True):
+        """
+        Restart IBM HCI nodes using power reset
+
+        Args:
+            nodes (list): The OCS objects of the nodes to restart
+            wait (bool): Wait for nodes to be ready after restart
+
+        """
+        logger.info(f"Restarting IBM HCI nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self.ibm_hci.power_reset(node.name)
+            logger.info(f"Successfully restarted node: {node.name}")
+
+        if wait:
+            wait_for_nodes_status(
+                node_names=[n.name for n in nodes],
+                status=constants.NODE_READY,
+                timeout=300,
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart IBM HCI nodes by stopping and then starting them
+
+        Args:
+            nodes (list): The OCS objects of the nodes to restart
+            force (bool): Force the restart operation
+
+        """
+        logger.info(
+            f"Restarting IBM HCI nodes by stop and start: {[n.name for n in nodes]}"
+        )
+
+        # Stop nodes
+        for node in nodes:
+            self.ibm_hci.power_off(node.name, force=force)
+            logger.info(f"Successfully stopped node: {node.name}")
+
+        # Wait a bit before starting
+        time.sleep(10)
+
+        # Start nodes
+        for node in nodes:
+            self.ibm_hci.power_on(node.name)
+            logger.info(f"Successfully started node: {node.name}")
+
+        # Wait for nodes to be ready
+        wait_for_nodes_status(
+            node_names=[n.name for n in nodes], status=constants.NODE_READY, timeout=900
+        )
+
+    def power_on_all_nodes(self):
+        """
+        Power on all nodes in the cluster using rack details
+
+        This method works even when the cluster API is unreachable,
+        as it directly accesses nodes via IPMI/Redfish using rack details.
+        Useful for recovery scenarios where nodes are powered off.
+
+        Returns:
+            list: Names of nodes that were successfully powered on
+        """
+        logger.info("Powering on all nodes from rack details")
+        powered_on_nodes = []
+
+        for rack_serial, rack_data in self.ibm_hci.rack_details.items():
+            nodes_dict = rack_data.get("nodes", {})
+            for node_role, _node_info in nodes_dict.items():
+                # Construct full node name using configurable domain suffix
+                node_name = f"{node_role}.{rack_serial}.{self.domain_suffix}"
+                try:
+                    logger.info(f"Powering on node: {node_name}")
+                    # Use power_on_direct which doesn't require API access
+                    result = self.ibm_hci.power_on_direct(node_name)
+                    if result:
+                        powered_on_nodes.append(node_name)
+                        logger.info(f"Successfully powered on: {node_name}")
+                    else:
+                        logger.warning(f"Failed to power on {node_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to power on {node_name}: {e}")
+
+        return powered_on_nodes
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        raise NotImplementedError("Detach volume functionality is not implemented")
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError("Attach volume functionality is not implemented")
+
+    def create_and_attach_volume(self, node, size, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volume functionality is not implemented"
+        )
+
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volumes functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        raise NotImplementedError(
+            "Wait for volume attach functionality is not implemented"
+        )
+
+    def _is_api_unavailable_error(self, error):
+        """
+        Check if an error indicates API unavailability
+
+        Args:
+            error (Exception or str): The error to check
+
+        Returns:
+            bool: True if error indicates API is unavailable, False otherwise
+        """
+        error_msg = str(error).lower()
+        api_unavailable_indicators = [
+            "tls handshake timeout",
+            "connection refused",
+            "unable to connect",
+            "unauthorized",
+            "connection reset",
+            "timeout",
+            "connection timed out",
+            "no route to host",
+            "network is unreachable",
+        ]
+        return any(indicator in error_msg for indicator in api_unavailable_indicators)
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Teardown method to ensure all nodes are powered on and cluster is accessible
+
+        This method is designed to recover the cluster even when the API is down.
+        It powers on all nodes directly via IPMI/Redfish and waits for cluster recovery.
+        Includes automatic re-login if authentication is lost.
+        """
+        from ocs_ci.helpers.helpers import refresh_oc_login_connection
+
+        logger.info(
+            "Teardown: Ensuring all nodes are powered on and cluster is accessible"
+        )
+
+        try:
+            # Power on all nodes (works even if API is down)
+            powered_on_nodes = self.power_on_all_nodes()
+            logger.info(f"Powered on {len(powered_on_nodes)} nodes")
+
+            # Wait for nodes to start booting
+            logger.info("Waiting 30 seconds for nodes to start booting...")
+            time.sleep(30)
+
+            # Try to verify nodes are ready (may fail if API still down)
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    logger.info(
+                        f"Attempting to verify node status via API (attempt {attempt + 1}/{max_retries})..."
+                    )
+
+                    # Try to re-login if we lost authentication
+                    try:
+                        refresh_oc_login_connection()
+                        logger.info("Successfully re-authenticated to cluster")
+                    except Exception as login_error:
+                        if self._is_api_unavailable_error(login_error):
+                            logger.warning(
+                                f"API unavailable (attempt {attempt + 1}): {str(login_error)[:100]}"
+                            )
+                        else:
+                            logger.warning(
+                                f"Could not re-authenticate (attempt {attempt + 1}): {login_error}"
+                            )
+                        if attempt < max_retries - 1:
+                            logger.info("Waiting 30 seconds before retry...")
+                            time.sleep(30)
+                            continue
+
+                    # Try to check node status
+                    wait_for_nodes_status(timeout=900, status=constants.NODE_READY)
+                    logger.info("All nodes are ready - cluster is accessible")
+                    break
+
+                except Exception as e:
+                    if self._is_api_unavailable_error(e):
+                        logger.warning(
+                            f"API unavailable (attempt {attempt + 1}): {str(e)[:100]}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Could not verify node status (attempt {attempt + 1}): {e}"
+                        )
+                    if attempt < max_retries - 1:
+                        logger.info("Waiting 30 seconds before retry...")
+                        time.sleep(30)
+                    else:
+                        logger.error(
+                            "Could not verify cluster status via API after all retries. "
+                            "Nodes have been powered on but cluster may not be fully recovered."
+                        )
+                        raise RuntimeError(
+                            f"Failed to verify cluster status after {max_retries} attempts. "
+                            "Nodes are powered on but API verification failed."
+                        )
+
+        except Exception as e:
+            logger.error(f"Critical error during teardown: {e}")
+            # Re-raise to propagate failure to test harness
+            raise
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError("Create nodes functionality not implemented")
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def read_default_config(self, default_config_path):
+        """
+        Commonly used function to read default config
+
+        Args:
+            default_config_path (str): Path to default config file
+
+        Returns:
+            dict: of default config loaded
+
+        """
+        assert os.path.exists(default_config_path), "Config file doesnt exists"
+
+        with open(default_config_path) as f:
+            default_config_dict = yaml.safe_load(f)
+
+        return default_config_dict
+
+    def terminate_nodes(self, nodes, wait=True):
+        raise NotImplementedError("terminate nodes functionality is not implemented")
+
+    def wait_for_nodes_to_stop(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to terminate functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_stop_or_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop or terminate functionality is not implemented"
+        )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        raise NotImplementedError(
+            "disable enable node network temporarily functionality is not implemented"
+        )
