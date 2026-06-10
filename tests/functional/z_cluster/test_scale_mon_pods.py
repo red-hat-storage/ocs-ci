@@ -360,7 +360,7 @@ class TestFiveMonInCluster(ManageTest):
         log.info(f"Chosen nodes for draining are {mon_nodes[0:2]} ")
         drained_nodes = mon_nodes[0:2]
         drain_nodes(drained_nodes)
-        
+
         try:
             # avoid scenario when provisioners yet not been created (6 sec for creation)
             retry(ResourceNotFoundError, tries=3, delay=3, backoff=3)(
@@ -374,7 +374,7 @@ class TestFiveMonInCluster(ManageTest):
                 pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
             )
             self.sanity_helpers.delete_resources()
-        
+            
         finally:
             # Mark the node back to schedulable
             schedule_nodes(mon_nodes[0:2])
