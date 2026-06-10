@@ -502,7 +502,7 @@ class TestObjectBrowserClientProviderUI(ManageTest):
 
         logger.info("Test completed successfully - Object browser isolation verified")
 
-    @polarion_id("OCS-7991")
+    @polarion_id("OCS-7994")
     def test_object_browser_upload_download_folder(self, project_factory):
         """
         Test upload and download folder with objects via object browser.
@@ -637,11 +637,15 @@ class TestObjectBrowserClientProviderUI(ManageTest):
                 logger.test_step("Step 3: Downloading object and verifying integrity")
 
                 # Navigate into folder
-                bucket_ui.do_click((f"//a[contains(text(), '{folder_name}')]", By.XPATH))
+                bucket_ui.do_click(
+                    (f"//a[contains(text(), '{folder_name}')]", By.XPATH)
+                )
                 time.sleep(2)
 
                 # Download file1.txt via S3
-                download_path = os.path.join(tempfile.gettempdir(), "downloaded_file1.txt")
+                download_path = os.path.join(
+                    tempfile.gettempdir(), "downloaded_file1.txt"
+                )
                 s3_client.download_file(
                     bucket_name, f"{folder_name}/file1.txt", download_path
                 )
@@ -667,17 +671,19 @@ class TestObjectBrowserClientProviderUI(ManageTest):
                 if "Contents" in response:
                     for obj in response["Contents"]:
                         key = obj["Key"]
-                        file_path = os.path.join(
-                            download_folder, os.path.basename(key)
-                        )
+                        file_path = os.path.join(download_folder, os.path.basename(key))
                         s3_client.download_file(bucket_name, key, file_path)
                         logger.info("Downloaded: %s", key)
 
                 # Verify downloaded folder contents
                 downloaded_file1 = os.path.join(download_folder, "file1.txt")
                 downloaded_file2 = os.path.join(download_folder, "file2.txt")
-                assert os.path.exists(downloaded_file1), "file1.txt not in downloaded folder"
-                assert os.path.exists(downloaded_file2), "file2.txt not in downloaded folder"
+                assert os.path.exists(
+                    downloaded_file1
+                ), "file1.txt not in downloaded folder"
+                assert os.path.exists(
+                    downloaded_file2
+                ), "file2.txt not in downloaded folder"
 
                 with open(downloaded_file1, "rb") as f:
                     assert f.read() == test_data1, "file1.txt content mismatch"
@@ -687,13 +693,16 @@ class TestObjectBrowserClientProviderUI(ManageTest):
 
                 # Cleanup downloaded folder
                 import shutil
+
                 shutil.rmtree(download_folder)
 
                 # Step 5: Delete object from folder via UI
                 logger.test_step("Step 5: Deleting object from folder via UI")
 
                 # Delete file1.txt via S3 (UI delete requires complex interactions)
-                s3_client.delete_object(Bucket=bucket_name, Key=f"{folder_name}/file1.txt")
+                s3_client.delete_object(
+                    Bucket=bucket_name, Key=f"{folder_name}/file1.txt"
+                )
                 logger.info("Deleted file1.txt from folder")
                 time.sleep(2)
 
@@ -722,19 +731,22 @@ class TestObjectBrowserClientProviderUI(ManageTest):
                 response = s3_client.list_objects_v2(
                     Bucket=bucket_name, Prefix=f"{folder_name}/"
                 )
-                assert "Contents" not in response, "Folder should be empty after deletion"
+                assert (
+                    "Contents" not in response
+                ), "Folder should be empty after deletion"
                 logger.info("✓ Folder deleted successfully")
 
         finally:
             # Cleanup temp folder
             import shutil
+
             if os.path.exists(temp_folder):
                 shutil.rmtree(temp_folder)
                 logger.info("Cleaned up temporary folder")
 
         logger.info("Test completed successfully")
 
-    @polarion_id("OCS-7992")
+    @polarion_id("OCS-7995")
     def test_object_browser_share_object(self, project_factory):
         """
         Test sharing an object via presigned URL in object browser.
@@ -832,12 +844,12 @@ class TestObjectBrowserClientProviderUI(ManageTest):
             import requests
 
             response = requests.get(presigned_url, verify=False)
-            assert response.status_code == 200, (
-                f"Presigned URL returned status {response.status_code}"
-            )
-            assert response.content == test_object_data, (
-                "Downloaded content does not match original"
-            )
+            assert (
+                response.status_code == 200
+            ), f"Presigned URL returned status {response.status_code}"
+            assert (
+                response.content == test_object_data
+            ), "Downloaded content does not match original"
             logger.info("✓ Presigned URL is accessible and returns correct content")
 
         logger.info("Test completed successfully")
