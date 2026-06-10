@@ -788,6 +788,103 @@ CEPH_DAEMON_LABEL_BY_COMPONENT = {
     "mds": MDS_APP_LABEL,
     "rgw": RGW_APP_LABEL,
 }
+# CephX authentication key rotation (Rook CephCluster spec.security.cephx)
+CEPHX_KEY_IDENTIFIER_ANNOTATION = "cephx-key-identifier"
+CEPHX_STATUS_ANNOTATION = "cephx-status"
+OSD_CEPHX_INIT_CONTAINER_NAMES = ("cephx-keyring-update",)
+OSD_STORE_LABEL = "osd-store"
+OSD_CEPHX_INIT_SUCCESS_LOG = "got latest cephx key for OSD successfully"
+OSD_CEPHX_GET_OR_CREATE_LOG = "auth get-or-create"
+OSD_ENCRYPTED_LABEL = "encrypted"
+OSD_LOCKBOX_AUTH_PREFIX = "client.osd-lockbox."
+OSD_ACTIVATE_INIT_CONTAINER = "activate"
+OSD_LOCKBOX_INIT_SUCCESS_LOG = "got latest cephx lockbox key for OSD successfully"
+OSD_LOCKBOX_GET_OR_CREATE_LOG = "auth get-or-create"
+OSD_LOCKBOX_OPERATOR_LOG = "rotating osd-lockbox cephx key of encrypted OSD"
+ROOK_OSD_UUID_ENV = "ROOK_OSD_UUID"
+CEPHX_BOOTSTRAP_AUTH_PREFIX = "client.bootstrap-"
+CEPHX_BOOTSTRAP_KEYS_TO_CLEANUP = (
+    "client.bootstrap-mds",
+    "client.bootstrap-mgr",
+    "client.bootstrap-rbd",
+    "client.bootstrap-rbd-mirror",
+    "client.bootstrap-rgw",
+    "client.bootstrap-osd",
+)
+CEPHX_BOOTSTRAP_NON_OSD_KEYS = tuple(
+    key for key in CEPHX_BOOTSTRAP_KEYS_TO_CLEANUP if key != "client.bootstrap-osd"
+)
+CEPHX_BOOTSTRAP_DELETED_OPERATOR_LOG = "successfully deleted"
+CEPHX_BOOTSTRAP_OPERATOR_LOG_TOKEN = "bootstrap key"
+CEPHX_BOOTSTRAP_DELETION_WARNING_PATTERNS = (
+    "failed to delete bootstrap",
+    "error deleting bootstrap",
+    "bootstrap key deletion failed",
+)
+CEPHX_LOCKBOX_ROTATION_FAILURE_LOG_PATTERNS = (
+    "error",
+    "failed",
+    "unable to",
+    "could not",
+    "connection refused",
+    "no route to host",
+    "timed out",
+)
+CEPHX_DEFAULT_ALLOWED_CIPHERS = ("aes", "aes256k")
+CEPHX_CUSTOM_ALLOWED_CIPHERS = ("aes256k",)
+OCS_METRICS_EXPORTER_PORT = 9443
+OCS_METRICS_EXPORTER_METRICS_PATH = "/metrics"
+OCS_METRICS_EXPORTER_CONTAINER = "ocs-metrics-exporter"
+AUTH_BAD_KEY_LOG = "AUTH_BAD_KEY"
+OCS_METRICS_EXPORTER_METRIC_PREFIXES = ("ocs_storagecluster", "ceph_")
+CEPHX_CUSTOM_KEY_TYPE = "aes256k"
+CEPHX_INSECURE_SERVICE_KEY_TYPE_WARN = "AUTH_INSECURE_SERVICE_KEY_TYPE"
+CEPHX_AUTH_ROTATE_KEY_TYPE_OPERATOR_LOG = "--key-type"
+# Substrings that indicate actual CephX auth rotation activity.
+# Do not use broad phrases like "cephx key rotation" — they also match
+# enablement logs such as "enabling cephx key rotation because the cluster
+# is not upgrading" and false-fail idempotency checks.
+CEPHX_KEY_ROTATION_OPERATOR_LOG_PATTERNS = (
+    "auth rotate",
+    "rotating cephx",
+    "rotating ceph auth key",
+)
+CEPHX_MON_AUTH_ROTATION_LOG_PATTERN = r'rotating ceph auth key.*"mon\.'
+CEPHX_MON_SECRET_UPDATE_LOG = "updating mon secret"
+CEPHX_MON_AUTH_GET_LOG_PATTERN = r"auth get mon"
+MANAGED_MONS_KEYRING_SECRET = "rook-ceph-mons-keyring"  # pragma: allowlist secret
+CEPHX_ROTATION_QUORUM_ERROR_PATTERNS = (
+    "quorum",
+    "cannot rotate",
+    "not in quorum",
+    "mon quorum",
+)
+CEPHX_OSD_ROTATION_DEFERRED_PATTERNS = (
+    "pg",
+    "not clean",
+    "not healthy",
+    "defer",
+    "skipping osd",
+    "waiting for pgs",
+)
+CEPHX_OSD_AUTH_ROTATION_LOG_PATTERN = r'rotating ceph auth key.*"osd\.'
+CEPHX_RECONCILE_FAILURE_PATTERNS = (
+    "failed to rotate",
+    "error rotating",
+    "reconcile failed",
+)
+# OSD-auth-delete inject: match the OSD rotate failure, not generic admin rotate
+# restart noise or normal Progressing reconcile messages.
+CEPHX_OSD_AUTH_ROTATION_FAILURE_PATTERNS = (
+    "failed to rotate cephx key for osd",
+    "failed auth rotate osd.",
+)
+ROOK_CEPHX_KEYROTATION_DAEMONS = ("mon", "mgr", "osd", "mds")
+CEPHCLUSTER_CEPHX_KEYROTATION_STATUS_ENTITIES = ("mon", "mgr", "osd")
+ROOK_CEPHX_KEYROTATION_DAEMON_LABELS = {
+    daemon: CEPH_DAEMON_LABEL_BY_COMPONENT[daemon]
+    for daemon in ROOK_CEPHX_KEYROTATION_DAEMONS
+}
 EXPORTER_APP_LABEL = "app=rook-ceph-exporter"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 ODF_CONSOLE = "app=odf-console"
@@ -1692,6 +1789,15 @@ ALERT_CEPHFS_ORPHANED_SNAPSHOT = "CephFSOrphanedSnapshot"
 CEPHFS_SNAPSHOT_STATE_ORPHANED = "orphaned"
 CEPHFS_SNAPSHOT_STATE_BOUND = "bound"
 ALERT_MDSXATTR = "CephXattrSetLatency"
+ALERT_CEPHX_KEY_GENERATION_FAILED = "CephxKeyGenerationFailed"
+OCS_CEPHX_DAEMON_KEY_ROTATION_MISMATCH_METRIC = "ocs_cephx_daemon_key_rotation_mismatch"
+CEPHX_CREATED_WITH_FEATURES_ANNOTATION = "ocs.openshift.io/created-with-cephx-features"
+CEPHX_CREATED_AT_DF_VERSION_ANNOTATION = "ocs.openshift.io/created-at-df-version"
+DESIRED_CEPHX_KEY_GEN_ENV = "DESIRED_CEPHX_KEY_GEN"
+DEFAULT_DESIRED_CEPHX_KEY_GEN = 2
+CEPHX_KEY_GENERATION_DECREASE_ERROR = "keyGeneration cannot be decreased"
+CEPHX_KEY_GENERATION_REMOVE_ERROR = "keyGeneration cannot be removed once set"
+CEPHX_KEY_GENERATION_TYPE_ERROR = "must be of type integer"
 
 # DR Pending Cleanup Alert (OCS 4.22+)
 ALERT_APPLICATION_CLEANUP_PENDING = "ApplicationCleanupPending"

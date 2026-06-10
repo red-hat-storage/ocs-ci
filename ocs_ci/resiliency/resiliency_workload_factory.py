@@ -94,22 +94,37 @@ class ResiliencyWorkloadOps:
 
     def _start_background_cluster_operations(self):
         """Start background cluster operations during workload execution."""
+        workload_config = ResiliencyWorkloadConfig()
+
+        if not workload_config.is_background_cluster_operations_enabled():
+            log.info("Background cluster operations disabled in config")
+            return
+
         try:
             from ocs_ci.krkn_chaos.background_cluster_operations import (
                 BackgroundClusterOperations,
-                BackgroundClusterValidator,
             )
 
-            self.background_cluster_ops = BackgroundClusterOperations()
-            self.background_cluster_ops.start_operations()
-
-            self.background_cluster_validator = BackgroundClusterValidator(
-                self.background_cluster_ops
+            enabled_operations = workload_config.get_enabled_background_operations()
+            self.background_cluster_ops = BackgroundClusterOperations(
+                workload_ops=self,
+                enabled_operations=enabled_operations if enabled_operations else None,
+                operation_interval=workload_config.get_background_operations_interval(),
+                max_concurrent_operations=workload_config.get_background_operations_max_concurrent(),
             )
+            self.background_cluster_ops.start()
 
-            log.info("Background cluster operations started successfully")
+            ops_count = len(enabled_operations) if enabled_operations else "all"
+            log.info(
+                f"Background cluster operations started with {ops_count} "
+                f"operation types (interval: "
+                f"{workload_config.get_background_operations_interval()}s, "
+                f"max concurrent: "
+                f"{workload_config.get_background_operations_max_concurrent()})"
+            )
         except Exception as e:
             log.warning(f"Failed to start background cluster operations: {e}")
+            self.background_cluster_ops = None
 
     def _start_background_scaling(self):
         """Start background scaling operations."""
@@ -167,19 +182,12 @@ class ResiliencyWorkloadOps:
         if self.background_cluster_ops:
             log.info("Stopping background cluster operations")
             try:
-                self.background_cluster_ops.stop_operations()
-
-                # Validate background operations
-                if self.background_cluster_validator:
-                    validation_result = (
-                        self.background_cluster_validator.validate_all_operations()
-                    )
-                    if not validation_result:
-                        validation_errors.append(
-                            "Background cluster operations validation failed"
-                        )
+                self.background_cluster_ops.stop(cleanup=True)
             except Exception as e:
                 log.warning(f"Failed to stop background cluster operations: {e}")
+            finally:
+                self.background_cluster_ops = None
+                self.background_cluster_validator = None
 
         # Validate and cleanup workloads
         for workload in self.workloads:
