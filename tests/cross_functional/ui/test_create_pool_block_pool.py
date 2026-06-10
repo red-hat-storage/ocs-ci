@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_disconnected_cluster,
     green_squad,
     jira,
+    zstream_4_20_14,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
@@ -51,6 +52,7 @@ need_to_delete = []
 )
 @skipif_hci_provider_or_client
 @jira("DFBUGS-4385")
+@zstream_4_20_14
 class TestPoolUserInterface(ManageTest):
     """
     Test Pool User Interface
