@@ -132,7 +132,6 @@ class TestFiveMonInCluster(ManageTest):
 
         request.addfinalizer(self.teardown)
 
-
     def teardown(self):
         """
         Scaledown the mon pods back to three and change failure domain values to three
@@ -152,7 +151,7 @@ class TestFiveMonInCluster(ManageTest):
                 else:
                     log.info("Successfully scaled mon count back to 3")
         except Exception:
-            log.error(f"Error during mon count teardown")
+            log.error("Error during mon count teardown")
             raise
 
         try:
@@ -164,9 +163,8 @@ class TestFiveMonInCluster(ManageTest):
                 log.info("Teardown: Reassigning rack labels")
                 self.assign_dummy_racks()
         except Exception:
-            log.error(f"Error during rack label teardown")
+            log.error("Error during rack label teardown")
             raise
-
 
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-5664")
