@@ -30,7 +30,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def select_osd_node_name():
@@ -43,7 +43,7 @@ def select_osd_node_name():
     """
     osd_node_names = node.get_osd_running_nodes()
     osd_node_name = random.choice(osd_node_names)
-    log.info(f"Selected OSD is {osd_node_name}")
+    logger.info(f"Selected OSD is {osd_node_name}")
     return osd_node_name
 
 
@@ -69,7 +69,7 @@ def check_node_replacement_verification_steps(
     num_of_old_ocs_nodes = len(ocs_nodes)
 
     if num_of_old_osd_nodes <= min_osd_nodes:
-        log.info(
+        logger.info(
             f"We have {num_of_old_osd_nodes} osd nodes in the cluster - which is the minimum number "
             f"of osd nodes. Wait for the new created worker node to appear in the osd nodes"
         )
@@ -86,39 +86,44 @@ def check_node_replacement_verification_steps(
                 new_osd_node_name = new_node_name
         else:
             new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
-        log.info(f"Newly created OSD name: {new_osd_node_name}")
+        logger.info(f"Newly created OSD name: {new_osd_node_name}")
+        logger.assertion(f"New OSD node found: {bool(new_osd_node_name)}")
         assert new_osd_node_name, (
             f"New osd node not found after the node replacement process "
             f"while waiting for {timeout} seconds"
         )
     elif num_of_old_osd_nodes < num_of_old_ocs_nodes:
         num_of_extra_old_ocs_nodes = num_of_old_ocs_nodes - num_of_old_osd_nodes
-        log.info(
+        logger.info(
             f"We have {num_of_extra_old_ocs_nodes} existing extra OCS worker nodes in the cluster"
             f"Wait for one of the existing OCS nodes to appear in the osd nodes"
         )
         timeout = 600
         new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
+        logger.assertion(f"New OSD node found: {bool(new_osd_node_name)}")
         assert new_osd_node_name, (
             f"New osd node not found after the node replacement process "
             f"while waiting for {timeout} seconds"
         )
     else:
-        log.info(
+        logger.info(
             f"We have more than {min_osd_nodes} osd nodes in the cluster, and also we don't have "
             f"an existing extra OCS worker nodes in the cluster. Don't wait for the new osd node"
         )
         new_osd_node_name = None
 
+    logger.assertion("Running ceph-side node replacement verification steps")
     assert node.node_replacement_verification_steps_ceph_side(
         old_node_name, new_node_name, new_osd_node_name
     )
+    logger.assertion("Running user-side node replacement verification steps")
     assert node.node_replacement_verification_steps_user_side(
         old_node_name, new_node_name, new_osd_node_name, old_osd_ids
     )
 
     # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
     if is_ms_provider_cluster() and config.is_consumer_exist():
+        logger.assertion("Consumer verification after provider node replacement")
         assert node.consumers_verification_steps_after_provider_node_replacement()
 
 
@@ -173,18 +178,26 @@ def delete_and_create_osd_node(osd_node_name):
                 new_node_name = node.delete_and_create_osd_node_vsphere_upi(
                     osd_node_name, use_existing_node=use_existing_node
                 )
+        else:
+            msg_invalid_platform = (
+                "ocs-ci config 'platform' value "
+                f"'{config.ENV_DATA['platform']}' is not supported for UPI "
+                f"deployment, results of this test run are all invalid."
+            )
+            logger.error(msg_invalid_platform)
+            pytest.fail(msg_invalid_platform)
     elif dt == constants.MANAGED_CP_DEPL_TYPE:
         new_node_name = node.delete_and_create_osd_node_managed_cp(osd_node_name)
     else:
-        log.error(msg_invalid)
+        logger.error(msg_invalid)
         pytest.fail(msg_invalid)
 
-    log.info("Start node replacement verification steps...")
+    logger.info("Start node replacement verification steps...")
     check_node_replacement_verification_steps(
         osd_node_name, new_node_name, old_osd_node_names, old_osd_ids
     )
 
-    log.info("Clear crash warnings and osd removal leftovers")
+    logger.info("Clear crash warnings and osd removal leftovers")
     clear_crash_warning_and_osd_removal_leftovers()
 
 
@@ -203,9 +216,12 @@ class TestNodeReplacementWithIO(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self):
-        log.info("Clear crash warnings and osd removal leftovers")
-        clear_crash_warning_and_osd_removal_leftovers()
+    def teardown(self, request):
+        def finalizer():
+            logger.info("Clear crash warnings and osd removal leftovers")
+            clear_crash_warning_and_osd_removal_leftovers()
+
+        request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
     def init_sanity(self):
@@ -228,42 +244,43 @@ class TestNodeReplacementWithIO(ManageTest):
 
         """
 
-        # Get worker nodes
+        logger.test_step("Get worker nodes and select OSD node for replacement")
         worker_node_list = node.get_worker_nodes()
-        log.info(f"Current available worker nodes are {worker_node_list}")
+        logger.info(f"Current available worker nodes are {worker_node_list}")
 
         osd_node_name = select_osd_node_name()
 
-        log.info("Creating dc pod backed with rbd pvc and running io in bg")
+        logger.test_step("Create RBD and CephFS DC pods with background IO")
+        logger.info("Creating dc pod backed with rbd pvc and running io in bg")
         rbd_dc_pod = deployment_pod_factory(interface=constants.CEPHBLOCKPOOL, size=20)
         pod.run_io_in_bg(rbd_dc_pod, expect_to_fail=False, fedora_dc=True)
 
-        log.info("Creating dc pod backed with cephfs pvc and running io in bg")
+        logger.info("Creating dc pod backed with cephfs pvc and running io in bg")
         cephfs_dc_pod = deployment_pod_factory(
             interface=constants.CEPHFILESYSTEM, size=20
         )
         pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
 
+        logger.test_step("Delete and create OSD node")
         delete_and_create_osd_node(osd_node_name)
 
-        # Creating Resources
-        log.info("Creating Resources using sanity helpers")
+        logger.test_step("Create and delete sanity resources")
+        logger.info("Creating Resources using sanity helpers")
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
-        # Deleting Resources
         self.sanity_helpers.delete_resources()
 
-        # Verify everything running fine
-        log.info("Verifying All resources are Running and matches expected result")
+        logger.test_step("Verify cluster health and StorageCluster topology")
+        logger.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=120)
 
-        # Verify OSD is encrypted
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
 
+        logger.assertion("Verifying StorageCluster node topology is valid")
         assert (
-            verify_storagecluster_nodetopology
+            verify_storagecluster_nodetopology()
         ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
 
@@ -283,7 +300,7 @@ class TestNodeReplacement(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def finalizer():
-            log.info("Clear crash warnings and osd removal leftovers")
+            logger.info("Clear crash warnings and osd removal leftovers")
             clear_crash_warning_and_osd_removal_leftovers()
 
         request.addfinalizer(finalizer)
@@ -302,24 +319,26 @@ class TestNodeReplacement(ManageTest):
         Knip-894 Node Replacement proactive(without IO running)
 
         """
+        logger.test_step("Select OSD node and perform node replacement")
         osd_node_name = select_osd_node_name()
         delete_and_create_osd_node(osd_node_name)
 
-        # Verify everything running fine
-        log.info("Verifying All resources are Running and matches expected result")
+        logger.test_step("Verify cluster health and data rebalance")
+        logger.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers.health_check(tries=120)
 
-        # Verify OSD encrypted
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
 
         ceph_cluster_obj = CephCluster()
+        logger.assertion("Verifying Ceph data rebalance completes within 1800s")
         assert ceph_cluster_obj.wait_for_rebalance(
             timeout=1800
         ), "Data re-balance failed to complete"
 
+        logger.assertion("Verifying StorageCluster node topology is valid")
         assert (
-            verify_storagecluster_nodetopology
+            verify_storagecluster_nodetopology()
         ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
 
@@ -345,25 +364,36 @@ class TestNodeReplacementTwice(ManageTest):
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
-        log.info("Clear crash warnings and osd removal leftovers")
-        clear_crash_warning_and_osd_removal_leftovers()
+        def finalizer():
+            logger.info("Clear crash warnings and osd removal leftovers")
+            clear_crash_warning_and_osd_removal_leftovers()
+
+        request.addfinalizer(finalizer)
 
     @skipif_ibm_cloud_managed
     def test_nodereplacement_twice(self):
         for i in range(2):
-            # Get random node name for replacement
+            logger.info(f"=== Node replacement iteration {i + 1}/2 ===")
+
+            logger.test_step("Select OSD node and perform node replacement")
             node_name_to_delete = select_osd_node_name()
-            log.info(f"Selected node for replacement: {node_name_to_delete}")
+            logger.info(f"Selected node for replacement: {node_name_to_delete}")
             delete_and_create_osd_node(node_name_to_delete)
+
+            logger.test_step("Verify deleted node is removed from ceph osd tree")
             ct_pod = pod.get_ceph_tools_pod()
             tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
-            log.info("ceph osd tree output:")
-            log.info(tree_output)
+            logger.info("ceph osd tree output:")
+            logger.info(tree_output)
 
-            assert not (
-                node_name_to_delete in str(tree_output)
+            logger.assertion(
+                f"Deleted node '{node_name_to_delete}' not in ceph osd tree"
+            )
+            assert node_name_to_delete not in str(
+                tree_output
             ), f"Deleted host {node_name_to_delete} still exist in ceph osd tree after node replacement"
 
+            logger.assertion("Verifying StorageCluster node topology is valid")
             assert (
                 verify_storagecluster_nodetopology
             ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
