@@ -6,10 +6,9 @@ This module provides fixtures for OLS test setup and teardown.
 import logging
 import pytest
 
-from ocs_ci.helpers.ols_helpers import cleanup_ols_operator, do_deploy_ols
+from ocs_ci.helpers.ols_helpers import cleanup_ols_operator
 
 log = logging.getLogger(__name__)
-
 
 
 @pytest.fixture(scope="class")
