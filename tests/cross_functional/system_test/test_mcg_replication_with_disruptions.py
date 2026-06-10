@@ -270,7 +270,6 @@ class TestMCGReplicationWithDisruptions(E2ETest):
 
 @system_test
 @magenta_squad
-@skipif_vsphere_ipi
 class TestLogBasedReplicationWithDisruptions:
     @retry(Exception, tries=10, delay=5)
     def delete_objs_in_batch(self, objs_to_delete, mockup_logger, source_bucket):

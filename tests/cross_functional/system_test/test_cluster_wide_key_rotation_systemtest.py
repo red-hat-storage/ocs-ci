@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
     ignore_leftovers,
     encryption_at_rest_required,
+    jira,
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.keyrotation_helper import (
@@ -25,6 +26,7 @@ log = logging.getLogger(__name__)
 @system_test
 @ignore_leftovers
 @encryption_at_rest_required
+@jira("DFBUGS-5769")
 class TestKeyRotationWithClusterFull(E2ETest):
     @pytest.fixture(autouse=True)
     def init_sanity(self):
