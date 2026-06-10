@@ -83,7 +83,10 @@ def do_deploy_ols():
 
     # Check if OLS is already installed (short timeout / fast poll)
     try:
-        if validate_ols_operator_installed(timeout=60, interval=5):
+        if validate_ols_operator_installed(
+            timeout=constants.OLS_OPERATOR_QUICK_CHECK_TIMEOUT_SEC,
+            interval=constants.OLS_OPERATOR_QUICK_CHECK_INTERVAL_SEC,
+        ):
             log.info("OLS Operator already installed")
             return True
     except ResourceWrongStatusException:

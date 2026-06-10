@@ -1,5 +1,19 @@
+import logging
+
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
+
+log = logging.getLogger(__name__)
+
+# Phrases indicating the model could not provide an answer
+OLS_UNCERTAINTY_PHRASES = [
+    "not available",
+    "no information",
+    "not found",
+    "i don't know",
+    "i don't have",
+    "no data",
+]
 
 
 def load_test_data():
@@ -8,7 +22,12 @@ def load_test_data():
     Load Q&A cases from ``qa-expectations.yaml`` (via ``constants.OLS_QA_EXPECTATIONS``).
 
     Returns:
-        list or dict: Parsed YAML (typically a list of question item dicts).
+        list: Parsed YAML containing a list of question dicts with keys:
+            id, type, question, expected_answer, required_terms.
+
+    Raises:
+        FileNotFoundError: If the template file is missing.
+        yaml.YAMLError: If the rendered YAML is malformed.
 
     """
     return templating.generate_yaml_from_jinja2_template_with_data(
@@ -19,7 +38,7 @@ def load_test_data():
 def calculate_accuracy(answer, keywords):
     """
 
-    Calculates accuracy based on the keywords given in "qa-expectation.yaml".
+    Calculates accuracy based on the keywords given in "qa-expectations.yaml".
 
     Args:
         answer (str): Model response text.
@@ -30,9 +49,6 @@ def calculate_accuracy(answer, keywords):
             ``keywords`` is empty (no terms to verify).
 
     """
-    import logging
-    log = logging.getLogger(__name__)
-
     if not keywords:
         return 0.0
 
@@ -49,7 +65,7 @@ def calculate_accuracy(answer, keywords):
     accuracy = len(matched_keywords) / len(keywords)
 
     # Log details for debugging when accuracy is low
-    if accuracy < 0.75:
+    if accuracy < constants.OLS_QA_ACCURACY_THRESHOLD:
         log.warning(
             f"Low accuracy ({accuracy:.2f}): "
             f"Matched {len(matched_keywords)}/{len(keywords)} keywords. "
@@ -72,13 +88,4 @@ def is_uncertain(answer):
         bool: True if any uncertainty phrase appears (case-insensitive substring match).
 
     """
-
-    phrases = [
-        "not available",
-        "no information",
-        "not found",
-        "i don't know",
-        "i don't have",
-        "no data",
-    ]
-    return any(p in answer.lower() for p in phrases)
+    return any(p in answer.lower() for p in OLS_UNCERTAINTY_PHRASES)

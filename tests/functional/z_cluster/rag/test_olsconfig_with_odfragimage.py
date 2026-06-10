@@ -101,6 +101,9 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
         failures = []
         test_data = load_test_data()
 
+        # Guard: Ensure test data is not empty
+        assert test_data, "qa-expectations.yaml must contain at least one test case"
+
         ols = OLSUI()
 
         # Open OLS chatbox
@@ -109,6 +112,13 @@ class TestRagImageDeploymentAndConfiguration(ManageTest):
         for item in test_data:
             qid = item["id"]
             qtype = item["type"]
+
+            # Guard: Validate qtype is supported
+            assert qtype in {"valid", "invalid", "no_rag_answer"}, (
+                f"Unsupported qtype '{qtype}' for Q{qid}. "
+                f"Must be one of: valid, invalid, no_rag_answer"
+            )
+
             question = item["question"]
             keywords = item.get("required_terms", [])
 
