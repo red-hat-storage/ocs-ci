@@ -17,7 +17,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
-from ocs_ci.ocs.resources.pod import get_noobaa_pvpool_pods
+
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.prometheus import PrometheusAPI, wait_for_alert_firing
@@ -243,13 +243,13 @@ class TestNooBaaBucketErrorStateMode:
         Trigger a resource-related bucket mode on a data bucket and
         verify the bucket enters NOT_ENOUGH_HEALTHY_RESOURCES mode.
 
-        Uses a PV pool backing store and deletes its pool pod
+        Uses a PV pool backing store and scales it down to 0 volumes
         to simulate a resource failure.
 
         Steps:
             1. Create a data bucket with a PV pool backing store (17Gi)
             2. Upload data so NooBaa tracks objects against the store
-            3. Delete the PV pool pod to trigger resource error
+            3. Scale the backing store to 0 volumes to trigger resource error
             4. Wait for bucket to detect the resource error
             5. Verify bucket mode is NOT_ENOUGH_HEALTHY_RESOURCES
             6. Clean up
@@ -281,14 +281,16 @@ class TestNooBaaBucketErrorStateMode:
             f"so NooBaa tracks objects against the backing store"
         )
 
-        pool_pods = get_noobaa_pvpool_pods(backingstore.name)
-        assert pool_pods, f"No pool pods found for backing store {backingstore.name}"
-        for pod in pool_pods:
-            log.info(
-                f"Deleting pool pod {pod.name} of backing store "
-                f"{backingstore.name} to trigger resource error"
-            )
-            pod.delete(force=True)
+        log.info(
+            f"Scaling PV pool backing store {backingstore.name} to 0 volumes "
+            f"to trigger resource error"
+        )
+        params = '{"spec":{"pvPool":{"numVolumes":0}}}'
+        backingstore.ocp.patch(
+            resource_name=backingstore.name,
+            params=params,
+            format_type="merge",
+        )
 
         _wait_for_bucket_mode(mcg_obj, bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
 
