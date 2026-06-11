@@ -8,7 +8,7 @@ import pytest
 
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_20_14
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import TimeoutSampler
@@ -76,6 +76,7 @@ def get_mds_active_count():
 # @tier1
 # Test case is disabled, as per requirement not to support this scenario
 @brown_squad
+@zstream_4_20_14
 class TestCephFilesystemCreation(ManageTest):
     """
     Testing creation of Ceph FileSystem
