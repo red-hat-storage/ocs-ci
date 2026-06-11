@@ -6,6 +6,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     polarion_id,
     tier2,
+    zstream_4_20_14,
+    zstream_4_20_14_naturalintelligence/fast_xml_parser,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -18,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestBucketClass:
 
     @tier2
