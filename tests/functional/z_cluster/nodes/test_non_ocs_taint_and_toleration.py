@@ -41,6 +41,8 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
+    zstream_4_20_14,
+    zstream_4_20_14_naturalintelligence/fast_xml_parser,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
@@ -67,6 +69,8 @@ def verify_pod_count_unchanged(number_of_pods_before):
 @skipif_tainted_nodes
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestNonOCSTaintAndTolerations(E2ETest):
     """
     Test to test non ocs taints on ocs nodes
