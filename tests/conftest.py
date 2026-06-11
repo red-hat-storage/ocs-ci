@@ -2221,6 +2221,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
         }
 
         if node.get_closest_marker("mcg"):
+            ocsci_config.RUN["skipped_tests_noobaa_health"] += 1
             pytest.skip(f"NooBaa health check failed at setup (phase: {noobaa_phase})")
 
     def finalizer():

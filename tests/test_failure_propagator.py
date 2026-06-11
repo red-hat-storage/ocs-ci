@@ -74,6 +74,23 @@ class TestFailurePropagator:
             f"skipped_tests_ceph_health: {config.RUN.get('skipped_tests_ceph_health')}"
         )
 
+        noobaa_failure = config.RUN.get("noobaa_health_failure_source")
+        skipped_noobaa = config.RUN.get("skipped_tests_noobaa_health", 0)
+        noobaa_summary = ""
+        if noobaa_failure or skipped_noobaa:
+            parts = []
+            if skipped_noobaa:
+                parts.append(
+                    f"{skipped_noobaa} MCG tests skipped due to NooBaa not Ready"
+                )
+            if noobaa_failure:
+                parts.append(
+                    f"NooBaa became unhealthy (phase: {noobaa_failure['phase']})"
+                    f" first detected at test: {noobaa_failure['test_name']}"
+                )
+            noobaa_summary = ". ".join(parts) + "."
+            log.warning(noobaa_summary)
+
         if number_of_eligible_tests > 0:
             config.RUN["skipped_on_ceph_health_ratio"] = round(
                 (
@@ -110,15 +127,13 @@ class TestFailurePropagator:
                     message = (
                         message + " Couldn't identify the test case that caused this"
                     )
-                noobaa_failure = config.RUN.get("noobaa_health_failure_source")
-                if noobaa_failure:
-                    message = (
-                        message
-                        + f". NooBaa became unhealthy (phase: {noobaa_failure['phase']})"
-                        f" first detected at test: {noobaa_failure['test_name']}."
-                    )
+                if noobaa_summary:
+                    message = message + f". {noobaa_summary}"
                 config.RUN["display_skipped_msg_in_email"] = message
                 pytest.fail(message)
+
+        if noobaa_summary and not config.RUN.get("display_skipped_msg_in_email"):
+            config.RUN["display_skipped_msg_in_email"] = noobaa_summary
 
     @pytest.mark.order("last")
     def test_failure_propagator(self):
