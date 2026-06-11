@@ -1,0 +1,29 @@
+---
+# Deploys an LSO-backed ODF cluster via the UI on vSphere UPI (VMDK, 3m/3w).
+# Simulates pre-existing unencrypted bluestore OSDs on the worker disks before
+# deployment (simulate_bluestore_label), skips disk cleanup so the simulation
+# data is preserved, then tests that typing an invalid (non-"CONFIRM") string
+# into the forceful deployment confirmation input disables the Next button.
+# The checkbox is unchecked after the negative test so deployment proceeds
+# normally without forceful deployment.
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  type: 'VMDK'
+  provision_type: 'thick'
+  ui_deployment: true
+  odf_forceful_deployment: false
+  test_forceful_deployment_invalid_key: true
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '65536'
+  fio_storageutilization_min_mbps: 10.0
+  skip_disks_cleanup: true
+  simulate_bluestore_label: true
+  encryption_at_rest: false

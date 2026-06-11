@@ -168,6 +168,12 @@ class DeploymentUI(PageNavigator):
 
         """
         if config.DEPLOYMENT.get("local_storage"):
+            if csv.get_csvs_start_with_prefix(
+                constants.LOCAL_STORAGE_OPERATOR_NAME,
+                constants.LOCAL_STORAGE_NAMESPACE,
+            ):
+                logger.info("Local Storage operator already installed, skipping")
+                return
             self.navigate_operatorhub_page()
             logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
@@ -395,6 +401,13 @@ class DeploymentUI(PageNavigator):
                 )
             self.enable_forceful_deployment()
 
+        if config.DEPLOYMENT.get("test_forceful_deployment_invalid_key"):
+            if "enable_forceful_deployment" not in self.dep_loc:
+                raise ConfigurationError(
+                    "Forceful deployment UI automation is supported only on ODF/OCP 4.22+."
+                )
+            self.enable_forceful_deployment_invalid_key()
+
         if config.DEPLOYMENT.get("ec_default_pools"):
             if "use_erasure_coding" not in self.dep_loc:
                 raise ConfigurationError(
@@ -540,17 +553,71 @@ class DeploymentUI(PageNavigator):
         )
         self.take_screenshot("odf_forceful_deployment_enabled")
 
+    def enable_forceful_deployment_invalid_key(self):
+        """
+        Verify that typing an invalid confirmation string blocks the Next
+        button, then undo the checkbox.
+
+        Enables the forceful deployment checkbox, sends a random 4-7
+        character string to the confirmation input (not ``"CONFIRM"``),
+        asserts that the Next button is greyed out (the UI must reject
+        the invalid key), and finally unchecks the checkbox so deployment
+        can proceed normally.
+        """
+        import random
+        import string
+
+        invalid_key = "".join(
+            random.choices(string.ascii_letters, k=random.randint(5, 8))
+        )
+        if invalid_key == "CONFIRM":
+            invalid_key = invalid_key[:-1] + "x"
+        logger.info(
+            "Testing forceful deployment with invalid confirmation key %r",
+            invalid_key,
+        )
+        self.select_checkbox_status(
+            status=True, locator=self.dep_loc["enable_forceful_deployment"]
+        )
+        self.do_send_keys(
+            locator=self.dep_loc["forceful_deployment_confirmation"],
+            text=invalid_key,
+        )
+        self.take_screenshot("odf_forceful_deployment_invalid_key")
+        # The disabled attribute lives on the <button>, not the inner <span>
+        # matched by dep_loc["next"], so check the button element directly.
+        _next_btn = (
+            "button.pf-v6-c-button.pf-m-primary",
+            By.CSS_SELECTOR,
+        )
+        assert self.is_element_greyed_out(_next_btn), (
+            "Next button should be disabled when an invalid confirmation"
+            " key is typed for forceful deployment"
+        )
+        logger.info("Confirmed: Next button is disabled with invalid confirmation key")
+        self.select_checkbox_status(
+            status=False, locator=self.dep_loc["enable_forceful_deployment"]
+        )
+        self.take_screenshot("odf_forceful_deployment_unchecked")
+
     def is_element_greyed_out(self, locator):
         """
         Check if a UI element is disabled (greyed out).
+
+        Checks both the HTML ``disabled`` attribute and the PatternFly
+        ``aria-disabled`` attribute, since PF buttons use the latter
+        without setting the native disabled property.
 
         Args:
             locator (tuple): (selector str, By type) of the element to check.
 
         Returns:
-            bool: True if the element has the disabled attribute, False otherwise.
+            bool: True if the element is disabled by either attribute.
         """
-        return self.get_element_attribute(locator, "disabled") is not None
+        return (
+            self.get_element_attribute(locator, "disabled") is not None
+            or self.get_element_attribute(locator, "aria-disabled") == "true"
+        )
 
     def check_erasure_coding(self):
         """
