@@ -7,6 +7,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     workloads,
     magenta_squad,
     skipif_external_mode,
+    zstream_4_20_14,
+    zstream_4_20_14_naturalintelligence/fast_xml_parser,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io
 from ocs_ci.ocs import constants
@@ -23,6 +25,8 @@ logger = logging.getLogger(__name__)
 @workloads
 @skipif_external_mode
 @ignore_leftovers
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestCnvDeviceReplace(E2ETest):
     """
     Test case for Device replacement
