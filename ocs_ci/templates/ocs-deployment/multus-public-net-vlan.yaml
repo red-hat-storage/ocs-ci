@@ -1,0 +1,21 @@
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: public-net
+  namespace: openshift-storage
+  labels: {}
+  annotations: {}
+spec:
+  config: '{
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "enp1s0f1.201",
+      "mode": "bridge",
+      "ipam": {
+            "type": "whereabouts",
+            "range": "192.168.20.0/24",
+            "routes": [
+                {"dst": "192.168.252.0/24"}
+            ]
+      }
+  }'
