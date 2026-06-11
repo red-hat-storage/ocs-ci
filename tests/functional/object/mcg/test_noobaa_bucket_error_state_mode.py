@@ -128,13 +128,13 @@ class TestNooBaaBucketErrorStateMode:
         Trigger a resource-related bucket mode on a data bucket and
         verify the bucket enters NOT_ENOUGH_HEALTHY_RESOURCES mode.
 
-        Uses a PV pool backing store and scales it down to 0 volumes
-        to simulate a resource failure.
+        Uses a PV pool backing store and scales its StatefulSet to 0
+        replicas to simulate a resource failure.
 
         Steps:
             1. Create a data bucket with a PV pool backing store (17Gi)
             2. Upload data so NooBaa tracks objects against the store
-            3. Scale the backing store to 0 volumes to trigger resource error
+            3. Scale the PV pool StatefulSet to 0 replicas
             4. Wait for bucket to detect the resource error
             5. Verify bucket mode is NOT_ENOUGH_HEALTHY_RESOURCES
             6. Clean up
@@ -173,19 +173,15 @@ class TestNooBaaBucketErrorStateMode:
             f"so NooBaa tracks objects against the backing store"
         )
 
+        sts_name = f"noobaa-pod-agent-{backingstore.name}"
         logger.info(
-            f"Scaling PV pool backing store {backingstore.name} to 0 volumes "
+            f"Scaling StatefulSet {sts_name} to 0 replicas "
             f"to trigger resource error"
         )
-        params = '{"spec":{"pvPool":{"numVolumes":0}}}'
         OCP(
-            kind="BackingStore",
+            kind="StatefulSet",
             namespace=config.ENV_DATA["cluster_namespace"],
-        ).patch(
-            resource_name=backingstore.name,
-            params=params,
-            format_type="merge",
-        )
+        ).exec_oc_cmd(f"scale statefulset {sts_name} --replicas=0")
 
         wait_for_bucket_mode(mcg_obj, bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
 
