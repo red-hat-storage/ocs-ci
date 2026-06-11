@@ -3,7 +3,7 @@ import logging
 
 from ocs_ci.ocs import exceptions, constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, zstream_4_16_16
 from ocs_ci.framework.testlib import ManageTest, tier2
 
 
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
         ),
     ],
 )
+@zstream_4_16_16
 class TestDeletePVCWhileRunningIO(ManageTest):
     """
     Delete PVC while IO is in progress

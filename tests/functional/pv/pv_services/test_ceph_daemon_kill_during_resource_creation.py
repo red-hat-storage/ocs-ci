@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, zstream_4_16_16
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
@@ -109,6 +109,7 @@ log = logging.getLogger(__name__)
         ),
     ],
 )
+@zstream_4_16_16
 class TestDaemonKillDuringResourceCreation(ManageTest):
     """
     Base class for ceph daemon kill related disruption tests
