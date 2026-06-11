@@ -81,19 +81,7 @@ class TestNetSplit:
         ],
     )
     @pytest.mark.polarion_id("OCS-5850")
-    def test_netsplit(
-        self,
-        setup_logwriter_cephfs_workload_factory,
-        setup_logwriter_rbd_workload_factory,
-        logreader_workload_factory,
-        # nodes,
-        zones,
-        duration,
-        node_restart_teardown,
-        reset_conn_score,
-        # cnv_workload,
-        setup_cnv,
-    ):
+    def test_netsplit(logreader_workload_factory, zones, duration):
         """
         This test will test the netsplit scenarios (BC, AB, AB-AC, AB-BC) when CephFS, RBD and VM workloads
         are running.
@@ -118,35 +106,6 @@ class TestNetSplit:
         sc_obj = StretchCluster()
 
         # run cephfs and rbd workload for both logwriter and logreader
-        (
-            sc_obj.cephfs_logwriter_dep,
-            sc_obj.cephfs_logreader_job,
-        ) = setup_logwriter_cephfs_workload_factory(read_duration=(duration + 10))
-
-        sc_obj.rbd_logwriter_sts = setup_logwriter_rbd_workload_factory(
-            zone_aware=False
-        )
-
-        logger.info("Workloads are running")
-
-        # # setup vm and write some data to the VM instance
-        # vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
-        # vm_obj.run_ssh_cmd(command="mkdir /test && sudo chmod -R 777 /test")
-        # vm_obj.run_ssh_cmd(
-        #     command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt && sync"
-        # )
-        # md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
-        # logger.debug(
-        #     f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /test/file_1.txt')}"
-        # )
-
-        # # note all the pod names
-        # check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
-
-        # note the file names created and each file start write time
-        # note the file names created
-        sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
-        sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
         # note the start time (UTC)
         target_time = datetime.now() + timedelta(minutes=5)
