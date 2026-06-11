@@ -868,3 +868,5 @@ skipif_lean_deployment = pytest.mark.skipif(
 zstream_4_20_14 = pytest.mark.zstream_4_20_14
 # z-stream marker
 zstream_4_20_14_naturalintelligence/fast_xml_parser = pytest.mark.zstream_4_20_14_naturalintelligence/fast_xml_parser
+# z-stream marker
+zstream_4_20_14_odf_console = pytest.mark.zstream_4_20_14_odf_console
