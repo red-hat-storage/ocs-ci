@@ -1714,9 +1714,11 @@ def collect_pod_container_rpm_package(dir_name):
         tarball_path = f"{package_log_dir_path}.tar.gz"
         try:
             with tarfile.open(tarball_path, "w:gz") as tar:
-                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+                tar.add(
+                    package_log_dir_path, arcname=os.path.basename(package_log_dir_path)
+                )
             if ocsci_config.REPORTING.get("delete_packed_mg_logs"):
-                shutil.rmtree(log_dir_path)
+                shutil.rmtree(package_log_dir_path)
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
 
