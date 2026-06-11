@@ -42,6 +42,8 @@ RUN:
   number_of_tests: None
   skipped_on_ceph_health_ratio: 0
   skipped_on_ceph_health_threshold: 0
+  noobaa_not_ready_at_setup: {}
+  noobaa_health_failure_source: {}
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.

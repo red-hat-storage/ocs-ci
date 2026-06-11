@@ -2176,6 +2176,51 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
     if "FailurePropagator" in str(node.cls):
         return
 
+    def check_noobaa_health_at_setup():
+        """
+        Check NooBaa health after Ceph health passes. Skips NooBaa-dependent
+        tests if NooBaa is not Ready, lets other tests proceed with flag set.
+        """
+        from ocs_ci.ocs.resources.storage_cluster import get_noobaa_phase
+
+        if ocsci_config.DEPLOYMENT.get("external_mode"):
+            return
+
+        namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+        noobaa_phase = get_noobaa_phase(namespace)
+
+        if noobaa_phase is None:
+            return
+
+        if noobaa_phase == constants.STATUS_READY:
+            ocsci_config.RUN.pop("noobaa_not_ready_at_setup", None)
+            return
+
+        already_detected = bool(ocsci_config.RUN.get("noobaa_not_ready_at_setup"))
+        if not already_detected:
+            log.warning(
+                "NooBaa is in phase '%s', waiting %ds for recovery...",
+                noobaa_phase or "(no phase set)",
+                constants.NOOBAA_HEALTH_CHECK_DELAY,
+            )
+            time.sleep(constants.NOOBAA_HEALTH_CHECK_DELAY)
+            noobaa_phase = get_noobaa_phase(namespace)
+            if noobaa_phase is None or noobaa_phase == constants.STATUS_READY:
+                ocsci_config.RUN.pop("noobaa_not_ready_at_setup", None)
+                return
+
+        log.warning(
+            "NooBaa is in phase '%s', not Ready",
+            noobaa_phase or "(no phase set)",
+        )
+        ocsci_config.RUN["noobaa_not_ready_at_setup"] = {
+            "phase": noobaa_phase,
+            "test_name": node.name,
+        }
+
+        if "tests/functional/object/" in str(node.fspath):
+            pytest.skip(f"NooBaa health check failed at setup (phase: {noobaa_phase})")
+
     def finalizer():
         if not skipped:
             multi_storagecluster_external_health_passed = False
@@ -2205,6 +2250,34 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                             "Ceph health check for multi-storagecluster external cluster passed at teardown!"
                         )
                         multi_storagecluster_external_health_passed = True
+
+                    if not ocsci_config.DEPLOYMENT.get("external_mode"):
+                        from ocs_ci.ocs.resources.storage_cluster import (
+                            get_noobaa_phase,
+                        )
+
+                        namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+                        nb_phase = get_noobaa_phase(namespace)
+                        nb_was_broken = bool(
+                            ocsci_config.RUN.get("noobaa_not_ready_at_setup")
+                        )
+                        nb_is_broken = (
+                            nb_phase is not None and nb_phase != constants.STATUS_READY
+                        )
+
+                        if not nb_was_broken and nb_is_broken:
+                            if not ocsci_config.RUN.get("noobaa_health_failure_source"):
+                                ocsci_config.RUN["noobaa_health_failure_source"] = {
+                                    "test_name": node.name,
+                                    "phase": nb_phase,
+                                }
+                        elif nb_was_broken and nb_is_broken:
+                            log.info(
+                                "NooBaa still not Ready at teardown (phase: %s)",
+                                nb_phase,
+                            )
+                        elif nb_was_broken and not nb_is_broken:
+                            log.info("NooBaa recovered to Ready during test execution")
 
             except CephHealthException:
                 if not ocsci_config.RUN["skip_reason_test_found"]:
@@ -2264,6 +2337,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 if not ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
                     if status:
                         log.info("Ceph health check passed at setup")
+                        check_noobaa_health_at_setup()
                         return
                 else:
                     external_multi_storagecluster_status = (
@@ -2273,6 +2347,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                         log.info(
                             "Ceph health check passed for internal and multi-storagecluster external at setup"
                         )
+                        check_noobaa_health_at_setup()
                         return
             except (CephHealthException, CephHealthNotRecoveredException):
                 ocsci_config.RUN["skipped_tests_ceph_health"] += 1

@@ -110,6 +110,13 @@ class TestFailurePropagator:
                     message = (
                         message + " Couldn't identify the test case that caused this"
                     )
+                noobaa_failure = config.RUN.get("noobaa_health_failure_source")
+                if noobaa_failure:
+                    message = (
+                        message
+                        + f". NooBaa became unhealthy (phase: {noobaa_failure['phase']})"
+                        f" first detected at test: {noobaa_failure['test_name']}."
+                    )
                 config.RUN["display_skipped_msg_in_email"] = message
                 pytest.fail(message)
 
