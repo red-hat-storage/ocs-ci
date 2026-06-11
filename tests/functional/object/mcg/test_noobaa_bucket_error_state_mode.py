@@ -31,8 +31,6 @@ from ocs_ci.utility.prometheus import PrometheusAPI, wait_for_alert_firing
 
 logger = logging.getLogger(__name__)
 
-UPLOAD_DIR = "/tmp/bucket_error_test"
-
 
 @mcg
 @red_squad
@@ -98,7 +96,7 @@ class TestNooBaaBucketErrorStateMode:
                 write_random_test_objects_to_bucket(
                     io_pod=awscli_pod,
                     bucket_to_write=bucket_name,
-                    file_dir=UPLOAD_DIR,
+                    file_dir=f"/tmp/{bucket_name}",
                     amount=5,
                     bs="500M",
                     mcg_obj=mcg_obj,
@@ -165,7 +163,7 @@ class TestNooBaaBucketErrorStateMode:
         write_random_test_objects_to_bucket(
             io_pod=awscli_pod,
             bucket_to_write=bucket.name,
-            file_dir=UPLOAD_DIR,
+            file_dir=f"/tmp/{bucket.name}",
             amount=2,
             bs="50M",
             mcg_obj=mcg_obj,
@@ -245,7 +243,7 @@ class TestNooBaaBucketErrorStateMode:
         write_random_test_objects_to_bucket(
             io_pod=awscli_pod,
             bucket_to_write=ns_bucket.name,
-            file_dir=UPLOAD_DIR,
+            file_dir=f"/tmp/{ns_bucket.name}",
             amount=2,
             bs="50M",
             mcg_obj=mcg_obj,
@@ -420,7 +418,7 @@ class TestNooBaaBucketErrorStateMode:
                 write_random_test_objects_to_bucket(
                     io_pod=awscli_pod,
                     bucket_to_write=bucket_name,
-                    file_dir=UPLOAD_DIR,
+                    file_dir=f"/tmp/{bucket_name}",
                     amount=5,
                     bs="500M",
                     mcg_obj=mcg_obj,
