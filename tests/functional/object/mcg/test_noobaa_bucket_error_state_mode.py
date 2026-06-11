@@ -1,7 +1,5 @@
-import json
 import logging
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     red_squad,
@@ -25,8 +23,8 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
+from ocs_ci.ocs.resources.pod import get_noobaa_pvpool_pods
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.utility.prometheus import PrometheusAPI, wait_for_alert_firing
 
@@ -121,24 +119,21 @@ class TestNooBaaBucketErrorStateMode:
     # Resource error mode tests (NOT_ENOUGH_HEALTHY_RESOURCES)
     # ------------------------------------------------------------------
 
-    @skipif_managed_service
-    @skipif_aws_creds_are_missing
+    @skipif_mcg_only
     # TODO: Replace with actual Polarion ID
     # @polarion_id("OCS-XXXXX")
-    def test_data_bucket_resource_error_mode(
-        self, mcg_obj, awscli_pod, bucket_factory
-    ):
+    def test_data_bucket_resource_error_mode(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Trigger a resource-related bucket mode on a data bucket and
         verify the bucket enters NOT_ENOUGH_HEALTHY_RESOURCES mode.
 
-        Corrupts the AWS credentials secret of the backing store so
-        that NooBaa can no longer access the underlying cloud storage.
+        Uses a PV pool backing store and force-deletes its pool pod
+        to simulate a resource failure.
 
         Steps:
-            1. Create a data bucket with an AWS cloud backing store
+            1. Create a data bucket with a PV pool backing store (17Gi)
             2. Upload data so NooBaa tracks objects against the store
-            3. Patch the backing store's secret with invalid credentials
+            3. Force-delete the PV pool pod to trigger resource error
             4. Wait for bucket to detect the resource error
             5. Verify bucket mode is NOT_ENOUGH_HEALTHY_RESOURCES
             6. Clean up
@@ -150,7 +145,7 @@ class TestNooBaaBucketErrorStateMode:
         """
         bucketclass_dict = {
             "interface": "OC",
-            "backingstore_dict": {"aws": [(1, "us-east-2")]},
+            "backingstore_dict": {"pv": [(1, 17, constants.DEFAULT_STORAGECLASS_RBD)]},
         }
         bucket = bucket_factory(
             amount=1,
@@ -161,7 +156,7 @@ class TestNooBaaBucketErrorStateMode:
 
         logger.info(
             f"Created data bucket {bucket.name} with "
-            f"AWS backing store {backingstore.name}"
+            f"PV pool backing store {backingstore.name}"
         )
 
         write_random_test_objects_to_bucket(
@@ -177,25 +172,14 @@ class TestNooBaaBucketErrorStateMode:
             f"so NooBaa tracks objects against the backing store"
         )
 
-        bs_ocp = OCP(
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind="backingstore",
-        ).get(resource_name=backingstore.name)
-        secret_name = bs_ocp["spec"]["awsS3"]["secret"]["name"]
-        logger.info(
-            f"Patching secret {secret_name} with invalid AWS credentials "
-            f"to make backing store {backingstore.name} unhealthy"
-        )
-        OCP(
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind="secret",
-        ).patch(
-            resource_name=secret_name,
-            params=json.dumps(
-                {"data": {"AWS_ACCESS_KEY_ID": "d3JvbmdhY2Nlc3NrZXk="}}
-            ),
-            format_type="merge",
-        )
+        pool_pods = get_noobaa_pvpool_pods(backingstore.name)
+        assert pool_pods, f"No pool pods found for backing store {backingstore.name}"
+        for pod in pool_pods:
+            logger.info(
+                f"Deleting pool pod {pod.name} of backing store "
+                f"{backingstore.name} to trigger resource error"
+            )
+            pod.delete(force=True)
 
         wait_for_bucket_mode(mcg_obj, bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
 
