@@ -304,7 +304,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         2. Set toleration in storagecluster yaml.
         3. Set toleration in wrong subscription yaml.
         4. Check that toleration is not applied on all subscriptions and pods.
-        5. Check that all pods are not in running state.
+        5. Delete listed pods (NotFound is ignored for pods already replaced).
+        6. Check that all pods are not in running state.
 
         """
 
@@ -380,7 +381,17 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             exclude_selector=True,
         )
         for pod in pod_list:
-            pod.delete(wait=False)
+            try:
+                pod.delete(wait=False)
+            except CommandFailed as ex:
+                err_str = str(ex)
+                # Pod may already be gone (replaced by controller) since we snapshotted the list
+                if "NotFound" not in err_str and "not found" not in err_str:
+                    raise
+                logger.debug(
+                    "Pod %s already deleted or recreated, skipping",
+                    pod.name,
+                )
 
         assert not wait_for_pods_to_be_running(
             timeout=120, sleep=15
