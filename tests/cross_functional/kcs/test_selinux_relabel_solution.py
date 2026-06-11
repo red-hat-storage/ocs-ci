@@ -26,7 +26,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -40,6 +40,7 @@ class TestSelinuxrelabel(E2ETest):
             object: helpers.create_pod instance
 
         """
+        logger.info(f"Creating deployment pod attached to PVC: {self.pvc_obj.name}")
         try:
             pod_obj = helpers.create_pod(
                 interface_type=constants.CEPHFS_INTERFACE,
@@ -50,10 +51,9 @@ class TestSelinuxrelabel(E2ETest):
                 pod_dict_path=constants.PERF_DEPLOY_YAML,
                 **kwargs,
             )
-        except Exception as e:
-            log.exception(
-                f"Pod attached to PVC {pod_obj.name} was not created, exception [{str(e)}]"
-            )
+            logger.info(f"Deployment pod created successfully: {pod_obj.name}")
+        except Exception:
+            logger.exception(f"Pod attached to PVC {self.pvc_obj.name} was not created")
             raise PodNotCreated("Pod attached to PVC was not created.")
         return pod_obj
 
@@ -65,14 +65,19 @@ class TestSelinuxrelabel(E2ETest):
             object: app pod instance
 
         """
+        logger.debug(f"Getting app pod with selector: {self.pod_selector}")
         pod_obj_list = res_pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
             selector=[self.pod_selector],
             selector_label=constants.DEPLOYMENTCONFIG,
         )
+        logger.debug(
+            f"Found {len(pod_obj_list)} pod(s) with selector {self.pod_selector}"
+        )
         pod_name = self.pod_selector + "-1-deploy"
         for pod_obj in pod_obj_list:
             if pod_name not in pod_obj.name:
+                logger.info(f"Found app pod: {pod_obj.name}")
                 return pod_obj
 
     def apply_selinux_solution_on_existing_pvc(self, pvc_obj):
@@ -83,16 +88,16 @@ class TestSelinuxrelabel(E2ETest):
             pvc_obj(PVC object): ocs_ci.ocs.resources.pvc.PVC instance kind.
 
         """
-        # Backup existing PV
-        log.info("Getting backup of existing PV")
+        logger.info(f"Backing up existing PV for PVC: {pvc_obj.name}")
         pv_name = pvc_obj.get().get("spec").get("volumeName")
+        logger.info(f"PV name: {pv_name}")
         backup_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="test_", suffix=".yaml", delete=False
         )
         backup_file = backup_file.name
         backup_get = pvc_obj.backed_pv_obj.get()
         dump_data_to_temp_yaml(backup_get, backup_file)
-        log.info(f"{backup_file} file for PV is created")
+        logger.info(f"PV backup file created: {backup_file}")
 
         # Change the Reclaim policy of PV
         ocp_pv = ocp.OCP(kind=constants.PV)
@@ -101,9 +106,9 @@ class TestSelinuxrelabel(E2ETest):
             params='{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}',
         )
         if patch_success:
-            log.info(f"Reclaim policy of {pv_name} was changed.")
+            logger.info(f"Reclaim policy of {pv_name} was changed.")
         else:
-            log.exception(f"Reclaim policy of {pv_name} failed to be changed.")
+            logger.exception(f"Reclaim policy of {pv_name} failed to be changed.")
 
         # Edit backup PV yaml
         yaml.safe_load(backup_file)
@@ -114,10 +119,10 @@ class TestSelinuxrelabel(E2ETest):
             ] = 'context="system_u:object_r:container_file_t:s0"'
         with open(backup_file, "w") as backup:
             yaml.dump(backup1, backup)
-            log.info(f"PV {backup_file} file is updated")
+            logger.info(f"PV {backup_file} file is updated")
 
         # Delete existing PV
-        log.info("Deleting the existing PV")
+        logger.info("Deleting the existing PV")
         ocp_pv.delete(resource_name=pv_name, wait=False)
         ocp_pv.patch(
             resource_name=pv_name,
@@ -125,12 +130,12 @@ class TestSelinuxrelabel(E2ETest):
             format_type="merge",
         )
         ocp_pv.wait_for_delete(resource_name=pv_name)
-        log.info(f"PersistentVolume {pv_name} deleted")
+        logger.info(f"PersistentVolume {pv_name} deleted")
 
         # Recreate PV from backup file
         run_cmd(f"oc apply -f {backup_file}")
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
-        log.info(f"Backup PV {pv_name} created")
+        logger.info(f"Backup PV {pv_name} created")
 
         # Re-bind the PV and PVC by removing annonation from PVC
         params = [
@@ -147,7 +152,7 @@ class TestSelinuxrelabel(E2ETest):
             params=params,
             format_type="json",
         )
-        log.info(f"PVC {self.pvc_obj.name} is modified")
+        logger.info(f"PVC {self.pvc_obj.name} is modified")
 
     def get_pod_start_time(self, pod_name):
         """
@@ -190,7 +195,9 @@ class TestSelinuxrelabel(E2ETest):
                 return time_difference.total_seconds()
 
         except CommandFailed as exc:
-            log.exception(f"Error retrieving pod information for '{pod_name}': {exc}")
+            logger.exception(
+                f"Error retrieving pod information for '{pod_name}': {exc}"
+            )
 
         return None
 
@@ -215,7 +222,7 @@ class TestSelinuxrelabel(E2ETest):
             timeout=300,
         )
         random_files = random_files.split()
-        log.info(f"files are {random_files}")
+        logger.info(f"files are {random_files}")
         return random_files
 
     def teardown(self):
@@ -244,62 +251,82 @@ class TestSelinuxrelabel(E2ETest):
             copies (int): number of copies to write kernel files in pod
 
         """
+        logger.test_step("Create CephFS PVC and deployment pod with 100K+ files")
         self.ocp_project = ocp.OCP(
             kind=constants.NAMESPACE, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
-        # Create cephfs pvc
+        logger.info("Creating CephFS PVC with size: 20Gi")
         self.pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             project=self.ocp_project,
             size="20",
         )
+        logger.info(f"CephFS PVC created: {self.pvc_obj.name}")
 
-        # Create service_account to get privilege for deployment pods
+        logger.info("Creating service account for deployment pod privileges")
         self.service_account_obj = service_account_factory(
             project=self.ocp_project,
         )
+        logger.info(f"Service account created: {self.service_account_obj.name}")
 
-        # Create deployment pod
+        logger.info(f"Creating deployment pod to write {copies} copies of kernel files")
         self.pod_obj = self.create_deployment_pod(
             command=["/opt/multiple_files.sh"],
             command_args=[f"{copies}", "/mnt"],
         )
-        log.info(f"files copied to pod {self.pod_obj.name}")
+        logger.info(f"Deployment pod created and writing files: {self.pod_obj.name}")
         self.pod_selector = self.pod_obj.labels.get(constants.DEPLOYMENTCONFIG)
 
-        # Leave pod for some time to run since file creation time is longer
         waiting_time = 200
-        log.info(f"Waiting for {waiting_time} seconds")
+        logger.info(
+            f"Waiting {waiting_time}s for file creation to complete (100K+ files)"
+        )
         time.sleep(waiting_time)
 
-        # Get the md5sum of some random files
+        logger.test_step("Calculate md5sum for random files before fix")
         random_files = self.get_random_files(self.pod_obj)
+        logger.info(
+            f"Selected {len(random_files)} random files for md5sum verification"
+        )
         initial_md5sum = []
-        for file_path in random_files:
+        for idx, file_path in enumerate(random_files, 1):
+            logger.debug(
+                f"Calculating md5sum {idx}/{len(random_files)} for: {file_path}"
+            )
             md5sum = res_pod.cal_md5sum(
                 pod_obj=self.pod_obj,
                 file_name=file_path,
             )
             initial_md5sum.append(md5sum)
+        logger.info(f"Initial md5sum calculated: {len(initial_md5sum)} files")
 
-        # Delete pod and Get time for pod restart
+        logger.test_step("Measure pod restart time before SELinux fix")
+        logger.info(f"Deleting pod {self.pod_obj.name} to trigger restart")
         self.pod_obj.delete(wait=True)
         self.pod_obj = self.get_app_pod_obj()
+        logger.info(
+            f"Waiting for re-spun pod to reach Running state: {self.pod_obj.name}"
+        )
         try:
             wait_for_pods_to_be_running(
                 pod_names=[self.pod_obj.name], timeout=600, sleep=15
             )
+            logger.info(f"Pod {self.pod_obj.name} is now running")
         except CommandFailed:
-            log.exception(f"Pod {self.pod_obj.name} didn't reach to running state")
+            logger.exception(f"Pod {self.pod_obj.name} didn't reach Running state")
 
         pod_restart_time_before_fix = self.get_pod_start_time(
             pod_name=self.pod_obj.name
         )
-        log.info(f"Time taken by pod to restart is {pod_restart_time_before_fix}")
+        logger.info(f"Pod restart time BEFORE fix: {pod_restart_time_before_fix}s")
 
-        # Apply the fix/solution for “Existing PVCs”
+        logger.test_step("Apply SELinux relabel fix for existing PVC")
+        logger.info(
+            f"Applying SELinux relabel solution to existing PVC: {self.pvc_obj.name}"
+        )
         self.apply_selinux_solution_on_existing_pvc(self.pvc_obj)
+        logger.info("SELinux relabel solution applied successfully")
 
         # Delete pod so that fix will be applied for new pod
         assert modify_deploymentconfig_replica_count(
@@ -330,7 +357,9 @@ class TestSelinuxrelabel(E2ETest):
         )(
             check_selinux_relabeling
         )(pod_obj=self.pod_obj)
-        log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")
+        logger.info(
+            f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}"
+        )
 
         # Restart pod after applying fix
         self.pod_obj = self.get_app_pod_obj()
@@ -355,7 +384,7 @@ class TestSelinuxrelabel(E2ETest):
 
         # Get pod restart time.
         pod_restart_time_after_fix = self.get_pod_start_time(pod_name=self.pod_obj.name)
-        log.info(f"Time taken by pod to restart is {pod_restart_time_after_fix}")
+        logger.info(f"Time taken by pod to restart is {pod_restart_time_after_fix}")
 
         assert (
             pod_restart_time_before_fix > pod_restart_time_after_fix
@@ -404,7 +433,7 @@ class TestSelinuxrelabel(E2ETest):
             storageclass=self.storage_class,
             size="20",
         )
-        log.info(f"PVC {self.pvc_obj.name} created")
+        logger.info(f"PVC {self.pvc_obj.name} created")
         teardown_factory(self.pvc_obj)
 
         # Create service_account to get privilege for deployment pods
@@ -418,18 +447,25 @@ class TestSelinuxrelabel(E2ETest):
             command_args=[f"{copies}", "/mnt"],
         )
 
-        log.info(f"pod {self.pod_obj.name} created")
+        logger.info(f"pod {self.pod_obj.name} created")
         self.pod_selector = self.pod_obj.labels.get(constants.DEPLOYMENTCONFIG)
 
-        # Get the md5sum of some random files
+        logger.test_step("Calculate md5sum for random files before fix")
         random_files = self.get_random_files(self.pod_obj)
+        logger.info(
+            f"Selected {len(random_files)} random files for md5sum verification"
+        )
         initial_md5sum = []
-        for file_path in random_files:
+        for idx, file_path in enumerate(random_files, 1):
+            logger.debug(
+                f"Calculating md5sum {idx}/{len(random_files)} for: {file_path}"
+            )
             md5sum = res_pod.cal_md5sum(
                 pod_obj=self.pod_obj,
                 file_name=file_path,
             )
             initial_md5sum.append(md5sum)
+        logger.info(f"Initial md5sum calculated: {len(initial_md5sum)} files")
 
         # Delete app pod and measure pod restart time
         self.pod_obj.delete(wait=True)
@@ -439,10 +475,10 @@ class TestSelinuxrelabel(E2ETest):
                 pod_names=[self.pod_obj.name], timeout=600, sleep=15
             )
         except CommandFailed:
-            log.exception(f"Pod {self.pod_obj.name} didn't reach to running state")
+            logger.exception(f"Pod {self.pod_obj.name} didn't reach to running state")
 
         pod_restart_time_after_fix = self.get_pod_start_time(pod_name=self.pod_obj.name)
-        log.info(f"Time taken by pod to restart is {pod_restart_time_after_fix}")
+        logger.info(f"Time taken by pod to restart is {pod_restart_time_after_fix}")
 
         # Check Data integrity
         final_md5sum = []
@@ -458,4 +494,4 @@ class TestSelinuxrelabel(E2ETest):
 
         # Check SeLinux Relabeling is set to false
         check_selinux_relabeling(pod_obj=self.pod_obj)
-        log.info(f"SeLinux Relabeling is skipped for the pvc {self.pvc_obj.name}")
+        logger.info(f"SeLinux Relabeling is skipped for the pvc {self.pvc_obj.name}")

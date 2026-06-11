@@ -23,7 +23,7 @@ from ocs_ci.ocs import flowtest
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -76,7 +76,7 @@ class TestCouchBaseNodeReboot(E2ETest):
         if pod_name_of_node == "master":
             nodes.restart_nodes(master_node, wait=False)
             waiting_time = 40
-            log.info(f"Waiting {waiting_time} seconds...")
+            logger.info(f"Waiting {waiting_time} seconds...")
             time.sleep(waiting_time)
         else:
             restart_node = get_node_objs(

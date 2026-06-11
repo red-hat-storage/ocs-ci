@@ -13,7 +13,7 @@ from ocs_ci.ocs.constants import CEPHBLOCKPOOL
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -40,15 +40,19 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
         8. Attach a new pgsql pod to it and Resize the new restored pvc
 
         """
-
-        # Deploy PGSQL workload
-        log.info("Deploying pgsql workloads")
+        logger.test_step("Deploy PostgreSQL workload")
+        logger.info("Deploying PostgreSQL workload with 1 replica")
         pgsql = pgsql_factory_fixture(replicas=1)
+        logger.info("PostgreSQL workload deployed successfully")
 
-        log.info("Starting multiple creation & clone of postgres PVC")
+        logger.test_step("Execute snapshot/clone/restore/resize workflow")
+        logger.info(
+            "Starting multiple snapshot and clone operations on PostgreSQL PVC (target size: 25Gi)"
+        )
         multiple_snapshot_and_clone_of_postgres_pvc_factory(
             pvc_size_new=25, pgsql=pgsql
         )
+        logger.info("Snapshot/clone/restore/resize workflow completed successfully")
 
     @skipif_ocs_version("<4.9")
     @skipif_ocp_version("<4.9")
@@ -79,26 +83,43 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
         8. Attach a new pgsql pod to it and Resize the new restored pvc
 
         """
-        log.info("Setting up csi-kms-connection-details configmap")
+        logger.test_step(f"Setup KMS encryption with Vault KV version: {kv_version}")
+        logger.info("Setting up csi-kms-connection-details configmap")
         self.vault = pv_encryption_kms_setup_factory(kv_version)
-        log.info("csi-kms-connection-details setup successful")
+        logger.info(
+            f"csi-kms-connection-details setup successful, KMS ID: {self.vault.kmsid}"
+        )
 
-        # Create an encryption enabled storageclass for RBD
+        logger.test_step("Create encrypted storage class for RBD")
         self.sc_obj = storageclass_factory(
             interface=CEPHBLOCKPOOL,
             encrypted=True,
             encryption_kms_id=self.vault.kmsid,
         )
+        logger.info(f"Created encrypted storage class: {self.sc_obj.name}")
 
-        # Create ceph-csi-kms-token in the tenant namespace
+        logger.test_step(f"Create Vault CSI KMS token in namespace: {BMO_NAME}")
         self.vault.vault_path_token = self.vault.generate_vault_token()
+        logger.info(f"Generated Vault token: {self.vault.vault_path_token[:20]}...")
         self.vault.create_vault_csi_kms_token(namespace=BMO_NAME)
+        logger.info(f"Created Vault CSI KMS token in namespace: {BMO_NAME}")
 
-        # Deploy PGSQL workload
-        log.info("Deploying pgsql workloads")
+        logger.test_step("Deploy PostgreSQL workload with encrypted storage")
+        logger.info(
+            f"Deploying PostgreSQL workload with encrypted storage class: {self.sc_obj.name}"
+        )
         pgsql = pgsql_factory_fixture(replicas=1, sc_name=self.sc_obj.name)
+        logger.info("PostgreSQL workload deployed successfully with encryption")
 
-        log.info("Starting multiple creation & clone of postgres PVC")
+        logger.test_step(
+            "Execute snapshot/clone/restore/resize workflow with encrypted PVCs"
+        )
+        logger.info(
+            "Starting multiple snapshot and clone operations on encrypted PostgreSQL PVC (target size: 25Gi)"
+        )
         multiple_snapshot_and_clone_of_postgres_pvc_factory(
             pvc_size_new=25, pgsql=pgsql, sc_name=self.sc_obj.name
+        )
+        logger.info(
+            "Encrypted snapshot/clone/restore/resize workflow completed successfully"
         )

@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.constants import VOLUME_MODE_FILESYSTEM
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -40,7 +40,7 @@ class TestPvcResizeOfClonedAndRestoredPVC(E2ETest):
         def teardown():
 
             # Delete created postgres and pgbench pods
-            log.info("Deleting postgres pods which are attached to restored PVCs")
+            logger.info("Deleting postgres pods which are attached to restored PVCs")
             for pgsql_obj in self.pgsql_obj_list:
                 pgsql_obj.delete()
 
@@ -66,47 +66,64 @@ class TestPvcResizeOfClonedAndRestoredPVC(E2ETest):
         pvc_size_new = 25
         self.pgsql_obj_list = []
 
-        # Deploy PGSQL workload
-        log.info("Deploying pgsql workloads")
+        logger.test_step("Deploy PostgreSQL workload")
+        logger.info("Deploying pgsql workload with 1 replica")
         pgsql = pgsql_factory_fixture(replicas=1)
+        logger.info("PostgreSQL workload deployed successfully")
 
-        # Get postgres pvc list obj
         postgres_pvcs_obj = pgsql.get_postgres_pvc()
+        logger.info(f"Retrieved {len(postgres_pvcs_obj)} PostgreSQL PVC(s)")
 
+        logger.test_step("Create snapshots from PostgreSQL PVCs")
         snapshots = multi_snapshot_factory(
             pvc_obj=postgres_pvcs_obj, snapshot_name_suffix="snap"
         )
-        log.info("Created snapshots from all the PVCs and snapshots are in Ready state")
+        logger.info(
+            f"Created {len(snapshots)} snapshot(s) from all PVCs in Ready state"
+        )
 
+        logger.test_step("Restore PVCs from snapshots")
         restored_pvc_objs = multi_snapshot_restore_factory(
             snapshot_obj=snapshots, restore_pvc_suffix="restore"
         )
-        log.info("Created new PVCs from all the snapshots")
+        logger.info(f"Created {len(restored_pvc_objs)} new PVC(s) from snapshots")
 
+        logger.test_step("Attach PostgreSQL pods to restored PVCs")
         sset_list = pgsql.attach_pgsql_pod_to_claim_pvc(
             pvc_objs=restored_pvc_objs,
             postgres_name="postgres-restore",
             run_benchmark=False,
         )
         self.pgsql_obj_list.extend(sset_list)
+        logger.info(f"Attached {len(sset_list)} PostgreSQL pod(s) to restored PVCs")
 
-        # Resize new PVCs created from snapshots
-        for pvc_obj in restored_pvc_objs:
-            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
+        logger.test_step(f"Resize restored PVCs to {pvc_size_new}Gi")
+        for idx, pvc_obj in enumerate(restored_pvc_objs, 1):
+            logger.info(
+                f"Resizing restored PVC {idx}/{len(restored_pvc_objs)}: {pvc_obj.name} to {pvc_size_new}Gi"
+            )
             pvc_obj.resize_pvc(pvc_size_new, True)
+        logger.info(
+            f"All {len(restored_pvc_objs)} restored PVC(s) resized successfully"
+        )
 
+        logger.test_step("Clone PostgreSQL PVCs")
         cloned_pvcs = multi_pvc_clone_factory(
             pvc_obj=postgres_pvcs_obj, volume_mode=VOLUME_MODE_FILESYSTEM
         )
-        log.info("Created new PVCs from all postrges volumes")
+        logger.info(f"Created {len(cloned_pvcs)} cloned PVC(s) from PostgreSQL volumes")
 
-        # Attach a new pgsql pod to cloned pvcs
+        logger.test_step("Attach PostgreSQL pods to cloned PVCs")
         sset_list = pgsql.attach_pgsql_pod_to_claim_pvc(
             pvc_objs=cloned_pvcs, postgres_name="postgres-clone", run_benchmark=False
         )
         self.pgsql_obj_list.extend(sset_list)
+        logger.info(f"Attached {len(sset_list)} PostgreSQL pod(s) to cloned PVCs")
 
-        # Resize cloned PVCs
-        for pvc_obj in cloned_pvcs:
-            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G")
+        logger.test_step(f"Resize cloned PVCs to {pvc_size_new}Gi")
+        for idx, pvc_obj in enumerate(cloned_pvcs, 1):
+            logger.info(
+                f"Resizing cloned PVC {idx}/{len(cloned_pvcs)}: {pvc_obj.name} to {pvc_size_new}Gi"
+            )
             pvc_obj.resize_pvc(pvc_size_new, True)
+        logger.info(f"All {len(cloned_pvcs)} cloned PVC(s) resized successfully")

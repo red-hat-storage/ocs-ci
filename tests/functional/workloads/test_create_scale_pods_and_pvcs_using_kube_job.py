@@ -26,7 +26,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources.pod import get_all_pods
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @orange_squad
@@ -42,7 +42,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
 
         def finalizer():
             if self.orig_index is not None:
-                log.info("Switch back to the original context")
+                logger.info("Switch back to the original context")
                 config.switch_ctx(self.orig_index)
 
         request.addfinalizer(finalizer)
@@ -58,16 +58,21 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         """
         Test create scale pods and PVCs using a kube job
         """
-        log.info("Start creating resources using kube job...")
+        logger.test_step("Create scale pods and PVCs using kube job")
+        logger.info("Starting resource creation using kube job")
         create_scale_pods_and_pvcs_using_kube_job()
+        logger.info("Kube job initiated successfully")
+
+        logger.test_step("Wait for IO operations to start")
         time_to_wait_for_io_running = 120
-        log.info(
-            f"Wait {time_to_wait_for_io_running} seconds for checking "
-            f"that the IO running as expected"
+        logger.info(
+            f"Waiting {time_to_wait_for_io_running} seconds for IO to stabilize"
         )
         sleep(time_to_wait_for_io_running)
+
+        logger.test_step("Verify Ceph health")
         ceph_health_check()
-        log.info("The resources created successfully using the kube job")
+        logger.info("Resources created successfully using kube job, Ceph health OK")
 
     @tier2
     @ms_provider_and_consumer_required
@@ -80,23 +85,23 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         self.orig_index = config.cur_index
 
         config.switch_to_consumer()
-        log.info("Start creating resources using kube job...")
+        logger.info("Start creating resources using kube job...")
         create_scale_pods_and_pvcs_using_kube_job()
         ceph_health_check()
 
-        log.info("Switch to the provider")
+        logger.info("Switch to the provider")
         config.switch_to_provider()
         time_to_wait_for_io_running = 120
-        log.info(
+        logger.info(
             f"Wait {time_to_wait_for_io_running} seconds for checking "
             f"that the IO running as expected"
         )
         sleep(time_to_wait_for_io_running)
         ceph_health_check()
 
-        log.info("Switch back to the consumer")
+        logger.info("Switch back to the consumer")
         config.switch_to_consumer()
-        log.info("The resources created successfully using the kube job")
+        logger.info("The resources created successfully using the kube job")
 
     @skipif_ms_provider_and_consumer
     @tier1
@@ -108,16 +113,16 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         Test create scale pods and PVCs using a kube job with MS consumer
         when we don't have a provider in the run
         """
-        log.info("Start creating resources using kube job with MS consumer...")
+        logger.info("Start creating resources using kube job with MS consumer...")
         create_scale_pods_and_pvcs_using_kube_job()
         time_to_wait_for_io_running = 60
-        log.info(
+        logger.info(
             f"Wait {time_to_wait_for_io_running} seconds for checking "
             f"that the IO running as expected"
         )
         sleep(time_to_wait_for_io_running)
         ceph_health_check()
-        log.info(
+        logger.info(
             "The resources created successfully using the kube job with MS consumer"
         )
 
@@ -148,7 +153,9 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
                 condition=constants.STATUS_BOUND,
                 resource_count=self.scale_count,
             )
-            log.info(f"All the PVCs were created successfully on the consumer {c_name}")
+            logger.info(
+                f"All the PVCs were created successfully on the consumer {c_name}"
+            )
 
             ocp_pod = OCP(kind=constants.POD, namespace=fio_scale.namespace)
             ocp_pod.wait_for_resource(
@@ -156,9 +163,11 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
                 condition=constants.STATUS_COMPLETED,
                 resource_count=self.expected_pod_num,
             )
-            log.info(f"All the pods were created successfully on the consumer {c_name}")
+            logger.info(
+                f"All the pods were created successfully on the consumer {c_name}"
+            )
 
-        log.info("All the pods and PVCs were created successfully on the consumers")
+        logger.info("All the pods and PVCs were created successfully on the consumers")
 
     def check_pods_and_pvcs_deleted_on_consumers(self):
         for consumer_i, fio_scale in self.consumer_i_per_fio_scale.items():
@@ -166,14 +175,20 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
             c_name = config.ENV_DATA.get("cluster_name")
 
             pvc_objs = get_all_pvcs(fio_scale.namespace)["items"]
+            logger.assertion(
+                f"PVC deletion check: consumer={c_name}, remaining_pvcs={len(pvc_objs)}, expected=0"
+            )
             assert not pvc_objs, "There are still remaining PVCs"
-            log.info(f"All the PVCs deleted successfully on the consumer {c_name}")
+            logger.info(f"All PVCs deleted successfully on consumer {c_name}")
 
             pod_objs = get_all_pods(fio_scale.namespace)
+            logger.assertion(
+                f"Pod deletion check: consumer={c_name}, remaining_pods={len(pod_objs)}, expected=0"
+            )
             assert not pod_objs, "There are still remaining pods"
-            log.info(f"All the pods deleted successfully on the consumer {c_name}")
+            logger.info(f"All pods deleted successfully on consumer {c_name}")
 
-        log.info("All the pods and PVCs were deleted successfully on the consumers")
+        logger.info("All the pods and PVCs were deleted successfully on the consumers")
 
     @tier1
     def test_create_scale_pods_and_pvcs_with_ms_consumers(
@@ -193,21 +208,21 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
 
         config.switch_to_provider()
         time_to_wait_for_io_running = 120
-        log.info(
+        logger.info(
             f"Wait {time_to_wait_for_io_running} seconds for checking "
             f"that the IO running as expected"
         )
         sleep(time_to_wait_for_io_running)
         ceph_health_check()
 
-        log.info("Checking the Ceph Health on the consumers")
+        logger.info("Checking the Ceph Health on the consumers")
         consumer_indexes = config.get_consumer_indexes_list()
         for i in consumer_indexes:
             config.switch_ctx(i)
             ceph_health_check()
 
         self.check_scale_pods_and_pvcs_created_on_consumers()
-        log.info(
+        logger.info(
             "The scale pods and PVCs using a kube job with MS consumers created successfully"
         )
 
@@ -229,7 +244,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
 
         config.switch_to_provider()
         time_to_wait_for_io_running = 120
-        log.info(
+        logger.info(
             f"Wait {time_to_wait_for_io_running} seconds for checking "
             f"that the IO running as expected"
         )
@@ -238,20 +253,20 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
 
         self.check_scale_pods_and_pvcs_created_on_consumers()
 
-        log.info("Clean up the pods and PVCs from all consumers")
+        logger.info("Clean up the pods and PVCs from all consumers")
         for consumer_i, fio_scale in self.consumer_i_per_fio_scale.items():
             config.switch_ctx(consumer_i)
             fio_scale.cleanup()
 
         self.check_pods_and_pvcs_deleted_on_consumers()
 
-        log.info("Checking the Ceph Health on the consumers")
+        logger.info("Checking the Ceph Health on the consumers")
         consumer_indexes = config.get_consumer_indexes_list()
         for i in consumer_indexes:
             config.switch_ctx(i)
             ceph_health_check()
 
-        log.info(
+        logger.info(
             "The scale pods and PVCs using a kube job with MS consumers "
             "created and deleted successfully"
         )
@@ -282,7 +297,9 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
                 condition=constants.STATUS_BOUND,
                 resource_count=self.scale_count,
             )
-            log.info(f"All the PVCs were created successfully on the client {c_name}")
+            logger.info(
+                f"All the PVCs were created successfully on the client {c_name}"
+            )
 
             ocp_pod = OCP(kind=constants.POD, namespace=fio_scale.namespace)
             ocp_pod.wait_for_resource(
@@ -290,9 +307,11 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
                 condition=constants.STATUS_COMPLETED,
                 resource_count=self.expected_pod_num,
             )
-            log.info(f"All the pods were created successfully on the client {c_name}")
+            logger.info(
+                f"All the pods were created successfully on the client {c_name}"
+            )
 
-        log.info("All the pods and PVCs were created successfully on the clients")
+        logger.info("All the pods and PVCs were created successfully on the clients")
 
     def check_pods_and_pvcs_deleted_on_clients(self):
         for client_i, fio_scale in self.client_i_per_fio_scale.items():
@@ -300,14 +319,20 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
             c_name = config.ENV_DATA.get("cluster_name")
 
             pvc_objs = get_all_pvcs(fio_scale.namespace)["items"]
+            logger.assertion(
+                f"PVC deletion check: client={c_name}, remaining_pvcs={len(pvc_objs)}, expected=0"
+            )
             assert not pvc_objs, "There are still remaining PVCs"
-            log.info(f"All the PVCs deleted successfully on the client {c_name}")
+            logger.info(f"All PVCs deleted successfully on client {c_name}")
 
             pod_objs = get_all_pods(fio_scale.namespace)
+            logger.assertion(
+                f"Pod deletion check: client={c_name}, remaining_pods={len(pod_objs)}, expected=0"
+            )
             assert not pod_objs, "There are still remaining pods"
-            log.info(f"All the pods deleted successfully on the client {c_name}")
+            logger.info(f"All pods deleted successfully on client {c_name}")
 
-        log.info("All the pods and PVCs were deleted successfully on the clients")
+        logger.info("All the pods and PVCs were deleted successfully on the clients")
 
     @tier2
     @pytest.mark.polarion_id("OCS-5428")
@@ -328,21 +353,21 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
 
         config.switch_to_provider()
         time_to_wait_for_io_running = 120
-        log.info(
+        logger.info(
             f"Wait {time_to_wait_for_io_running} seconds for checking "
             f"that the IO running as expected"
         )
         sleep(time_to_wait_for_io_running)
         ceph_health_check()
 
-        log.info("Checking the Ceph Health on the clients")
+        logger.info("Checking the Ceph Health on the clients")
         client_indexes = config.get_consumer_indexes_list()
         for i in client_indexes:
             config.switch_ctx(i)
             ceph_health_check()
 
         self.check_scale_pods_and_pvcs_created_on_clients()
-        log.info(
+        logger.info(
             "The scale pods and PVCs using a kube job with HCI clients created successfully"
         )
 
@@ -365,7 +390,7 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
 
         config.switch_to_provider()
         time_to_wait_for_io_running = 120
-        log.info(
+        logger.info(
             f"Wait {time_to_wait_for_io_running} seconds for checking "
             f"that the IO running as expected"
         )
@@ -374,20 +399,20 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
 
         self.check_scale_pods_and_pvcs_created_on_clients()
 
-        log.info("Clean up the pods and PVCs from all clients")
+        logger.info("Clean up the pods and PVCs from all clients")
         for client_i, fio_scale in self.client_i_per_fio_scale.items():
             config.switch_ctx(client_i)
             fio_scale.cleanup()
 
         self.check_pods_and_pvcs_deleted_on_clients()
 
-        log.info("Checking the Ceph Health on the clients")
+        logger.info("Checking the Ceph Health on the clients")
         client_indexes = config.get_consumer_indexes_list()
         for i in client_indexes:
             config.switch_ctx(i)
             ceph_health_check()
 
-        log.info(
+        logger.info(
             "The scale pods and PVCs using a kube job with MS clients "
             "created and deleted successfully"
         )

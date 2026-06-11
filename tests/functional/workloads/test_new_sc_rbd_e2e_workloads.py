@@ -20,7 +20,7 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.ocs import flowtest
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -86,6 +86,9 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
         """
         Testing workloads on new storage class with new cephblockpool
         """
+        logger.test_step(
+            f"Create storage class with new RBD pool: replica={replica}, compression={compression}, EC={erasure_coded}"
+        )
         interface_type = constants.CEPHBLOCKPOOL
         sc_obj = storageclass_factory(
             interface=interface_type,
@@ -94,10 +97,20 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
             compression=compression,
             erasure_coded=erasure_coded,
         )
+        logger.info(
+            f"Created storage class: {sc_obj.name} (replica={replica}, compression={compression}, EC={erasure_coded})"
+        )
+
+        logger.test_step("Deploy AMQ workload with new storage class")
         bg_handler = flowtest.BackgroundOps()
         executor_run_bg_ios_ops = ThreadPoolExecutor(max_workers=5)
         self.amq, self.threads = amq_factory_fixture(sc_name=sc_obj.name)
+        logger.info(f"AMQ workload deployed with storage class: {sc_obj.name}")
 
+        logger.test_step("Deploy PostgreSQL workload in background")
+        logger.info(
+            "Starting PostgreSQL workload: replicas=1, clients=1, transactions=100"
+        )
         pgsql_workload = executor_run_bg_ios_ops.submit(
             bg_handler.handler,
             pgsql_factory_fixture,
@@ -110,14 +123,23 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
         )
         bg_handler = flowtest.BackgroundOps()
         bg_ops = [pgsql_workload]
-        bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
-        # AMQ Validate the results
-        log.info("Validate message run completely")
-        for thread in self.threads:
-            thread.result(timeout=1800)
 
+        logger.test_step("Wait for PostgreSQL workload to complete")
+        bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
+        logger.info("PostgreSQL workload completed successfully")
+
+        logger.test_step("Validate AMQ message processing")
+        logger.info("Validating AMQ message threads completed")
+        for idx, thread in enumerate(self.threads, 1):
+            logger.debug(f"Waiting for AMQ thread {idx}/{len(self.threads)}")
+            thread.result(timeout=1800)
+        logger.info(
+            f"All {len(self.threads)} AMQ message thread(s) completed successfully"
+        )
+
+        logger.test_step("Check cluster storage usage")
         cluster_used_space = get_percent_used_capacity()
-        log.info(
-            f" Cluster used percentage space with replica size {replica}, "
-            f"compression mode {compression}={cluster_used_space}"
+        logger.info(
+            f"Cluster used space: {cluster_used_space}% "
+            f"(replica={replica}, compression={compression}, EC={erasure_coded})"
         )

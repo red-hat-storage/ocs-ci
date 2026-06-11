@@ -8,7 +8,7 @@ from ocs_ci.ocs.amq import AMQ
 from ocs_ci.utility import templating
 from ocs_ci.helpers.helpers import default_storage_class
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function")
@@ -44,19 +44,29 @@ class TestAMQBasics(E2ETest):
         Create amq cluster and run open messages on it
 
         """
-        # Get sc
+        logger.test_step("Get default storage class")
         sc = default_storage_class(interface_type=interface)
+        logger.info(f"Using storage class: {sc.name}, interface: {interface}")
 
-        # Deploy amq cluster
+        logger.test_step("Deploy AMQ cluster")
         test_fixture_amq.setup_amq_cluster(sc.name)
+        logger.info("AMQ cluster deployed successfully")
 
-        # Run benchmark
+        logger.test_step("Configure and run AMQ benchmark")
         amq_workload_dict = templating.load_yaml(constants.AMQ_WORKLOAD_YAML)
         amq_workload_dict["producersPerTopic"] = 3
         amq_workload_dict["consumerPerSubscription"] = 3
+        logger.info("Benchmark config: producersPerTopic=3, consumerPerSubscription=3")
+
         result = test_fixture_amq.run_amq_benchmark(amq_workload_yaml=amq_workload_dict)
+        logger.info("AMQ benchmark execution completed")
+
+        logger.test_step("Validate AMQ benchmark results")
         amq_output = test_fixture_amq.validate_amq_benchmark(result, amq_workload_dict)
-        # Export pgdata to google  google spreadsheet
+        logger.info("AMQ benchmark results validated")
+
+        logger.test_step("Export results to Google Spreadsheet")
         test_fixture_amq.export_amq_output_to_gsheet(
             amq_output=amq_output, sheet_name="E2E Workloads", sheet_index=1
         )
+        logger.info("Results exported to Google Spreadsheet: E2E Workloads")

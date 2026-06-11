@@ -17,7 +17,7 @@ from ocs_ci.ocs.exceptions import ResourceNotFoundError
 from ocs_ci.helpers.helpers import get_snapshot_content_obj
 from ocs_ci.utility import kms
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -34,8 +34,7 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
         self.pgsql_obj_list = []
 
         def teardown():
-            # Delete created postgres and pgbench pods
-            log.info("Deleting postgres pods which are attached to restored PVCs")
+            logger.info("Deleting postgres pods which are attached to restored PVCs")
             for pgsql_obj in self.pgsql_obj_list:
                 pgsql_obj.delete()
 
@@ -49,23 +48,24 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
         snapshot_restore_factory,
         sc_name=None,
     ):
-
-        # Take a snapshot
-        log.info("Creating snapshot of all postgres PVCs")
+        logger.info(f"Creating snapshots of {len(postgres_pvcs_obj)} PostgreSQL PVC(s)")
         snapshots = []
-        for pvc_obj in postgres_pvcs_obj:
-            log.info(f"Creating snapshot of PVC {pvc_obj.name}")
+        for idx, pvc_obj in enumerate(postgres_pvcs_obj, 1):
+            logger.debug(
+                f"Creating snapshot {idx}/{len(postgres_pvcs_obj)} for PVC: {pvc_obj.name}"
+            )
             snap_obj = snapshot_factory(
                 pvc_obj=pvc_obj, snapshot_name=f"{pvc_obj.name}-snap"
             )
             snapshots.append(snap_obj)
-        log.info("Snapshots creation completed and in Ready state")
+        logger.info(f"All {len(snapshots)} snapshot(s) created and in Ready state")
 
-        # Create PVCs out of the snapshots
-        log.info("Creating new PVCs from snapshots")
+        logger.info("Creating new PVCs from snapshots")
         restore_pvc_objs = []
-        for snapshot in snapshots:
-            log.info(f"Creating a PVC from snapshot {snapshot.name}")
+        for idx, snapshot in enumerate(snapshots, 1):
+            logger.debug(
+                f"Creating PVC {idx}/{len(snapshots)} from snapshot: {snapshot.name}"
+            )
             restore_pvc_obj = snapshot_restore_factory(
                 snapshot_obj=snapshot,
                 restore_pvc_name=f"{snapshot.name}-restored",
@@ -73,17 +73,22 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
                 volume_mode=snapshot.parent_volume_mode,
                 access_mode=snapshot.parent_access_mode,
             )
-
-            log.info(
-                f"Created PVC {restore_pvc_obj.name} from snapshot " f"{snapshot.name}"
+            logger.debug(
+                f"Created PVC {restore_pvc_obj.name} from snapshot {snapshot.name}"
             )
             restore_pvc_objs.append(restore_pvc_obj)
-        log.info("Created new PVCs from all the snapshots and in Bound state")
+        logger.info(
+            f"Created {len(restore_pvc_objs)} new PVC(s) from snapshots in Bound state"
+        )
 
+        logger.info("Attaching PostgreSQL pods to restored PVCs")
         self.pgsql_obj_list = pgsql.attach_pgsql_pod_to_claim_pvc(
             pvc_objs=restore_pvc_objs,
             postgres_name="postgres-snap",
             pgbench_name="pgbench-snap",
+        )
+        logger.info(
+            f"Attached {len(self.pgsql_obj_list)} PostgreSQL pod(s) to restored PVCs"
         )
 
         return snapshots, restore_pvc_objs
@@ -107,16 +112,20 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
         """
         pgsql_teardown
 
-        # Deploy PGSQL workload
-        log.info("Deploying pgsql workloads")
+        logger.test_step("Deploy PostgreSQL workload")
+        logger.info("Deploying PostgreSQL workload with 1 replica")
         pgsql = pgsql_factory_fixture(replicas=1)
+        logger.info("PostgreSQL workload deployed successfully")
 
-        # Get postgres pvc list obj
         postgres_pvcs_obj = pgsql.get_postgres_pvc()
+        logger.info(f"Retrieved {len(postgres_pvcs_obj)} PostgreSQL PVC(s)")
 
-        # Take a snapshot of it
+        logger.test_step("Create snapshots and restore to new PVCs")
         snapshots, restore_pvc_objs = self.create_snapshot(
             pgsql, postgres_pvcs_obj, snapshot_factory, snapshot_restore_factory
+        )
+        logger.info(
+            f"Snapshot/restore workflow completed: {len(snapshots)} snapshots, {len(restore_pvc_objs)} restored PVCs"
         )
 
     @pytest.mark.parametrize(
@@ -151,9 +160,9 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
         """
         pgsql_teardown
 
-        log.info("Setting up csi-kms-connection-details configmap")
+        logger.info("Setting up csi-kms-connection-details configmap")
         self.vault = pv_encryption_kms_setup_factory(kv_version)
-        log.info("csi-kms-connection-details setup successful")
+        logger.info("csi-kms-connection-details setup successful")
 
         # Create an encryption enabled storageclass for RBD
         self.sc_obj = storageclass_factory(
@@ -167,7 +176,7 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
         self.vault.create_vault_csi_kms_token(namespace=BMO_NAME)
 
         # Deploy PGSQL workload
-        log.info("Deploying pgsql workloads")
+        logger.info("Deploying pgsql workloads")
         pgsql = pgsql_factory_fixture(replicas=1, sc_name=self.sc_obj.name)
 
         # Get postgres pvc list obj
@@ -189,7 +198,7 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
             if kms.is_key_present_in_path(
                 key=snap_handle, path=self.vault.vault_backend_path
             ):
-                log.info(f"Vault: Found key for snapshot {snap_obj.name}")
+                logger.info(f"Vault: Found key for snapshot {snap_obj.name}")
             else:
                 raise ResourceNotFoundError(
                     f"Vault: Key not found for snapshot {snap_obj.name}"
@@ -202,7 +211,7 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
             if kms.is_key_present_in_path(
                 key=vol_handle, path=self.vault.vault_backend_path
             ):
-                log.info(f"Vault: Found key for restore PVC {pvc_obj.name}")
+                logger.info(f"Vault: Found key for restore PVC {pvc_obj.name}")
             else:
                 raise ResourceNotFoundError(
                     f"Vault: Key not found for restored PVC {pvc_obj.name}"

@@ -8,7 +8,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.helpers.helpers import default_storage_class
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function")
@@ -38,21 +38,22 @@ class TestAMQBasics(E2ETest):
         """
         Create amq cluster and run open messages on it
         """
-        # Get sc
+        logger.test_step("Get default storage class")
         sc = default_storage_class(interface_type=interface)
+        logger.info(f"Using storage class: {sc.name}")
 
-        # Deploy amq cluster
+        logger.test_step("Deploy AMQ cluster")
         test_fixture_amq.setup_amq_cluster(sc.name)
 
-        # Run open messages
+        logger.test_step("Create messaging on AMQ")
         test_fixture_amq.create_messaging_on_amq()
 
-        # Wait for some time to generate msg
         waiting_time = 60
-        log.info(f"Waiting for {waiting_time}sec to generate msg")
+        logger.info(f"Waiting {waiting_time}s for messages to be generated")
         time.sleep(waiting_time)
 
-        # Check messages are sent and received
+        logger.test_step("Verify messages are sent and received")
         threads = test_fixture_amq.run_in_bg()
         for thread in threads:
             thread.result(timeout=1800)
+        logger.info("All messaging threads completed successfully")

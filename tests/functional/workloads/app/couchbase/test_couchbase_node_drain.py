@@ -14,7 +14,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 from ocs_ci.ocs import flowtest
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad

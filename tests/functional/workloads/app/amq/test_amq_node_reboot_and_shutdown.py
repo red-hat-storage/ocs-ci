@@ -18,7 +18,7 @@ from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.utility.retry import retry
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 POD = ocp.OCP(kind=constants.POD, namespace=constants.AMQ_NAMESPACE)
 TILLER_NAMESPACE = "tiller"
 
@@ -58,14 +58,14 @@ class TestAMQNodeReboot(E2ETest):
                 for n in get_node_objs()
                 if n.ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
             ]
-            log.warning(
+            logger.warning(
                 f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
             )
             if not_ready_nodes:
                 nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
                 wait_for_nodes_status()
 
-            log.info("All nodes are in Ready status")
+            logger.info("All nodes are in Ready status")
 
         request.addfinalizer(finalizer)
 
@@ -95,44 +95,56 @@ class TestAMQNodeReboot(E2ETest):
         amq workloads running in background
 
         """
-        # Get all amq pods
+        logger.test_step(f"Get all AMQ pods and {node_type} node for reboot")
         pod_obj_list = get_all_pods(namespace=constants.AMQ_NAMESPACE)
+        logger.info(f"Found {len(pod_obj_list)} AMQ pods")
 
-        # Get the node list
         node = get_nodes(node_type, num_of_nodes=1)
+        logger.info(f"Selected {node_type} node for reboot: {node[0].name}")
 
-        # Reboot one master nodes
+        logger.test_step(f"Reboot {node_type} node")
         nodes.restart_nodes(node, wait=False)
+        logger.info(f"Initiated restart of node: {node[0].name}")
 
-        # Wait some time after rebooting master
         waiting_time = 90
-        log.info(f"Waiting {waiting_time} seconds...")
+        logger.info(f"Waiting {waiting_time}s for node to reboot")
         time.sleep(waiting_time)
 
-        # Validate all nodes and services are in READY state and up
+        logger.test_step("Wait for cluster connectivity and all nodes to be Ready")
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=28,
             delay=15,
         )(ocp.wait_for_cluster_connectivity(tries=400))
+        logger.info("Cluster connectivity restored")
+
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=28,
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
+        logger.info("All nodes are in Ready state")
 
-        # Check the node are Ready state and check cluster is health ok
+        logger.test_step("Verify cluster health")
         self.sanity_helpers.health_check(tries=40)
+        logger.info("Cluster health check passed")
 
-        # Check all amq pods are up and running
-        assert POD.wait_for_resource(
+        logger.test_step("Verify all AMQ pods are running")
+        pods_running = POD.wait_for_resource(
             condition="Running", resource_count=len(pod_obj_list), timeout=300
         )
+        logger.assertion(
+            f"AMQ pods status: expected_count={len(pod_obj_list)}, "
+            f"running={pods_running}, condition='Running'"
+        )
+        assert (
+            pods_running
+        ), f"Not all AMQ pods are running after {node_type} node reboot"
 
-        # Validate the results
-        log.info("Validate message run completely")
+        logger.test_step("Validate AMQ message processing completed")
         for thread in self.threads:
             thread.result(timeout=1800)
+        logger.info("All AMQ message threads completed successfully")
 
     @pytest.mark.polarion_id("OCS-1278")
     @skipif_ibm_cloud
@@ -142,37 +154,48 @@ class TestAMQNodeReboot(E2ETest):
         shouldn't effect amq workloads running in background
 
         """
-        # Get all amq pods
+        logger.test_step("Get all AMQ pods and worker node for shutdown/recovery")
         pod_obj_list = get_all_pods(namespace=constants.AMQ_NAMESPACE)
+        logger.info(f"Found {len(pod_obj_list)} AMQ pods")
 
-        # Get the node list
         node = get_nodes(node_type="worker", num_of_nodes=1)
+        logger.info(f"Selected worker node for shutdown: {node[0].name}")
 
-        # Reboot one master nodes
+        logger.test_step("Shutdown worker node")
         nodes.stop_nodes(nodes=node)
+        logger.info(f"Worker node {node[0].name} stopped")
 
         waiting_time = 20
-        log.info(f"Waiting for {waiting_time} seconds")
+        logger.info(f"Waiting {waiting_time}s before recovery")
         time.sleep(waiting_time)
 
+        logger.test_step("Start worker node (recovery)")
         nodes.start_nodes(nodes=node)
+        logger.info(f"Worker node {node[0].name} started")
 
-        # Validate all nodes are in READY state and up
+        logger.test_step("Wait for all nodes to be Ready")
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=28,
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
+        logger.info("All nodes are in Ready state")
 
-        # Check the node are Ready state and check cluster is health ok
+        logger.test_step("Verify cluster health")
         self.sanity_helpers.health_check(tries=40)
+        logger.info("Cluster health check passed")
 
-        # Check all amq pods are up and running
-        assert POD.wait_for_resource(
+        logger.test_step("Verify all AMQ pods are running")
+        pods_running = POD.wait_for_resource(
             condition="Running", resource_count=len(pod_obj_list), timeout=300
         )
+        logger.assertion(
+            f"AMQ pods status: expected_count={len(pod_obj_list)}, "
+            f"running={pods_running}, condition='Running'"
+        )
+        assert pods_running, "Not all AMQ pods are running after worker node recovery"
 
-        # Validate the results
-        log.info("Validate message run completely")
+        logger.test_step("Validate AMQ message processing completed")
         for thread in self.threads:
             thread.result(timeout=1800)
+        logger.info("All AMQ message threads completed successfully")

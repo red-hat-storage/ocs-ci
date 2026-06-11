@@ -20,7 +20,7 @@ from ocs_ci.ocs.registry import (
 )
 from ocs_ci.utility.retry import retry
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -45,9 +45,10 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
         """
         Setup and clean up the namespace
         """
-
+        logger.info("Setting up test environment")
         self.project_name = "test"
         project_factory(project_name=self.project_name)
+        logger.info(f"Created test project: {self.project_name}")
 
     @pytest.mark.polarion_id("OCS-1800")
     @skipif_ibm_cloud
@@ -57,28 +58,36 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
         its impact when node is shutdown and recovered
 
         """
-
-        # Pull and push images to registries
-        log.info("Pull and push images to registries")
+        logger.test_step("Pull and push images to registry")
+        logger.info(f"Pulling and pushing images to project: {self.project_name}")
         image_pull_and_push(project_name=self.project_name)
+        logger.info("Images pulled and pushed successfully")
 
-        # Get the node list
+        logger.test_step("Get all worker nodes for shutdown and recovery")
         node_list = get_nodes(node_type="worker")
+        logger.info(
+            f"Selected {len(node_list)} worker node(s) for shutdown and recovery: {[n.name for n in node_list]}"
+        )
 
-        for node in node_list:
-
-            # Stop node
+        logger.test_step(
+            f"Perform shutdown and recovery of {len(node_list)} worker node(s)"
+        )
+        for idx, node in enumerate(node_list, 1):
+            logger.info(f"Shutting down node {idx}/{len(node_list)}: {node.name}")
             nodes.stop_nodes(nodes=[node])
 
-            # Validate node reached NotReady state
+            logger.debug(f"Waiting for node {node.name} to reach NotReady state")
             wait_for_nodes_status(
                 node_names=[node.name], status=constants.NODE_NOT_READY
             )
+            logger.info(f"Node {node.name} reached NotReady state")
 
-            # Start node
+            logger.info(f"Starting node {node.name}")
             nodes.start_nodes(nodes=[node])
 
-            # Validate all nodes are in READY state and up
+            logger.debug(
+                f"Waiting for all nodes to be Ready after recovering {node.name}"
+            )
             retry(
                 (
                     CommandFailed,
@@ -89,15 +98,26 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
                 tries=28,
                 delay=15,
             )(wait_for_nodes_status)(timeout=900)
+            logger.info(f"Node {node.name} recovered successfully, all nodes are Ready")
 
-        # Validate all storage pods are running
+        logger.info(
+            f"Completed shutdown and recovery of all {len(node_list)} worker node(s)"
+        )
+
+        logger.test_step("Wait for all storage pods to be running")
         retry(CommandFailed)(wait_for_storage_pods)(timeout=900)
+        logger.info("All storage pods are running")
 
-        # Validate cluster health ok and all pods are running
+        logger.test_step("Verify cluster and Ceph health")
         self.sanity_helpers.health_check(tries=40)
+        logger.info("Cluster and Ceph health checks passed")
 
-        # Validate image registry pods
+        logger.test_step("Validate registry pods are running")
         validate_registry_pod_status()
+        logger.info("All registry pods are in Running state")
 
-        # Validate image exists in registries path
+        logger.test_step("Validate images exist in registry after node recovery")
         validate_image_exists()
+        logger.info(
+            "Images validated successfully in registry after shutdown and recovery"
+        )

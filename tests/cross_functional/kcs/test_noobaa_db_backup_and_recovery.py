@@ -18,7 +18,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_logs,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @mcg
@@ -67,30 +67,45 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         7. Scale up the stateful set again and the pod should be running
 
         """
+        logger.test_step("Backup and restore NooBaa DB using snapshot")
+        logger.info("Starting NooBaa DB backup and recovery procedure via snapshot")
         noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
+        logger.info("NooBaa DB backup and recovery completed successfully")
 
-        # Verify all storage pods are running
+        logger.test_step("Verify all storage pods are running")
+        logger.info("Waiting for all storage pods to reach Running state")
         wait_for_storage_pods()
+        logger.info("All storage pods are running")
 
-        # Creating Resources
-        log.info("Creating Resources using sanity helpers")
+        logger.test_step("Create and delete resources to verify MCG functionality")
+        logger.info(
+            "Creating resources using sanity helpers (PVCs, pods, buckets, RGW buckets)"
+        )
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
-        # Deleting Resources
+        logger.info("Resources created successfully")
+        logger.info("Deleting created resources to verify cleanup")
         self.sanity_helpers.delete_resources()
+        logger.info("Resources deleted successfully")
 
-        # Verify everything running fine
-        log.info("Verifying All resources are Running and matches expected result")
+        logger.test_step("Verify cluster health after recovery")
+        logger.info("Running cluster health check (max 120 retries)")
         self.sanity_helpers.health_check(tries=120)
+        logger.info("Cluster health check passed - NooBaa DB recovery verified")
 
     @pytest.fixture()
     def warps3(self, request):
+        logger.info("Setting up warp S3 benchmarking fixture")
         warps3 = warp.Warp()
+        logger.info("Creating warp resources: replicas=4, multi_client=True")
         warps3.create_resource_warp(replicas=4, multi_client=True)
+        logger.info("Warp resources created successfully")
 
         def teardown():
+            logger.info("Teardown: Cleaning up warp resources (multi_client=True)")
             warps3.cleanup(multi_client=True)
+            logger.info("Teardown completed: Warp resources cleaned up")
 
         request.addfinalizer(teardown)
         return warps3
@@ -127,14 +142,21 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         Run multi client warp benchamrking to verify bug https://bugzilla.redhat.com/show_bug.cgi?id=2141035
 
         """
-
-        # create a bucket for warp benchmarking
+        logger.test_step("Create bucket for warp benchmarking")
+        logger.info("Creating bucket for warp S3 benchmarking")
         bucket_name = bucket_factory()[0].name
+        logger.info(f"Bucket created for warp: {bucket_name}")
 
-        # Backup and restore noobaa db using fixture
+        logger.test_step("Backup and restore NooBaa DB locally")
+        logger.info("Starting NooBaa DB backup and recovery procedure (local backup)")
         noobaa_db_backup_and_recovery_locally()
+        logger.info("NooBaa DB local backup and recovery completed successfully")
 
-        # Run multi client warp benchmarking
+        logger.test_step("Run multi-client warp S3 benchmarking")
+        logger.info(
+            f"Starting warp benchmark: bucket={bucket_name}, duration=10m, "
+            f"concurrent=10, objects=100, obj_size=1MiB, multi_client=True"
+        )
         warps3.run_benchmark(
             bucket_name=bucket_name,
             access_key=mcg_obj_session.access_key_id,
@@ -150,17 +172,27 @@ class TestNoobaaBackupAndRecovery(E2ETest):
             debug=True,
             insecure=True,
         )
+        logger.info("Warp benchmark completed successfully")
 
-        # make sure no errors in the noobaa pod logs
+        logger.test_step("Verify no assertion errors in NooBaa pod logs (BZ 2141035)")
         search_string = (
             "AssertionError [ERR_ASSERTION]: _id must be unique. "
             "found 2 rows with _id=undefined in table bucketstats"
         )
+        logger.info(
+            f"Checking NooBaa pod logs for assertion errors: '{search_string[:50]}...'"
+        )
         nb_pods = get_noobaa_pods()
-        for pod in nb_pods:
+        logger.info(f"Found {len(nb_pods)} NooBaa pod(s) to check")
+        for idx, pod in enumerate(nb_pods, 1):
+            logger.debug(f"Checking pod {idx}/{len(nb_pods)}: {pod.name}")
             pod_logs = get_pod_logs(pod_name=pod.name)
+            logger.debug(f"Retrieved {len(pod_logs)} log lines from pod {pod.name}")
             for line in pod_logs:
+                logger.assertion(f"Verify no assertion errors in {pod.name} logs")
                 assert (
                     search_string not in line
                 ), f"[Error] {search_string} found in the noobaa pod logs"
-        log.info(f"No {search_string} errors are found in the noobaa pod logs")
+        logger.info(
+            f"No assertion errors found in any NooBaa pod logs ({len(nb_pods)} pods checked)"
+        )

@@ -36,8 +36,8 @@ def test_log_reader_writer_parallel(project, tmp_path):
 
     Reproduces BZ 1989301. Test failure means new blocker high priority bug.
     """
+    logger.test_step("Prepare PVC configuration for CephFS RWX volume")
     pvc_dict = get_pvc_dict()
-    # we need to mount the volume on every worker node, so RWX/cephfs
     pvc_dict["metadata"]["name"] = "logwriter-cephfs-many"
     pvc_dict["spec"]["accessModes"] = [constants.ACCESS_MODE_RWX]
     if (
@@ -47,44 +47,53 @@ def test_log_reader_writer_parallel(project, tmp_path):
     else:
         sc_name = constants.CEPHFILESYSTEM_SC
     pvc_dict["spec"]["storageClassName"] = sc_name
-    # there is no need for lot of storage capacity for this test
     pvc_dict["spec"]["resources"]["requests"]["storage"] = "1Gi"
+    logger.info(
+        f"PVC configured: name={pvc_dict['metadata']['name']}, "
+        f"access_mode=RWX, storage_class={sc_name}, size=1Gi"
+    )
 
-    # get deployment dict for the reproducer logwriter workload
+    logger.test_step("Configure logwriter deployment for all worker nodes")
     with open(constants.LOGWRITER_CEPHFS_REPRODUCER, "r") as deployment_file:
         deploy_dict = yaml.safe_load(deployment_file.read())
-    # if we are running in disconnected environment, we need to mirror the
-    # container image first, and then use the mirror instead of the original
+
     if config.DEPLOYMENT.get("disconnected"):
+        logger.info("Updating container image for disconnected environment")
         update_container_with_mirrored_image(deploy_dict["spec"]["template"])
-    # we need to match deployment replicas with number of worker nodes
-    deploy_dict["spec"]["replicas"] = len(get_worker_nodes())
-    # drop topology spread constraints related to zones
+
+    worker_count = len(get_worker_nodes())
+    deploy_dict["spec"]["replicas"] = worker_count
+    logger.info(f"Deployment replicas set to match worker node count: {worker_count}")
+
     topology.drop_topology_constraint(
         deploy_dict["spec"]["template"]["spec"], topology.ZONE_LABEL
     )
-    # and link the deployment with the pvc
+    logger.debug("Dropped zone topology constraints")
+
     try:
         link_spec_volume(
             deploy_dict["spec"]["template"]["spec"],
             "logwriter-cephfs-volume",
             pvc_dict["metadata"]["name"],
         )
+        logger.info(f"Linked deployment to PVC: {pvc_dict['metadata']['name']}")
     except Exception as ex:
         error_msg = "LOGWRITER_CEPHFS_REPRODUCER no longer matches code of this test"
+        logger.exception(error_msg)
         raise Exception(error_msg) from ex
 
-    # prepare k8s yaml file for deployment
+    logger.test_step("Deploy log reader/writer workload (one pod per worker)")
     workload_file = ObjectConfFile(
         "log_reader_writer_parallel", [pvc_dict, deploy_dict], project, tmp_path
     )
-    # deploy the workload, starting the log reader/writer pods
     logger.info(
-        "starting log reader/writer workload via Deployment, one pod per worker"
+        f"Starting log reader/writer workload via Deployment: {worker_count} pods"
     )
     workload_file.create()
 
-    logger.info("waiting for all pods of the workload Deployment to run")
+    logger.info(
+        f"Waiting for {deploy_dict['spec']['replicas']} pod(s) to reach Running state"
+    )
     ocp_pod = ocp.OCP(kind="Pod", namespace=project.namespace)
     try:
         ocp_pod.wait_for_resource(
@@ -94,35 +103,31 @@ def test_log_reader_writer_parallel(project, tmp_path):
             timeout=300,
             sleep=30,
         )
+        logger.info(
+            f"All {deploy_dict['spec']['replicas']} workload pod(s) are running"
+        )
     except Exception as ex:
-        # this is not a problem with feature under test, but with infra,
-        # cluster configuration or unrelated bug which must have happened
-        # before this test case
         error_msg = "unexpected problem with start of the workload, cluster is either misconfigured or broken"
         logger.exception(error_msg)
         logger.debug(workload_file.describe())
         raise exceptions.UnexpectedBehaviour(error_msg) from ex
 
-    # while the workload is running, we will try to fetch and validate data
-    # from the cephfs volume of the workload 120 times (this number of retries
-    # is a bit larger than usual number required to reproduce bug from
-    # BZ 1989301, but we need to be sure here)
+    logger.test_step(
+        "Fetch and validate data from CephFS volume (BZ 1989301 reproducer)"
+    )
     number_of_fetches = 120
-    # if given fetch fail, we will ignore the failure unless the number of
-    # failures is too high (this has no direct impact on feature under test,
-    # we should be able to detect the bug even with 10% of rsync failures,
-    # since data corruption doesn't simply go away ...)
-    number_of_failures = 0
     allowed_failures = 12
+    number_of_failures = 0
     is_local_data_ok = True
     local_dir = tmp_path / "logwriter"
     local_dir.mkdir()
     workload_pods = ocp_pod.get()
     workload_pod_name = workload_pods["items"][0]["metadata"]["name"]
     logger.info(
-        "while the workload is running, we will fetch and check data from the cephfs volume %d times",
-        number_of_fetches,
+        f"Fetching and checking data {number_of_fetches} times to detect corruption "
+        f"(allowed failures: {allowed_failures}, reproduces BZ 1989301)"
     )
+    logger.info(f"Using pod for data fetch: {workload_pod_name}")
     for _ in range(number_of_fetches):
         # fetch data from cephfs volume into the local dir
         oc_cmd = [
@@ -184,58 +189,71 @@ def test_log_reader_writer_parallel(project, tmp_path):
                 number_of_failures,
             )
             raise exceptions.UnexpectedBehaviour(error_msg) from ex
-        # look for null bytes in the just fetched local files in target dir,
-        # and if these binary bytes are found, the test failed (the bug
-        # was reproduced)
         target_dir = os.path.join(local_dir, "target")
-        for file_name in os.listdir(target_dir):
+        file_list = os.listdir(target_dir)
+        logger.debug(
+            f"Checking {len(file_list)} file(s) for null bytes (data corruption)"
+        )
+        for file_name in file_list:
             with open(os.path.join(target_dir, file_name), "r") as fo:
                 data = fo.read()
                 if "\0" in data:
                     is_local_data_ok = False
                     logger.error(
-                        "file %s is corrupted: null byte found in a text file",
-                        file_name,
+                        f"Data corruption detected: null byte found in file {file_name}"
                     )
-        # is_local_data_ok = False
+        logger.assertion(
+            f"Data corruption check: files_checked={len(file_list)}, corrupted={not is_local_data_ok}"
+        )
         assert is_local_data_ok, "data corruption detected"
         time.sleep(2)
 
-    logger.debug("number of ignored rsync failures: %d", number_of_failures)
+    logger.info(
+        f"Data fetch completed: total_fetches={number_of_fetches}, ignored_failures={number_of_failures}"
+    )
+    logger.debug(f"Number of ignored rsync failures: {number_of_failures}")
 
-    # if no obvious problem was detected, run the logreader job to validate
-    # checksums in the log files (so that we are 100% sure that nothing went
-    # wrong with the IO or the data)
+    logger.test_step("Run logreader job to validate checksums in log files")
+    logger.info(
+        "No corruption detected in initial checks, running full checksum validation"
+    )
     with open(constants.LOGWRITER_CEPHFS_READER, "r") as job_file:
         job_dict = yaml.safe_load(job_file.read())
-    # mirroring for disconnected environment, if necessary
+
     if config.DEPLOYMENT.get("disconnected"):
+        logger.info("Updating container image for disconnected environment")
         update_container_with_mirrored_image(job_dict["spec"]["template"])
-    # drop topology spread constraints related to zones
+
     topology.drop_topology_constraint(
         job_dict["spec"]["template"]["spec"], topology.ZONE_LABEL
     )
-    # we need to match number of jobs with the number used in the workload
+
     job_dict["spec"]["completions"] = deploy_dict["spec"]["replicas"]
     job_dict["spec"]["parallelism"] = deploy_dict["spec"]["replicas"]
-    # and reffer to the correct pvc name
+    logger.info(
+        f"Logreader job configured: completions={job_dict['spec']['completions']}, "
+        f"parallelism={job_dict['spec']['parallelism']}"
+    )
+
     try:
         link_spec_volume(
             job_dict["spec"]["template"]["spec"],
             "logwriter-cephfs-volume",
             pvc_dict["metadata"]["name"],
         )
+        logger.info(f"Linked logreader job to PVC: {pvc_dict['metadata']['name']}")
     except Exception as ex:
         error_msg = "LOGWRITER_CEPHFS_READER no longer matches code of this test"
+        logger.exception(error_msg)
         raise Exception(error_msg) from ex
-    # prepare k8s yaml file for the job
+
     job_file = ObjectConfFile("log_reader", [job_dict], project, tmp_path)
-    # deploy the job, starting the log reader pods
-    logger.info(
-        "starting log reader data validation job to fully check the log data",
-    )
+    logger.info("Starting log reader data validation job to fully check the log data")
     job_file.create()
-    # wait for the logreader job to complete (this should be rather quick)
+    logger.test_step("Wait for logreader job to complete")
+    logger.info(
+        f"Waiting for logreader job to complete: {job_dict['metadata']['name']}"
+    )
     try:
         job.wait_for_job_completion(
             job_name=job_dict["metadata"]["name"],
@@ -243,13 +261,15 @@ def test_log_reader_writer_parallel(project, tmp_path):
             timeout=300,
             sleep_time=30,
         )
+        logger.info("Logreader job completed")
     except exceptions.TimeoutExpiredError:
         error_msg = (
             "verification failed to complete in time: data loss or broken cluster?"
         )
         logger.exception(error_msg)
-    # and then check that the job completed with success
-    logger.info("checking the result of data validation job")
+
+    logger.test_step("Verify logreader job completed successfully")
+    logger.info("Checking the result of data validation job")
     logger.debug(job_file.describe())
     ocp_job = ocp.OCP(
         kind="Job",
@@ -257,14 +277,25 @@ def test_log_reader_writer_parallel(project, tmp_path):
         resource_name=job_dict["metadata"]["name"],
     )
     job_status = ocp_job.get()["status"]
-    logger.info("last status of data verification job: %s", job_status)
-    if (
-        "failed" in job_status
-        or job_status["succeeded"] != deploy_dict["spec"]["replicas"]
-    ):
+    logger.info(f"Data verification job status: {job_status}")
+
+    expected_succeeded = deploy_dict["spec"]["replicas"]
+    actual_succeeded = job_status.get("succeeded", 0)
+    has_failures = "failed" in job_status
+
+    logger.assertion(
+        f"Logreader job result: expected_succeeded={expected_succeeded}, "
+        f"actual_succeeded={actual_succeeded}, has_failures={has_failures}"
+    )
+
+    if has_failures or actual_succeeded != expected_succeeded:
         error_msg = "possible data corruption: data verification job failed!"
         logger.error(error_msg)
         job.log_output_of_job_pods(
             job_name=job_dict["metadata"]["name"], namespace=project.namespace
         )
         raise Exception(error_msg)
+
+    logger.info(
+        f"Data validation successful: all {expected_succeeded} job(s) completed without corruption"
+    )

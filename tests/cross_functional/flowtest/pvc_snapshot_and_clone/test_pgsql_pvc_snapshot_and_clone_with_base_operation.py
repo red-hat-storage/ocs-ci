@@ -17,7 +17,7 @@ from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import flowtest
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -31,7 +31,10 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
     def run_in_bg(
         self, nodes, multiple_snapshot_and_clone_of_postgres_pvc_factory, sc_name=None
     ):
-        log.info("Starting multiple creation & clone of postgres PVC in Background")
+        logger.test_step("Start background snapshot/clone operations")
+        logger.info(
+            "Starting multiple creation & clone of postgres PVC in background (target size: 25Gi)"
+        )
         bg_handler = flowtest.BackgroundOps()
         executor_run_bg_ops = ThreadPoolExecutor(max_workers=1)
         pgsql_snapshot_and_clone = executor_run_bg_ops.submit(
@@ -42,10 +45,10 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
             sc_name=sc_name,
             iterations=1,
         )
-        log.info("Started creation of snapshots & clones in background")
+        logger.info("Background snapshot/clone operations started")
 
         flow_ops = flowtest.FlowOperations()
-        log.info("Starting operation 1: Pod Restarts")
+        logger.test_step("Operation 1: Pod Restarts")
         disruption = Disruptions()
         pod_obj_list = [
             "osd",
@@ -55,40 +58,52 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
             "rbdplugin",
             "rbdplugin_provisioner",
         ]
+        logger.info(
+            f"Restarting {len(pod_obj_list)} Ceph/OCS pods: {', '.join(pod_obj_list)}"
+        )
         for pod in pod_obj_list:
             disruption.set_resource(resource=f"{pod}")
             disruption.delete_resource()
-        log.info("Verifying exit criteria for operation 1: Pod Restarts")
+        logger.info("Verifying exit criteria for operation 1: Pod Restarts")
         flow_ops.validate_cluster(
             node_status=True, pod_status=True, operation_name="Pod Restarts"
         )
+        logger.info("Operation 1 completed: Pod Restarts successful")
 
-        log.info("Starting operation 2: Node Reboot")
+        logger.test_step("Operation 2: Node Reboot")
         node_names = flow_ops.node_operations_entry_criteria(
             node_type="worker", number_of_nodes=3, operation_name="Node Reboot"
         )
-        # Reboot node
+        logger.info(
+            f"Rebooting {len(node_names)} worker node(s): {[n.name for n in node_names]}"
+        )
         nodes.restart_nodes(node_names)
-        log.info("Verifying exit criteria for operation 2: Node Reboot")
+        logger.info("Verifying exit criteria for operation 2: Node Reboot")
         flow_ops.validate_cluster(
             node_status=True, pod_status=True, operation_name="Node Reboot"
         )
+        logger.info("Operation 2 completed: Node Reboot successful")
 
-        log.info("Starting operation 3: Node Drain")
+        logger.test_step("Operation 3: Node Drain")
         node_name = flow_ops.node_operations_entry_criteria(
             node_type="worker", number_of_nodes=1, operation_name="Node Drain"
         )
-        # Node maintenance - to gracefully terminate all pods on the node
+        logger.info(f"Draining node: {node_name[0].name}")
         drain_nodes([node_name[0].name])
-        # Make the node schedulable again
+        logger.info(f"Making node schedulable again: {node_name[0].name}")
         schedule_nodes([node_name[0].name])
-        log.info("Verifying exit criteria for operation 3: Node Drain")
+        logger.info("Verifying exit criteria for operation 3: Node Drain")
         flow_ops.validate_cluster(
             node_status=True, pod_status=True, operation_name="Node Drain"
         )
+        logger.info("Operation 3 completed: Node Drain successful")
 
-        log.info("Waiting for background operations to be completed")
+        logger.test_step("Wait for all background operations to complete")
+        logger.info(
+            "Waiting for background snapshot/clone operations to complete (timeout: 600s)"
+        )
         bg_handler.wait_for_bg_operations([pgsql_snapshot_and_clone], timeout=600)
+        logger.info("All background operations completed successfully")
 
     @skipif_ocs_version("<4.6")
     @skipif_ocp_version("<4.6")
@@ -112,10 +127,14 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
             restart pods, worker node reboot, node drain, device replacement
 
         """
-        # Deploy PGSQL workload
-        log.info("Deploying pgsql workloads")
+        logger.test_step("Deploy PostgreSQL workload")
+        logger.info("Deploying PostgreSQL workload with 1 replica")
         self.pgsql = pgsql_factory_fixture(replicas=1)
+        logger.info("PostgreSQL workload deployed successfully")
 
+        logger.test_step(
+            "Execute disruption operations with background snapshot/clone workload"
+        )
         self.run_in_bg(nodes, multiple_snapshot_and_clone_of_postgres_pvc_factory)
 
     @skipif_ocs_version("<4.9")
@@ -150,25 +169,37 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
             restart pods, worker node reboot, node drain, device replacement
 
         """
-        log.info("Setting up csi-kms-connection-details configmap")
+        logger.test_step(f"Setup KMS encryption with Vault KV version: {kv_version}")
+        logger.info("Setting up csi-kms-connection-details configmap")
         self.vault = pv_encryption_kms_setup_factory(kv_version)
-        log.info("csi-kms-connection-details setup successful")
+        logger.info(
+            f"csi-kms-connection-details setup successful, KMS ID: {self.vault.kmsid}"
+        )
 
-        # Create an encryption enabled storageclass for RBD
+        logger.test_step("Create encrypted storage class for RBD")
         self.sc_obj = storageclass_factory(
             interface=CEPHBLOCKPOOL,
             encrypted=True,
             encryption_kms_id=self.vault.kmsid,
         )
+        logger.info(f"Created encrypted storage class: {self.sc_obj.name}")
 
-        # Create ceph-csi-kms-token in the tenant namespace
+        logger.test_step(f"Create Vault CSI KMS token in namespace: {BMO_NAME}")
         self.vault.vault_path_token = self.vault.generate_vault_token()
+        logger.info(f"Generated Vault token: {self.vault.vault_path_token[:20]}...")
         self.vault.create_vault_csi_kms_token(namespace=BMO_NAME)
+        logger.info(f"Created Vault CSI KMS token in namespace: {BMO_NAME}")
 
-        # Deploy PGSQL workload
-        log.info("Deploying pgsql workloads")
+        logger.test_step("Deploy PostgreSQL workload with encrypted storage")
+        logger.info(
+            f"Deploying PostgreSQL workload with encrypted storage class: {self.sc_obj.name}"
+        )
         self.pgsql = pgsql_factory_fixture(replicas=1, sc_name=self.sc_obj.name)
+        logger.info("PostgreSQL workload deployed successfully with encryption")
 
+        logger.test_step(
+            "Execute disruption operations with background encrypted snapshot/clone workload"
+        )
         self.run_in_bg(
             nodes, multiple_snapshot_and_clone_of_postgres_pvc_factory, self.sc_obj.name
         )

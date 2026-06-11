@@ -10,7 +10,7 @@ from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function")
@@ -39,10 +39,12 @@ class TestPgSQLNodeReboot(E2ETest):
         """
         PGSQL test setup
         """
-        # Deployment of postgres database
+        logger.info(
+            "Setting up PostgreSQL environment with node drain test configuration"
+        )
         pgsql.setup_postgresql(replicas=1)
+        logger.info("PostgreSQL deployed with 1 replica")
 
-        # Initialize Sanity instance
         self.sanity_helpers = Sanity()
 
     @pytest.mark.usefixtures(pgsql_setup.__name__)
@@ -50,45 +52,56 @@ class TestPgSQLNodeReboot(E2ETest):
         """
         Test pgsql workload
         """
-        # Create pgbench benchmark
+        logger.test_step("Create pgbench benchmark: 1 replica, 600 transactions")
         pgsql.create_pgbench_benchmark(replicas=1, transactions=600)
+        logger.info("pgbench benchmark created")
 
-        # Start measuring time
         start_time = datetime.now()
+        logger.info(f"Benchmark start time: {start_time}")
 
-        # Wait for pgbench pod to reach running state
+        logger.test_step("Wait for pgbench to reach running state")
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
+        logger.info(f"pgbench reached status: {constants.STATUS_RUNNING}")
 
-        # Check worker node utilization (adm_top)
+        logger.test_step("Check worker node resource utilization")
         get_node_resource_utilization_from_adm_top(node_type="worker", print_table=True)
 
-        # Select a node where pgbench is not running for drain
+        logger.test_step(f"Identify {node_type} node for drain operation")
         typed_nodes = [node1.name for node1 in node.get_nodes(node_type=node_type)]
+        logger.debug(f"Available {node_type} nodes: {typed_nodes}")
+
         filter_list = pgsql.filter_pgbench_nodes_from_nodeslist(typed_nodes)
+        logger.debug(f"Nodes not running pgbench: {filter_list}")
+
         typed_node_name = filter_list[random.randint(0, len(filter_list) - 1)]
-        log.info(f"Selected node {typed_node_name} for node drain operation")
+        logger.info(f"Selected node for drain operation: {typed_node_name}")
 
-        # Node maintenance - to gracefully terminate all pods on the node
+        logger.test_step(f"Drain {node_type} node during pgbench execution")
+        logger.info(f"Draining node: {typed_node_name}")
         node.drain_nodes([typed_node_name])
+        logger.info("Node drain completed")
 
-        # Make the node schedulable again
+        logger.info(f"Making node schedulable again: {typed_node_name}")
         node.schedule_nodes([typed_node_name])
+        logger.info("Node marked schedulable")
 
-        # Perform cluster and Ceph health checks
+        logger.test_step("Verify cluster and Ceph health after node drain")
         self.sanity_helpers.health_check(tries=40)
+        logger.info("Cluster and Ceph health checks passed")
 
-        # Wait for pg_bench pod to complete
+        logger.test_step("Wait for pgbench to complete")
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+        logger.info(f"pgbench reached status: {constants.STATUS_COMPLETED}")
 
-        # Calculate the time from running state to completed state
         end_time = datetime.now()
         diff_time = end_time - start_time
-        log.info(
-            f"\npgbench pod reached to completed state after {diff_time.seconds} seconds\n"
+        logger.info(
+            f"pgbench pod reached completed state after {diff_time.seconds} seconds"
         )
 
-        # Get pgbench pods
+        logger.test_step("Validate pgbench results")
         pgbench_pods = pgsql.get_pgbench_pods()
+        logger.info(f"Retrieved {len(pgbench_pods)} pgbench pod(s)")
 
-        # Validate pgbench run and parse logs
         pgsql.validate_pgbench_run(pgbench_pods)
+        logger.info("pgbench results validated successfully")

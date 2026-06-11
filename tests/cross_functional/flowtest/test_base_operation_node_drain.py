@@ -52,11 +52,15 @@ class TestBaseOperationNodeDrain(E2ETest):
         4. Node n/w failure
 
         """
-        logger.info("Starting IO operations in Background")
+        logger.test_step("Start background IO operations")
+        logger.info("Initializing background workloads")
         project = project_factory()
         bg_handler = flowtest.BackgroundOps()
         executor_run_bg_ios_ops = ThreadPoolExecutor(max_workers=3)
 
+        logger.info(
+            "Starting PostgreSQL workload in background: replicas=1, clients=1, transactions=100"
+        )
         pgsql_workload = executor_run_bg_ios_ops.submit(
             bg_handler.handler,
             pgsql_factory_fixture,
@@ -66,10 +70,11 @@ class TestBaseOperationNodeDrain(E2ETest):
             timeout=100,
             iterations=1,
         )
-        logger.info("Started pgsql workload in background")
+        logger.info("PostgreSQL workload started in background")
 
         flow_ops = flowtest.FlowOperations()
 
+        logger.info("Starting OBC object IOs in background: 30 iterations")
         obc_ios = executor_run_bg_ios_ops.submit(
             bg_handler.handler,
             flow_ops.sanity_helpers.obc_put_obj_create_delete,
@@ -77,8 +82,11 @@ class TestBaseOperationNodeDrain(E2ETest):
             bucket_factory,
             iterations=30,
         )
-        logger.info("Started object IOs in background")
+        logger.info("OBC object IOs started in background")
 
+        logger.info(
+            "Starting PVC create/delete operations in background: 70 iterations"
+        )
         pvc_create_delete = executor_run_bg_ios_ops.submit(
             bg_handler.handler,
             flow_ops.sanity_helpers.create_pvc_delete,
@@ -86,31 +94,37 @@ class TestBaseOperationNodeDrain(E2ETest):
             project,
             iterations=70,
         )
-        logger.info("Started pvc create and delete in background")
+        logger.info("PVC create/delete operations started in background")
 
-        logger.info("Starting operation 1: Node Drain")
+        logger.test_step("Operation 1: Node Drain")
+        logger.info("Selecting worker node for drain operation")
         node_name = flow_ops.node_operations_entry_criteria(
             node_type="worker", number_of_nodes=1, operation_name="Node Drain"
         )
-        # Node maintenance - to gracefully terminate all pods on the node
+        logger.info(f"Draining node: {node_name[0].name}")
         node.drain_nodes([node_name[0].name])
-        # Make the node schedulable again
+        logger.info(f"Making node schedulable again: {node_name[0].name}")
         node.schedule_nodes([node_name[0].name])
         logger.info("Verifying exit criteria for operation 1: Node Drain")
         flow_ops.validate_cluster(
             node_status=True, pod_status=True, operation_name="Node Drain"
         )
+        logger.info("Operation 1 completed: Node Drain successful")
 
-        logger.info("Starting operation 2: Add Capacity")
+        logger.test_step("Operation 2: Add Capacity")
+        logger.info("Capturing pre-add capacity state")
         osd_pods_before, restart_count_before = flow_ops.add_capacity_entry_criteria()
-        # Add capacity
         osd_size = storage_cluster.get_osd_size()
+        logger.info(f"Adding capacity with OSD size: {osd_size}")
         result = storage_cluster.add_capacity(osd_size)
         pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
         if is_flexible_scaling_enabled():
             replica_count = 1
         else:
             replica_count = 3
+        logger.info(
+            f"Waiting for {result * replica_count} OSD pod(s) to be Running (replica_count={replica_count})"
+        )
         pod.wait_for_resource(
             timeout=300,
             condition=constants.STATUS_RUNNING,
@@ -119,39 +133,43 @@ class TestBaseOperationNodeDrain(E2ETest):
         )
         logger.info("Verifying exit criteria for operation 2: Add Capacity")
         flow_ops.add_capacity_exit_criteria(restart_count_before, osd_pods_before)
+        logger.info("Operation 2 completed: Add Capacity successful")
 
-        logger.info("Starting operation 3: Node Restart")
+        logger.test_step("Operation 3: Node Restart")
+        logger.info("Selecting worker node for restart operation")
         node_name = flow_ops.node_operations_entry_criteria(
             node_type="worker", number_of_nodes=1, operation_name="Node Restart"
         )
-        # Node failure (reboot)
+        logger.info(f"Restarting node: {[n.name for n in node_name]}")
         nodes.restart_nodes(nodes=node_name)
         logger.info("Verifying exit criteria for operation 3: Node Restart")
         flow_ops.validate_cluster(
             node_status=True, pod_status=True, operation_name="Node Restart"
         )
+        logger.info("Operation 3 completed: Node Restart successful")
 
-        logger.info("Starting operation 4: Node network fail")
+        logger.test_step("Operation 4: Node Network Failure")
+        logger.info("Selecting worker node for network failure operation")
         node_name, nw_fail_time = flow_ops.node_operations_entry_criteria(
             node_type="worker",
             number_of_nodes=1,
             network_fail_time=300,
             operation_name="Node N/W failure",
         )
-        # Node n/w interface failure
+        logger.info(f"Triggering network failure on node: {node_name[0].name}")
         node.node_network_failure(node_name[0].name)
-        logger.info(f"Waiting for {nw_fail_time} seconds")
+        logger.info(f"Waiting {nw_fail_time} seconds for network failure impact")
         sleep(nw_fail_time)
-        # Reboot the unresponsive node(s)
-        logger.info(f"Stop and start the unresponsive node(s): {node_name[0].name}")
+        logger.info(f"Restarting unresponsive node: {node_name[0].name}")
         nodes.restart_nodes_by_stop_and_start(nodes=node_name)
         logger.info("Verifying exit criteria for operation 4: Node network fail")
         flow_ops.validate_cluster(
             node_status=True, pod_status=True, operation_name="Node N/W failure"
         )
+        logger.info("Operation 4 completed: Node Network Failure recovery successful")
 
-        logger.info(
-            "Waiting for final iteration of background operations to be completed"
-        )
+        logger.test_step("Wait for all background operations to complete")
+        logger.info("Waiting for final iteration of background operations to complete")
         bg_ops = [pvc_create_delete, obc_ios, pgsql_workload]
         bg_handler.wait_for_bg_operations(bg_ops, timeout=600)
+        logger.info("All background operations completed successfully")

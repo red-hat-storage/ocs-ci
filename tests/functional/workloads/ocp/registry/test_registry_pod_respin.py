@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.helpers import disruption_helpers
 from ocs_ci.helpers.sanity_helpers import Sanity
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 IMAGE_URL = "docker.io/library/busybox"
 
 
@@ -37,18 +37,19 @@ class TestRegistryPodRespin(E2ETest):
         """
         Setup and clean up the namespace
         """
-
+        logger.info("Setting up test environment")
         self.project_name = "test"
         ocp_obj = ocp.OCP(kind=constants.NAMESPACES)
         ocp_obj.new_project(project_name=self.project_name)
+        logger.info(f"Created test project: {self.project_name}")
 
         def finalizer():
-            log.info("Clean up and remove namespace")
+            logger.info("Clean up and remove namespace")
             ocp_obj.exec_oc_cmd(command=f"delete project {self.project_name}")
 
-            # Reset namespace to default
             ocp.switch_to_default_rook_cluster_project()
             ocp_obj.wait_for_delete(resource_name=self.project_name)
+            logger.info(f"Deleted project: {self.project_name}")
 
         request.addfinalizer(finalizer)
 
@@ -65,22 +66,26 @@ class TestRegistryPodRespin(E2ETest):
         """
         Test registry workload when backed by OCS respin of ceph pods
         """
-
-        # Respin relevant pod
-        log.info(f"Respin Ceph pod {pod_name}")
+        logger.test_step(f"Respin Ceph {pod_name} pod")
+        logger.info(f"Respinning Ceph {pod_name} pod")
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=f"{pod_name}")
         disruption.delete_resource()
+        logger.info(f"Ceph {pod_name} pod respun successfully")
 
-        # Pull and push images to registries
-        log.info("Pull and push images to registries")
+        logger.test_step("Pull and push images to registry")
+        logger.info(f"Pulling and pushing images to project: {self.project_name}")
         image_pull_and_push(project_name=self.project_name)
+        logger.info("Images pulled and pushed successfully")
 
-        # Validate image exists in registries path
+        logger.test_step("Validate images exist in registry")
         validate_image_exists()
+        logger.info("Images validated successfully in registry")
 
-        # Validate image registry pods
+        logger.test_step("Validate registry pod status")
         validate_registry_pod_status()
+        logger.info("All registry pods are in Running state")
 
-        # Validate cluster health ok and all pods are running
+        logger.test_step("Verify cluster and Ceph health")
         self.sanity_helpers.health_check(tries=40)
+        logger.info("Cluster and Ceph health checks passed")
