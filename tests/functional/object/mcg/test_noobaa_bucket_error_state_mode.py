@@ -16,150 +16,22 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import craft_s3_command
+from ocs_ci.ocs.bucket_utils import (
+    copy_objects,
+    get_bucket_mode,
+    rm_object_recursive,
+    wait_for_bucket_mode,
+    write_random_test_objects_to_bucket,
+)
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
-
 from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.prometheus import PrometheusAPI, wait_for_alert_firing
-from ocs_ci.utility.utils import TimeoutSampler
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
-BUCKET_MODE_TIMEOUT = 60 * 10
-BUCKET_MODE_POLL_INTERVAL = 15
-
-
-def _wait_for_bucket_mode(mcg_obj, bucket_name, expected_mode, timeout=None):
-    """
-    Poll NooBaa until the bucket enters the expected mode or timeout.
-
-    Args:
-        mcg_obj: MCG object
-        bucket_name (str): Name of the bucket
-        expected_mode (str): Expected bucket mode (e.g. "EXCEEDING_QUOTA")
-            or "!OPTIMAL" to wait for any non-OPTIMAL mode
-            (UNKNOWN is excluded to avoid false positives on lookup failures)
-        timeout (int): Timeout in seconds (default: BUCKET_MODE_TIMEOUT)
-
-    Returns:
-        str: The actual bucket mode once matched
-
-    Raises:
-        AssertionError: If the bucket does not reach the expected mode
-            within the timeout
-    """
-    if timeout is None:
-        timeout = BUCKET_MODE_TIMEOUT
-    check_not_optimal = expected_mode == "!OPTIMAL"
-    last_mode = "UNKNOWN"
-
-    try:
-        for mode in TimeoutSampler(
-            timeout=timeout,
-            sleep=BUCKET_MODE_POLL_INTERVAL,
-            func=_get_bucket_mode,
-            mcg_obj=mcg_obj,
-            bucket_name=bucket_name,
-        ):
-            last_mode = mode
-            if check_not_optimal and mode not in ("OPTIMAL", "UNKNOWN"):
-                log.info(f"Bucket {bucket_name} entered non-OPTIMAL mode: {mode}")
-                return mode
-            elif not check_not_optimal and mode == expected_mode:
-                log.info(f"Bucket {bucket_name} entered expected mode: {mode}")
-                return mode
-    except TimeoutExpiredError:
-        if check_not_optimal:
-            assert False, (
-                f"Bucket {bucket_name} is still OPTIMAL after "
-                f"{timeout}s (last mode: {last_mode})"
-            )
-        else:
-            assert False, (
-                f"Expected bucket mode {expected_mode} for {bucket_name}, "
-                f"got {last_mode} after {timeout}s"
-            )
-
-
-def _get_bucket_mode(mcg_obj, bucket_name):
-    """
-    Get the current mode of a bucket from NooBaa.
-
-    Args:
-        mcg_obj: MCG object
-        bucket_name (str): Name of the bucket
-
-    Returns:
-        str: The bucket mode (e.g. "OPTIMAL", "EXCEEDING_QUOTA")
-    """
-    bucket_info = mcg_obj.get_bucket_info(bucket_name)
-    if bucket_info:
-        log.info(f"Full bucket info for {bucket_name}: {bucket_info}")
-        return bucket_info.get("mode", "UNKNOWN")
-    log.warning(f"Bucket {bucket_name} not found in NooBaa system")
-    return "UNKNOWN"
-
-
-def _upload_data_to_bucket(awscli_pod, bucket_name, mcg_obj, file_count, file_size_mb):
-    """
-    Upload data files to a bucket via S3.
-
-    Args:
-        awscli_pod: Pod with awscli tools
-        bucket_name (str): Target bucket name
-        mcg_obj: MCG object with S3 credentials
-        file_count (int): Number of files to upload
-        file_size_mb (int): Size of each file in MB
-    """
-    awscli_pod.exec_cmd_on_pod(
-        f"dd if=/dev/zero of=/tmp/testfile bs=1M count={file_size_mb}"
-    )
-    for i in range(1, file_count + 1):
-        try:
-            awscli_pod.exec_cmd_on_pod(
-                craft_s3_command(
-                    f"cp /tmp/testfile s3://{bucket_name}/testfile{i}",
-                    mcg_obj,
-                ),
-                out_yaml_format=False,
-                secrets=[
-                    mcg_obj.access_key_id,
-                    mcg_obj.access_key,
-                    mcg_obj.s3_endpoint,
-                ],
-            )
-        except Exception:
-            log.warning(
-                f"Upload of testfile{i} to {bucket_name} failed "
-                f"(expected when exceeding capacity/quota)"
-            )
-
-
-def _delete_data_from_bucket(awscli_pod, bucket_name, mcg_obj, file_count):
-    """
-    Delete data files from a bucket via S3.
-
-    Args:
-        awscli_pod: Pod with awscli tools
-        bucket_name (str): Target bucket name
-        mcg_obj: MCG object with S3 credentials
-        file_count (int): Number of files to delete
-    """
-    for i in range(1, file_count + 1):
-        try:
-            awscli_pod.exec_cmd_on_pod(
-                craft_s3_command(f"rm s3://{bucket_name}/testfile{i}", mcg_obj),
-                out_yaml_format=False,
-                secrets=[
-                    mcg_obj.access_key_id,
-                    mcg_obj.access_key,
-                    mcg_obj.s3_endpoint,
-                ],
-            )
-        except Exception:
-            log.warning(f"Failed to delete testfile{i} from {bucket_name}")
+UPLOAD_DIR = "/tmp/bucket_error_test"
 
 
 @mcg
@@ -219,18 +91,31 @@ class TestNooBaaBucketErrorStateMode:
             resource_description="bucket", resource_type="quota"
         )
         bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj, quota="2Gi")
-        log.info(f"Created bucket {bucket_name} with 2Gi quota")
+        logger.info(f"Created bucket {bucket_name} with 2Gi quota")
 
         try:
-            _upload_data_to_bucket(awscli_pod, bucket_name, mcg_obj, 5, 500)
-            log.info(
-                f"Uploaded ~2.5GB to bucket {bucket_name} "
+            try:
+                write_random_test_objects_to_bucket(
+                    io_pod=awscli_pod,
+                    bucket_to_write=bucket_name,
+                    file_dir=UPLOAD_DIR,
+                    amount=5,
+                    bs="500M",
+                    mcg_obj=mcg_obj,
+                )
+            except CommandFailed:
+                logger.warning("Some uploads failed as expected when exceeding quota")
+            logger.info(
+                f"Uploaded data to bucket {bucket_name} "
                 f"(quota 2Gi) to trigger EXCEEDING_QUOTA"
             )
 
-            _wait_for_bucket_mode(mcg_obj, bucket_name, "EXCEEDING_QUOTA")
+            wait_for_bucket_mode(mcg_obj, bucket_name, "EXCEEDING_QUOTA")
         finally:
-            _delete_data_from_bucket(awscli_pod, bucket_name, mcg_obj, 5)
+            try:
+                rm_object_recursive(awscli_pod, bucket_name, mcg_obj)
+            except CommandFailed:
+                logger.warning(f"Cleanup of bucket {bucket_name} objects failed")
             bucket.delete()
 
     # ------------------------------------------------------------------
@@ -272,18 +157,25 @@ class TestNooBaaBucketErrorStateMode:
         )[0]
         backingstore = bucket.bucketclass.backingstores[0]
 
-        log.info(
+        logger.info(
             f"Created data bucket {bucket.name} with "
             f"PV pool backing store {backingstore.name}"
         )
 
-        _upload_data_to_bucket(awscli_pod, bucket.name, mcg_obj, 2, 50)
-        log.info(
+        write_random_test_objects_to_bucket(
+            io_pod=awscli_pod,
+            bucket_to_write=bucket.name,
+            file_dir=UPLOAD_DIR,
+            amount=2,
+            bs="50M",
+            mcg_obj=mcg_obj,
+        )
+        logger.info(
             f"Uploaded ~100MB to bucket {bucket.name} "
             f"so NooBaa tracks objects against the backing store"
         )
 
-        log.info(
+        logger.info(
             f"Scaling PV pool backing store {backingstore.name} to 0 volumes "
             f"to trigger resource error"
         )
@@ -297,7 +189,7 @@ class TestNooBaaBucketErrorStateMode:
             format_type="merge",
         )
 
-        _wait_for_bucket_mode(mcg_obj, bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
+        wait_for_bucket_mode(mcg_obj, bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
 
     @skipif_managed_service
     @skipif_aws_creds_are_missing
@@ -347,23 +239,30 @@ class TestNooBaaBucketErrorStateMode:
             bucketclass=bucketclass_dict,
         )[0]
 
-        log.info(f"Created namespace stores: {[ns.name for ns in ns_stores]}")
-        log.info(f"Created namespace bucket {ns_bucket.name} with Multi policy")
+        logger.info(f"Created namespace stores: {[ns.name for ns in ns_stores]}")
+        logger.info(f"Created namespace bucket {ns_bucket.name} with Multi policy")
 
-        _upload_data_to_bucket(awscli_pod, ns_bucket.name, mcg_obj, 2, 50)
-        log.info(
+        write_random_test_objects_to_bucket(
+            io_pod=awscli_pod,
+            bucket_to_write=ns_bucket.name,
+            file_dir=UPLOAD_DIR,
+            amount=2,
+            bs="50M",
+            mcg_obj=mcg_obj,
+        )
+        logger.info(
             f"Uploaded ~100MB to namespace bucket {ns_bucket.name} "
             f"so NooBaa tracks objects against the namespace stores"
         )
 
         target_uls_name = ns_stores[0].uls_name
-        log.info(
+        logger.info(
             f"Deleting target bucket {target_uls_name} of "
             f"namespace store {ns_stores[0].name}"
         )
         cld_mgr.aws_client.delete_uls(target_uls_name)
 
-        _wait_for_bucket_mode(mcg_obj, ns_bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
+        wait_for_bucket_mode(mcg_obj, ns_bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
 
     # ------------------------------------------------------------------
     # Capacity error mode tests
@@ -416,7 +315,7 @@ class TestNooBaaBucketErrorStateMode:
         )[0]
         backingstore = bucket.bucketclass.backingstores[0]
 
-        log.info(
+        logger.info(
             f"Created data bucket {bucket.name} with "
             f"17Gi PV pool backing store {backingstore.name}"
         )
@@ -426,60 +325,54 @@ class TestNooBaaBucketErrorStateMode:
         final_mode = None
 
         awscli_pod.exec_cmd_on_pod("dd if=/dev/zero of=/tmp/testfile bs=1M count=4000")
-        log.info("Created 4GB test file for gradual upload")
+        logger.info("Created 4GB test file for gradual upload")
 
         for chunk in range(1, 7):
             file_num += 1
-            log.info(
+            logger.info(
                 f"Uploading chunk {chunk}/6 (~4GB) to bucket {bucket.name} "
                 f"(total so far: ~{chunk * 4}GB, PV pool: 17Gi)"
             )
             try:
-                awscli_pod.exec_cmd_on_pod(
-                    craft_s3_command(
-                        f"cp /tmp/testfile s3://{bucket.name}/testfile{file_num}",
-                        mcg_obj,
-                    ),
-                    out_yaml_format=False,
-                    secrets=[
-                        mcg_obj.access_key_id,
-                        mcg_obj.access_key,
-                        mcg_obj.s3_endpoint,
-                    ],
+                copy_objects(
+                    awscli_pod,
+                    "/tmp/testfile",
+                    f"s3://{bucket.name}/testfile{file_num}",
+                    s3_obj=mcg_obj,
                 )
-            except Exception:
-                log.warning(
+            except CommandFailed:
+                logger.warning(
                     f"Upload of chunk {chunk} failed "
                     f"(expected when exceeding capacity)"
                 )
 
-            mode = _get_bucket_mode(mcg_obj, bucket.name)
-            log.info(
+            mode = get_bucket_mode(mcg_obj, bucket.name)
+            logger.info(
                 f"After chunk {chunk}: bucket mode = {mode} "
                 f"(uploaded ~{chunk * 4}GB / 17Gi)"
             )
 
             if mode != "OPTIMAL" and mode not in observed_modes:
                 observed_modes.append(mode)
-                log.info(f"New non-OPTIMAL mode observed: {mode}")
+                logger.info(f"New non-OPTIMAL mode observed: {mode}")
 
             if mode in capacity_error_modes:
                 final_mode = mode
-                log.info(f"Bucket {bucket.name} entered capacity error mode: {mode}")
+                logger.info(f"Bucket {bucket.name} entered capacity error mode: {mode}")
                 break
 
         if not final_mode:
-            log.info(
+            logger.info(
                 "Bucket still OPTIMAL after all uploads, "
                 "waiting for mode to propagate"
             )
-            final_mode = _wait_for_bucket_mode(
+            final_mode = wait_for_bucket_mode(
                 mcg_obj, bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES"
             )
             if final_mode and final_mode not in observed_modes:
                 observed_modes.append(final_mode)
 
-        log.info(
+        logger.info(
             f"Capacity test complete. "
             f"Observed mode transitions: {observed_modes}. "
             f"Final mode: {final_mode}"
@@ -520,17 +413,27 @@ class TestNooBaaBucketErrorStateMode:
             resource_description="bucket", resource_type="alert-quota"
         )
         bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj, quota="2Gi")
-        log.info(f"Created bucket {bucket_name} with 2Gi quota")
+        logger.info(f"Created bucket {bucket_name} with 2Gi quota")
 
         try:
-            _upload_data_to_bucket(awscli_pod, bucket_name, mcg_obj, 5, 500)
-            log.info(
-                f"Uploaded ~2.5GB to bucket {bucket_name} "
+            try:
+                write_random_test_objects_to_bucket(
+                    io_pod=awscli_pod,
+                    bucket_to_write=bucket_name,
+                    file_dir=UPLOAD_DIR,
+                    amount=5,
+                    bs="500M",
+                    mcg_obj=mcg_obj,
+                )
+            except CommandFailed:
+                logger.warning("Some uploads failed as expected when exceeding quota")
+            logger.info(
+                f"Uploaded data to bucket {bucket_name} "
                 f"(quota 2Gi) to trigger EXCEEDING_QUOTA"
             )
 
-            _wait_for_bucket_mode(mcg_obj, bucket_name, "EXCEEDING_QUOTA")
-            log.info(
+            wait_for_bucket_mode(mcg_obj, bucket_name, "EXCEEDING_QUOTA")
+            logger.info(
                 f"Bucket {bucket_name} is in EXCEEDING_QUOTA mode, "
                 f"waiting for Prometheus alert to fire (5+ minutes)"
             )
@@ -545,7 +448,7 @@ class TestNooBaaBucketErrorStateMode:
             )
 
             alert_labels = alerts[0]["labels"]
-            log.info(f"Alert {alert_name} fired with labels: {alert_labels}")
+            logger.info(f"Alert {alert_name} fired with labels: {alert_labels}")
             assert alert_labels.get("bucket_mode") == "EXCEEDING_QUOTA", (
                 f"Expected bucket_mode=EXCEEDING_QUOTA in alert labels, "
                 f"got bucket_mode={alert_labels.get('bucket_mode')}"
@@ -554,11 +457,14 @@ class TestNooBaaBucketErrorStateMode:
                 f"Expected bucket_name={bucket_name} in alert labels, "
                 f"got bucket_name={alert_labels.get('bucket_name')}"
             )
-            log.info(
+            logger.info(
                 f"Alert {alert_name} verified: "
                 f"bucket_name={alert_labels.get('bucket_name')}, "
                 f"bucket_mode={alert_labels.get('bucket_mode')}"
             )
         finally:
-            _delete_data_from_bucket(awscli_pod, bucket_name, mcg_obj, 5)
+            try:
+                rm_object_recursive(awscli_pod, bucket_name, mcg_obj)
+            except CommandFailed:
+                logger.warning(f"Cleanup of bucket {bucket_name} objects failed")
             bucket.delete()

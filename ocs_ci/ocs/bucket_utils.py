@@ -3651,6 +3651,76 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
         )
 
 
+def get_bucket_mode(mcg_obj, bucket_name):
+    """
+    Get the current mode of a bucket from NooBaa.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+
+    Returns:
+        str: The bucket mode (e.g. "OPTIMAL", "EXCEEDING_QUOTA")
+    """
+    bucket_info = mcg_obj.get_bucket_info(bucket_name)
+    if bucket_info:
+        logger.debug(f"Bucket info for {bucket_name}: {bucket_info}")
+        return bucket_info.get("mode", "UNKNOWN")
+    logger.warning(f"Bucket {bucket_name} not found in NooBaa system")
+    return "UNKNOWN"
+
+
+def wait_for_bucket_mode(mcg_obj, bucket_name, expected_mode, timeout=600, sleep=15):
+    """
+    Poll NooBaa until the bucket enters the expected mode or timeout.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        expected_mode (str): Expected bucket mode (e.g. "EXCEEDING_QUOTA")
+            or "!OPTIMAL" to wait for any non-OPTIMAL mode
+            (UNKNOWN is excluded to avoid false positives on lookup failures)
+        timeout (int): Timeout in seconds (default: 600)
+        sleep (int): Poll interval in seconds (default: 15)
+
+    Returns:
+        str: The actual bucket mode once matched
+
+    Raises:
+        AssertionError: If the bucket does not reach the expected mode
+            within the timeout
+    """
+    check_not_optimal = expected_mode == "!OPTIMAL"
+    last_mode = "UNKNOWN"
+
+    try:
+        for mode in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_bucket_mode,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket_name,
+        ):
+            last_mode = mode
+            if check_not_optimal and mode not in ("OPTIMAL", "UNKNOWN"):
+                logger.info(f"Bucket {bucket_name} entered non-OPTIMAL mode: {mode}")
+                return mode
+            elif not check_not_optimal and mode == expected_mode:
+                logger.info(f"Bucket {bucket_name} entered expected mode: {mode}")
+                return mode
+    except TimeoutExpiredError:
+        if check_not_optimal:
+            assert False, (
+                f"Bucket {bucket_name} is still OPTIMAL after "
+                f"{timeout}s (last mode: {last_mode})"
+            )
+        else:
+            assert False, (
+                f"Expected bucket mode {expected_mode} for {bucket_name}, "
+                f"got {last_mode} after {timeout}s"
+            )
+
+
 def get_bucket_status_value(mcg_obj, bucket_name, key):
     """
     Helper function returning specific bucket status value by key
