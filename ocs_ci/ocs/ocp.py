@@ -1014,6 +1014,9 @@ class OCP(object):
                 constants.STATUS_ACTIVE,
                 constants.STATUS_TERMINATING,
             ],
+            constants.ACM_MULTICLUSTER_HUB.lower(): [
+                constants.STATUS_RUNNING,
+            ],
         }
 
         if (
