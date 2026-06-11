@@ -884,3 +884,5 @@ zstream_4_20_14_odf_dr_multicluster_orchestrator = pytest.mark.zstream_4_20_14_o
 zstream_4_20_14_ocs_operator = pytest.mark.zstream_4_20_14_ocs_operator
 # z-stream marker
 zstream_4_20_14_rook = pytest.mark.zstream_4_20_14_rook
+# z-stream marker
+zstream_4_20_14_odf_console = pytest.mark.zstream_4_20_14_odf_console
