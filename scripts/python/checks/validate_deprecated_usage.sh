@@ -6,7 +6,7 @@
 #   precommit  – check staged changes (git diff --cached)
 #   ci         – check branch changes vs origin/master
 #
-# Exit 0 if clean, 1 if violations found.
+# Exit 0 if clean. precommit exits 1 on violations; ci exits 0 with warnings.
 
 set -euo pipefail
 
@@ -75,10 +75,28 @@ VIOLATIONS=$(echo "$DIFF_OUTPUT" | awk '
         line++
     }
     /^ / { line++ }
-' | grep -E "(from\s+\S+\s+import\s+.*\b(${COMBINED})\b|\b(${COMBINED})\s*\()" | \
-    grep -vE "def (${COMBINED})\s*\(" || true)
+' | grep -E "(from\s+\S+\s+import\s+.*\b(${COMBINED})\b|\b(${COMBINED})\s*\(|@\s*(${COMBINED})\b)" | \
+    grep -vE "def (${COMBINED})\s*\(" | \
+    grep -vE "\.\s*(${COMBINED})\s*\(" | \
+    grep -vE "#\s*IgnoreDeprecation" || true)
 
 if [ -z "$VIOLATIONS" ]; then
+    exit 0
+fi
+
+REPLACEMENT_HELP=""
+for entry in "${DEPRECATED_FUNCTIONS[@]}"; do
+    IFS='|' read -r pattern name replacement <<< "$entry"
+    REPLACEMENT_HELP+="  - ${name}  →  ${replacement}\n"
+done
+
+if [ "$MODE" = "ci" ]; then
+    while IFS=: read -r file line_num code; do
+        echo "::warning file=${file},line=${line_num}::Deprecated usage:${code## }"
+    done <<< "$VIOLATIONS"
+    echo ""
+    echo "⚠ Deprecated function usage detected (warning only in CI)."
+    echo -e "Replacements:\n${REPLACEMENT_HELP}"
     exit 0
 fi
 
@@ -90,16 +108,13 @@ echo ""
 echo "The following added lines use deprecated functions."
 echo "Please use the recommended replacements:"
 echo ""
-
-for entry in "${DEPRECATED_FUNCTIONS[@]}"; do
-    IFS='|' read -r pattern name replacement <<< "$entry"
-    echo "  - ${name}  →  ${replacement}"
-done
-
+echo -e "$REPLACEMENT_HELP"
 echo ""
 echo "Violations:"
 echo "--------------------------------------------------------"
 echo "$VIOLATIONS"
 echo "--------------------------------------------------------"
+echo ""
+echo "Hint: add '# IgnoreDeprecation' to suppress false positives."
 echo ""
 exit 1
