@@ -21,6 +21,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    zstream_4_20_14,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ def setup(pod_obj, bucket_factory, test_directory_setup):
 @red_squad
 @runs_on_provider
 @skipif_managed_service
+@zstream_4_20_14
 class TestS3MultipartUpload(MCGTest):
     """
     Test Multipart upload on Noobaa buckets

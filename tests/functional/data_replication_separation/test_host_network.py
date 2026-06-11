@@ -4,6 +4,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     data_replication_separation_required,
     jira,
     yellow_squad,
+    zstream_4_20_14,
 )
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.ocs import data_replication_separation
@@ -13,6 +14,7 @@ from ocs_ci.ocs import data_replication_separation
 @yellow_squad
 @data_replication_separation_required
 @pytest.mark.polarion_id("OCS-7308")
+@zstream_4_20_14
 def test_ceph_pods_have_host_network():
     """
     Test that running ceph pods have set host network.
@@ -39,6 +41,7 @@ def test_ceph_pods_have_host_network():
 @data_replication_separation_required
 @jira("DFBUGS-4306")
 @pytest.mark.polarion_id("OCS-7307")
+@zstream_4_20_14
 def test_operator_and_csi_pods_have_host_network():
     """
     Test that running operator and csi pods have set host network.

@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     red_squad,
     mcg,
+    zstream_4_20_14,
 )
 from ocs_ci.ocs.bucket_utils import sync_object_directory
 from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD, AWSCLI_TEST_OBJ_DIR
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @runs_on_provider
 @skipif_managed_service
+@zstream_4_20_14
 class TestBucketCreationAndDeletion(MCGTest):
     """
     Test creation of a bucket

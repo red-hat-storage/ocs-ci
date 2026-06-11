@@ -18,6 +18,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     runs_on_provider,
     skipif_ibm_cloud_managed,
+    zstream_4_20_14,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -37,6 +38,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
+@zstream_4_20_14
 class TestCapacityBreakdownUI(ManageTest):
     """
     Test Capacity Breakdown UI
