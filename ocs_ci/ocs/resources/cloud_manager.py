@@ -31,6 +31,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     load_auth_config,
     get_role_arn_from_sub,
+    get_azure_sts_creds_from_sub,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ class CloudManager(ABC):
             "GCP": GoogleClient,
             "AZURE": AzureClient,
             "AZURE_WITH_LOGS": AzureWithLogsClient,
+            "AZURE_STS": AzureSTSClient,
             "IBMCOS": IbmCosClient,
             "RGW": RgwClient,
         }
@@ -118,6 +120,16 @@ class CloudManager(ABC):
             )
         except ClusterNotInSTSModeException:
             setattr(self, "aws_sts_client", None)
+
+        # set the client for Azure STS enabled cluster
+        try:
+            setattr(
+                self,
+                "azure_sts_client",
+                cloud_map["AZURE_STS"](full_auth_dict=cred_dict),
+            )
+        except ClusterNotInSTSModeException:
+            setattr(self, "azure_sts_client", None)
 
 
 class CloudClient(ABC):
@@ -756,3 +768,53 @@ class AwsSTSClient(S3Client):
             *args,
             **kwargs,
         )
+
+
+class AzureSTSClient(AzureClient):
+    """
+    Implementation of an Azure Client for STS (managed identity) clusters.
+
+    Reuses AzureClient's blob_service_client for ULS operations but creates
+    a different k8s secret with managed identity fields instead of AccountKey.
+
+    """
+
+    @config.run_with_provider_context_if_available
+    def __init__(self, full_auth_dict, *args, **kwargs):
+        sts_creds = get_azure_sts_creds_from_sub()
+        azure_auth_dict = full_auth_dict.get("AZURE")
+        if not azure_auth_dict:
+            logger.error("Cluster is in Azure STS mode, but no AZURE credentials found")
+            raise ClusterNotInSTSModeException
+
+        self.client_id = sts_creds["client_id"]
+        self.tenant_id = sts_creds["tenant_id"]
+        self.subscription_id = sts_creds["subscription_id"]
+        self.resource_group = sts_creds.get("resource_group", "")
+
+        super().__init__(auth_dict=azure_auth_dict, *args, **kwargs)
+
+    def create_azure_secret(self):
+        """
+        Create a Kubernetes secret for Azure STS backingstores/namespacestores.
+
+        Contains AccountName, azure_tenant_id, and azure_client_id
+        for managed identity authentication (no AccountKey).
+
+        """
+        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
+            "cldmgr-azure-sts", "secret"
+        )
+        bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+        bs_secret_data["data"]["AccountName"] = base64.urlsafe_b64encode(
+            self.account_name.encode("UTF-8")
+        ).decode("ascii")
+        bs_secret_data["data"]["azure_tenant_id"] = base64.urlsafe_b64encode(
+            self.tenant_id.encode("UTF-8")
+        ).decode("ascii")
+        bs_secret_data["data"]["azure_client_id"] = base64.urlsafe_b64encode(
+            self.client_id.encode("UTF-8")
+        ).decode("ascii")
+
+        return create_resource(**bs_secret_data)

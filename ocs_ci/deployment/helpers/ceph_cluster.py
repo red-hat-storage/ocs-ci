@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from pathlib import Path
 
 from ocs_ci.deployment.baremetal import (
@@ -481,4 +482,82 @@ def simulate_full_ceph_bluestore_process_on_wnodes(
         return False
 
     logger.info("Full Ceph BlueStore simulation process completed successfully.")
+    return True
+
+
+def verify_wipe_devices_from_other_clusters():
+    """
+    Verify that the cluster correctly wiped pre-existing bluestore OSDs from
+    another cluster before provisioning new OSDs.
+
+    Performs two checks:
+
+    1. **StorageCluster CR** — asserts that
+       ``spec.managedResources.cephCluster.cleanupPolicy.wipeDevicesFromOtherClusters``
+       is exactly ``true``.
+
+    2. **OSD prepare logs** — checks each ``rook-ceph-osd-prepare`` pod for
+       the following regex patterns, which confirm that foreign bluestore data
+       was detected and zapped:
+
+       - ``completed wiping OSD <id> device "<dev>" belonging to a different
+         ceph cluster`` — foreign bluestore data detected and zapped
+       - ``successfully zapped osd.<id> path "<dev>"`` — low-level wipe
+         succeeded
+       - ``ceph-volume raw dmcrypt prepare successful`` — new OSD prepared
+         (emitted for both encrypted and unencrypted OSDs)
+
+    Returns:
+        bool: True if both checks pass, False otherwise.
+
+    """
+    from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+
+    # Check 1: StorageCluster CR flag
+    sc_obj = get_storage_cluster()
+    sc_data = sc_obj.get(resource_name=constants.DEFAULT_STORAGE_CLUSTER)
+    flag = (
+        sc_data.get("spec", {})
+        .get("managedResources", {})
+        .get("cephCluster", {})
+        .get("cleanupPolicy", {})
+        .get("wipeDevicesFromOtherClusters")
+    )
+    if flag is True:
+        logger.info("StorageCluster has wipeDevicesFromOtherClusters set to true")
+    else:
+        logger.error(
+            "StorageCluster wipeDevicesFromOtherClusters is %r, expected true",
+            flag,
+        )
+        return False
+
+    # Check 2: OSD prepare pod logs
+    expected_patterns = [
+        re.compile(
+            r'completed wiping OSD \d+ device ".+" belonging to a different'
+            r" ceph cluster"
+        ),
+        re.compile(r'successfully zapped osd\.\d+ path ".+"'),
+        re.compile(r"ceph-volume raw dmcrypt prepare successful"),
+    ]
+
+    osd_prepare_pods = get_osd_prepare_pods()
+    if not osd_prepare_pods:
+        logger.error("No rook-ceph-osd-prepare pods found")
+        return False
+
+    for pod in osd_prepare_pods:
+        logs = get_pod_logs(pod.name)
+        logger.info("Verifying bluestore wipe log entries in pod %s", pod.name)
+        for pattern in expected_patterns:
+            if not pattern.search(logs):
+                logger.error(
+                    "Expected log pattern not found in pod %r: %r",
+                    pod.name,
+                    pattern.pattern,
+                )
+                return False
+
     return True

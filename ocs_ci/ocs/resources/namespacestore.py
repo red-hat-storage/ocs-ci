@@ -265,6 +265,13 @@ def cli_create_namespacestore(
             f"--private-key-json-file {constants.GOOGLE_CREDS_JSON_PATH} "
             f"--target-bucket {uls_name}"
         ),
+        constants.AZURE_STS_PLATFORM: lambda: (
+            f"azure-sts-blob {nss_name} "
+            f"--target-blob-container {uls_name} "
+            f"--tenant-id {get_attr_chain(cld_mgr, 'azure_sts_client.tenant_id')} "
+            f"--client-id {get_attr_chain(cld_mgr, 'azure_sts_client.client_id')} "
+            f"--account-name {get_attr_chain(cld_mgr, 'azure_sts_client.account_name')}"
+        ),
         constants.NAMESPACE_FILESYSTEM: lambda: (
             f"nsfs {nss_name} "
             f"--pvc-name {uls_name} "
@@ -369,6 +376,17 @@ def oc_create_namespacestore(
                 },
             },
         },
+        constants.AZURE_STS_PLATFORM: lambda: {
+            "type": "azure-blob",
+            "azureBlob": {
+                "targetBlobContainer": uls_name,
+                "clientId": get_attr_chain(cld_mgr, "azure_sts_client.client_id"),
+                "secret": {
+                    "name": get_attr_chain(cld_mgr, "azure_sts_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
+            },
+        },
     }
 
     if (
@@ -467,9 +485,14 @@ def namespace_store_factory(
                 for nss_tup in nss_lst:
                     for _ in range(nss_tup[0] if isinstance(nss_tup[0], int) else 1):
                         if platform.lower() == "nsfs":
-                            uls_name = nss_tup[0] or create_unique_resource_name(
-                                constants.PVC.lower(), platform
-                            )
+                            # Use nss_tup[0] as PVC name only if it's a string
+                            # If it's an int (amount) or None, generate a unique name
+                            if isinstance(nss_tup[0], str) and nss_tup[0].strip():
+                                uls_name = nss_tup[0].strip()
+                            else:
+                                uls_name = create_unique_resource_name(
+                                    constants.PVC.lower(), platform
+                                )
                             pvc_factory_session(
                                 custom_data=template_pvc(uls_name, size=nss_tup[1])
                             )

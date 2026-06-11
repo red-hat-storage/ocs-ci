@@ -129,8 +129,22 @@ def bucket_class_factory(
             backingstores = None
             namespacestores = None
             placement_policy = None
+            vector_policy = None
 
-            if "namespace_policy_dict" in bucket_class_dict:
+            if "vector_policy" in bucket_class_dict and interface.lower() != "oc":
+                raise RuntimeError(
+                    f"vector_policy is supported only with 'oc' interface, got: {interface}"
+                )
+
+            if "vector_policy" in bucket_class_dict:
+                # Vector policy for vector buckets
+                vector_policy = {
+                    "resource": bucket_class_dict["vector_policy"]["resource"],
+                    "vectorDBType": bucket_class_dict["vector_policy"].get(
+                        "vector_db_type", "lance"
+                    ),
+                }
+            elif "namespace_policy_dict" in bucket_class_dict:
                 if "namespacestore_dict" in bucket_class_dict["namespace_policy_dict"]:
                     nss_dict = bucket_class_dict["namespace_policy_dict"][
                         "namespacestore_dict"
@@ -171,6 +185,8 @@ def bucket_class_factory(
                         ]
                         namespace_policy["write_resource"] = namespacestores[0].name
 
+            elif "backingstores" in bucket_class_dict:
+                backingstores = bucket_class_dict["backingstores"]
             elif "backingstore_dict" in bucket_class_dict:
                 try:
                     backingstores = [
@@ -222,6 +238,7 @@ def bucket_class_factory(
                     placement_policy,
                     namespace_policy,
                     replication_policy,
+                    vector_policy,
                 )
             elif interface.lower() == "cli" and backingstores:
                 mcg_obj.cli_create_bucketclass_over_backingstores(

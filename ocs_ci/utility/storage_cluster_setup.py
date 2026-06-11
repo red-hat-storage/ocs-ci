@@ -145,7 +145,9 @@ class StorageClusterSetup(object):
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
-            cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
+            cluster_data["spec"]["storageDeviceSets"][0]["count"] = (
+                config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
+            )
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
         elif (
             self.platform.lower() == constants.FYRE_PLATFORM

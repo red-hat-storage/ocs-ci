@@ -3950,7 +3950,7 @@ def get_ocs_olm_operator_tags(limit=100):
     return all_tags
 
 
-@retry(requests.RequestException, 10, 30, 1)
+@retry(requests.RequestException, 20, 30, 1)
 def query_quay_for_operator_tags(
     image: str, headers: dict, limit: int, page: int
 ) -> list:
@@ -3981,7 +3981,9 @@ def query_quay_for_operator_tags(
         timeout=120,
     )
     if not resp.ok:
-        raise requests.RequestException(resp.json())
+        raise requests.RequestException(
+            f"Quay API returned {resp.status_code}: {resp.text[:200]}"
+        )
     tags = resp.json()["tags"]
     return tags
 
@@ -4956,6 +4958,10 @@ def mirror_image(image, cluster_config=None):
             mirror_base = f"{mirror_registry}/{mirror_registry_path}"
 
         mirrored_image = mirror_base + re.sub(r"^[^/]*", "", orig_image_full)
+        # remove the sha256 hash from the mirrored image (if present) and replace it by temporary custom tag:
+        if "@sha256" in mirrored_image:
+            mirrored_image = mirrored_image.split("@")[0]
+            mirrored_image += f":odf-qe-temp-tag-{get_random_str(10)}"
         # mirror the image
         log.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
@@ -6266,6 +6272,47 @@ def get_role_arn_from_sub():
         return role_arn
     else:
         raise ClusterNotInSTSModeException
+
+
+def get_azure_sts_creds_from_sub():
+    """
+    Get Azure STS credentials (managed identity) from the ODF Subscription.
+
+    Returns:
+        dict: Keys are ``client_id``, ``tenant_id``,
+            ``subscription_id``, and ``resource_group``.
+
+    Raises:
+        ClusterNotInSTSModeException: If cluster not in STS mode
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    if not config.DEPLOYMENT.get("sts_enabled"):
+        raise ClusterNotInSTSModeException
+
+    env_key_map = {
+        "CLIENTID": "client_id",
+        "TENANTID": "tenant_id",
+        "SUBSCRIPTIONID": "subscription_id",
+        "RESOURCEGROUP": "resource_group",
+    }
+    odf_sub = OCP(
+        kind=constants.SUBSCRIPTION,
+        resource_name=constants.ODF_SUBSCRIPTION,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    creds = {}
+    env_items = odf_sub.get().get("spec", {}).get("config", {}).get("env", [])
+    for item in env_items:
+        if item["name"] in env_key_map:
+            creds[env_key_map[item["name"]]] = item["value"]
+
+    required = {"client_id", "tenant_id", "subscription_id"}
+    if not required.issubset(creds):
+        raise ClusterNotInSTSModeException
+
+    return creds
 
 
 def get_glibc_version():

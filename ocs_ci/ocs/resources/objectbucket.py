@@ -169,6 +169,7 @@ class ObjectBucket(ABC):
     """
 
     mcg, name = (None,) * 2
+    _verify_s3_listing = True  # Set to False in subclasses to skip S3 bucket check
 
     def __init__(
         self,
@@ -313,7 +314,11 @@ class ObjectBucket(ABC):
             ):
                 if not health_check:
                     logger.info(f"{self.name} is unhealthy. Rechecking.")
-                elif self.mcg and not self.mcg.s3_verify_bucket_exists(self.name):
+                elif (
+                    self._verify_s3_listing
+                    and self.mcg
+                    and not self.mcg.s3_verify_bucket_exists(self.name)
+                ):
                     logger.info(
                         f"{self.name} is healthy, but not found in S3. Rechecking."
                     )
@@ -627,6 +632,36 @@ class MCGOCBucket(OCBucket):
         create_resource(**obc_data)
 
 
+class VectorOCBucket(OCBucket):
+    """
+    Implementation of an MCG Vector bucket using the OC CLI
+    """
+
+    _verify_s3_listing = False  # Skip S3 bucket existence check for vector buckets
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        obc_data = templating.load_yaml(constants.VECTOR_OBC_YAML)
+        if self.name is None:
+            self.name = create_unique_resource_name("vector-oc", "obc")
+        obc_data["metadata"]["name"] = self.name
+        obc_data["spec"]["bucketName"] = self.name
+        obc_data["spec"]["storageClassName"] = f"{self.namespace}.noobaa.io"
+        obc_data["metadata"]["namespace"] = self.namespace
+
+        # Ensure additionalConfig exists
+        obc_data.setdefault("spec", {}).setdefault("additionalConfig", {})
+
+        # Always set bucketType to vector
+        obc_data["spec"]["additionalConfig"]["bucketType"] = "vector"
+
+        # Add bucketclass if specified
+        if self.bucketclass:
+            obc_data["spec"]["additionalConfig"]["bucketclass"] = self.bucketclass.name
+
+        create_resource(**obc_data)
+
+
 class RGWOCBucket(OCBucket):
     """
     Implementation of an RGW bucket using the S3 API
@@ -744,6 +779,7 @@ BUCKET_MAP = {
     "cli": MCGCLIBucket,
     "rgw-oc": RGWOCBucket,
     "mcg-namespace": MCGNamespaceBucket,
+    "vector-oc": VectorOCBucket,
 }
 
 

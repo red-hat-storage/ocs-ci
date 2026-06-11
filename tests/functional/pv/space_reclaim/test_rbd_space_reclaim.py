@@ -5,16 +5,16 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, ec_allowed
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
     tier2,
-    polarion_id,
     skipif_managed_service,
     skipif_external_mode,
 )
+from ocs_ci.ocs.cluster import is_ec_pool_supported
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -32,6 +32,12 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture
+def erasure_coded():
+    """Default pool type: replicated. Overridden per-test via parametrize."""
+    return False
+
+
 @green_squad
 @skipif_ocs_version("<4.10")
 class TestRbdSpaceReclaim(ManageTest):
@@ -41,7 +47,9 @@ class TestRbdSpaceReclaim(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, storageclass_factory, create_pvcs_and_pods):
+    def setup(
+        self, project_factory, storageclass_factory, create_pvcs_and_pods, erasure_coded
+    ):
         """
         Create PVCs and pods
 
@@ -55,6 +63,7 @@ class TestRbdSpaceReclaim(ManageTest):
                 interface=constants.CEPHBLOCKPOOL,
                 replica=self.pool_replica,
                 new_rbd_pool=True,
+                erasure_coded=erasure_coded,
             )
         self.data_pool = helpers.get_data_pool_name(sc_obj=self.sc_obj)
         self.pool_size_factor = helpers.get_pool_size_factor(self.data_pool)
@@ -67,11 +76,27 @@ class TestRbdSpaceReclaim(ManageTest):
             sc_rbd=self.sc_obj,
         )
 
-    @polarion_id("OCS-2741")
+    @pytest.mark.parametrize(
+        "erasure_coded",
+        [
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-2741")]),
+            pytest.param(
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7974"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
     @tier1
     @skipif_external_mode
     @skipif_managed_service
-    def test_rbd_space_reclaim(self):
+    def test_rbd_space_reclaim(self, erasure_coded):
         """
         Test to verify RBD space reclamation
 
@@ -150,11 +175,27 @@ class TestRbdSpaceReclaim(ManageTest):
         if check_file_existence(pod_obj=pod_obj, file_path=file_path):
             log.info(f"{fio_filename2} is intact")
 
-    @polarion_id("OCS-2774")
+    @pytest.mark.parametrize(
+        "erasure_coded",
+        [
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-2774")]),
+            pytest.param(
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7975"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
     @tier2
     @skipif_managed_service
     @skipif_external_mode
-    def test_rbd_space_reclaim_no_space(self):
+    def test_rbd_space_reclaim_no_space(self, erasure_coded):
         """
         Test to verify RBD space reclamation
 
@@ -207,10 +248,26 @@ class TestRbdSpaceReclaim(ManageTest):
             f"Memory remains intact. Used size after io is {used_after_reclaiming_space}."
         )
 
-    @polarion_id("OCS-3733")
+    @pytest.mark.parametrize(
+        "erasure_coded",
+        [
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-3733")]),
+            pytest.param(
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7976"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
     @tier2
     @skipif_external_mode
-    def test_no_volume_mounted(self):
+    def test_no_volume_mounted(self, erasure_coded):
         """
         Test reclaimspace job with no volume mounted
 

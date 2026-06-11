@@ -12,10 +12,15 @@ from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_ibm_cloud_managed,
     runs_on_provider,
+    ec_allowed,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.cluster import get_percent_used_capacity, CephCluster
+from ocs_ci.ocs.cluster import (
+    get_percent_used_capacity,
+    CephCluster,
+    is_ec_pool_supported,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
@@ -30,6 +35,7 @@ def preconditions_rbd_pool_created_associated_to_sc(
     replica,
     storageclass_factory_class,
     volume_binding_mode,
+    erasure_coded=False,
 ):
     """
     Helper method to create storageclass with the pool and verify that in pool list
@@ -43,6 +49,7 @@ def preconditions_rbd_pool_created_associated_to_sc(
     :param replica: replica size
     :param storageclass_factory_class: storageclass factory fixture
     :param volume_binding_mode: volume binding mode
+    :param erasure_coded: True to create an erasure coded pool
     :return: ceph blockpool name
     """
     interface_type = constants.CEPHBLOCKPOOL
@@ -53,6 +60,7 @@ def preconditions_rbd_pool_created_associated_to_sc(
         compression=compression,
         volume_binding_mode=volume_binding_mode,
         pool_name="test-pool",
+        erasure_coded=erasure_coded,
     )
     logger.info(f"Creating a PVC using {sc_obj.name}")
     pvc_obj = pvc_factory(
@@ -93,7 +101,13 @@ def preconditions_rbd_pool_created_associated_to_sc(
 class TestDeleteRbdPool(ManageTest):
     @skipif_external_mode
     @pytest.mark.parametrize(
-        argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
+        argnames=[
+            "replica",
+            "compression",
+            "volume_binding_mode",
+            "pvc_status",
+            "erasure_coded",
+        ],
         argvalues=[
             pytest.param(
                 *[
@@ -101,6 +115,7 @@ class TestDeleteRbdPool(ManageTest):
                     "aggressive",
                     constants.WFFC_VOLUMEBINDINGMODE,
                     constants.STATUS_PENDING,
+                    False,
                 ],
                 marks=[tier3, pytest.mark.polarion_id("OCS-5134")],
             ),
@@ -110,6 +125,7 @@ class TestDeleteRbdPool(ManageTest):
                     "aggressive",
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
+                    False,
                 ],
                 marks=[tier3, pytest.mark.polarion_id("OCS-5135")],
             ),
@@ -119,6 +135,7 @@ class TestDeleteRbdPool(ManageTest):
                     "none",
                     constants.WFFC_VOLUMEBINDINGMODE,
                     constants.STATUS_PENDING,
+                    False,
                 ],
                 marks=[tier3, pytest.mark.polarion_id("OCS-5136")],
             ),
@@ -128,8 +145,27 @@ class TestDeleteRbdPool(ManageTest):
                     "none",
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
+                    False,
                 ],
                 marks=[tier3, pytest.mark.polarion_id("OCS-5137")],
+            ),
+            pytest.param(
+                *[
+                    3,
+                    "none",
+                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                    constants.STATUS_BOUND,
+                    True,
+                ],
+                marks=[
+                    ec_allowed,
+                    tier3,
+                    pytest.mark.polarion_id("OCS-7961"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
             ),
         ],
     )
@@ -139,6 +175,7 @@ class TestDeleteRbdPool(ManageTest):
         compression,
         volume_binding_mode,
         pvc_status,
+        erasure_coded,
         storageclass_factory_class,
         pvc_factory,
         pod_factory,
@@ -160,6 +197,7 @@ class TestDeleteRbdPool(ManageTest):
             replica,
             storageclass_factory_class,
             volume_binding_mode,
+            erasure_coded=erasure_coded,
         )
 
         distr_res = distribute_storage_classes_to_all_consumers_factory()

@@ -107,6 +107,7 @@ from ocs_ci.ocs.resources import packagemanifest
 from ocs_ci.ocs.resources.catalog_source import (
     CatalogSource,
     disable_specific_source,
+    is_catalog_source_ready,
 )
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -1350,6 +1351,22 @@ class Deployment(object):
             and platform in constants.AWS_STS_PLATFORMS
         )
 
+        add_new_disks_for_lso = True
+        # Simulate bluestore label on worker nodes before deploying OCS.
+        # Must run before ui_deployment early-return so it applies to both
+        # UI and non-UI paths.
+        simulate_bluestore_label = config.ENV_DATA.get(
+            "simulate_bluestore_label", False
+        )
+        if simulate_bluestore_label:
+            from ocs_ci.deployment.helpers.ceph_cluster import (
+                simulate_full_ceph_bluestore_process_on_wnodes,
+            )
+
+            log_step("Simulate Ceph OSD bluestore on worker nodes")
+            simulate_full_ceph_bluestore_process_on_wnodes()
+            add_new_disks_for_lso = False
+
         if ui_deployment and ui_deployment_conditions():
             log_step("Start ODF deployment with UI")
             self.deployment_with_ui()
@@ -1411,19 +1428,6 @@ class Deployment(object):
                     "oc wait --for=condition=Updated --timeout=30m mcp/worker",
                     timeout=2100,
                 )
-
-        add_new_disks_for_lso = True
-        # Simulate bluestore label on Baremetal or vSphere LSO worker nodes before deploying OCS
-        simulate_bluestore_label = config.ENV_DATA.get(
-            "simulate_bluestore_label", False
-        )
-        if simulate_bluestore_label:
-            from ocs_ci.deployment.helpers.ceph_cluster import (
-                simulate_full_ceph_bluestore_process_on_wnodes,
-            )
-
-            simulate_full_ceph_bluestore_process_on_wnodes()
-            add_new_disks_for_lso = False
 
         # with Hub/Spoke deployments LSO on IBM BareMetal is a mandatory requirement, it is installed on Dependency
         # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
@@ -1860,7 +1864,27 @@ class Deployment(object):
 
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         if not live_deployment:
-            create_catalog_source()
+            if is_catalog_source_ready():
+                logger.info(
+                    "CatalogSource %s already exists and is READY, skipping creation",
+                    constants.OPERATOR_CATALOG_SOURCE_NAME,
+                )
+            else:
+                create_catalog_source()
+
+        # Complete all CLI prep work (LSO catalog, disk attachment) before
+        # opening the browser to avoid stale element errors caused by the
+        # console re-rendering while the browser sits idle.
+        if config.DEPLOYMENT.get("local_storage"):
+            from ocs_ci.deployment.helpers.lso_helpers import (
+                add_disk_for_vsphere_platform,
+            )
+            from ocs_ci.utility.operators import LocalStorageOperator
+
+            LocalStorageOperator(create_catalog=True)
+            if config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM:
+                add_disk_for_vsphere_platform()
+
         login_ui()
         deployment_obj = DeploymentUI()
         deployment_obj.install_ocs_ui()
@@ -1909,10 +1933,13 @@ class Deployment(object):
             )
             raise
 
-    def deploy_with_external_mode(self):
+    def deploy_with_external_mode(self, image=None):
         """
         This function handles the deployment of OCS on
         external/indpendent RHCS cluster
+
+        Args:
+            image (str): Image of ocs registry.
 
         """
         if config.EXTERNAL_MODE.get("rgw_secure"):
@@ -1926,7 +1953,7 @@ class Deployment(object):
                 logger.info("Creating namespace and operator group.")
                 run_cmd(f"oc apply -f {constants.OLM_YAML}")
             if not live_deployment:
-                create_catalog_source()
+                create_catalog_source(image)
             self.subscribe_ocs()
             operator_selector = get_selector_for_ocs_operator()
             subscription_plan_approval = config.DEPLOYMENT.get(
@@ -2171,7 +2198,7 @@ class Deployment(object):
                 label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
 
         if config.DEPLOYMENT["external_mode"]:
-            self.deploy_with_external_mode()
+            self.deploy_with_external_mode(image)
         else:
             self.deploy_ocs_via_operator(image)
             if config.ENV_DATA["mcg_only_deployment"]:
@@ -2232,6 +2259,25 @@ class Deployment(object):
                 resource_count=1,
                 timeout=600,
             )
+
+            wipe_devices_from_other_clusters = config.ENV_DATA.get(
+                "wipe_devices_from_other_clusters", False
+            )
+            odf_forceful_deployment = config.DEPLOYMENT.get(
+                "odf_forceful_deployment", False
+            )
+            if wipe_devices_from_other_clusters or odf_forceful_deployment:
+                from ocs_ci.deployment.helpers.ceph_cluster import (
+                    verify_wipe_devices_from_other_clusters,
+                )
+
+                logger.info(
+                    "Verify wipe devices from other clusters "
+                    "(StorageCluster CR flag and OSD prepare logs)"
+                )
+                assert (
+                    verify_wipe_devices_from_other_clusters()
+                ), "Wipe devices from other clusters verification failed"
 
             if not config.COMPONENTS["disable_cephfs"]:
                 # Check for CephFilesystem creation in ocp

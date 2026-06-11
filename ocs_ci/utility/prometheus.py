@@ -882,6 +882,33 @@ class PrometheusAPI(object):
                 timeout -= sleep
         return alerts
 
+    def get_alerts_by_labels(self, alert_name, labels_dict):
+        """
+        Get alerts (pending or firing) matching a specific alert name and
+        label values.
+
+        Args:
+            alert_name (str): Alert name to match.
+            labels_dict (dict): Label key-value pairs to filter by
+                (e.g. {"source_bucket": "my-bucket"}).
+
+        Returns:
+            list: Matching alert records, empty if none found.
+        """
+        with self._cluster_context():
+            response = self.get(
+                "alerts",
+                payload={"silenced": False, "inhibited": False},
+            )
+            if not response.ok:
+                raise AlertingError(f"Request {response.request.url} failed")
+            return [
+                alert
+                for alert in response.json()["data"]["alerts"]
+                if alert["labels"].get("alertname") == alert_name
+                and all(alert["labels"].get(k) == v for k, v in labels_dict.items())
+            ]
+
     def check_alert_cleared(self, label, measure_end_time, time_min=120):
         """
         Check that all alerts with provided label are cleared.

@@ -868,6 +868,7 @@ TOOL_POD_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "toolbox_pod.yaml")
 CEPHFILESYSTEM_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "CephFileSystem.yaml")
 
 CEPHBLOCKPOOL_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "cephblockpool.yaml")
+CEPHBLOCKPOOL_EC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "cephblockpool_ec.yaml")
 
 VSPHERE_THICK_STORAGECLASS_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "vsphere_storageclass_thick.yaml"
@@ -901,6 +902,8 @@ SCC_YAML = os.path.join(TEMPLATE_SECURITY_DIR, "scc.yaml")
 CSI_PVC_YAML = os.path.join(TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml")
 
 MCG_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml")
+
+VECTOR_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "VectorObjectBucketClaim.yaml")
 
 RGW_OBC_YAML = os.path.join(TEMPLATE_MCG_DIR, "ObjectBucketClaim-RGW.yaml")
 
@@ -1797,6 +1800,7 @@ PSA_RESTRICTED = "restricted"
 AWS_PLATFORM = "aws"
 AZURE_PLATFORM = "azure"
 AZURE_WITH_LOGS_PLATFORM = "azure-with-logs"
+AZURE_STS_PLATFORM = "azure-sts"
 GCP_PLATFORM = "gcp"
 VSPHERE_PLATFORM = "vsphere"
 BAREMETAL_PLATFORM = "baremetal"
@@ -2924,7 +2928,15 @@ SQUAD_CHECK_IGNORED_MARKERS = ["ignore_owner", "libtest"]
 PRODUCTION_JOBS_PREFIX = ["jnk"]
 
 # Cloud Manager available platforms
-CLOUD_MNGR_PLATFORMS = ["AWS", "GCP", "AZURE", "AZURE_WITH_LOGS", "IBMCOS", "AWS_STS"]
+CLOUD_MNGR_PLATFORMS = [
+    "AWS",
+    "GCP",
+    "AZURE",
+    "AZURE_WITH_LOGS",
+    "IBMCOS",
+    "AWS_STS",
+    "AZURE_STS",
+]
 
 # Vault related configurations
 VAULT_VERSION_INFO_URL = "https://github.com/hashicorp/vault/releases/latest"
