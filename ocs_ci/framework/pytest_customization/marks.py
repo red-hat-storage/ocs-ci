@@ -882,3 +882,5 @@ zstream_4_20_14_upgrade = pytest.mark.zstream_4_20_14_upgrade
 zstream_4_20_14_naturalintelligence_fast_xml_parser = pytest.mark.zstream_4_20_14_naturalintelligence_fast_xml_parser
 # z-stream marker
 zstream_4_20_14_ocs_operator = pytest.mark.zstream_4_20_14_ocs_operator
+# z-stream marker
+zstream_4_20_14_rook = pytest.mark.zstream_4_20_14_rook
