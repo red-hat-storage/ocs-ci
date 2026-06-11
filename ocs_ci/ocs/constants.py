@@ -747,6 +747,14 @@ CEPH_DAEMON_LABEL_BY_COMPONENT = {
     "mds": MDS_APP_LABEL,
     "rgw": RGW_APP_LABEL,
 }
+# CephX authentication key rotation (Rook CephCluster spec.security.cephx)
+CEPHX_KEY_IDENTIFIER_ANNOTATION = "cephx-key-identifier"
+ROOK_CEPHX_KEYROTATION_DAEMONS = ("mon", "mgr", "osd", "mds")
+CEPHCLUSTER_CEPHX_KEYROTATION_STATUS_ENTITIES = ("mon", "mgr", "osd")
+ROOK_CEPHX_KEYROTATION_DAEMON_LABELS = {
+    daemon: CEPH_DAEMON_LABEL_BY_COMPONENT[daemon]
+    for daemon in ROOK_CEPHX_KEYROTATION_DAEMONS
+}
 EXPORTER_APP_LABEL = "app=rook-ceph-exporter"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 ODF_CONSOLE = "app=odf-console"

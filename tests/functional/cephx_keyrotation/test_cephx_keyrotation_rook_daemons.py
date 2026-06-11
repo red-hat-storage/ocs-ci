@@ -50,11 +50,9 @@ class TestCephXKeyRotationRookDaemons:
         mon_rotation_supported = rotator.is_mon_key_rotation_supported()
         mon_auth_verifiable = rotator.is_mon_auth_verifiable()
         log.info(
-            "Pre-rotation keyGeneration: mon=%s mgr=%s osd=%s mds=%s",
-            pre_mon_generation,
-            pre_mgr_generation,
-            pre_osd_generation,
-            pre_mds_generation,
+            f"Pre-rotation keyGeneration: mon={pre_mon_generation} "
+            f"mgr={pre_mgr_generation} osd={pre_osd_generation} "
+            f"mds={pre_mds_generation}"
         )
 
         auth_entities = rotator.discover_rook_daemon_auth_entities()
@@ -66,7 +64,7 @@ class TestCephXKeyRotationRookDaemons:
                 )
                 continue
             assert entities, f"No Ceph auth entities found for {daemon}"
-            log.info("Pre-rotation %s auth entities: %s", daemon, ", ".join(entities))
+            log.info(f"Pre-rotation {daemon} auth entities: {', '.join(entities)}")
 
         all_entities = [
             entity
@@ -81,17 +79,14 @@ class TestCephXKeyRotationRookDaemons:
         for daemon, pods in pre_pod_states.items():
             assert pods, f"No Running pods found for {daemon} before rotation"
             log.info(
-                "Pre-rotation %s pods: %s",
-                daemon,
-                ", ".join(
-                    f"{name} (cephx-key-identifier={ann})" for name, ann in pods.items()
-                ),
+                f"Pre-rotation {daemon} pods: "
+                f"{', '.join(f'{name} (cephx-key-identifier={ann})' for name, ann in pods.items())}"
             )
 
         ceph_health_check(namespace=namespace)
 
         target_generation = rotator.rotate_daemon_keys()
-        log.info("Triggered daemon CephX rotation to generation %s", target_generation)
+        log.info(f"Triggered daemon CephX rotation to generation {target_generation}")
 
         rotator.wait_for_rook_daemon_rotation(target_generation)
         post_pod_states = rotator.wait_for_all_daemon_pod_restarts(pre_pod_states)
@@ -117,32 +112,26 @@ class TestCephXKeyRotationRookDaemons:
         rotator.log_auth_key_snapshot("after rotation", post_auth_keys)
         rotator.verify_auth_caps_unchanged(pre_auth_caps, entities=all_entities)
         log.info(
-            "Post-rotation keyGeneration: mon=%s mgr=%s osd=%s mds=%s",
-            rotator.get_status_key_generation("mon"),
-            rotator.get_status_key_generation("mgr"),
-            rotator.get_status_key_generation("osd"),
-            rotator.get_filesystem_daemon_key_generation(),
+            f"Post-rotation keyGeneration: mon={rotator.get_status_key_generation('mon')} "
+            f"mgr={rotator.get_status_key_generation('mgr')} "
+            f"osd={rotator.get_status_key_generation('osd')} "
+            f"mds={rotator.get_filesystem_daemon_key_generation()}"
         )
 
         for daemon, pods in post_pod_states.items():
             for pod_name, annotation in pods.items():
                 if annotation is None and daemon == "mon" and not mon_auth_verifiable:
                     log.warning(
-                        "Pod %s (%s) missing cephx-key-identifier; "
-                        "MON auth is not verifiable on this cluster",
-                        pod_name,
-                        daemon,
+                        f"Pod {pod_name} ({daemon}) missing cephx-key-identifier; "
+                        "MON auth is not verifiable on this cluster"
                     )
                     continue
                 assert (
                     annotation is not None
                 ), f"Pod {pod_name} ({daemon}) missing cephx-key-identifier annotation"
             log.info(
-                "Post-rotation %s pods: %s",
-                daemon,
-                ", ".join(
-                    f"{name} (cephx-key-identifier={ann})" for name, ann in pods.items()
-                ),
+                f"Post-rotation {daemon} pods: "
+                f"{', '.join(f'{name} (cephx-key-identifier={ann})' for name, ann in pods.items())}"
             )
 
         ceph_health_check(namespace=namespace)
@@ -154,4 +143,4 @@ class TestCephXKeyRotationRookDaemons:
         assert rotator.get_status_key_generation("osd") > pre_osd_generation
         assert rotator.get_filesystem_daemon_key_generation() > pre_mds_generation
 
-        log.info("TC-01 CephX key rotation for MON/MGR/OSD/MDS completed successfully")
+        log.info("CephX key rotation for MON/MGR/OSD/MDS completed successfully")

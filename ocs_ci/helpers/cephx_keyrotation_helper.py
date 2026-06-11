@@ -22,19 +22,6 @@ from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
-CEPHX_KEY_IDENTIFIER_ANNOTATION = "cephx-key-identifier"
-
-# TC-01 / Rook daemon CephX key rotation scope
-ROOK_KEYROTATION_DAEMONS = ("mon", "mgr", "osd", "mds")
-CEPHCLUSTER_KEYROTATION_STATUS_ENTITIES = ("mon", "mgr", "osd")
-
-DAEMON_POD_LABELS = {
-    "mon": "app=rook-ceph-mon",
-    "mgr": "app=rook-ceph-mgr",
-    "osd": constants.OSD_APP_LABEL,
-    "mds": constants.MDS_APP_LABEL,
-}
-
 
 class CephXKeyRotation:
     """
@@ -193,11 +180,9 @@ class CephXKeyRotation:
 
         patch_ops = self._build_cephx_component_patch_ops(component, component_config)
         log.info(
-            "Initiating CephX key rotation for %s (generation=%s) on %s/%s",
-            component,
-            key_generation,
-            self.namespace,
-            self.ceph_cluster_name,
+            f"Initiating CephX key rotation for {component} "
+            f"(generation={key_generation}) on "
+            f"{self.namespace}/{self.ceph_cluster_name}"
         )
         self.cephcluster_obj.patch(
             params=json.dumps(patch_ops),
@@ -350,7 +335,7 @@ class CephXKeyRotation:
             result = toolbox.exec_ceph_cmd(f"ceph auth get-key {entity}")
         except CommandFailed as exc:
             if "ENOENT" in str(exc):
-                log.warning("Ceph auth entity %s not found", entity)
+                log.warning(f"Ceph auth entity {entity} not found")
                 return ""
             raise
         if isinstance(result, dict):
@@ -360,10 +345,10 @@ class CephXKeyRotation:
     @staticmethod
     def log_auth_key_snapshot(label, keys):
         """Log CephX auth keys for a snapshot (before/after rotation)."""
-        log.info("CephX auth keys %s:", label)
+        log.info(f"CephX auth keys {label}:")
         for entity in sorted(keys):
             key = keys[entity]
-            log.info("  %s: %s", entity, key if key else "<empty>")
+            log.info(f"  {entity}: {key if key else '<empty>'}")
 
     @staticmethod
     def log_auth_key_comparison(old_keys, new_keys):
@@ -379,11 +364,9 @@ class CephXKeyRotation:
             else:
                 status = "CHANGED"
             log.info(
-                "  %s [%s]: before=%s after=%s",
-                entity,
-                status,
-                old_key if old_key else "<empty>",
-                new_key if new_key else "<empty>",
+                f"  {entity} [{status}]: "
+                f"before={old_key if old_key else '<empty>'} "
+                f"after={new_key if new_key else '<empty>'}"
             )
 
     def capture_auth_keys(self, entities, toolbox_pod=None, label=None):
@@ -448,14 +431,12 @@ class CephXKeyRotation:
             and current >= key_generation
         ):
             log.info(
-                "Daemon CephX key rotation already enabled at generation %s",
-                current,
+                f"Daemon CephX key rotation already enabled at generation {current}"
             )
             return current
 
         log.info(
-            "Enabling daemon CephX KeyGeneration policy at generation %s",
-            key_generation,
+            f"Enabling daemon CephX KeyGeneration policy at generation {key_generation}"
         )
         return self.rotate_component_keys(
             self.COMPONENT_DAEMON, key_generation=key_generation
@@ -470,7 +451,7 @@ class CephXKeyRotation:
         )
         # CephCluster has status.phase but generic OCP defaults _has_phase to False.
         cephcluster._has_phase = True
-        log.info("Waiting for CephCluster %s to be Ready", self.ceph_cluster_name)
+        log.info(f"Waiting for CephCluster {self.ceph_cluster_name} to be Ready")
         cephcluster.wait_for_phase(phase=constants.STATUS_READY, timeout=timeout)
 
         storage_cluster = StorageCluster(
@@ -482,8 +463,8 @@ class CephXKeyRotation:
 
     def wait_for_rook_daemon_pods_ready(self, timeout=600):
         """Wait until MON, MGR, OSD, and MDS pods are Running."""
-        for daemon, label in DAEMON_POD_LABELS.items():
-            log.info("Waiting for %s pods (%s) to be Running", daemon, label)
+        for daemon, label in constants.ROOK_CEPHX_KEYROTATION_DAEMON_LABELS.items():
+            log.info(f"Waiting for {daemon} pods ({label}) to be Running")
 
             def _pods_running(lbl=label):
                 pods = get_pods_having_label(
@@ -617,7 +598,7 @@ class CephXKeyRotation:
             result = toolbox.exec_ceph_cmd(f"ceph auth get {entity}")
         except CommandFailed as exc:
             if "ENOENT" in str(exc):
-                log.warning("Ceph auth entity %s not found", entity)
+                log.warning(f"Ceph auth entity {entity} not found")
                 return {}
             raise
         if isinstance(result, dict):
@@ -645,7 +626,7 @@ class CephXKeyRotation:
             raise UnexpectedBehaviour(
                 f"CephX capabilities changed after rotation for: {', '.join(changed)}"
             )
-        log.info("CephX capabilities unchanged for entities: %s", ", ".join(entities))
+        log.info(f"CephX capabilities unchanged for entities: {', '.join(entities)}")
         return new_caps
 
     def capture_daemon_pod_state(self, label):
@@ -662,14 +643,14 @@ class CephXKeyRotation:
         for pod in pods:
             name = pod["metadata"]["name"]
             annotations = pod["metadata"].get("annotations") or {}
-            state[name] = annotations.get(CEPHX_KEY_IDENTIFIER_ANNOTATION)
+            state[name] = annotations.get(constants.CEPHX_KEY_IDENTIFIER_ANNOTATION)
         return state
 
     def capture_all_daemon_pod_states(self):
         """Capture pod state for MON, MGR, OSD, and MDS daemons."""
         return {
             daemon: self.capture_daemon_pod_state(label)
-            for daemon, label in DAEMON_POD_LABELS.items()
+            for daemon, label in constants.ROOK_CEPHX_KEYROTATION_DAEMON_LABELS.items()
         }
 
     def wait_for_pod_restarts(self, before_state, label, timeout=900, sleep=15):
@@ -680,9 +661,8 @@ class CephXKeyRotation:
             before_state (dict): Output of :meth:`capture_daemon_pod_state`.
         """
         log.info(
-            "Waiting for pod restarts (label=%s, prior pods=%s)",
-            label,
-            ", ".join(before_state) or "none",
+            f"Waiting for pod restarts (label={label}, "
+            f"prior pods={', '.join(before_state) or 'none'})"
         )
 
         def _pods_restarted():
@@ -698,7 +678,7 @@ class CephXKeyRotation:
 
         for restarted in TimeoutSampler(timeout, sleep, _pods_restarted):
             if restarted:
-                log.info("Pods restarted for label %s", label)
+                log.info(f"Pods restarted for label {label}")
                 return self.capture_daemon_pod_state(label)
 
         raise UnexpectedBehaviour(
@@ -708,7 +688,7 @@ class CephXKeyRotation:
     def wait_for_all_daemon_pod_restarts(self, before_states, timeout=900, sleep=15):
         """Wait for MON, MGR, OSD, and MDS pod restarts."""
         after_states = {}
-        for daemon, label in DAEMON_POD_LABELS.items():
+        for daemon, label in constants.ROOK_CEPHX_KEYROTATION_DAEMON_LABELS.items():
             after_states[daemon] = self.wait_for_pod_restarts(
                 before_states.get(daemon, {}),
                 label,
@@ -746,8 +726,8 @@ class CephXKeyRotation:
             if old_keys.get(entity) != new_keys.get(entity)
         ]
         log.info(
-            "CephX keys rotated for entities: %s",
-            ", ".join(changed) if changed else ", ".join(entities),
+            f"CephX keys rotated for entities: "
+            f"{', '.join(changed) if changed else ', '.join(entities)}"
         )
         return new_keys
 
@@ -755,10 +735,8 @@ class CephXKeyRotation:
         self, entities, expected_generation, timeout, sleep, label
     ):
         log.info(
-            "Waiting for CephX %s rotation to reach generation %s (timeout=%ss)",
-            label,
-            expected_generation,
-            timeout,
+            f"Waiting for CephX {label} rotation to reach generation "
+            f"{expected_generation} (timeout={timeout}s)"
         )
 
         def _entities_ready():
@@ -769,10 +747,8 @@ class CephXKeyRotation:
                     pending.append(f"{entity}={generation}")
             if pending:
                 log.debug(
-                    "CephX %s rotation pending for: %s (want >= %s)",
-                    label,
-                    ", ".join(pending),
-                    expected_generation,
+                    f"CephX {label} rotation pending for: {', '.join(pending)} "
+                    f"(want >= {expected_generation})"
                 )
                 return False
             return True
@@ -780,9 +756,7 @@ class CephXKeyRotation:
         for ready in TimeoutSampler(timeout, sleep, _entities_ready):
             if ready:
                 log.info(
-                    "CephX %s rotation reached generation %s",
-                    label,
-                    expected_generation,
+                    f"CephX {label} rotation reached generation {expected_generation}"
                 )
                 return True
 
@@ -855,9 +829,8 @@ class CephXKeyRotation:
         self, cr_obj, expected_generation, timeout, sleep, label
     ):
         log.info(
-            "Waiting for CephX daemon rotation on %s to reach generation %s",
-            label,
-            expected_generation,
+            f"Waiting for CephX daemon rotation on {label} to reach "
+            f"generation {expected_generation}"
         )
 
         def _daemon_ready():
@@ -866,10 +839,8 @@ class CephXKeyRotation:
             generation = int((cephx.get("daemon") or {}).get("keyGeneration", 0) or 0)
             if generation < expected_generation:
                 log.debug(
-                    "%s daemon keyGeneration=%s (want >= %s)",
-                    label,
-                    generation,
-                    expected_generation,
+                    f"{label} daemon keyGeneration={generation} "
+                    f"(want >= {expected_generation})"
                 )
                 return False
             return True
@@ -877,9 +848,8 @@ class CephXKeyRotation:
         for ready in TimeoutSampler(timeout, sleep, _daemon_ready):
             if ready:
                 log.info(
-                    "CephX daemon rotation on %s reached generation %s",
-                    label,
-                    expected_generation,
+                    f"CephX daemon rotation on {label} reached "
+                    f"generation {expected_generation}"
                 )
                 return True
 
