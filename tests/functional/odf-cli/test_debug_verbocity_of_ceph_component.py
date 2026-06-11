@@ -2,7 +2,7 @@ import pytest
 import logging
 
 from ocs_ci.helpers.helpers import get_ceph_log_level
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_20_14, zstream_4_20_14_naturalintelligence/fast_xml_parser
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import tier2, skipif_kms_deployment, skipif_external_mode
 
@@ -13,6 +13,8 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_kms_deployment
 @skipif_external_mode
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestDebugVerbosityOfCephComponents:
     @pytest.fixture(autouse=True)
     def setup(self, odf_cli_setup):
