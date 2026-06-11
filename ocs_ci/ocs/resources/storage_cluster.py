@@ -8,6 +8,7 @@ import logging
 import re
 import tempfile
 import json
+import time
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -3793,3 +3794,52 @@ def get_storage_client():
             or constants.STORAGE_CLIENT_NAME
         ),
     )
+
+
+def trigger_storage_cluster_reconciliation(storage_cluster_name=None, namespace=None):
+    """
+    Trigger StorageCluster operator reconciliation by adding a timestamp annotation.
+    This forces the operator to reconcile the StorageCluster resource.
+
+    Args:
+        storage_cluster_name (str): Name of the StorageCluster resource.
+            If None, uses the default from config.
+        namespace (str): Namespace of the StorageCluster resource.
+            If None, uses the default from config.
+
+    Returns:
+        bool: True if annotation was successfully applied
+
+    """
+    if storage_cluster_name is None:
+        storage_cluster_name = config.ENV_DATA.get(
+            "storage_cluster_name", constants.DEFAULT_CLUSTERNAME
+        )
+    if namespace is None:
+        namespace = config.ENV_DATA.get(
+            "cluster_namespace", constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+    log.info(
+        f"Triggering reconciliation for StorageCluster '{storage_cluster_name}' "
+        f"in namespace '{namespace}'"
+    )
+    sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+    timestamp = str(time.time_ns())
+    annotation_cmd = (
+        f"annotate storagecluster {storage_cluster_name} "
+        f"-n {namespace} "
+        f'reconcile-trigger="{timestamp}" --overwrite'
+    )
+    try:
+        sc_obj.exec_oc_cmd(annotation_cmd)
+        log.info(
+            f"Successfully triggered reconciliation for StorageCluster "
+            f"'{storage_cluster_name}' with timestamp {timestamp}"
+        )
+        return True
+    except CommandFailed as e:
+        log.error(
+            f"Failed to trigger reconciliation for StorageCluster "
+            f"'{storage_cluster_name}': {e}"
+        )
+        raise

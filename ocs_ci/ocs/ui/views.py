@@ -2473,6 +2473,27 @@ validation_4_21 = {
         "//span[contains(text(),'Silence alert')]",
         By.XPATH,
     ),
+    "silence_type_indefinite_radio": (
+        "//input[@id='silence-type-indefinite']",
+        By.XPATH,
+    ),
+    "filter_indefinite_checkbox": (
+        "//span[contains(@class,'c-menu__item-text')"
+        " and normalize-space()='Indefinite']/ancestor::label//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "all_checks": (
+        "//button[.//span[normalize-space()='All checks']]",
+        By.XPATH,
+    ),
+    "checks_list": (
+        "//div[contains(@class,'c-menu__content')]",
+        By.XPATH,
+    ),
+    "select_alert": (
+        "//input[@name='checkrow{}']",
+        By.XPATH,
+    ),
     "duration_input": (
         "//input[@name='duration']",
         By.XPATH,
