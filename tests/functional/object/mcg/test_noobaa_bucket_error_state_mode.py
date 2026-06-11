@@ -14,8 +14,10 @@ from ocs_ci.framework.testlib import (
     tier2,
     mcg,
 )
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import craft_s3_command
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -286,7 +288,10 @@ class TestNooBaaBucketErrorStateMode:
             f"to trigger resource error"
         )
         params = '{"spec":{"pvPool":{"numVolumes":0}}}'
-        backingstore.ocp.patch(
+        OCP(
+            kind="BackingStore",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        ).patch(
             resource_name=backingstore.name,
             params=params,
             format_type="merge",
