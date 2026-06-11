@@ -1,5 +1,7 @@
+import json
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     red_squad,
@@ -23,6 +25,7 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.utility.prometheus import PrometheusAPI, wait_for_alert_firing
@@ -123,19 +126,19 @@ class TestNooBaaBucketErrorStateMode:
     # TODO: Replace with actual Polarion ID
     # @polarion_id("OCS-XXXXX")
     def test_data_bucket_resource_error_mode(
-        self, mcg_obj, awscli_pod, bucket_factory, cld_mgr
+        self, mcg_obj, awscli_pod, bucket_factory
     ):
         """
         Trigger a resource-related bucket mode on a data bucket and
         verify the bucket enters NOT_ENOUGH_HEALTHY_RESOURCES mode.
 
-        Uses an AWS cloud backing store and deletes its target bucket
-        to simulate a resource failure.
+        Corrupts the AWS credentials secret of the backing store so
+        that NooBaa can no longer access the underlying cloud storage.
 
         Steps:
             1. Create a data bucket with an AWS cloud backing store
             2. Upload data so NooBaa tracks objects against the store
-            3. Delete the target bucket of the backing store
+            3. Patch the backing store's secret with invalid credentials
             4. Wait for bucket to detect the resource error
             5. Verify bucket mode is NOT_ENOUGH_HEALTHY_RESOURCES
             6. Clean up
@@ -144,7 +147,6 @@ class TestNooBaaBucketErrorStateMode:
             mcg_obj (MCG): MCG object with S3 connection credentials
             awscli_pod (Pod): Pod running the AWSCLI tools
             bucket_factory (func): Factory for creating MCG buckets
-            cld_mgr (CloudManager): Cloud manager for cloud operations
         """
         bucketclass_dict = {
             "interface": "OC",
@@ -175,12 +177,25 @@ class TestNooBaaBucketErrorStateMode:
             f"so NooBaa tracks objects against the backing store"
         )
 
-        target_uls_name = backingstore.uls_name
+        bs_ocp = OCP(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind="backingstore",
+        ).get(resource_name=backingstore.name)
+        secret_name = bs_ocp["spec"]["awsS3"]["secret"]["name"]
         logger.info(
-            f"Deleting target bucket {target_uls_name} of "
-            f"backing store {backingstore.name}"
+            f"Patching secret {secret_name} with invalid AWS credentials "
+            f"to make backing store {backingstore.name} unhealthy"
         )
-        cld_mgr.aws_client.delete_uls(target_uls_name)
+        OCP(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind="secret",
+        ).patch(
+            resource_name=secret_name,
+            params=json.dumps(
+                {"data": {"AWS_ACCESS_KEY_ID": "d3JvbmdhY2Nlc3NrZXk="}}
+            ),
+            format_type="merge",
+        )
 
         wait_for_bucket_mode(mcg_obj, bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
 
