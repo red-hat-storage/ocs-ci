@@ -11,10 +11,13 @@ import tempfile
 import uuid
 import os
 
+import yaml
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
+    CommandFailed,
     ExternalClusterCephfsMissing,
     ExternalClusterCephSSHAuthDetailsMissing,
     ExternalClusterCrushRuleCreationFailed,
@@ -90,6 +93,17 @@ class TopologyReplica1Config:
     zones: list[ZoneConfig]
     pool_prefix: str = "rbd-zone"
     pg_num: int = 32
+
+    @property
+    def pool_names(self) -> list[str]:
+        return [
+            zone.pool_name or f"{self.pool_prefix}-{zone.zone_name}"
+            for zone in self.zones
+        ]
+
+    @property
+    def zone_names(self) -> list[str]:
+        return [zone.zone_name for zone in self.zones]
 
 
 class ExternalCluster(object):
@@ -811,6 +825,57 @@ class ExternalCluster(object):
 
         return created_rules
 
+    def create_rbd_pool(
+        self,
+        pool_name: str,
+        pg_num: int,
+        pool_size: int,
+        crush_rule: str | None = None,
+        min_size: int | None = None,
+    ) -> None:
+        """
+        Create a single replicated RBD pool on the external Ceph cluster.
+
+        Args:
+            pool_name (str): Name of the pool to create.
+            pg_num (int): Placement groups for the pool.
+            pool_size (int): Replication factor.
+            crush_rule (str): Optional CRUSH rule name for the pool.
+            min_size (int): Optional minimum replication size.
+
+        Raises:
+            ExternalClusterPoolCreationFailed: If any step fails.
+
+        """
+        rule_part = f" {crush_rule}" if crush_rule else ""
+        self.exec_external_ceph_cmd(
+            cmd=f"ceph osd pool create {pool_name} {pg_num} {pg_num} replicated{rule_part}",
+            error_msg=f"Failed to create pool {pool_name}",
+            exception_class=ExternalClusterPoolCreationFailed,
+        )
+
+        force_flag = " --yes-i-really-mean-it" if pool_size == 1 else ""
+        self.exec_external_ceph_cmd(
+            cmd=f"ceph osd pool set {pool_name} size {pool_size}{force_flag}",
+            error_msg=f"Failed to set size {pool_size} for pool {pool_name}",
+            exception_class=ExternalClusterPoolCreationFailed,
+        )
+
+        if min_size is not None:
+            self.exec_external_ceph_cmd(
+                cmd=f"ceph osd pool set {pool_name} min_size {min_size}",
+                error_msg=f"Failed to set min_size {min_size} for pool {pool_name}",
+                exception_class=ExternalClusterPoolCreationFailed,
+            )
+
+        self.exec_external_ceph_cmd(
+            cmd=f"ceph osd pool application enable {pool_name} rbd",
+            error_msg=f"Failed to enable rbd for pool {pool_name}",
+            exception_class=ExternalClusterPoolCreationFailed,
+        )
+
+        logger.info(f"Created RBD pool: {pool_name} (size={pool_size})")
+
     def create_replica_one_pools(
         self, topology_config: TopologyReplica1Config
     ) -> list[str]:
@@ -846,10 +911,7 @@ class ExternalCluster(object):
         logger.debug(f"Existing pools: {existing_pools}")
 
         created_pools = []
-        for zone in topology_config.zones:
-            pool_name = (
-                zone.pool_name or f"{topology_config.pool_prefix}-{zone.zone_name}"
-            )
+        for zone, pool_name in zip(topology_config.zones, topology_config.pool_names):
             rule_name = f"{zone.zone_name}-rule"
             pg_num = topology_config.pg_num
 
@@ -859,53 +921,26 @@ class ExternalCluster(object):
                 created_pools.append(pool_name)
                 continue
 
-            logger.info(f"Creating replica-1 pool: {pool_name} with rule: {rule_name}")
-
-            # Create pool with CRUSH rule (pg_num appears twice for pg_num and pgp_num)
-            self.exec_external_ceph_cmd(
-                cmd=f"ceph osd pool create {pool_name} {pg_num} {pg_num} replicated {rule_name}",
-                error_msg=f"Failed to create pool {pool_name}",
-                exception_class=ExternalClusterPoolCreationFailed,
+            self.create_rbd_pool(
+                pool_name,
+                pg_num=pg_num,
+                pool_size=1,
+                crush_rule=rule_name,
+                min_size=1,
             )
-
-            # Set pool size to 1
-            self.exec_external_ceph_cmd(
-                cmd=f"ceph osd pool set {pool_name} size 1 --yes-i-really-mean-it",
-                error_msg=f"Failed to set size 1 for pool {pool_name}",
-                exception_class=ExternalClusterPoolCreationFailed,
-            )
-
-            # Set pool min_size to 1
-            self.exec_external_ceph_cmd(
-                cmd=f"ceph osd pool set {pool_name} min_size 1",
-                error_msg=f"Failed to set min_size 1 for pool {pool_name}",
-                exception_class=ExternalClusterPoolCreationFailed,
-            )
-
-            # Enable RBD application
-            self.exec_external_ceph_cmd(
-                cmd=f"ceph osd pool application enable {pool_name} rbd",
-                error_msg=f"Failed to enable rbd for pool {pool_name}",
-                exception_class=ExternalClusterPoolCreationFailed,
-            )
-
-            logger.info(f"Created replica-1 pool: {pool_name}")
             created_pools.append(pool_name)
 
         return created_pools
 
     def verify_replica_one_setup(
         self, expected_pools: list[str], expected_rules: list[str]
-    ) -> bool:
+    ) -> None:
         """
         Verify that replica-1 pools and CRUSH rules are properly configured.
 
         Args:
             expected_pools (list[str]): List of expected pool names.
             expected_rules (list[str]): List of expected CRUSH rule names.
-
-        Returns:
-            bool: True if all pools and rules exist with correct configuration.
 
         Raises:
             ExternalClusterReplica1ConfigurationFailed: If verification fails.
@@ -944,7 +979,64 @@ class ExternalCluster(object):
         logger.info(f"All expected pools have size 1: {expected_pools}")
 
         logger.info("Replica-1 setup verification passed")
-        return True
+
+    def discover_zones_from_crush_tree(self) -> list[ZoneConfig]:
+        """
+        Auto-detect zones from the external cluster's CRUSH tree.
+
+        Queries 'ceph osd tree' and extracts host-type buckets.
+        Each host becomes a zone (zone-a, zone-b, ...).
+
+        Returns:
+            list[ZoneConfig]: Zone configurations derived from CRUSH hosts.
+
+        Raises:
+            CommandFailed: If 'ceph osd tree' command fails.
+
+        """
+        _, out, _ = self.exec_external_ceph_cmd(
+            cmd="ceph osd tree --format json",
+            error_msg="Failed to get OSD tree from external cluster",
+            exception_class=CommandFailed,
+        )
+        osd_tree = json.loads(out)
+        hosts = [node["name"] for node in osd_tree["nodes"] if node["type"] == "host"]
+
+        zones = [
+            ZoneConfig(zone_name=f"zone-{chr(ord('a') + i)}", host_name=host)
+            for i, host in enumerate(hosts)
+        ]
+        logger.info(f"Auto-detected {len(zones)} zones from CRUSH tree: {zones}")
+        return zones
+
+    def build_topology_replica1_config(self) -> TopologyReplica1Config:
+        """
+        Build topology configuration from EXTERNAL_MODE config or CRUSH tree.
+
+        Reads replica1_zones from config.EXTERNAL_MODE if available.
+        Falls back to auto-detecting zones from the cluster's CRUSH tree.
+
+        Returns:
+            TopologyReplica1Config: Configuration for replica-1 setup.
+
+        """
+        zones_config = config.EXTERNAL_MODE.get("replica1_zones", [])
+        if zones_config:
+            logger.info(f"Using replica1_zones from config: {zones_config}")
+            zones = [
+                ZoneConfig(
+                    zone_name=z["zone_name"],
+                    host_name=z["host_name"],
+                    pool_name=z.get("pool_name", ""),
+                )
+                for z in zones_config
+            ]
+        else:
+            logger.info("replica1_zones not configured, auto-detecting from CRUSH tree")
+            zones = self.discover_zones_from_crush_tree()
+
+        logger.info(f"Built topology config with {len(zones)} zones")
+        return TopologyReplica1Config(zones=zones)
 
     def setup_topology_replica_one(
         self, topology_config: TopologyReplica1Config
@@ -1103,32 +1195,139 @@ class ExternalCluster(object):
                 created_pools.append(pool_name)
                 continue
 
-            logger.info(
-                f"Creating topology pool: {pool_name} (size={pool_size}, pg_num={pg_num})"
-            )
-
-            self.exec_external_ceph_cmd(
-                cmd=f"ceph osd pool create {pool_name} {pg_num} {pg_num} replicated",
-                error_msg=f"Failed to create pool {pool_name}",
-                exception_class=ExternalClusterPoolCreationFailed,
-            )
-
-            self.exec_external_ceph_cmd(
-                cmd=f"ceph osd pool set {pool_name} size {pool_size}",
-                error_msg=f"Failed to set size {pool_size} for pool {pool_name}",
-                exception_class=ExternalClusterPoolCreationFailed,
-            )
-
-            self.exec_external_ceph_cmd(
-                cmd=f"ceph osd pool application enable {pool_name} rbd",
-                error_msg=f"Failed to enable rbd for pool {pool_name}",
-                exception_class=ExternalClusterPoolCreationFailed,
-            )
-
-            logger.info(f"Created topology pool: {pool_name}")
+            self.create_rbd_pool(pool_name, pg_num=pg_num, pool_size=pool_size)
             created_pools.append(pool_name)
 
         return created_pools
+
+    def run_topology_exporter_script(
+        self, topology_config: TopologyReplica1Config, additional_params: str = ""
+    ) -> list[dict]:
+        """
+        Run exporter script with topology flags for replica-1 pools.
+
+        Builds topology-specific parameters from the configuration:
+        - --topology-pools (comma-separated pool names)
+        - --topology-failure-domain-label (from constants.ZONE_LABEL)
+        - --topology-failure-domain-values (comma-separated zone names)
+        - --rbd-data-pool-name (first pool in list)
+        - --format json
+
+        Args:
+            topology_config (TopologyReplica1Config): Topology configuration with zones.
+            additional_params (str): Additional parameters to pass to the script.
+
+        Returns:
+            list[dict]: Parsed JSON output from the exporter script.
+
+        Raises:
+            ExternalClusterExporterRunFailed: If script execution fails.
+            ValueError: If topology_config.zones is empty.
+
+        """
+        if not topology_config.zones:
+            raise ValueError("topology_config.zones cannot be empty")
+
+        pool_names = topology_config.pool_names
+        zone_names = topology_config.zone_names
+
+        # Build topology params
+        topology_params = (
+            f"--rbd-data-pool-name {pool_names[0]} "
+            f"--topology-pools {','.join(pool_names)} "
+            f"--topology-failure-domain-label {constants.ZONE_LABEL} "
+            f"--topology-failure-domain-values {','.join(zone_names)} "
+            f"--format json"
+        )
+
+        if additional_params:
+            topology_params = f"{topology_params} {additional_params}"
+
+        logger.info(f"Running topology exporter with params: {topology_params}")
+
+        # Run the exporter script using existing infrastructure
+        out = self.run_exporter_script(params=topology_params)
+
+        # Parse JSON output
+        try:
+            resources = json.loads(out)
+            logger.info(f"Parsed {len(resources)} resources from exporter output")
+            return resources
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse exporter JSON output: {e}")
+            logger.debug(f"Raw output: {out}")
+            raise ExternalClusterExporterRunFailed(
+                f"Failed to parse topology exporter output as JSON: {e}"
+            ) from e
+
+    def apply_topology_export_resources(
+        self, resources: list[dict], namespace: str | None = None
+    ) -> dict[str, list[str]]:
+        """
+        Apply exported topology resources (secrets, configmaps) to the cluster.
+
+        Args:
+            resources (list[dict]): List of resource dicts from exporter script.
+                Each dict has 'name', 'kind', and 'data' keys.
+            namespace (str): Namespace to create resources in.
+                Defaults to cluster_namespace from config.
+
+        Returns:
+            dict[str, list[str]]: Dictionary with keys 'secrets' and 'configmaps',
+                each containing list of created resource names.
+
+        Raises:
+            CommandFailed: If resource creation fails.
+
+        """
+        namespace = namespace or config.ENV_DATA["cluster_namespace"]
+        created = {"secrets": [], "configmaps": []}
+
+        for resource in resources:
+            name = resource.get("name")
+            kind = resource.get("kind")
+            data = resource.get("data", {})
+
+            if kind == "Secret":
+                resource_data = {
+                    "apiVersion": "v1",
+                    "kind": "Secret",
+                    "metadata": {"name": name, "namespace": namespace},
+                    "type": "Opaque",
+                    "stringData": data,
+                }
+            elif kind == "ConfigMap":
+                resource_data = {
+                    "apiVersion": "v1",
+                    "kind": "ConfigMap",
+                    "metadata": {"name": name, "namespace": namespace},
+                    "data": data,
+                }
+
+            else:
+                logger.debug(f"Skipping resource kind '{kind}': {name}")
+                continue
+
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".yaml", delete=False
+            ) as f:
+                yaml.dump(resource_data, f)
+                tmp_path = f.name
+
+            try:
+                ocp_resource = OCP(kind=kind, namespace=namespace)
+                ocp_resource.apply(yaml_file=tmp_path)
+                key = "secrets" if kind == "Secret" else "configmaps"
+                created[key].append(name)
+                logger.info(f"Created {kind}: {name}")
+            finally:
+                os.remove(tmp_path)
+
+        logger.info(
+            f"Applied topology resources - Secrets: {created['secrets']}, "
+            f"ConfigMaps: {created['configmaps']}"
+        )
+        return created
 
 
 def save_external_cluster_secret():
