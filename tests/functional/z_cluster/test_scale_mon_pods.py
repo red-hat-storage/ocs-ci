@@ -374,7 +374,7 @@ class TestFiveMonInCluster(ManageTest):
                 pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
             )
             self.sanity_helpers.delete_resources()
-            
+
         finally:
             # Mark the node back to schedulable
             schedule_nodes(mon_nodes[0:2])
