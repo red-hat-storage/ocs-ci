@@ -418,6 +418,9 @@ class VirtualMachine(Virtctl):
             if sample == "":
                 logger.info(f"{self.name} is ready for SSH connection")
                 return
+            else:
+                logger.warning(f"{self.name} is not ready for SSH connection")
+                self.restart()
 
     def stop(self, force=False, wait=True):
         """
