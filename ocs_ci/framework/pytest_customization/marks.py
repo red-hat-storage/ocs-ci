@@ -880,3 +880,5 @@ zstream_4_20_14_mcg = pytest.mark.zstream_4_20_14_mcg
 zstream_4_20_14_upgrade = pytest.mark.zstream_4_20_14_upgrade
 # z-stream marker
 zstream_4_20_14_red_hat_storage/odf_cli = pytest.mark.zstream_4_20_14_red_hat_storage/odf_cli
+# z-stream marker
+zstream_4_20_14_ocs_operator = pytest.mark.zstream_4_20_14_ocs_operator
