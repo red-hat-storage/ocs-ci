@@ -22,6 +22,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_pods_having_label
+from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -597,13 +598,14 @@ class CephXKeyRotation:
             namespace=self.namespace,
             resource_name=self.ceph_cluster_name,
         )
+        # CephCluster has status.phase but generic OCP defaults _has_phase to False.
+        cephcluster._has_phase = True
         log.info("Waiting for CephCluster %s to be Ready", self.ceph_cluster_name)
         cephcluster.wait_for_phase(phase=constants.STATUS_READY, timeout=timeout)
 
-        storage_cluster = OCP(
-            kind=constants.STORAGECLUSTER,
-            namespace=self.namespace,
+        storage_cluster = StorageCluster(
             resource_name=constants.DEFAULT_CLUSTERNAME,
+            namespace=self.namespace,
         )
         log.info("Waiting for StorageCluster to be Ready")
         storage_cluster.wait_for_phase(phase=constants.STATUS_READY, timeout=timeout)
