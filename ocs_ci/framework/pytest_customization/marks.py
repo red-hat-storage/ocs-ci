@@ -874,3 +874,5 @@ zstream_4_20_14_nfs = pytest.mark.zstream_4_20_14_nfs
 zstream_4_20_14_ceph_csi = pytest.mark.zstream_4_20_14_ceph_csi
 # z-stream marker
 zstream_4_20_14_disaster_recovery = pytest.mark.zstream_4_20_14_disaster_recovery
+# z-stream marker
+zstream_4_20_14_mcg = pytest.mark.zstream_4_20_14_mcg
