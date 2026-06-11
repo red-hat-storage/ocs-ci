@@ -2183,7 +2183,9 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
         """
         from ocs_ci.ocs.resources.storage_cluster import get_noobaa_phase
 
-        if ocsci_config.DEPLOYMENT.get("external_mode"):
+        if ocsci_config.DEPLOYMENT.get("external_mode") or ocsci_config.COMPONENTS.get(
+            "disable_noobaa"
+        ):
             return
 
         namespace = ocsci_config.ENV_DATA["cluster_namespace"]
@@ -2218,7 +2220,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
             "test_name": node.name,
         }
 
-        if "tests/functional/object/" in str(node.fspath):
+        if node.get_closest_marker("mcg"):
             pytest.skip(f"NooBaa health check failed at setup (phase: {noobaa_phase})")
 
     def finalizer():
@@ -2251,7 +2253,9 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                         )
                         multi_storagecluster_external_health_passed = True
 
-                    if not ocsci_config.DEPLOYMENT.get("external_mode"):
+                    if not ocsci_config.DEPLOYMENT.get(
+                        "external_mode"
+                    ) and not ocsci_config.COMPONENTS.get("disable_noobaa"):
                         from ocs_ci.ocs.resources.storage_cluster import (
                             get_noobaa_phase,
                         )
