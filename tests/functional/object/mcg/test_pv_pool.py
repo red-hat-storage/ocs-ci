@@ -128,10 +128,12 @@ class TestPvPool:
             backingstore_name=bs_name,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        sample.wait_for_func_status(result=True)
+        assert sample.wait_for_func_status(
+            result=True
+        ), f"BackingStore {bs_name} did not recover to healthy status after freeing objects"
 
         # 4. Confirm that uploading is possible again now that there is space
-        retry((CommandFailed,), tries=3, delay=10, backoff=1)(
+        retry((CommandFailed,), tries=5, delay=20, backoff=1)(
             awscli_pod_session.exec_s3_cmd_on_pod
         )(
             f"cp /tmp/testfile s3://{bucket.name}/{uploaded_objs[0]}",
