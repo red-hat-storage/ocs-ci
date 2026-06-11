@@ -14,7 +14,6 @@ from ocs_ci.framework.testlib import (
     tier2,
     mcg,
 )
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     copy_objects,
@@ -24,7 +23,6 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.utility.prometheus import PrometheusAPI, wait_for_alert_firing
@@ -120,21 +118,24 @@ class TestNooBaaBucketErrorStateMode:
     # Resource error mode tests (NOT_ENOUGH_HEALTHY_RESOURCES)
     # ------------------------------------------------------------------
 
-    @skipif_mcg_only
+    @skipif_managed_service
+    @skipif_aws_creds_are_missing
     # TODO: Replace with actual Polarion ID
     # @polarion_id("OCS-XXXXX")
-    def test_data_bucket_resource_error_mode(self, mcg_obj, awscli_pod, bucket_factory):
+    def test_data_bucket_resource_error_mode(
+        self, mcg_obj, awscli_pod, bucket_factory, cld_mgr
+    ):
         """
         Trigger a resource-related bucket mode on a data bucket and
         verify the bucket enters NOT_ENOUGH_HEALTHY_RESOURCES mode.
 
-        Uses a PV pool backing store and scales its StatefulSet to 0
-        replicas to simulate a resource failure.
+        Uses an AWS cloud backing store and deletes its target bucket
+        to simulate a resource failure.
 
         Steps:
-            1. Create a data bucket with a PV pool backing store (17Gi)
+            1. Create a data bucket with an AWS cloud backing store
             2. Upload data so NooBaa tracks objects against the store
-            3. Scale the PV pool StatefulSet to 0 replicas
+            3. Delete the target bucket of the backing store
             4. Wait for bucket to detect the resource error
             5. Verify bucket mode is NOT_ENOUGH_HEALTHY_RESOURCES
             6. Clean up
@@ -143,10 +144,11 @@ class TestNooBaaBucketErrorStateMode:
             mcg_obj (MCG): MCG object with S3 connection credentials
             awscli_pod (Pod): Pod running the AWSCLI tools
             bucket_factory (func): Factory for creating MCG buckets
+            cld_mgr (CloudManager): Cloud manager for cloud operations
         """
         bucketclass_dict = {
             "interface": "OC",
-            "backingstore_dict": {"pv": [(1, 17, constants.DEFAULT_STORAGECLASS_RBD)]},
+            "backingstore_dict": {"aws": [(1, "us-east-2")]},
         }
         bucket = bucket_factory(
             amount=1,
@@ -157,7 +159,7 @@ class TestNooBaaBucketErrorStateMode:
 
         logger.info(
             f"Created data bucket {bucket.name} with "
-            f"PV pool backing store {backingstore.name}"
+            f"AWS backing store {backingstore.name}"
         )
 
         write_random_test_objects_to_bucket(
@@ -173,15 +175,12 @@ class TestNooBaaBucketErrorStateMode:
             f"so NooBaa tracks objects against the backing store"
         )
 
-        sts_name = f"noobaa-pod-agent-{backingstore.name}"
+        target_uls_name = backingstore.uls_name
         logger.info(
-            f"Scaling StatefulSet {sts_name} to 0 replicas "
-            f"to trigger resource error"
+            f"Deleting target bucket {target_uls_name} of "
+            f"backing store {backingstore.name}"
         )
-        OCP(
-            kind="StatefulSet",
-            namespace=config.ENV_DATA["cluster_namespace"],
-        ).exec_oc_cmd(f"scale statefulset {sts_name} --replicas=0")
+        cld_mgr.aws_client.delete_uls(target_uls_name)
 
         wait_for_bucket_mode(mcg_obj, bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
 
