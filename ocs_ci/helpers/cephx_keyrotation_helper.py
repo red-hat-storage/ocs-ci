@@ -12,14 +12,8 @@ import json
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.helpers import helpers
-from ocs_ci.helpers.dr_helpers import check_rbd_mirror_running
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.exceptions import (
-    CommandFailed,
-    UnexpectedBehaviour,
-    UnexpectedDeploymentConfiguration,
-)
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_pods_having_label
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
@@ -29,14 +23,16 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = logging.getLogger(__name__)
 
 CEPHX_KEY_IDENTIFIER_ANNOTATION = "cephx-key-identifier"
-CEPH_RBD_MIRROR_KIND = "CephRBDMirror"
-DEFAULT_CEPH_RBD_MIRROR_NAME = f"{constants.DEFAULT_CLUSTERNAME}-cephrbdmirror"
+
+# TC-01 / Rook daemon CephX key rotation scope
+ROOK_KEYROTATION_DAEMONS = ("mon", "mgr", "osd", "mds")
+CEPHCLUSTER_KEYROTATION_STATUS_ENTITIES = ("mon", "mgr", "osd")
 
 DAEMON_POD_LABELS = {
     "mon": "app=rook-ceph-mon",
     "mgr": "app=rook-ceph-mgr",
+    "osd": constants.OSD_APP_LABEL,
     "mds": constants.MDS_APP_LABEL,
-    "rbd_mirror": constants.RBD_MIRROR_APP_LABEL,
 }
 
 
@@ -83,26 +79,22 @@ class CephXKeyRotation:
         ceph_cluster_name=None,
         namespace=None,
         cephfilesystem_name=None,
-        cephrbdmirror_name=None,
     ):
         """
         Args:
             ceph_cluster_name (str): CephCluster resource name.
             namespace (str): Cluster namespace (default: openshift-storage).
             cephfilesystem_name (str): CephFilesystem resource name.
-            cephrbdmirror_name (str): CephRBDMirror resource name.
         """
         self.ceph_cluster_name = ceph_cluster_name or constants.CEPH_CLUSTER_NAME
         self.namespace = namespace or config.ENV_DATA["cluster_namespace"]
         self.cephfilesystem_name = cephfilesystem_name or defaults.CEPHFILESYSTEM_NAME
-        self.cephrbdmirror_name = cephrbdmirror_name or DEFAULT_CEPH_RBD_MIRROR_NAME
         self.cephcluster_obj = OCP(
             kind=constants.CEPH_CLUSTER,
             resource_name=self.ceph_cluster_name,
             namespace=self.namespace,
         )
         self._cephfilesystem_obj = None
-        self._cephrbdmirror_obj = None
 
     def _reload(self):
         self.cephcluster_obj.reload_data()
@@ -308,29 +300,22 @@ class CephXKeyRotation:
             label=f"CephFilesystem/{self.cephfilesystem_name}",
         )
 
-    def wait_for_rbd_mirror_daemon_rotation(
-        self, expected_generation, timeout=900, sleep=15
-    ):
-        """Wait until CephRBDMirror ``status.cephx.daemon.keyGeneration`` matches."""
-        return self._wait_for_cr_daemon_rotation(
-            self._get_cephrbdmirror_obj(),
-            expected_generation,
-            timeout,
-            sleep,
-            label=f"CephRBDMirror/{self.cephrbdmirror_name}",
-        )
-
     def wait_for_rook_daemon_rotation(
         self, expected_generation, timeout=1200, sleep=15
     ):
         """
-        Wait for TC-01 daemon rotation: CephCluster mgr (and mon when supported),
-        CephFilesystem MDS, and CephRBDMirror daemon status.
+        Wait for TC-01 daemon rotation: CephCluster mon/mgr/osd and
+        CephFilesystem MDS status.
         """
-        self.wait_for_daemon_rotation(expected_generation, timeout, sleep)
+        self._wait_for_status_entities(
+            ["mgr", "osd"],
+            expected_generation,
+            timeout,
+            sleep,
+            label="CephCluster mgr/osd",
+        )
         self.wait_for_mon_rotation(expected_generation, timeout, sleep)
         self.wait_for_filesystem_daemon_rotation(expected_generation, timeout, sleep)
-        self.wait_for_rbd_mirror_daemon_rotation(expected_generation, timeout, sleep)
 
     def wait_for_rotation(self, component, expected_generation, timeout=900, sleep=15):
         """
@@ -401,17 +386,6 @@ class CephXKeyRotation:
         daemon_status = self.get_filesystem_status_cephx().get("daemon") or {}
         return int(daemon_status.get("keyGeneration", 0) or 0)
 
-    def get_rbd_mirror_status_cephx(self):
-        """Return ``status.cephx`` from the CephRBDMirror CR."""
-        mirror_obj = self._get_cephrbdmirror_obj()
-        mirror_obj.reload_data()
-        return mirror_obj.data.get("status", {}).get("cephx", {}) or {}
-
-    def get_rbd_mirror_daemon_key_generation(self):
-        """Return ``status.cephx.daemon.keyGeneration`` from CephRBDMirror."""
-        daemon_status = self.get_rbd_mirror_status_cephx().get("daemon") or {}
-        return int(daemon_status.get("keyGeneration", 0) or 0)
-
     def ensure_daemon_key_rotation_enabled(self, key_generation=1):
         """
         Ensure ``spec.security.cephx.daemon`` uses KeyGeneration policy.
@@ -444,153 +418,6 @@ class CephXKeyRotation:
             self.COMPONENT_DAEMON, key_generation=key_generation
         )
 
-    def discover_cephrbdmirror_name(self):
-        """
-        Return the name of an existing CephRBDMirror CR in the namespace, if any.
-
-        Returns:
-            str | None: Resource name, or None when no CR exists.
-        """
-        mirror_ocp = OCP(kind=CEPH_RBD_MIRROR_KIND, namespace=self.namespace)
-        items = mirror_ocp.get().get("items", [])
-        if not items:
-            return None
-        name = items[0]["metadata"]["name"]
-        self.cephrbdmirror_name = name
-        self._cephrbdmirror_obj = None
-        return name
-
-    def _patch_storagecluster_rbd_mirror_settings(
-        self, count=1, reconcile_strategy="ignore"
-    ):
-        """
-        Configure StorageCluster so ODF does not delete a CephRBDMirror CR.
-
-        ODF only creates CephRBDMirror during DR/mirroring setup on many clusters.
-        Setting ``reconcileStrategy: ignore`` allows a test-managed CR to persist.
-        """
-        storage_cluster = OCP(
-            kind=constants.STORAGECLUSTER,
-            namespace=self.namespace,
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-        )
-        cluster = storage_cluster.get()
-        spec = cluster.get("spec", {})
-        patch_ops = []
-
-        if not spec.get("mirroring", {}).get("enabled"):
-            if "mirroring" in spec:
-                patch_ops.append(
-                    {
-                        "op": "replace",
-                        "path": "/spec/mirroring",
-                        "value": {"enabled": True},
-                    }
-                )
-            else:
-                patch_ops.append(
-                    {
-                        "op": "add",
-                        "path": "/spec/mirroring",
-                        "value": {"enabled": True},
-                    }
-                )
-
-        desired_mirror_cfg = {
-            "daemonCount": int(count),
-            "reconcileStrategy": reconcile_strategy,
-        }
-        managed_resources = spec.get("managedResources") or {}
-        if managed_resources.get("cephRBDMirror") != desired_mirror_cfg:
-            if "managedResources" not in spec:
-                patch_ops.append(
-                    {
-                        "op": "add",
-                        "path": "/spec/managedResources",
-                        "value": {"cephRBDMirror": desired_mirror_cfg},
-                    }
-                )
-            elif "cephRBDMirror" not in managed_resources:
-                patch_ops.append(
-                    {
-                        "op": "add",
-                        "path": "/spec/managedResources/cephRBDMirror",
-                        "value": desired_mirror_cfg,
-                    }
-                )
-            else:
-                patch_ops.append(
-                    {
-                        "op": "replace",
-                        "path": "/spec/managedResources/cephRBDMirror",
-                        "value": desired_mirror_cfg,
-                    }
-                )
-
-        if patch_ops:
-            log.info(
-                "Patching StorageCluster RBD mirror settings: %s",
-                desired_mirror_cfg,
-            )
-            storage_cluster.patch(
-                params=json.dumps(patch_ops),
-                format_type="json",
-            )
-
-    def ensure_rbd_mirror(self, count=1, timeout=900):
-        """
-        Ensure an RBD mirror daemon is running (create CephRBDMirror CR if needed).
-
-        Returns:
-            str: CephRBDMirror resource name.
-        """
-        try:
-            check_rbd_mirror_running(self.namespace)
-            discovered = self.discover_cephrbdmirror_name()
-            if discovered:
-                log.info("RBD mirror daemon already running (%s)", discovered)
-                return discovered
-        except UnexpectedDeploymentConfiguration:
-            pass
-
-        discovered = self.discover_cephrbdmirror_name()
-        if not discovered:
-            self._patch_storagecluster_rbd_mirror_settings(count=count)
-            mirror_obj = OCP(
-                kind=CEPH_RBD_MIRROR_KIND,
-                namespace=self.namespace,
-                resource_name=self.cephrbdmirror_name,
-            )
-            if not mirror_obj.get(dont_raise=True):
-                log.info("Creating CephRBDMirror %s", self.cephrbdmirror_name)
-                helpers.create_resource(
-                    **{
-                        "api_version": "ceph.rook.io/v1",
-                        "kind": CEPH_RBD_MIRROR_KIND,
-                        "metadata": {
-                            "name": self.cephrbdmirror_name,
-                            "namespace": self.namespace,
-                        },
-                        "spec": {"count": int(count)},
-                    }
-                )
-            else:
-                log.info("CephRBDMirror %s already exists", self.cephrbdmirror_name)
-
-        def _mirror_running():
-            try:
-                check_rbd_mirror_running(self.namespace)
-                return True
-            except UnexpectedDeploymentConfiguration:
-                return False
-
-        for _ in TimeoutSampler(timeout, 15, _mirror_running):
-            self.discover_cephrbdmirror_name()
-            log.info("RBD mirror daemon is running")
-            break
-
-        return self.cephrbdmirror_name
-
     def wait_for_cluster_ready(self, timeout=900):
         """Wait until CephCluster and StorageCluster reach Ready phase."""
         cephcluster = OCP(
@@ -611,7 +438,7 @@ class CephXKeyRotation:
         storage_cluster.wait_for_phase(phase=constants.STATUS_READY, timeout=timeout)
 
     def wait_for_rook_daemon_pods_ready(self, timeout=600):
-        """Wait until MON, MGR, MDS, and RBD mirror pods are Running."""
+        """Wait until MON, MGR, OSD, and MDS pods are Running."""
         for daemon, label in DAEMON_POD_LABELS.items():
             log.info("Waiting for %s pods (%s) to be Running", daemon, label)
 
@@ -637,21 +464,102 @@ class CephXKeyRotation:
             entities = [entity for entity in entities if entity.startswith(prefix)]
         return entities
 
+    def _auth_entity_exists(self, entity, toolbox_pod=None):
+        """Return True when *entity* is present in the Ceph auth store."""
+        toolbox = toolbox_pod or get_ceph_tools_pod()
+        try:
+            toolbox.exec_ceph_cmd(f"ceph auth get {entity}")
+            return True
+        except CommandFailed:
+            return False
+
+    def _discover_mon_auth_entities(self, toolbox_pod=None):
+        """
+        Discover MON auth entities (e.g. mon.a).
+
+        MON keys are not always listed in ``ceph auth ls`` on newer Ceph builds,
+        so fall back to ``ceph mon dump`` names.
+        """
+        entities = self.list_auth_entities("mon.", toolbox_pod)
+        if entities:
+            return entities
+
+        toolbox = toolbox_pod or get_ceph_tools_pod()
+        mon_dump = toolbox.exec_ceph_cmd("ceph mon dump")
+        discovered = []
+        for mon in mon_dump.get("mons", []):
+            name = mon.get("name")
+            if not name:
+                continue
+            entity = f"mon.{name}"
+            if self._auth_entity_exists(entity, toolbox_pod):
+                discovered.append(entity)
+        return sorted(discovered)
+
+    def _discover_mgr_auth_entities(self, toolbox_pod=None):
+        """Discover MGR auth entities, falling back to ``ceph mgr dump``."""
+        entities = self.list_auth_entities("mgr.", toolbox_pod)
+        if entities:
+            return entities
+
+        toolbox = toolbox_pod or get_ceph_tools_pod()
+        mgr_dump = toolbox.exec_ceph_cmd("ceph mgr dump")
+        discovered = []
+        active = mgr_dump.get("active_name")
+        if active:
+            entity = f"mgr.{active}"
+            if self._auth_entity_exists(entity, toolbox_pod):
+                discovered.append(entity)
+        for standby in mgr_dump.get("standbys", []) or []:
+            entity = f"mgr.{standby}"
+            if self._auth_entity_exists(entity, toolbox_pod):
+                discovered.append(entity)
+        return sorted(set(discovered))
+
+    def _discover_osd_auth_entities(self, toolbox_pod=None):
+        """Discover OSD auth entities, falling back to ``ceph osd dump``."""
+        entities = self.list_auth_entities("osd.", toolbox_pod)
+        if entities:
+            return entities
+
+        toolbox = toolbox_pod or get_ceph_tools_pod()
+        osd_dump = toolbox.exec_ceph_cmd("ceph osd dump")
+        discovered = []
+        for osd in osd_dump.get("osds", []):
+            osd_id = osd.get("osd")
+            if osd_id is None:
+                continue
+            entity = f"osd.{osd_id}"
+            if self._auth_entity_exists(entity, toolbox_pod):
+                discovered.append(entity)
+        return sorted(discovered, key=lambda name: int(name.split(".", 1)[1]))
+
+    def _discover_mds_auth_entities(self, toolbox_pod=None):
+        """Discover MDS auth entities for the configured CephFilesystem."""
+        mds_prefix = f"mds.{self.cephfilesystem_name}"
+        entities = self.list_auth_entities(mds_prefix, toolbox_pod)
+        if entities:
+            return entities
+
+        discovered = []
+        for suffix in ("a", "b"):
+            entity = f"{mds_prefix}-{suffix}"
+            if self._auth_entity_exists(entity, toolbox_pod):
+                discovered.append(entity)
+        return sorted(discovered)
+
     def discover_rook_daemon_auth_entities(self, toolbox_pod=None):
         """
-        Discover MON, MGR, MDS, and RBD mirror auth entities for TC-01.
+        Discover MON, MGR, OSD, and MDS auth entities for TC-01.
 
         Returns:
             dict: daemon type to list of entity names.
         """
-        mds_prefix = f"mds.{self.cephfilesystem_name}"
         return {
-            "mon": self.list_auth_entities("mon.", toolbox_pod=toolbox_pod),
-            "mgr": self.list_auth_entities("mgr.", toolbox_pod=toolbox_pod),
-            "mds": self.list_auth_entities(mds_prefix, toolbox_pod=toolbox_pod),
-            "rbd_mirror": self.list_auth_entities(
-                "client.rbd-mirror", toolbox_pod=toolbox_pod
-            ),
+            "mon": self._discover_mon_auth_entities(toolbox_pod),
+            "mgr": self._discover_mgr_auth_entities(toolbox_pod),
+            "osd": self._discover_osd_auth_entities(toolbox_pod),
+            "mds": self._discover_mds_auth_entities(toolbox_pod),
         }
 
     def get_auth_caps(self, entity, toolbox_pod=None):
@@ -715,7 +623,7 @@ class CephXKeyRotation:
         return state
 
     def capture_all_daemon_pod_states(self):
-        """Capture pod state for MON, MGR, MDS, and RBD mirror daemons."""
+        """Capture pod state for MON, MGR, OSD, and MDS daemons."""
         return {
             daemon: self.capture_daemon_pod_state(label)
             for daemon, label in DAEMON_POD_LABELS.items()
@@ -755,7 +663,7 @@ class CephXKeyRotation:
         )
 
     def wait_for_all_daemon_pod_restarts(self, before_states, timeout=900, sleep=15):
-        """Wait for MON, MGR, MDS, and RBD mirror pod restarts."""
+        """Wait for MON, MGR, OSD, and MDS pod restarts."""
         after_states = {}
         for daemon, label in DAEMON_POD_LABELS.items():
             after_states[daemon] = self.wait_for_pod_restarts(
@@ -883,15 +791,6 @@ class CephXKeyRotation:
                 namespace=self.namespace,
             )
         return self._cephfilesystem_obj
-
-    def _get_cephrbdmirror_obj(self):
-        if self._cephrbdmirror_obj is None:
-            self._cephrbdmirror_obj = OCP(
-                kind=CEPH_RBD_MIRROR_KIND,
-                resource_name=self.cephrbdmirror_name,
-                namespace=self.namespace,
-            )
-        return self._cephrbdmirror_obj
 
     def _get_auth_entities_dict(self, toolbox_pod=None):
         toolbox = toolbox_pod or get_ceph_tools_pod()
