@@ -443,32 +443,138 @@ class CephXKeyRotation:
             self.COMPONENT_DAEMON, key_generation=key_generation
         )
 
-    def ensure_rbd_mirror(self, count=1, timeout=600):
+    def discover_cephrbdmirror_name(self):
+        """
+        Return the name of an existing CephRBDMirror CR in the namespace, if any.
+
+        Returns:
+            str | None: Resource name, or None when no CR exists.
+        """
+        mirror_ocp = OCP(kind=CEPH_RBD_MIRROR_KIND, namespace=self.namespace)
+        items = mirror_ocp.get().get("items", [])
+        if not items:
+            return None
+        name = items[0]["metadata"]["name"]
+        self.cephrbdmirror_name = name
+        self._cephrbdmirror_obj = None
+        return name
+
+    def _patch_storagecluster_rbd_mirror_settings(
+        self, count=1, reconcile_strategy="ignore"
+    ):
+        """
+        Configure StorageCluster so ODF does not delete a CephRBDMirror CR.
+
+        ODF only creates CephRBDMirror during DR/mirroring setup on many clusters.
+        Setting ``reconcileStrategy: ignore`` allows a test-managed CR to persist.
+        """
+        storage_cluster = OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=self.namespace,
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+        )
+        cluster = storage_cluster.get()
+        spec = cluster.get("spec", {})
+        patch_ops = []
+
+        if not spec.get("mirroring", {}).get("enabled"):
+            if "mirroring" in spec:
+                patch_ops.append(
+                    {
+                        "op": "replace",
+                        "path": "/spec/mirroring",
+                        "value": {"enabled": True},
+                    }
+                )
+            else:
+                patch_ops.append(
+                    {
+                        "op": "add",
+                        "path": "/spec/mirroring",
+                        "value": {"enabled": True},
+                    }
+                )
+
+        desired_mirror_cfg = {
+            "daemonCount": int(count),
+            "reconcileStrategy": reconcile_strategy,
+        }
+        managed_resources = spec.get("managedResources") or {}
+        if managed_resources.get("cephRBDMirror") != desired_mirror_cfg:
+            if "managedResources" not in spec:
+                patch_ops.append(
+                    {
+                        "op": "add",
+                        "path": "/spec/managedResources",
+                        "value": {"cephRBDMirror": desired_mirror_cfg},
+                    }
+                )
+            elif "cephRBDMirror" not in managed_resources:
+                patch_ops.append(
+                    {
+                        "op": "add",
+                        "path": "/spec/managedResources/cephRBDMirror",
+                        "value": desired_mirror_cfg,
+                    }
+                )
+            else:
+                patch_ops.append(
+                    {
+                        "op": "replace",
+                        "path": "/spec/managedResources/cephRBDMirror",
+                        "value": desired_mirror_cfg,
+                    }
+                )
+
+        if patch_ops:
+            log.info(
+                "Patching StorageCluster RBD mirror settings: %s",
+                desired_mirror_cfg,
+            )
+            storage_cluster.patch(
+                params=json.dumps(patch_ops),
+                format_type="json",
+            )
+
+    def ensure_rbd_mirror(self, count=1, timeout=900):
         """
         Ensure an RBD mirror daemon is running (create CephRBDMirror CR if needed).
 
         Returns:
             str: CephRBDMirror resource name.
         """
-        mirror_obj = OCP(
-            kind=CEPH_RBD_MIRROR_KIND,
-            namespace=self.namespace,
-            resource_name=self.cephrbdmirror_name,
-        )
         try:
-            mirror_obj.get()
-            log.info("CephRBDMirror %s already exists", self.cephrbdmirror_name)
-        except CommandFailed:
-            log.info("Creating CephRBDMirror %s", self.cephrbdmirror_name)
-            helpers.create_resource(
-                **{
-                    "api_version": "ceph.rook.io/v1",
-                    "kind": CEPH_RBD_MIRROR_KIND,
-                    "namespace": self.namespace,
-                    "name": self.cephrbdmirror_name,
-                    "spec": {"count": int(count)},
-                }
+            check_rbd_mirror_running(self.namespace)
+            discovered = self.discover_cephrbdmirror_name()
+            if discovered:
+                log.info("RBD mirror daemon already running (%s)", discovered)
+                return discovered
+        except UnexpectedDeploymentConfiguration:
+            pass
+
+        discovered = self.discover_cephrbdmirror_name()
+        if not discovered:
+            self._patch_storagecluster_rbd_mirror_settings(count=count)
+            mirror_obj = OCP(
+                kind=CEPH_RBD_MIRROR_KIND,
+                namespace=self.namespace,
+                resource_name=self.cephrbdmirror_name,
             )
+            if not mirror_obj.get(dont_raise=True):
+                log.info("Creating CephRBDMirror %s", self.cephrbdmirror_name)
+                helpers.create_resource(
+                    **{
+                        "api_version": "ceph.rook.io/v1",
+                        "kind": CEPH_RBD_MIRROR_KIND,
+                        "metadata": {
+                            "name": self.cephrbdmirror_name,
+                            "namespace": self.namespace,
+                        },
+                        "spec": {"count": int(count)},
+                    }
+                )
+            else:
+                log.info("CephRBDMirror %s already exists", self.cephrbdmirror_name)
 
         def _mirror_running():
             try:
@@ -478,8 +584,10 @@ class CephXKeyRotation:
                 return False
 
         for _ in TimeoutSampler(timeout, 15, _mirror_running):
+            self.discover_cephrbdmirror_name()
             log.info("RBD mirror daemon is running")
             break
+
         return self.cephrbdmirror_name
 
     def wait_for_cluster_ready(self, timeout=900):
