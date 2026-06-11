@@ -441,6 +441,32 @@ def backingstore_factory(
         with cluster_context():
             for backingstore in created_backingstores:
                 try:
+                    # Remove finalizer from rejected backingstores to allow deletion
+                    # when dependent secrets have already been cleaned up
+                    try:
+                        bs_data = OCP(
+                            kind=constants.BACKINGSTORE,
+                            namespace=config.ENV_DATA["cluster_namespace"],
+                        ).get(resource_name=backingstore.name)
+                        if bs_data.get("status", {}).get("phase") == "Rejected":
+                            log.warning(
+                                f"BackingStore {backingstore.name} is in Rejected state. "
+                                "Removing finalizer to allow cleanup."
+                            )
+                            patch_param = '{"metadata":{"finalizers":null}}'
+                            OCP(
+                                kind=constants.BACKINGSTORE,
+                                namespace=config.ENV_DATA["cluster_namespace"],
+                            ).patch(
+                                resource_name=backingstore.name,
+                                params=patch_param,
+                                format_type="merge",
+                            )
+                    except Exception as e:
+                        log.warning(
+                            f"Failed to check/patch backingstore {backingstore.name}: {e}"
+                        )
+
                     backingstore.delete()
                 except CommandFailed as e:
                     if "not found" in str(e).lower():
