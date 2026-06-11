@@ -2417,7 +2417,8 @@ def wait_for_noobaa_db_ready(timeout=300, sleep=10, stability_count=3):
     Wait for all NooBaa DB pods to be container-ready (1/1) and stable.
 
     Operations like endpoint scaling can trigger CNPG to rolling-restart
-    DB pods. This function requires all DB pods to report ready for
+    DB pods. This function first waits for the restart to begin (at least
+    one pod goes not-ready), then requires all DB pods to report ready for
     multiple consecutive checks, ensuring the pods are genuinely stable
     and not mid-rolling-restart.
 
@@ -2453,8 +2454,28 @@ def wait_for_noobaa_db_ready(timeout=300, sleep=10, stability_count=3):
         for pod_info in pods:
             container_statuses = pod_info.get("status", {}).get("containerStatuses")
             if not container_statuses or not container_statuses[0].get("ready"):
+                pod_name = pod_info.get("metadata", {}).get("name", "unknown")
+                logger.info(f"Pod {pod_name} container not ready: {container_statuses}")
                 return False
         return True
+
+    # Wait for the rolling restart to begin before checking stability.
+    # Without this, the stability checks could pass before the CNPG
+    # operator even starts restarting pods.
+    restart_grace_timeout = 60
+    logger.info(f"Waiting up to {restart_grace_timeout}s for a DB pod restart to begin")
+    try:
+        for not_ready in TimeoutSampler(
+            restart_grace_timeout, sleep, _all_db_pods_ready
+        ):
+            if not not_ready:
+                logger.info("Detected DB pod restart, proceeding to stability checks")
+                break
+    except TimeoutExpiredError:
+        logger.info(
+            "No DB pod restart detected within the grace period, "
+            "proceeding to stability checks"
+        )
 
     try:
         for is_ready in TimeoutSampler(timeout, sleep, _all_db_pods_ready):
