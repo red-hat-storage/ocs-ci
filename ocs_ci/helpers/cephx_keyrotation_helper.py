@@ -357,9 +357,41 @@ class CephXKeyRotation:
             return result.get("key", "")
         return str(result).strip()
 
-    def capture_auth_keys(self, entities, toolbox_pod=None):
+    @staticmethod
+    def log_auth_key_snapshot(label, keys):
+        """Log CephX auth keys for a snapshot (before/after rotation)."""
+        log.info("CephX auth keys %s:", label)
+        for entity in sorted(keys):
+            key = keys[entity]
+            log.info("  %s: %s", entity, key if key else "<empty>")
+
+    @staticmethod
+    def log_auth_key_comparison(old_keys, new_keys):
+        """Log per-entity CephX key comparison between two snapshots."""
+        log.info("CephX auth key comparison (before vs after rotation):")
+        for entity in sorted(old_keys):
+            old_key = old_keys.get(entity, "")
+            new_key = new_keys.get(entity, "")
+            if not old_key and not new_key:
+                status = "MISSING"
+            elif old_key == new_key:
+                status = "UNCHANGED"
+            else:
+                status = "CHANGED"
+            log.info(
+                "  %s [%s]: before=%s after=%s",
+                entity,
+                status,
+                old_key if old_key else "<empty>",
+                new_key if new_key else "<empty>",
+            )
+
+    def capture_auth_keys(self, entities, toolbox_pod=None, label=None):
         """
         Snapshot CephX keys for a list of entities (for before/after comparison).
+
+        Args:
+            label (str): When set, log the captured keys under this label.
 
         Returns:
             dict: entity name to key string.
@@ -367,13 +399,24 @@ class CephXKeyRotation:
         keys = {}
         for entity in entities:
             keys[entity] = self.get_auth_key(entity, toolbox_pod=toolbox_pod)
+        if label:
+            self.log_auth_key_snapshot(label, keys)
         return keys
 
-    @retry(UnexpectedBehaviour, tries=10, delay=30)
     def is_mon_key_rotation_supported(self):
-        """Return True when CephCluster reports ``status.cephx.mon``."""
+        """
+        Return True when CephCluster reports MON ``status.cephx.mon.keyGeneration``.
+
+        Note: Rook may report MON rotation status even when ``mon.*`` entities are
+        not present in ``ceph auth ls`` (e.g. Ceph Tentacle). Use
+        :meth:`is_mon_auth_verifiable` before asserting on MON auth keys.
+        """
         mon_status = self.get_status_cephx().get("mon") or {}
-        return bool(mon_status)
+        return bool(mon_status.get("keyGeneration"))
+
+    def is_mon_auth_verifiable(self, toolbox_pod=None):
+        """Return True when MON auth entities are readable from the auth store."""
+        return bool(self._discover_mon_auth_entities(toolbox_pod))
 
     def get_filesystem_status_cephx(self):
         """Return ``status.cephx`` from the CephFilesystem CR."""
@@ -687,6 +730,7 @@ class CephXKeyRotation:
         """
         entities = entities or list(old_keys.keys())
         new_keys = self.capture_auth_keys(entities, toolbox_pod=toolbox_pod)
+        self.log_auth_key_comparison(old_keys, new_keys)
         unchanged = [
             entity
             for entity in entities
@@ -696,7 +740,15 @@ class CephXKeyRotation:
             raise UnexpectedBehaviour(
                 f"CephX keys unchanged after rotation for: {', '.join(unchanged)}"
             )
-        log.info("CephX keys rotated for entities: %s", ", ".join(entities))
+        changed = [
+            entity
+            for entity in entities
+            if old_keys.get(entity) != new_keys.get(entity)
+        ]
+        log.info(
+            "CephX keys rotated for entities: %s",
+            ", ".join(changed) if changed else ", ".join(entities),
+        )
         return new_keys
 
     def _wait_for_status_entities(
