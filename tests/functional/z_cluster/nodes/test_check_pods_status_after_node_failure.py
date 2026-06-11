@@ -2,7 +2,7 @@ import logging
 import pytest
 import random
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4a,
@@ -103,6 +103,8 @@ def wait_for_change_in_rook_ceph_pods(node_name, timeout=300, sleep=20):
 @skipif_hci_provider_and_client
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2552")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestCheckPodsAfterNodeFailure(ManageTest):
     """
     Test check pods status after a node failure event.

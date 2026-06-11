@@ -9,7 +9,7 @@ from ocs_ci.ocs.resources.pod import (
     get_operator_pods,
     wait_for_pods_to_be_running,
 )
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4b,
@@ -29,6 +29,8 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2572")
 @runs_on_provider
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestDrainNodeMon(ManageTest):
     """
     1.Get worker node name where monitoring pod run
