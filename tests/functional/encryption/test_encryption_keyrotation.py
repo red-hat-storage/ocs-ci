@@ -40,6 +40,7 @@ class TestEncryptionKeyrotation:
         request.addfinalizer(finalizer)
 
     @pytest.mark.polarion_id("OCS-5790")
+    @pytest.mark.zstream_4_16_13
     def test_osd_keyrotation(self):
         """
         Test to verify the key rotation of the OSD
@@ -127,6 +128,7 @@ class TestEncryptionKeyrotation:
         osd_keyrotation.set_keyrotation_schedule("@weekly")
 
     @pytest.mark.polarion_id("OCS-5791")
+    @pytest.mark.zstream_4_16_13
     def test_noobaa_keyrotation(self):
         """
         Test to verify the keyrotation for noobaa.
