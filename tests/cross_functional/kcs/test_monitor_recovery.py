@@ -96,21 +96,31 @@ class TestMonitorRecovery(E2ETest):
                 access_mode=constants.ACCESS_MODE_RWX,
             )
         )
+        logger.info("Setup: Writing test data to DC pods and calculating md5sum")
         self.md5sum = []
-        for pod_obj in self.dc_pods:
+        for idx, pod_obj in enumerate(self.dc_pods, 1):
+            logger.debug(
+                f"Writing data to pod {idx}/{len(self.dc_pods)}: {pod_obj.name}"
+            )
             pod_obj.exec_cmd_on_pod(command=self.dd_cmd)
-            # Calculate md5sum
-            self.md5sum.append(pod.cal_md5sum(pod_obj, self.filename))
+            md5 = pod.cal_md5sum(pod_obj, self.filename)
+            self.md5sum.append(md5)
+            logger.debug(f"MD5sum for pod {pod_obj.name}: {md5}")
         logger.info(f"Md5sum calculated before recovery: {self.md5sum}")
 
+        logger.info("Setup: Creating test bucket and writing object")
         self.bucket_name = bucket_factory(interface="OC")[0].name
-        logger.info(f"Putting object on: {self.bucket_name}")
+        logger.info(f"Putting object '{self.object_key}' on bucket: {self.bucket_name}")
+        logger.assertion(f"Verify S3 PutObject succeeds for bucket: {self.bucket_name}")
         assert bucket_utils.s3_put_object(
             s3_obj=mcg_obj,
             bucketname=self.bucket_name,
             object_key=self.object_key,
             data=self.object_data,
         ), "Failed: PutObject"
+        logger.info(
+            f"Object '{self.object_key}' written successfully to bucket: {self.bucket_name}"
+        )
 
     @jira("DFBUGS-4322")
     @pytest.mark.skip(
@@ -127,93 +137,155 @@ class TestMonitorRecovery(E2ETest):
         https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.8/html/troubleshooting_openshift_container_storage/restoring-the-monitor-pods-in-openshift-container-storage_rhocs
 
         """
-        # Initialize mon recovery class
+        logger.test_step("Initialize Mon recovery and corrupt monitors")
+        logger.info("Initializing MonitorRecovery class")
         mon_recovery = MonitorRecovery()
 
-        logger.info("Corrupting ceph monitors by deleting store.db")
+        logger.info("Corrupting Ceph monitors by deleting store.db files")
         corrupt_ceph_monitors()
+        logger.info("All monitors corrupted and in CrashLoopBackOff state")
 
-        logger.info("Backing up all the deployments")
+        logger.test_step("Backup deployments and identify components to revert")
+        logger.info("Backing up all deployments in openshift-storage namespace")
         mon_recovery.backup_deployments()
+        logger.info(f"Deployments backed up to: {mon_recovery.backup_dir}")
         dep_revert, mds_revert = mon_recovery.deployments_to_revert()
-
-        logger.info("Starting the monitor recovery procedure")
-        logger.info("Scaling down rook and ocs operators")
-        mon_recovery.scale_rook_ocs_operators(replica=0)
-
         logger.info(
-            "Preparing script and patching OSDs to remove LivenessProbe and sleep to infinity"
+            f"Deployments to revert: {len(dep_revert)} (Mon/OSD/MGR) + {len(mds_revert)} (MDS)"
         )
+
+        logger.test_step("Scale down operators and prepare OSDs for Mon recovery")
+        logger.info("Scaling down rook-ceph-operator and ocs-operator to 0 replicas")
+        mon_recovery.scale_rook_ocs_operators(replica=0)
+        logger.info("Operators scaled down successfully")
+
+        logger.info("Preparing monstore script and patching OSDs")
         mon_recovery.prepare_monstore_script()
+        logger.info(
+            f"Monstore script prepared at: {mon_recovery.backup_dir}/recover_mon.sh"
+        )
         mon_recovery.patch_sleep_on_osds()
+        logger.info("OSDs patched to sleep infinitely with livenessProbe removed")
         switch_to_project(config.ENV_DATA["cluster_namespace"])
 
-        logger.info("Getting mon-store from OSDs")
+        logger.test_step("Extract Mon store from OSDs")
+        logger.info("Running mon-store script to collect cluster map from OSDs")
         mon_recovery.run_mon_store()
+        logger.info("Mon store successfully collected from OSDs")
 
-        logger.info("Patching MONs to sleep infinitely")
+        logger.test_step("Prepare monitors for rebuild")
+        logger.info("Patching all Mon deployments to sleep infinitely")
         mon_recovery.patch_sleep_on_mon()
+        logger.info("Mon deployments patched successfully")
 
-        logger.info("Updating initial delay on all monitors")
+        logger.info("Updating initialDelaySeconds on all monitor deployments")
         update_mon_initial_delay()
+        logger.info("Monitor initialDelaySeconds updated to 10000")
 
-        logger.info("Generating monitor map command using the IPs")
+        logger.info("Generating monmap command using Mon pod IPs and FSID")
         mon_map_cmd = generate_monmap_cmd()
+        logger.info(f"Generated monmap command: {mon_map_cmd[:100]}...")
 
-        logger.info("Getting ceph keyring from ocs secrets")
+        logger.info("Extracting Ceph keyrings from OCS secrets")
         mon_recovery.get_ceph_keyrings()
+        logger.info(f"Keyrings extracted: {len(mon_recovery.keyring_files)} files")
 
-        logger.info("Rebuilding Monitors to recover store db")
+        logger.test_step("Rebuild monitors with recovered store.db")
+        logger.info("Starting monitor rebuild process")
         mon_recovery.monitor_rebuild(mon_map_cmd)
+        logger.info("Monitors rebuilt successfully with recovered store.db")
 
-        logger.info("Reverting mon, osd and mgr deployments")
+        logger.test_step("Revert patches and scale up operators")
+        logger.info(f"Reverting {len(dep_revert)} deployment(s): Mon, OSD, MGR")
         mon_recovery.revert_patches(dep_revert)
+        logger.info("Deployments reverted to original state")
 
-        logger.info("Scaling back rook and ocs operators")
+        logger.info("Scaling rook-ceph-operator and ocs-operator back to 1 replica")
         mon_recovery.scale_rook_ocs_operators(replica=1)
+        logger.info("Operators scaled up successfully")
 
-        logger.info("Recovering CephFS")
+        logger.test_step("Recover CephFS filesystem")
+        logger.info("Recovering CephFS by resetting filesystem")
         mon_recovery.scale_rook_ocs_operators(replica=0)
+        logger.info("Operators scaled down for CephFS recovery")
         logger.info(
-            "Patching MDSs to remove LivenessProbe and setting sleep to infinity"
+            "Patching MDS deployments to remove livenessProbe and sleep infinitely"
         )
         mon_recovery.patch_sleep_on_mds()
-        logger.info("Resetting the fs")
+        logger.info("MDS deployments patched successfully")
+        logger.info(f"Resetting CephFS filesystem: {defaults.CEPHFILESYSTEM_NAME}")
         ceph_fs_recovery()
-        logger.info("Reverting MDS deployments")
+        logger.info("CephFS filesystem reset successfully")
+        logger.info(f"Reverting {len(mds_revert)} MDS deployment(s) to original state")
         mon_recovery.revert_patches(mds_revert)
-        logger.info("Scaling back rook and ocs operators")
+        logger.info("MDS deployments reverted successfully")
+        logger.info("Scaling operators back to 1 replica")
         mon_recovery.scale_rook_ocs_operators(replica=1)
-        logger.info("Recovering mcg by re-spinning the pods")
+        logger.info("Operators scaled up after CephFS recovery")
+
+        logger.test_step("Recover MCG and remove global ID warnings")
+        logger.info("Recovering MCG by re-spinning NooBaa and RGW pods")
         recover_mcg()
+        logger.info("MCG recovery completed")
+        logger.info(
+            "Removing global ID reclaim warnings by re-spinning CSI and Mon pods"
+        )
         remove_global_id_reclaim()
+        logger.info("Global ID warnings removed")
+        logger.test_step("Verify data integrity after Mon recovery")
+        logger.info(
+            f"Deleting {len(self.dc_pods)} original DC pod(s) to trigger re-spin"
+        )
         for pod_obj in self.dc_pods:
+            logger.debug(f"Deleting pod: {pod_obj.name}")
             pod_obj.delete(force=True)
+
+        logger.info("Waiting for re-spun DC pods and calculating md5sum")
         new_md5_sum = []
-        logger.info("Verifying md5sum of files after recovery")
-        for pod_obj in get_spun_dc_pods(self.dc_pods):
+        respun_pods = get_spun_dc_pods(self.dc_pods)
+        logger.info(f"Found {len(respun_pods)} re-spun pod(s)")
+        for idx, pod_obj in enumerate(respun_pods, 1):
+            logger.debug(
+                f"Waiting for pod {idx}/{len(respun_pods)} to be Running: {pod_obj.name}"
+            )
             pod_obj.ocp.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 resource_name=pod_obj.name,
                 timeout=600,
                 sleep=10,
             )
-            new_md5_sum.append(pod.cal_md5sum(pod_obj, self.filename))
+            md5 = pod.cal_md5sum(pod_obj, self.filename)
+            new_md5_sum.append(md5)
+            logger.debug(f"MD5sum for pod {pod_obj.name}: {md5}")
         logger.info(f"Md5sum calculated after recovery: {new_md5_sum}")
+
+        logger.assertion(
+            f"Verify md5sum matches after recovery: original={self.md5sum}, new={new_md5_sum}"
+        )
         if collections.Counter(new_md5_sum) == collections.Counter(self.md5sum):
             logger.info(
                 f"Verified: md5sum of {self.filename} on pods matches with the original md5sum"
             )
         else:
             assert False, f"Data corruption found {new_md5_sum} and {self.md5sum}"
-        logger.info("Getting object after recovery")
+
+        logger.info(
+            f"Getting object '{self.object_key}' from bucket: {self.bucket_name}"
+        )
+        logger.assertion(
+            f"Verify S3 GetObject succeeds after recovery for bucket: {self.bucket_name}"
+        )
         assert bucket_utils.s3_get_object(
             s3_obj=mcg_obj,
             bucketname=self.bucket_name,
             object_key=self.object_key,
         ), "Failed: GetObject"
+        logger.info(
+            f"Object '{self.object_key}' retrieved successfully from bucket after recovery"
+        )
 
-        # New pvc, dc pods, obcs
+        logger.test_step("Create new resources to verify cluster functionality")
+        logger.info("Creating new DC pods with RBD and CephFS PVCs")
         new_dc_pods = [
             deployment_pod_factory(
                 interface=constants.CEPHBLOCKPOOL,
@@ -222,21 +294,41 @@ class TestMonitorRecovery(E2ETest):
                 interface=constants.CEPHFILESYSTEM,
             ),
         ]
-        for pod_obj in new_dc_pods:
+        logger.info(f"Created {len(new_dc_pods)} new DC pod(s)")
+        logger.info("Writing test data to new pods")
+        for idx, pod_obj in enumerate(new_dc_pods, 1):
+            logger.debug(
+                f"Writing data to new pod {idx}/{len(new_dc_pods)}: {pod_obj.name}"
+            )
             pod_obj.exec_cmd_on_pod(command=self.dd_cmd)
-        logger.info("Creating new bucket and write object")
+        logger.info("Test data written successfully to all new pods")
+
+        logger.info(
+            "Creating new bucket and writing object to verify MCG functionality"
+        )
         new_bucket = bucket_factory(interface="OC")[0].name
+        logger.info(f"Created new bucket: {new_bucket}")
+        logger.assertion(f"Verify S3 PutObject succeeds for new bucket: {new_bucket}")
         assert bucket_utils.s3_put_object(
             s3_obj=mcg_obj,
             bucketname=new_bucket,
             object_key=self.object_key,
             data=self.object_data,
         ), "Failed: PutObject"
+        logger.info(f"Object '{self.object_key}' written successfully to new bucket")
+
+        logger.test_step("Final cluster health check")
+        logger.info("Waiting for all storage pods to be running")
         wait_for_storage_pods()
-        logger.info("Archiving the ceph crash warnings")
+        logger.info("All storage pods are running")
+        logger.info("Archiving Ceph crash warnings")
         tool_pod = get_ceph_tools_pod()
+        logger.info(f"Running 'ceph crash archive-all' on toolbox pod: {tool_pod.name}")
         tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
+        logger.info("Ceph crash warnings archived")
+        logger.info("Running final cluster health check (10 retries)")
         self.sanity_helpers.health_check(tries=10)
+        logger.info("Cluster health check passed - Mon recovery verified successfully")
 
 
 class MonitorRecovery(object):
@@ -691,26 +783,32 @@ def corrupt_ceph_monitors():
 
     """
     mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
-    for mon in mon_pods:
-        logger.info(f"Corrupting monitor: {mon.name}")
+    logger.info(f"Corrupting {len(mon_pods)} Ceph monitor(s) by deleting store.db")
+    for idx, mon in enumerate(mon_pods, 1):
         mon_id = mon.get().get("metadata").get("labels").get("ceph_daemon_id")
-        _exec_cmd_on_pod(
-            cmd=f"rm -rf /var/lib/ceph/mon/ceph-{mon_id}/store.db", pod_obj=mon
+        logger.info(
+            f"Corrupting monitor {idx}/{len(mon_pods)}: {mon.name} (mon_id={mon_id})"
         )
+        store_db_path = f"/var/lib/ceph/mon/ceph-{mon_id}/store.db"
+        logger.debug(f"Deleting store.db at: {store_db_path}")
+        _exec_cmd_on_pod(cmd=f"rm -rf {store_db_path}", pod_obj=mon)
+        logger.info(f"Waiting for monitor {mon.name} to reach CrashLoopBackOff state")
         try:
             wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
+            logger.info(f"Monitor {mon.name} is now in CrashLoopBackOff state")
         except ResourceWrongStatusException:
-            if (
-                mon.ocp.get_resource(resource_name=mon.name, column="STATUS")
-                != constants.STATUS_CLBO
-            ):
-                logger.info(
-                    f"Re-spinning monitor: {mon.name} since it did not reach CLBO state"
+            current_status = mon.ocp.get_resource(
+                resource_name=mon.name, column="STATUS"
+            )
+            if current_status != constants.STATUS_CLBO:
+                logger.warning(
+                    f"Monitor {mon.name} did not reach CLBO (current: {current_status}), re-spinning pod"
                 )
                 mon.delete()
-    logger.info("Validating all the monitors are in CLBO state")
+    logger.info("Validating all monitors are in CrashLoopBackOff state")
     for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"]):
         wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
+    logger.info("All monitors successfully corrupted and in CrashLoopBackOff state")
 
 
 def recover_mcg():
@@ -718,21 +816,38 @@ def recover_mcg():
     Recovery procedure for noobaa by re-spinning the pods after mon recovery
 
     """
-    logger.info("Re-spinning noobaa pods")
-    for noobaa_pod in get_noobaa_pods():
+    noobaa_pods = get_noobaa_pods()
+    logger.info(f"Re-spinning {len(noobaa_pods)} NooBaa pod(s)")
+    for idx, noobaa_pod in enumerate(noobaa_pods, 1):
+        logger.debug(f"Deleting NooBaa pod {idx}/{len(noobaa_pods)}: {noobaa_pod.name}")
         noobaa_pod.delete()
-    for noobaa_pod in get_noobaa_pods():
+    logger.info("Waiting for re-spun NooBaa pods to reach Running state")
+    for idx, noobaa_pod in enumerate(get_noobaa_pods(), 1):
+        logger.debug(f"Waiting for NooBaa pod {idx} to be Running: {noobaa_pod.name}")
         wait_for_resource_state(
             resource=noobaa_pod, state=constants.STATUS_RUNNING, timeout=600
         )
+    logger.info("All NooBaa pods are running")
+
     if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
-        logger.info("Re-spinning RGW pods")
-        for rgw_pod in get_rgw_pods():
+        rgw_pods = get_rgw_pods()
+        logger.info(
+            f"Platform {config.ENV_DATA['platform']} detected - re-spinning {len(rgw_pods)} RGW pod(s)"
+        )
+        for idx, rgw_pod in enumerate(rgw_pods, 1):
+            logger.debug(f"Deleting RGW pod {idx}/{len(rgw_pods)}: {rgw_pod.name}")
             rgw_pod.delete()
-        for rgw_pod in get_rgw_pods():
+        logger.info("Waiting for re-spun RGW pods to reach Running state")
+        for idx, rgw_pod in enumerate(get_rgw_pods(), 1):
+            logger.debug(f"Waiting for RGW pod {idx} to be Running: {rgw_pod.name}")
             wait_for_resource_state(
                 resource=rgw_pod, state=constants.STATUS_RUNNING, timeout=600
             )
+        logger.info("All RGW pods are running")
+    else:
+        logger.info(
+            f"Platform {config.ENV_DATA['platform']} does not require RGW recovery"
+        )
 
 
 def remove_global_id_reclaim():
@@ -795,15 +910,22 @@ def get_spun_dc_pods(pod_list):
         list : list of respun pod objects
 
     """
+    logger.info(f"Finding re-spun DC pods for {len(pod_list)} original pod(s)")
     new_pods = []
-    for pod_obj in pod_list:
+    for idx, pod_obj in enumerate(pod_list, 1):
         pod_label = pod_obj.labels.get("deploymentconfig")
         label_selector = f"deploymentconfig={pod_label}"
+        logger.debug(
+            f"Searching for re-spun pod {idx}/{len(pod_list)} with label: {label_selector}"
+        )
 
         pods_data = pod.get_pods_having_label(label_selector, pod_obj.namespace)
         for pod_data in pods_data:
             pod_name = pod_data.get("metadata").get("name")
             if "-deploy" not in pod_name and pod_name not in pod_obj.name:
+                logger.debug(
+                    f"Found re-spun pod: {pod_name} (replacing {pod_obj.name})"
+                )
                 new_pods.append(pod.get_pod_obj(pod_name, pod_obj.namespace))
     logger.info(f"Previous pods: {[pod_obj.name for pod_obj in pod_list]}")
     logger.info(f"Re-spun pods: {[pod_obj.name for pod_obj in new_pods]}")

@@ -6,7 +6,7 @@ from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.constants import STATUS_COMPLETED
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function")
@@ -34,37 +34,44 @@ class TestJenkinsWorkload(E2ETest):
         """
         JENKINS test setup
         """
-        # Deployment of jenkins
+        logger.info("Setting up Jenkins environment")
         jenkins.create_ocs_jenkins_template()
+        logger.info("Jenkins OCS template created")
 
     @pytest.mark.usefixtures(jenkins_setup.__name__)
     def test_jenkins_workload_simple(self, jenkins, num_projects=5, num_of_builds=5):
         """
         Test jenkins workload
         """
-        # Init number of projects
+        logger.test_step(f"Configure Jenkins with {num_projects} projects")
         jenkins.number_projects = num_projects
+        logger.info(f"Number of projects set to: {num_projects}")
 
-        # Create app jenkins
+        logger.test_step("Create Jenkins application resources")
         jenkins.create_app_jenkins()
+        logger.info("Jenkins application created")
 
-        # Create jenkins pvc
         jenkins.create_jenkins_pvc()
+        logger.info("Jenkins PVC created")
 
-        # Create jenkins build config
         jenkins.create_jenkins_build_config()
+        logger.info("Jenkins build config created")
 
-        # Wait jenkins deploy pod reach to completed state
+        logger.test_step("Wait for Jenkins deployment to complete")
         jenkins.wait_for_jenkins_deploy_status(status=STATUS_COMPLETED)
+        logger.info(f"Jenkins deployment reached status: {STATUS_COMPLETED}")
 
-        # Init number of builds per project
+        logger.test_step(f"Start {num_of_builds} builds per project")
         jenkins.number_builds_per_project = num_of_builds
+        logger.info(f"Number of builds per project set to: {num_of_builds}")
 
-        # Start  Builds
         jenkins.start_build()
+        logger.info(f"Started builds for {num_projects} projects")
 
-        # Wait build reach 'Complete' state
+        logger.test_step("Wait for all builds to complete")
         jenkins.wait_for_build_to_complete()
+        logger.info("All builds completed successfully")
 
-        # Print table of builds
+        logger.test_step("Display build results")
         jenkins.print_completed_builds_results()
+        logger.info("Build results displayed")
