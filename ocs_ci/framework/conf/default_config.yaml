@@ -134,7 +134,8 @@ DEPLOYMENT:
   fusion_channel: v2.0
   enable_nested_virtualization: False # Enable nested virtualization on the cluster nodes
   host_network: False # Use host network for ODF pods, propagates to spec of StorageCluster. Mandatory for Hub/Spoke deployments.
-  enable_data_replication_separation: False # separates client data path from data replication
+  enable_data_replication_separation_public: False # separates client data path from data replication via public network (requires NAD/MachineConfig/mon-ip annotations)
+  enable_data_replication_separation_cluster: False # separates client data path from data replication via cluster network (only requires CIDR in StorageCluster)
   # Erasure Coding: deploy ODF with EC as default pool type instead of replication
   ec_default_pools: False
 
