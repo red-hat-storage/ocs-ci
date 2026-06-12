@@ -1523,9 +1523,107 @@ def get_rosa_cli(
     return rosa_binary_path
 
 
+def _try_extract_from_fallback_ga_image(binary, original_image, bin_dir):
+    """
+    Try to extract binary from GA fallback image when nightly registry is unavailable.
+
+    Args:
+        binary (str): type of binary (oc or openshift-install)
+        original_image (str): original nightly image URL that failed
+        bin_dir (str): path to bin folder where to extract the binary
+
+    Returns:
+        bool: True if fallback extraction succeeded, False otherwise
+    """
+    # Check if this looks like a nightly build that we can fallback
+    if (
+        "registry.ci.openshift.org/ocp/release:" in original_image
+        and "nightly" in original_image
+    ):
+        try:
+            # Extract version from nightly image name
+            # e.g., "registry.ci.openshift.org/ocp/release:4.22.0-0.nightly-2026-06-10-104337"
+            image_tag = original_image.split(":")[
+                -1
+            ]  # "4.22.0-0.nightly-2026-06-10-104337"
+
+            if ".nightly" in image_tag:
+                # Extract major.minor version
+                major_minor = image_tag.split(".nightly")[0]  # "4.22.0-0"
+                major_minor = ".".join(major_minor.split(".")[0:2])  # "4.22"
+
+                # Check if this version is GA'ed
+                if is_ocp_version_gaed(major_minor):
+                    # Get the latest GA version
+                    ga_version = get_latest_ocp_version(f"stable-{major_minor}")
+
+                    # Construct GA image URL for quay.io
+                    ga_image = (
+                        f"quay.io/openshift-release-dev/ocp-release:{ga_version}-x86_64"
+                    )
+
+                    log.warning(
+                        f"Nightly registry image unavailable: {original_image}. "
+                        f"Attempting fallback to GA image: {ga_image}"
+                    )
+
+                    # Try extracting from the GA image
+                    binary_path = os.path.join(bin_dir, binary)
+                    binary_path_exists = os.path.isfile(binary_path)
+
+                    with TemporaryDirectory() as temp_dir:
+                        pull_secret_path = os.path.join(
+                            constants.DATA_DIR, "pull-secret"
+                        )
+                        cmd = (
+                            f"oc adm release extract -a {pull_secret_path} --to {temp_dir} "
+                            f'--command={binary} "{ga_image}"'
+                        )
+                        exec_cmd(cmd)
+                        temp_binary = os.path.join(temp_dir, binary)
+
+                        if binary_path_exists:
+                            backup_file = f"{binary_path}.bak"
+                            os.rename(binary_path, backup_file)
+                            try:
+                                shutil.move(temp_binary, binary_path)
+                                delete_file(backup_file)
+                                log.info("Deleted backup binaries.")
+                            except FileNotFoundError as ex:
+                                log.error(
+                                    "Something went wrong with copying binary, reverting backup file. "
+                                    f"Exception: {ex}"
+                                )
+                                shutil.move(backup_file, binary_path)
+                                raise ex
+                        else:
+                            shutil.move(temp_binary, binary_path)
+
+                        # Set executable permissions
+                        current_file_permissions = os.stat(binary_path)
+                        os.chmod(
+                            binary_path, current_file_permissions.st_mode | stat.S_IEXEC
+                        )
+
+                    log.warning(
+                        f"FALLBACK SUCCESS: Extracted {binary} from GA image {ga_image} "
+                        "instead of unavailable nightly image. "
+                        "This may affect behavior if nightly-specific features are expected."
+                    )
+                    return True
+
+        except Exception as e:
+            log.warning(f"GA fallback extraction failed: {e}")
+
+    return False
+
+
 def extract_ocp_binary_from_image(binary, image, bin_dir):
     """
-    Extract binary (oc client or openshift installer) from custom OCP image
+    Extract binary (oc client or openshift installer) from custom OCP image.
+
+    If the image is a nightly build from registry.ci.openshift.org and extraction
+    fails, automatically attempts fallback to GA version from quay.io.
 
     Args:
         binary (str): type of binary (oc or openshift-install)
@@ -1533,27 +1631,47 @@ def extract_ocp_binary_from_image(binary, image, bin_dir):
         bin_dir (str): path to bin folder where to extract the binary
 
     """
-    binary_path = os.path.join(bin_dir, binary)
-    binary_path_exists = os.path.isfile(binary_path)
-    with TemporaryDirectory() as temp_dir:
-        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-        cmd = f'oc adm release extract -a {pull_secret_path} --to {temp_dir} --command={binary} "{image}"'
-        exec_cmd(cmd)
-        temp_binary = os.path.join(temp_dir, binary)
-        if binary_path_exists:
-            backup_file = f"{binary_path}.bak"
-            os.rename(binary_path, backup_file)
-            try:
+    try:
+        binary_path = os.path.join(bin_dir, binary)
+        binary_path_exists = os.path.isfile(binary_path)
+        with TemporaryDirectory() as temp_dir:
+            pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+            cmd = f'oc adm release extract -a {pull_secret_path} --to {temp_dir} --command={binary} "{image}"'
+            exec_cmd(cmd)
+            temp_binary = os.path.join(temp_dir, binary)
+            if binary_path_exists:
+                backup_file = f"{binary_path}.bak"
+                os.rename(binary_path, backup_file)
+                try:
+                    shutil.move(temp_binary, binary_path)
+                    delete_file(backup_file)
+                    log.info("Deleted backup binaries.")
+                except FileNotFoundError as ex:
+                    log.error(
+                        f"Something went wrong with copying binary, reverting backup file. Exception: {ex}"
+                    )
+                    shutil.move(backup_file, binary_path)
+                    raise ex
+            else:
                 shutil.move(temp_binary, binary_path)
-                delete_file(backup_file)
-                log.info("Deleted backup binaries.")
-            except FileNotFoundError as ex:
-                log.error(
-                    f"Something went wrong with copying binary, reverting backup file. Exception: {ex}"
-                )
-                shutil.move(backup_file, binary_path)
-        else:
-            shutil.move(temp_binary, binary_path)
+
+        # Set executable permissions
+        current_file_permissions = os.stat(binary_path)
+        os.chmod(binary_path, current_file_permissions.st_mode | stat.S_IEXEC)
+
+    except Exception as e:
+        log.warning(f"Failed to extract {binary} from image {image}: {e}")
+
+        # Try fallback to GA image if this was a nightly build
+        if _try_extract_from_fallback_ga_image(binary, image, bin_dir):
+            return  # Fallback succeeded
+
+        # Fallback didn't work or wasn't applicable, re-raise original error
+        log.error(
+            f"Failed to extract {binary} from {image} and no fallback was possible. "
+            f"Error: {e}"
+        )
+        raise e
 
 
 def get_openshift_client(version=None, bin_dir=None, force_download=False):
