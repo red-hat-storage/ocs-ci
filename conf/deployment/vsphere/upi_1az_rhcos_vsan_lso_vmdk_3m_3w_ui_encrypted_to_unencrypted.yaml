@@ -1,0 +1,26 @@
+---
+# Deploys an LSO-backed ODF cluster via the UI on vSphere UPI (VMDK, 3m/3w).
+# After LSO installs and disks are attached, simulates pre-existing encrypted
+# bluestore OSDs (dm-crypt/LUKS) on the worker disks
+# (simulate_bluestore_label_dmcrypt). The LUKS signature is left intact on
+# the disks (clear_signatures=False) so that forceful deployment can detect
+# and wipe it, then provisions new unencrypted OSDs.
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  type: 'VMDK'
+  provision_type: 'thick'
+  ui_deployment: true
+  odf_forceful_deployment: true
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '65536'
+  fio_storageutilization_min_mbps: 10.0
+  simulate_bluestore_label_dmcrypt: true
+  encryption_at_rest: false

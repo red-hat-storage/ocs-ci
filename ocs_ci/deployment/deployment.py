@@ -2266,7 +2266,12 @@ class Deployment(object):
             odf_forceful_deployment = config.DEPLOYMENT.get(
                 "odf_forceful_deployment", False
             )
-            if wipe_devices_from_other_clusters or odf_forceful_deployment:
+            simulate_bluestore_label_dmcrypt = config.ENV_DATA.get(
+                "simulate_bluestore_label_dmcrypt", False
+            )
+            if (
+                wipe_devices_from_other_clusters or odf_forceful_deployment
+            ) and not simulate_bluestore_label_dmcrypt:
                 from ocs_ci.deployment.helpers.ceph_cluster import (
                     verify_wipe_devices_from_other_clusters,
                 )

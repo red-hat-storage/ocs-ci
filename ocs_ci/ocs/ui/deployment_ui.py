@@ -168,6 +168,12 @@ class DeploymentUI(PageNavigator):
 
         """
         if config.DEPLOYMENT.get("local_storage"):
+            if csv.get_csvs_start_with_prefix(
+                constants.LOCAL_STORAGE_OPERATOR_NAME,
+                constants.LOCAL_STORAGE_NAMESPACE,
+            ):
+                logger.info("Local Storage operator already installed, skipping")
+                return
             self.navigate_operatorhub_page()
             logger.info(f"Search {self.operator_name} Operator")
             self.do_send_keys(self.dep_loc["search_operators"], text="Local Storage")
@@ -897,6 +903,24 @@ class DeploymentUI(PageNavigator):
 
         """
         self.install_local_storage_operator()
+        # The dm-crypt simulation must run after LSO is installed and has
+        # completed its initial LocalVolumeDiscovery — so the disk is seen
+        # as Available while it is still clean. Writing the LUKS header
+        # before LSO discovery would cause LSO to mark the disk
+        # NotAvailable (crypto_LUKS fstype), and the storage cluster
+        # configuration step would time out waiting for capacity.
+        if config.ENV_DATA.get("simulate_bluestore_label_dmcrypt"):
+            from ocs_ci.deployment.helpers.ceph_cluster import (
+                simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes,
+            )
+
+            logger.info(
+                "Simulating encrypted Ceph OSD bluestore (dm-crypt) "
+                "on worker nodes after LSO installation"
+            )
+            assert simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
+                add_disks=False, clear_signatures=False
+            ), "Encrypted BlueStore (dm-crypt) simulation failed on worker nodes"
         if not csv.get_csvs_start_with_prefix(
             defaults.ODF_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]
         ):
