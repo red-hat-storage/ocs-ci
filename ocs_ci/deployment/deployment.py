@@ -4113,6 +4113,22 @@ class MultiClusterDROperatorsDeploy(object):
             config.switch_acm_ctx()
             logger.info("Switched back to ACM context")
 
+    def should_use_odf_bucket(self):
+        """
+        Check if ODF bucket should be used by checking use_internal_s3 across all clusters.
+
+        Returns:
+            bool: True if any cluster has use_internal_s3=True, False otherwise
+        """
+        for cluster in config.clusters:
+            if cluster.ENV_DATA.get("use_internal_s3", False):
+                logger.info(
+                    f"Found use_internal_s3=True in cluster: "
+                    f"{cluster.ENV_DATA.get('cluster_name', 'unknown')}"
+                )
+                return True
+        return False
+
     def create_s3_bucket(self, access_key, secret_key, bucket_name):
         """
         Create s3 bucket using AWS S3 or ODF ObjectBucketClaim.
@@ -4131,7 +4147,7 @@ class MultiClusterDROperatorsDeploy(object):
             tuple: (bucket_name, endpoint, access_key, secret_key) when use_internal_s3=True
                    None when using AWS S3 (credentials passed as parameters)
         """
-        use_odf_bucket = config.ENV_DATA.get("use_internal_s3", False)
+        use_odf_bucket = self.should_use_odf_bucket()
 
         if use_odf_bucket:
             logger.info("Using ODF ObjectBucketClaim for backup storage")
@@ -4280,7 +4296,7 @@ class MultiClusterDROperatorsDeploy(object):
         ] = bucket_name
         oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
 
-        use_odf_bucket = config.ENV_DATA.get("use_internal_s3", False)
+        use_odf_bucket = self.should_use_odf_bucket()
         if use_odf_bucket:
             oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
                 "region"
@@ -4685,7 +4701,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.enable_cluster_backup()
         # Configuring s3 bucket
         # Get AWS credentials only if not using internal ODF bucket
-        use_odf_bucket = config.ENV_DATA.get("use_internal_s3", False)
+        use_odf_bucket = self.should_use_odf_bucket()
         if not use_odf_bucket:
             self.meta_obj.get_meta_access_secret_keys()
             access_key = self.meta_obj.access_key
@@ -4795,7 +4811,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         acm_indexes = get_all_acm_indexes()
         thanos_secret_data = templating.load_yaml(constants.THANOS_PATH)
 
-        use_odf_bucket = config.ENV_DATA.get("use_internal_s3", False)
+        use_odf_bucket = self.should_use_odf_bucket()
 
         if use_odf_bucket:
             logger.info("Using ODF ObjectBucketClaim for Thanos storage")
