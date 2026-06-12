@@ -15,7 +15,10 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
-from ocs_ci.helpers.dr_helpers import wait_for_all_resources_deletion
+from ocs_ci.helpers.dr_helpers import (
+    check_mirroring_status_for_custom_pool,
+    wait_for_all_resources_deletion,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.helpers.dr_helpers_ui import (
@@ -43,27 +46,61 @@ class TestVMAutoCleanUp:
     """
 
     @pytest.mark.parametrize(
-        argnames=["protection_type", "primary_cluster_down"],
+        argnames=[
+            "protection_type",
+            "primary_cluster_down",
+            "custom_sc",
+            "replica",
+            "compression",
+        ],
         argvalues=[
             pytest.param(
                 "standalone",
                 False,
+                False,
+                2,
+                None,
                 id="primary_up_standalone-protection",
             ),
             pytest.param(
                 "standalone",
                 True,
+                False,
+                2,
+                None,
                 id="primary_down_standalone-protection",
             ),
             pytest.param(
                 "shared",
                 False,
+                False,
+                2,
+                None,
                 id="primary_up_shared-protection",
             ),
             pytest.param(
                 "shared",
                 True,
+                False,
+                2,
+                None,
                 id="primary_down_shared-protection",
+            ),
+            pytest.param(
+                "standalone",
+                False,
+                True,
+                2,
+                None,
+                id="primary_up_standalone-protection_custom_pool_replica2",
+            ),
+            pytest.param(
+                "shared",
+                False,
+                True,
+                2,
+                "aggressive",
+                id="primary_up_shared-protection_custom_pool_replica2_compression",
             ),
         ],
     )
@@ -72,6 +109,10 @@ class TestVMAutoCleanUp:
         setup_acm_ui,
         protection_type,
         primary_cluster_down,
+        custom_sc,
+        replica,
+        compression,
+        cnv_custom_storage_class,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
         node_restart_teardown,
@@ -102,12 +143,17 @@ class TestVMAutoCleanUp:
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
 
+        if custom_sc:
+            logger.info("Calling fixture to create Custom Pool/SC..")
+            cnv_custom_storage_class(replica=replica, compression=compression)
+
         logger.info("Deploy 1st CNV workload")
         cnv_workloads = discovered_apps_dr_workload_cnv(
             pvc_vm=1,
             dr_protect=False,
             shared_drpc_protection=False,
             vm_type=constants.VM_VOLUME_DVT,
+            custom_sc=custom_sc,
         )
 
         if protection_type == "shared":
@@ -119,6 +165,7 @@ class TestVMAutoCleanUp:
                 dr_protect=False,
                 shared_drpc_protection=True,
                 vm_type=constants.VM_VOLUME_DVT,
+                custom_sc=custom_sc,
             )
 
         assert cnv_workloads, "No discovered VM found"
@@ -192,6 +239,12 @@ class TestVMAutoCleanUp:
             discovered_apps=True,
             resource_name=resource_name,
         )
+
+        if custom_sc:
+            assert check_mirroring_status_for_custom_pool(
+                pool_name=constants.RDR_CUSTOM_RBD_POOL
+            ), "Mirroring status check for custom SC failed"
+            logger.info("Mirroring status check for custom SC passed")
 
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
@@ -488,3 +541,9 @@ class TestVMAutoCleanUp:
         dr_helpers.verify_last_kubeobject_protection_time(
             drpc_obj, cnv_workloads[0].kubeobject_capture_interval_int
         )
+
+        if custom_sc:
+            assert check_mirroring_status_for_custom_pool(
+                pool_name=constants.RDR_CUSTOM_RBD_POOL
+            ), "Mirroring status check for custom SC failed"
+            logger.info("Mirroring status check for custom SC passed")
