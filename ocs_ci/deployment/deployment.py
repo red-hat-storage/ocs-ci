@@ -208,6 +208,8 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 from ocs_ci.deployment.cnv import CNVInstaller
+from ocs_ci.deployment.kmm import deploy_kmm_operator
+from ocs_ci.deployment.image_registry import configure_image_registry_with_pvc
 
 logger = logging.getLogger(__name__)
 
@@ -1061,6 +1063,28 @@ class Deployment(object):
             except Exception as err:
                 logger.warning(
                     f"iSCSI setup failed: {err}. Continuing with deployment..."
+                )
+
+        # Deploy KMM operator if configured
+        if config.DEPLOYMENT.get("kmm_deployment"):
+            try:
+                logger.info("Deploying KMM operator after OCP deployment...")
+                deploy_kmm_operator()
+            except Exception as err:
+                logger.warning(
+                    f"KMM operator deployment failed: {err}. Continuing with deployment..."
+                )
+
+        # Configure image registry with PVC if configured
+        if config.DEPLOYMENT.get("image_registry_pvc_deployment"):
+            try:
+                logger.info(
+                    "Configuring image registry with PVC after OCP deployment..."
+                )
+                configure_image_registry_with_pvc()
+            except Exception as err:
+                logger.warning(
+                    f"Image registry PVC configuration failed: {err}. Continuing with deployment..."
                 )
 
     def label_and_taint_nodes(self):
