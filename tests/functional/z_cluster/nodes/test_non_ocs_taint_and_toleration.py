@@ -79,6 +79,14 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         Initialize Sanity instance
 
         """
+        if (
+            config.ENV_DATA.get("platform", "").lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+        ):
+            pytest.skip(
+                "Test not supported on HCI client cluster - CephCluster CRD not available"
+            )
         self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
