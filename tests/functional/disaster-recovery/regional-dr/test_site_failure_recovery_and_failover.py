@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 @tier4a
 @turquoise_squad
 @dr_hub_recovery
-@pytest.mark.order("last")
+@pytest.mark.order("last-1")
 class TestSiteFailureRecoveryAndFailover:
     """
     Perform site-failure by bringing down the active hub and the primary managed cluster, then perform hub recovery
