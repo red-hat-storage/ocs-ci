@@ -38,7 +38,6 @@ class Initializer(BaseInitializer):
             InvalidDeploymentType: If the provided deployment_type is invalid
 
         """
-        # 1. Validate the deployment type and look up the log name
         try:
             log_basename = LOG_NAMES[deployment_type]
         except KeyError:
@@ -86,6 +85,10 @@ class Initializer(BaseInitializer):
                 config.DEPLOYMENT["fdf_image_tag"] = args.fdf_image_tag
             if args.live_deploy:
                 config.DEPLOYMENT["live_deployment"] = args.live_deploy
+
+        # Set report path if provided
+        if hasattr(args, "report") and args.report:
+            config.REPORTING["report_path"] = args.report
 
     def init_cli(self, args: list) -> list:
         """
@@ -139,18 +142,6 @@ class Initializer(BaseInitializer):
         parsed_args, _ = parser.parse_known_args(args)
 
         return parsed_args
-
-    def init_logging(self) -> None:
-        """
-        Initialize the logging config.
-        """
-        super().init_logging()
-
-    def set_cluster_connection(self) -> None:
-        """
-        Setup cluster connection.
-        """
-        super().set_cluster_connection()
 
     def load_ocp_version_config(self) -> None:
         """
