@@ -84,7 +84,6 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         Test is parametrized to run with Custom RBD Storage Class and Pool of Replica-2.
 
         """
-
         md5sum_original = []
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]

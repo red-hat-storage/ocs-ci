@@ -70,6 +70,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     is_cluster_y_version_upgraded,
     wait_for_machineconfigpool_status,
+    create_directory_path,
 )
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
@@ -79,6 +80,7 @@ from ocs_ci.helpers.helpers import (
     find_radosnamespace,
 )
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.odf_cli import ODFCliRunner
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +289,13 @@ def failover(
         constants.STATUS_FAILEDOVER,
         timeout=360,
     )
+
+    validate_application_odf_cli(
+        drpc_name=drpc_obj.resource_name,
+        namespace=namespace,
+        dr_action="app-failover",
+    )
+
     config.switch_ctx(restore_index)
 
 
@@ -3415,3 +3424,116 @@ def extract_images_from_yaml(obj, images=None):
             extract_images_from_yaml(item, images)
 
     return images
+
+
+def validate_application_odf_cli(
+    drpc_name, namespace, action="validate", dr_action=None
+):
+    """
+    Run an ODF CLI DR action on a DR application.
+
+    Supports 'validate' and 'gather' actions. For 'validate', runs
+    'odf dr validate application' and asserts success. For 'gather',
+    runs 'odf dr gather application' to collect diagnostic data
+    (non-fatal on failure).
+
+    Args:
+        drpc_name (str): Name of the DRPC resource
+        namespace (str): Namespace of the application
+        action (str): Action to perform - "validate" or "gather"
+        dr_action (str): Label for the output directory
+            (e.g., "app-failover", "app-relocate"). Defaults to
+            "{action}-app" if not provided.
+
+    Returns:
+        str or None: The stdout output from the command,
+            or None if gather failed
+
+    Raises:
+        CommandFailed: If the ODF CLI command fails (validate only)
+
+    """
+    dir_label = dr_action or f"{action}-app"
+    output_dir = os.path.join(
+        os.path.expanduser(config.RUN["log_dir"]),
+        f"odf_dr_{dir_label}_{config.RUN['run_id']}",
+        f"{dir_label}_{drpc_name}",
+    )
+    odf_cli_runner = ODFCliRunner()
+    cmd_args = (
+        f"dr {action} application "
+        f"--name {drpc_name} "
+        f"--namespace {namespace} "
+        f"-o {output_dir}"
+    )
+
+    create_directory_path(output_dir)
+    logger.info(f"ODF DR {action} application output will be stored in: {output_dir}")
+
+    if action == "gather":
+        try:
+            logger.info(
+                f"Running ODF DR gather application for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}'"
+            )
+            result = odf_cli_runner.run_command(cmd_args)
+            stdout = result.stdout.decode()
+            logger.info(f"ODF DR gather application output:\n{stdout}")
+            return stdout
+        except Exception:
+            logger.warning(
+                f"ODF DR gather application failed for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}'. Continuing with teardown.",
+                exc_info=True,
+            )
+            return None
+    else:
+        logger.info(
+            f"Running ODF DR validate application for DRPC '{drpc_name}' "
+            f"in namespace '{namespace}'"
+        )
+        result = odf_cli_runner.run_command(cmd_args)
+        stdout = result.stdout.decode()
+        logger.info(f"ODF DR validate application output:\n{stdout}")
+
+        assert "validation successful" in stdout.lower(), (
+            f"ODF DR validate application did not report success for DRPC '{drpc_name}' "
+            f"in namespace '{namespace}'. Output:\n{stdout}"
+        )
+
+    return stdout
+
+
+def validate_cluster_odf_cli():
+    """
+    Validate DR cluster configuration using the ODF CLI tool.
+
+    Runs 'odf dr validate clusters' and stores the output files
+    to the test log directory.
+
+    Returns:
+        str: The stdout output from the validation command
+
+    Raises:
+        CommandFailed: If the ODF CLI command fails
+
+    """
+    output_dir = os.path.join(
+        os.path.expanduser(config.RUN["log_dir"]),
+        f"odf_dr_validate_clusters_{config.RUN['run_id']}",
+    )
+    create_directory_path(output_dir)
+    logger.info(f"ODF DR validate clusters output will be stored in: {output_dir}")
+
+    odf_cli_runner = ODFCliRunner()
+    cmd_args = f"dr validate clusters -o {output_dir}"
+    logger.info("Running ODF DR validate clusters")
+    result = odf_cli_runner.run_command(cmd_args)
+    stdout = result.stdout.decode()
+    logger.info(f"ODF DR validate clusters output:\n{stdout}")
+
+    assert (
+        "validation successful" in stdout.lower()
+    ), f"ODF DR validate clusters did not report success. Output:\n{stdout}"
+
+    return stdout

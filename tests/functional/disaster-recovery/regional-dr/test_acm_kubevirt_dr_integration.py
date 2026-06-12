@@ -77,7 +77,6 @@ class TestACMKubevirtDRIntergration:
 
 
         """
-
         md5sum_original = []
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]

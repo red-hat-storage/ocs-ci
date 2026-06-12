@@ -123,7 +123,6 @@ class TestRDRWarningAndAlerting:
         and mds daemons on the primary cluster and scale them up back to their original count.
 
         """
-
         config.switch_acm_ctx()
         # Enable MCO console plugin needed for DR dashboard
         enable_mco_console_plugin()
@@ -362,7 +361,6 @@ class TestRDRWarningAndAlerting:
         and mds daemons on the primary cluster and scale them up back to their original count.
 
         """
-
         config.switch_acm_ctx()
         # Enable MCO console plugin needed for DR dashboard
         enable_mco_console_plugin()
