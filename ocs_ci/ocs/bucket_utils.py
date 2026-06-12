@@ -3670,3 +3670,100 @@ def get_bucket_status_value(mcg_obj, bucket_name, key):
     op = bucket_status.split("\n")
     value = next(item.split(":")[1].strip() for item in op if key in item)
     return value
+
+
+def get_bucket_tagging(s3_client, bucket_name):
+    """
+    Get S3 bucket tagging via the S3 API.
+
+    Args:
+        s3_client: boto3 S3 client with credentials for the bucket
+        bucket_name (str): Name of the S3 bucket
+
+    Returns:
+        list: TagSet from get_bucket_tagging response
+
+    Raises:
+        botocore.exceptions.ClientError: When tagging is not set (NoSuchTagSet)
+    """
+    response = s3_client.get_bucket_tagging(Bucket=bucket_name)
+    return response.get("TagSet", [])
+
+
+def tag_set_to_dict(tag_set):
+    """
+    Convert S3 TagSet to a key-value dictionary.
+
+    Args:
+        tag_set (list): List of dicts with Key and Value keys
+
+    Returns:
+        dict: Mapping of tag keys to values
+    """
+    return {tag["Key"]: tag["Value"] for tag in tag_set}
+
+
+def verify_bucket_tagging_matches_labels(
+    s3_client, bucket_name, expected_labels, timeout=180, sleep=10
+):
+    """
+    Wait until bucket S3 tags include the expected label key-value pairs.
+
+    Args:
+        s3_client: boto3 S3 client with credentials for the bucket
+        bucket_name (str): Name of the S3 bucket
+        expected_labels (dict): Labels that should appear as bucket tags
+        timeout (int): Timeout in seconds
+        sleep (int): Sleep interval between checks
+
+    Raises:
+        TimeoutExpiredError: If tags do not match within the timeout
+    """
+    for tag_set in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_bucket_tagging,
+        s3_client=s3_client,
+        bucket_name=bucket_name,
+    ):
+        bucket_tags = tag_set_to_dict(tag_set)
+        if all(bucket_tags.get(key) == value for key, value in expected_labels.items()):
+            logger.info(
+                f"Bucket {bucket_name} tags {bucket_tags} match expected labels "
+                f"{expected_labels}"
+            )
+            return bucket_tags
+    raise TimeoutExpiredError(
+        f"Bucket {bucket_name} tags did not match expected labels {expected_labels} "
+        f"within {timeout}s"
+    )
+
+
+def get_noobaa_bucket_metric_value(metric_name, bucket_name, threading_lock):
+    """
+    Query Prometheus for a NooBaa bucket metric filtered by bucket_name.
+
+    Args:
+        metric_name (str): Prometheus metric name
+        bucket_name (str): Bucket name label value
+        threading_lock: Threading lock for PrometheusAPI
+
+    Returns:
+        int or None: Metric value if present, None if the metric is not found
+    """
+    query = f'{metric_name}{{bucket_name="{bucket_name}"}}'
+    api = PrometheusAPI(threading_lock=threading_lock)
+    logger.info(f"Prometheus query: {query}")
+    resp = api.get("query", payload={"query": query}, timeout=120)
+    if not resp.ok:
+        raise Exception(
+            f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
+        )
+    metrics_output = json.loads(resp.text)
+    results = metrics_output.get("data", {}).get("result", [])
+    if not results:
+        logger.info(f"No results for metric {metric_name} on bucket {bucket_name}")
+        return None
+    value = int(float(results[0]["value"][1]))
+    logger.info(f"Metric {metric_name} for bucket {bucket_name}: {value}")
+    return value
