@@ -73,6 +73,7 @@ from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 log = logging.getLogger(__name__)
 
 # variables
+_oc_plugin_list_cache = None
 mounting_dir = "/mnt/cephfs/"
 clients = []
 md5sum_list1 = []
@@ -806,22 +807,25 @@ def exec_cmd(
     ):
         kube_index = 1
         # check if we have an oc plugin in the command
-        plugin_list = "oc plugin list"
-        cp = subprocess.run(
-            shlex.split(plugin_list),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        global _oc_plugin_list_cache
+        if _oc_plugin_list_cache is None:
+            cp = subprocess.run(
+                shlex.split("oc plugin list"),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if cp.returncode == 0:
+                _oc_plugin_list_cache = cp.stdout.decode().splitlines()
+
         subcmd = cmd[1].split("-")
         if len(subcmd) > 1:
             subcmd = "_".join(subcmd)
         if not isinstance(subcmd, str) and isinstance(subcmd, list):
             subcmd = str(subcmd[0])
 
-        for l in cp.stdout.decode().splitlines():
+        plugin_lines = _oc_plugin_list_cache or []
+        for l in plugin_lines:
             if subcmd in l:
-                # If oc cmdline has plugin name then we need to push the
-                # --kubeconfig to next index
                 kube_index = 2
                 log.info(f"Found oc plugin {subcmd}")
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
