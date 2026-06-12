@@ -7,6 +7,7 @@ import json
 import logging
 import yaml
 import pytest
+import time
 from ocs_ci.ocs import constants, resources, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
@@ -141,7 +142,15 @@ def nfs_disable(
     pod_obj.wait_for_delete(resource_name=nfs_ganesha_pod_name)
 
     # Delete the nfs StorageClass
+    log.info(f"Deleting NFS StorageClass {constants.NFS_STORAGECLASS_NAME}")
     sc_obj.delete(resource_name=constants.NFS_STORAGECLASS_NAME)
+
+    # Wait for StorageClass deletion to complete before returning
+    log.info(
+        f"Waiting for NFS StorageClass {constants.NFS_STORAGECLASS_NAME} to be deleted..."
+    )
+    sc_obj.wait_for_delete(resource_name=constants.NFS_STORAGECLASS_NAME, timeout=120)
+    log.info(f"NFS StorageClass {constants.NFS_STORAGECLASS_NAME} deleted successfully")
 
 
 def create_nfs_load_balancer_service(
@@ -217,7 +226,12 @@ def create_nfs_load_balancer_service(
             configure_nfs_lb_security_group,
         )
 
+        log.info("Configuring IBM Cloud security group for NFS LoadBalancer...")
         configure_nfs_lb_security_group()
+        log.info(
+            "Security group configured. Waiting 60 seconds for rules to propagate..."
+        )
+        time.sleep(60)
 
     return hostname_add
 
@@ -850,3 +864,115 @@ def fetch_nfs_server_details_on_client_cluster(default_server=False):
                 server,
             )
             return server
+
+
+def get_file_checksum_from_nfs(con, file_path):
+    """
+    Get MD5 checksum for a file on NFS mount (out-of-cluster).
+
+    Args:
+        con: Connection object to NFS client VM
+        file_path (str): Full path to the file on NFS mount
+
+    Returns:
+        str: MD5 checksum or None if failed
+    """
+    checksum_cmd = f"md5sum {file_path}"
+    retcode, stdout, stderr = con.exec_cmd(checksum_cmd)
+    if retcode != 0:
+        log.error(f"Failed to calculate checksum for {file_path}: {stderr}")
+        return None
+    return stdout.split()[0]
+
+
+def get_file_line_count_from_nfs(con, file_path):
+    """
+    Get line count for a file on NFS mount (out-of-cluster).
+
+    Args:
+        con: Connection object to NFS client VM
+        file_path (str): Full path to the file on NFS mount
+
+    Returns:
+        int: Line count or 0 if failed
+    """
+    line_cmd = f"wc -l {file_path}"
+    retcode, stdout, stderr = con.exec_cmd(line_cmd)
+    if retcode != 0:
+        log.error(f"Failed to get line count for {file_path}: {stderr}")
+        return 0
+    return int(stdout.split()[0])
+
+
+def get_file_checksum_from_pod(pod_obj, file_path_in_pod):
+    """
+    Get MD5 checksum for a file from within the pod (in-cluster).
+
+    Args:
+        pod_obj: Pod object
+        file_path_in_pod (str): Path to file inside pod (e.g., /mnt/filename)
+
+    Returns:
+        str: MD5 checksum or None if failed
+    """
+    checksum_cmd = f"md5sum {file_path_in_pod}"
+    try:
+        pod_output = pod_obj.exec_cmd_on_pod(
+            command=checksum_cmd, out_yaml_format=False
+        )
+        return pod_output.split()[0]
+    except Exception as e:
+        log.error(f"Failed to get checksum from pod for {file_path_in_pod}: {str(e)}")
+        return None
+
+
+def get_file_line_count_from_pod(pod_obj, file_path_in_pod):
+    """
+    Get line count for a file from within the pod (in-cluster).
+
+    Args:
+        pod_obj: Pod object
+        file_path_in_pod (str): Path to file inside pod (e.g., /mnt/filename)
+
+    Returns:
+        int: Line count or 0 if failed
+    """
+    line_cmd = f"wc -l {file_path_in_pod}"
+    try:
+        pod_output = pod_obj.exec_cmd_on_pod(command=line_cmd, out_yaml_format=False)
+        return int(pod_output.split()[0])
+    except Exception as e:
+        log.error(f"Failed to get line count from pod for {file_path_in_pod}: {str(e)}")
+        return 0
+
+
+def configure_deployment_for_nfs(deployment_name, pvc_name):
+    """
+    Configure deployment data for NFS pod with given names.
+
+    Args:
+        deployment_name (str): Name for the deployment
+        pvc_name (str): Name of the PVC to mount
+
+    Returns:
+        dict: Configured deployment data ready for creation
+    """
+    from ocs_ci.utility import templating
+
+    # Load base deployment template
+    deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
+
+    # Set deployment name
+    deployment_data["metadata"]["name"] = deployment_name
+
+    # Set label values (used in multiple places for pod selection)
+    deployment_data["metadata"]["labels"]["app"] = deployment_name
+    deployment_data["spec"]["selector"]["matchLabels"]["name"] = deployment_name
+    deployment_data["spec"]["template"]["metadata"]["labels"]["name"] = deployment_name
+
+    # Set PVC claimName
+    deployment_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+        "claimName"
+    ] = pvc_name
+
+    return deployment_data
