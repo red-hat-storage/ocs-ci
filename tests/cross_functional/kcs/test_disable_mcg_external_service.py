@@ -4,6 +4,7 @@ import logging
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.pod import wait_for_noobaa_db_ready
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
@@ -47,6 +48,7 @@ class TestDisableMCGExternalService:
             params='{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 2,"maxCount": 4}}}}',
             format_type="merge",
         )
+        wait_for_noobaa_db_ready()
 
         def finalizer():
 
@@ -61,6 +63,7 @@ class TestDisableMCGExternalService:
                 params='{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 1,"maxCount": 2}}}}',
                 format_type="merge",
             )
+            wait_for_noobaa_db_ready()
 
         request.addfinalizer(finalizer)
         return noobaa_ocp_obj
