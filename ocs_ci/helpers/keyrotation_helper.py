@@ -8,6 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.kms import (
     get_kms_details,
     is_kms_enabled,
@@ -528,6 +529,43 @@ class PVKeyrotation(KeyRotation):
         cron_job.patch(params=suspend_patch, format_type="json")
         log.info(f"'suspend' {'enabled' if suspend_state else 'removed'} for CronJob.")
 
+    def wait_for_keyrotation_cronjob_for_pvc(self, pvc_obj, timeout=120):
+        """
+        Wait for the CSI addons controller to create the KeyRotationCronJob and
+        (optionally) set its name on the PVC annotation (keyrotation.csiaddons.openshift.io/cronjob).
+        If the controller does not set the annotation, waits for the CRD to exist
+        by naming convention: {pvc_name}-keyrotation.
+
+        Args:
+            pvc_obj (object): PersistentVolumeClaim (PVC) object.
+            timeout (int): Max seconds to wait (default 120).
+
+        Raises:
+            TimeoutExpiredError: If the cronjob CRD is not found within timeout.
+        """
+        cronjob_annotation_key = "keyrotation.csiaddons.openshift.io/cronjob"
+        default_cronjob_name = f"{pvc_obj.name}-keyrotation"
+
+        def check():
+            pvc_obj.reload()
+            annotations = (pvc_obj.data.get("metadata") or {}).get("annotations") or {}
+            cron_job_name = (
+                annotations.get(cronjob_annotation_key) or default_cronjob_name
+            )
+            cronjob_obj = OCP(
+                kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
+                namespace=pvc_obj.namespace,
+                resource_name=cron_job_name,
+            )
+            if cronjob_obj.is_exist():
+                return True
+            return None
+
+        for _ in TimeoutSampler(timeout=timeout, sleep=5, func=check):
+            if _:
+                log.info(f"KeyRotationCronJob found for PVC '{pvc_obj.name}'")
+                return
+
     def get_keyrotation_cronjob_for_pvc(self, pvc_obj):
         """
         Retrieves the key rotation CronJob associated with a PVC.
@@ -722,6 +760,9 @@ class PVKeyrotation(KeyRotation):
         state_value = "unmanaged" if disable else "managed"
 
         for pvc in pvc_objs:
+            # Wait for CSI addons to create KeyRotationCronJob (and optionally set PVC annotation)
+            self.wait_for_keyrotation_cronjob_for_pvc(pvc)
+
             # Retrieve the cronjob associated with the PVC
             cronjob = self.get_keyrotation_cronjob_for_pvc(pvc)
             if not cronjob:
@@ -765,6 +806,24 @@ class PVKeyrotation(KeyRotation):
             pvc.reload()
 
         log.info("Completed key rotation state changes for all specified PVCs.")
+
+        # Restart CSI Addons controller manager so it picks up the state change
+        namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+        try:
+            from ocs_ci.ocs.resources import pod as pod_module
+
+            log.info("Restarting CSI Addons controller manager pods...")
+            pod_module.restart_pods_having_label(
+                label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+                namespace=namespace,
+            )
+            log.info("CSI Addons controller manager pods restarted.")
+        except Exception as e:
+            log.warning(
+                f"Could not restart CSI Addons controller manager: {e}. "
+                "Controller may still pick up state change via watch."
+            )
+
         return True
 
     def reset_keyrotation_baseline(self):
