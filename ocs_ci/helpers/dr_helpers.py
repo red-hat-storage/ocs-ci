@@ -1698,71 +1698,163 @@ def validate_vgrc_count():
     return True
 
 
-def verify_last_group_sync_time(
+def _wait_for_last_group_sync_time(
     drpc_obj,
     scheduling_interval,
-    initial_last_group_sync_time=None,
+    previous_last_group_sync_time=None,
 ):
     """
-    Verifies that the lastGroupSyncTime for a given DRPC object is within the expected range.
+    Wait for lastGroupSyncTime to be set or to change from a previous value.
 
     Args:
         drpc_obj (obj): DRPC object
         scheduling_interval (int): The scheduling interval in minutes
-        initial_last_group_sync_time (str): Previous lastGroupSyncTime value (optional).
+        previous_last_group_sync_time (str): Previous lastGroupSyncTime value. When
+            None, waits for the field to be set for the first time.
+
+    Returns:
+        str: The observed lastGroupSyncTime value
+
+    Raises:
+        TimeoutExpiredError: If the expected lastGroupSyncTime update did not occur
+            within three scheduling intervals
+
+    """
+    timeout = 3 * scheduling_interval * 60
+    wait_for_set = previous_last_group_sync_time is None
+
+    try:
+        for last_group_sync_time in TimeoutSampler(
+            timeout, 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                if (
+                    wait_for_set
+                    or last_group_sync_time != previous_last_group_sync_time
+                ):
+                    return last_group_sync_time
+            if not last_group_sync_time:
+                logger.info("lastGroupSyncTime not yet set, retrying...")
+            else:
+                logger.info(
+                    f"lastGroupSyncTime still {last_group_sync_time} "
+                    f"(previous {previous_last_group_sync_time}), retrying..."
+                )
+    except TimeoutExpiredError:
+        if wait_for_set:
+            error_msg = "lastGroupSyncTime was not set within 3 scheduling intervals"
+        else:
+            error_msg = (
+                f"lastGroupSyncTime did not change from "
+                f"{previous_last_group_sync_time} within 3 scheduling intervals"
+            )
+        logger.error(error_msg)
+        raise TimeoutExpiredError(error_msg) from None
+
+
+def verify_last_group_sync_time(
+    drpc_obj,
+    scheduling_interval,
+    initial_last_group_sync_time=None,
+    sync_updates_to_wait=0,
+):
+    """
+    Verifies that lastGroupSyncTime is within three scheduling intervals.
+
+    Waits on the ACM hub when the field is unset or when initial_last_group_sync_time
+    is provided.
+
+    Args:
+        drpc_obj (obj): DRPC object
+        scheduling_interval (int): The scheduling interval in minutes
+        initial_last_group_sync_time (str): Wait until lastGroupSyncTime differs from
+            this initial value (optional).
+        sync_updates_to_wait (int): Additional lastGroupSyncTime updates to wait for
+            before asserting (default: 0).
 
     Returns:
         str: Current lastGroupSyncTime
 
     Raises:
+        ValueError: If sync_updates_to_wait is less than 0
+        TimeoutExpiredError: If lastGroupSyncTime is not updated within the expected time
         AssertionError: If the lastGroupSyncTime is outside the expected range
             (greater than or equal to three times the scheduling interval)
 
     """
-    restore_index = config.cur_index
-    config.switch_acm_ctx()
-    if initial_last_group_sync_time:
-        for last_group_sync_time in TimeoutSampler(
-            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
-        ):
-            if last_group_sync_time:
-                if last_group_sync_time != initial_last_group_sync_time:
-                    logger.info(
-                        f"Verified: Current lastGroupSyncTime {last_group_sync_time} is different from "
-                        f"previous value {initial_last_group_sync_time}"
-                    )
-                    break
-            logger.info(
-                "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
-            )
-    else:
-        logger.info("Waiting for lastGroupSyncTime to be set")
-        for last_group_sync_time in TimeoutSampler(
-            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
-        ):
-            if last_group_sync_time:
-                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
-                break
-            logger.info("lastGroupSyncTime not yet set, retrying...")
+    if sync_updates_to_wait < 0:
+        raise ValueError("sync_updates_to_wait must be >= 0")
 
-    # Verify lastGroupSyncTime
-    time_format = "%Y-%m-%dT%H:%M:%SZ"
-    last_group_sync_time_formatted = datetime.strptime(
-        last_group_sync_time, time_format
-    )
-    current_time = datetime.strptime(
-        datetime.utcnow().strftime(time_format), time_format
-    )
-    time_since_last_sync = (
-        current_time - last_group_sync_time_formatted
-    ).total_seconds() / 60
-    logger.info(f"Time in minutes since the last sync {time_since_last_sync}")
-    assert (
-        time_since_last_sync < 3 * scheduling_interval
-    ), "The syncing of volumes is exceeding three times the scheduled snapshot interval"
-    logger.info("Verified lastGroupSyncTime value within expected range")
-    config.switch_ctx(restore_index)
-    return last_group_sync_time
+    with config.RunWithAcmConfigContext():
+        previous_last_group_sync_time = initial_last_group_sync_time
+        if previous_last_group_sync_time is not None:
+            logger.info(
+                "Waiting for lastGroupSyncTime to change from initial value "
+                f"{previous_last_group_sync_time}"
+            )
+            last_group_sync_time = _wait_for_last_group_sync_time(
+                drpc_obj,
+                scheduling_interval,
+                previous_last_group_sync_time,
+            )
+            logger.info(
+                f"Verified: Current lastGroupSyncTime {last_group_sync_time} "
+                f"is different from initial value {previous_last_group_sync_time}"
+            )
+        else:
+            last_group_sync_time = drpc_obj.get_last_group_sync_time()
+            if last_group_sync_time:
+                logger.info(f"lastGroupSyncTime is already set: {last_group_sync_time}")
+            else:
+                logger.info("Waiting for lastGroupSyncTime to be set")
+                last_group_sync_time = _wait_for_last_group_sync_time(
+                    drpc_obj,
+                    scheduling_interval,
+                )
+                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
+
+        if sync_updates_to_wait > 0:
+            previous_last_group_sync_time = last_group_sync_time
+        for update_num in range(1, sync_updates_to_wait + 1):
+            logger.info(
+                f"Waiting for lastGroupSyncTime change "
+                f"(sync update {update_num}/{sync_updates_to_wait})"
+            )
+            try:
+                last_group_sync_time = _wait_for_last_group_sync_time(
+                    drpc_obj,
+                    scheduling_interval,
+                    previous_last_group_sync_time,
+                )
+            except TimeoutExpiredError as e:
+                raise TimeoutExpiredError(
+                    f"{e} (sync update {update_num}/{sync_updates_to_wait})"
+                ) from None
+
+            logger.info(
+                f"Verified: lastGroupSyncTime changed to "
+                f"{last_group_sync_time} "
+                f"(sync update {update_num}/{sync_updates_to_wait})"
+            )
+            previous_last_group_sync_time = last_group_sync_time
+
+        # Verify lastGroupSyncTime
+        time_format = "%Y-%m-%dT%H:%M:%SZ"
+        last_group_sync_time_formatted = datetime.strptime(
+            last_group_sync_time, time_format
+        )
+        current_time = datetime.strptime(
+            datetime.utcnow().strftime(time_format), time_format
+        )
+        time_since_last_sync = (
+            current_time - last_group_sync_time_formatted
+        ).total_seconds() / 60
+        logger.info(f"Time in minutes since the last sync {time_since_last_sync}")
+        assert (
+            time_since_last_sync < 3 * scheduling_interval
+        ), "The syncing of volumes is exceeding three times the scheduled snapshot interval"
+        logger.info("Verified lastGroupSyncTime value within expected range")
+        return last_group_sync_time
 
 
 def get_all_drclusters():
