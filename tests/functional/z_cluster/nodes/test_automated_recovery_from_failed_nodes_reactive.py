@@ -58,10 +58,10 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     Knip-678 Automated recovery from failed nodes - Reactive
     """
 
-    threads = []
-
     @pytest.fixture(autouse=True)
     def teardown(self, request):
+        self.threads = []
+
         def finalizer():
             worker_nodes = get_worker_nodes()
             # Removing created label on all worker nodes
@@ -183,12 +183,18 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 else:
                     node_type = constants.RHCOS
                 node_conf = {"stack_name": common_nodes[0]}
-                print(f"node_conf: {node_conf}")
+                log.info(f"node_conf: {node_conf}")
                 new_ocs_node_names = add_new_node_and_label_upi(
-                    node_type, 1, mark_for_ocs_label=True
+                    node_type, 1, mark_for_ocs_label=True, node_conf=node_conf
                 )
-        except ValueError as e:
-            log.error(f"Unsupported deployment type: {e}")
+            else:
+                raise ValueError(
+                    f"Unsupported deployment type: {deployment_type}. "
+                    "Expected 'ipi' or 'upi'."
+                )
+        except (ValueError, IndexError) as e:
+            log.error(f"Failed to add new node: {e}")
+            raise
 
         failure_domain = get_failure_domain()
         log.info("Wait for the nodes racks or zones to appear...")
@@ -206,6 +212,33 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         if failure == "shutdown":
             nodes.stop_nodes(failure_node_obj, wait=True)
             log.info(f"Successfully powered off node: " f"{failure_node_obj[0].name}")
+            log.info(
+                f"Waiting for node {failure_node_obj[0].name} to reach NotReady state"
+            )
+            wait_for_nodes_status(
+                node_names=[failure_node_obj[0].name],
+                status=constants.NODE_NOT_READY,
+                timeout=300,
+            )
+            # Force-delete DC app pods on the failed node to immediately
+            # release RBD/CephFS VolumeAttachments. For stopped (not
+            # terminated) nodes the CSI external-attacher waits for kubelet
+            # confirmation of unmount which never comes, leaving the
+            # VolumeAttachment permanently stuck and blocking the replacement
+            # pod with a Multi-Attach error. Force-deleting the old pod
+            # removes the VolumeAttachment without CSI confirmation.
+            log.info(
+                f"Force-deleting DC app pods on failed node "
+                f"{failure_node_obj[0].name} to release VolumeAttachments"
+            )
+            for dc_pod in dc_pod_obj:
+                try:
+                    dc_pod_node = get_pod_node(dc_pod)
+                    if dc_pod_node.name == failure_node_obj[0].name:
+                        log.info(f"Force-deleting pod {dc_pod.name} on failed node")
+                        dc_pod.delete(force=True, wait=False)
+                except Exception as ex:
+                    log.warning(f"Could not force-delete DC pod {dc_pod.name}: {ex}")
         elif failure == "terminate":
             nodes.terminate_nodes(failure_node_obj, wait=True)
             log.info(
@@ -213,10 +246,13 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 f"{failure_node_obj[0].name} instance"
             )
 
+        dc_pod_timeout = 900 if failure == "shutdown" else 720
         try:
             # DC app pods on the failed node will get automatically created on other
             # running node. Waiting for all dc app pod to reach running state
-            pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=720)
+            pod.wait_for_dc_app_pods_to_reach_running_state(
+                dc_pod_obj, timeout=dc_pod_timeout
+            )
             log.info("All the dc pods reached running state")
             pod.wait_for_storage_pods(timeout=300)
 
@@ -228,6 +264,18 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                     f"{failure_node_obj[0].name} instance"
                 )
             raise
+
+        # For shutdown, the stopped node is permanently replaced by the new
+        # node added before the failure. Terminate it now so the node object
+        # is removed from the cluster before health_check calls
+        # wait_for_nodes_status for all nodes (the stopped node would never
+        # return to Ready and would cause health_check to time out).
+        if failure == "shutdown":
+            nodes.terminate_nodes(failure_node_obj, wait=True)
+            log.info(
+                f"Successfully terminated stopped node : "
+                f"{failure_node_obj[0].name} instance"
+            )
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
