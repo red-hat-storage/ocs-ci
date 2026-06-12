@@ -18,7 +18,7 @@ from ocs_ci.utility.utils import (
     get_cluster_name,
     get_openshift_client,
     get_running_ocp_version,
-    run_cmd,
+    exec_cmd,
     create_kubeconfig,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -96,10 +96,6 @@ class BaseInitializer:
                 raise ClusterNameNotProvidedError()
         else:
             config.ENV_DATA["cluster_name"] = cluster_name
-
-        # Set report path if provided
-        if hasattr(args, "report") and args.report:
-            config.REPORTING["report_path"] = args.report
 
     def init_logging(self) -> None:
         """
@@ -199,7 +195,7 @@ class BaseInitializer:
         if not which("oc"):
             get_openshift_client()
         try:
-            run_cmd(f"oc --kubeconfig {kubeconfig_path} cluster-info")
+            exec_cmd(f"oc --kubeconfig {kubeconfig_path} cluster-info")
         except CommandFailed as ex:
             raise ClusterNotAccessibleError("Cluster is not ready to use: %s", ex)
         logger.info("Access to cluster is OK!")
