@@ -1533,6 +1533,10 @@ acm_configuration_4_18 = {
         "(//span[@class='mco-status-card__alert-item-header'])[2]",
         By.XPATH,
     ),
+    "pending-cleanup-alert": (
+        "//span[@class='mco-status-card__alert-item-header'][normalize-space()='ApplicationCleanupPending']",
+        By.XPATH,
+    ),
 }
 
 acm_configuration_4_19 = {

@@ -1645,6 +1645,10 @@ CEPHFS_SNAPSHOT_STATE_ORPHANED = "orphaned"
 CEPHFS_SNAPSHOT_STATE_BOUND = "bound"
 ALERT_MDSXATTR = "CephXattrSetLatency"
 
+# DR Pending Cleanup Alert (OCS 4.22+)
+ALERT_APPLICATION_CLEANUP_PENDING = "ApplicationCleanupPending"
+ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD = 15 * 60  # 15 minutes in seconds
+
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 INFRA_NODE_LABEL = "node-role.kubernetes.io/infra=''"
