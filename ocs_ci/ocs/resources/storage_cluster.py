@@ -1352,6 +1352,15 @@ def verify_storage_cluster_extended():
             "resourceProfile"
         ) != storage_cluster.data["status"].get("lastAppliedResourceProfile"):
             timeout = 1800
+        elif (
+            storage_cluster.data["spec"]
+            .get("network")
+            .get("connections")
+            .get("encryption")
+            .get("enabled")
+            == "true"
+        ):
+            timeout = 1200
         else:
             timeout = 600
         storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
@@ -1906,7 +1915,7 @@ def set_in_transit_encryption(enabled=True):
 
         log.info(f"In-transit encryption is {action}d successfully.")
         try:
-            ocp_obj.wait_for_phase(constants.STATUS_PROGRESSING, timeout=60)
+            ocp_obj.wait_for_phase(constants.STATUS_PROGRESSING, timeout=300)
         except ResourceWrongStatusException:
             is_sc_status_ready = ocp_obj.check_phase(constants.STATUS_READY)
 
