@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, ResourceWrongStatusException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
@@ -119,6 +120,15 @@ class TestRestoreCephMonQuorum(E2ETest):
                     sleep=5,
                 )
             log.info("All mons are up and running")
+
+            # Perform ceph health check after disruptions
+            try:
+                ceph_health_check(
+                    namespace=config.ENV_DATA["cluster_namespace"], tries=45, delay=60
+                )
+                log.info("Ceph health check passed after disruptions")
+            except Exception as ex:
+                log.warning(f"Ceph health check failed: {ex}")
 
         request.addfinalizer(finalizer)
 

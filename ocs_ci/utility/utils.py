@@ -740,7 +740,11 @@ def run_cmd_multicluster(
     tries=6,
     delay=10,
     backoff=1,
-    text_in_exception="client connection lost",
+    text_in_exception=[
+        "client connection lost",
+        "websocket: close 1006",
+        "unexpected EOF",
+    ],
 )
 def exec_cmd(
     cmd,
