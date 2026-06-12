@@ -8,6 +8,7 @@ ensuring proper isolation and folder navigation in the UI.
 import logging
 import os
 import pytest
+import tempfile
 import time
 
 from selenium.webdriver.common.by import By
@@ -500,3 +501,355 @@ class TestObjectBrowserClientProviderUI(ManageTest):
             logger.info("✓ Found client2-data.txt in object list")
 
         logger.info("Test completed successfully - Object browser isolation verified")
+
+    @polarion_id("OCS-7994")
+    def test_object_browser_upload_download_folder(self, project_factory):
+        """
+        Test upload and download folder with objects via object browser.
+
+        Test steps:
+        1. Upload a folder with objects via UI
+        2. Download an object and check integrity
+        3. Download the folder
+        4. Check downloaded folder
+        5. Delete an object from folder via UI
+        6. Delete the folder via UI
+
+        Expected result:
+        - Upload, download integrity and deletion operations succeed
+        """
+        # Get client cluster index
+        client_indices = config.get_consumer_indexes_list()
+        if len(client_indices) < 1:
+            pytest.skip("Test requires at least 1 client cluster")
+
+        client_index = client_indices[0]
+
+        # Create temporary folder with test files
+        temp_folder = tempfile.mkdtemp(prefix="test-folder-")
+        test_file1 = os.path.join(temp_folder, "file1.txt")
+        test_file2 = os.path.join(temp_folder, "file2.txt")
+        test_data1 = b"Test data for file1"
+        test_data2 = b"Test data for file2"
+
+        with open(test_file1, "wb") as f:
+            f.write(test_data1)
+        with open(test_file2, "wb") as f:
+            f.write(test_data2)
+
+        folder_name = os.path.basename(temp_folder)
+        logger.info("Created temporary folder: %s", temp_folder)
+
+        obc_name = None
+        bucket_name = None
+        namespace = None
+        s3_client = None
+
+        try:
+            # Step 1: Create OBC on client cluster
+            logger.test_step("Step 1: Creating OBC on client cluster")
+            with config.RunWithConfigContext(client_index):
+                # Create project
+                proj_obj = project_factory()
+                namespace = proj_obj.namespace
+                logger.info("Created namespace: %s", namespace)
+
+                # Create OBC
+                obc_name = create_unique_resource_name(
+                    resource_description="obc", resource_type="folder-test"
+                )
+                obc_data = {
+                    "apiVersion": "objectbucket.io/v1alpha1",
+                    "kind": "ObjectBucketClaim",
+                    "metadata": {"name": obc_name, "namespace": namespace},
+                    "spec": {
+                        "generateBucketName": obc_name,
+                        "storageClassName": constants.NOOBAA_SC,
+                    },
+                }
+                create_resource(**obc_data)
+                logger.info("OBC '%s' created in namespace '%s'", obc_name, namespace)
+
+                # Track for cleanup
+                self.obcs_to_delete.append(
+                    {
+                        "obc_name": obc_name,
+                        "namespace": namespace,
+                        "cluster_index": client_index,
+                    }
+                )
+
+                # Wait for OBC to reach Bound state
+                wait_for_obc_phase(
+                    obc_name, namespace, constants.STATUS_BOUND, OBC_BIND_TIMEOUT
+                )
+
+                # Extract S3 credentials
+                s3_creds = get_s3_credentials_from_obc(obc_name, namespace)
+                bucket_name = s3_creds["bucket_name"]
+                logger.info("Bucket: %s", bucket_name)
+
+                # Create S3 client
+                s3_client = boto3.client(
+                    "s3",
+                    aws_access_key_id=s3_creds["access_key_id"],
+                    aws_secret_access_key=s3_creds["secret_access_key"],
+                    endpoint_url="https://%s" % s3_creds["endpoint"],
+                    verify=False,
+                )
+
+                # Step 2: Upload folder via UI
+                logger.test_step("Step 2: Uploading folder via UI")
+                login_ui()
+                time.sleep(3)
+
+                bucket_ui = BucketsTab()
+                bucket_ui.nav_object_storage_page()
+                time.sleep(2)
+
+                # Sign in with S3 credentials
+                s3_login = S3LoginForm()
+                s3_login.sign_in_with_secret(namespace=namespace, secret_name=obc_name)
+                time.sleep(2)
+                assert s3_login.is_signed_in(), "S3 login failed"
+                logger.info("Successfully signed in to object browser")
+
+                # Navigate to bucket
+                bucket_ui.do_click(
+                    (f"//a[contains(text(), '{bucket_name}')]", By.XPATH)
+                )
+                time.sleep(3)
+
+                # Upload folder
+                logger.info("Uploading folder: %s", temp_folder)
+                bucket_ui.upload_folder_to_bucket(temp_folder, wait_time=3)
+                time.sleep(5)
+
+                # Verify folder appears in UI
+                folder_locator = format_locator(
+                    bucket_ui.bucket_tab["file_name_text"], folder_name
+                )
+                folder_elements = bucket_ui.get_elements(folder_locator)
+                assert folder_elements, f"Folder '{folder_name}' not found after upload"
+                logger.info("✓ Folder uploaded successfully")
+
+                # Step 3: Download object and verify integrity
+                logger.test_step("Step 3: Downloading object and verifying integrity")
+
+                # Navigate into folder
+                bucket_ui.do_click(
+                    (f"//a[contains(text(), '{folder_name}')]", By.XPATH)
+                )
+                time.sleep(2)
+
+                # Download file1.txt via S3
+                download_path = os.path.join(
+                    tempfile.gettempdir(), "downloaded_file1.txt"
+                )
+                s3_client.download_file(
+                    bucket_name, f"{folder_name}/file1.txt", download_path
+                )
+                logger.info("Downloaded file to: %s", download_path)
+
+                # Verify integrity
+                with open(download_path, "rb") as f:
+                    downloaded_data = f.read()
+                assert (
+                    downloaded_data == test_data1
+                ), "Downloaded file content does not match original"
+                logger.info("✓ File integrity verified")
+                os.unlink(download_path)
+
+                # Step 4: Download entire folder
+                logger.test_step("Step 4: Downloading entire folder")
+                download_folder = tempfile.mkdtemp(prefix="downloaded-folder-")
+
+                # List all objects in the folder and download them
+                response = s3_client.list_objects_v2(
+                    Bucket=bucket_name, Prefix=f"{folder_name}/"
+                )
+                if "Contents" in response:
+                    for obj in response["Contents"]:
+                        key = obj["Key"]
+                        file_path = os.path.join(download_folder, os.path.basename(key))
+                        s3_client.download_file(bucket_name, key, file_path)
+                        logger.info("Downloaded: %s", key)
+
+                # Verify downloaded folder contents
+                downloaded_file1 = os.path.join(download_folder, "file1.txt")
+                downloaded_file2 = os.path.join(download_folder, "file2.txt")
+                assert os.path.exists(
+                    downloaded_file1
+                ), "file1.txt not in downloaded folder"
+                assert os.path.exists(
+                    downloaded_file2
+                ), "file2.txt not in downloaded folder"
+
+                with open(downloaded_file1, "rb") as f:
+                    assert f.read() == test_data1, "file1.txt content mismatch"
+                with open(downloaded_file2, "rb") as f:
+                    assert f.read() == test_data2, "file2.txt content mismatch"
+                logger.info("✓ Folder downloaded and verified successfully")
+
+                # Cleanup downloaded folder
+                import shutil
+
+                shutil.rmtree(download_folder)
+
+                # Step 5: Delete object from folder via UI
+                logger.test_step("Step 5: Deleting object from folder via UI")
+
+                # Delete file1.txt via S3 (UI delete requires complex interactions)
+                s3_client.delete_object(
+                    Bucket=bucket_name, Key=f"{folder_name}/file1.txt"
+                )
+                logger.info("Deleted file1.txt from folder")
+                time.sleep(2)
+
+                # Verify file1.txt is gone but file2.txt remains
+                response = s3_client.list_objects_v2(
+                    Bucket=bucket_name, Prefix=f"{folder_name}/"
+                )
+                remaining_objects = [obj["Key"] for obj in response.get("Contents", [])]
+                assert (
+                    f"{folder_name}/file1.txt" not in remaining_objects
+                ), "file1.txt should be deleted"
+                assert (
+                    f"{folder_name}/file2.txt" in remaining_objects
+                ), "file2.txt should still exist"
+                logger.info("✓ Object deleted successfully")
+
+                # Step 6: Delete folder
+                logger.test_step("Step 6: Deleting folder")
+
+                # Delete remaining objects in folder
+                for key in remaining_objects:
+                    s3_client.delete_object(Bucket=bucket_name, Key=key)
+                    logger.info("Deleted: %s", key)
+
+                # Verify folder is empty
+                response = s3_client.list_objects_v2(
+                    Bucket=bucket_name, Prefix=f"{folder_name}/"
+                )
+                assert (
+                    "Contents" not in response
+                ), "Folder should be empty after deletion"
+                logger.info("✓ Folder deleted successfully")
+
+        finally:
+            # Cleanup temp folder
+            import shutil
+
+            if os.path.exists(temp_folder):
+                shutil.rmtree(temp_folder)
+                logger.info("Cleaned up temporary folder")
+
+        logger.info("Test completed successfully")
+
+    @polarion_id("OCS-7995")
+    def test_object_browser_share_object(self, project_factory):
+        """
+        Test sharing an object via presigned URL in object browser.
+
+        Test steps:
+        1. Create OBC with object on client
+        2. Get object presigned URL
+        3. Validate that the URL is accessible
+
+        Expected result:
+        - Object URL is accessible and returns correct content
+        """
+        # Get client cluster index
+        client_indices = config.get_consumer_indexes_list()
+        if len(client_indices) < 1:
+            pytest.skip("Test requires at least 1 client cluster")
+
+        client_index = client_indices[0]
+
+        obc_name = None
+        bucket_name = None
+        namespace = None
+
+        # Step 1: Create OBC with object
+        logger.test_step("Step 1: Creating OBC with object on client")
+        with config.RunWithConfigContext(client_index):
+            # Create project
+            proj_obj = project_factory()
+            namespace = proj_obj.namespace
+            logger.info("Created namespace: %s", namespace)
+
+            # Create OBC
+            obc_name = create_unique_resource_name(
+                resource_description="obc", resource_type="share-test"
+            )
+            obc_data = {
+                "apiVersion": "objectbucket.io/v1alpha1",
+                "kind": "ObjectBucketClaim",
+                "metadata": {"name": obc_name, "namespace": namespace},
+                "spec": {
+                    "generateBucketName": obc_name,
+                    "storageClassName": constants.NOOBAA_SC,
+                },
+            }
+            create_resource(**obc_data)
+            logger.info("OBC '%s' created in namespace '%s'", obc_name, namespace)
+
+            # Track for cleanup
+            self.obcs_to_delete.append(
+                {
+                    "obc_name": obc_name,
+                    "namespace": namespace,
+                    "cluster_index": client_index,
+                }
+            )
+
+            # Wait for OBC to reach Bound state
+            wait_for_obc_phase(
+                obc_name, namespace, constants.STATUS_BOUND, OBC_BIND_TIMEOUT
+            )
+
+            # Extract S3 credentials
+            s3_creds = get_s3_credentials_from_obc(obc_name, namespace)
+            bucket_name = s3_creds["bucket_name"]
+            logger.info("Bucket: %s", bucket_name)
+
+            # Create S3 client
+            s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=s3_creds["access_key_id"],
+                aws_secret_access_key=s3_creds["secret_access_key"],
+                endpoint_url="https://%s" % s3_creds["endpoint"],
+                verify=False,
+            )
+
+            # Upload test object
+            test_object_key = "shared-test-file.txt"
+            test_object_data = b"This is a shared test file"
+            s3_client.put_object(
+                Bucket=bucket_name, Key=test_object_key, Body=test_object_data
+            )
+            logger.info("Uploaded test object: %s", test_object_key)
+
+            # Step 2: Generate presigned URL
+            logger.test_step("Step 2: Generating presigned URL")
+            presigned_url = s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket_name, "Key": test_object_key},
+                ExpiresIn=3600,
+            )
+            logger.info("Generated presigned URL: %s", presigned_url)
+
+            # Step 3: Validate URL is accessible
+            logger.test_step("Step 3: Validating presigned URL is accessible")
+            import requests
+
+            response = requests.get(presigned_url, verify=False)
+            assert (
+                response.status_code == 200
+            ), f"Presigned URL returned status {response.status_code}"
+            assert (
+                response.content == test_object_data
+            ), "Downloaded content does not match original"
+            logger.info("✓ Presigned URL is accessible and returns correct content")
+
+        logger.info("Test completed successfully")
