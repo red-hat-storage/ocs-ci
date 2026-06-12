@@ -255,10 +255,18 @@ def scale_deployments(request):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def mirror_rdr_images():
+def mirror_rdr_images(request):
     """
     Mirror RDR images to disconnected registry and apply ITMS to managed clusters.
+    Skip this fixture when test_deploy_rdr is being executed.
     """
+    # Skip this fixture for test_deploy_rdr
+    if request.session.items:
+        for item in request.session.items:
+            if "test_deploy_rdr" in item.nodeid:
+                log.info("Skipping mirror_rdr_images fixture for test_deploy_rdr")
+                return
+
     if not config.DEPLOYMENT.get("disconnected"):
         return
 
@@ -270,8 +278,15 @@ def mirror_rdr_images():
         log.warning("No RDR images found to mirror. Exiting function.")
         return
 
-    imageset_config_data["mirror"]["additionalImages"] = rdr_images
-    log.info(f"Added {len(rdr_images)} RDR images to mirror configuration")
+    # Convert image list to the format required by oc mirror v2
+    # Each image needs to be in format: {"name": "image_url"}
+    # Strip docker:// prefix if present
+    formatted_images = [
+        {"name": image.replace("docker://", "")} for image in rdr_images
+    ]
+
+    imageset_config_data["mirror"]["additionalImages"] = formatted_images
+    log.info(f"Added {len(formatted_images)} RDR images to mirror configuration")
 
     # Mirror required images
     log.info(
