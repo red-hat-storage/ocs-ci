@@ -5648,6 +5648,439 @@ def ip_from_subnet_offset(subnet: str, offset: int) -> str:
     return str(ip)
 
 
+def _check_all_nncps_available(nncp_ocp):
+    """
+    Check whether every NNCP is Available and none is Degraded.
+
+    Returns:
+        bool: True when all NNCPs are Available, False if still progressing.
+
+    Raises:
+        Exception: If any NNCP is Degraded.
+    """
+    nncps = nncp_ocp.get().get("items", [])
+    for nncp in nncps:
+        name = nncp["metadata"]["name"]
+        conditions = nncp.get("status", {}).get("conditions", [])
+        degraded = any(
+            c.get("type") == "Degraded" and c.get("status") == "True"
+            for c in conditions
+        )
+        available = any(
+            c.get("type") == "Available" and c.get("status") == "True"
+            for c in conditions
+        )
+        if degraded:
+            raise Exception(
+                f"NNCP {name} is Degraded, cannot proceed with multus validation"
+            )
+        if not available:
+            logger.info(f"NNCP {name} is not yet Available, waiting...")
+            return False
+    return True
+
+
+def validate_multus_with_odf_cli():
+    """
+    Validate Multus network connectivity using odf-cli before ODF deployment.
+
+    Downloads the odf-cli binary, verifies NNCPs are configured, creates
+    a temporary ServiceAccount with cluster-admin privileges, runs
+    ``odf multus validation run``, and cleans up on success.
+
+    On failure the validation pods are left running for debugging and an
+    exception is raised to abort deployment.
+
+    Raises:
+        CommandFailed: If the validation command fails.
+        Exception: If NNCP verification or RBAC setup fails.
+    """
+    from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
+
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version < version.VERSION_4_15:
+        logger.warning(
+            f"ODF CLI not supported on {ocs_version}, skipping multus validation"
+        )
+        return
+
+    if not config.ENV_DATA.get("multus_create_public_net"):
+        logger.warning(
+            "No public network configured (multus_create_public_net is not set). "
+            "odf-cli multus validation requires a public network, skipping."
+        )
+        return
+
+    namespace = config.ENV_DATA.get("multus_public_net_namespace", "openshift-storage")
+
+    # Reject mixed NAD namespaces — odf-cli only validates one namespace
+    if config.ENV_DATA.get("multus_create_cluster_net"):
+        cluster_ns = config.ENV_DATA.get("multus_cluster_net_namespace", namespace)
+        if cluster_ns != namespace:
+            raise exceptions.UnexpectedDeploymentConfiguration(
+                "odf-cli multus validation requires public and cluster "
+                f"NADs in the same namespace, got '{namespace}' vs "
+                f"'{cluster_ns}'"
+            )
+
+    # Wait for all NNCPs to be SuccessfullyConfigured
+    logger.info("Waiting for all NNCPs to be Available before multus validation")
+    nncp_ocp = OCP(kind="nncp")
+    nncps = nncp_ocp.get().get("items", [])
+    if nncps:
+        for sample in TimeoutSampler(
+            timeout=600,
+            sleep=10,
+            func=_check_all_nncps_available,
+            nncp_ocp=nncp_ocp,
+        ):
+            if sample:
+                break
+        logger.info("All NNCPs are Available")
+    else:
+        logger.info("No NNCPs found, skipping NNCP status check")
+
+    # Download odf-cli
+    logger.info("Setting up odf-cli for multus validation")
+    runner = odf_cli_setup_helper()
+
+    # Create temp SA + RBAC if needed — only touch what we create
+    created_sa = False
+    created_crb = False
+    sa_name = "rook-ceph-system"
+    sa_subject = f"system:serviceaccount:{namespace}:{sa_name}"
+
+    try:
+        run_cmd(f"oc get sa {sa_name} -n {namespace}")
+        logger.info(f"ServiceAccount {sa_name} already exists in {namespace}")
+    except CommandFailed:
+        logger.info(f"Creating ServiceAccount {sa_name} in {namespace}")
+        run_cmd(f"oc create sa {sa_name} -n {namespace}")
+        created_sa = True
+
+    # Only grant cluster-admin if the SA doesn't already have it
+    try:
+        out = run_cmd("oc get clusterrolebinding -o json", silent=True)
+        import json as json_mod
+
+        existing_crbs = json_mod.loads(out)
+        has_cluster_admin = any(
+            subj.get("kind") == "ServiceAccount"
+            and subj.get("name") == sa_name
+            and subj.get("namespace") == namespace
+            for crb in existing_crbs.get("items", [])
+            if crb.get("roleRef", {}).get("name") == "cluster-admin"
+            for subj in crb.get("subjects", [])
+        )
+    except Exception:
+        has_cluster_admin = False
+
+    if has_cluster_admin:
+        logger.info(f"{sa_name} already has cluster-admin, skipping RBAC grant")
+    else:
+        logger.info(f"Granting cluster-admin to {sa_name} in {namespace}")
+        run_cmd(f"oc adm policy add-cluster-role-to-user cluster-admin {sa_subject}")
+        created_crb = True
+
+    # Build validation args from config
+    public_network = config.ENV_DATA.get("multus_public_net_name", "public-net")
+    cluster_network = None
+    if config.ENV_DATA.get("multus_create_cluster_net"):
+        cluster_network = config.ENV_DATA.get("multus_cluster_net_name", "cluster-net")
+
+    try:
+        logger.info("Running odf multus validation")
+        runner.run_multus_validation(
+            public_network=public_network,
+            cluster_network=cluster_network,
+            namespace=namespace,
+            timeout_minutes=5,
+        )
+        logger.info("ODF multus validation PASSED")
+
+        logger.info("Cleaning up multus validation resources")
+        runner.run_multus_validation_cleanup(namespace=namespace)
+
+    except Exception as ex:
+        logger.error(f"ODF multus validation FAILED: {ex}")
+        logger.error(
+            "Validation pods left running for debugging. "
+            f"Run: odf multus validation cleanup --namespace {namespace}"
+        )
+        raise
+
+    finally:
+        if created_crb:
+            try:
+                run_cmd(
+                    f"oc adm policy remove-cluster-role-from-user cluster-admin"
+                    f" system:serviceaccount:{namespace}:{sa_name}",
+                    ignore_error=True,
+                )
+            except Exception:
+                logger.warning("Failed to remove temp ClusterRoleBinding")
+        if created_sa:
+            try:
+                run_cmd(
+                    f"oc delete sa {sa_name} -n {namespace}",
+                    ignore_error=True,
+                )
+            except Exception:
+                logger.warning(f"Failed to remove temp ServiceAccount {sa_name}")
+
+
+def setup_multus_networks(patch_storagecluster=False):
+    """
+    Set up Multus networks for ODF deployment.
+
+    Creates NetworkAttachmentDefinitions (NADs) for public and/or cluster
+    networks based on config.ENV_DATA settings. Optionally deploys NMState
+    operator and configures promiscuous mode on worker node interfaces.
+
+    When patch_storagecluster is True, patches an existing StorageCluster CR
+    with multus network selectors (used for multus_after_odf_install deployments
+    where the StorageCluster was created without multus configuration).
+
+    Args:
+        patch_storagecluster (bool): If True, patch the existing StorageCluster
+            with multus network selectors after creating NADs. Default False.
+
+    Raises:
+        exceptions.UnexpectedDeploymentConfiguration: If patch_storagecluster
+            is True but neither public nor cluster network is configured.
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    create_public_net = config.ENV_DATA.get("multus_create_public_net")
+    create_cluster_net = config.ENV_DATA.get("multus_create_cluster_net")
+
+    # Deploy NMState operator if needed for multus networks on OCS >= 4.16
+    if (
+        create_public_net or create_cluster_net
+    ) and ocs_version >= version.VERSION_4_16:
+        logger.info("Deploying NMState operator for multus networks")
+        nmstate_operator = NMStateOperator(
+            create_catalog=True,
+        )
+        nmstate_operator.deploy()
+        configure_node_network_configuration_policy_on_all_worker_nodes()
+
+    # Set promiscuous mode on worker node interfaces (non-baremetal only)
+    interfaces = set()
+    if create_public_net:
+        interfaces.add(config.ENV_DATA["multus_public_net_interface"])
+    if create_cluster_net:
+        interfaces.add(config.ENV_DATA["multus_cluster_net_interface"])
+    worker_nodes = node.get_worker_nodes()
+    node_obj = ocp.OCP(kind="node")
+    platform = config.ENV_DATA.get("platform").lower()
+    if platform not in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
+        for worker in worker_nodes:
+            for interface in interfaces:
+                ip_link_cmd = f"ip link set promisc on {interface}"
+                node_obj.exec_oc_debug_cmd(
+                    node=worker, cmd_list=[ip_link_cmd], namespace="default"
+                )
+
+    # Create public NAD
+    if create_public_net:
+        use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
+        logger.info("Creating Multus public network")
+
+        # Determine which template to use
+        if use_vlan:
+            nad_to_load = constants.MULTUS_PUBLIC_NET_VLAN_YAML
+            logger.info("Using VLAN-based public network template")
+        elif config.DEPLOYMENT.get("ipv6"):
+            nad_to_load = constants.MULTUS_PUBLIC_NET_IPV6_YAML
+        else:
+            nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
+
+        public_net_data = templating.load_yaml(nad_to_load)
+        public_net_data["metadata"]["name"] = config.ENV_DATA.get(
+            "multus_public_net_name"
+        )
+        public_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+            "multus_public_net_namespace"
+        )
+        public_net_config_str = public_net_data["spec"]["config"]
+        public_net_config_dict = json.loads(public_net_config_str)
+
+        # Configure master interface
+        if use_vlan:
+            # For VLAN mode, master is the VLAN interface
+            vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
+            base_interface = config.ENV_DATA.get("multus_public_net_interface")
+            vlan_interface = f"{base_interface}.{vlan_id}"
+            public_net_config_dict["master"] = vlan_interface
+            logger.info(f"Public network using VLAN interface: {vlan_interface}")
+        else:
+            # For non-VLAN mode, master is the base interface
+            public_net_config_dict["master"] = config.ENV_DATA.get(
+                "multus_public_net_interface"
+            )
+
+        # Configure IP range
+        if not config.DEPLOYMENT.get("ipv6"):
+            if use_vlan and config.ENV_DATA.get("multus_public_net_ip_range"):
+                public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                    "multus_public_net_ip_range"
+                )
+            else:
+                public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                    "multus_public_net_range"
+                )
+        else:
+            public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                "multus_public_ipv6_net_range"
+            )
+
+        # Configure IP range limits for VLAN mode
+        if use_vlan:
+            # Add routes to shim network (critical for host-to-pod communication)
+            # Default shim network is 192.168.252.0/24 (shim IPs assigned starting at .5)
+            shim_network = config.ENV_DATA.get(
+                "multus_public_net_shim_network", "192.168.252.0/24"
+            )
+            if "routes" not in public_net_config_dict["ipam"]:
+                public_net_config_dict["ipam"]["routes"] = []
+            # Ensure route to shim network exists
+            if not any(
+                r.get("dst") == shim_network
+                for r in public_net_config_dict["ipam"]["routes"]
+            ):
+                public_net_config_dict["ipam"]["routes"].append({"dst": shim_network})
+            logger.info(f"Added route to shim network: {shim_network}")
+
+        public_net_config_dict["type"] = config.ENV_DATA.get("multus_public_net_type")
+        public_net_config_dict["mode"] = config.ENV_DATA.get("multus_public_net_mode")
+        public_net_data["spec"]["config"] = json.dumps(public_net_config_dict)
+        public_net_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multus_public", delete=False
+        )
+        templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
+        run_cmd(f"oc apply -f {public_net_yaml.name}")
+
+    # Create cluster NAD
+    if create_cluster_net:
+        use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
+        logger.info("Creating Multus cluster network")
+
+        # Determine which template to use
+        if use_vlan:
+            nad_to_load = constants.MULTUS_CLUSTER_NET_VLAN_YAML
+            logger.info("Using VLAN-based cluster network template")
+        elif config.DEPLOYMENT.get("ipv6"):
+            nad_to_load = constants.MULTUS_CLUSTER_NET_IPV6_YAML
+        else:
+            nad_to_load = constants.MULTUS_CLUSTER_NET_YAML
+
+        cluster_net_data = templating.load_yaml(nad_to_load)
+        cluster_net_data["metadata"]["name"] = config.ENV_DATA.get(
+            "multus_cluster_net_name"
+        )
+        cluster_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+            "multus_cluster_net_namespace"
+        )
+        cluster_net_config_str = cluster_net_data["spec"]["config"]
+        cluster_net_config_dict = json.loads(cluster_net_config_str)
+
+        # Configure master interface
+        if use_vlan:
+            # For VLAN mode, master is the VLAN interface
+            vlan_id = config.ENV_DATA.get("multus_cluster_net_vlan_id", 202)
+            base_interface = config.ENV_DATA.get("multus_cluster_net_interface")
+            vlan_interface = f"{base_interface}.{vlan_id}"
+            cluster_net_config_dict["master"] = vlan_interface
+            logger.info(f"Cluster network using VLAN interface: {vlan_interface}")
+        else:
+            # For non-VLAN mode, master is the base interface
+            cluster_net_config_dict["master"] = config.ENV_DATA.get(
+                "multus_cluster_net_interface"
+            )
+
+        # Configure IP range
+        if not config.DEPLOYMENT.get("ipv6"):
+            if use_vlan and config.ENV_DATA.get("multus_cluster_net_ip_range"):
+                cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                    "multus_cluster_net_ip_range"
+                )
+            else:
+                cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                    "multus_cluster_net_range"
+                )
+        else:
+            cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                "multus_cluster_ipv6_net_range"
+            )
+
+        # Configure IP range limits for VLAN mode
+        if use_vlan:
+            if config.ENV_DATA.get("multus_cluster_net_ip_range_start"):
+                cluster_net_config_dict["ipam"]["range_start"] = config.ENV_DATA.get(
+                    "multus_cluster_net_ip_range_start"
+                )
+            if config.ENV_DATA.get("multus_cluster_net_ip_range_end"):
+                cluster_net_config_dict["ipam"]["range_end"] = config.ENV_DATA.get(
+                    "multus_cluster_net_ip_range_end"
+                )
+            # Remove routes for VLAN mode (not needed)
+            cluster_net_config_dict["ipam"].pop("routes", None)
+
+        cluster_net_config_dict["mode"] = config.ENV_DATA.get("multus_cluster_net_mode")
+        cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
+        cluster_net_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multus_cluster", delete=False
+        )
+        templating.dump_data_to_temp_yaml(cluster_net_data, cluster_net_yaml.name)
+        run_cmd(f"oc apply -f {cluster_net_yaml.name}")
+
+    # Validate multus networks with odf-cli before proceeding
+    if not config.ENV_DATA.get("multus_skip_odf_cli_validation", False):
+        validate_multus_with_odf_cli()
+    else:
+        logger.info(
+            "Skipping odf-cli multus validation (multus_skip_odf_cli_validation=True)"
+        )
+
+    # Patch StorageCluster with multus network selectors if requested
+    if patch_storagecluster:
+        logger.info("Patching StorageCluster with multus network selectors")
+        selectors = {}
+        if create_public_net:
+            public_ns = config.ENV_DATA.get("multus_public_net_namespace")
+            public_name = config.ENV_DATA.get("multus_public_net_name")
+            selectors["public"] = f"{public_ns}/{public_name}"
+        if create_cluster_net:
+            cluster_ns = config.ENV_DATA.get("multus_cluster_net_namespace")
+            cluster_name = config.ENV_DATA.get("multus_cluster_net_name")
+            selectors["cluster"] = f"{cluster_ns}/{cluster_name}"
+        if not selectors:
+            msg = (
+                "patch_storagecluster=True but neither multus_create_public_net"
+                " nor multus_create_cluster_net is configured"
+            )
+            logger.error(msg)
+            raise exceptions.UnexpectedDeploymentConfiguration(msg)
+        patch = {
+            "spec": {
+                "network": {
+                    "provider": "multus",
+                    "selectors": selectors,
+                }
+            }
+        }
+        from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+
+        sc = get_storage_cluster()
+        resource_name = sc.get()["items"][0]["metadata"]["name"]
+        sc.patch(
+            resource_name=resource_name,
+            params=json.dumps(patch),
+            format_type="merge",
+        )
+        logger.info(f"StorageCluster patched with multus configuration: {selectors}")
+
+
 def configure_node_network_configuration_policy_on_all_worker_nodes():
     """
     Configure NodeNetworkConfigurationPolicy CR on each worker node in cluster

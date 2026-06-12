@@ -93,7 +93,6 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_are_mounted_on_monitoring_pods,
 )
 from ocs_ci.ocs.node import (
-    get_worker_nodes,
     mark_masters_schedulable,
     verify_all_nodes_created,
     label_nodes,
@@ -131,6 +130,8 @@ from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
     get_osd_count,
     StorageCluster,
+    verify_storage_cluster,
+    verify_multus_network,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -165,7 +166,7 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
 from ocs_ci.utility.multicluster import create_mce_catsrc
-from ocs_ci.utility.operators import NMStateOperator, OADPOperator
+from ocs_ci.utility.operators import OADPOperator
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
@@ -203,6 +204,7 @@ from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
     get_default_storage_class,
+    setup_multus_networks,
     update_volsync_channel,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
@@ -210,6 +212,130 @@ from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 from ocs_ci.deployment.cnv import CNVInstaller
 
 logger = logging.getLogger(__name__)
+
+
+def _wait_for_multus_pods_ready(timeout=1200, interval=30):
+    """
+    Wait for Ceph pods to restart with multus network annotations after
+    the StorageCluster is patched with multus selectors.
+
+    Rook automatically restarts OSD, MON, MGR, and CSI pods after the
+    patch, but MDS pods are not restarted. This function waits for the
+    auto-restarted pods first, then explicitly deletes MDS pods so they
+    are recreated with multus network interfaces, and finally verifies
+    the full multus network configuration.
+    """
+    from ocs_ci.ocs.resources.pod import get_mds_pods
+
+    public_net_name = config.ENV_DATA.get("multus_public_net_name", "public-net")
+
+    logger.info(
+        "Waiting for Ceph pods (excluding MDS) to have multus annotations "
+        "(timeout=%ds)",
+        timeout,
+    )
+    for sample in TimeoutSampler(
+        timeout=timeout,
+        sleep=interval,
+        func=_ceph_pods_have_multus_annotation,
+        public_net_name=public_net_name,
+    ):
+        if sample:
+            break
+
+    logger.info("Non-MDS Ceph pods have multus annotations, waiting for pods Running")
+    if not wait_for_pods_to_be_running(
+        timeout=600,
+        sleep=20,
+        skip_for_status=[
+            constants.STATUS_COMPLETED,
+            "Succeeded",
+            "Terminating",
+        ],
+    ):
+        raise Exception(
+            "Not all storage pods reached Running state after multus restart"
+        )
+
+    # MDS pods are not restarted by Rook after multus patch — delete them
+    # so they are recreated with multus network interfaces
+    mds_pods = get_mds_pods()
+    if mds_pods:
+        mds_names = [p.name for p in mds_pods]
+        logger.info("Restarting MDS pods for multus: %s", mds_names)
+        for pod in mds_pods:
+            pod.delete(wait=False)
+        logger.info("Waiting for MDS pods to be Running with multus")
+        if not wait_for_pods_to_be_running(
+            timeout=300,
+            sleep=10,
+            skip_for_status=[
+                constants.STATUS_COMPLETED,
+                "Succeeded",
+                "Terminating",
+            ],
+        ):
+            raise Exception("MDS pods did not reach Running state after restart")
+
+    logger.info("Verifying multus network configuration")
+    _verify_multus_with_retry()
+
+
+@retry(
+    (AssertionError, KeyError, CommandFailed),
+    tries=10,
+    delay=30,
+    backoff=1,
+)
+def _verify_multus_with_retry():
+    """Run verify_multus_network with retries for Ceph map convergence."""
+    verify_multus_network()
+
+
+def _ceph_pods_have_multus_annotation(public_net_name):
+    """Check if Ceph daemon (excluding MDS) and CSI controller pods have multus annotations.
+
+    MDS pods are excluded because Rook does not automatically restart
+    them after the StorageCluster multus patch. They are handled
+    separately in _wait_for_multus_pods_ready().
+    """
+    from ocs_ci.ocs.resources.pod import (
+        get_osd_pods,
+        get_mon_pods,
+        get_mgr_pods,
+        get_cephfsplugin_provisioner_pods,
+        get_rbdfsplugin_provisioner_pods,
+    )
+
+    try:
+        all_pods = []
+        for getter, label in [
+            (get_osd_pods, "OSD"),
+            (get_mon_pods, "MON"),
+            (get_mgr_pods, "MGR"),
+            (get_cephfsplugin_provisioner_pods, "CephFS CSI"),
+            (get_rbdfsplugin_provisioner_pods, "RBD CSI"),
+        ]:
+            pods = getter()
+            if not pods:
+                logger.info("No %s pods found yet, waiting...", label)
+                return False
+            all_pods.extend((pod, label) for pod in pods)
+
+        for pod, label in all_pods:
+            annotations = pod.data.get("metadata", {}).get("annotations", {})
+            networks = annotations.get("k8s.v1.cni.cncf.io/networks", "")
+            if public_net_name not in networks:
+                logger.info(
+                    "%s pod %s does not yet have multus annotation, waiting...",
+                    label,
+                    pod.name,
+                )
+                return False
+        return True
+    except Exception as ex:
+        logger.info("Error checking Ceph pods for multus annotations: %s", ex)
+        return False
 
 
 class Deployment(object):
@@ -889,6 +1015,18 @@ class Deployment(object):
         Args:
             log_cli_level (str): log level for installer (default: DEBUG)
         """
+        # Validate multus flag mutual exclusivity before any deployment
+        if config.ENV_DATA.get("is_multus_enabled") and config.ENV_DATA.get(
+            "multus_after_odf_install"
+        ):
+            msg = (
+                "is_multus_enabled and multus_after_odf_install cannot both be set. "
+                "Use is_multus_enabled for pre-ODF multus setup or "
+                "multus_after_odf_install for post-ODF multus setup."
+            )
+            logger.error(msg)
+            raise UnexpectedDeploymentConfiguration(msg)
+
         self.do_deploy_ocp(log_cli_level)
 
         if config.ENV_DATA.get("workaround_mark_disks_as_ssd"):
@@ -1471,203 +1609,7 @@ class Deployment(object):
         # Create Multus Networks
         if config.ENV_DATA.get("is_multus_enabled"):
             log_step("Establish Multus Network")
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if (
-                config.ENV_DATA.get("multus_create_public_net")
-                and ocs_version >= version.VERSION_4_16
-            ):
-                nmstate_operator = NMStateOperator(
-                    create_catalog=True,
-                )
-                nmstate_operator.deploy()
-                from ocs_ci.helpers.helpers import (
-                    configure_node_network_configuration_policy_on_all_worker_nodes,
-                )
-
-                configure_node_network_configuration_policy_on_all_worker_nodes()
-
-            create_public_net = config.ENV_DATA["multus_create_public_net"]
-            create_cluster_net = config.ENV_DATA["multus_create_cluster_net"]
-            interfaces = set()
-            if create_public_net:
-                interfaces.add(config.ENV_DATA["multus_public_net_interface"])
-            if create_cluster_net:
-                interfaces.add(config.ENV_DATA["multus_cluster_net_interface"])
-            worker_nodes = get_worker_nodes()
-            node_obj = ocp.OCP(kind="node")
-            platform = config.ENV_DATA.get("platform").lower()
-            if platform not in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
-                for node in worker_nodes:
-                    for interface in interfaces:
-                        ip_link_cmd = f"ip link set promisc on {interface}"
-                        node_obj.exec_oc_debug_cmd(
-                            node=node, cmd_list=[ip_link_cmd], namespace="default"
-                        )
-
-            if create_public_net:
-                use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
-                logger.info("Creating Multus public network")
-
-                # Determine which template to use
-                if use_vlan:
-                    nad_to_load = constants.MULTUS_PUBLIC_NET_VLAN_YAML
-                    logger.info("Using VLAN-based public network template")
-                elif config.DEPLOYMENT.get("ipv6"):
-                    nad_to_load = constants.MULTUS_PUBLIC_NET_IPV6_YAML
-                else:
-                    nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
-
-                public_net_data = templating.load_yaml(nad_to_load)
-                public_net_data["metadata"]["name"] = config.ENV_DATA.get(
-                    "multus_public_net_name"
-                )
-                public_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
-                    "multus_public_net_namespace"
-                )
-                public_net_config_str = public_net_data["spec"]["config"]
-                public_net_config_dict = json.loads(public_net_config_str)
-
-                # Configure master interface
-                if use_vlan:
-                    # For VLAN mode, master is the VLAN interface
-                    vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
-                    base_interface = config.ENV_DATA.get("multus_public_net_interface")
-                    vlan_interface = f"{base_interface}.{vlan_id}"
-                    public_net_config_dict["master"] = vlan_interface
-                    logger.info(
-                        f"Public network using VLAN interface: {vlan_interface}"
-                    )
-                else:
-                    # For non-VLAN mode, master is the base interface
-                    public_net_config_dict["master"] = config.ENV_DATA.get(
-                        "multus_public_net_interface"
-                    )
-
-                # Configure IP range
-                if not config.DEPLOYMENT.get("ipv6"):
-                    if use_vlan and config.ENV_DATA.get("multus_public_net_ip_range"):
-                        public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                            "multus_public_net_ip_range"
-                        )
-                    else:
-                        public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                            "multus_public_net_range"
-                        )
-                else:
-                    public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_public_ipv6_net_range"
-                    )
-
-                # Configure IP range limits for VLAN mode
-                if use_vlan:
-                    # Add routes to shim network (critical for host-to-pod communication)
-                    # Default shim network is 192.168.252.0/24 (shim IPs assigned starting at .5)
-                    shim_network = config.ENV_DATA.get(
-                        "multus_public_net_shim_network", "192.168.252.0/24"
-                    )
-                    if "routes" not in public_net_config_dict["ipam"]:
-                        public_net_config_dict["ipam"]["routes"] = []
-                    # Ensure route to shim network exists
-                    if not any(
-                        r.get("dst") == shim_network
-                        for r in public_net_config_dict["ipam"]["routes"]
-                    ):
-                        public_net_config_dict["ipam"]["routes"].append(
-                            {"dst": shim_network}
-                        )
-                    logger.info(f"Added route to shim network: {shim_network}")
-
-                public_net_config_dict["type"] = config.ENV_DATA.get(
-                    "multus_public_net_type"
-                )
-                public_net_config_dict["mode"] = config.ENV_DATA.get(
-                    "multus_public_net_mode"
-                )
-                public_net_data["spec"]["config"] = json.dumps(public_net_config_dict)
-                public_net_yaml = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="multus_public", delete=False
-                )
-                templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
-                run_cmd(f"oc create -f {public_net_yaml.name}")
-
-            if create_cluster_net:
-                use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
-                logger.info("Creating Multus cluster network")
-
-                # Determine which template to use
-                if use_vlan:
-                    nad_to_load = constants.MULTUS_CLUSTER_NET_VLAN_YAML
-                    logger.info("Using VLAN-based cluster network template")
-                elif config.DEPLOYMENT.get("ipv6"):
-                    nad_to_load = constants.MULTUS_CLUSTER_NET_IPV6_YAML
-                else:
-                    nad_to_load = constants.MULTUS_CLUSTER_NET_YAML
-
-                cluster_net_data = templating.load_yaml(nad_to_load)
-                cluster_net_data["metadata"]["name"] = config.ENV_DATA.get(
-                    "multus_cluster_net_name"
-                )
-                cluster_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
-                    "multus_cluster_net_namespace"
-                )
-                cluster_net_config_str = cluster_net_data["spec"]["config"]
-                cluster_net_config_dict = json.loads(cluster_net_config_str)
-
-                # Configure master interface
-                if use_vlan:
-                    # For VLAN mode, master is the VLAN interface
-                    vlan_id = config.ENV_DATA.get("multus_cluster_net_vlan_id", 202)
-                    base_interface = config.ENV_DATA.get("multus_cluster_net_interface")
-                    vlan_interface = f"{base_interface}.{vlan_id}"
-                    cluster_net_config_dict["master"] = vlan_interface
-                    logger.info(
-                        f"Cluster network using VLAN interface: {vlan_interface}"
-                    )
-                else:
-                    # For non-VLAN mode, master is the base interface
-                    cluster_net_config_dict["master"] = config.ENV_DATA.get(
-                        "multus_cluster_net_interface"
-                    )
-
-                # Configure IP range
-                if not config.DEPLOYMENT.get("ipv6"):
-                    if use_vlan and config.ENV_DATA.get("multus_cluster_net_ip_range"):
-                        cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                            "multus_cluster_net_ip_range"
-                        )
-                    else:
-                        cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                            "multus_cluster_net_range"
-                        )
-                else:
-                    cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                        "multus_cluster_ipv6_net_range"
-                    )
-
-                # Configure IP range limits for VLAN mode
-                if use_vlan:
-                    if config.ENV_DATA.get("multus_cluster_net_ip_range_start"):
-                        cluster_net_config_dict["ipam"]["range_start"] = (
-                            config.ENV_DATA.get("multus_cluster_net_ip_range_start")
-                        )
-                    if config.ENV_DATA.get("multus_cluster_net_ip_range_end"):
-                        cluster_net_config_dict["ipam"]["range_end"] = (
-                            config.ENV_DATA.get("multus_cluster_net_ip_range_end")
-                        )
-                    # Remove routes for VLAN mode (not needed)
-                    cluster_net_config_dict["ipam"].pop("routes", None)
-
-                cluster_net_config_dict["mode"] = config.ENV_DATA.get(
-                    "multus_cluster_net_mode"
-                )
-                cluster_net_data["spec"]["config"] = json.dumps(cluster_net_config_dict)
-                cluster_net_yaml = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="multus_cluster", delete=False
-                )
-                templating.dump_data_to_temp_yaml(
-                    cluster_net_data, cluster_net_yaml.name
-                )
-                run_cmd(f"oc create -f {cluster_net_yaml.name}")
+            setup_multus_networks()
 
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
         managed_ibmcloud = (
@@ -1703,7 +1645,6 @@ class Deployment(object):
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        ocs_version = version.get_semantic_ocs_version_from_config()
         ocs_operator_names = get_required_csvs()
 
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
@@ -1797,6 +1738,24 @@ class Deployment(object):
 
         storage_cluster_setup = StorageClusterSetup()
         storage_cluster_setup.setup_storage_cluster()
+
+        # Create Multus Networks after ODF deployment
+        if config.ENV_DATA.get("multus_after_odf_install"):
+            logger.info(
+                "Waiting for StorageCluster to be Ready before multus configuration"
+            )
+            verify_storage_cluster()
+
+            log_step("Establish Multus Network (post-ODF)")
+            setup_multus_networks(patch_storagecluster=True)
+
+            logger.info("Waiting for StorageCluster to be Ready after multus patching")
+            verify_storage_cluster()
+
+            logger.info(
+                "Waiting for Ceph pods to restart with multus network interfaces"
+            )
+            _wait_for_multus_pods_ready()
 
         if config.DEPLOYMENT["infra_nodes"]:
             log_step("Labeling infra nodes")
