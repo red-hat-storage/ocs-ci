@@ -1,0 +1,134 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                                                                           ║
+║              🤖 AI-Powered Provider/Client Code Review                    ║
+║                      Ready to Use in 5 Minutes!                          ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+QUICK START (5 Minutes)
+═══════════════════════════════════════════════════════════════════════════
+
+1️⃣  INSTALL DEPENDENCIES
+   $ pip install -r tools/code-review/provider-client/requirements.txt
+
+2️⃣  GET API KEY
+   Visit: https://console.anthropic.com/
+   → Create API key
+   → Copy key (starts with sk-ant-)
+
+3️⃣  SET ENVIRONMENT VARIABLE
+   $ export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+
+4️⃣  TEST IT
+   $ python tools/code-review/provider-client/review.py --use-claude
+
+   ✅ You're ready!
+
+═══════════════════════════════════════════════════════════════════════════
+
+COMMON COMMANDS
+═══════════════════════════════════════════════════════════════════════════
+
+Basic pattern check (no AI):
+$ python tools/code-review/provider-client/review.py
+
+With Claude AI suggestions:
+$ python tools/code-review/provider-client/review.py --use-claude
+
+Analyze specific file:
+$ python tools/code-review/provider-client/review.py tests/my_test.py --use-claude
+
+Review a PR:
+$ python tools/code-review/provider-client/review.py --pr 1234 --use-claude
+
+Post review to GitHub PR:
+$ export GITHUB_TOKEN="ghp_your_token"
+$ python tools/code-review/provider-client/review.py --pr 1234 --use-claude --post-to-github
+
+═══════════════════════════════════════════════════════════════════════════
+
+GITHUB ACTIONS (AUTOMATED)
+═══════════════════════════════════════════════════════════════════════════
+
+Already configured! Just add your API key:
+
+1. Go to: Repository Settings → Secrets → Actions
+2. Click: "New repository secret"
+3. Name: ANTHROPIC_API_KEY
+4. Value: Your Claude API key
+5. Save
+
+Now every PR automatically gets AI review! 🎉
+
+═══════════════════════════════════════════════════════════════════════════
+
+DOCUMENTATION
+═══════════════════════════════════════════════════════════════════════════
+
+📘 QUICKSTART.md        - 5-minute setup guide
+📗 SETUP.md             - Detailed installation & troubleshooting
+📕 README.md            - Complete feature documentation
+📙 EXAMPLE.md           - Usage examples and patterns
+📔 DEMO.md              - Interactive demonstration
+📓 ARCHITECTURE.md      - System architecture & design
+📖 IMPLEMENTATION_SUMMARY.md - What was built
+
+═══════════════════════════════════════════════════════════════════════════
+
+WHAT IT DETECTS
+═══════════════════════════════════════════════════════════════════════════
+
+❌ Missing RunWithProviderConfigContextIfAvailable() wrapper
+❌ Missing @runs_on_provider marker on test functions
+❌ Provider function calls without proper context
+
+Example:
+
+  BAD:
+    def test_provider():
+        address = get_provider_address()  # ❌
+
+  GOOD:
+    @runs_on_provider
+    def test_provider():
+        address = get_provider_address()  # ✅
+
+  OR:
+    def test_provider():
+        with config.RunWithProviderConfigContextIfAvailable():
+            address = get_provider_address()  # ✅
+
+═══════════════════════════════════════════════════════════════════════════
+
+COST
+═══════════════════════════════════════════════════════════════════════════
+
+Claude API (Sonnet 4.5):
+  • $3 per million tokens
+  • Average PR: ~$0.015 per review
+  • 50 PRs/month: ~$0.75/month
+
+Very affordable! Less than a coffee per month. ☕
+
+═══════════════════════════════════════════════════════════════════════════
+
+HELP & SUPPORT
+═══════════════════════════════════════════════════════════════════════════
+
+❓ Questions? Check SETUP.md for troubleshooting
+🐛 Issues? See documentation for common problems
+💡 Ideas? Customize patterns in tools/code-review/provider-client/analyzers/patterns.yaml
+
+═══════════════════════════════════════════════════════════════════════════
+
+NEXT STEPS
+═══════════════════════════════════════════════════════════════════════════
+
+1. Read QUICKSTART.md for detailed setup
+2. Try it on your current branch
+3. Add ANTHROPIC_API_KEY to repo secrets
+4. Open a PR and see it in action! 🚀
+
+═══════════════════════════════════════════════════════════════════════════
+
+Built with ❤️ using Claude Code - https://claude.ai/code
