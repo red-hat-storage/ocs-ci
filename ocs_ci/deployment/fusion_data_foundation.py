@@ -19,7 +19,10 @@ from ocs_ci.framework import config
 
 from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs import constants, defaults, node
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
@@ -106,12 +109,17 @@ class FusionDataFoundationDeployment:
             f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}", silent=True
         )
 
-    def create_image_digest_mirror_set(self):
+    def create_image_digest_mirror_set(self, upgrade=False):
         """
-        Create or update ImageTagMirrorSet.
+        Create or update ImageDigestMirrorSet.
+
+        Args:
+            upgrade (bool): If True, use upgrade-specific config values for
+                registry and image tag. Default is False.
+
         """
         logger.info("Creating FDF ImageDigestMirrorSet")
-        image_digest_mirror_set = extract_image_digest_mirror_set()
+        image_digest_mirror_set = extract_image_digest_mirror_set(upgrade=upgrade)
 
         run_cmd(
             f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}",
@@ -159,11 +167,31 @@ class FusionDataFoundationDeployment:
         """
         time.sleep(60)
         wait_for_machineconfigpool_status(node_type="all")
+        self.patch_fusion_service_definition()
 
-        fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+    def patch_fusion_service_definition(self, upgrade=False):
+        """
+        Patch the FusionServiceDefinition with the imageDigest and registryPath of the build.
+
+        Args:
+            upgrade (bool): If True, use upgrade-specific config values
+                (fdf_upgrade_registry and fdf_upgrade_image_tag). Default is False.
+
+        """
+        if upgrade:
+            fdf_registry = config.DEPLOYMENT.get(
+                "fdf_upgrade_registry"
+            ) or config.DEPLOYMENT.get("fdf_pre_release_registry")
+            fdf_image_tag = config.DEPLOYMENT.get(
+                "fdf_upgrade_image_tag"
+            ) or config.DEPLOYMENT.get("fdf_image_tag")
+            fdf_image_digest = config.DEPLOYMENT.get("fdf_upgrade_image_digest")
+        else:
+            fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+            fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+            fdf_image_digest = config.DEPLOYMENT.get("fdf_pre_release_image_digest")
+
         fdf_catalog_name = defaults.FUSION_CATALOG_NAME
-        fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
-        fdf_image_digest = config.DEPLOYMENT.get("fdf_pre_release_image_digest")
         pull_secret = os.path.join(constants.DATA_DIR, "pull-secret")
 
         if not fdf_image_digest:
@@ -172,7 +200,10 @@ class FusionDataFoundationDeployment:
             catalog_data = run_cmd(cmd)
             fdf_image_digest = json.loads(catalog_data).get("Digest")
             logger.info(f"Retrieved image digest: {fdf_image_digest}")
-            config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
+            if upgrade:
+                config.DEPLOYMENT["fdf_upgrade_image_digest"] = fdf_image_digest
+            else:
+                config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
 
         ocp_version = f"ocp{get_running_ocp_version().replace('.', '')}-t"
         logger.info(f"OCP version: {ocp_version}")
@@ -380,18 +411,32 @@ def odfcluster_status_check():
     logger.info("OdfCluster created successfully")
 
 
-def extract_image_digest_mirror_set():
+def extract_image_digest_mirror_set(upgrade=False):
     """
     Extract the ImageDigestMirrorSet from the FDF build.
+
+    Args:
+        upgrade (bool): If True, use upgrade-specific config values
+            (fdf_upgrade_registry and fdf_upgrade_image_tag). Default is False.
 
     Returns:
         str: Name of the extracted ImageDigestMirrorSet
 
     """
     pull_secret = os.path.join(constants.DATA_DIR, "pull-secret")
-    fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+
+    if upgrade:
+        fdf_registry = config.DEPLOYMENT.get(
+            "fdf_upgrade_registry"
+        ) or config.DEPLOYMENT.get("fdf_pre_release_registry")
+        fdf_image_tag = config.DEPLOYMENT.get(
+            "fdf_upgrade_image_tag"
+        ) or config.DEPLOYMENT.get("fdf_image_tag")
+    else:
+        fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+        fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+
     fdf_catalog_name = defaults.FUSION_CATALOG_NAME
-    fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
 
     filename = constants.FDF_IMAGE_DIGEST_MIRROR_SET_FILENAME
     cmd = (
@@ -411,7 +456,7 @@ def is_not_arbiter_node(node_obj):
         node_obj (ocs_ci.ocs.ocp.OCP): OCP Node object
 
     Returns:
-        bool: True if node doesn't contain the labelj, False if it does
+        bool: True if node doesn't contain the label, False if it does
 
     """
     arbiter_zone = config.DEPLOYMENT.get(
@@ -457,6 +502,7 @@ def storagecluster_health_check():
         AssertionError: If the StorageCluster is not in a Ready state
                         or Ceph health is not HEALTH_OK.
         KeyError: If expected status keys are missing.
+
     """
     storagecluster = StorageCluster(
         resource_name="ocs-storagecluster",
