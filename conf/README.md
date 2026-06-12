@@ -570,6 +570,7 @@ Configurations specific to disable/enable OCS components
 * `disable_noobaa` - Disable noobaa component deployment (Default: False)
 * `disable_cephfs` - Disable cephfs component deployment (Default: False)
 * `disable_blockpools` - Disable blockpools (rbd) component deployment (Default: False)
+* `disable_cephobjectstoreusers` - Disable cephObjectStoreUsers, this should be disabled together with RGW! (Default: False)
 
 ## Example of accessing config/default data
 
