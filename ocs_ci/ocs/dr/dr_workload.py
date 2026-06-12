@@ -1510,12 +1510,15 @@ class BusyboxDiscoveredApps(DRWorkload):
         """
         self._deploy_prereqs()
         dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        log.info(f"dr_cluster_relations: {dr_cluster_relations}")
         if dr_cluster_relations:
-            non_acm_cluster_config = (
-                get_non_acm_cluster_and_non_provider_cluster_config()
-            )
+            # Use get_non_acm_cluster_config() to include provider clusters
+            # if workload needs to be deployed on provider clusters as well
+            non_acm_cluster_config = get_non_acm_cluster_config()
         else:
             non_acm_cluster_config = get_non_acm_cluster_config()
+        log.info(f"non_acm_cluster_config: {non_acm_cluster_config}")
+        log.info(f"Number of clusters to process: {len(non_acm_cluster_config)}")
         for cluster in non_acm_cluster_config:
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             self.create_namespace()
