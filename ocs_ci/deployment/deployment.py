@@ -14,6 +14,7 @@ import base64
 
 import boto3
 import yaml
+import shutil
 
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 
@@ -3818,6 +3819,388 @@ class MultiClusterDROperatorsDeploy(object):
         run_cmd(f"oc patch csv {csv_name} -n {namespace} --type='json' -p='{patch}'")
         logger.info(f"Patched CSV {csv_name} with {new_image}")
 
+    def run_ramenctl_e2e(self):
+        """
+        Run ramendr e2e tests using ramenctl tool after RDR deployment.
+
+        Activated by passing conf/ocsci/run_ramenctl_e2e.yaml via
+        --ocsci-conf. Clones ramenctl repo, builds the binary, generates
+        config via 'ramenctl init', and runs e2e tests.
+
+        Must be called after deploy_dr_policy() to ensure all DR resources
+        are configured and self.dr_policy_name is set.
+
+        """
+        run_e2e = config.UPGRADE.get("run_ramenctl_e2e")
+        if not run_e2e:
+            return
+
+        if not hasattr(self, "dr_policy_name"):
+            logger.error("[ramenctl-e2e] dr_policy_name not set, skipping e2e tests")
+            return
+
+        logger.info("[ramenctl-e2e] Starting ramenctl e2e test execution")
+
+        ramenctl_repo_url = constants.RAMENCTL_REPO_URL
+        ramenctl_branch = constants.RAMENCTL_REPO_BRANCH
+
+        ramenctl_clone_dir = os.path.join(constants.EXTERNAL_DIR, "ramenctl-e2e")
+        logger.info(f"[ramenctl-e2e] Using directory: {ramenctl_clone_dir}")
+
+        try:
+            logger.info(
+                f"[ramenctl-e2e] Cloning ramenctl from {ramenctl_repo_url} "
+                f"(branch: {ramenctl_branch})"
+            )
+            try:
+                clone_repo(
+                    url=ramenctl_repo_url,
+                    location=ramenctl_clone_dir,
+                    branch=ramenctl_branch,
+                )
+            except Exception as e:
+                logger.error(f"[ramenctl-e2e] Failed to clone ramenctl repo: {e}")
+                logger.warning("[ramenctl-e2e] Skipping ramenctl e2e tests")
+                return
+
+            if not self._install_ramenctl(ramenctl_clone_dir):
+                logger.warning("[ramenctl-e2e] Skipping e2e tests due to build failure")
+                return
+
+            config_file = self._generate_ramenctl_config(ramenctl_clone_dir)
+            if not config_file:
+                logger.warning("[ramenctl-e2e] Skipping e2e tests due to config generation failure")
+                return
+
+            self._execute_ramenctl_e2e(ramenctl_clone_dir, config_file)
+
+            logger.info("[ramenctl-e2e] Completed ramenctl e2e test execution")
+        finally:
+            logger.info(f"[ramenctl-e2e] Cleaning up temporary directory: {ramenctl_clone_dir}")
+            shutil.rmtree(ramenctl_clone_dir, ignore_errors=True)
+
+    def _install_ramenctl(self, ramenctl_dir):
+        """
+        Build ramenctl binary from the cloned repository.
+
+        Args:
+            ramenctl_dir (str): Path to cloned ramenctl repository
+
+        Returns:
+            bool: True if build successful, False otherwise
+
+        """
+        logger.info("[ramenctl-e2e] Building ramenctl binary")
+
+        build_cmd = f"cd {ramenctl_dir} && make ramenctl"
+        try:
+            run_cmd(build_cmd, timeout=600)
+            logger.info("[ramenctl-e2e] ramenctl binary built successfully")
+        except CommandFailed as e:
+            logger.error(
+                f"[ramenctl-e2e] Failed to build ramenctl binary: {e}"
+            )
+            return False
+
+        binary_path = f"{ramenctl_dir}/ramenctl"
+        if not os.path.exists(binary_path):
+            logger.error(
+                f"[ramenctl-e2e] Binary not found at {binary_path} after build"
+            )
+            return False
+
+        verify_cmd = f"cd {ramenctl_dir} && ./ramenctl --version"
+        try:
+            version_output = run_cmd(verify_cmd)
+            logger.info(
+                f"[ramenctl-e2e] ramenctl binary ready at {binary_path}: "
+                f"{version_output.strip()}"
+            )
+        except CommandFailed as e:
+            logger.warning(
+                f"[ramenctl-e2e] Failed to get version, but binary exists: {e}"
+            )
+            return False
+
+        return True
+
+    def _generate_ramenctl_config(self, ramenctl_dir):
+        """
+        Generate ramenctl configuration file using ramenctl init and
+        populate it with cluster information.
+
+        Args:
+            ramenctl_dir (str): Path to cloned ramenctl repository
+
+        Returns:
+            str: Path to generated config file, or None if generation failed
+
+        """
+        logger.info("[ramenctl-e2e] Generating ramenctl configuration")
+
+        init_cmd = f"cd {ramenctl_dir} && ./ramenctl init"
+        try:
+            run_cmd(init_cmd, timeout=60)
+            logger.info("[ramenctl-e2e] Generated default config with ramenctl init")
+        except CommandFailed as e:
+            logger.error(f"[ramenctl-e2e] Failed to run ramenctl init: {e}")
+            return None
+
+        config_file = f"{ramenctl_dir}/config.yaml"
+
+        logger.info("[ramenctl-e2e] Building config content with cluster details")
+        try:
+            ramenctl_config = self._build_ramenctl_config_content(ramenctl_dir)
+        except Exception as e:
+            logger.error(f"[ramenctl-e2e] Failed to build ramenctl config: {e}")
+            return None
+
+        try:
+            with open(config_file, "w") as f:
+                yaml.dump(ramenctl_config, f, default_flow_style=False)
+            logger.info(f"[ramenctl-e2e] Updated config at {config_file}")
+            logger.debug(
+                f"[ramenctl-e2e] Config content:\n"
+                f"{yaml.dump(ramenctl_config, default_flow_style=False)}"
+            )
+        except IOError as e:
+            logger.error(f"[ramenctl-e2e] Failed to write config file: {e}")
+            return None
+
+        return config_file
+
+    def _build_ramenctl_config_content(self, ramenctl_dir):
+        """
+        Build ramenctl configuration content with cluster details.
+
+        Copies kubeconfig files to ramenctl directory and generates config
+        matching ramenctl expected format:
+        - clusters: dict with hub, passive-hub, c1, c2, etc.
+        - clusterSet: ManagedClusterSet name (fetched dynamically)
+        - drPolicy: DR policy name (from self.dr_policy_name)
+        - pvcSpecs: storage class configurations
+        - deployers: deployment types to test
+        - tests: test cases to run
+
+        Args:
+            ramenctl_dir (str): Path to ramenctl repository directory
+
+        Returns:
+            dict: Configuration dictionary for ramenctl
+
+        """
+        old_ctx = config.cur_index
+        clusters_config = {}
+
+        try:
+            config.switch_acm_ctx()
+            hub_kubeconfig = config.RUN.get("kubeconfig")
+
+            if hub_kubeconfig and os.path.exists(hub_kubeconfig):
+                hub_dest = os.path.join(ramenctl_dir, "hub.yaml")
+                shutil.copy(hub_kubeconfig, hub_dest)
+                clusters_config["hub"] = {"kubeconfig": "hub.yaml"}
+                logger.debug(f"[ramenctl-e2e] Copied hub kubeconfig to {hub_dest}")
+            else:
+                logger.warning("[ramenctl-e2e] Hub kubeconfig not found")
+
+            clusters_config["passive-hub"] = {"kubeconfig": ""}
+
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            if dr_cluster_relations:
+                dr_cluster_names = dr_cluster_relations[0]
+                managed_clusters = [
+                    cluster
+                    for cluster in config.clusters
+                    if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+                ]
+            else:
+                managed_clusters = get_non_acm_cluster_config()
+
+            primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
+            filtered_clusters = [
+                cluster
+                for cluster in managed_clusters
+                if cluster.ENV_DATA["cluster_name"] != primary_cluster_name
+                and not is_recovery_cluster(cluster)
+            ]
+
+            if not filtered_clusters:
+                logger.warning("[ramenctl-e2e] No DR-policy managed clusters found")
+
+            for idx, cluster in enumerate(filtered_clusters, start=1):
+                cluster_kubeconfig = cluster.RUN.get("kubeconfig")
+                if cluster_kubeconfig and os.path.exists(cluster_kubeconfig):
+                    cluster_dest = os.path.join(ramenctl_dir, f"c{idx}.yaml")
+                    shutil.copy(cluster_kubeconfig, cluster_dest)
+                    clusters_config[f"c{idx}"] = {"kubeconfig": f"c{idx}.yaml"}
+                    logger.debug(
+                        f"[ramenctl-e2e] Copied c{idx} kubeconfig to {cluster_dest}"
+                    )
+
+            dr_policy_name = self.dr_policy_name
+            logger.info(f"[ramenctl-e2e] Using DRPolicy: {dr_policy_name}")
+
+            cluster_set_list = get_cluster_set_name()
+            cluster_set = cluster_set_list[0] if cluster_set_list else "default"
+            logger.info(f"[ramenctl-e2e] Using ManagedClusterSet: {cluster_set}")
+
+        finally:
+            config.switch_ctx(old_ctx)
+
+        pvc_specs = [
+            {
+                "name": "rbd",
+                "storageClassName": "ocs-storagecluster-ceph-rbd",
+                "accessModes": "ReadWriteOnce",
+            },
+            {
+                "name": "cephfs",
+                "storageClassName": "ocs-storagecluster-cephfs",
+                "accessModes": "ReadWriteMany",
+            },
+        ]
+
+        # Build deployers - match ramenctl init defaults
+        deployers = [
+            {
+                "name": "appset",
+                "type": "appset",
+                "description": "ApplicationSet deployer for ArgoCD",
+            },
+            {
+                "name": "subscr",
+                "type": "subscr",
+                "description": "Subscription deployer for OCM subscriptions",
+            },
+            {
+                "name": "disapp",
+                "type": "disapp",
+                "description": "Discovered Application deployer",
+            },
+            {
+                "name": "disapp-recipe",
+                "type": "disapp",
+                "recipe": {"type": "generate"},
+                "description": "Discovered Application deployer with recipe",
+            },
+            {
+                "name": "disapp-recipe-check",
+                "type": "disapp",
+                "recipe": {"type": "generate", "checkHook": True},
+                "description": "Discovered Application deployer with recipe using check hook",
+            },
+            {
+                "name": "disapp-recipe-exec",
+                "type": "disapp",
+                "recipe": {"type": "generate", "execHook": True},
+                "description": "Discovered Application deployer with recipe using exec hook",
+            },
+            {
+                "name": "disapp-recipe-check-exec",
+                "type": "disapp",
+                "recipe": {"type": "generate", "checkHook": True, "execHook": True},
+                "description": "Discovered Application deployer with recipe using check and exec hooks",
+            },
+        ]
+
+        tests = [
+            {
+                "workload": "deploy",
+                "deployer": "appset",
+                "pvcSpec": "cephfs",
+            },
+            {
+                "workload": "deploy",
+                "deployer": "appset",
+                "pvcSpec": "rbd",
+            },
+            {
+                "workload": "deploy",
+                "deployer": "subscr",
+                "pvcSpec": "cephfs",
+            },
+            {
+                "workload": "deploy",
+                "deployer": "subscr",
+                "pvcSpec": "rbd",
+            },
+            {
+                "workload": "deploy",
+                "deployer": "disapp",
+                "pvcSpec": "cephfs",
+            },
+            {
+                "workload": "deploy",
+                "deployer": "disapp",
+                "pvcSpec": "rbd",
+            },
+            {
+                "workload": "deploy",
+                "deployer": "disapp-recipe-check-exec",
+                "pvcSpec": "rbd",
+            },
+        ]
+
+        # Build final config structure matching ramenctl format
+        ramenctl_config = {
+            "clusters": clusters_config,
+            "clusterSet": cluster_set,
+            "drPolicy": dr_policy_name,
+            "repo": {
+                "url": "https://github.com/RamenDR/ocm-ramen-samples.git",
+                "branch": "main",
+            },
+            "pvcSpecs": pvc_specs,
+            "deployers": deployers,
+            "tests": tests,
+        }
+
+        return ramenctl_config
+
+    def _execute_ramenctl_e2e(self, ramenctl_dir, config_file):
+        """
+        Execute ramenctl test run command.
+
+        Logs errors if tests fail but does not raise exceptions to allow
+        deployment to continue.
+
+        Args:
+            ramenctl_dir (str): Path to ramenctl repository
+            config_file (str): Path to ramenctl config file (should be config.yaml)
+
+        """
+        logger.info("[ramenctl-e2e] Executing ramenctl test run")
+
+        # Output directory for test results (relative to ramenctl_dir)
+        output_dirname = "e2e-results"
+        output_path = f"{ramenctl_dir}/{output_dirname}"
+
+        e2e_cmd = " ".join([
+            "cd",
+            ramenctl_dir,
+            "&&",
+            "./ramenctl",
+            "test",
+            "run",
+            "-o",
+            output_dirname,
+        ])
+
+        logger.info(f"[ramenctl-e2e] Running command: {e2e_cmd}")
+        logger.info(f"[ramenctl-e2e] Test results will be saved to: {output_path}")
+
+        e2e_timeout = 7200
+
+        try:
+            output = run_cmd(e2e_cmd, timeout=e2e_timeout)
+            logger.info(f"[ramenctl-e2e] E2E tests completed successfully")
+            logger.debug(f"[ramenctl-e2e] Test output:\n{output}")
+            logger.info(f"[ramenctl-e2e] Test results available at: {output_path}")
+        except CommandFailed as e:
+            logger.error(f"[ramenctl-e2e] E2E tests failed: {e}")
+            logger.error(f"[ramenctl-e2e] Check detailed results at: {output_path}")
+
     def deploy_dr_policy(self):
         # Create DR policy on ACM hub cluster
         dr_policy_hub_data = templating.load_yaml(constants.DR_POLICY_ACM_HUB)
@@ -4424,6 +4807,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # validate storage cluster peer state
             validate_storage_cluster_peer_state()
             verify_volsync()
+
+        self.run_ramenctl_e2e()
 
         # TODO: Skip backup configuration if the managed clusters under test is client clusters
         #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
