@@ -1051,17 +1051,25 @@ def get_url_content(url, **kwargs):
 def expose_ocp_version(version):
     """
     This helper function exposes latest nightly version or GA version of OCP.
-    When the version string ends with .nightly (e.g. 4.2.0-0.nightly) it will
+    When the version string ends with .nightly (e.g. 4.22.0-0.nightly) it will
     expose the version to latest accepted OCP build
-    (e.g. 4.2.0-0.nightly-2019-08-08-103722)
-    If the version ends with -ga than it will find the latest GA OCP version
-    and will expose 4.2-ga to for example 4.2.22.
+    (e.g. 4.22.0-0.nightly-2026-06-10-151504).
+
+    If the nightly service is unavailable, it will fallback to the latest GA
+    version of the same major.minor version if available (e.g., 4.22.0).
+
+    If the version ends with -ga it will find the latest GA OCP version
+    and will expose 4.22-ga to for example 4.22.0.
 
     Args:
-        version (str): Verison of OCP
+        version (str): Version of OCP (e.g., "4.22.0-0.nightly", "4.22-ga")
 
     Returns:
-        str: Version of OCP exposed to full version if latest nighly passed
+        str: Version of OCP exposed to full version. For nightly requests,
+             returns either the nightly build name or GA fallback version.
+
+    Raises:
+        ValueError: When unable to get version info and no fallback is possible
 
     """
     if version.endswith(".nightly"):
@@ -1069,9 +1077,47 @@ def expose_ocp_version(version):
         if release_info and release_info.get("name"):
             return release_info["name"]
         else:
-            raise ValueError(
-                f"Unable to get nightly release info for version {version}"
-            )
+            # Nightly service unavailable, try fallback to GA version
+            log.warning(f"Nightly release service unavailable for {version}")
+
+            # Extract major.minor version (e.g., "4.22.0-0.nightly" -> "4.22")
+            try:
+                major_minor = version.split(".nightly")[0]  # "4.22.0-0"
+                major_minor = ".".join(major_minor.split(".")[0:2])  # "4.22"
+
+                # Check if this major.minor version has GA releases available
+                if is_ocp_version_gaed(major_minor):
+                    log.warning(
+                        f"OpenShift CI nightly service is unavailable. "
+                        f"Falling back to latest GA version of {major_minor} instead of nightly."
+                    )
+
+                    # Get the latest GA version for this major.minor
+                    ga_version = get_latest_ocp_version(f"stable-{major_minor}")
+                    log.warning(
+                        f"FALLBACK: Using GA version {ga_version} instead of nightly {version}. "
+                        f"This may affect test behavior if nightly-specific features are expected."
+                    )
+                    return str(ga_version)
+                else:
+                    raise ValueError(
+                        f"Unable to get nightly release info for version {version}. "
+                        "The OpenShift CI nightly service is currently unavailable, "
+                        f"and version {major_minor} is not yet GA'ed so no fallback is possible. "
+                        "\n\nThis typically means:\n"
+                        "1. The OpenShift CI release service "
+                        "(amd64.ocp.releases.ci.openshift.org) is experiencing an outage\n"
+                        f"2. Version {major_minor} is still under development and not yet GA'ed\n"
+                        "\nPossible solutions:\n"
+                        "- Wait for the OpenShift CI service to recover\n"
+                        "- Use a different OCP version that is already GA'ed\n"
+                        "- Check the service status at the OpenShift CI console"
+                    )
+            except Exception as parse_error:
+                raise ValueError(
+                    f"Unable to get nightly release info for version {version} "
+                    f"and failed to parse version for GA fallback: {parse_error}"
+                )
     if version.endswith("-ga"):
         channel = config.DEPLOYMENT.get("ocp_channel", "stable")
         ocp_version = version.rstrip("-ga")
@@ -1079,6 +1125,68 @@ def expose_ocp_version(version):
         return get_latest_ocp_version(f"{channel}-{ocp_version}", index)
     else:
         return version
+
+
+@retry(
+    exception_to_check=(requests.exceptions.RequestException, AssertionError),
+    tries=6,  # 6 retries = ~1 minute total
+    delay=10,  # 10 seconds between retries
+    backoff=1,  # No backoff, keep it simple
+    max_delay=10,  # Keep delay constant
+    max_timeout=120,  # 2 minutes max
+)
+def _fetch_nightly_release_info_with_retry(url):
+    """
+    Fetch nightly release info with retry logic for temporary service outages.
+
+    Args:
+        url (str): The API endpoint URL to fetch from
+
+    Returns:
+        dict: Parsed JSON response
+
+    Raises:
+        requests.exceptions.RequestException: For network-related errors
+        AssertionError: For HTTP error status codes
+    """
+    log.debug(f"Attempting to fetch nightly release info from: {url}")
+
+    try:
+        response = requests.get(url, timeout=30)
+
+        # Check for HTTP errors and provide specific messages
+        if response.status_code == 503:
+            raise requests.exceptions.RequestException(
+                "OCP release service temporarily unavailable (HTTP 503). "
+                "This usually indicates the OpenShift CI release service is experiencing an outage."
+            )
+        elif response.status_code == 404:
+            raise requests.exceptions.RequestException(
+                "OCP release stream not found (HTTP 404). "
+                "The requested nightly version may not exist."
+            )
+        elif not response.ok:
+            raise requests.exceptions.RequestException(
+                f"OCP release service returned HTTP {response.status_code}"
+            )
+
+        # Parse and return JSON response
+        release_info = response.json()
+        log.debug(
+            f"Successfully retrieved release info: name={release_info.get('name')}, "
+            f"pullSpec={release_info.get('pullSpec')}"
+        )
+        return release_info
+
+    except requests.exceptions.Timeout:
+        raise requests.exceptions.RequestException(
+            "Timeout while fetching OCP release info. The service may be slow or unavailable."
+        )
+    except requests.exceptions.ConnectionError:
+        raise requests.exceptions.RequestException(
+            "Network connection error while fetching OCP release info. "
+            "Check internet connectivity or if the OpenShift CI service is accessible."
+        )
 
 
 def get_nightly_release_info(version):
@@ -1105,21 +1213,18 @@ def get_nightly_release_info(version):
         # Shouldn't happen, but handle it gracefully
         stream_name = version
 
+    latest_nightly_url = (
+        f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
+        f"releasestream/{stream_name}/latest"
+    )
+
     try:
-        latest_nightly_url = (
-            f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
-            f"releasestream/{stream_name}/latest"
-        )
-        log.debug(f"Fetching nightly release info from: {latest_nightly_url}")
-        version_url_content = get_url_content(latest_nightly_url)
-        release_info = json.loads(version_url_content)
-        log.debug(
-            f"Retrieved release info: name={release_info.get('name')}, "
-            f"pullSpec={release_info.get('pullSpec')}"
-        )
-        return release_info
+        return _fetch_nightly_release_info_with_retry(latest_nightly_url)
     except Exception as e:
-        log.warning(f"Failed to get nightly release info for {version}: {e}")
+        log.warning(
+            f"Failed to get nightly release info for {version} after retrying for 1 minute. "
+            f"Error: {e}"
+        )
         return None
 
 
