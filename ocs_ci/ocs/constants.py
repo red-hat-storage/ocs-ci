@@ -775,6 +775,20 @@ CEPHX_BOOTSTRAP_NON_OSD_KEYS = tuple(
 )
 CEPHX_BOOTSTRAP_DELETED_OPERATOR_LOG = "successfully deleted"
 CEPHX_BOOTSTRAP_OPERATOR_LOG_TOKEN = "bootstrap key"
+CEPHX_BOOTSTRAP_DELETION_WARNING_PATTERNS = (
+    "failed to delete bootstrap",
+    "error deleting bootstrap",
+    "bootstrap key deletion failed",
+)
+CEPHX_LOCKBOX_ROTATION_FAILURE_LOG_PATTERNS = (
+    "error",
+    "failed",
+    "unable to",
+    "could not",
+    "connection refused",
+    "no route to host",
+    "timed out",
+)
 CEPHX_DEFAULT_ALLOWED_CIPHERS = ("aes", "aes256k")
 CEPHX_CUSTOM_ALLOWED_CIPHERS = ("aes256k",)
 OCS_METRICS_EXPORTER_PORT = 9443

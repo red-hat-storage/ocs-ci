@@ -19,6 +19,7 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
+    Pod,
     get_ceph_tools_pod,
     get_deployments_having_label,
     get_mon_pods,
@@ -1682,6 +1683,366 @@ class CephXKeyRotation:
             else:
                 statuses[deployment.name] = {}
         return statuses
+
+    def clear_osd_deployment_cephx_status_annotations(self):
+        """
+        Remove ``cephx-status`` from OSD deployment templates.
+
+        Simulates brownfield OSD deployments that pre-date cephx rotation support.
+        """
+        annotation_key = constants.CEPHX_STATUS_ANNOTATION
+        cleared = []
+        for deployment in get_osd_deployments(namespace=self.namespace):
+            deployment_data = deployment.get()
+            annotations = (
+                deployment_data.get("spec", {})
+                .get("template", {})
+                .get("metadata", {})
+                .get("annotations", {})
+                or {}
+            )
+            if annotation_key not in annotations:
+                continue
+            patch_ops = [
+                {
+                    "op": "remove",
+                    "path": (
+                        "/spec/template/metadata/annotations/" f"{annotation_key}"
+                    ),
+                }
+            ]
+            deployment.patch(params=json.dumps(patch_ops), format_type="json")
+            cleared.append(deployment.name)
+        log.info(
+            "Cleared cephx-status annotation from OSD deployments: "
+            f"{', '.join(cleared) or 'none'}"
+        )
+        return cleared
+
+    def assert_osd_deployments_have_empty_cephx_status(self):
+        """Assert all OSD deployments lack populated cephx-status annotations."""
+        statuses = self.capture_osd_deployment_cephx_status()
+        assert statuses, "No OSD deployments found for cephx-status verification"
+        populated = {name: status for name, status in statuses.items() if status}
+        if populated:
+            raise UnexpectedBehaviour(
+                "Expected empty cephx-status on brownfield OSD deployments; "
+                f"populated: {populated}"
+            )
+        log.info("All OSD deployments have empty cephx-status annotations")
+
+    def assert_all_osd_deployments_cephx_status_at_generation(
+        self, expected_generation
+    ):
+        """Assert every OSD deployment cephx-status reached *expected_generation*."""
+        statuses = self.capture_osd_deployment_cephx_status()
+        assert statuses, "No OSD deployments found for cephx-status verification"
+        behind = {
+            name: int(status.get("keyGeneration", 0) or 0)
+            for name, status in statuses.items()
+            if int(status.get("keyGeneration", 0) or 0) < expected_generation
+        }
+        if behind:
+            raise UnexpectedBehaviour(
+                f"OSD deployments below cephx-status keyGeneration "
+                f"{expected_generation}: {behind}"
+            )
+        log.info(
+            f"All OSD deployments report cephx-status keyGeneration "
+            f">= {expected_generation}"
+        )
+
+    def assert_osd_deployment_cephx_status_unchanged_for(
+        self, deployment_names, baseline_status
+    ):
+        """Assert cephx-status for *deployment_names* matches *baseline_status*."""
+        current = self.capture_osd_deployment_cephx_status()
+        changed = {
+            name: {
+                "before": baseline_status.get(name),
+                "after": current.get(name),
+            }
+            for name in deployment_names
+            if baseline_status.get(name) != current.get(name)
+        }
+        if changed:
+            raise UnexpectedBehaviour(
+                "cephx-status changed for OSD deployments that should be "
+                f"checkpoint-frozen: {changed}"
+            )
+        log.info(
+            "cephx-status unchanged for checkpoint OSD deployments: "
+            f"{', '.join(deployment_names)}"
+        )
+
+    def assert_auth_keys_unchanged_for(self, baseline_keys, entities=None):
+        """Assert a subset of auth keys did not change."""
+        entities = entities or list(baseline_keys.keys())
+        self.assert_auth_keys_unchanged(
+            baseline_keys,
+            entities=entities,
+            context="for checkpoint OSDs after operator restart",
+        )
+
+    def get_disk_based_encrypted_osd_deployments(self):
+        """Return encrypted OSD deployments backed by host/disk store."""
+        return {
+            name: info
+            for name, info in self.capture_encrypted_osd_deployments().items()
+            if info.get("store_type") == "host"
+        }
+
+    def assert_lockbox_auth_keys_present(self, entities, toolbox_pod=None):
+        """Assert lockbox auth entities still exist in the Ceph auth store."""
+        missing = [
+            entity
+            for entity in entities
+            if not self.get_auth_key(entity, toolbox_pod=toolbox_pod)
+        ]
+        if missing:
+            raise UnexpectedBehaviour(
+                f"Lockbox auth keys missing after rotation disruption: "
+                f"{', '.join(missing)}"
+            )
+        log.info(f"Lockbox auth keys present for: {', '.join(entities)}")
+
+    def get_osd_auth_entity_for_deployment(self, deployment_name):
+        """Map an OSD deployment name to its ``osd.<id>`` auth entity."""
+        deployment = OCP(
+            kind=constants.DEPLOYMENT,
+            namespace=self.namespace,
+            resource_name=deployment_name,
+        )
+        osd_id = (
+            deployment.get().get("metadata", {}).get("labels", {}).get("ceph-osd-id")
+        )
+        if osd_id is None:
+            raise UnexpectedBehaviour(
+                f"OSD deployment {deployment_name} missing ceph-osd-id label"
+            )
+        return f"osd.{osd_id}"
+
+    def map_osd_deployments_to_auth_entities(self, deployment_names):
+        """Return ``osd.<id>`` auth entities for OSD deployment names."""
+        return [
+            self.get_osd_auth_entity_for_deployment(name) for name in deployment_names
+        ]
+
+    def break_mon_quorum_during_lockbox_rotation(self, mons_to_stop=2, timeout=600):
+        """
+        Start daemon rotation and break mon quorum while lockbox rotation runs.
+
+        Returns:
+            list: Mon deployment names scaled down for later restoration.
+        """
+        from ocs_ci.helpers.helpers import get_last_log_time_date
+
+        operator_log_marker = get_last_log_time_date()
+        target_generation = self.rotate_daemon_keys()
+
+        def _lockbox_rotation_started():
+            logs = self.get_operator_logs_since(operator_log_marker)
+            return any(constants.OSD_LOCKBOX_OPERATOR_LOG in line for line in logs)
+
+        for started in TimeoutSampler(timeout, 5, _lockbox_rotation_started):
+            if started:
+                log.info("Encrypted OSD lockbox rotation started; breaking mon quorum")
+                scaled = self.break_mon_quorum(mons_to_stop=mons_to_stop)
+                return target_generation, scaled
+
+        raise UnexpectedBehaviour(f"Lockbox rotation did not start within {timeout}s")
+
+    def verify_osd_lockbox_init_container_disruption_logs(self, osd_pods=None):
+        """
+        Verify encrypted OSD init containers logged failures during disruption.
+
+        At least one encrypted OSD pod should report a failure pattern in an
+        init container involved in lockbox key load.
+        """
+        osd_pods = osd_pods or self.get_encrypted_osd_pods()
+        if not osd_pods:
+            raise UnexpectedBehaviour(
+                "No encrypted OSD pods found for lockbox disruption logs"
+            )
+
+        init_containers = list(constants.OSD_CEPHX_INIT_CONTAINER_NAMES) + [
+            constants.OSD_ACTIVATE_INIT_CONTAINER
+        ]
+        failure_patterns = constants.CEPHX_LOCKBOX_ROTATION_FAILURE_LOG_PATTERNS
+        pods_with_failures = []
+
+        for osd_pod in osd_pods:
+            for container_name in init_containers:
+                try:
+                    logs = get_pod_logs(
+                        pod_name=osd_pod.name,
+                        container=container_name,
+                        namespace=self.namespace,
+                    )
+                except CommandFailed:
+                    continue
+                lower_logs = logs.lower()
+                if any(pattern in lower_logs for pattern in failure_patterns):
+                    pods_with_failures.append((osd_pod.name, container_name))
+                    log.info(
+                        f"OSD pod {osd_pod.name} init container {container_name} "
+                        "logged lockbox rotation disruption"
+                    )
+                    break
+
+        if not pods_with_failures:
+            raise UnexpectedBehaviour(
+                "No encrypted OSD init containers logged lockbox rotation failures"
+            )
+
+    def verify_csi_node_plugin_logs_for_auth_errors(self, since_time=None):
+        """
+        Collect AUTH_BAD_KEY lines from CSI RBD node plugin logs.
+
+        Returns:
+            list: Matching log lines (may be non-empty when old CSI keys are deleted).
+        """
+        matches = []
+        for csi_pod in self.get_csi_node_plugin_pods():
+            logs = get_pod_logs(
+                pod_name=csi_pod.name,
+                namespace=self.namespace,
+            )
+            if since_time:
+                logs = "\n".join(
+                    line for line in logs.splitlines() if line[:19] >= since_time[:19]
+                )
+            for line in logs.splitlines():
+                if constants.AUTH_BAD_KEY_LOG in line:
+                    matches.append(f"{csi_pod.name}: {line.strip()}")
+        if matches:
+            log.warning(
+                "CSI node plugin AUTH_BAD_KEY log lines:\n" + "\n".join(matches[:10])
+            )
+        else:
+            log.info("No AUTH_BAD_KEY lines found in CSI node plugin logs")
+        return matches
+
+    def kill_operator_during_partial_osd_rotation(
+        self,
+        baseline_cephx_status,
+        min_rotated,
+        timeout=900,
+        poll_interval=5,
+    ):
+        """
+        Trigger OSD rotation and kill the operator after partial completion.
+
+        Returns:
+            tuple: (target_generation, list of deployment names rotated before kill)
+        """
+        target_generation = self.rotate_daemon_keys()
+        operator_pods = get_operator_pods(namespace=self.namespace)
+        if not operator_pods:
+            raise UnexpectedBehaviour("rook-ceph-operator pod not found")
+        operator_pod = operator_pods[0]
+        operator_ocp = OCP(kind=constants.POD, namespace=self.namespace)
+        rotated_before_kill = []
+
+        log.info(
+            f"Waiting to kill operator after >= {min_rotated} OSD cephx-status "
+            "updates and before all OSDs complete"
+        )
+
+        def _partial_rotation_ready():
+            nonlocal rotated_before_kill
+            current = self.capture_osd_deployment_cephx_status()
+            rotated_before_kill = [
+                deployment_name
+                for deployment_name, prior in baseline_cephx_status.items()
+                if current.get(deployment_name) != prior
+                and int(current.get(deployment_name, {}).get("keyGeneration", 0) or 0)
+                >= target_generation
+            ]
+            total = len(baseline_cephx_status)
+            if (
+                len(rotated_before_kill) >= min_rotated
+                and len(rotated_before_kill) < total
+            ):
+                log.info(
+                    f"Killing rook-ceph-operator after partial OSD rotation; "
+                    f"rotated={rotated_before_kill}"
+                )
+                operator_ocp.delete(
+                    resource_name=operator_pod.name, force=True, wait=False
+                )
+                return True
+            return False
+
+        for ready in TimeoutSampler(timeout, poll_interval, _partial_rotation_ready):
+            if ready:
+                return target_generation, list(rotated_before_kill)
+
+        raise UnexpectedBehaviour(
+            f"Partial OSD rotation checkpoint not reached within {timeout}s "
+            f"(min_rotated={min_rotated})"
+        )
+
+    def verify_bootstrap_deletion_idempotent_after_operator_restart(self, timeout=600):
+        """Restart operator and verify bootstrap cleanup is idempotent."""
+        self.assert_bootstrap_keys_absent(constants.CEPHX_BOOTSTRAP_KEYS_TO_CLEANUP)
+        operator_log_marker = None
+        from ocs_ci.helpers.helpers import get_last_log_time_date
+
+        operator_log_marker = get_last_log_time_date()
+        previous_operator = self.restart_rook_ceph_operator()
+        self.wait_for_rook_ceph_operator_ready(previous_pod_name=previous_operator)
+        self.wait_for_cluster_ready(timeout=timeout)
+        self.assert_bootstrap_keys_absent(constants.CEPHX_BOOTSTRAP_KEYS_TO_CLEANUP)
+        self.verify_no_bootstrap_deletion_errors()
+        self.verify_operator_logs_do_not_contain_warnings(
+            constants.CEPHX_BOOTSTRAP_DELETION_WARNING_PATTERNS,
+            since_time=operator_log_marker,
+            require_match=False,
+        )
+        log.info(
+            "Bootstrap key deletion is idempotent after operator restart "
+            f"(restarted pod {previous_operator})"
+        )
+
+    def verify_operator_logs_do_not_contain_warnings(
+        self, patterns, since_time=None, require_match=False
+    ):
+        """Fail if operator logs since *since_time* contain warning-level patterns."""
+        from ocs_ci.helpers.helpers import get_logs_rook_ceph_operator
+
+        logs = (
+            self.get_operator_logs_since(since_time)
+            if since_time
+            else get_logs_rook_ceph_operator().splitlines()
+        )
+        matches = []
+        for line in logs:
+            lower_line = line.lower()
+            if "warning" not in lower_line and " error" not in lower_line:
+                continue
+            if any(pattern.lower() in lower_line for pattern in patterns):
+                matches.append(line)
+        if matches and require_match:
+            raise UnexpectedBehaviour(
+                f"Expected warning patterns in operator logs: {patterns}"
+            )
+        if matches and not require_match:
+            sample = "\n".join(matches[:5])
+            raise UnexpectedBehaviour(
+                "Unexpected bootstrap deletion warnings in operator logs:\n" f"{sample}"
+            )
+
+    def get_csi_node_plugin_pods(self):
+        """Return CSI RBD node plugin pods for the cluster namespace."""
+        pods = get_pods_having_label(
+            constants.CSI_RBDPLUGIN_LABEL, namespace=self.namespace
+        )
+        if not pods:
+            pods = get_pods_having_label(
+                constants.CSI_RBDPLUGIN_LABEL_419, namespace=self.namespace
+            )
+        return [Pod(**pod) for pod in pods]
 
     def capture_osd_store_types(self):
         """
