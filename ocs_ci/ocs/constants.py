@@ -749,6 +749,71 @@ CEPH_DAEMON_LABEL_BY_COMPONENT = {
 }
 # CephX authentication key rotation (Rook CephCluster spec.security.cephx)
 CEPHX_KEY_IDENTIFIER_ANNOTATION = "cephx-key-identifier"
+CEPHX_STATUS_ANNOTATION = "cephx-status"
+OSD_CEPHX_INIT_CONTAINER_NAMES = ("cephx-keyring-update", "load-cephx-key")
+OSD_STORE_LABEL = "osd-store"
+OSD_CEPHX_INIT_SUCCESS_LOG = "got latest cephx key for OSD successfully"
+OSD_CEPHX_GET_OR_CREATE_LOG = "auth get-or-create"
+OSD_ENCRYPTED_LABEL = "encrypted"
+OSD_LOCKBOX_AUTH_PREFIX = "client.osd-lockbox."
+OSD_ACTIVATE_INIT_CONTAINER = "activate"
+OSD_LOCKBOX_INIT_SUCCESS_LOG = "got latest cephx lockbox key for OSD successfully"
+OSD_LOCKBOX_GET_OR_CREATE_LOG = "auth get-or-create"
+OSD_LOCKBOX_OPERATOR_LOG = "rotating osd-lockbox cephx key of encrypted OSD"
+ROOK_OSD_UUID_ENV = "ROOK_OSD_UUID"
+CEPHX_BOOTSTRAP_AUTH_PREFIX = "client.bootstrap-"
+CEPHX_BOOTSTRAP_KEYS_TO_CLEANUP = (
+    "client.bootstrap-mds",
+    "client.bootstrap-mgr",
+    "client.bootstrap-rbd",
+    "client.bootstrap-rbd-mirror",
+    "client.bootstrap-rgw",
+    "client.bootstrap-osd",
+)
+CEPHX_BOOTSTRAP_NON_OSD_KEYS = tuple(
+    key for key in CEPHX_BOOTSTRAP_KEYS_TO_CLEANUP if key != "client.bootstrap-osd"
+)
+CEPHX_BOOTSTRAP_DELETED_OPERATOR_LOG = "successfully deleted"
+CEPHX_BOOTSTRAP_OPERATOR_LOG_TOKEN = "bootstrap key"
+CEPHX_DEFAULT_ALLOWED_CIPHERS = ("aes", "aes256k")
+CEPHX_CUSTOM_ALLOWED_CIPHERS = ("aes256k",)
+OCS_METRICS_EXPORTER_PORT = 9443
+OCS_METRICS_EXPORTER_METRICS_PATH = "/metrics"
+OCS_METRICS_EXPORTER_CONTAINER = "ocs-metrics-exporter"
+AUTH_BAD_KEY_LOG = "AUTH_BAD_KEY"
+OCS_METRICS_EXPORTER_METRIC_PREFIXES = ("ocs_storagecluster", "ceph_")
+CEPHX_CUSTOM_KEY_TYPE = "aes256k"
+CEPHX_INSECURE_SERVICE_KEY_TYPE_WARN = "AUTH_INSECURE_SERVICE_KEY_TYPE"
+CEPHX_AUTH_ROTATE_KEY_TYPE_OPERATOR_LOG = "--key-type"
+CEPHX_KEY_ROTATION_OPERATOR_LOG_PATTERNS = (
+    "auth rotate",
+    "rotating cephx",
+    "cephx key rotation",
+)
+CEPHX_MON_AUTH_ROTATION_LOG_PATTERN = r'rotating ceph auth key.*"mon\.'
+CEPHX_MON_SECRET_UPDATE_LOG = "updating mon secret"
+CEPHX_MON_AUTH_GET_LOG_PATTERN = r"auth get mon"
+MANAGED_MONS_KEYRING_SECRET = "rook-ceph-mons-keyring"  # pragma: allowlist secret
+CEPHX_ROTATION_QUORUM_ERROR_PATTERNS = (
+    "quorum",
+    "cannot rotate",
+    "not in quorum",
+    "mon quorum",
+)
+CEPHX_OSD_ROTATION_DEFERRED_PATTERNS = (
+    "pg",
+    "not clean",
+    "not healthy",
+    "defer",
+    "skipping osd",
+    "waiting for pgs",
+)
+CEPHX_OSD_AUTH_ROTATION_LOG_PATTERN = r'rotating ceph auth key.*"osd\.'
+CEPHX_RECONCILE_FAILURE_PATTERNS = (
+    "failed to rotate",
+    "error rotating",
+    "reconcile failed",
+)
 ROOK_CEPHX_KEYROTATION_DAEMONS = ("mon", "mgr", "osd", "mds")
 CEPHCLUSTER_CEPHX_KEYROTATION_STATUS_ENTITIES = ("mon", "mgr", "osd")
 ROOK_CEPHX_KEYROTATION_DAEMON_LABELS = {
