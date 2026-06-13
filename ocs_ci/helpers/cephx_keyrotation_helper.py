@@ -323,8 +323,12 @@ class CephXKeyRotation:
         """
         Return the current CephX key for *entity* from the toolbox.
 
+        Uses ``ceph auth get-key <entity>`` (not ``ceph auth <entity>``, which is
+        invalid). Works for daemon entities (``osd.0``, ``mgr.a``, ``mds.*``,
+        ``mon.a``) and client entities (``client.admin``, CSI users, etc.).
+
         Args:
-            entity (str): e.g. ``client.csi-rbd-node``, ``client.admin``.
+            entity (str): Ceph auth entity name.
             toolbox_pod: Optional rook-ceph-tools pod object.
 
         Returns:
@@ -332,7 +336,10 @@ class CephXKeyRotation:
         """
         toolbox = toolbox_pod or get_ceph_tools_pod()
         try:
-            result = toolbox.exec_ceph_cmd(f"ceph auth get-key {entity}")
+            result = toolbox.exec_cmd_on_pod(
+                f"ceph auth get-key {entity} --format json",
+                out_yaml_format=True,
+            )
         except CommandFailed as exc:
             if "ENOENT" in str(exc):
                 log.warning(f"Ceph auth entity {entity} not found")
@@ -492,7 +499,10 @@ class CephXKeyRotation:
         """Return True when *entity* is present in the Ceph auth store."""
         toolbox = toolbox_pod or get_ceph_tools_pod()
         try:
-            toolbox.exec_ceph_cmd(f"ceph auth get {entity}")
+            toolbox.exec_cmd_on_pod(
+                f"ceph auth get-key {entity} --format json",
+                out_yaml_format=True,
+            )
             return True
         except CommandFailed:
             return False
@@ -585,6 +595,99 @@ class CephXKeyRotation:
             "osd": self._discover_osd_auth_entities(toolbox_pod),
             "mds": self._discover_mds_auth_entities(toolbox_pod),
         }
+
+    @staticmethod
+    def flatten_daemon_auth_entities(auth_entities):
+        """
+        Return auth entity names for all daemons with discoverable entities.
+
+        Args:
+            auth_entities (dict): Output of :meth:`discover_rook_daemon_auth_entities`.
+
+        Returns:
+            list[str]: Flat list of Ceph auth entity names.
+        """
+        return [
+            entity
+            for daemon, entities in auth_entities.items()
+            for entity in entities
+            if not (daemon == "mon" and not entities)
+        ]
+
+    def record_daemon_generations(self):
+        """
+        Snapshot current rook daemon keyGeneration values from status.
+
+        Returns:
+            dict: mon, mgr, osd, and mds (CephFilesystem) generations.
+        """
+        return {
+            "mon": self.get_status_key_generation("mon"),
+            "mgr": self.get_status_key_generation("mgr"),
+            "osd": self.get_status_key_generation("osd"),
+            "mds": self.get_filesystem_daemon_key_generation(),
+        }
+
+    def log_generation_status(self, label):
+        """Log mon/mgr/osd/mds keyGeneration values under *label*."""
+        generations = self.record_daemon_generations()
+        log.info(
+            f"{label} keyGeneration: mon={generations['mon']} "
+            f"mgr={generations['mgr']} osd={generations['osd']} "
+            f"mds={generations['mds']}"
+        )
+
+    def assert_rook_daemon_generations(
+        self, target_generation, mon_rotation_supported=None
+    ):
+        """
+        Assert CephCluster and CephFilesystem daemon keyGeneration reached target.
+
+        Args:
+            target_generation (int): Expected minimum generation.
+            mon_rotation_supported (bool): When True, also assert MON generation.
+                Auto-detected when omitted.
+        """
+        if mon_rotation_supported is None:
+            mon_rotation_supported = self.is_mon_key_rotation_supported()
+        assert (
+            self.get_status_key_generation("mgr") >= target_generation
+        ), "MGR keyGeneration did not reach target"
+        assert (
+            self.get_status_key_generation("osd") >= target_generation
+        ), "OSD keyGeneration did not reach target"
+        if mon_rotation_supported:
+            assert (
+                self.get_status_key_generation("mon") >= target_generation
+            ), "MON keyGeneration did not reach target"
+        assert (
+            self.get_filesystem_daemon_key_generation() >= target_generation
+        ), "MDS (CephFilesystem) keyGeneration did not reach target"
+
+    def assert_generations_increased(self, before, mon_rotation_supported=None):
+        """
+        Assert each daemon type keyGeneration increased after a rotation.
+
+        Args:
+            before (dict): Output of :meth:`record_daemon_generations`.
+            mon_rotation_supported (bool): When True, also assert MON increased.
+                Auto-detected when omitted.
+        """
+        if mon_rotation_supported is None:
+            mon_rotation_supported = self.is_mon_key_rotation_supported()
+        assert (
+            self.get_status_key_generation("mgr") > before["mgr"]
+        ), "MGR keyGeneration did not increase"
+        assert (
+            self.get_status_key_generation("osd") > before["osd"]
+        ), "OSD keyGeneration did not increase"
+        if mon_rotation_supported:
+            assert (
+                self.get_status_key_generation("mon") > before["mon"]
+            ), "MON keyGeneration did not increase"
+        assert (
+            self.get_filesystem_daemon_key_generation() > before["mds"]
+        ), "MDS keyGeneration did not increase"
 
     def get_auth_caps(self, entity, toolbox_pod=None):
         """

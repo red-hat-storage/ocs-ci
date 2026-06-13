@@ -66,12 +66,7 @@ class TestCephXKeyRotationRookDaemons:
             assert entities, f"No Ceph auth entities found for {daemon}"
             log.info(f"Pre-rotation {daemon} auth entities: {', '.join(entities)}")
 
-        all_entities = [
-            entity
-            for daemon, entities in auth_entities.items()
-            for entity in entities
-            if not (daemon == "mon" and not entities)
-        ]
+        all_entities = rotator.flatten_daemon_auth_entities(auth_entities)
         pre_auth_keys = rotator.capture_auth_keys(all_entities, label="before rotation")
         pre_auth_caps = rotator.capture_auth_caps(all_entities)
         pre_pod_states = rotator.capture_all_daemon_pod_states()
@@ -92,31 +87,16 @@ class TestCephXKeyRotationRookDaemons:
         post_pod_states = rotator.wait_for_all_daemon_pod_restarts(pre_pod_states)
 
         log.info("Verifying post-rotation keyGeneration values")
-        assert (
-            rotator.get_status_key_generation("mgr") >= target_generation
-        ), "MGR keyGeneration did not reach target"
-        assert (
-            rotator.get_status_key_generation("osd") >= target_generation
-        ), "OSD keyGeneration did not reach target"
-        if mon_rotation_supported:
-            assert (
-                rotator.get_status_key_generation("mon") >= target_generation
-            ), "MON keyGeneration did not reach target"
-        assert (
-            rotator.get_filesystem_daemon_key_generation() >= target_generation
-        ), "MDS (CephFilesystem) keyGeneration did not reach target"
+        rotator.assert_rook_daemon_generations(
+            target_generation, mon_rotation_supported
+        )
 
         post_auth_keys = rotator.verify_auth_keys_changed(
             pre_auth_keys, entities=all_entities
         )
         rotator.log_auth_key_snapshot("after rotation", post_auth_keys)
         rotator.verify_auth_caps_unchanged(pre_auth_caps, entities=all_entities)
-        log.info(
-            f"Post-rotation keyGeneration: mon={rotator.get_status_key_generation('mon')} "
-            f"mgr={rotator.get_status_key_generation('mgr')} "
-            f"osd={rotator.get_status_key_generation('osd')} "
-            f"mds={rotator.get_filesystem_daemon_key_generation()}"
-        )
+        rotator.log_generation_status("Post-rotation")
 
         for daemon, pods in post_pod_states.items():
             for pod_name, annotation in pods.items():
