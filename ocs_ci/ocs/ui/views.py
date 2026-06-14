@@ -1193,7 +1193,8 @@ acm_configuration_4_12 = {
         "//h2[text()='local-cluster'] | "
         "//span[contains(@class, 'c-menu-toggle__text') "
         "and text()='local-cluster']/.. | "
-        "//h2[normalize-space()='Fleet Management']",
+        "//h2[normalize-space()='Fleet Management'] | "
+        "//h2[normalize-space()='Core platform']",
         By.XPATH,
     ),
     # works for OCP 4.12 to 4.20
