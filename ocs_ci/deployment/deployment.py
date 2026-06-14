@@ -123,6 +123,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_ceph_cmd_execute_successfully,
     get_operator_pods,
     delete_pods,
+    get_cephfs_nodeplugin_pods,
     wait_for_pods_by_label_count,
     wait_for_pods_to_be_running,
     wait_for_pods_to_be_in_statuses,
@@ -2321,6 +2322,26 @@ class Deployment(object):
             )
 
         if not config.COMPONENTS["disable_cephfs"]:
+            worker_count = len(get_worker_nodes())
+            logger.info(
+                "Restarting CephFS CSI node plugin pods to clear any "
+                "transient ContainerCreating state before configuring "
+                "image registry"
+            )
+            nodeplugin_pods = get_cephfs_nodeplugin_pods(namespace=self.namespace)
+            if nodeplugin_pods:
+                delete_pods(nodeplugin_pods, wait=True)
+            logger.info(
+                "Waiting for CephFS CSI node plugin to be Running on all "
+                "%d worker nodes before configuring image registry",
+                worker_count,
+            )
+            assert pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=constants.CEPHFS_NODEPLUGIN_LABEL,
+                resource_count=worker_count,
+                timeout=600,
+            ), "CephFS CSI node plugin pods did not reach Running state"
             # Change registry backend to OCS CEPHFS RWX PVC
             registry.change_registry_backend_to_ocs()
 
