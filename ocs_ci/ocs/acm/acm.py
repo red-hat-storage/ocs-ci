@@ -285,6 +285,10 @@ class AcmAddClusters(AcmPageNavigator):
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
+        is_disconnected = False
+        if config.DEPLOYMENT.get("disconnected"):
+            is_disconnected = True
+            log.info("Submariner is in disconnected mode")
         azure_ipi_clusters_indices = [
             cluster_index
             for cluster_index in [primary_index, secondary_index]
@@ -320,6 +324,9 @@ class AcmAddClusters(AcmPageNavigator):
                     f"Click on 'Enable NAT-T' to uncheck it for cluster [{cluster_nr}]"
                 )
                 self.do_click(self.page_nav["nat-t-checkbox"])
+            if is_disconnected:
+                log.info(f"Click on 'Diconnected Clsuter for cluster [{cluster_nr}]")
+                self.do_click(self.page_nav["disconnected-checkbox"])
             if increase_gateway:
                 log.info(
                     f"Increase the gateway count by {increase_gateway_number} clicking"
