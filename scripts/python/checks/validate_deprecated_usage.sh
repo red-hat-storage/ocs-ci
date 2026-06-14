@@ -60,16 +60,14 @@ VIOLATIONS=$(echo "$DIFF_OUTPUT" | awk '
         sub("^b/", "", file)
     }
     /^@@ / {
-        # Parse the +line from hunk header (e.g., @@ -10,3 +20,5 @@)
-        # Match " +NNN" (space before +) to avoid greedy match on + in function context
         s = $0
-        sub(/.* \+/, "", s)
+        sub(/^@@ -[0-9,]+ \+/, "", s)
         sub(/[,@ ].*/, "", s)
         line = s + 0
         next
     }
-    /^\+[^+]/ {
-        # Added line (skip the +++ header)
+    /^\+\+\+ / { next }
+    /^\+/ {
         code = substr($0, 2)
         printf "%s:%d: %s\n", file, line, code
         line++
