@@ -333,6 +333,10 @@ deployment_4_19 = {
     "0.5 TiB": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
 }
 deployment_4_21 = {
+    "gathering_resources": (
+        "//*[contains(text(), 'gathering required resources')]",
+        By.XPATH,
+    ),
     "osd_size_dropdown": (
         "//button[contains(@aria-label, 'select') and contains(@class, 'dropdown--full-width')]",
         By.XPATH,

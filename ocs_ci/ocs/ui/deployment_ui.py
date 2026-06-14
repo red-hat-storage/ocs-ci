@@ -15,6 +15,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
     add_disk_for_vsphere_platform,
     create_optional_operators_catalogsource_non_ga,
 )
+
 from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,22 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["setup_storage_cluster"], enable_screenshot=True
             )
+            gathering_loc = self.dep_loc["gathering_resources"]
+            if self.check_element_presence(gathering_loc[::-1], timeout=5):
+                logger.info(
+                    "Wizard is gathering required resources. "
+                    "Waiting up to 2 minutes for it to complete."
+                )
+                self.take_screenshot("gathering_resources")
+                self.copy_dom("gathering_resources")
+                if self.wait_for_element_absence(gathering_loc[::-1], timeout=60 * 2):
+                    logger.info("Resource gathering completed.")
+                else:
+                    logger.warning(
+                        "Resource gathering text still present after 5 minutes."
+                    )
+                    self.take_screenshot("gathering_resources_timeout")
+                    self.copy_dom("gathering_resources_timeout")
         elif ocs_version >= version.VERSION_4_19:
             self.nav_storage_cluster_default_page()
             logger.info("Click on 'Storage Systems tab' under the dashboard")
