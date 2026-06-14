@@ -2924,7 +2924,7 @@ def create_service_exporter(annotate=True):
             run_cmd(
                 "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
                 f" ocs.openshift.io/api-server-exported-address={cluster_address}"
-                f"{cluster_service_export_provider_server}:{cluster_address_port}"
+                f"{cluster_service_export_provider_server}:{cluster_address_port} --overwrite"
             )
     config.switch_ctx(restore_index)
 
