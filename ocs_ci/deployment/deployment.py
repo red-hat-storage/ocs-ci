@@ -4920,7 +4920,9 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         )
         exec_cmd(f"oc create -f {thanos_data_yaml.name}")
 
+        logger.info("Thanos secret created, checking observability status")
         self.check_observability_status()
+        logger.info("Observability status check passed, thanos_secret() completed")
 
     def enable_acm_observability(self):
         """
