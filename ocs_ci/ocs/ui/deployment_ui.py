@@ -236,15 +236,36 @@ class DeploymentUI(PageNavigator):
                     f"after {max_retries} attempts"
                 )
         elif ocs_version >= version.VERSION_4_19:
-            self.nav_storage_cluster_default_page()
-            logger.info("Click on 'Storage Systems tab' under the dashboard")
-            self.do_click(
-                locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
-            )
-            logger.info("Click on 'Create StorageSystem' button")
-            self.do_click(
-                locator=self.dep_loc["storage_system_btn"], enable_screenshot=True
-            )
+            max_retries = 3
+            for attempt in range(1, max_retries + 1):
+                self.nav_storage_cluster_default_page()
+                logger.info("Click on 'Storage Systems tab' under the dashboard")
+                self.do_click(
+                    locator=self.dep_loc["create_storage_cluster"],
+                    enable_screenshot=True,
+                )
+                self.page_has_loaded()
+                logger.info("Click on 'Create StorageSystem' button")
+                self.do_click(
+                    locator=self.dep_loc["storage_system_btn"],
+                    enable_screenshot=True,
+                )
+                self.page_has_loaded()
+                if not self._is_page_crashed():
+                    break
+                logger.warning(
+                    f"Page crashed during Storage System creation "
+                    f"(attempt {attempt}/{max_retries}). Refreshing and retrying."
+                )
+                self.take_screenshot()
+                self.refresh_page()
+                self.page_has_loaded()
+            else:
+                self.take_screenshot()
+                raise ValueError(
+                    "Page crashed at the time of Storage System creation "
+                    f"after {max_retries} attempts"
+                )
         else:
             if self.operator_name == ODF_OPERATOR:
                 self.navigate_installed_operators_page()
