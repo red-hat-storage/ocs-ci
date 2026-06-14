@@ -330,15 +330,10 @@ class StorageConsumer:
 
         """
         with config.RunWithConfigContext(self.consumer_context):
-            current_storage_classes = (
-                self.ocp.get(resource_name=self.name).get("spec").get("storageClasses")
-            )
+            current_storage_classes = self.get_storage_classes()
             if storage_class in current_storage_classes:
                 current_storage_classes.remove(storage_class)
-                patch_param = (
-                    f'{{"spec": {{"storageClasses": {current_storage_classes}}}}}'
-                )
-                self.ocp.patch(resource_name=self.name, params=patch_param)
+                self.set_storage_classes(current_storage_classes)
 
     @if_version(">4.18")
     def set_custom_volume_snapshot_class(self, snapshot_class):
