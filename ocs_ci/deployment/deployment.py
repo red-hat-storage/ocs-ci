@@ -2795,13 +2795,66 @@ class Deployment(object):
                 "Setting Up Configure ACM to import MCE operator cluster via Automated Way"
             )
 
-            cmd = (
-                "oc patch addondeploymentconfig hypershift-addon-deploy-config "
-                "-n multicluster-engine "
-                "--type=merge "
-                '-p \'{"spec":{"customizedVariables":[{"name":"configureMceImport","value":"true"}]}}\''
+            # Get existing customizedVariables to avoid duplicates
+            addon_deployment_config = ocp.OCP(
+                kind=constants.ADDONDEPLOYMENTCONFIG,
+                namespace=constants.MCE_NAMESPACE,
+                resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
             )
-            run_cmd(cmd=cmd)
+            existing_spec = addon_deployment_config.get()
+            existing_vars = existing_spec.get("spec", {}).get("customizedVariables", [])
+
+            # Track if we need to patch
+            needs_patch = False
+
+            # Remove duplicates by keeping only the first occurrence of each variable name
+            seen_names = set()
+            deduplicated_vars = []
+            for var in existing_vars:
+                var_name = var.get("name")
+                if var_name not in seen_names:
+                    seen_names.add(var_name)
+                    deduplicated_vars.append(var)
+                else:
+                    logger.warning(f"Removing duplicate customizedVariable: {var_name}")
+                    needs_patch = True
+
+            # Add or update configureMceImport
+            configure_mce_import_exists = False
+            for var in deduplicated_vars:
+                if var.get("name") == "configureMceImport":
+                    if var.get("value") != "true":
+                        var["value"] = "true"
+                        needs_patch = True
+                        logger.info("Updating configureMceImport to true")
+                    else:
+                        logger.info("configureMceImport is already set to true")
+                    configure_mce_import_exists = True
+                    break
+
+            if not configure_mce_import_exists:
+                deduplicated_vars.append(
+                    {"name": "configureMceImport", "value": "true"}
+                )
+                needs_patch = True
+                logger.info("Adding configureMceImport with value true")
+
+            # Only patch if changes are needed
+            if needs_patch:
+                patch_data = json.dumps(
+                    {"spec": {"customizedVariables": deduplicated_vars}}
+                )
+                cmd = (
+                    f"oc patch addondeploymentconfig hypershift-addon-deploy-config "
+                    f"-n multicluster-engine "
+                    f"--type=merge "
+                    f"-p '{patch_data}'"
+                )
+                run_cmd(cmd=cmd)
+            else:
+                logger.info(
+                    "No changes needed for hypershift-addon-deploy-config, skipping patch"
+                )
             logger.info("Sleeping for 60 Sec for Background Activity")
             time.sleep(60)
             for pod_label in [
