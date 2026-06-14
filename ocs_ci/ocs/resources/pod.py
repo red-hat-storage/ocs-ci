@@ -4408,6 +4408,23 @@ def get_ceph_csi_ctrl_pods(namespace=None):
     return ceph_csi_ctrl_pods
 
 
+def get_cephfs_nodeplugin_pods(namespace=None):
+    """
+    Fetch the CephFS CSI node plugin pod objects.
+
+    Args:
+        namespace (str): Namespace in which ceph cluster lives
+            (default: config.ENV_DATA["cluster_namespace"])
+
+    Returns:
+        list: List of Pod objects for the CephFS node plugin DaemonSet.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pods_data = get_pods_having_label(constants.CEPHFS_NODEPLUGIN_LABEL, namespace)
+    return [Pod(**pod_data) for pod_data in pods_data]
+
+
 def get_container_images(pod_obj):
     """
     Get all container images (both containers and initContainers) from the pod object
