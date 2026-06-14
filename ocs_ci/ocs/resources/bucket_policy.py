@@ -1,4 +1,3 @@
-import datetime
 import logging
 
 import boto3
@@ -193,7 +192,7 @@ def gen_bucket_policy(
     resources = list(
         map(lambda bucket_name: "arn:aws:s3:::%s" % bucket_name, resources_list)
     )
-    ver = datetime.date.today().strftime("%Y-%m-%d")
+    ver = "2012-10-17"
 
     principal = principal_property if principal_property else "Principal"
     effect = effect if effect else "Allow"
