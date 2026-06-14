@@ -4957,6 +4957,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         logger.info("Create thanos secret yaml")
         self.thanos_secret()
 
+        # Ensure we're in ACM context after thanos_secret() completes
+        # (in case context was switched during ODF bucket creation)
+        config.switch_acm_ctx()
+        logger.info("Switched to ACM context for configmap and namespace labeling")
+
         logger.info("Whitelist RBD metrics by creating configmap")
         exec_cmd(f"oc create -f {constants.OBSERVABILITYMETRICSCONFIGMAP_PATH}")
 
