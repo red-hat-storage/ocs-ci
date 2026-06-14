@@ -27,6 +27,13 @@ logger = logging.getLogger(__name__)
 class TestNoobaaDbNFSMount:
     @pytest.fixture()
     def mount_ngix_pod(self, request):
+        nfs_server = config.ENV_DATA.get("nb_nfs_server")
+        nfs_mount = config.ENV_DATA.get("nb_nfs_mount")
+        if not nfs_server or not nfs_mount:
+            pytest.skip(
+                f"NFS config not set: nb_nfs_server={nfs_server}, nb_nfs_mount={nfs_mount}"
+            )
+
         # try to mount the reesi004 nfs mount to nginx pod
         nginx_pod_data = templating.load_yaml(constants.NGINX_POD_YAML)
         nginx_pod_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
@@ -36,18 +43,15 @@ class TestNoobaaDbNFSMount:
         ] = "/var/nfs"
         nginx_pod_data["spec"]["volumes"][0]["name"] = "nfs-vol"
         nginx_pod_data["spec"]["volumes"][0]["nfs"] = dict()
-        nginx_pod_data["spec"]["volumes"][0]["nfs"]["server"] = config.ENV_DATA.get(
-            "nb_nfs_server"
-        )
-        nginx_pod_data["spec"]["volumes"][0]["nfs"]["path"] = config.ENV_DATA.get(
-            "nb_nfs_mount"
-        )
+        nginx_pod_data["spec"]["volumes"][0]["nfs"]["server"] = nfs_server
+        nginx_pod_data["spec"]["volumes"][0]["nfs"]["path"] = nfs_mount
         nginx_pod_data["spec"]["volumes"][0].pop("persistentVolumeClaim")
         nginx_pod = helpers.create_resource(**nginx_pod_data)
 
         helpers.wait_for_resource_state(
             nginx_pod,
             constants.STATUS_RUNNING,
+            timeout=300,
         )
         logger.info(f"Pod {nginx_pod.name} is created and running")
 
@@ -59,6 +63,13 @@ class TestNoobaaDbNFSMount:
 
     @pytest.fixture()
     def mount_noobaa_db_pod(self, request):
+        nfs_server = config.ENV_DATA.get("nb_nfs_server")
+        nfs_mount = config.ENV_DATA.get("nb_nfs_mount")
+        if not nfs_server or not nfs_mount:
+            pytest.skip(
+                f"NFS config not set: nb_nfs_server={nfs_server}, nb_nfs_mount={nfs_mount}"
+            )
+
         # scale down noobaa db stateful set
         helpers.modify_statefulset_replica_count(
             constants.NOOBAA_DB_STATEFULSET, replica_count=0
@@ -74,8 +85,8 @@ class TestNoobaaDbNFSMount:
         params = (
             '{"spec": {"template": {"spec": {"containers": [{"name": "db", "volumeMounts": '
             '[{"mountPath": "/var/nfs", "name": "nfs-vol"}]}], "volumes":[{"name": "nfs-vol", '
-            f'"nfs": {{"server": "{config.ENV_DATA.get("nb_nfs_server")}", '
-            f'"path": "{config.ENV_DATA.get("nb_nfs_mount")}"}}}}]}}}}}}}}'
+            f'"nfs": {{"server": "{nfs_server}", '
+            f'"path": "{nfs_mount}"}}}}]}}}}}}}}'
         )
         ocp_obj.patch(params=params, format_type="strategic")
         logger.info("Patched noobaa sts to mount nfs")
