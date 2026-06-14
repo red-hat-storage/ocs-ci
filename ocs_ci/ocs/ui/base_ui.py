@@ -767,7 +767,7 @@ class BaseUI:
 
 
         Args:
-             locator (tuple): (GUI element needs to operate on (str), type (By))
+             locator (tuple): (type (By), GUI element needs to operate on (str))
              timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
         Returns:
             bool: True if the element is found, returns False otherwise and raises NoSuchElementException
@@ -817,6 +817,29 @@ class BaseUI:
                     return True
                 except (TimeoutException, NoSuchElementException):
                     pass
+            return False
+
+    def wait_for_element_absence(self, locator, timeout=300):
+        """
+        Wait for a web element to disappear from the web console.
+
+        Args:
+            locator (tuple): (type (By), GUI element needs to operate on (str))
+            timeout (int): Maximum time in seconds to wait for the element
+                to disappear.
+
+        Returns:
+            bool: True if the element disappeared within timeout,
+                False otherwise.
+
+        """
+        try:
+            WebDriverWait(self.driver, timeout, poll_frequency=5).until_not(
+                ec.presence_of_element_located(locator)
+            )
+            return True
+        except TimeoutException:
+            logger.warning(f"Element {locator} still present after {timeout}s")
             return False
 
     def wait_for_endswith_url(self, endswith, timeout=60):
