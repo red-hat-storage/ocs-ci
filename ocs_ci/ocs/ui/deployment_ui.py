@@ -558,7 +558,7 @@ class DeploymentUI(PageNavigator):
         Verify that typing an invalid confirmation string blocks the Next
         button, then undo the checkbox.
 
-        Enables the forceful deployment checkbox, sends a random 4-7
+        Enables the forceful deployment checkbox, sends a random 5-8
         character string to the confirmation input (not ``"CONFIRM"``),
         asserts that the Next button is greyed out (the UI must reject
         the invalid key), and finally unchecks the checkbox so deployment
@@ -584,13 +584,7 @@ class DeploymentUI(PageNavigator):
             text=invalid_key,
         )
         self.take_screenshot("odf_forceful_deployment_invalid_key")
-        # The disabled attribute lives on the <button>, not the inner <span>
-        # matched by dep_loc["next"], so check the button element directly.
-        _next_btn = (
-            "button.pf-v6-c-button.pf-m-primary",
-            By.CSS_SELECTOR,
-        )
-        assert self.is_element_greyed_out(_next_btn), (
+        assert self.is_element_greyed_out(self.dep_loc["next_button_element"]), (
             "Next button should be disabled when an invalid confirmation"
             " key is typed for forceful deployment"
         )
