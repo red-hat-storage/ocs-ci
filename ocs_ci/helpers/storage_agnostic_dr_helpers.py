@@ -16,8 +16,10 @@ import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.utils import get_active_acm_index, get_non_acm_cluster_config
 from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, run_cmd
 
 logger = logging.getLogger(__name__)
@@ -731,5 +733,69 @@ def configure_ramen_hub_config(minio_endpoints):
         f" MinIO s3StoreProfile(s): "
         + ", ".join(p["s3ProfileName"] for p in new_s3_profiles)
     )
+
+    config.switch_ctx(restore_index)
+
+
+def create_dr_clusters():
+    """
+    Create a ``DRCluster`` resource on the ACM hub for every managed
+    (non-ACM) cluster and wait for each one to reach ``Validated`` status.
+
+    ``DRCluster`` objects must exist on the hub **before** the ``DRPolicy``
+    is applied.  Ramen uses them to resolve the S3 profile and validate
+    connectivity to each cluster's object store.
+
+    Each ``DRCluster`` is named after its managed cluster and references the
+    MinIO S3 profile created by :func:`configure_ramen_hub_config`.
+
+    Raises:
+        CommandFailed: if the ``oc apply`` for any DRCluster fails.
+        UnexpectedBehaviour: if a DRCluster does not reach Validated status
+            within the polling timeout.
+    """
+    from ocs_ci.helpers.dr_helpers import verify_drcluster_validated_on_hub
+
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+
+    config.switch_ctx(get_active_acm_index())
+
+    drcluster_names = []
+
+    for cluster in managed_clusters:
+        cluster_name = cluster.ENV_DATA.get(
+            "cluster_name",
+            f"cluster-{cluster.MULTICLUSTER['multicluster_index']}",
+        )
+        s3_profile_name = f"minio-s3profile-{cluster_name}"
+
+        drcluster_data = {
+            "apiVersion": "ramendr.openshift.io/v1alpha1",
+            "kind": constants.DRCLUSTER,
+            "metadata": {"name": cluster_name},
+            "spec": {
+                "s3ProfileName": s3_profile_name,
+            },
+        }
+
+        logger.info(
+            "Creating DRCluster '%s' on hub (s3ProfileName=%s)",
+            cluster_name,
+            s3_profile_name,
+        )
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
+            templating.dump_data_to_temp_yaml(drcluster_data, tmp.name)
+            run_cmd(f"oc apply -f {tmp.name}")
+
+        drcluster_names.append(cluster_name)
+
+    for name in drcluster_names:
+        logger.info("Waiting for DRCluster '%s' to reach Validated status", name)
+        retry(UnexpectedBehaviour, tries=20, delay=15, backoff=1)(
+            verify_drcluster_validated_on_hub
+        )(drcluster_name=name)
+        logger.info("DRCluster '%s' is Validated", name)
 
     config.switch_ctx(restore_index)

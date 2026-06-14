@@ -63,6 +63,7 @@ from ocs_ci.helpers.dr_helpers import (
 )
 from ocs_ci.helpers.storage_agnostic_dr_helpers import (
     configure_ramen_hub_config,
+    create_dr_clusters,
     deploy_minio,
     install_mock_storage,
     install_volsync_from_helm,
@@ -883,6 +884,8 @@ class Deployment(object):
         config.switch_acm_ctx()
 
         configure_ramen_hub_config(minio_endpoints)
+
+        create_dr_clusters()
 
         rdr_deploy.deploy_dr_policy()
 
