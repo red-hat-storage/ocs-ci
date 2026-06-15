@@ -13,6 +13,7 @@ from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import (
     exec_cmd,
+    login_to_mirror_registry,
     run_cmd,
 )
 from ocs_ci.helpers.dr_helpers import (
@@ -297,7 +298,8 @@ def mirror_rdr_images(request):
         f"imageset-config-{config.RUN['run_id']}.yaml",
     )
     templating.dump_data_to_temp_yaml(imageset_config_data, imageset_config_file)
-
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+    login_to_mirror_registry(pull_secret_path)
     cmd = (
         f"oc mirror --config {imageset_config_file} "
         f"docker://{config.DEPLOYMENT['mirror_registry']}/{config.DEPLOYMENT['mirror_registry_path']} "
