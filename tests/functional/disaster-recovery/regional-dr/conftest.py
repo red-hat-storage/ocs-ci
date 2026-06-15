@@ -1,6 +1,7 @@
 import logging
 import platform
 import os
+from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.utility import templating
 import pytest
 import time
@@ -13,7 +14,6 @@ from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import (
     exec_cmd,
-    login_to_mirror_registry,
     run_cmd,
 )
 from ocs_ci.helpers.dr_helpers import (
@@ -298,11 +298,11 @@ def mirror_rdr_images(request):
         f"imageset-config-{config.RUN['run_id']}.yaml",
     )
     templating.dump_data_to_temp_yaml(imageset_config_data, imageset_config_file)
-    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-    login_to_mirror_registry(pull_secret_path)
+    pull_secret_path = download_pull_secret()
     cmd = (
         f"oc mirror --config {imageset_config_file} "
         f"docker://{config.DEPLOYMENT['mirror_registry']}/{config.DEPLOYMENT['mirror_registry_path']} "
+        f"--authfile {pull_secret_path} "
         "--workspace file://oc-mirror-workspace/results-files --v2 --dest-tls-verify=false --src-tls-verify=false"
     )
 
