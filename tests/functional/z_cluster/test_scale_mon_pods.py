@@ -188,7 +188,9 @@ class TestFiveMonInCluster(ManageTest):
             pytest.skip("INVALID: Mon count is already above three.")
 
         # Sleep for alert generation
-        log.info(f"Waiting {ALERT_GENERATION_WAIT_TIME} seconds for alert to be generated")
+        log.info(
+            f"Waiting {ALERT_GENERATION_WAIT_TIME} seconds for alert to be generated"
+        )
         time.sleep(ALERT_GENERATION_WAIT_TIME)
 
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
@@ -220,7 +222,9 @@ class TestFiveMonInCluster(ManageTest):
             params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 5}}}}'
 
             # Negative test: Verify that monCount=4 is rejected (only 3 and 5 are valid)
-            log.info("Testing that monCount cannot be set to 4 (only 3 and 5 are valid)")
+            log.info(
+                "Testing that monCount cannot be set to 4 (only 3 and 5 are valid)"
+            )
             try:
                 self.storagecluster_obj.patch(
                     params=params_neg,
@@ -231,7 +235,9 @@ class TestFiveMonInCluster(ManageTest):
                     "Mon count should not be updatable to 4. Only values 3 and 5 are valid."
                 )
             except CommandFailed:
-                log.info("Correctly rejected mon count update to 4 (only 3 and 5 are valid)")
+                log.info(
+                    "Correctly rejected mon count update to 4 (only 3 and 5 are valid)"
+                )
 
             # Positive test: Update monCount to 5
             log.info("Updating monCount to 5")
@@ -265,7 +271,9 @@ class TestFiveMonInCluster(ManageTest):
             f"Verify that CephMonLowNumber alert got cleared post updating monCount to {self.mon_count}"
         )
         api.check_alert_cleared(
-            label=target_label, measure_end_time=measure_end_time, time_min=ALERT_CLEAR_TIMEOUT
+            label=target_label,
+            measure_end_time=measure_end_time,
+            time_min=ALERT_CLEAR_TIMEOUT,
         )
 
     @ignore_leftovers
@@ -298,7 +306,9 @@ class TestFiveMonInCluster(ManageTest):
             # See issue https://github.com/red-hat-storage/ocs-ci/issues/7760.
             nodes.restart_nodes(nodes=ocp_nodes, force="True", wait=False)
             node_names = [n.name for n in ocp_nodes]
-            wait_for_nodes_status(node_names, constants.STATUS_READY, timeout=NODE_READY_TIMEOUT)
+            wait_for_nodes_status(
+                node_names, constants.STATUS_READY, timeout=NODE_READY_TIMEOUT
+            )
         else:
             nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force="True")
 
