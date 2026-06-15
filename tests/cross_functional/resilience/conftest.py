@@ -7,8 +7,68 @@ from ocs_ci.resiliency.resiliency_helper import (
     ResiliencyConfig,
     WorkloadScalingHelper,
 )
+from ocs_ci.resiliency.resiliency_tools import (
+    CEPH_CRASH_POLL_INTERVAL,
+    CephStatusTool,
+    ceph_crash_monitor,
+    raise_if_ceph_crashes_detected,
+)
 
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture(autouse=True)
+def resiliency_test_lifecycle(request):
+    """
+    Common lifecycle for all resiliency tests in this directory.
+
+    - At test start: archive any existing Ceph crashes so the test starts clean.
+    - During the entire test: background Ceph crash monitor every CEPH_CRASH_POLL_INTERVAL s.
+    - finalizer: fail if Ceph crashes were introduced during the test.
+    """
+    try:
+        ceph_status = CephStatusTool()
+        ceph_status.archive_ceph_crashes()
+        log.info(
+            "Resiliency test lifecycle: archived pre-existing Ceph crashes (baseline)"
+        )
+    except Exception as e:
+        log.warning(
+            "Resiliency test lifecycle: could not archive pre-existing Ceph crashes: %s",
+            e,
+        )
+
+    def _resiliency_finalizer():
+        config = ResiliencyConfig()
+        if not config.stop_when_ceph_crashed:
+            return
+        try:
+            raise_if_ceph_crashes_detected(
+                CephStatusTool(),
+                "resiliency test finalizer",
+                poll_interval=0,
+            )
+        except AssertionError:
+            raise
+        except Exception as e:
+            log.warning(
+                "Resiliency test lifecycle: could not run Ceph crash finalizer: %s",
+                e,
+            )
+
+    request.addfinalizer(_resiliency_finalizer)
+
+    config = ResiliencyConfig()
+    with ceph_crash_monitor(
+        enabled=config.stop_when_ceph_crashed,
+        context="resiliency test",
+    ):
+        log.info(
+            "Resiliency test lifecycle: background Ceph crash monitor active "
+            "for entire test (every %ss, including workload setup)",
+            CEPH_CRASH_POLL_INTERVAL,
+        )
+        yield
 
 
 @pytest.fixture

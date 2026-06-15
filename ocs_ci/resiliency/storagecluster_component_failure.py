@@ -2,7 +2,10 @@ import logging
 import random
 
 from ocs_ci.helpers.disruption_helpers import Disruptions
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.resiliency.resiliency_tools import (
+    CephStatusTool,
+    raise_if_ceph_crashes_detected,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +63,18 @@ class StorageClusterComponentFailures:
             iterations (int): How many times to run the scenario
         """
         logger.info(f" Starting {self.SCENARIO_NAME} for {iterations} iterations")
+        from ocs_ci.resiliency.resiliency_helper import ResiliencyConfig
+
+        resiliency_config = ResiliencyConfig()
+        ceph_tool = CephStatusTool()
 
         for i in range(1, iterations + 1):
+            if resiliency_config.stop_when_ceph_crashed:
+                raise_if_ceph_crashes_detected(
+                    ceph_tool,
+                    f"{self.SCENARIO_NAME} iteration {i}/{iterations}",
+                    poll_interval=0,
+                )
             logger.info(f"--- Iteration {i}/{iterations} ---")
 
             # Select method and resource

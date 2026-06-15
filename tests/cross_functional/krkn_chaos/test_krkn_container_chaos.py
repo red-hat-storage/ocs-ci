@@ -116,7 +116,6 @@ class TestKrKnContainerChaosScenarios:
                 kill_signal=kill_signal,
                 count=1,
                 expected_recovery_time=120,
-                container_name="",  # Leave blank to target all containers
             )
 
             # Log scenario details using helper function

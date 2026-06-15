@@ -19,6 +19,8 @@ from ocs_ci.ocs.constants import (
     CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
     # Container chaos specific labels
     NOOBAA_APP_LABEL,
+    NOOBAA_CORE_POD_LABEL,
+    NOOBAA_ENDPOINT_POD_LABEL,
     # Platform constants
     AWS_PLATFORM,
     ROSA_PLATFORM,
@@ -53,12 +55,18 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import (
     HogScenarios,
     PodScenarios,
     NodeScenarios,
+    convert_signal_to_number,
 )
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.resiliency.resiliency_tools import CephStatusTool, CEPH_CRASH_POLL_INTERVAL
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import ceph_crash_info_display
+from ocs_ci.utility.utils import format_ceph_crash_summary_lines
 
 log = logging.getLogger(__name__)
+
+# Krkn output.log [ERROR] lines that must not fail the test (known benign messages).
+KRKN_OUTPUT_IGNORED_ERROR_MESSAGES = (
+    "Post scenarios are still failing at the end of all iterations",
+)
 
 # ============================================================================
 # PLATFORM DETECTION HELPER CLASS
@@ -206,8 +214,25 @@ class BaseScenarioHelper:
         "rbd-ctrlplugin": CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
         # Rook Operator
         "rook-operator": OPERATOR_LABEL,
-        # NooBaa
+        # NooBaa (avoid broad app=noobaa for chaos; legacy key retained for callers)
         "noobaa": NOOBAA_APP_LABEL,
+        "noobaa-core": NOOBAA_CORE_POD_LABEL,
+        "noobaa-endpoint": NOOBAA_ENDPOINT_POD_LABEL,
+    }
+
+    # Primary workload container per component (avoids killing random sidecars).
+    COMPONENT_PRIMARY_CONTAINERS = {
+        "cephfs-nodeplugin": "csi-cephfsplugin",
+        "mgr": "mgr",
+        "rbd-nodeplugin": "csi-rbdplugin",
+        "rgw": "rgw",
+        "noobaa-core": "noobaa-core",
+        "noobaa-endpoint": "noobaa-endpoint",
+        "cephfs-ctrlplugin": "csi-cephfsplugin",
+        "rbd-ctrlplugin": "csi-rbdplugin",
+        "mon": "mon",
+        "mds": "mds",
+        "osd": "osd",
     }
 
     # Component criticality mapping - for chaos testing approach, not exclusion
@@ -297,6 +322,10 @@ class BaseScenarioHelper:
             )
         elif "rook-operator" in label_selector:
             return "rook-operator"
+        elif "noobaa-core" in label_selector:
+            return "noobaa-core"
+        elif "noobaa-s3" in label_selector:
+            return "noobaa-endpoint"
         else:
             return "unknown"
 
@@ -344,8 +373,12 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             "description": "RGW (RADOS Gateway)",
         },
         {
-            "name": "noobaa",
-            "description": "NooBaa",
+            "name": "noobaa-core",
+            "description": "NooBaa Core",
+        },
+        {
+            "name": "noobaa-endpoint",
+            "description": "NooBaa Endpoint",
         },
         {
             "name": "cephfs-ctrlplugin",
@@ -356,8 +389,18 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             "description": "RBD Control Plugin",
         },
         {
+            "name": "mon",
+            "description": "MON",
+            "count": 1,
+        },
+        {
+            "name": "mds",
+            "description": "MDS",
+        },
+        {
             "name": "osd",
             "description": "OSD",
+            "expected_recovery_time": 300,
         },
     ]
 
@@ -381,7 +424,8 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             kill_signal (str): Kill signal to use (default: "SIGKILL")
             count (int): Number of containers to kill (default: 1)
             expected_recovery_time (int): Expected recovery time in seconds (default: 120)
-            container_name (str): Specific container name (default: "" for all containers)
+            container_name (str): Override container name for all scenarios when non-empty;
+                otherwise each component uses COMPONENT_PRIMARY_CONTAINERS (recommended).
             components (list): List of component configs to use (default: all components)
 
         Returns:
@@ -389,6 +433,9 @@ class ContainerScenarioHelper(BaseScenarioHelper):
         """
         if components is None:
             components = self.DEFAULT_COMPONENTS
+
+        # Convert signal name to number
+        kill_signal_number = convert_signal_to_number(kill_signal)
 
         scenarios = []
         for component in components:
@@ -399,14 +446,21 @@ class ContainerScenarioHelper(BaseScenarioHelper):
                     f"No label selector found for component: {component['name']}"
                 )
                 continue
+            resolved_container = component.get("container_name") or container_name
+            if not resolved_container:
+                resolved_container = self.COMPONENT_PRIMARY_CONTAINERS.get(
+                    component["name"], ""
+                )
             scenario = {
                 "name": f"{component['name'].replace('-', '_')}_{kill_signal.lower()}_kill",
                 "namespace": namespace,
                 "label_selector": label_selector,
-                "container_name": container_name,
-                "kill_signal": kill_signal,
-                "count": count,
-                "expected_recovery_time": expected_recovery_time,
+                "container_name": resolved_container,
+                "kill_signal": kill_signal_number,
+                "count": component.get("count", count),
+                "expected_recovery_time": component.get(
+                    "expected_recovery_time", expected_recovery_time
+                ),
                 "description": component["description"],
             }
             scenarios.append(scenario)
@@ -480,6 +534,7 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             for scenario in scenarios:
                 self.log.info(
                     f"   • {scenario['name']}: {scenario['label_selector']}\n"
+                    f"     - Container: {scenario['container_name']}\n"
                     f"     - Kill signal: {scenario['kill_signal']}\n"
                     f"     - Target count: {scenario['count']}\n"
                     f"     - Recovery time: {scenario['expected_recovery_time']}s"
@@ -1032,30 +1087,6 @@ class NetworkScenarioHelper(BaseScenarioHelper):
         # For other patterns, return the app value or a simplified version
         return app_value.lower()
 
-    def is_critical_component(self, component_name):
-        """
-        Determine if a Ceph component should receive conservative chaos testing.
-
-        In chaos engineering, ALL components should be tested under chaotic conditions
-        to discover weaknesses and improve system resilience. This method always returns
-        False to ensure all components receive the same level of chaos testing intensity.
-
-        Args:
-            component_name (str): Component name (e.g., "mon", "mgr", "osd")
-
-        Returns:
-            bool: Always False - all components should experience full chaos testing
-        """
-        # In true chaos engineering spirit, no component is exempt from chaos!
-        # All components (mon, mgr, mds, osd, rgw, tools, etc.) should be tested
-        # under chaotic conditions to validate system resilience and discover
-        # potential failure modes.
-
-        self.log.debug(
-            f"Component '{component_name}' will receive full chaos testing intensity"
-        )
-        return False
-
 
 # ============================================================================
 # HOG SCENARIO HELPER CLASS
@@ -1222,8 +1253,6 @@ class NetworkPortHelper(BaseScenarioHelper):
 
             # Filter out ephemeral virtual interfaces that may disappear
             # These typically have patterns like: xxxxx@ifX, xxxxx@ens3, etc.
-            import re
-
             stable_interfaces = []
             for iface in all_interfaces:
                 # Skip interfaces with @ symbol (virtual/ephemeral interfaces)
@@ -1755,6 +1784,7 @@ class KrknResultAnalyzer(BaseScenarioHelper):
 
         filtered_errors = []
         cleanup_errors = []
+        ignored_errors = []
 
         # Network cleanup error patterns (tracked separately for informational purposes)
         cleanup_error_patterns = [
@@ -1767,23 +1797,45 @@ class KrknResultAnalyzer(BaseScenarioHelper):
         for error in detected_errors:
             is_false_positive = False
             is_cleanup_error = False
+            is_ignored = False
 
-            # Check if this is a cleanup-related error
-            for cleanup_pattern in cleanup_error_patterns:
-                if re.search(cleanup_pattern, error["context"], re.IGNORECASE):
-                    is_cleanup_error = True
-                    cleanup_errors.append(error)
+            # Known benign Krkn messages (e.g. post-scenario checks after iterations)
+            for ignored_msg in KRKN_OUTPUT_IGNORED_ERROR_MESSAGES:
+                if ignored_msg.lower() in error["match"].lower():
+                    is_ignored = True
+                    ignored_errors.append(error)
                     break
 
+            # Check if this is a cleanup-related error
+            if not is_ignored:
+                for cleanup_pattern in cleanup_error_patterns:
+                    if re.search(cleanup_pattern, error["context"], re.IGNORECASE):
+                        is_cleanup_error = True
+                        cleanup_errors.append(error)
+                        break
+
             # Check if this is a false positive
-            if not is_cleanup_error:
+            if not is_cleanup_error and not is_ignored:
                 for fp_pattern in false_positive_patterns:
                     if re.search(fp_pattern, error["context"], re.IGNORECASE):
                         is_false_positive = True
                         break
 
-            if not is_false_positive and not is_cleanup_error:
+            if not is_false_positive and not is_cleanup_error and not is_ignored:
                 filtered_errors.append(error)
+
+        if ignored_errors:
+            self.log.info(
+                "Ignoring %s known non-fatal Krkn output error(s) for %s %s",
+                len(ignored_errors),
+                component_name,
+                test_type,
+            )
+            for error in ignored_errors:
+                self.log.info(
+                    "   Ignored Krkn output: %s",
+                    error["match"].strip(),
+                )
 
         # Log cleanup errors as warnings (non-critical)
         if cleanup_errors:
@@ -1826,13 +1878,21 @@ class KrknResultAnalyzer(BaseScenarioHelper):
 
             raise AssertionError(error_summary)
         else:
+            ignored_note = (
+                f", {len(ignored_errors)} ignored known message(s)"
+                if ignored_errors
+                else ""
+            )
             if cleanup_errors:
                 success_msg = (
                     f"No critical errors detected in Krkn output for {component_name} {test_type} "
-                    f"({len(cleanup_errors)} non-critical cleanup errors filtered)"
+                    f"({len(cleanup_errors)} non-critical cleanup errors filtered{ignored_note})"
                 )
             else:
-                success_msg = f"No error messages detected in Krkn output for {component_name} {test_type}"
+                success_msg = (
+                    f"No error messages detected in Krkn output for {component_name} "
+                    f"{test_type}{ignored_note}"
+                )
             self.log.info(success_msg)
 
     def validate_krkn_execution_with_error_check(
@@ -2136,45 +2196,18 @@ class CephHealthHelper(BaseScenarioHelper):
                 return True, ""
             else:
                 self.log.error("❌ Ceph crashes detected")
-                # Same as resiliency: log each crash ID and `ceph crash info <id>` output
-                try:
-                    self.log.error(
-                        "Ceph crash details (ceph crash info <crash_id>), "
-                        "same as resiliency ceph_crash_info_display:"
-                    )
-                    ceph_crash_info_display(ceph_status.toolbox)
-                except Exception as disp_ex:
-                    self.log.warning(
-                        "Could not run ceph_crash_info_display on toolbox: %s", disp_ex
-                    )
-                # Get detailed crash information for logging and error message
+                # check_ceph_crashes() already logged ceph crash info for every crash.
                 error_msg = (
                     f"Ceph crashes detected after {component_label} {chaos_type}. "
                 )
                 try:
                     crashes = ceph_status.get_ceph_crashes()
                     if crashes:
-                        self.log.error(f"Found {len(crashes)} Ceph crashes:")
                         error_msg += f"Found {len(crashes)} crash(es):\n"
-                        for i, crash in enumerate(
-                            crashes[:5], 1
-                        ):  # Show first 5 crashes
-                            crash_id = crash.get("crash_id", "unknown")
-                            timestamp = crash.get("timestamp", "unknown")
-                            entity = crash.get("entity_name", "unknown")
-                            self.log.error(
-                                f"   {i}. Crash ID: {crash_id}, Entity: {entity}, Time: {timestamp}"
-                            )
-                            error_msg += f"  {i}. Crash ID: {crash_id}, Entity: {entity}, Time: {timestamp}\n"
-
-                        if len(crashes) > 5:
-                            remaining = len(crashes) - 5
-                            self.log.error(f"   ... and {remaining} more crashes")
-                            error_msg += f"  ... and {remaining} more crash(es)\n"
-
+                        error_msg += "\n".join(format_ceph_crash_summary_lines(crashes))
                         error_msg += (
-                            "\nFull `ceph crash info <crash_id>` output was logged above "
-                            "(same as resiliency ceph_crash_info_display)."
+                            "\n\nFull ``ceph crash info <crash_id>`` output was logged "
+                            "above for every crash."
                         )
                     else:
                         error_msg += "Unable to retrieve crash details."
@@ -2186,8 +2219,41 @@ class CephHealthHelper(BaseScenarioHelper):
 
         except Exception as e:
             self.log.error(f"Failed to check Ceph crashes: {e}")
-            # In case of check failure, assume no crashes (conservative approach)
-            return True, ""
+            return False, f"Failed to check Ceph crashes: {e}"
+
+
+def raise_if_ceph_crashes_detected(
+    health_helper,
+    component_label,
+    chaos_type,
+    poll_interval=CEPH_CRASH_POLL_INTERVAL,
+):
+    """
+    Run a Ceph crash check and raise AssertionError when any crash is found.
+
+    Used by krkn/krknctl wait loops so tests fail promptly and collect evidence
+    (must-gather) instead of continuing until chaos finishes.
+
+    Args:
+        health_helper (CephHealthHelper): Helper bound to the storage namespace.
+        component_label: Component label for log context (may be None).
+        chaos_type (str): Chaos context for log messages.
+        poll_interval (int): Interval in seconds (for error message only).
+
+    Raises:
+        AssertionError: If Ceph crash(es) are detected or the check itself fails.
+    """
+    no_crashes, crash_details = health_helper.check_ceph_crashes(
+        component_label, chaos_type
+    )
+    if no_crashes:
+        return
+    details = crash_details or "Ceph crash detected (details unavailable)"
+    raise AssertionError(
+        f"Periodic Ceph crash check failed (every {poll_interval} s). "
+        f"Ceph crash detected during {chaos_type}; failing test to generate evidence.\n"
+        f"{details}"
+    )
 
 
 def _krkn_should_run_noobaa_health_check():
@@ -2475,7 +2541,7 @@ class ValidationHelper(BaseScenarioHelper):
             no_crashes, ceph_crash_details = health_helper.check_ceph_crashes(
                 component_name, test_type
             )
-            if not no_crashes and ceph_crash_details:
+            if not no_crashes:
                 self.log.error(
                     f"Ceph crash check (before reporting failure): {ceph_crash_details}"
                 )

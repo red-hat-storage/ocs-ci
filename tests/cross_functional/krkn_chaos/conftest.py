@@ -15,13 +15,17 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import run_cmd, download_with_retries
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.resiliency.resiliency_tools import (
+    CEPH_CRASH_POLL_INTERVAL,
+    CephStatusTool,
+    ceph_crash_monitor,
+)
 from ocs_ci.krkn_chaos.krkn_helpers import CephHealthHelper
+from ocs_ci.krkn_chaos.krkn_config_generator import ensure_krkn_resiliency_support_files
 from ocs_ci.ocs import constants
 
 from contextlib import suppress
 
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +44,8 @@ def krkn_chaos_test_lifecycle(request):
     Common lifecycle for all Krkn chaos tests in this directory.
 
     - At test start: archive any existing Ceph crashes so the test starts from a clean baseline.
+    - During the entire test (workload setup, krkn/krknctl run, teardown): background
+      Ceph crash monitor checks every CEPH_CRASH_POLL_INTERVAL seconds.
     - finalizer: check for Ceph crashes introduced during the test; log them and raise AssertionError if any are found.
 
     Extend this fixture's setup/finalizer when adding more shared behavior for
@@ -67,9 +73,10 @@ def krkn_chaos_test_lifecycle(request):
             no_crashes, crash_details = health_helper.check_ceph_crashes(
                 None, "chaos test"
             )
-            if not no_crashes and crash_details:
-                log.error("Ceph crashes detected during chaos test:\n%s", crash_details)
-                raise AssertionError(crash_details)
+            if not no_crashes:
+                details = crash_details or "Ceph crash detected (details unavailable)"
+                log.error("Ceph crashes detected during chaos test:\n%s", details)
+                raise AssertionError(details)
         except AssertionError:
             raise
         except Exception as e:
@@ -79,6 +86,14 @@ def krkn_chaos_test_lifecycle(request):
             )
 
     request.addfinalizer(_krkn_chaos_finalizer)
+
+    with ceph_crash_monitor(enabled=True, context="krkn chaos test"):
+        log.info(
+            "Krkn chaos test lifecycle: background Ceph crash monitor active "
+            "for entire test (every %ss, including workload setup)",
+            CEPH_CRASH_POLL_INTERVAL,
+        )
+        yield
 
 
 @pytest.fixture(scope="session")
@@ -178,6 +193,8 @@ def krkn_setup():
     log.info("  - Krkn directory: %s", KRKN_DIR)
     log.info("  - Krkn venv: %s", krkn_venv)
     log.info("  - Krkn run script: %s", krkn_run_script)
+
+    ensure_krkn_resiliency_support_files()
 
 
 @pytest.fixture(scope="session")
@@ -332,50 +349,6 @@ def krkn_scenario_directory():
     return dir_path
 
 
-class WorkloadOps:
-    """
-    Helper to manage VDBENCH workloads life cycle (create -> validate -> cleanup).
-    """
-
-    def __init__(self, proj_obj, workloads):
-        self.proj_obj = proj_obj
-        self.workloads = workloads
-
-    @property
-    def namespace(self):
-        return self.proj_obj.namespace
-
-    def validate_and_cleanup(self):
-        """
-        Validate workload results and stop/cleanup all workloads.
-        """
-        validation_errors = []
-        for workload in self.workloads:
-            try:
-                result = workload.workload_impl.get_all_deployment_pod_logs()
-                workload.stop_workload()
-
-                if not result:
-                    validation_errors.append(
-                        f"Workload {workload.workload_impl.deployment_name} returned no logs after network outage"
-                    )
-                elif "error" in result.lower():
-                    validation_errors.append(
-                        f"Workload {workload.workload_impl.deployment_name} failed after network outage"
-                    )
-
-                workload.cleanup_workload()
-
-            except UnexpectedBehaviour as e:
-                validation_errors.append(
-                    f"Failed to get results for workload {workload.workload_impl.deployment_name}: {e}"
-                )
-
-        if validation_errors:
-            log.error("Workload validation errors:\n" + "\n".join(validation_errors))
-            pytest.fail("Workload validation failed.")
-
-
 @pytest.fixture
 def workload_ops(request, project_factory, multi_pvc_factory, storageclass_factory):
     """
@@ -510,6 +483,8 @@ def workload_ops(request, project_factory, multi_pvc_factory, storageclass_facto
     finally:
         # Best-effort cleanup if the test aborted before calling validate_and_cleanup
         log.info("Performing best-effort workload cleanup")
+        with suppress(Exception):
+            ops._stop_rgw_background_provisioner()
         for w in ops.workloads:
             with suppress(Exception):
                 if hasattr(w, "stop_workload"):

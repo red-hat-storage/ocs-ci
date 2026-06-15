@@ -24,6 +24,10 @@ from ocs_ci.resiliency.network_faults import NetworkFaults
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.resiliency.resiliency_tools import (
+    CephStatusTool,
+    raise_if_ceph_crashes_detected,
+)
 
 log = logging.getLogger(__name__)
 
@@ -61,10 +65,20 @@ class PlatformFailures(PlatformNodesFactory):
         one-by-one using a stop-and-start mechanism.
         """
         log.info("Running Failure Case: PLATFORM_INSTANCE_FAILURES.")
+        from ocs_ci.resiliency.resiliency_helper import ResiliencyConfig
+
         available_nodes = self.nodes.copy()
         random.shuffle(available_nodes)
+        resiliency_config = ResiliencyConfig()
+        ceph_tool = CephStatusTool()
 
         for i, node in enumerate(available_nodes, start=1):
+            if resiliency_config.stop_when_ceph_crashed:
+                raise_if_ceph_crashes_detected(
+                    ceph_tool,
+                    f"PLATFORM_INSTANCE_FAILURES before node {node.name}",
+                    poll_interval=0,
+                )
             log.info(f"Iteration {i}: Restarting node {node.name}")
             self.platform_node_obj.restart_nodes_by_stop_and_start([node])
 

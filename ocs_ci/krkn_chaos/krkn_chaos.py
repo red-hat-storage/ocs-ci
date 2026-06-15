@@ -10,6 +10,7 @@ import yaml
 
 from ocs_ci.ocs.constants import (
     HCI_VSPHERE,
+    KRKN_DIR,
     KRKN_OUTPUT_DIR,
     KRKN_RUN_CMD,
     KRKNCTL,
@@ -606,6 +607,7 @@ class KrKnRunner:
                     stderr=subprocess.PIPE,
                     text=True,
                     env=env,
+                    cwd=KRKN_DIR,
                 )
 
                 # CRITICAL FIX: Add timeout to prevent infinite blocking
@@ -674,13 +676,16 @@ class KrKnRunner:
                         error_msg += f"\nConfig file: {self.krkn_config}"
 
                         if attempt == max_retries - 1:
-                            # Final attempt failed - log warning instead of raising
-                            log.warning(
-                                "Krkn command failed (non-zero exit code). "
-                                "Treating as warning and continuing: %s",
+                            log.error(
+                                "Krkn command failed after %d attempts "
+                                "(non-zero exit code): %s",
+                                max_retries,
                                 error_msg,
                             )
-                            return
+                            raise CommandFailed(
+                                f"Krkn command failed after {max_retries} "
+                                f"attempts: {error_msg}"
+                            )
                         else:
                             # Log error but continue retrying
                             log.warning(f"Attempt {attempt + 1} failed: {error_msg}")
@@ -693,12 +698,15 @@ class KrKnRunner:
 
             except Exception as e:
                 if attempt == max_retries - 1:
-                    # Final attempt failed - log warning instead of raising
-                    log.warning(
-                        "Failed to run Krkn command. Treating as warning and continuing: %s",
+                    log.error(
+                        "Krkn command failed after %d attempts: %s",
+                        max_retries,
                         str(e),
                     )
-                    return
+                    raise CommandFailed(
+                        f"Krkn command failed after {max_retries} "
+                        f"attempts: {str(e)}"
+                    )
                 else:
                     # Log error but continue retrying
                     log.warning(
@@ -718,7 +726,30 @@ class KrKnRunner:
         """Check if the Krkn process is still running."""
         return self.process and self.process.poll() is None
 
-    def wait_for_completion(self, check_interval=30, max_wait_time=None):
+    def _terminate_krkn_process(self):
+        """Stop the Krkn subprocess after an early abort (e.g. Ceph crash detected)."""
+        if self.process is None or self.process.poll() is not None:
+            return
+        log.warning("Terminating Krkn subprocess after Ceph crash detection")
+        try:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                log.warning("Krkn did not exit after SIGTERM; sending SIGKILL")
+                self.process.kill()
+                self.process.wait(timeout=15)
+        except Exception as ex:
+            log.warning("Error terminating Krkn process: %s", ex)
+
+    def wait_for_completion(
+        self,
+        check_interval=30,
+        max_wait_time=None,
+        ceph_crash_check_interval=180,
+        namespace=None,
+        chaos_context="krkn chaos",
+    ):
         """
         Wait for Krkn to complete, checking status every `check_interval` seconds.
 
@@ -727,13 +758,52 @@ class KrKnRunner:
             max_wait_time (int): Maximum time to wait in seconds. If None, waits indefinitely
                                 until completion is detected or thread exception occurs.
                                 This is recommended for large scenario sets.
+            ceph_crash_check_interval (int): Seconds between periodic Ceph crash checks
+                during the wait loop (default 180). Set to 0 to disable.
+            namespace (str, optional): OpenShift namespace for Ceph crash checks.
+            chaos_context (str): Context string for crash-check log messages.
 
         Raises:
             CommandFailed: If the Krkn thread encountered an exception.
+            AssertionError: If a Ceph crash is detected during periodic checks.
         """
+        from ocs_ci.krkn_chaos.krkn_helpers import (
+            CephHealthHelper,
+            raise_if_ceph_crashes_detected,
+        )
+        from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
+
+        if namespace is None:
+            namespace = OPENSHIFT_STORAGE_NAMESPACE
+
+        health_helper = (
+            CephHealthHelper(namespace=namespace) if ceph_crash_check_interval else None
+        )
         start_time = time.time()
+        last_ceph_check_time = 0.0
 
         while self.thread.is_alive():
+            if (
+                health_helper
+                and ceph_crash_check_interval
+                and (time.time() - last_ceph_check_time) >= ceph_crash_check_interval
+            ):
+                last_ceph_check_time = time.time()
+                try:
+                    raise_if_ceph_crashes_detected(
+                        health_helper,
+                        None,
+                        f"{chaos_context} (periodic check every {ceph_crash_check_interval} s)",
+                        poll_interval=ceph_crash_check_interval,
+                    )
+                    log.info(
+                        "Krkn wait loop: periodic Ceph crash check passed; "
+                        "next check in %ss",
+                        ceph_crash_check_interval,
+                    )
+                except AssertionError:
+                    self._terminate_krkn_process()
+                    raise
             # Check for thread exceptions during execution
             if self.thread_exception:
                 log.error("Krkn thread encountered an exception")
@@ -835,6 +905,14 @@ class KrKnRunner:
         if self.thread_exception:
             log.error("Krkn thread completed with an exception")
             raise self.thread_exception
+
+        if health_helper and ceph_crash_check_interval:
+            raise_if_ceph_crashes_detected(
+                health_helper,
+                None,
+                f"{chaos_context} (final check after krkn exit)",
+                poll_interval=ceph_crash_check_interval,
+            )
 
         if self._completed_due_to_failure:
             log.info(
