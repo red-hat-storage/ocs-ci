@@ -164,30 +164,80 @@ class VSPHEREBASE(Deployment):
         self.wait_time = 90
         self.infra_id = None
 
-    def attach_disk(
-        self,
-        size=100,
-        disk_type=constants.VM_DISK_TYPE,
-        ssd=False,
-        include_masters=False,
-    ):
+    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE, ssd=False):
         """
-        Add a new disk to worker nodes (and optionally master nodes).
+        Add a new disk to all the workers nodes.
+
+        Supports varied disk sizes for DFBUGS-2885 stretch cluster testing.
 
         Args:
             size (int): Size of disk in GB (default: 100)
+            disk_type (str): Disk provisioning type
             ssd (bool): if True, mark disk as SSD
-            include_masters (bool): if True, also add disks to control-plane VMs
-
         """
+        from ocs_ci.deployment.helpers.stretch_cluster_disk_helpers import (
+            should_use_varied_disk_sizes,
+            get_disk_sizes_for_deployment,
+            log_disk_configuration_for_stretch_cluster,
+        )
+
         vms = self.vsphere.get_all_vms_in_pool(
             config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
         )
-        for vm in vms:
-            if "compute" in vm.name or (include_masters and "control-plane" in vm.name):
-                self.vsphere.add_disks_with_same_size(
-                    config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type, ssd
+
+        use_varied_sizes = should_use_varied_disk_sizes()
+
+        if use_varied_sizes:
+            log_disk_configuration_for_stretch_cluster()
+            disk_sizes = get_disk_sizes_for_deployment(size)
+            num_disks = config.ENV_DATA.get("extra_disks", 1)
+
+            # FIX: Sort compute VMs by name so zone assignment is deterministic.
+            # VM names follow the pattern compute-0, compute-1, … compute-N.
+            # The disk_sizes list is ordered zone-1-node-0 … zone-2-node-K,
+            # matching sorted VM order.
+            compute_vms = sorted(
+                [vm for vm in vms if "compute" in vm.name],
+                key=lambda vm: vm.name,
+            )
+
+            disk_index = 0
+            for vm in compute_vms:
+                vm_disk_sizes = disk_sizes[disk_index : disk_index + num_disks]
+
+                if not vm_disk_sizes:
+                    logger.warning(
+                        f"No disk sizes left for {vm.name} "
+                        f"(disk_index={disk_index}, total={len(disk_sizes)}). "
+                        f"Falling back to base size {size}GB."
+                    )
+                    vm_disk_sizes = [size] * num_disks
+
+                logger.info(
+                    f"Adding {len(vm_disk_sizes)} disk(s) to {vm.name} "
+                    f"with sizes: {vm_disk_sizes}GB "
+                    f"(varied for DFBUGS-2885 testing)"
                 )
+
+                # FIX: Use add_disks_with_same_size per disk to avoid
+                # signature mismatch with add_disks().
+                for disk_size in vm_disk_sizes:
+                    self.vsphere.add_disks_with_same_size(
+                        1, vm, disk_size, disk_type, ssd
+                    )
+
+                disk_index += num_disks
+        else:
+            # Original behavior: add disks with same size
+            for vm in vms:
+                if "compute" in vm.name:
+                    self.vsphere.add_disks_with_same_size(
+                        config.ENV_DATA.get("extra_disks", 1),
+                        vm,
+                        size,
+                        disk_type,
+                        ssd,
+                    )
 
     def add_nodes(self):
         """

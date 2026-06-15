@@ -1,0 +1,15 @@
+---
+# Configuration overlay for DFBUGS-2885 verification
+# Use this with: conf/deployment/vsphere/upi_1az_rhcos_vsan_lso_vmdk_3m_6w_arbiter.yaml
+#
+# Run:
+#   run-ci --conf conf/deployment/vsphere/upi_1az_rhcos_vsan_lso_vmdk_3m_6w_arbiter.yaml \
+#          --conf conf/ocsci/dfbugs_2885_stretch_cluster_varied_disks.yaml \
+#          tests/functional/disaster-recovery/sc_arbiter/test_crush_weight_balance.py
+
+ENV_DATA:
+  # Enable varied disk sizes for DFBUGS-2885 testing
+  use_varied_disk_sizes_for_stretch: true
+
+  # Percentage variation for disk sizes (default: 2%)
+  disk_size_variation_percent: 2.0
