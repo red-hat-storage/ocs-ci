@@ -301,7 +301,7 @@ def mirror_rdr_images(request):
     cmd = (
         f"oc mirror --config {imageset_config_file} "
         f"docker://{config.DEPLOYMENT['mirror_registry']} "
-        "--workspace file://oc-mirror-workspace/results-files --v2"
+        "--workspace file://oc-mirror-workspace/results-files --v2 --dest-tls-verify=false --src-tls-verify=false"
     )
 
     try:
