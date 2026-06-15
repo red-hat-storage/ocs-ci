@@ -1,0 +1,3 @@
+# Z-stream agent run outputs (logs, issue JSON per run)
+agents/zstream/run_record/*
+!agents/zstream/run_record/.gitkeep

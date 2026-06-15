@@ -1,0 +1,2 @@
+# Optional dependencies for z-stream Claude agent stages
+claude-agent-sdk>=0.1.0
