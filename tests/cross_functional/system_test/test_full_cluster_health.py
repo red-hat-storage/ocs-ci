@@ -193,7 +193,7 @@ class TestFullClusterHealth(PASTest):
             timeout=300,
         )
 
-    def is_cluster_healthy(self, timeout):
+    def is_cluster_healthy(self):
         """
         Wrapper function for cluster health check
 
@@ -202,12 +202,7 @@ class TestFullClusterHealth(PASTest):
         """
         start_time = time.time()
 
-        if timeout is None:
-            timeout = self.TIMEOUT_POD_RUNNING
-
-        result = self.ceph_not_health_error() and pod.wait_for_pods_to_be_running(
-            timeout=timeout
-        )
+        result = self.ceph_not_health_error() and pod.wait_for_pods_to_be_running()
 
         execution_time = time.time() - start_time
         logger.info(f"is_cluster_healthy took {execution_time:.2f} seconds to execute")
