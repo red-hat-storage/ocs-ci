@@ -177,8 +177,12 @@ class TestMonitorRecovery(E2ETest):
         file_path = mon_recovery.get_ceph_daemons_keyrings()
 
         logger.info("Copy the ceph daemons key ring to mon-a")
-        mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
-        mon_a = mon_pods[0]
+        mon_a = next(
+            mon
+            for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
+            if mon.get().get("metadata", {}).get("labels", {}).get("ceph_daemon_id")
+            == "a"
+        )
         logger.info(
             f"Copying the mon keyring stored locally from {file_path} to monitor: {mon_a.name}"
         )
@@ -459,8 +463,12 @@ class MonitorRecovery(object):
             mon_map_cmd (str): mon-store tool command
 
         """
-        mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
-        mon_a = mon_pods[0]
+        mon_a = next(
+            mon
+            for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
+            if mon.get().get("metadata", {}).get("labels", {}).get("ceph_daemon_id")
+            == "a"
+        )
         logger.info(f"Working on monitor: {mon_a.name}")
 
         rebuild_mon_cmd = "ceph-monstore-tool /tmp/monstore rebuild -- --keyring /tmp/keyring --monmap /tmp/monmap"
@@ -616,7 +624,7 @@ class MonitorRecovery(object):
                 elif "caps" in block:
                     caps.append(block.strip())
                 if key:
-                    logger.info(f"Found key :{key}")
+                    logger.info("Found key entry in keyring data")
                     formatted_data.append(f"    key = {key}")
                 for cap in caps:
                     logger.info(f"Found cap :{cap}")
@@ -721,8 +729,8 @@ def insert_delay(mon_dep):
     logger.info(f"Updating initialDelaySeconds on deployment: {mon_dep}")
     kubeconfig = config.RUN.get("kubeconfig")
     cmd = (
-        f"oc get --kubeconfig {kubeconfig} deployment {mon_dep} -o yaml | "
-        f'sed "s/initialDelaySeconds: 10/initialDelaySeconds: 10000/g" | oc replace -f - '
+        f"oc --kubeconfig {kubeconfig} get deployment {mon_dep} -o yaml | "
+        f'sed "s/initialDelaySeconds: 10/initialDelaySeconds: 10000/g" | oc --kubeconfig {kubeconfig} replace -f - '
     )
     logger.info(f"Executing {cmd}")
     os.system(cmd)
