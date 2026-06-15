@@ -2149,7 +2149,6 @@ DEPLOYMENT_TYPES = [IPI_DEPL_TYPE, UPI_DEPL_TYPE, MANAGED_DEPL_TYPE, LOCAL_DEPL_
 
 DEFAULT_AWS_REGION = "us-east-2"
 
-
 HCI_PROVIDER_CLIENT_PLATFORMS = [
     HCI_BAREMETAL,
     HCI_VSPHERE,
@@ -4312,9 +4311,6 @@ CEPH_EXPORTER_PORT = 9283  # Ceph Exporter (metrics)
 CEPH_OSD_PORT_MIN = 6800  # Ceph OSD port range start
 CEPH_OSD_PORT_MAX = 7300  # Ceph OSD port range end
 
-# IBM HCI
-IBM_HCI_RACK_DIR = os.path.join(DATA_DIR, "rack_details")
-
 MANIFEST_WORKS = "manifestworks.work.open-cluster-management.io"
 # IBM Fusion Access Operator for SAN
 TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS = os.path.join(TEMPLATE_DIR, "fusion-access")
@@ -4326,3 +4322,6 @@ FUSION_ACCESS_CR_YAML = os.path.join(
 )
 
 CONFIRM_DELETION_ANNOTATION = "uninstall.ocs.openshift.io/confirm-deletion"
+
+# IBM HCI
+IBM_HCI_RACK_DIR = os.path.join(DATA_DIR, "rack_details")
