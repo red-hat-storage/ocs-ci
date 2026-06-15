@@ -3882,7 +3882,7 @@ class HypershiftAWSNode(AWSNodes):
 
 class IBMHCINode(object):
     """
-    A base class for nodes related operations.
+    A IBMHCI class for nodes related operations.
     Should be inherited by specific platform classes
 
     """
