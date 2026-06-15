@@ -397,4 +397,3 @@ class TestFiveMonInCluster(ManageTest):
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check(tries=HEALTH_CHECK_RETRIES)
-        
