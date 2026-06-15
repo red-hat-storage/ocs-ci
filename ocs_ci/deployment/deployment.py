@@ -4933,6 +4933,12 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
         defaultstorageclass = get_default_storage_class()
 
+        if not defaultstorageclass:
+            logger.warning(
+                "No default storage class found. Skipping ACM observability enablement."
+            )
+            return
+
         logger.info(
             "Enabling ACM MultiClusterObservability for DR monitoring dashboard"
         )
