@@ -2899,7 +2899,7 @@ def create_service_exporter(annotate=True):
         else:
             logger.info("Skipping multiClusterService creation for multiclient cluster")
         logger.info("Creating Service exporter")
-        run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+        run_cmd(f"oc apply -f {constants.DR_SERVICE_EXPORTER}")
 
         if annotate:
             cluster_type = cluster.ENV_DATA.get("cluster_type", "").lower()
@@ -2924,7 +2924,7 @@ def create_service_exporter(annotate=True):
             run_cmd(
                 "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
                 f" ocs.openshift.io/api-server-exported-address={cluster_address}"
-                f"{cluster_service_export_provider_server}:{cluster_address_port}"
+                f"{cluster_service_export_provider_server}:{cluster_address_port} --overwrite"
             )
     config.switch_ctx(restore_index)
 

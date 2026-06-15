@@ -8,6 +8,7 @@ import logging
 import os
 from subprocess import PIPE, Popen
 import tempfile
+import fauxfactory
 import time
 from pathlib import Path
 import base64
@@ -2729,13 +2730,66 @@ class Deployment(object):
                 "Setting Up Configure ACM to import MCE operator cluster via Automated Way"
             )
 
-            cmd = (
-                "oc patch addondeploymentconfig hypershift-addon-deploy-config "
-                "-n multicluster-engine "
-                "--type=merge "
-                '-p \'{"spec":{"customizedVariables":[{"name":"configureMceImport","value":"true"}]}}\''
+            # Get existing customizedVariables to avoid duplicates
+            addon_deployment_config = ocp.OCP(
+                kind=constants.ADDONDEPLOYMENTCONFIG,
+                namespace=constants.MCE_NAMESPACE,
+                resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
             )
-            run_cmd(cmd=cmd)
+            existing_spec = addon_deployment_config.get()
+            existing_vars = existing_spec.get("spec", {}).get("customizedVariables", [])
+
+            # Track if we need to patch
+            needs_patch = False
+
+            # Remove duplicates by keeping only the first occurrence of each variable name
+            seen_names = set()
+            deduplicated_vars = []
+            for var in existing_vars:
+                var_name = var.get("name")
+                if var_name not in seen_names:
+                    seen_names.add(var_name)
+                    deduplicated_vars.append(var)
+                else:
+                    logger.warning(f"Removing duplicate customizedVariable: {var_name}")
+                    needs_patch = True
+
+            # Add or update configureMceImport
+            configure_mce_import_exists = False
+            for var in deduplicated_vars:
+                if var.get("name") == "configureMceImport":
+                    if var.get("value") != "true":
+                        var["value"] = "true"
+                        needs_patch = True
+                        logger.info("Updating configureMceImport to true")
+                    else:
+                        logger.info("configureMceImport is already set to true")
+                    configure_mce_import_exists = True
+                    break
+
+            if not configure_mce_import_exists:
+                deduplicated_vars.append(
+                    {"name": "configureMceImport", "value": "true"}
+                )
+                needs_patch = True
+                logger.info("Adding configureMceImport with value true")
+
+            # Only patch if changes are needed
+            if needs_patch:
+                patch_data = json.dumps(
+                    {"spec": {"customizedVariables": deduplicated_vars}}
+                )
+                cmd = (
+                    f"oc patch addondeploymentconfig hypershift-addon-deploy-config "
+                    f"-n multicluster-engine "
+                    f"--type=merge "
+                    f"-p '{patch_data}'"
+                )
+                run_cmd(cmd=cmd)
+            else:
+                logger.info(
+                    "No changes needed for hypershift-addon-deploy-config, skipping patch"
+                )
             logger.info("Sleeping for 60 Sec for Background Activity")
             time.sleep(60)
             for pod_label in [
@@ -3933,30 +3987,155 @@ class MultiClusterDROperatorsDeploy(object):
         mch_resource.wait_for_phase("Running")
         self.backup_pod_status_check()
 
+    def create_odf_bucket_and_get_credentials(self, bucket_name):
+        """
+        Create ODF ObjectBucketClaim on secondary cluster and retrieve credentials.
+
+        This helper function:
+        1. Identifies the secondary cluster
+        2. Switches context to secondary cluster
+        3. Creates an ObjectBucketClaim (OBC) using NooBaa/MCG
+        4. Waits for OBC to be bound
+        5. Retrieves bucket credentials
+        6. Switches back to original context
+
+        Args:
+            bucket_name (str): Name of the bucket to create
+
+        Returns:
+            tuple: (bucket_name, endpoint, access_key, secret_key)
+                - bucket_name (str): Actual bucket name from OBC
+                - endpoint (str): S3-compatible endpoint URL
+                - access_key (str): Access key for the bucket
+                - secret_key (str): Secret key for the bucket
+
+        Raises:
+            TimeoutError: If OBC doesn't become bound within 5 minutes
+        """
+        from ocs_ci.ocs.resources.objectbucket import OBC, MCGOCBucket
+        from ocs_ci.ocs.utils import get_secondary_cluster_config
+
+        logger.info("Creating ODF ObjectBucketClaim on secondary cluster")
+
+        # Get secondary cluster configuration
+        secondary_cluster_config = get_secondary_cluster_config()
+        secondary_cluster_name = secondary_cluster_config.ENV_DATA["cluster_name"]
+        logger.info(f"Secondary cluster identified: {secondary_cluster_name}")
+
+        # Switch to secondary cluster
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+
+        try:
+            # Create OBC using MCGOCBucket class
+            logger.info(f"Creating ObjectBucketClaim: {bucket_name}")
+            mcg_bucket = MCGOCBucket(name=bucket_name)
+
+            # Wait for OBC to be bound (max 5 minutes)
+            logger.info("Waiting for ObjectBucketClaim to be bound...")
+            for attempt in range(30):
+                try:
+                    if mcg_bucket.status == constants.HEALTHY_OBC:
+                        logger.info("ObjectBucketClaim is bound and healthy")
+                        break
+                except KeyError:
+                    logger.debug(
+                        f"OBC status not available yet, attempt {attempt + 1}/30"
+                    )
+                time.sleep(10)
+            else:
+                raise TimeoutError(
+                    f"ObjectBucketClaim {bucket_name} did not become bound within 5 minutes"
+                )
+
+            # Retrieve bucket credentials using OBC class
+            obc_obj = OBC(bucket_name)
+
+            actual_bucket_name = obc_obj.bucket_name
+            endpoint = obc_obj.s3_external_endpoint
+            access_key = obc_obj.access_key_id
+            secret_key = obc_obj.access_key
+
+            # Clean endpoint URL (remove port if present)
+            if endpoint and ":" in endpoint:
+                if "://" in endpoint:
+                    protocol, rest = endpoint.split("://", 1)
+                    host = rest.split(":")[0]
+                    endpoint = f"{protocol}://{host}"
+                else:
+                    endpoint = endpoint.split(":")[0]
+
+            logger.info(
+                f"Successfully created ODF bucket: {actual_bucket_name} @ {endpoint}"
+            )
+
+            return (actual_bucket_name, endpoint, access_key, secret_key)
+
+        finally:
+            # Always switch back to original ACM context
+            config.switch_acm_ctx()
+            logger.info("Switched back to ACM context")
+
+    def should_use_odf_bucket(self):
+        """
+        Check if ODF bucket should be used by checking use_internal_s3 across all clusters.
+
+        Returns:
+            bool: True if any cluster has use_internal_s3=True, False otherwise
+        """
+        for cluster in config.clusters:
+            if cluster.ENV_DATA.get("use_internal_s3", False):
+                logger.info(
+                    f"Found use_internal_s3=True in cluster: "
+                    f"{cluster.ENV_DATA.get('cluster_name', 'unknown')}"
+                )
+                return True
+        return False
+
     def create_s3_bucket(self, access_key, secret_key, bucket_name):
         """
-        Create s3 bucket
+        Create s3 bucket using AWS S3 or ODF ObjectBucketClaim.
+
+        If config.ENV_DATA.get('use_internal_s3') is True,
+        it will create an ODF ObjectBucketClaim from the secondary cluster
+        using the create_odf_bucket_and_get_credentials() helper.
+        Otherwise, it uses AWS S3 bucket (default behavior).
+
         Args:
-            access_key (str): S3 access key
-            secret_key (str): S3 secret key
-            acm_indexes (list): List of acm indexes
+            access_key (str): S3 access key (not used when use_internal_s3=True)
+            secret_key (str): S3 secret key (not used when use_internal_s3=True)
+            bucket_name (str): Name of the bucket to create
+
+        Returns:
+            tuple: (bucket_name, endpoint, access_key, secret_key) when use_internal_s3=True
+                   None when using AWS S3 (credentials passed as parameters)
         """
-        client = boto3.resource(
-            "s3",
-            verify=True,
-            endpoint_url="https://s3.amazonaws.com",
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-        )
-        try:
-            client.create_bucket(
-                Bucket=bucket_name,
-                CreateBucketConfiguration={"LocationConstraint": constants.AWS_REGION},
+        use_odf_bucket = self.should_use_odf_bucket()
+
+        if use_odf_bucket:
+            logger.info("Using ODF ObjectBucketClaim for backup storage")
+            return self.create_odf_bucket_and_get_credentials(bucket_name)
+        else:
+            # Default AWS S3 bucket behavior
+            logger.info("Using AWS S3 bucket for backup storage")
+            client = boto3.resource(
+                "s3",
+                verify=True,
+                endpoint_url="https://s3.amazonaws.com",
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
             )
-            logger.info(f"Successfully created backup bucket: {bucket_name}")
-        except BotoCoreError as e:
-            logger.error(f"Failed to create s3 bucket {e}")
-            raise
+            try:
+                client.create_bucket(
+                    Bucket=bucket_name,
+                    CreateBucketConfiguration={
+                        "LocationConstraint": constants.AWS_REGION
+                    },
+                )
+                logger.info(f"Successfully created backup bucket: {bucket_name}")
+            except BotoCoreError as e:
+                logger.error(f"Failed to create s3 bucket {e}")
+                raise
+            return None
 
     def build_bucket_name(self, acm_indexes):
         """
@@ -4059,7 +4238,7 @@ class MultiClusterDROperatorsDeploy(object):
         multicluster_engine.wait_for_phase("Available")
         config.switch_ctx(old_ctx)
 
-    def create_dpa(self, bucket_name):
+    def create_dpa(self, bucket_name, s3_endpoint=None):
         """
         create DPA
         OADP will be already installed when we enable backup flag
@@ -4067,12 +4246,35 @@ class MultiClusterDROperatorsDeploy(object):
         update bucket name and s3 storage link
         Args:
             bucket_name (str): Name of the Bucket
+            s3_endpoint (str, optional): S3 endpoint URL (required for ODF buckets)
         """
         oadp_data = templating.load_yaml(constants.ACM_DPA)
         oadp_data["spec"]["backupLocations"][0]["velero"]["objectStorage"][
             "bucket"
         ] = bucket_name
         oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
+
+        use_odf_bucket = self.should_use_odf_bucket()
+        if use_odf_bucket:
+            oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
+                "region"
+            ] = "noobaa"
+            oadp_data["spec"]["snapshotLocations"][0]["velero"]["config"][
+                "region"
+            ] = "noobaa"
+
+            # Set S3 endpoint URL for ODF bucket
+            if s3_endpoint:
+                oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
+                    "s3ForcePathStyle"
+                ] = "true"
+                oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
+                    "insecureSkipTLSVerify"
+                ] = "true"
+                oadp_data["spec"]["backupLocations"][0]["velero"]["config"][
+                    "s3Url"
+                ] = s3_endpoint
+                logger.info(f"Configured DPA with ODF S3 endpoint: {s3_endpoint}")
         if version.compare_versions(f"{oadp_version} >= 1.5"):
             # Remove 'restic' under 'configuration' if it exists
             oadp_data["spec"]["configuration"].pop("restic", None)
@@ -4453,15 +4655,36 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             config.switch_ctx(i)
             self.enable_cluster_backup()
         # Configuring s3 bucket
-        self.meta_obj.get_meta_access_secret_keys()
+        # Get AWS credentials only if not using internal ODF bucket
+        use_odf_bucket = self.should_use_odf_bucket()
+        if not use_odf_bucket:
+            self.meta_obj.get_meta_access_secret_keys()
+            access_key = self.meta_obj.access_key
+            secret_key = self.meta_obj.secret_key
+        else:
+            # Placeholder values for ODF - will be replaced by create_s3_bucket
+            access_key = None
+            secret_key = None
+
         # bucket name formed like '{acm_active_cluster}-{acm_passive_cluster}'
         self.meta_obj.bucket_name = self.build_bucket_name(acm_indexes)
-        # create s3 bucket
-        self.create_s3_bucket(
-            self.meta_obj.access_key,
-            self.meta_obj.secret_key,
+
+        # create s3 bucket (AWS or ODF based on use_internal_s3 config)
+        odf_credentials = self.create_s3_bucket(
+            access_key,
+            secret_key,
             self.meta_obj.bucket_name,
         )
+
+        # Use ODF credentials if returned, otherwise use AWS credentials
+        s3_endpoint = None
+        if odf_credentials:
+            bucket_name, endpoint, access_key, secret_key = odf_credentials
+            self.meta_obj.bucket_name = bucket_name
+            self.meta_obj.access_key = access_key
+            self.meta_obj.secret_key = secret_key
+            s3_endpoint = endpoint  # Store endpoint for DPA configuration
+
         self.create_generic_credentials(
             self.meta_obj.access_key, self.meta_obj.secret_key, acm_indexes
         )
@@ -4469,7 +4692,10 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Reconfigure OADP on all ACM clusters
         for i in acm_indexes:
             config.switch_ctx(i)
-            self.create_dpa(self.meta_obj.bucket_name)
+            self.create_dpa(
+                self.meta_obj.bucket_name,
+                s3_endpoint=s3_endpoint if odf_credentials else None,
+            )
 
         config.switch_acm_ctx()
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
@@ -4530,39 +4756,75 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
     def thanos_secret(self):
         """
-        Create thanos secret yaml by using Noobaa or AWS bucket (AWS bucket is used in this function)
+        Create thanos secret yaml by using Noobaa/ODF bucket or AWS bucket
 
+        If config.ENV_DATA.get('use_internal_s3') is True,
+        it will use ODF ObjectBucketClaim from secondary site using the
+        create_odf_bucket_and_get_credentials() helper function.
+        Otherwise, it uses AWS S3 bucket (default behavior).
         """
         acm_indexes = get_all_acm_indexes()
-        self.meta_obj.get_meta_access_secret_keys()
         thanos_secret_data = templating.load_yaml(constants.THANOS_PATH)
-        thanos_bucket_name = (
-            f"dr-thanos-bucket-{config.clusters[0].ENV_DATA['cluster_name']}"
-        )
-        self.create_s3_bucket(
-            self.meta_obj.access_key,
-            self.meta_obj.secret_key,
-            thanos_bucket_name,
-        )
+
+        use_odf_bucket = self.should_use_odf_bucket()
+
+        if use_odf_bucket:
+            logger.info("Using ODF ObjectBucketClaim for Thanos storage")
+
+            # Generate unique bucket name for Thanos
+            thanos_bucket_name = f"thanos-bkt-int-{fauxfactory.gen_alpha(6).lower()}"
+
+            # Use helper function to create OBC and get credentials
+            bucket_name, endpoint, access_key, secret_key = (
+                self.create_odf_bucket_and_get_credentials(thanos_bucket_name)
+            )
+
+            logger.info(
+                f"Retrieved ODF bucket credentials for Thanos: {bucket_name} @ {endpoint}"
+            )
+
+        else:
+            # Default AWS S3 bucket behavior
+            logger.info("Using AWS S3 bucket for Thanos storage")
+            self.meta_obj.get_meta_access_secret_keys()
+            thanos_bucket_name = (
+                f"dr-thanos-bucket-{config.clusters[0].ENV_DATA['cluster_name']}"
+            )
+            self.create_s3_bucket(
+                self.meta_obj.access_key,
+                self.meta_obj.secret_key,
+                thanos_bucket_name,
+            )
+            bucket_name = thanos_bucket_name
+            endpoint = "s3.amazonaws.com"
+            access_key = self.meta_obj.access_key
+            secret_key = self.meta_obj.secret_key
+
+        # Configure thanos secret with the selected bucket
         logger.info(f"ACM indexes {acm_indexes}")
         navigate_thanos_yaml = thanos_secret_data["stringData"]["thanos.yaml"]
         navigate_thanos_yaml = yaml.safe_load(navigate_thanos_yaml)
-        navigate_thanos_yaml["config"]["bucket"] = thanos_bucket_name
-        navigate_thanos_yaml["config"]["endpoint"] = "s3.amazonaws.com"
-        navigate_thanos_yaml["config"]["access_key"] = self.meta_obj.access_key
-        navigate_thanos_yaml["config"]["secret_key"] = self.meta_obj.secret_key
-        thanos_secret_data["stringData"]["thanos.yaml"] = str(navigate_thanos_yaml)
+        navigate_thanos_yaml["config"]["bucket"] = bucket_name
+        navigate_thanos_yaml["config"]["endpoint"] = endpoint
+        navigate_thanos_yaml["config"]["access_key"] = access_key
+        navigate_thanos_yaml["config"]["secret_key"] = secret_key
+        thanos_secret_data["stringData"]["thanos.yaml"] = yaml.dump(
+            navigate_thanos_yaml
+        )
+
         thanos_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="thanos", delete=False
         )
         templating.dump_data_to_temp_yaml(thanos_secret_data, thanos_data_yaml.name)
 
         logger.info(
-            "Creating thanos.yaml needed for ACM observability after passing required params"
+            f"Creating thanos-object-storage secret with {'ODF' if use_odf_bucket else 'AWS'} bucket"
         )
         exec_cmd(f"oc create -f {thanos_data_yaml.name}")
 
+        logger.info("Thanos secret created, checking observability status")
         self.check_observability_status()
+        logger.info("Observability status check passed, thanos_secret() completed")
 
     def enable_acm_observability(self):
         """
@@ -4596,6 +4858,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
         logger.info("Create thanos secret yaml")
         self.thanos_secret()
+
+        # Ensure we're in ACM context after thanos_secret() completes
+        # (in case context was switched during ODF bucket creation)
+        config.switch_acm_ctx()
+        logger.info("Switched to ACM context for configmap and namespace labeling")
 
         logger.info("Whitelist RBD metrics by creating configmap")
         exec_cmd(f"oc create -f {constants.OBSERVABILITYMETRICSCONFIGMAP_PATH}")

@@ -1533,6 +1533,7 @@ acm_configuration_4_18 = {
         "(//span[@class='mco-status-card__alert-item-header'])[2]",
         By.XPATH,
     ),
+    "disconnected-checkbox": ("//input[@id='isAirGappedDeployment']", By.XPATH),
 }
 
 acm_configuration_4_19 = {
