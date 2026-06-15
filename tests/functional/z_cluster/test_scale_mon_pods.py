@@ -79,7 +79,6 @@ class TestFiveMonInCluster(ManageTest):
         """
         worker_nodes = get_worker_nodes()
         node_h = ocp.OCP(kind="node")
-
         # Get only worker nodes with rack labels
         nodes_labeled = node_h.get(selector=constants.RACK_LABEL)
         labeled_node_names = [n["metadata"]["name"] for n in nodes_labeled["items"]]
