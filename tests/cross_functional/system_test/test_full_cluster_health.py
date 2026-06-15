@@ -13,11 +13,11 @@ from ocs_ci.ocs.constants import MGR_APP_LABEL, MON_APP_LABEL, OSD_APP_LABEL
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.node import wait_for_nodes_status
+from ocs_ci.ocs.disruptive_operations import osd_node_reboot
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     polarion_id,
     magenta_squad,
-    ignore_leftovers,
 )
 from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
 from ocs_ci.utility.utils import TimeoutSampler
@@ -34,20 +34,16 @@ from ocs_ci.helpers.managed_services import (
 )
 
 
-# Expected leftovers (ignore_leftovers) after disruptive steps in this test:
-#   - MON pod identity change (e.g. mon-c -> mon-d) after node restarts
-#   - Benchmark-operator PVs after pod deletions
-@ignore_leftovers
 @magenta_squad
 class TestFullClusterHealth(PASTest):
     """
     Test Cluster health when storage is ~85%
     """
 
-    TIMEOUT_CEPH_MGR = 900
+    TIMEOUT_CEPH_MGR = 600
     TIMEOUT_CEPH_MON = 1500
-    TIMEOUT_CEPH_OSD = 1600
-    TIMEOUT_POD_RUNNING = 1500
+    TIMEOUT_CEPH_OSD = 600
+    TIMEOUT_POD_RUNNING = 600
     TIMEOUT_BENCHMARK_SETUP = 2500
 
     @pytest.fixture(autouse=True)
@@ -197,7 +193,7 @@ class TestFullClusterHealth(PASTest):
             timeout=300,
         )
 
-    def is_cluster_healthy(self, timeout=None):
+    def is_cluster_healthy(self, timeout):
         """
         Wrapper function for cluster health check
 
@@ -256,34 +252,41 @@ class TestFullClusterHealth(PASTest):
         """
         self.nodes = nodes
 
-        # Commented below code due to Bug: DFBUGS-5633
-        # logger.info("Checking health before disruptive operations")
-        # assert self.is_cluster_healthy(), "Cluster is not healthy"
-        # osd_node_reboot()
-        # logger.info("Checking health after OSD node reboot")
+        logger.info("Checking health before disruptive operations")
+        assert (
+            self.is_cluster_healthy()
+        ), "Cluster is not healthy before starting disruptive operations"
+        osd_node_reboot()
+        logger.info("Checking health after OSD node reboot")
         # time.sleep(180)
         # self.reload_ceph_cluster()
-        # assert self.is_cluster_healthy(), "Cluster is not healthy"
+        assert self.is_cluster_healthy(), "Cluster is not healthy after OSD node reboot"
 
         logger.info("Starting MGR pod node restart (worker node shutdown)")
         self.mgr_pod_node_restart()
         logger.info("Checking health after worker node shutdown")
         # Wait for cluster stabilization after node restart so reload_ceph_cluster()
         # can successfully refresh cluster state with valid pod references
-        time.sleep(300)
-        self.reload_ceph_cluster()
-        assert self.is_cluster_healthy(timeout=7200), "Cluster is not healthy"
+        # time.sleep(300)
+        # self.reload_ceph_cluster()
+        assert (
+            self.is_cluster_healthy()
+        ), "Cluster is not healthy after MGR pod node restart (worker node shutdown)"
 
         logger.info("Starting OCS operator node restart")
         self.restart_ocs_operator_node()
         logger.info("Checking health after OCS operator node restart")
         # Wait for cluster stabilization after node restart so reload_ceph_cluster()
         # can successfully refresh cluster state with valid pod references
-        time.sleep(300)
+        # time.sleep(300)
         self.reload_ceph_cluster()
-        assert self.is_cluster_healthy(timeout=7200), "Cluster is not healthy"
+        assert (
+            self.is_cluster_healthy()
+        ), "Cluster is not healthy after OCS operator node restart"
 
         logger.info("Starting Rook, OSD, MGR & MON pods deletion")
         self.delete_pods()
         logger.info("Checking health after Rook, OSD, MGR & MON pods deletion")
-        assert self.is_cluster_healthy(timeout=7200), "Cluster is not healthy"
+        assert (
+            self.is_cluster_healthy()
+        ), "Cluster is not healthy after Rook, OSD, MGR & MON pods deletion"
