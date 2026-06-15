@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class BaseInitializer:
     """
-    Base initializer class with common infrastructure.
+    Base initializer class with common infrastructure
 
     Provides:
     - Configuration initialization
