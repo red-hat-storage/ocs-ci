@@ -42,9 +42,26 @@ class Sanity:
         if not is_hci_client_cluster():
             self.ceph_cluster = CephCluster()
 
-    def health_check(self, cluster_check=True, tries=20):
+    def health_check(
+        self,
+        cluster_check=True,
+        tries=20,
+        fix_ceph_health=False,
+        update_jira=True,
+        no_exception_if_jira_issue_updated=False,
+    ):
         """
         Perform Ceph and cluster health checks
+
+        Args:
+            cluster_check (bool): If true, perform the cluster check. False, otherwise.
+            tries (int): The number of tries to perform ceph health check
+            fix_ceph_health (bool): If True, it will try to fix the health to be OK
+                even if it will recover, we will get an exception CephHealthRecoveredException
+            update_jira (bool): If True, it will update the Jira issue with comment and MG logs
+            no_exception_if_jira_issue_updated (bool): If True, it will not raise an exception if the Jira
+                issue is updated and ceph health is recovered. Applicable only if fix_ceph_health is True.
+
         """
         wait_for_cluster_connectivity(tries=400)
         logger.info("Checking cluster and Ceph health")
@@ -59,7 +76,11 @@ class Sanity:
             or is_hci_client_cluster()
         ):
             ceph_health_check(
-                namespace=config.ENV_DATA["cluster_namespace"], tries=tries
+                namespace=config.ENV_DATA["cluster_namespace"],
+                tries=tries,
+                fix_ceph_health=fix_ceph_health,
+                update_jira=update_jira,
+                no_exception_if_jira_issue_updated=no_exception_if_jira_issue_updated,
             )
             if cluster_check:
                 self.ceph_cluster.cluster_health_check(timeout=120)
