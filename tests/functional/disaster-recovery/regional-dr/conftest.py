@@ -271,6 +271,45 @@ def mirror_rdr_images(request):
     if not config.DEPLOYMENT.get("disconnected"):
         return
 
+    # TODO: update itms_name to  odf-generic-0
+    # Check if odf-generic-0 ITMS already exists on managed clusters - skip mirroring if present
+    itms_name = "itms-generic-0"
+    managed_clusters = get_non_acm_cluster_config()
+
+    if managed_clusters:
+        # Store original context
+        original_ctx = config.cur_index
+        itms_exists_on_all = True
+
+        try:
+            for cluster_config in managed_clusters:
+                cluster_name = cluster_config.ENV_DATA.get("cluster_name", "unknown")
+                cluster_index = cluster_config.MULTICLUSTER.get("multicluster_index")
+
+                if cluster_index is not None:
+                    config.switch_ctx(cluster_index)
+                    try:
+                        # Check if odf-generic-0 ITMS exists on this cluster
+                        run_cmd(f"oc get itms {itms_name}", check_ec=True)
+                        log.info(
+                            f"ITMS '{itms_name}' already exists on cluster {cluster_name}"
+                        )
+                    except CommandFailed:
+                        log.info(
+                            f"ITMS '{itms_name}' not found on cluster {cluster_name}"
+                        )
+                        itms_exists_on_all = False
+                        break
+        finally:
+            config.switch_ctx(original_ctx)
+
+        if itms_exists_on_all:
+            log.info(
+                f"ITMS '{itms_name}' already exists on all managed clusters. "
+                "Skipping mirror operation and ITMS application."
+            )
+            return
+
     imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG_V2)
 
     # Get RDR images and add to additionalImages
@@ -319,6 +358,25 @@ def mirror_rdr_images(request):
 
     if os.path.exists(itms_file_path):
         log.info(f"Found ITMS file at {itms_file_path}")
+
+        # Modify ITMS name to odf-generic-0 (always use -0 suffix)
+        try:
+            itms_data = templating.load_yaml(itms_file_path)
+            if (
+                itms_data.get("metadata", {})
+                .get("name", "")
+                .startswith("itms-generic-")
+            ):
+                old_name = itms_data["metadata"]["name"]
+                new_name = "odf-generic-0"
+                itms_data["metadata"]["name"] = new_name
+                log.info(f"Renaming ITMS from '{old_name}' to '{new_name}'")
+
+                # Save modified ITMS back to file
+                templating.dump_data_to_temp_yaml(itms_data, itms_file_path)
+        except Exception as e:
+            log.warning(f"Failed to rename ITMS: {e}. Continuing with original name.")
+
         apply_itms_to_managed_clusters(itms_file_path)
     else:
         error_msg = f"ITMS file not found at expected location: {itms_file_path}"
