@@ -555,9 +555,11 @@ def ocs_install_verification(
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and (disable_noobaa or managed_service or client_cluster):
+        if ("noobaa" in label or label is constants.NOOBAA_CNPG_POD_LABEL) and (
+            disable_noobaa or managed_service or client_cluster
+        ):
             continue
-        if "mds" in label and disable_cephfs:
+        if ("mds" in label or "cephfs" in label) and disable_cephfs:
             continue
         if label == constants.MANAGED_CONTROLLER_LABEL:
             if fusion_aas_provider:
@@ -671,7 +673,12 @@ def ocs_install_verification(
                 f"{namespace}.rbd.csi.ceph.com",
             }.issubset(csi_drivers)
         else:
-            assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
+            csi_provisioners = set(defaults.CSI_PROVISIONERS)
+            if disable_cephfs:
+                csi_provisioners.discard(defaults.CEPHFS_PROVISIONER)
+            if disable_blockpools:
+                csi_provisioners.discard(defaults.RBD_PROVISIONER)
+            assert csi_provisioners.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
@@ -1074,24 +1081,36 @@ def ocs_install_verification(
         else constants.ROOK_CEPH_OPERATOR
     )
     if odf_running_version >= version.VERSION_4_19 or hci_cluster:
-        provisioner_deployment_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
-        }
+        provisioner_deployment_and_owner_names = {}
+        nodeplugin_daemonset_and_owner_names = {}
+        if not disable_cephfs:
+            provisioner_deployment_and_owner_names[
+                f"{constants.CEPHFS_PROVISIONER}-ctrlplugin"
+            ] = constants.CEPHFS_PROVISIONER
+            nodeplugin_daemonset_and_owner_names[
+                f"{constants.CEPHFS_PROVISIONER}-nodeplugin"
+            ] = constants.CEPHFS_PROVISIONER
+        if not disable_blockpools:
+            provisioner_deployment_and_owner_names[
+                f"{constants.RBD_PROVISIONER}-ctrlplugin"
+            ] = constants.RBD_PROVISIONER
+            nodeplugin_daemonset_and_owner_names[
+                f"{constants.RBD_PROVISIONER}-nodeplugin"
+            ] = constants.RBD_PROVISIONER
         csi_owner_kind = constants.DRIVER
     else:
-        provisioner_deployment_and_owner_names = {
-            "csi-cephfsplugin-provisioner": csi_owner_name,
-            "csi-rbdplugin-provisioner": csi_owner_name,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            "csi-cephfsplugin": csi_owner_name,
-            "csi-rbdplugin": csi_owner_name,
-        }
+        provisioner_deployment_and_owner_names = {}
+        nodeplugin_daemonset_and_owner_names = {}
+        if not disable_cephfs:
+            provisioner_deployment_and_owner_names["csi-cephfsplugin-provisioner"] = (
+                csi_owner_name
+            )
+            nodeplugin_daemonset_and_owner_names["csi-cephfsplugin"] = csi_owner_name
+        if not disable_blockpools:
+            provisioner_deployment_and_owner_names["csi-rbdplugin-provisioner"] = (
+                csi_owner_name
+            )
+            nodeplugin_daemonset_and_owner_names["csi-rbdplugin"] = csi_owner_name
         csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
 
     deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
@@ -1142,7 +1161,11 @@ def ocs_install_verification(
         ), "Host network is not set to False for cephObjectStores when spec.hostNetwork is True"
     log.info("Verified the providerAPIServerServiceType setting in StorageCluster")
     log.info("Verifying the csi driver ownership")
-    csi_driver_list = [constants.RBD_PROVISIONER, constants.CEPHFS_PROVISIONER]
+    csi_driver_list = []
+    if not disable_blockpools:
+        csi_driver_list.append(constants.RBD_PROVISIONER)
+    if not disable_cephfs:
+        csi_driver_list.append(constants.CEPHFS_PROVISIONER)
     if odf_running_version >= version.VERSION_4_19 or hci_cluster:
         csi_driver_obj = OCP(kind=constants.DRIVER, namespace=namespace)
         for driver in csi_driver_list:
