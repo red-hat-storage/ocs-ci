@@ -21,6 +21,7 @@ from ocs_ci.helpers.pod_helpers import (
 )
 from ocs_ci.ocs.node import get_worker_nodes, drain_nodes, schedule_nodes
 from ocs_ci.framework.custom_logger import reset_step_counts
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 
 # Guideline: Instantiated immediately after imports using __name__
 logger = logging.getLogger(__name__)
@@ -80,7 +81,6 @@ class TestLiveResourcesPresenceAndFormat(BaseTest):
                 sleep=10,
             )
 
-            # Guideline: Log assertion details via logger.assertion() BEFORE evaluating the assert statement
             logger.assertion(
                 f"Verify all non-transient ODF pods are successfully Running: state={pods_stabilized}"
             )
@@ -94,7 +94,6 @@ class TestLiveResourcesPresenceAndFormat(BaseTest):
             pod_objs = get_all_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
             filtered_pods = []
 
-            # Guideline: Use reset_step_counts before entering an independent loop to keep numbering clean
             reset_step_counts(__name__)
             for p in pod_objs:
                 if any(keyword in p.name for keyword in pod_name_exclude_patterns):
@@ -132,7 +131,6 @@ class TestLiveResourcesPresenceAndFormat(BaseTest):
             else:
                 error_message = ""
 
-            # Guideline: Log assertion details prior to validation evaluation
             logger.assertion(
                 f"Resource structural compliance format check: result={validation['result']}"
             )
@@ -141,15 +139,13 @@ class TestLiveResourcesPresenceAndFormat(BaseTest):
                 "Success! All live rescheduled pod resource metrics exist and are well-formed."
             )
 
-        except Exception as e:
-            # Guideline: Use logger.exception() within except blocks to automatically capture tracebacks at ERROR level
-            logger.exception(
-                f"An unexpected failure occurred during the live resources evaluation: {e}"
+        except (TimeoutExpiredError, CommandFailed, AssertionError) as e:
+            logger.error(
+                f"A targeted operational error or assertion failure occurred during evaluation: {e}"
             )
             raise
 
         finally:
-            # Guideline: Standard log levels (info) remain preferred for cleanup block steps
             logger.info(
                 f"Restoring cluster state. Un-draining / scheduling worker node: {target_node}"
             )
