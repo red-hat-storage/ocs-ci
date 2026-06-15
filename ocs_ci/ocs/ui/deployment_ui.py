@@ -188,6 +188,16 @@ class DeploymentUI(PageNavigator):
             )
             self.verify_operator_succeeded(operator=LOCAL_STORAGE, timeout_install=300)
 
+    def _is_page_crashed(self):
+        """
+        Check if the current page shows a crash (404 or error page).
+
+        Returns:
+            bool: True if the page displays a crash indicator.
+
+        """
+        return self.check_element_text("404") or self.check_element_text("An error")
+
     def install_storage_cluster(self):
         """
         Install StorageCluster/StorageSystem
@@ -196,24 +206,66 @@ class DeploymentUI(PageNavigator):
 
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_20:
-            logger.info("Navigate to Storage Cluster page")
-
-            self.nav_storage_cluster_default_page()
-            logger.info("Click Configure ODF")
-            self.do_click(locator=self.dep_loc["configure_odf"], enable_screenshot=True)
-            self.do_click(
-                locator=self.dep_loc["setup_storage_cluster"], enable_screenshot=True
-            )
+            max_retries = 3
+            for attempt in range(1, max_retries + 1):
+                logger.info("Navigate to Storage Cluster page")
+                self.nav_storage_cluster_default_page()
+                logger.info("Click Configure ODF")
+                self.do_click(
+                    locator=self.dep_loc["configure_odf"], enable_screenshot=True
+                )
+                self.page_has_loaded()
+                self.do_click(
+                    locator=self.dep_loc["setup_storage_cluster"],
+                    enable_screenshot=True,
+                )
+                self.page_has_loaded()
+                if not self._is_page_crashed():
+                    break
+                logger.warning(
+                    f"Page crashed during Storage System creation "
+                    f"(attempt {attempt}/{max_retries}). Refreshing and retrying."
+                )
+                self.take_screenshot()
+                self.refresh_page()
+                self.page_has_loaded()
+            else:
+                self.take_screenshot()
+                raise ValueError(
+                    "Page crashed at the time of Storage System creation "
+                    f"after {max_retries} attempts"
+                )
         elif ocs_version >= version.VERSION_4_19:
-            self.nav_storage_cluster_default_page()
-            logger.info("Click on 'Storage Systems tab' under the dashboard")
-            self.do_click(
-                locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
-            )
-            logger.info("Click on 'Create StorageSystem' button")
-            self.do_click(
-                locator=self.dep_loc["storage_system_btn"], enable_screenshot=True
-            )
+            max_retries = 3
+            for attempt in range(1, max_retries + 1):
+                self.nav_storage_cluster_default_page()
+                logger.info("Click on 'Storage Systems tab' under the dashboard")
+                self.do_click(
+                    locator=self.dep_loc["create_storage_cluster"],
+                    enable_screenshot=True,
+                )
+                self.page_has_loaded()
+                logger.info("Click on 'Create StorageSystem' button")
+                self.do_click(
+                    locator=self.dep_loc["storage_system_btn"],
+                    enable_screenshot=True,
+                )
+                self.page_has_loaded()
+                if not self._is_page_crashed():
+                    break
+                logger.warning(
+                    f"Page crashed during Storage System creation "
+                    f"(attempt {attempt}/{max_retries}). Refreshing and retrying."
+                )
+                self.take_screenshot()
+                self.refresh_page()
+                self.page_has_loaded()
+            else:
+                self.take_screenshot()
+                raise ValueError(
+                    "Page crashed at the time of Storage System creation "
+                    f"after {max_retries} attempts"
+                )
         else:
             if self.operator_name == ODF_OPERATOR:
                 self.navigate_installed_operators_page()
@@ -257,7 +309,7 @@ class DeploymentUI(PageNavigator):
                     locator=self.dep_loc["create_storage_cluster"],
                     enable_screenshot=True,
                 )
-        if self.check_element_text("404") or self.check_element_text("An error"):
+        if self._is_page_crashed():
             raise ValueError("Page crashed at the time of Storage System creation")
         if config.ENV_DATA.get("mcg_only_deployment", False):
             self.install_mcg_only_cluster()
