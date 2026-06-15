@@ -164,9 +164,15 @@ class VSPHEREBASE(Deployment):
         self.wait_time = 90
         self.infra_id = None
 
-    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE, ssd=False):
+    def attach_disk(
+        self,
+        size=100,
+        disk_type=constants.VM_DISK_TYPE,
+        ssd=False,
+        include_masters=False,
+    ):
         """
-        Add a new disk to all the workers nodes.
+        Add a new disk to all the worker nodes (and optionally master nodes).
 
         Supports varied disk sizes for DFBUGS-2885 stretch cluster testing.
 
@@ -174,6 +180,7 @@ class VSPHEREBASE(Deployment):
             size (int): Size of disk in GB (default: 100)
             disk_type (str): Disk provisioning type
             ssd (bool): if True, mark disk as SSD
+            include_masters (bool): if True, also attach disks to master nodes
         """
         from ocs_ci.deployment.helpers.stretch_cluster_disk_helpers import (
             should_use_varied_disk_sizes,
@@ -184,6 +191,12 @@ class VSPHEREBASE(Deployment):
         vms = self.vsphere.get_all_vms_in_pool(
             config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
         )
+
+        # Determine which VM roles to target
+        target_roles = ["compute"]
+        if include_masters:
+            target_roles.append("control-plane")
+            logger.info("Including master/control-plane nodes for disk attachment")
 
         use_varied_sizes = should_use_varied_disk_sizes()
 
@@ -196,6 +209,9 @@ class VSPHEREBASE(Deployment):
             # VM names follow the pattern compute-0, compute-1, … compute-N.
             # The disk_sizes list is ordered zone-1-node-0 … zone-2-node-K,
             # matching sorted VM order.
+            #
+            # Note: varied disk sizes only apply to compute (worker) nodes.
+            # Master nodes (if included) always get the base size.
             compute_vms = sorted(
                 [vm for vm in vms if "compute" in vm.name],
                 key=lambda vm: vm.name,
@@ -227,10 +243,27 @@ class VSPHEREBASE(Deployment):
                     )
 
                 disk_index += num_disks
+
+            # Handle master nodes with base size (no variation)
+            if include_masters:
+                master_vms = [
+                    vm
+                    for vm in vms
+                    if "control-plane" in vm.name or "master" in vm.name
+                ]
+                for vm in master_vms:
+                    logger.info(
+                        f"Adding {num_disks} disk(s) to master {vm.name} "
+                        f"with base size: {size}GB"
+                    )
+                    self.vsphere.add_disks_with_same_size(
+                        num_disks, vm, size, disk_type, ssd
+                    )
         else:
             # Original behavior: add disks with same size
             for vm in vms:
-                if "compute" in vm.name:
+                is_target = any(role in vm.name for role in target_roles)
+                if is_target:
                     self.vsphere.add_disks_with_same_size(
                         config.ENV_DATA.get("extra_disks", 1),
                         vm,
