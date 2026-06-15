@@ -167,6 +167,22 @@ class BackingStore:
                 func=cmdMap[self.method],
             )
             if not sample.wait_for_func_status(result=True):
+                # Get backingstore details before raising error
+                log.error(
+                    f"Failed to delete backingstore {self.name} after {timeout} seconds"
+                )
+                try:
+                    log.info(f"Getting describe output for backingstore {self.name}")
+                    bs_describe = OCP(
+                        kind=constants.BACKINGSTORE,
+                        namespace=config.ENV_DATA["cluster_namespace"],
+                    ).describe(resource_name=self.name)
+                    log.error(
+                        f"Backingstore {self.name} describe output:\n{bs_describe}"
+                    )
+                except Exception as e:
+                    log.warning(f"Could not get describe output for {self.name}: {e}")
+
                 err_msg = f"Failed to delete {self.name}"
                 log.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
@@ -429,6 +445,32 @@ def backingstore_factory(
         with cluster_context():
             for backingstore in created_backingstores:
                 try:
+                    # Remove finalizer from rejected backingstores to allow deletion
+                    # when dependent secrets have already been cleaned up
+                    try:
+                        bs_data = OCP(
+                            kind=constants.BACKINGSTORE,
+                            namespace=config.ENV_DATA["cluster_namespace"],
+                        ).get(resource_name=backingstore.name)
+                        if bs_data.get("status", {}).get("phase") == "Rejected":
+                            log.warning(
+                                f"BackingStore {backingstore.name} is in Rejected state. "
+                                "Removing finalizer to allow cleanup."
+                            )
+                            patch_param = '{"metadata":{"finalizers":null}}'
+                            OCP(
+                                kind=constants.BACKINGSTORE,
+                                namespace=config.ENV_DATA["cluster_namespace"],
+                            ).patch(
+                                resource_name=backingstore.name,
+                                params=patch_param,
+                                format_type="merge",
+                            )
+                    except Exception as e:
+                        log.warning(
+                            f"Failed to check/patch backingstore {backingstore.name}: {e}"
+                        )
+
                     backingstore.delete()
                 except CommandFailed as e:
                     if "not found" in str(e).lower():
