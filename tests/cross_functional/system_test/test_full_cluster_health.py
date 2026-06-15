@@ -202,7 +202,9 @@ class TestFullClusterHealth(PASTest):
         """
         start_time = time.time()
 
-        result = self.ceph_not_health_error() and pod.wait_for_pods_to_be_running()
+        result = self.ceph_not_health_error() and pod.wait_for_pods_to_be_running(
+            timeout=self.TIMEOUT_POD_RUNNING
+        )
 
         execution_time = time.time() - start_time
         logger.info(f"is_cluster_healthy took {execution_time:.2f} seconds to execute")
