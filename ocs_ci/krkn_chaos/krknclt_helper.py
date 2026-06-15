@@ -37,16 +37,18 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnctlRunner
 from ocs_ci.krkn_chaos.krkn_helpers import (
+    CEPH_CRASH_POLL_INTERVAL,
     CephHealthHelper,
     ValidationHelper,
     krknctl_random_test_exit_criteria,
+    raise_if_ceph_crashes_detected,
     vsphere_creds_for_krkn_from_ocs_config,
 )
 
 log = logging.getLogger(__name__)
 
 # Default interval (seconds) for polling krknctl process and running Ceph crash check.
-POLL_INTERVAL = 180
+POLL_INTERVAL = CEPH_CRASH_POLL_INTERVAL
 
 
 def _normalize_krknctl_cloud_type(cloud_type):
@@ -578,22 +580,37 @@ def poll_krknctl_until_exit(
     if namespace is None:
         namespace = OPENSHIFT_STORAGE_NAMESPACE
     health_helper = CephHealthHelper(namespace=namespace)
+    chaos_type = f"chaos (periodic check every {poll_interval} s)"
+
     while process.poll() is None:
-        no_crashes, crash_details = health_helper.check_ceph_crashes(
-            None, f"chaos (periodic check every {poll_interval} s)"
-        )
-        if not no_crashes and crash_details:
-            _shutdown_chaos_on_ceph_crash(process, workload_ops)
-            raise AssertionError(
-                f"Periodic Ceph crash check failed (every {poll_interval} s). "
-                f"Ceph crash detected during chaos; failing test to generate evidence.\n{crash_details}"
+        try:
+            raise_if_ceph_crashes_detected(
+                health_helper,
+                None,
+                chaos_type,
+                poll_interval=poll_interval,
             )
+        except AssertionError:
+            _shutdown_chaos_on_ceph_crash(process, workload_ops)
+            raise
         log_msg = f"{run_name} still running"
         if log_path:
             log_msg += f" (log: {log_path})"
-        log_msg += f"; next check in {poll_interval} s"
+        log_msg += f"; next Ceph crash check in {poll_interval} s"
         log.info(log_msg)
-        time.sleep(poll_interval)
+        # Sleep in chunks so we notice krknctl exit (and run a final crash check) sooner.
+        slept = 0
+        while slept < poll_interval and process.poll() is None:
+            chunk = min(30, poll_interval - slept)
+            time.sleep(chunk)
+            slept += chunk
+
+    raise_if_ceph_crashes_detected(
+        health_helper,
+        None,
+        f"chaos (final check after {run_name} exit)",
+        poll_interval=poll_interval,
+    )
     return process.returncode
 
 

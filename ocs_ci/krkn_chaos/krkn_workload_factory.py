@@ -1,13 +1,144 @@
 import logging
 import subprocess
 import tempfile
+import threading
 import time
+import traceback
 from contextlib import suppress
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import constants
 from ocs_ci.krkn_chaos.krkn_workload_config import KrknWorkloadConfig
 
 log = logging.getLogger(__name__)
+
+
+def _verify_rgw_pods_running():
+    """
+    Pre-flight check that at least one RGW pod is running.
+
+    Returns:
+        bool: True when RGW pods exist and at least one is Running.
+    """
+    from ocs_ci.ocs.ocp import OCP
+    from ocs_ci.ocs import constants
+
+    log.info("Checking RGW pod health before creating buckets...")
+    rgw_pods = OCP(kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE).get(
+        selector="app=rook-ceph-rgw"
+    )
+
+    if not rgw_pods or "items" not in rgw_pods or not rgw_pods["items"]:
+        log.warning("No RGW pods found - RGW may not be deployed on this cluster")
+        log.warning("RGW workload requires RGW to be enabled in ODF deployment")
+        return False
+
+    running_pods = sum(
+        1
+        for pod in rgw_pods["items"]
+        if pod.get("status", {}).get("phase") == "Running"
+    )
+    total_pods = len(rgw_pods["items"])
+    log.info(f"RGW pods: {running_pods}/{total_pods} running")
+
+    if running_pods == 0:
+        log.error("No RGW pods are running - cannot create RGW workloads")
+        raise RuntimeError(
+            "RGW service is not available. "
+            "Ensure RGW is enabled in your ODF deployment."
+        )
+    if running_pods < total_pods:
+        log.warning(
+            f"Only {running_pods}/{total_pods} RGW pods are running. "
+            f"This may cause bucket creation failures."
+        )
+    return True
+
+
+def _provision_single_rgw_workload(proj_obj, awscli_pod, rgw_config, bucket_index):
+    """
+    Create one OBC-backed RGW workload and start its S3 loop in a background thread.
+
+    Returns:
+        RGWWorkload or None when bucket provisioning fails.
+    """
+    from ocs_ci.resiliency.resiliency_workload import RGWWorkload
+    from ocs_ci.ocs.resources.objectbucket import RGWOCBucket
+    import fauxfactory
+
+    iteration_count = rgw_config.get("iteration_count", 10)
+    operation_types = rgw_config.get(
+        "operation_types", ["upload", "download", "list", "delete"]
+    )
+    upload_multiplier = rgw_config.get("upload_multiplier", 1)
+    metadata_ops_enabled = rgw_config.get("metadata_ops_enabled", False)
+    delay_between_iterations = rgw_config.get("delay_between_iterations", 30)
+    delete_bucket_on_cleanup = rgw_config.get("delete_bucket_on_cleanup", True)
+    obc_reconcile_wait = rgw_config.get("obc_reconcile_wait_seconds", 15)
+    bucket_health_timeout = rgw_config.get("bucket_health_timeout_seconds", 300)
+
+    bucket_name = f"rgw-workload-{fauxfactory.gen_alpha(4).lower()}"
+    log.info(f"Creating RGW bucket: {bucket_name} ({bucket_index + 1})")
+
+    rgw_bucket = RGWOCBucket(bucket_name)
+
+    log.info(f"Waiting {obc_reconcile_wait}s for OBC {bucket_name} to be reconciled...")
+    time.sleep(obc_reconcile_wait)
+
+    log.info(
+        f"Waiting for bucket {bucket_name} to be ready "
+        f"(up to {bucket_health_timeout}s)..."
+    )
+    try:
+        rgw_bucket.verify_health(timeout=bucket_health_timeout)
+        log.info(f"✓ Bucket {bucket_name} is ready")
+    except KeyError as e:
+        log.error(
+            f"OBC {bucket_name} missing status field after {bucket_health_timeout}s: {e}"
+        )
+        log.error(
+            "The OBC controller has not added status field. "
+            "This indicates the controller is not processing OBC requests."
+        )
+        try:
+            from ocs_ci.ocs.ocp import OCP
+
+            obc_obj = OCP(
+                kind="obc",
+                namespace=rgw_bucket.namespace,
+                resource_name=bucket_name,
+            )
+            describe_out = obc_obj.exec_oc_cmd(f"describe obc {bucket_name}")
+            log.error(f"OBC {bucket_name} details:\n{describe_out}")
+        except Exception as desc_err:
+            log.warning(f"Could not get OBC describe: {desc_err}")
+        return None
+    except Exception as e:
+        log.error(f"Bucket {bucket_name} failed to become healthy: {e}")
+        if "did not reach a healthy state" in str(e):
+            log.warning(
+                "OBC binding timeout - possible RGW service issue. "
+                "Check cluster health before creating more buckets."
+            )
+        return None
+
+    workload_config = {
+        "iteration_count": iteration_count,
+        "operation_types": operation_types,
+        "upload_multiplier": upload_multiplier,
+        "metadata_ops_enabled": metadata_ops_enabled,
+        "delay_between_iterations": delay_between_iterations,
+    }
+
+    rgw_workload = RGWWorkload(
+        rgw_bucket=rgw_bucket,
+        awscli_pod=awscli_pod,
+        namespace=proj_obj.namespace,
+        workload_config=workload_config,
+        delete_bucket_on_cleanup=delete_bucket_on_cleanup,
+    )
+    rgw_workload.start_workload()
+    log.info(f"✓ Created and started RGW workload in background: {bucket_name}")
+    return rgw_workload
 
 
 def _ensure_tenant_kms_for_encrypted_rbd(proj_obj, pv_encryption_kms_setup_factory):
@@ -87,17 +218,32 @@ class WorkloadOps:
         self.background_cluster_ops = None
         self.background_cluster_validator = None
 
+        # RGW workloads are provisioned in a background thread (see setup_workloads)
+        self._rgw_setup_context = None
+        self._rgw_provisioner_thread = None
+        self._rgw_stop_event = threading.Event()
+        self._rgw_workloads_lock = threading.Lock()
+
+    def set_rgw_background_setup(self, setup_context):
+        """Register deferred RGW bucket/workload provisioning for setup_workloads()."""
+        self._rgw_setup_context = setup_context
+
     def setup_workloads(self):
         """
         Set up workloads for chaos testing and start background cluster operations.
 
         This method:
-        1. Validates workloads are ready
-        2. Starts background cluster operations for continuous validation
+        1. Validates workloads that are already running (e.g. VDBENCH)
+        2. Starts RGW bucket provisioning in a background thread (non-blocking)
+        3. Starts background cluster operations for continuous validation
         """
-        log.info(f"Setting up {len(self.workloads)} workloads for chaos testing")
+        rgw_pending = self._rgw_setup_context is not None
+        log.info(
+            f"Setting up {len(self.workloads)} workloads for chaos testing"
+            + (" (RGW will provision in background)" if rgw_pending else "")
+        )
 
-        # Validate workloads are ready
+        # Validate workloads that are already running (RGW may still be provisioning)
         ready_count = 0
         for i, workload in enumerate(self.workloads, 1):
             try:
@@ -118,10 +264,18 @@ class WorkloadOps:
             except Exception as e:
                 log.warning(f"Issue validating workload {i}: {e}")
 
-        if ready_count == 0:
+        if ready_count == 0 and not rgw_pending:
             raise RuntimeError("No workloads are ready for chaos testing")
 
-        log.info(f"{ready_count}/{len(self.workloads)} workloads ready")
+        if ready_count:
+            log.info(f"{ready_count}/{len(self.workloads)} workloads ready")
+        elif rgw_pending:
+            log.info(
+                "No synchronous workloads yet; RGW background provisioning starting"
+            )
+
+        if rgw_pending:
+            self._start_rgw_workloads_background()
 
         # Start background cluster operations if enabled
         self._start_background_cluster_operations()
@@ -222,11 +376,13 @@ class WorkloadOps:
 
         This method:
         1. Stops background cluster operations
-        2. Validates workloads are still running
-        3. Stops and cleans up all workloads
+        2. Stops RGW background provisioning
+        3. Validates workloads are still running
+        4. Stops and cleans up all workloads
         """
         # Stop background cluster operations first
         self._stop_background_cluster_operations()
+        self._stop_rgw_background_provisioner()
 
         log.info(f"Validating and cleaning up {len(self.workloads)} workloads")
 
@@ -269,6 +425,86 @@ class WorkloadOps:
         validate_and_cleanup() for normal post-chaos teardown.
         """
         self._stop_background_cluster_operations()
+        self._stop_rgw_background_provisioner()
+
+    def _register_rgw_workload(self, rgw_workload):
+        """Thread-safe append of a newly started RGW workload."""
+        with self._rgw_workloads_lock:
+            self.workloads.append(rgw_workload)
+            self.workloads_by_type.setdefault(
+                KrknWorkloadConfig.RGW_WORKLOAD, []
+            ).append(rgw_workload)
+
+    def _start_rgw_workloads_background(self):
+        """Start provisioning RGW buckets and S3 workloads in a daemon thread."""
+        if self._rgw_provisioner_thread and self._rgw_provisioner_thread.is_alive():
+            log.info("RGW background provisioner already running")
+            return
+
+        ctx = self._rgw_setup_context
+        num_buckets = ctx["rgw_config"].get("num_buckets", 3)
+        log.info(
+            "Starting RGW workload background provisioner for %s bucket(s) "
+            "(chaos can proceed while buckets bind and S3 loops run)",
+            num_buckets,
+        )
+        self._rgw_stop_event.clear()
+        self._rgw_provisioner_thread = threading.Thread(
+            target=self._rgw_background_provisioner_loop,
+            name="rgw-workload-provisioner",
+            daemon=True,
+        )
+        self._rgw_provisioner_thread.start()
+
+    def _rgw_background_provisioner_loop(self):
+        """Create OBCs and start RGW S3 workloads without blocking the test thread."""
+        ctx = self._rgw_setup_context
+        proj_obj = ctx["project"]
+        awscli_pod = ctx["awscli_pod"]
+        rgw_config = ctx["rgw_config"]
+        num_buckets = rgw_config.get("num_buckets", 3)
+        created = 0
+
+        try:
+            for i in range(num_buckets):
+                if self._rgw_stop_event.is_set():
+                    log.info(
+                        "RGW background provisioner stopped before completing all buckets"
+                    )
+                    break
+                try:
+                    rgw_workload = _provision_single_rgw_workload(
+                        proj_obj, awscli_pod, rgw_config, i
+                    )
+                    if rgw_workload:
+                        self._register_rgw_workload(rgw_workload)
+                        created += 1
+                except Exception as e:
+                    log.error(f"Failed to create RGW workload {i + 1}: {e}")
+                    log.error(traceback.format_exc())
+        finally:
+            if created:
+                log.info(
+                    "RGW background provisioner finished: %s/%s workloads running",
+                    created,
+                    num_buckets,
+                )
+            else:
+                log.warning(
+                    "RGW background provisioner finished: no workloads started "
+                    "(check OBC controller and RGW service health)"
+                )
+
+    def _stop_rgw_background_provisioner(self):
+        """Signal the RGW provisioner thread to stop and wait briefly for it."""
+        if not self._rgw_provisioner_thread:
+            return
+        self._rgw_stop_event.set()
+        self._rgw_provisioner_thread.join(timeout=30)
+        if self._rgw_provisioner_thread.is_alive():
+            log.warning("RGW background provisioner did not exit within 30s")
+        self._rgw_provisioner_thread = None
+        self._rgw_setup_context = None
 
     def _stop_background_cluster_operations(self):
         """Stop background cluster operations."""
@@ -484,6 +720,7 @@ class KrknWorkloadFactory:
         # Dictionary to store workloads by type
         workloads_by_type = {}
         all_workloads = []
+        rgw_background_setup = None
 
         # Create workloads for each configured type using registry
         for workload_type in self.workload_types:
@@ -531,6 +768,27 @@ class KrknWorkloadFactory:
                 args.append(storageclass_factory)
                 args.append(pv_encryption_kms_setup_factory)
 
+            # RGW: defer bucket creation to setup_workloads() background thread
+            if workload_type == KrknWorkloadConfig.RGW_WORKLOAD:
+                try:
+                    log.info(
+                        f"Preparing {workload_type} for background provisioning..."
+                    )
+                    rgw_background_setup = self._prepare_rgw_background_setup(
+                        proj_obj, loaded_fixtures.get("awscli_pod")
+                    )
+                    workloads_by_type[workload_type] = []
+                    log.info(
+                        "RGW workloads deferred to background provisioning "
+                        "(fixture returns immediately; buckets start in setup_workloads)"
+                    )
+                except Exception as e:
+                    log.error(
+                        f"Failed to prepare {workload_type} background setup: {e}",
+                        exc_info=True,
+                    )
+                continue
+
             # Create workloads using factory method
             try:
                 log.info(f"Creating {workload_type} workloads...")
@@ -544,7 +802,7 @@ class KrknWorkloadFactory:
                 )
                 continue
 
-        if not all_workloads:
+        if not all_workloads and not rgw_background_setup:
             # Try fallback to VDBENCH if fixtures are available
             vdbench_fixtures = KrknWorkloadRegistry.get_required_fixtures("VDBENCH")
             fallback_error = None
@@ -588,7 +846,10 @@ class KrknWorkloadFactory:
 
                 raise RuntimeError(error_msg)
 
-        return WorkloadOps(proj_obj, workloads_by_type, self.workload_types)
+        ops = WorkloadOps(proj_obj, workloads_by_type, self.workload_types)
+        if rgw_background_setup:
+            ops.set_rgw_background_setup(rgw_background_setup)
+        return ops
 
     def _create_vdbench_workloads(
         self,
@@ -977,197 +1238,69 @@ class KrknWorkloadFactory:
 
         return all_vms
 
+    def _prepare_rgw_background_setup(self, proj_obj, awscli_pod):
+        """
+        Validate RGW preconditions and return context for background provisioning.
+
+        Bucket creation and ``start_workload()`` run in a daemon thread from
+        :meth:`WorkloadOps.setup_workloads` so the pytest fixture and Krkn
+        execution are not blocked on OBC binding.
+
+        Args:
+            proj_obj: Project object
+            awscli_pod: Pod with AWS CLI for S3 operations
+
+        Returns:
+            dict: Context passed to the background provisioner thread
+        """
+        if awscli_pod is None:
+            raise ValueError("awscli_pod fixture is required for RGW workloads")
+
+        rgw_config = self.config.get_rgw_config()
+        num_buckets = rgw_config.get("num_buckets", 3)
+        log.info(
+            f"RGW background setup: {num_buckets} bucket(s) will provision after "
+            f"VDBENCH and other synchronous workloads"
+        )
+
+        try:
+            _verify_rgw_pods_running()
+        except RuntimeError:
+            raise
+        except Exception as e:
+            log.warning(f"Could not verify RGW pod health: {e}")
+            log.warning("Proceeding with background RGW provisioning anyway...")
+
+        return {
+            "project": proj_obj,
+            "awscli_pod": awscli_pod,
+            "rgw_config": rgw_config,
+        }
+
     def _create_rgw_workloads_for_project(
         self, proj_obj, multi_pvc_factory, awscli_pod
     ):
         """
-        Create multiple RGW workloads with different configurations.
+        Legacy synchronous RGW factory entry point (registry compatibility).
 
-        Args:
-            proj_obj: Project object
-            multi_pvc_factory: Multi-PVC factory (not used by RGW, but required for consistency)
-            awscli_pod: Pod with AWS CLI for S3 operations
-
-        Returns:
-            List of RGW workload objects
+        Krkn tests use :meth:`_prepare_rgw_background_setup` instead; this method
+        is retained for callers that still expect a blocking factory.
         """
-        from ocs_ci.resiliency.resiliency_workload import RGWWorkload
-
-        # Get RGW configuration from krkn_config
-        rgw_config = self.config.get_rgw_config()
-
-        # Configure workload parameters from config
+        setup = self._prepare_rgw_background_setup(proj_obj, awscli_pod)
+        rgw_config = setup["rgw_config"]
         num_buckets = rgw_config.get("num_buckets", 3)
-        iteration_count = rgw_config.get("iteration_count", 10)
-        operation_types = rgw_config.get(
-            "operation_types", ["upload", "download", "list", "delete"]
-        )
-        upload_multiplier = rgw_config.get("upload_multiplier", 1)
-        metadata_ops_enabled = rgw_config.get("metadata_ops_enabled", False)
-        delay_between_iterations = rgw_config.get("delay_between_iterations", 30)
-        delete_bucket_on_cleanup = rgw_config.get("delete_bucket_on_cleanup", True)
-
         workloads = []
 
-        log.info(f"Creating {num_buckets} RGW workloads")
-
-        # Pre-flight check: Verify RGW pods are running
-        try:
-            from ocs_ci.ocs.ocp import OCP
-            from ocs_ci.ocs import constants
-
-            log.info("Checking RGW pod health before creating buckets...")
-            rgw_pods = OCP(
-                kind="pod", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-            ).get(selector="app=rook-ceph-rgw")
-
-            if not rgw_pods or "items" not in rgw_pods or not rgw_pods["items"]:
-                log.warning(
-                    "No RGW pods found - RGW may not be deployed on this cluster"
-                )
-                log.warning("RGW workload requires RGW to be enabled in ODF deployment")
-            else:
-                running_pods = sum(
-                    1
-                    for pod in rgw_pods["items"]
-                    if pod.get("status", {}).get("phase") == "Running"
-                )
-                total_pods = len(rgw_pods["items"])
-                log.info(f"RGW pods: {running_pods}/{total_pods} running")
-
-                if running_pods == 0:
-                    log.error("No RGW pods are running - cannot create RGW workloads")
-                    raise RuntimeError(
-                        "RGW service is not available. "
-                        "Ensure RGW is enabled in your ODF deployment."
-                    )
-                elif running_pods < total_pods:
-                    log.warning(
-                        f"Only {running_pods}/{total_pods} RGW pods are running. "
-                        f"This may cause bucket creation failures."
-                    )
-        except Exception as e:
-            log.warning(f"Could not verify RGW pod health: {e}")
-            log.warning("Proceeding with bucket creation anyway...")
-
-        # Get rgw_bucket_factory from conftest dynamically
-        try:
-            # This requires the rgw_bucket_factory fixture to be available
-            # For now, we'll create buckets using the project's RGW capabilities
-            log.info("Creating RGW buckets for workload testing")
-
-            for i in range(num_buckets):
-                try:
-                    # Create RGW bucket
-                    from ocs_ci.ocs.resources.objectbucket import RGWOCBucket
-                    import fauxfactory
-
-                    bucket_name = f"rgw-workload-{fauxfactory.gen_alpha(4).lower()}"
-                    log.info(f"Creating RGW bucket: {bucket_name}")
-
-                    # Create RGW bucket - it creates the OBC
-                    rgw_bucket = RGWOCBucket(bucket_name)
-
-                    # Give OBC a moment to be reconciled by the operator
-                    log.info(f"Waiting 15s for OBC {bucket_name} to be reconciled...")
-                    time.sleep(15)
-
-                    # Wait for bucket to be bound and ready (timeout 300s)
-                    log.info(
-                        f"Waiting for bucket {bucket_name} to be ready (up to 5 minutes)..."
-                    )
-                    try:
-                        rgw_bucket.verify_health(timeout=300)
-                        log.info(f"✓ Bucket {bucket_name} is ready")
-                    except KeyError as e:
-                        log.error(
-                            f"OBC {bucket_name} missing status field after 300s: {e}"
-                        )
-                        log.error(
-                            "The OBC controller has not added status field. "
-                            "This indicates the controller is not processing OBC requests."
-                        )
-
-                        # Show OBC describe output
-                        try:
-                            from ocs_ci.ocs.ocp import OCP
-
-                            obc_obj = OCP(
-                                kind="obc",
-                                namespace=rgw_bucket.namespace,
-                                resource_name=bucket_name,
-                            )
-                            describe_out = obc_obj.exec_oc_cmd(
-                                f"describe obc {bucket_name}"
-                            )
-                            log.error(f"OBC {bucket_name} details:\n{describe_out}")
-                        except Exception as desc_err:
-                            log.warning(f"Could not get OBC describe: {desc_err}")
-
-                        # Don't raise - continue with next bucket
-                        continue
-                    except Exception as e:
-                        log.error(f"Bucket {bucket_name} failed to become healthy: {e}")
-                        # Check if this is due to cluster health issues
-                        if "did not reach a healthy state" in str(e):
-                            log.warning(
-                                "OBC binding timeout - possible RGW service issue. "
-                                "Check cluster health before creating more buckets."
-                            )
-                        # Continue with next bucket instead of failing completely
-                        continue
-
-                    # Workload configuration
-                    workload_config = {
-                        "iteration_count": iteration_count,
-                        "operation_types": operation_types,
-                        "upload_multiplier": upload_multiplier,
-                        "metadata_ops_enabled": metadata_ops_enabled,
-                        "delay_between_iterations": delay_between_iterations,
-                    }
-
-                    # Create RGW workload
-                    rgw_workload = RGWWorkload(
-                        rgw_bucket=rgw_bucket,
-                        awscli_pod=awscli_pod,
-                        namespace=proj_obj.namespace,
-                        workload_config=workload_config,
-                        delete_bucket_on_cleanup=delete_bucket_on_cleanup,
-                    )
-
-                    # Start the workload
-                    rgw_workload.start_workload()
-
-                    workloads.append(rgw_workload)
-                    log.info(f"✓ Created and started RGW workload: {bucket_name}")
-
-                except Exception as e:
-                    log.error(f"Failed to create RGW workload {i + 1}: {e}")
-                    import traceback
-
-                    log.error(traceback.format_exc())
-                    # Continue with next workload instead of failing completely
-                    continue
-
-        except Exception as e:
-            log.error(f"Failed to create RGW workloads: {e}")
-            raise RuntimeError(f"Failed to create any RGW workloads: {e}")
+        log.info(f"Creating {num_buckets} RGW workloads (synchronous)")
+        for i in range(num_buckets):
+            rgw_workload = _provision_single_rgw_workload(
+                proj_obj, awscli_pod, rgw_config, i
+            )
+            if rgw_workload:
+                workloads.append(rgw_workload)
 
         if not workloads:
-            log.error("Failed to create any RGW workloads")
-            log.error(
-                "This may be due to cluster health issues. "
-                "Check RGW pod status and OBC controller health."
-            )
             raise RuntimeError("Failed to create any RGW workloads")
-
-        if len(workloads) < num_buckets:
-            log.warning(
-                f"Only created {len(workloads)} out of {num_buckets} requested RGW workloads. "
-                f"Some buckets failed to bind - check cluster health."
-            )
-        else:
-            log.info(f"✓ Successfully created all {len(workloads)} RGW workloads")
 
         return workloads
 

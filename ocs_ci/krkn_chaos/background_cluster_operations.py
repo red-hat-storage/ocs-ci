@@ -30,9 +30,9 @@ from collections import defaultdict
 from ocs_ci.ocs import constants, node as node_helpers, ocp
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import pvc as pvc_helpers
+from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.resources import job as job_helpers
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     CommandFailed,
@@ -444,14 +444,15 @@ class BackgroundClusterOperations:
             log.info(f"Creating clone of PVC {workload_pvc.name}")
 
             # Determine clone YAML based on provisioner
-            if "rbd" in workload_pvc.provisioner:
+            provisioner = (
+                (getattr(workload_pvc, "provisioner", "") or "").strip().lower()
+            )
+            if "rbd" in provisioner:
                 clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
-            elif "cephfs" in workload_pvc.provisioner:
+            elif "cephfs" in provisioner:
                 clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             else:
-                log.warning(
-                    f"Unsupported provisioner for clone: {workload_pvc.provisioner}"
-                )
+                log.warning(f"Unsupported provisioner for clone: {provisioner!r}")
                 return
 
             # Get actual capacity from source PVC (not converted size)
@@ -951,10 +952,17 @@ class BackgroundClusterOperations:
             log.info("Creating snapshots from workload PVCs")
             snapshots = []
             for pvc_obj in workload_pvcs:
+                if not hasattr(pvc_obj, "create_snapshot"):
+                    log.warning(
+                        "Workload PVC %s is not a PVC instance (type=%s), skipping snapshot",
+                        getattr(pvc_obj, "name", "?"),
+                        type(pvc_obj).__name__,
+                    )
+                    continue
                 try:
                     pvc_obj.reload()
                     snapshot_obj = pvc_obj.create_snapshot(wait=True, timeout=180)
-                    snapshots.append(snapshot_obj)
+                    snapshots.append((snapshot_obj, pvc_obj))
                     self._resources_to_cleanup.append(snapshot_obj)
                     log.info(
                         f"Created snapshot {snapshot_obj.name} from PVC {pvc_obj.name}"
@@ -975,10 +983,9 @@ class BackgroundClusterOperations:
             # Step 2: Restore PVCs from snapshots
             log.info("Restoring PVCs from snapshots")
             restored_pvcs = []
-            for idx, snapshot_obj in enumerate(snapshots):
+            for snapshot_obj, source_pvc in snapshots:
                 try:
                     # Get actual capacity from source PVC
-                    source_pvc = workload_pvcs[idx]
                     source_pvc.reload()
                     source_capacity = (
                         source_pvc.data.get("status", {})
@@ -1058,7 +1065,7 @@ class BackgroundClusterOperations:
                 except Exception as e:
                     log.error(f"Failed to cleanup restored PVCs: {e}")
 
-            for snapshot_obj in snapshots:
+            for snapshot_obj, _ in snapshots:
                 try:
                     snapshot_obj.delete()
                     snapshot_obj.ocp.wait_for_delete(
@@ -1156,7 +1163,8 @@ class BackgroundClusterOperations:
         from ocs_ci.utility import templating
 
         # Determine interface type based on PVC provisioner
-        if "rbd" in pvc_obj.provisioner.lower():
+        provisioner = getattr(pvc_obj, "provisioner", "") or ""
+        if "rbd" in provisioner.lower():
             pod_dict_path = constants.CSI_RBD_POD_YAML
         else:
             pod_dict_path = constants.CSI_CEPHFS_POD_YAML
