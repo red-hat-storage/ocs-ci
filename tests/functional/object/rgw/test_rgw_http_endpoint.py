@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 @rgw
 @red_squad
 @skipif_disconnected_cluster
+@skipif_external_mode
 @skipif_proxy_cluster
 @runs_on_provider
 @on_prem_platform_required
@@ -152,6 +153,52 @@ class TestRGWHTTPEndpoint:
         except CommandFailed:
             return None
 
+    def check_https_accessibility(self, https_endpoint_url):
+        """
+        Check if HTTPS endpoint returns a functional response
+
+        Args:
+            https_endpoint_url (str): Full HTTPS URL to check
+
+        Returns:
+            bool: True if endpoint returns a functional status, False otherwise
+
+        """
+        try:
+            response = requests.get(https_endpoint_url, timeout=10, verify=False)
+            if response.status_code in [200, 403, 401, 404]:
+                log.info(
+                    f"HTTPS endpoint accessible with status {response.status_code}"
+                )
+                return True
+            log.info(f"Got status {response.status_code}, retrying...")
+            return False
+        except requests.exceptions.RequestException as e:
+            log.info(f"Connection failed: {e}, retrying...")
+            return False
+
+    def check_http_accessibility(self, http_endpoint_url):
+        """
+        Check if HTTP endpoint returns a 200 response
+
+        Args:
+            http_endpoint_url (str): Full HTTP URL to check
+
+        Returns:
+            bool: True if endpoint returns 200, False otherwise
+
+        """
+        try:
+            response = requests.get(http_endpoint_url, timeout=10, verify=False)
+            if response.status_code == 200:
+                log.info(f"HTTP endpoint accessible with status {response.status_code}")
+                return True
+            log.info(f"Got status {response.status_code}, retrying...")
+            return False
+        except requests.exceptions.RequestException as e:
+            log.info(f"Connection failed: {e}, retrying...")
+            return False
+
     def wait_for_route_to_exist(self, route_name, timeout=180):
         """
         Wait for a route to exist
@@ -180,7 +227,6 @@ class TestRGWHTTPEndpoint:
                 f"Route {route_name} did not get created within {timeout} seconds"
             )
 
-    @skipif_external_mode
     @tier2
     @post_upgrade
     @skipif_ocs_version(">4.22")
@@ -318,31 +364,131 @@ class TestRGWHTTPEndpoint:
         self.wait_for_route_to_exist(constants.RGW_ROUTE_INTERNAL_MODE, timeout=180)
 
         # Verify the HTTP endpoint is actually accessible by making a request
-        # Retry logic to handle RGW service initialization delay
         log.info("Verifying HTTP endpoint is accessible after re-enabling")
-
-        def check_http_accessibility():
-            """Check if HTTP endpoint is accessible"""
-            try:
-                response = requests.get(http_endpoint_url, timeout=10, verify=False)
-                if response.status_code == 200:
-                    log.info(
-                        f"HTTP endpoint accessible with status {response.status_code}"
-                    )
-                    return True
-                else:
-                    log.info(f"Got status {response.status_code}, retrying...")
-                    return False
-            except requests.exceptions.RequestException as e:
-                log.info(f"Connection failed: {e}, retrying...")
-                return False
-
-        # Wait for endpoint to become accessible (up to 2 minutes)
         for sample in TimeoutSampler(
-            timeout=300, sleep=10, func=check_http_accessibility
+            timeout=300,
+            sleep=10,
+            func=self.check_http_accessibility,
+            http_endpoint_url=http_endpoint_url,
         ):
             if sample:
                 log.info("Step 6 passed: HTTP endpoint is accessible again")
+                break
+
+        log.info("Test completed successfully")
+
+    @pytest.mark.parametrize(
+        argnames="patch_action",
+        argvalues=[
+            pytest.param(
+                "null",
+                id="null_value",
+            ),
+            pytest.param(
+                "remove",
+                id="remove_field",
+            ),
+        ],
+    )
+    @tier2
+    @post_upgrade
+    @skipif_ocs_version(">4.22")
+    def test_rgw_disable_http_unset(self, patch_action):
+        """
+        Test that HTTP endpoint is re-enabled when disableHttp is unset via
+        null value (merge patch) or field removal (JSON patch).
+
+        Both approaches remove the field from StorageCluster spec, causing the
+        operator to fall back to the default behavior (HTTP enabled).
+
+        Test Steps:
+            1. Set disableHttp=true to disable HTTP and verify route is deleted
+            2. Unset disableHttp via null merge patch or JSON remove patch
+            3. Verify HTTP route is recreated and endpoint is accessible
+            4. Verify HTTPS route is still functional
+        """
+        # Step 1: Set disableHttp=true and verify HTTP route is deleted
+        log.info("Step 1: Setting disableHttp=true to disable HTTP")
+        self.set_disable_http_value(self.storage_cluster_name, True)
+        self.wait_for_rgw_pods_ready()
+
+        assert self.route_obj.wait_for_delete(
+            resource_name=constants.RGW_ROUTE_INTERNAL_MODE, timeout=180
+        ), (
+            f"Route {constants.RGW_ROUTE_INTERNAL_MODE} should be deleted "
+            "when disableHttp is set to true"
+        )
+        log.info("HTTP route deleted as expected after setting disableHttp=true")
+
+        # Step 2: Unset disableHttp — null merge patch removes the field same as JSON remove
+        if patch_action == "null":
+            log.info("Step 2: Setting disableHttp to null via merge patch")
+            params = '{"spec":{"managedResources":{"cephObjectStores":{"disableHttp": null}}}}'
+            assert self.storage_cluster_obj.patch(
+                resource_name=self.storage_cluster_name,
+                params=params,
+                format_type="merge",
+            ), "Failed to set disableHttp=null"
+            log.info(
+                "disableHttp=null patch applied — field removed from StorageCluster"
+            )
+        else:
+            log.info("Step 2: Removing disableHttp field via JSON patch")
+            params = '[{"op": "remove", "path": "/spec/managedResources/cephObjectStores/disableHttp"}]'
+            try:
+                self.storage_cluster_obj.patch(
+                    resource_name=self.storage_cluster_name,
+                    params=params,
+                    format_type="json",
+                )
+                log.info("disableHttp field removed via JSON patch")
+            except CommandFailed as e:
+                pytest.fail(f"Failed to remove disableHttp parameter: {e}")
+
+        self.wait_for_rgw_pods_ready()
+
+        # Step 3: Verify HTTP route is recreated and endpoint is accessible
+        log.info("Step 3: Verifying HTTP route is recreated")
+        http_route_data = self.wait_for_route_to_exist(
+            constants.RGW_ROUTE_INTERNAL_MODE, timeout=180
+        )
+        log.info("HTTP route recreated as expected - HTTP enabled by default")
+
+        http_host = http_route_data.get("spec", {}).get("host")
+        assert (
+            http_host
+        ), "HTTP route host is missing; cannot validate endpoint accessibility"
+        http_endpoint_url = f"http://{http_host}"
+
+        for sample in TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=self.check_http_accessibility,
+            http_endpoint_url=http_endpoint_url,
+        ):
+            if sample:
+                log.info(f"HTTP endpoint accessible after patch_action={patch_action}")
+                break
+
+        # Step 4: Verify HTTPS route is still functional
+        log.info("Step 4: Verifying HTTPS route is still functional")
+        https_route_data = self.wait_for_route_to_exist(
+            constants.RGW_ROUTE_INTERNAL_MODE_SECURE, timeout=60
+        )
+        https_host = https_route_data.get("spec", {}).get("host")
+        assert (
+            https_host
+        ), "HTTPS route host is missing; cannot validate endpoint accessibility"
+        https_endpoint_url = f"https://{https_host}"
+
+        for sample in TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=self.check_https_accessibility,
+            https_endpoint_url=https_endpoint_url,
+        ):
+            if sample:
+                log.info("HTTPS endpoint is still functional")
                 break
 
         log.info("Test completed successfully")
