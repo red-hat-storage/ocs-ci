@@ -30,7 +30,7 @@ from ocs_ci.ocs.cluster import is_vsphere_ipi_cluster
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import pod
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Constants for timeouts and retries
 ALERT_GENERATION_WAIT_TIME = 120  # seconds to wait for alert generation
@@ -60,11 +60,11 @@ class TestFiveMonInCluster(ManageTest):
         overwrite = True
         if len(self.nodes) % len(self.racks) != 0:
             msg = "number of nodes is not divisible by number of racks"
-            log.error(msg)
+            logger.error(msg)
             raise ValueError(msg)
         node_h = ocp.OCP(kind="node")
         for node, rack in zip(self.nodes, self.racks):
-            log.info("labeling node %s with %s=%s", node, constants.RACK_LABEL, rack)
+            logger.info("labeling node %s with %s=%s", node, constants.RACK_LABEL, rack)
             oc_cmd = f"label node {node} {constants.RACK_LABEL}={rack}"
             if overwrite:
                 oc_cmd += " --overwrite"
@@ -94,14 +94,14 @@ class TestFiveMonInCluster(ManageTest):
         ]
         rack_label_wo_dup = list(set(rack_labels))
 
-        log.info(f"Worker nodes with rack labels: {worker_nodes_with_labels}")
-        log.info(f"Unique rack labels on worker nodes: {rack_label_wo_dup}")
+        logger.info(f"Worker nodes with rack labels: {worker_nodes_with_labels}")
+        logger.info(f"Unique rack labels on worker nodes: {rack_label_wo_dup}")
 
         # Check: all worker nodes have rack labels AND at least 5 unique racks exist
         all_workers_labeled = len(worker_nodes_with_labels) == len(worker_nodes)
         sufficient_racks = len(rack_label_wo_dup) >= 5
 
-        log.info(
+        logger.info(
             f"All workers labeled: {all_workers_labeled}, "
             f"Sufficient racks (>=5): {sufficient_racks} (found {len(rack_label_wo_dup)})"
         )
@@ -136,40 +136,47 @@ class TestFiveMonInCluster(ManageTest):
         Scaledown the mon pods back to three and change failure domain values to three
 
         """
+        # Collect exceptions to ensure both cleanup operations are attempted
+        exceptions = []
+        
+        # First cleanup: Scale down mon count
         try:
             list_mons = self.ceph_cluster.get_mons_from_cluster()
             if len(list_mons) == self.mon_count:
                 params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 3}}}}'
-                log.info("Teardown: Scaling mon count back to 3")
+                logger.info("Teardown: Scaling mon count back to 3")
                 patch_result = self.storagecluster_obj.patch(
                     params=params,
                     format_type="merge",
                 )
                 if not patch_result:
-                    log.error("Failed to scale mon count back to 3 during teardown")
+                    logger.error("Failed to scale mon count back to 3 during teardown")
                 else:
-                    log.info("Successfully scaled mon count back to 3")
-        except Exception:
-            log.error("Error during mon count teardown")
-            raise
+                    logger.info("Successfully scaled mon count back to 3")
+        except Exception as ex:
+            logger.error(f"Error during mon count teardown: {ex}")
+            exceptions.append(ex)
 
+        # Second cleanup: Reset rack labels (always attempt, even if first cleanup failed)
         try:
             if self.are_rack_labels_present():
                 self.nodes = get_worker_nodes()
                 # We will scaledown the total racks back to three during teardown
                 target_racks = 3
                 self.racks = [f"rack{i % target_racks}" for i in range(len(self.nodes))]
-                log.info("Teardown: Reassigning rack labels")
+                logger.info("Teardown: Reassigning rack labels")
                 self.assign_dummy_racks()
-        except Exception:
-            log.error("Error during rack label teardown")
-            raise
+        except Exception as ex:
+            logger.error(f"Error during rack label teardown: {ex}")
+            exceptions.append(ex)
+        
+        # If any exceptions occurred, raise the first one after all cleanup attempts
+        if exceptions:
+            logger.error(f"Teardown completed with {len(exceptions)} error(s)")
+            raise exceptions[0]
 
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-5664")
-    @pytest.mark.polarion_id("OCS-5665")
-    @pytest.mark.polarion_id("OCS-5667")
-    @pytest.mark.polarion_id("OCS-5668")
     def test_scale_mons_in_cluster_to_five(self, threading_lock):
         """
 
@@ -188,7 +195,7 @@ class TestFiveMonInCluster(ManageTest):
             pytest.skip("INVALID: Mon count is already above three.")
 
         # Sleep for alert generation
-        log.info(
+        logger.info(
             f"Waiting {ALERT_GENERATION_WAIT_TIME} seconds for alert to be generated"
         )
         time.sleep(ALERT_GENERATION_WAIT_TIME)
@@ -198,10 +205,10 @@ class TestFiveMonInCluster(ManageTest):
             "alerts", payload={"silenced": False, "inhibited": False}
         )
         if not alerts_response.ok:
-            log.error(f"got bad response from Prometheus: {alerts_response.text}")
+            logger.error(f"got bad response from Prometheus: {alerts_response.text}")
         prometheus_alerts = alerts_response.json()["data"]["alerts"]
 
-        log.info("verifying that alert is generated to update monCount to five")
+        loggerinfo("verifying that alert is generated to update monCount to five")
         try:
             prometheus.check_alert_list(
                 label=target_label,
@@ -222,7 +229,7 @@ class TestFiveMonInCluster(ManageTest):
             params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 5}}}}'
 
             # Negative test: Verify that monCount=4 is rejected (only 3 and 5 are valid)
-            log.info(
+            logger.info(
                 "Testing that monCount cannot be set to 4 (only 3 and 5 are valid)"
             )
             try:
@@ -235,18 +242,18 @@ class TestFiveMonInCluster(ManageTest):
                     "Mon count should not be updatable to 4. Only values 3 and 5 are valid."
                 )
             except CommandFailed:
-                log.info(
+                logger.info(
                     "Correctly rejected mon count update to 4 (only 3 and 5 are valid)"
                 )
 
             # Positive test: Update monCount to 5
-            log.info("Updating monCount to 5")
+            logger.info("Updating monCount to 5")
             self.storagecluster_obj.patch(
                 params=params,
                 format_type="merge",
             )
 
-            log.info("Verifying that all five mon pods are in running state")
+            logger.info("Verifying that all five mon pods are in running state")
             assert verify_mon_pod_running(
                 self.mon_count
             ), "All five mon pods are not up and running state"
@@ -267,7 +274,7 @@ class TestFiveMonInCluster(ManageTest):
                 "Failed to get CephMonLowCount warning when mon count is updated to five"
             )
 
-        log.info(
+        logger.info(
             f"Verify that CephMonLowNumber alert got cleared post updating monCount to {self.mon_count}"
         )
         api.check_alert_cleared(
@@ -277,6 +284,7 @@ class TestFiveMonInCluster(ManageTest):
         )
 
     @ignore_leftovers
+    @pytest.mark.polarion_id("OCS-5665")
     def test_mon_restart_post_five_mon_update(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
@@ -293,7 +301,7 @@ class TestFiveMonInCluster(ManageTest):
                 params=params,
                 format_type="merge",
             )
-            log.info("Verifying that all five mon pods are in running state")
+            logger.info("Verifying that all five mon pods are in running state")
             assert verify_mon_pod_running(
                 self.mon_count
             ), "All five mon pods are not up and running state"
@@ -317,6 +325,7 @@ class TestFiveMonInCluster(ManageTest):
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
 
+    @pytest.mark.polarion_id("OCS-5667")
     def test_node_maintenance_post_five_mon_update(
         self,
         pvc_factory,
@@ -341,7 +350,7 @@ class TestFiveMonInCluster(ManageTest):
                 params=params,
                 format_type="merge",
             )
-            log.info("Verifying that all five mon pods are in running state")
+            logger.info("Verifying that all five mon pods are in running state")
             assert verify_mon_pod_running(
                 self.mon_count
             ), "All five mon pods are not up and running state"
@@ -366,7 +375,7 @@ class TestFiveMonInCluster(ManageTest):
         provis_pod_names = [p["metadata"]["name"] for p in provis_pods]
 
         # Maintenance of the node (unschedule and drain)
-        log.info(f"Chosen nodes for draining are {mon_nodes[0:2]} ")
+        logger.info(f"Chosen nodes for draining are {mon_nodes[0:2]} ")
         drained_nodes = mon_nodes[0:2]
         drain_nodes(drained_nodes)
 
