@@ -290,7 +290,7 @@ def mirror_rdr_images(request):
                     config.switch_ctx(cluster_index)
                     try:
                         # Check if odf-generic-0 ITMS exists on this cluster
-                        run_cmd(f"oc get itms {itms_name}", check_ec=True)
+                        run_cmd(f"oc get itms {itms_name}")
                         log.info(
                             f"ITMS '{itms_name}' already exists on cluster {cluster_name}"
                         )
