@@ -9,7 +9,7 @@ from ocs_ci.helpers import disruption_helpers
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function")
@@ -37,10 +37,12 @@ class TestPgSQLPodRespin(E2ETest):
         """
         PGSQL test setup
         """
-        # Deployment of postgres database
+        logger.info(
+            "Setting up PostgreSQL environment with pod respin test configuration"
+        )
         pgsql.setup_postgresql(replicas=1)
+        logger.info("PostgreSQL deployed with 1 replica")
 
-        # Initialize Sanity instance
         self.sanity_helpers = Sanity()
 
     @pytest.mark.parametrize(
@@ -57,41 +59,51 @@ class TestPgSQLPodRespin(E2ETest):
         """
         Test pgsql workload
         """
-        # Create pgbench benchmark
+        logger.test_step(
+            f"Create pgbench benchmark: 1 replica, {transactions} transactions"
+        )
         pgsql.create_pgbench_benchmark(replicas=1, transactions=transactions)
-        # Start measuring time
+        logger.info("pgbench benchmark created")
+
         start_time = datetime.now()
+        logger.info(f"Benchmark start time: {start_time}")
 
-        # Wait for pgbench pod to reach running state
+        logger.test_step("Wait for pgbench to reach running state")
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
+        logger.info(f"pgbench reached status: {constants.STATUS_RUNNING}")
 
-        # Check worker node utilization(adm_top)
+        logger.test_step("Check worker node resource utilization")
         get_node_resource_utilization_from_adm_top(node_type="worker", print_table=True)
 
-        # Respin relevant pod
+        logger.test_step(f"Respin {pod_name} pod during pgbench execution")
         if pod_name == "postgres":
+            logger.info("Respinning PostgreSQL application pod")
             pgsql.respin_pgsql_app_pod()
+            logger.info("PostgreSQL pod respun successfully")
         else:
-            log.info(f"Respin Ceph pod {pod_name}")
+            logger.info(f"Respinning Ceph {pod_name} pod")
             disruption = disruption_helpers.Disruptions()
             disruption.set_resource(resource=f"{pod_name}")
             disruption.delete_resource()
+            logger.info(f"Ceph {pod_name} pod respun successfully")
 
-        # Wait for pg_bench pod to complete
+        logger.test_step("Wait for pgbench to complete")
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+        logger.info(f"pgbench reached status: {constants.STATUS_COMPLETED}")
 
-        # Calculate the time from running state to completed state
         end_time = datetime.now()
         diff_time = end_time - start_time
-        log.info(
-            f"\npgbench pod reached to completed state after {diff_time.seconds} seconds\n"
+        logger.info(
+            f"pgbench pod reached completed state after {diff_time.seconds} seconds"
         )
 
-        # Get pgbench pods
+        logger.test_step("Validate pgbench results")
         pgbench_pods = pgsql.get_pgbench_pods()
+        logger.info(f"Retrieved {len(pgbench_pods)} pgbench pod(s)")
 
-        # Validate pgbench run and parse logs
         pgsql.validate_pgbench_run(pgbench_pods)
+        logger.info("pgbench results validated successfully")
 
-        # Perform cluster and Ceph health checks
+        logger.test_step("Verify cluster and Ceph health")
         self.sanity_helpers.health_check(tries=40)
+        logger.info("Cluster and Ceph health checks passed")

@@ -7,7 +7,7 @@ from ocs_ci.ocs import machine, node, ocp, constants
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="class")
@@ -39,14 +39,14 @@ def clone_ibm_chart_project_factory_fixture(request):
             git_url (str): Project's URL.
         """
         bdi_dir.append(destination_dir)
-        log.info(f"Cloning chart from github into {destination_dir}")
+        logger.info(f"Cloning chart from github into {destination_dir}")
         clone_repo(url=git_url, location=destination_dir)
 
     def finalizer():
         """
         Delete bdi temporary directory
         """
-        log.info(f"Deleting directory {bdi_dir[0]}")
+        logger.info(f"Deleting directory {bdi_dir[0]}")
         # if os.path.isdir(class_instance.bdi_dir[0]):
         exec_cmd(cmd=f"rm -rf {bdi_dir[0]}")
 
@@ -84,12 +84,12 @@ def create_machineset_factory_fixture(request):
         Args:
             additional_nodes (int): Number of additional nodes to be added (default=3).
         """
-        log.info("Creating machineset")
+        logger.info("Creating machineset")
         machineset_name.append(
             machine.create_custom_machineset(instance_type="m5.4xlarge", zone="a")
         )
         machine.wait_for_new_node_to_be_ready(machineset_name[0])
-        log.info(
+        logger.info(
             f"Adding {additional_nodes} more nodes to machineset {machineset_name[0]}"
         )
         node.add_new_node_and_label_it(
@@ -107,7 +107,7 @@ def create_machineset_factory_fixture(request):
             if machineset_name[0] is not None and machine.check_machineset_exists(
                 machine_set=machineset_name[0]
             ):
-                log.info(f"Deleting machineset {machineset_name[0]}")
+                logger.info(f"Deleting machineset {machineset_name[0]}")
                 machine.delete_custom_machineset(machineset_name[0])
 
     request.addfinalizer(finalizer)
@@ -143,7 +143,7 @@ def install_helm_factory_fixture(request):
 
         os.environ["TILLER_NAMESPACE"] = ""
         ocp_tiller_proj = ocp.OCP(kind="Project", namespace=tiller_namespace)
-        log.info(f"Creating a new project '{tiller_namespace}'")
+        logger.info(f"Creating a new project '{tiller_namespace}'")
         assert ocp_tiller_proj.new_project(
             tiller_namespace
         ), f"Failed to create project {tiller_namespace}"
@@ -161,7 +161,7 @@ def install_helm_factory_fixture(request):
         exec_cmd(cmd=create_crb_cmd)
 
         os.chdir(helm_dir)
-        log.info(f"Fetching helm chart from {helm_url}")
+        logger.info(f"Fetching helm chart from {helm_url}")
         curl_helm_cmd = f"wget {helm_url}"
         exec_cmd(cmd=curl_helm_cmd)
 
@@ -173,7 +173,7 @@ def install_helm_factory_fixture(request):
 
         exec_cmd(cmd=copy_helm_binary_cmd)
 
-        log.info("Installing helm chart")
+        logger.info("Installing helm chart")
         helm_cmd = (
             f"./helm init --stable-repo-url https://charts.helm.sh/stable "
             f"--tiller-namespace {tiller_namespace} --service-account tiller"
@@ -192,7 +192,7 @@ def install_helm_factory_fixture(request):
         """
         ocp_project = ocp.OCP(kind="Project", namespace=tiller_namespace)
         ocp.switch_to_project("openshift-storage")
-        log.info(f"Deleting project {tiller_namespace}")
+        logger.info(f"Deleting project {tiller_namespace}")
         ocp_project.delete_project(project_name=tiller_namespace)
         ocp_project.wait_for_delete(resource_name=tiller_namespace)
 
@@ -232,7 +232,7 @@ def create_db2u_project_factory_fixture(request):
         """
         db2u_project.append(db2u_project_name)
         ocp_proj = ocp.OCP(kind="Project", namespace=db2u_project_name)
-        log.info(f"Creating a new project '{db2u_project_name}'")
+        logger.info(f"Creating a new project '{db2u_project_name}'")
         assert ocp_proj.new_project(
             db2u_project_name
         ), f"Failed to create project {db2u_project_name}"
@@ -281,7 +281,7 @@ def create_scc_factory_fixture(request):
         Args:
             db2u_project_name (str): Name of the db2u project to be created.
         """
-        log.info("Creating Security Context Constraints")
+        logger.info("Creating Security Context Constraints")
         ocp_proj = ocp.OCP(namespace=db2u_project_name)
         template_yaml_dict = templating.load_yaml(constants.IBM_BDI_SCC_WORKLOAD_YAML)
         temp_scc_yaml.append(
@@ -331,7 +331,7 @@ def create_security_prereqs_factory_fixture(request):
             bdi_dir (str): Bdi directory contains the DB2U project from git.
             chart_dir (str): Path to chart directory within the bdi directory.
         """
-        log.info(f"Creating secrets on project {db2u_project_name}")
+        logger.info(f"Creating secrets on project {db2u_project_name}")
         os.chdir(bdi_dir + chart_dir)
         cluster_prereqs_cmd = (
             "./pre-install/clusterAdministration/createSecurityClusterPrereqs.sh"
@@ -384,13 +384,13 @@ def create_secretes_factory_fixture(request):
         temp_ldap_r_n.append(ldap_r_n)
         temp_db2u_r_n.append(db2u_r_n)
 
-        log.info("Creating LDAP secrets")
+        logger.info("Creating LDAP secrets")
         ocp_proj[0].exec_oc_cmd(
             command=f"create secret generic {ldap_r_n}-db2u-ldap-bluadmin "
             f"--from-literal=password={ldap_r_p}"
         )
 
-        log.info("Creating DB2U secrets")
+        logger.info("Creating DB2U secrets")
         ocp_proj[0].exec_oc_cmd(
             command=f"create secret generic {db2u_r_n}-db2u-instance "
             f"--from-literal=password={db2u_r_p}"
@@ -441,7 +441,7 @@ def create_ibm_container_registry_factory_fixture(request):
 
         ocp_proj = ocp.OCP(namespace=db2u_project_name)
 
-        log.info("Registering with IBM could for container images")
+        logger.info("Registering with IBM could for container images")
         ocp_proj.exec_oc_cmd(
             command=f"create secret docker-registry ibm-registry --docker-server=icr.io "
             f"--docker-username=iamapikey --docker-password={ibm_cloud_key}",

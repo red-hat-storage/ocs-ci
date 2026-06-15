@@ -45,7 +45,8 @@ class Testopenshiftloggingonocs(E2ETest):
 
     @pytest.fixture()
     def create_pvc_and_deployment_pod(self, request, pvc_factory, pod_factory):
-        """"""
+        """Create PVC and deployment pod for logging test"""
+        logger.info("Setting up PVC and deployment pod for logging test")
 
         def finalizer():
             delete_deployment_pods(pod_obj)
@@ -53,14 +54,19 @@ class Testopenshiftloggingonocs(E2ETest):
         request.addfinalizer(finalizer)
 
         pvc_obj = pvc_factory(size=10)
+        logger.info(
+            f"Created PVC: {pvc_obj.name}, size=10Gi, namespace={pvc_obj.project.namespace}"
+        )
 
-        # Create service_account to get privilege for deployment pods
         sa_name = helpers.create_serviceaccount(pvc_obj.project.namespace)
+        logger.info(f"Created service account: {sa_name.name}")
 
         helpers.add_scc_policy(
             sa_name=sa_name.name, namespace=pvc_obj.project.namespace
         )
+        logger.info(f"Added SCC policy to service account: {sa_name.name}")
 
+        logger.info("Creating deployment pod with FIO workload and log generation")
         pod_obj = helpers.create_pod(
             interface_type=constants.CEPHBLOCKPOOL,
             pvc_name=pvc_obj.name,
@@ -70,7 +76,6 @@ class Testopenshiftloggingonocs(E2ETest):
             command=["/bin/bash"],
             command_args=[
                 "-c",
-                # Run FIO in background and generate logs in foreground
                 "fio --name=test --filename=/mnt/test --size=6G --runtime=300 & "
                 'while true; do echo "$(date) - Application running"; sleep 5; done',
             ],
@@ -79,6 +84,7 @@ class Testopenshiftloggingonocs(E2ETest):
         helpers.wait_for_resource_state(
             resource=pod_obj, state=constants.STATUS_RUNNING
         )
+        logger.info(f"Deployment pod is running: {pod_obj.name}")
         return pod_obj, pvc_obj
 
     def setup_prerequisites(self, project):
@@ -92,26 +98,28 @@ class Testopenshiftloggingonocs(E2ETest):
         Returns:
             return values: lokistack_route, decoded token for success
         """
+        logger.info(f"Setting up prerequisites for project: {project}")
         sa_name = "loki-reader2"
         sa_cmd = f"oc create sa {sa_name} -n {project}"
         exec_cmd(sa_cmd)
+        logger.info(f"Created service account: {sa_name} in namespace: {project}")
 
-        # grants permission to service account
         permission_cmd = (
             "oc adm policy add-cluster-role-to-user cluster-admin "
             f"system:serviceaccount:{project}:{sa_name}"
         )
         exec_cmd(permission_cmd)
+        logger.info(f"Granted cluster-admin permissions to service account: {sa_name}")
 
-        # generate a valid JWT token from the ServiceAccount
         token_cmd = f"oc create token {sa_name} -n {project}"
         token = exec_cmd(token_cmd)
+        logger.info(f"Generated JWT token for service account: {sa_name}")
 
-        # gets lokistack route
         result = exec_cmd("oc get route logging-loki -n openshift-logging -o json")
         decoded_output = result.stdout.decode("utf-8")
         lokistack_route1 = json.loads(decoded_output)
         lokistack_route = lokistack_route1["spec"]["host"]
+        logger.info(f"Retrieved Loki route: {lokistack_route}")
         return lokistack_route, token.stdout.decode("utf-8")
 
     @retry(ModuleNotFoundError, tries=5, delay=200, backoff=1)
@@ -127,30 +135,33 @@ class Testopenshiftloggingonocs(E2ETest):
             AssertionError: If curl command fails or logs are not accessible
 
         """
+        logger.info(f"Validating project exists in Loki logs: {project}")
         route, TOKEN = self.setup_prerequisites(project)
+
+        logger.debug("Waiting 40 seconds for log ingestion")
         time.sleep(40)
+
         curl_command = (
             f"curl -k "
             f'-H  "Authorization: Bearer {TOKEN}" '
             f" https://{route}/api/logs/v1/application/loki/api/v1/query_range?"
             f"query=%7Bk8s_namespace_name%3D%22{project}%22%7D&limit=30&direction=BACKWARD"
         )
+        logger.debug(f"Querying Loki for namespace: {project}")
 
         try:
             curl_output_str = exec_cmd(curl_command).stdout.decode("utf-8")
-            logger.info(f"Curl command output: {curl_output_str}")
+            logger.debug(f"Curl command output: {curl_output_str[:200]}...")
         except Exception as e:
-            logger.error(f"Failed to fetch logs: {e}")
+            logger.exception(f"Failed to fetch logs from Loki for project: {project}")
             raise AssertionError(f"Curl command failed to fetch logs: {e}")
 
-        # Parse JSON output
         try:
             curl_output = json.loads(curl_output_str)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON output: {curl_output_str}")
+            logger.exception("Failed to parse JSON output from Loki query")
             raise AssertionError(f"Invalid JSON response from curl command: {e}")
 
-        # Check for error in response
         if "error" in curl_output:
             error_msg = curl_output.get("error", "Unknown error")
             error_type = curl_output.get("errorType", "Unknown type")
@@ -160,10 +171,12 @@ class Testopenshiftloggingonocs(E2ETest):
                 f"Full response: {curl_output_str}"
             )
 
-        assert (
-            curl_output["data"]["result"][0]["stream"]["openshift_log_type"]
-            == "application"
-        ), "not able to access project in logs"
+        log_type = curl_output["data"]["result"][0]["stream"]["openshift_log_type"]
+        logger.assertion(
+            f"Log type validation: project={project}, expected='application', actual='{log_type}'"
+        )
+        assert log_type == "application", "not able to access project in logs"
+        logger.info(f"Successfully validated project logs in Loki: {project}")
 
     @pytest.mark.polarion_id("OCS-6912")
     @tier1
@@ -177,12 +190,15 @@ class Testopenshiftloggingonocs(E2ETest):
         3. Creates Deployment pod in the new_project and run-io on the app pod
         4. verify if apllication logs are present in lokistack
         """
-
+        logger.test_step("Setup test environment with PVC and deployment pod")
         pod_obj, pvc_obj = create_pvc_and_deployment_pod
+        project = pvc_obj.project.namespace
+        logger.info(f"Test project: {project}, pod: {pod_obj.name}")
 
-        logger.info("Waiting 60 seconds for logs to be collected...")
+        logger.test_step("Wait for logs to be collected by Loki")
+        logger.info("Waiting 300 seconds for logs to be collected and ingested")
         time.sleep(300)
 
-        # Validating if the project exists in lokistack
-        project = pvc_obj.project.namespace
+        logger.test_step("Validate project logs are present in Loki")
         self.validate_project_exists_in_logs(project)
+        logger.info("Test completed successfully: project logs verified in Loki")

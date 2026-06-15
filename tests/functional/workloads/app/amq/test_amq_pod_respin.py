@@ -11,7 +11,7 @@ from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility.utils import TimeoutSampler
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def respin_amq_app_pod(kafka_namespace, pod_pattern):
@@ -23,20 +23,40 @@ def respin_amq_app_pod(kafka_namespace, pod_pattern):
         pod_pattern (str): The pattern for the pod
 
     """
+    logger.info(f"Respinning AMQ pod matching pattern: {pod_pattern}")
     pod_obj = ocp.OCP(kind=constants.POD, namespace=kafka_namespace)
     pod_obj_list = get_all_pods(namespace=kafka_namespace)
+    expected_pod_count = len(pod_obj_list)
+    logger.debug(
+        f"Expected pod count in namespace {kafka_namespace}: {expected_pod_count}"
+    )
+
     for pod in TimeoutSampler(
         300, 10, get_pod_name_by_pattern, pod_pattern, kafka_namespace
     ):
         try:
             if pod is not None:
-                pod_obj.delete(resource_name=pod[0])
-                assert pod_obj.wait_for_resource(
-                    condition="Running", resource_count=len(pod_obj_list), timeout=300
+                pod_name = pod[0]
+                logger.info(f"Deleting pod: {pod_name}")
+                pod_obj.delete(resource_name=pod_name)
+
+                logger.debug(f"Waiting for {expected_pod_count} pods to be Running")
+                pods_running = pod_obj.wait_for_resource(
+                    condition="Running", resource_count=expected_pod_count, timeout=300
+                )
+                logger.assertion(
+                    f"Pod recovery check: pattern='{pod_pattern}', deleted_pod='{pod_name}', "
+                    f"expected_count={expected_pod_count}, all_running={pods_running}"
+                )
+                assert pods_running, f"Not all pods recovered after deleting {pod_name}"
+                logger.info(
+                    f"Pod {pod_name} respun successfully, all {expected_pod_count} pods running"
                 )
                 break
         except IndexError as ie:
-            log.error(" pod doesn't exist")
+            logger.error(
+                f"Pod matching pattern '{pod_pattern}' doesn't exist in namespace {kafka_namespace}"
+            )
             raise ie
 
 
@@ -83,8 +103,8 @@ class TestAMQPodRespin(E2ETest):
         and restarting amq pods
 
         """
-        # Respin relevant pod
         if pod_name == "amq":
+            logger.test_step("Respin AMQ application pods")
             pod_pattern_list = [
                 "cluster-operator",
                 "my-cluster-broker",
@@ -92,20 +112,26 @@ class TestAMQPodRespin(E2ETest):
                 "my-connect-cluster-connect",
                 "my-bridge-bridge",
             ]
+            logger.info(
+                f"Respinning {len(pod_pattern_list)} AMQ pod types: {pod_pattern_list}"
+            )
+
             for pod_pattern in pod_pattern_list:
                 respin_amq_app_pod(
                     kafka_namespace=constants.AMQ_NAMESPACE, pod_pattern=pod_pattern
                 )
         else:
-            log.info(f"Respin Ceph pod {pod_name}")
+            logger.test_step(f"Respin Ceph {pod_name} pod")
             disruption = Disruptions()
             disruption.set_resource(resource=f"{pod_name}")
             disruption.delete_resource()
+            logger.info(f"Ceph {pod_name} pod respun successfully")
 
-            # Validate the results
-            log.info("Validate message run completely")
-            for thread in self.threads:
-                thread.result(timeout=1800)
+        logger.test_step("Validate AMQ message processing completed")
+        for thread in self.threads:
+            thread.result(timeout=1800)
+        logger.info("All AMQ message threads completed successfully")
 
-        # Perform cluster and Ceph health checks
+        logger.test_step("Verify cluster and Ceph health")
         self.sanity_helpers.health_check(tries=40)
+        logger.info("Cluster and Ceph health checks passed")
