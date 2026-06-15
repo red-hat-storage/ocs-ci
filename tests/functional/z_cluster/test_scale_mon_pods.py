@@ -138,7 +138,6 @@ class TestFiveMonInCluster(ManageTest):
         """
         # Collect exceptions to ensure both cleanup operations are attempted
         exceptions = []
-        
         # First cleanup: Scale down mon count
         try:
             list_mons = self.ceph_cluster.get_mons_from_cluster()
@@ -169,7 +168,6 @@ class TestFiveMonInCluster(ManageTest):
         except Exception as ex:
             logger.error(f"Error during rack label teardown: {ex}")
             exceptions.append(ex)
-        
         # If any exceptions occurred, raise the first one after all cleanup attempts
         if exceptions:
             logger.error(f"Teardown completed with {len(exceptions)} error(s)")
@@ -208,7 +206,7 @@ class TestFiveMonInCluster(ManageTest):
             logger.error(f"got bad response from Prometheus: {alerts_response.text}")
         prometheus_alerts = alerts_response.json()["data"]["alerts"]
 
-        loggerinfo("verifying that alert is generated to update monCount to five")
+        logger.info("verifying that alert is generated to update monCount to five")
         try:
             prometheus.check_alert_list(
                 label=target_label,
@@ -399,3 +397,4 @@ class TestFiveMonInCluster(ManageTest):
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check(tries=HEALTH_CHECK_RETRIES)
+        
