@@ -104,6 +104,8 @@ class Submariner(object):
                     )
                 else:
                     self.download_binary()
+        else:
+            self.download_binary()
         if self.source == "upstream":
             self.deploy_upstream()
         elif self.source == "downstream":
