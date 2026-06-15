@@ -1583,7 +1583,7 @@ def get_all_drpolicy():
     return return_drpolicy_list
 
 
-@retry(UnexpectedBehaviour, tries=5, delay=10, backoff=2)
+@retry(UnexpectedBehaviour, tries=7, delay=10, backoff=2)
 def validate_drpolicy_grouping(drpolicy_name=None):
     """
     Validate DRPolicy configuration for CG behavior.
