@@ -188,6 +188,10 @@ class DeploymentUI(PageNavigator):
             )
             self.verify_operator_succeeded(operator=LOCAL_STORAGE, timeout_install=300)
 
+    PAGE_CRASH_RETRY_DELAY = 30
+    GATHERING_RESOURCES_TIMEOUT = 120
+    GATHERING_RESOURCES_INTERVAL = 10
+
     def _is_page_crashed(self):
         """
         Check if the current page shows a crash (404 or error page).
@@ -196,7 +200,41 @@ class DeploymentUI(PageNavigator):
             bool: True if the page displays a crash indicator.
 
         """
+        if self.check_element_text("gathering required resources"):
+            return False
         return self.check_element_text("404") or self.check_element_text("An error")
+
+    def _wait_for_resources_gathering(self):
+        """
+        Wait for "Data Foundation is gathering required resources" loading
+        state to finish before interacting with the form.
+
+        Raises:
+            TimeoutExpiredError: If resources are not gathered within timeout.
+
+        """
+        gathering_text = "gathering required resources"
+        if not self.check_element_text(gathering_text):
+            return
+        logger.info(
+            f"Waiting up to {self.GATHERING_RESOURCES_TIMEOUT}s for "
+            f"Data Foundation to finish gathering resources"
+        )
+        sample = TimeoutSampler(
+            timeout=self.GATHERING_RESOURCES_TIMEOUT,
+            sleep=self.GATHERING_RESOURCES_INTERVAL,
+            func=self.check_element_text,
+            expected_text=gathering_text,
+        )
+        if not sample.wait_for_func_status(result=False):
+            self.take_screenshot()
+            raise TimeoutExpiredError(
+                "Data Foundation is still gathering resources after "
+                f"{self.GATHERING_RESOURCES_TIMEOUT} seconds"
+            )
+        logger.info("Data Foundation finished gathering resources")
+        self.page_has_loaded()
+        self.take_screenshot()
 
     def install_storage_cluster(self):
         """
@@ -221,12 +259,18 @@ class DeploymentUI(PageNavigator):
                 )
                 self.page_has_loaded()
                 if not self._is_page_crashed():
+                    self._wait_for_resources_gathering()
                     break
                 logger.warning(
                     f"Page crashed during Storage System creation "
                     f"(attempt {attempt}/{max_retries}). Refreshing and retrying."
                 )
                 self.take_screenshot()
+                logger.info(
+                    f"Waiting {self.PAGE_CRASH_RETRY_DELAY}s for console "
+                    f"backend to stabilize before retry"
+                )
+                time.sleep(self.PAGE_CRASH_RETRY_DELAY)
                 self.refresh_page()
                 self.page_has_loaded()
             else:
@@ -252,12 +296,18 @@ class DeploymentUI(PageNavigator):
                 )
                 self.page_has_loaded()
                 if not self._is_page_crashed():
+                    self._wait_for_resources_gathering()
                     break
                 logger.warning(
                     f"Page crashed during Storage System creation "
                     f"(attempt {attempt}/{max_retries}). Refreshing and retrying."
                 )
                 self.take_screenshot()
+                logger.info(
+                    f"Waiting {self.PAGE_CRASH_RETRY_DELAY}s for console "
+                    f"backend to stabilize before retry"
+                )
+                time.sleep(self.PAGE_CRASH_RETRY_DELAY)
                 self.refresh_page()
                 self.page_has_loaded()
             else:
@@ -309,7 +359,7 @@ class DeploymentUI(PageNavigator):
                     locator=self.dep_loc["create_storage_cluster"],
                     enable_screenshot=True,
                 )
-        if self._is_page_crashed():
+        if ocs_version < version.VERSION_4_19 and self._is_page_crashed():
             raise ValueError("Page crashed at the time of Storage System creation")
         if config.ENV_DATA.get("mcg_only_deployment", False):
             self.install_mcg_only_cluster()
@@ -503,9 +553,11 @@ class DeploymentUI(PageNavigator):
 
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+            self.page_has_loaded()
 
         if ocs_version >= version.VERSION_4_21:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+            self.page_has_loaded()
 
         self.configure_osd_size()
 
