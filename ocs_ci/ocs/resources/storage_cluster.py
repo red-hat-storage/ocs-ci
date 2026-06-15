@@ -555,7 +555,9 @@ def ocs_install_verification(
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and (disable_noobaa or managed_service or client_cluster):
+        if ("noobaa" in label or label is constants.NOOBAA_CNPG_POD_LABEL) and (
+            disable_noobaa or managed_service or client_cluster
+        ):
             continue
         if "mds" in label and disable_cephfs:
             continue
