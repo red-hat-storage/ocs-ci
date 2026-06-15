@@ -19,7 +19,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     magenta_squad,
 )
-from ocs_ci.helpers.helpers import wait_for_ct_pod_recovery
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.cluster import (
@@ -211,23 +210,6 @@ class TestFullClusterHealth(PASTest):
 
         return result
 
-    def reload_ceph_cluster(self):
-        """
-        Refresh the Ceph cluster object state from the API.
-
-        This method should be called after disruptive operations (node reboot,
-        pod deletion) to ensure health checks use current pod references instead
-        of stale ones. It waits for toolbox recovery before scanning.
-
-        Raises:
-            TimeoutExpiredError: If toolbox recovery times out
-        """
-        assert (
-            wait_for_ct_pod_recovery()
-        ), "Ceph tools pod failed to come up on another node"
-        self.ceph_cluster.scan_cluster()
-        logger.debug("Ceph cluster object refreshed (toolbox and pod refs updated)")
-
     @system_test
     @polarion_id("OCS-2749")
     def test_full_cluster_health(
@@ -253,19 +235,15 @@ class TestFullClusterHealth(PASTest):
         assert (
             self.is_cluster_healthy()
         ), "Cluster is not healthy before starting disruptive operations"
+
+        logger.info("Starting OSD node reboot")
         osd_node_reboot()
         logger.info("Checking health after OSD node reboot")
-        # time.sleep(180)
-        # self.reload_ceph_cluster()
         assert self.is_cluster_healthy(), "Cluster is not healthy after OSD node reboot"
 
         logger.info("Starting MGR pod node restart (worker node shutdown)")
         self.mgr_pod_node_restart()
         logger.info("Checking health after worker node shutdown")
-        # Wait for cluster stabilization after node restart so reload_ceph_cluster()
-        # can successfully refresh cluster state with valid pod references
-        # time.sleep(300)
-        # self.reload_ceph_cluster()
         assert (
             self.is_cluster_healthy()
         ), "Cluster is not healthy after MGR pod node restart (worker node shutdown)"
@@ -273,10 +251,6 @@ class TestFullClusterHealth(PASTest):
         logger.info("Starting OCS operator node restart")
         self.restart_ocs_operator_node()
         logger.info("Checking health after OCS operator node restart")
-        # Wait for cluster stabilization after node restart so reload_ceph_cluster()
-        # can successfully refresh cluster state with valid pod references
-        # time.sleep(300)
-        self.reload_ceph_cluster()
         assert (
             self.is_cluster_healthy()
         ), "Cluster is not healthy after OCS operator node restart"
