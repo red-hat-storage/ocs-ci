@@ -7730,6 +7730,7 @@ def create_workload_factory():
         appset_model=None,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
+        skip_replication_resources=False,
     ):
         """
         Args:
@@ -7740,6 +7741,9 @@ def create_workload_factory():
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             switch_ctx (int): The cluster index by the cluster name
+            skip_replication_resources (bool): If True, skip VGR/VR checks during
+                workload deployment verification. Required for agnostic DR where
+                replication resources are created after the migration script.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -7781,9 +7785,15 @@ def create_workload_factory():
             workload.deploy_workload()
 
         for index in range(num_of_appset):
-            workload_key = "dr_workload_appset"
-            if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
-                workload_key += f"_{interface}"
+            agnostic_dr = any(
+                c.ENV_DATA.get("agnostic_dr", False) for c in ocsci_config.clusters
+            )
+            if agnostic_dr:
+                workload_key = "dr_workload_appset_agnostic_dr"
+            elif ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+                workload_key = f"dr_workload_appset_{interface}"
+            else:
+                workload_key = "dr_workload_appset"
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox_AppSet(
                 workload_dir=workload_details["workload_dir"],
@@ -7801,10 +7811,16 @@ def create_workload_factory():
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+            workload.deploy_workload(
+                skip_replication_resources=skip_replication_resources
+            )
+        agnostic_dr_mode = any(
+            c.ENV_DATA.get("agnostic_dr", False) for c in ocsci_config.clusters
+        )
         if (
             ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
             and pvc_interface == constants.CEPHBLOCKPOOL
+            and not agnostic_dr_mode
         ):
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances
@@ -7817,10 +7833,96 @@ def create_workload_factory():
             except ResourceNotDeleted:
                 failed_to_delete.append(instance.workload_namespace)
 
+        agnostic_dr_mode = any(
+            c.ENV_DATA.get("agnostic_dr", False) for c in ocsci_config.clusters
+        )
+        if agnostic_dr_mode:
+            _cleanup_local_pvs()
+
         if failed_to_delete:
             raise ResourceNotDeleted(
                 f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
             )
+
+    def _cleanup_local_pvs():
+        """
+        Cleanup Released local PVs across all managed clusters: unmount
+        stale mounts, wipe the disk filesystem, delete and recreate the
+        PV so it can be reused by subsequent test runs.
+        """
+        from ocs_ci.ocs.utils import get_non_acm_cluster_config
+
+        restore_index = ocsci_config.cur_index
+        for cluster in get_non_acm_cluster_config():
+            cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+            ocsci_config.switch_ctx(cluster_index)
+            cluster_name = cluster.ENV_DATA.get(
+                "cluster_name", f"cluster-{cluster_index}"
+            )
+            pv_obj = ocp.OCP(kind=constants.PV)
+            pv_list = pv_obj.get(dont_raise=True) or {}
+            for pv in pv_list.get("items", []):
+                pv_name = pv["metadata"]["name"]
+                pv_phase = pv.get("status", {}).get("phase", "")
+                if pv_phase not in ("Released", "Failed"):
+                    continue
+
+                disk_path = pv.get("spec", {}).get("local", {}).get("path", "")
+                node_name = (
+                    pv.get("spec", {})
+                    .get("nodeAffinity", {})
+                    .get("required", {})
+                    .get("nodeSelectorTerms", [{}])[0]
+                    .get("matchExpressions", [{}])[0]
+                    .get("values", [""])[0]
+                )
+
+                if disk_path and node_name:
+                    log.info(
+                        "Wiping disk '%s' on node '%s' for PV '%s' " "on cluster '%s'",
+                        disk_path,
+                        node_name,
+                        pv_name,
+                        cluster_name,
+                    )
+                    try:
+                        mount_path = (
+                            "/var/lib/kubelet/plugins/kubernetes.io"
+                            f"/local-volume/mounts/{pv_name}"
+                        )
+                        run_cmd(
+                            f"oc debug node/{node_name} -- chroot /host"
+                            f" bash -c '"
+                            f"umount {mount_path} 2>/dev/null;"
+                            f" rm -rf {mount_path};"
+                            f" wipefs -a {disk_path};"
+                            f" mkfs.ext4 -F {disk_path}'",
+                            timeout=300,
+                        )
+                    except Exception:
+                        log.warning(
+                            "Failed to wipe disk for PV '%s', "
+                            "continuing with claimRef cleanup",
+                            pv_name,
+                        )
+
+                log.info(
+                    "Recovering PV '%s' (%s) on cluster '%s'",
+                    pv_name,
+                    pv_phase,
+                    cluster_name,
+                )
+                pv_obj.patch(
+                    resource_name=pv_name,
+                    params=('{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'),
+                    format_type="merge",
+                )
+                pv_obj.patch(
+                    resource_name=pv_name,
+                    params='[{"op": "remove", "path": "/spec/claimRef"}]',
+                    format_type="json",
+                )
+        ocsci_config.switch_ctx(restore_index)
 
     def factory(
         num_of_subscription=1,
@@ -7828,9 +7930,15 @@ def create_workload_factory():
         appset_model=None,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
+        skip_replication_resources=False,
     ):
         return _create_resources(
-            num_of_subscription, num_of_appset, appset_model, pvc_interface, switch_ctx
+            num_of_subscription,
+            num_of_appset,
+            appset_model,
+            pvc_interface,
+            switch_ctx,
+            skip_replication_resources,
         )
 
     return factory, _teardown

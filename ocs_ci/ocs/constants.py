@@ -97,6 +97,31 @@ ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
 MANIFESTS_DIR = "manifests"
+VOLSYNC_HELM_CONFIG = os.path.join(TOP_DIR, MANIFESTS_DIR, "volsync-helm.yaml")
+MIGRATE_PVC_PV_SCRIPT = os.path.join(TOP_DIR, MANIFESTS_DIR, "migrate-pvc-pv.sh")
+MINIO_NAMESPACE = "minio"
+MINIO_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "minio.yaml")
+MINIO_INTERNAL_ENDPOINT = "http://minio.minio.svc:9000"
+MINIO_BUCKET = "bucket"
+MINIO_ACCESS_KEY = "minio"
+MINIO_SECRET_KEY = "minio123"
+MOCK_VGRC_NAME = "vgrc-1"
+VOLUME_GROUP_SNAPSHOT_CLASS_CRD_URL = (
+    "https://raw.githubusercontent.com/red-hat-storage/external-snapshotter"
+    "/refs/heads/master/config/crd/bases"
+    "/groupsnapshot.storage.openshift.io_volumegroupsnapshotclasses.yaml"
+)
+LSO_PROVISIONER = "kubernetes.io/no-provisioner"
+VOLSYNC_PSK_SECRET_NAME = "volsync-rsync-tls-secret"
+MOCK_STORAGE_OPERATOR_KUSTOMIZE_URL = (
+    "https://github.com/BenamarMk/mock-storage-operator/config/default"
+    "?ref=agnostic-storage"
+)
+MOCK_STORAGE_OPERATOR_NAMESPACE = "mock-storage-operator-system"
+MOCK_STORAGE_OPERATOR_IMAGE = "quay.io/bmekhiss/mock-storage-operator:latest"
+CSI_ADDONS_CRD_KUSTOMIZE_URL = (
+    "github.com/csi-addons/kubernetes-csi-addons/config/crd?ref=v0.14.0"
+)
 PROVIDER_CLIENT_DEPLOYMENT_DIR = os.path.join(
     TEMPLATE_DIR, "provider-client-deployment"
 )
@@ -2394,6 +2419,7 @@ LOCAL_VOLUME_DISCOVERY = (
 )
 LOCAL_VOLUME_SET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "local-volume-set.yaml")
 LOCAL_VOLUME_SET = "localvolumesets.local.storage.openshift.io"
+LOCAL_PV_DISK_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "local-pv-disk.yaml")
 
 AUTO_DISCOVER_DEVICES_RESOURCE = "auto-discover-devices"
 LOCAL_BLOCK_RESOURCE = "localblock"

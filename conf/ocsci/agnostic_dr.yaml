@@ -1,0 +1,19 @@
+ENV_DATA:
+  # Enable agnostic DR mode. When true, the standard ODF-based RDR steps are
+  # replaced with the storage-agnostic stack (LSO-only, VolSync via Helm,
+  # and the mock-storage-operator). Steps 1-5 of the RDR deployment (OCP,
+  # ACM, cluster import, Submariner, GitOps/OADP) remain unchanged.
+  agnostic_dr: true
+
+  # ODF StorageCluster is not deployed in agnostic mode; LSO is installed
+  # directly without creating a LocalVolumeSet CR.
+  skip_ocs_deployment: true
+
+DEPLOYMENT:
+  # Install the LSO operator on primary and secondary managed clusters.
+  # LocalVolumeSet CR creation is skipped (controlled in code by agnostic_dr).
+  local_storage: true
+
+  # Do not run LSO standalone deployment path (which creates LocalVolumeSet).
+  # LSO operator install happens inside the agnostic DR deploy path instead.
+  lso_standalone_deployment: false
