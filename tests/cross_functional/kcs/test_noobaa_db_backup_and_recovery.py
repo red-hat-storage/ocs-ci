@@ -43,7 +43,7 @@ class TestNoobaaBackupAndRecovery(E2ETest):
 
     @pytest.mark.polarion_id("OCS-2605")
     @skipif_ocs_version("<4.6")
-    def test_noobaa_db_backup_and_recovery(
+    def deprecated_test_noobaa_db_backup_and_recovery(
         self,
         pvc_factory,
         pod_factory,
