@@ -3193,6 +3193,7 @@ OCS_COMPONENTS_MAP = {
     "noobaa": "multiCloudGateway",
     "blockpools": "cephBlockPools",
     "cephnonresilentpools": "cephNonResilientPools",
+    "cephobjectstoreusers": "cephObjectStoreUsers",
 }
 
 DEFAULT_PAXOS_SERVICE_TRIM_MIN = 250
