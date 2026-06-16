@@ -129,17 +129,46 @@ class TestFullClusterHealth(PASTest):
         logger.info(f"Deleting pods: {[p.name for p in pod_list]}")
         pod.delete_pods(pod_objs=pod_list)
 
-    def ceph_not_health_error(self):
+    def ceph_not_health_error(self, timeout=0):
         """
         Check if Ceph is NOT in "HEALTH_ERR" state
         Warning state is ok since the cluster is low in storage space
 
+        Args:
+            timeout (int): Time to wait for Ceph to recover from HEALTH_ERR (default: 0 - no wait)
+                          Pass 600 for 10 minutes wait during recovery scenarios
+
         Returns:
             bool: True if Ceph state is NOT "HEALTH_ERR"
         """
-        ceph_status = self.ceph_cluster.get_ceph_health()
-        logger.info(f"Ceph status is: {ceph_status}")
-        return ceph_status != "HEALTH_ERR"
+        if timeout == 0:
+            # No wait - immediate check
+            ceph_status = self.ceph_cluster.get_ceph_health()
+            logger.info(f"Ceph status is: {ceph_status}")
+            return "HEALTH_ERR" not in ceph_status
+
+        # Wait for Ceph to recover from HEALTH_ERR
+        logger.info(
+            f"Waiting up to {timeout} seconds for Ceph to recover from HEALTH_ERR state"
+        )
+        sample = TimeoutSampler(
+            timeout=timeout, sleep=30, func=self.ceph_cluster.get_ceph_health
+        )
+
+        try:
+            for ceph_status in sample:
+                if "HEALTH_ERR" not in ceph_status:
+                    logger.info(f"Ceph recovered successfully. Status: {ceph_status}")
+                    return True
+                logger.debug(f"Ceph still in HEALTH_ERR state: {ceph_status}")
+        except TimeoutExpiredError:
+            ceph_status = self.ceph_cluster.get_ceph_health()
+            logger.error(
+                f"Ceph did not recover from HEALTH_ERR within {timeout} seconds. Final status: {ceph_status}"
+            )
+            return False
+
+        return False
 
     def mgr_pod_node_restart(self):
         """
@@ -192,21 +221,38 @@ class TestFullClusterHealth(PASTest):
             timeout=300,
         )
 
-    def is_cluster_healthy(self):
+    def is_cluster_healthy(self, ceph_recovery_timeout=600):
         """
         Wrapper function for cluster health check
 
+        Args:
+            ceph_recovery_timeout (int): Time to wait for Ceph to recover (default: 600s/10min)
+
         Returns:
-            bool: True if ALL checks passed, False otherwise
+            bool: True if ALL checks passed (Ceph healthy AND all pods running), False otherwise
         """
         start_time = time.time()
 
-        result = self.ceph_not_health_error() and pod.wait_for_pods_to_be_running(
-            timeout=self.TIMEOUT_POD_RUNNING
-        )
+        # First check if Ceph is healthy (with optional wait for recovery)
+        ceph_healthy = self.ceph_not_health_error(timeout=ceph_recovery_timeout)
+
+        if not ceph_healthy:
+            logger.error("Ceph is in HEALTH_ERR state, skipping pod check")
+            execution_time = time.time() - start_time
+            logger.info(
+                f"is_cluster_healthy took {execution_time:.2f} seconds to execute"
+            )
+            return False
+
+        # Only check pods if Ceph is healthy
+        pods_running = pod.wait_for_pods_to_be_running(timeout=self.TIMEOUT_POD_RUNNING)
 
         execution_time = time.time() - start_time
+        result = ceph_healthy and pods_running
         logger.info(f"is_cluster_healthy took {execution_time:.2f} seconds to execute")
+        logger.info(
+            f"Ceph healthy: {ceph_healthy}, Pods running: {pods_running}, Overall result: {result}"
+        )
 
         return result
 
@@ -232,8 +278,8 @@ class TestFullClusterHealth(PASTest):
         self.nodes = nodes
 
         logger.info("Checking health before disruptive operations")
-        assert (
-            self.is_cluster_healthy()
+        assert self.is_cluster_healthy(
+            ceph_recovery_timeout=0
         ), "Cluster is not healthy before starting disruptive operations"
 
         logger.info("Starting OSD node reboot")
