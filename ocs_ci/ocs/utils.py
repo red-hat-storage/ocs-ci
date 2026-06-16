@@ -1041,10 +1041,13 @@ def run_must_gather(
 
     if config.REPORTING.get("tarball_mg_logs"):
         tarball_path = f"{log_dir_path}.tar.gz"
+        log.info(f"Packing must-gather logs to {tarball_path}")
         try:
             with tarfile.open(tarball_path, "w:gz") as tar:
                 tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+            log.info(f"Must-gather tarball created: {tarball_path}")
             if config.REPORTING.get("delete_packed_mg_logs"):
+                log.info(f"Deleting packed must-gather directory: {log_dir_path}")
                 shutil.rmtree(log_dir_path)
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
