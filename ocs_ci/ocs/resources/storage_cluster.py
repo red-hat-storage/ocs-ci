@@ -463,6 +463,13 @@ def ocs_install_verification(
             }
         )
 
+    if odf_running_version >= version.VERSION_4_23:
+        resources_dict.update(
+            {
+                constants.NOOBAA_CORE_POD_LABEL: 2,
+            }
+        )
+
     if config.ENV_DATA.get("noobaa_external_pgsql"):
         del resources_dict[nb_db_label]
 
@@ -1760,6 +1767,8 @@ def verify_mcg_only_pods():
     # DFBUGS-5211 ocs-metrics-exporter disabled from ODF 4.21
     if odf_running_version >= version.VERSION_4_21:
         del resources_dict[constants.OCS_METRICS_EXPORTER]
+    if odf_running_version >= version.VERSION_4_23:
+        resources_dict[constants.NOOBAA_CORE_POD_LABEL] = 2
     if odf_running_version >= version.VERSION_4_19:
         del resources_dict[constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL]
         del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]

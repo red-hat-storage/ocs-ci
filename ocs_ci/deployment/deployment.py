@@ -1961,7 +1961,9 @@ class Deployment(object):
         )
 
         # Wait for StatefulSet for noobaa-core exists before patching
-        jsonpath: str = "'{.status.readyReplicas}'=1"
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        expected_replicas = 2 if ocs_version >= version.VERSION_4_23 else 1
+        jsonpath: str = f"'{{.status.readyReplicas}}'={expected_replicas}"
         if not sts_obj.wait(
             timeout=600,
             condition=None,
