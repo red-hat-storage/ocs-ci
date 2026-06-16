@@ -32,6 +32,7 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_deployments_having_label,
     get_mds_pods,
+    get_mgr_pods,
     get_cephfsplugin_provisioner_pods,
     get_rbdfsplugin_provisioner_pods,
     get_rgw_pods,
@@ -111,9 +112,6 @@ class TestMonitorRecovery(E2ETest):
         ), "Failed: PutObject"
 
     @jira("DFBUGS-4322")
-    @pytest.mark.skip(
-        reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/14384"
-    )
     def test_monitor_recovery(
         self,
         deployment_pod_factory,
@@ -164,12 +162,16 @@ class TestMonitorRecovery(E2ETest):
         mon_recovery.copy_tar_to_pods(pod_type="mon")
 
         logger.info("Copy the previously retrieved monstore to the mon-a pod")
-        mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
-        mon_a = mon_pods[0]
+        mon_a = next(
+            mon
+            for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
+            if mon.get().get("metadata", {}).get("labels", {}).get("ceph_daemon_id")
+            == "a"
+        )
         logger.info(f"Copying mon-store into monitor: {mon_a.name}")
         ocp_obj = MonitorRecovery()
         ocp_obj._exec_oc_cmd(
-            cmd=f"cp -n {constants.OPENSHIFT_STORAGE_NAMESPACE} /tmp/monstore {mon_a.name}:/tmp/"
+            cmd=f"cp /tmp/monstore {constants.OPENSHIFT_STORAGE_NAMESPACE}/{mon_a.name}:/tmp/"
         )
 
         logger.info(
@@ -193,7 +195,7 @@ class TestMonitorRecovery(E2ETest):
             f"Copying the mon keyring stored locally from {file_path} to monitor: {mon_a.name}"
         )
         ocp_obj._exec_oc_cmd(
-            cmd=f"cp -n {constants.OPENSHIFT_STORAGE_NAMESPACE} {file_path} {mon_a.name}:/tmp/keyring"
+            cmd=f"cp {file_path} {constants.OPENSHIFT_STORAGE_NAMESPACE}/{mon_a.name}:/tmp/keyring"
         )
 
         logger.info("Generating monitor map command using the IPs")
@@ -325,7 +327,7 @@ class MonitorRecovery(object):
         osd_deployments = [OCS(**osd) for osd in osd_dep]
         for osd in osd_deployments:
             logger.info(
-                f"Patching OSD: {osd.name} with livenessProbe and sleep infinity"
+                f"Patching OSD: {osd.name} to remove livenessProbe and set sleep infinity"
             )
             params = '[{"op":"remove", "path":"/spec/template/spec/containers/0/livenessProbe"}]'
             self.dep_ocp.patch(
@@ -342,12 +344,16 @@ class MonitorRecovery(object):
                 params=params,
             )
         logger.info(
-            "Sleeping for 15 seconds and waiting for OSDs to reach running state"
+            "Sleeping for 60 seconds to allow OSD pods to restart with new configuration"
         )
-        time.sleep(15)
+        time.sleep(60)
+        logger.info("Waiting for OSD pods to reach running state")
         for osd in get_osd_pods():
-            wait_for_resource_state(resource=osd, state=constants.STATUS_RUNNING)
+            wait_for_resource_state(
+                resource=osd, state=constants.STATUS_RUNNING, timeout=600
+            )
 
+    @retry(CommandFailed, tries=10, delay=5, backoff=1)
     def copy_tar_to_pods(self, pod_type="osd"):
         """
         Copies local tar binary to the specified type of pods (OSD or MON) pod
@@ -372,7 +378,7 @@ class MonitorRecovery(object):
                 f"cat /usr/bin/tar | oc exec -i -n {constants.OPENSHIFT_STORAGE_NAMESPACE} {pod_obj.name}  -- bash -c "
                 f"'cat > /usr/bin/tar'"
             )
-            run_cmd(cmd)
+            run_cmd(cmd, shell=True)
             logger.info(
                 f"Setting execute permissions on /usr/bin/tar in pod: {pod_obj.name}"
             )
@@ -384,7 +390,7 @@ class MonitorRecovery(object):
         Prepares the script to retrieve the `monstore` cluster map from OSDs
 
         """
-        recover_mon = """
+        recover_mon = f"""
         #!/bin/bash
         ms=/tmp/monstore
 
@@ -398,7 +404,7 @@ class MonitorRecovery(object):
             podname=$(echo $osd_pod|sed 's/pod\\///g')
             oc exec -n {constants.OPENSHIFT_STORAGE_NAMESPACE} $osd_pod -- rm -rf $ms
             oc exec -n {constants.OPENSHIFT_STORAGE_NAMESPACE} $osd_pod -- mkdir $ms
-            oc cp -n {constants.OPENSHIFT_STORAGE_NAMESPACE} $ms $podname:$ms
+            oc cp $ms {constants.OPENSHIFT_STORAGE_NAMESPACE}/$podname:$ms
 
             rm -rf $ms
             mkdir $ms
@@ -409,11 +415,11 @@ class MonitorRecovery(object):
             ceph-objectstore-tool --type bluestore --data-path \\
             /var/lib/ceph/osd/ceph-$(oc get -n \\
             {constants.OPENSHIFT_STORAGE_NAMESPACE} $osd_pod \\
-            -ojsonpath='{ .metadata.labels.ceph_daemon_id }') \\
+            -ojsonpath='{{ .metadata.labels.ceph_daemon_id }}') \\
             --op update-mon-db --no-mon-config --mon-store-path $ms
             echo "Done with COT on pod: $osd_pod"
 
-            oc cp -n {constants.OPENSHIFT_STORAGE_NAMESPACE} $podname:$ms $ms
+            oc cp {constants.OPENSHIFT_STORAGE_NAMESPACE}/$podname:$ms $ms
 
             echo "Finished pulling COT data from pod: $osd_pod"
         done
@@ -506,19 +512,19 @@ class MonitorRecovery(object):
         )
         self._exec_oc_cmd(
             cmd=(
-                f"cp -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+                f"cp {constants.OPENSHIFT_STORAGE_NAMESPACE}/"
                 f"{mon_a.name}:/var/lib/ceph/mon/ceph-a/store.db "
-                f"{self.backup_dir}/"
+                f"{self.backup_dir}/store.db"
             )
         )
         logger.info("Copying store.db to rest of the monitors")
         for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"]):
-            if not mon.get().get("metadata").get("labels").get("ceph_daemon_id") == "a":
+            if mon.get().get("metadata").get("labels").get("ceph_daemon_id") != "a":
                 cmd = (
-                    f"cp -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
-                    f"{self.backup_dir}/store.db "
+                    f"cp {self.backup_dir}/store.db "
+                    f"{constants.OPENSHIFT_STORAGE_NAMESPACE}/"
                     f"{mon.name}:/var/lib/ceph/mon/ceph-"
-                    f"{mon.get().get('metadata').get('labels').get('ceph_daemon_id')}/ "
+                    f"{mon.get().get('metadata').get('labels').get('ceph_daemon_id')}/"
                 )
                 logger.info(f"Copying store.db to monitor: {mon.name}")
                 self._exec_oc_cmd(cmd)
@@ -542,6 +548,33 @@ class MonitorRecovery(object):
             logger.info(f"Reverting {dep}")
             revert_patch = f"replace --force -f {dep}"
             self.ocp_obj.exec_oc_cmd(revert_patch)
+
+            # Determine the type of deployment and wait for corresponding pods
+            dep_name = dep.split("/")[-1].replace(".yaml", "")
+            logger.info(
+                f"Waiting for pods from deployment {dep_name} to reach running state"
+            )
+
+            if "rook-ceph-mon" in dep_name:
+                logger.info("Waiting for monitor pods to reach running state")
+                time.sleep(30)
+                validate_mon_pods()
+            elif "rook-ceph-osd" in dep_name:
+                logger.info("Waiting for OSD pods to reach running state")
+                time.sleep(30)
+                for osd in get_osd_pods():
+                    wait_for_resource_state(
+                        resource=osd, state=constants.STATUS_RUNNING, timeout=600
+                    )
+            elif "rook-ceph-mgr" in dep_name:
+                logger.info("Waiting for MGR pods to reach running state")
+                time.sleep(30)
+                for mgr_pod in get_mgr_pods(
+                    namespace=config.ENV_DATA["cluster_namespace"]
+                ):
+                    wait_for_resource_state(
+                        resource=mgr_pod, state=constants.STATUS_RUNNING, timeout=600
+                    )
 
     def backup_deployments(self):
         """
