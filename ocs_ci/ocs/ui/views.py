@@ -954,26 +954,6 @@ storage_clients = {
     "close_token_modal": ("//button[@aria-label='Close']", By.XPATH),
 }
 
-external_systems = {
-    "page_title": ("span[data-test-id='resource-title']", By.CSS_SELECTOR),
-    "empty_state_heading": (
-        "//h4[normalize-space()='No external systems connected']",
-        By.XPATH,
-    ),
-    "empty_state_description": (
-        "//div[contains(text(), 'Start configuring your storage platform')]",
-        By.XPATH,
-    ),
-    "connect_external_system_button": (
-        "//button[normalize-space()='Connect external systems']",
-        By.XPATH,
-    ),
-    "explore_external_systems_link": (
-        "//a[normalize-space()='Explore all supported external systems']",
-        By.XPATH,
-    ),
-}
-
 page_nav = {
     "page_navigator_sidebar": ("page-sidebar", By.ID),
     "Home": ("//button[text()='Home']", By.XPATH),
@@ -3395,6 +3375,23 @@ external_systems = {
     "breadcrumb-link": (
         "a[data-test-id='breadcrumb-link-0']",
         By.CSS_SELECTOR,
+    ),
+    "page_title": ("span[data-test-id='resource-title']", By.CSS_SELECTOR),
+    "empty_state_heading": (
+        "//h4[normalize-space()='No external systems connected']",
+        By.XPATH,
+    ),
+    "empty_state_description": (
+        "//div[contains(text(), 'Start configuring your storage platform')]",
+        By.XPATH,
+    ),
+    "connect_external_system_button": (
+        "//button[normalize-space()='Connect external systems']",
+        By.XPATH,
+    ),
+    "explore_external_systems_link": (
+        "//a[normalize-space()='Explore all supported external systems']",
+        By.XPATH,
     ),
 }
 locators = {
