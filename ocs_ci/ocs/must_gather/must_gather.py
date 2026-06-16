@@ -76,11 +76,12 @@ class MustGather(object):
             files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_EXTERNAL"]
         else:
             files = GATHER_COMMANDS_VERSION[ocs_version][self.type_log]
+        self.get_all_paths()
         for file in files:
             self.files_not_exist.append(file)
-            for dir_name, subdir_list, files_list in os.walk(self.root):
-                if file in files_list:
-                    self.files_path[file] = os.path.join(dir_name, file)
+            for full_path in self.full_paths:
+                if os.path.basename(full_path) == file:
+                    self.files_path[file] = full_path
                     self.files_not_exist.remove(file)
                     break
 
@@ -111,6 +112,8 @@ class MustGather(object):
         # https://bugzilla.redhat.com/show_bug.cgi?id=2049204
         # self.verify_ceph_file_content()
         for file, file_path in self.files_path.items():
+            if not os.path.isabs(file_path):
+                continue
             if not Path(file_path).is_file():
                 self.files_not_exist.append(file)
             elif re.search(r"\.yaml$", file):
