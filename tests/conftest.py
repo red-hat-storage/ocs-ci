@@ -1077,7 +1077,9 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None, pool_name=No
 
         for instance in instances:
             try:
+                log.info(f"Deleting CephBlockPool {instance.name}")
                 instance.delete(wait=False)
+                log.info(f"Delete request sent for CephBlockPool {instance.name}")
 
                 try:
                     radosns_obj = ocp.OCP(
@@ -1129,7 +1131,18 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None, pool_name=No
                     raise
 
             try:
-                instance.ocp.wait_for_delete(instance.name)
+                log.info(f"Waiting for CephBlockPool {instance.name} to be deleted")
+                instance.ocp.wait_for_delete(
+                    resource_name=instance.name,
+                    timeout=300,
+                )
+                log.info(f"CephBlockPool {instance.name} deleted successfully")
+            except TimeoutError:
+                log.error(f"Timeout waiting for CephBlockPool {instance.name} deletion")
+                log.error(
+                    f"Describe output: {instance.ocp.describe(resource_name=instance.name)}"
+                )
+                raise
             except CommandFailed as wait_ex:
                 if "NotFound" in str(wait_ex) or skip_resource_not_found_error:
                     log.info(f"Resource {instance.name} already deleted or not found")
