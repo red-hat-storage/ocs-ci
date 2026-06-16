@@ -1188,9 +1188,11 @@ class MCG:
         """
         from ocs_ci.ocs.resources.pod import wait_for_pods_by_label_count
 
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        expected_count = 2 if ocs_version >= version.VERSION_4_23 else 1
         self.core_pod.delete(wait=True)
         wait_for_pods_by_label_count(
-            label=constants.NOOBAA_CORE_POD_LABEL, expected_count=1
+            label=constants.NOOBAA_CORE_POD_LABEL, expected_count=expected_count
         )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
