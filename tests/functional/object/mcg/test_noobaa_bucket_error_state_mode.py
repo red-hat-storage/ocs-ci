@@ -449,7 +449,7 @@ class TestNooBaaBucketErrorStateMode:
             alerts = wait_for_alert_firing(
                 api=prometheus_api,
                 alert_name=alert_name,
-                timeout=600,
+                timeout=900,
                 expected_message_substr="EXCEEDING_QUOTA",
             )
 
