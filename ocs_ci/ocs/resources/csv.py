@@ -46,6 +46,8 @@ def get_csvs_start_with_prefix(csv_prefix, namespace):
 
     """
 
+    if not OCP(kind=constants.NAMESPACE).is_exist(resource_name=namespace):
+        return []
     csvs = CSV(namespace=namespace)
     csv_list = csvs.get()["items"]
     return [csv for csv in csv_list if csv["metadata"]["name"].startswith(csv_prefix)]

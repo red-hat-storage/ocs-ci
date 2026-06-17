@@ -391,6 +391,10 @@ deployment_4_22 = {
         "input#forceful-deployment-confirmation",
         By.CSS_SELECTOR,
     ),
+    "next_button_element": (
+        "//button[normalize-space(.)='Next']",
+        By.XPATH,
+    ),
     "use_erasure_coding": ("input#use-erasure-coding", By.CSS_SELECTOR),
     # Perspective switcher for ACM hub cluster (PF v6)
     "perspective_switcher_toggle": (

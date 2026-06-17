@@ -485,6 +485,90 @@ def simulate_full_ceph_bluestore_process_on_wnodes(
     return True
 
 
+def get_wipe_devices_from_other_clusters_flag():
+    """
+    Read the ``wipeDevicesFromOtherClusters`` flag from the StorageCluster CR.
+
+    Returns:
+        object: The raw value of
+            ``spec.managedResources.cephCluster.cleanupPolicy
+            .wipeDevicesFromOtherClusters`` — ``True``, ``False``, or
+            ``None`` when the key is absent.
+
+    """
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+
+    sc_obj = get_storage_cluster()
+    sc_data = sc_obj.get(resource_name=constants.DEFAULT_STORAGE_CLUSTER)
+    return (
+        sc_data.get("spec", {})
+        .get("managedResources", {})
+        .get("cephCluster", {})
+        .get("cleanupPolicy", {})
+        .get("wipeDevicesFromOtherClusters")
+    )
+
+
+def verify_no_wipe_devices_from_other_clusters():
+    """
+    Verify that no bluestore wipe of foreign OSD data occurred when neither
+    ``wipe_devices_from_other_clusters`` nor ``odf_forceful_deployment`` was
+    requested.
+
+    Performs two checks:
+
+    1. **StorageCluster CR** — asserts that
+       ``spec.managedResources.cephCluster.cleanupPolicy.wipeDevicesFromOtherClusters``
+       is **not** ``true``.
+
+    2. **OSD prepare logs** — checks each ``rook-ceph-osd-prepare`` pod and
+       asserts that the following pattern is **absent**:
+
+       - ``completed wiping OSD <id> device "<dev>" belonging to a different
+         ceph cluster`` — would indicate an unexpected wipe occurred
+
+    Returns:
+        bool: True if both checks pass (no wipe found), False otherwise.
+
+    """
+    from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
+
+    # Check 1: StorageCluster CR flag must not be True
+    flag = get_wipe_devices_from_other_clusters_flag()
+    if flag is True:
+        logger.error(
+            "StorageCluster wipeDevicesFromOtherClusters is True"
+            " but wipe was not requested"
+        )
+        return False
+    logger.info(
+        "StorageCluster wipeDevicesFromOtherClusters is %r — no wipe expected",
+        flag,
+    )
+
+    # Check 2: wipe pattern must be absent from OSD prepare pod logs
+    wipe_pattern = re.compile(
+        r'completed wiping OSD \d+ device ".+" belonging to a'
+        r" different ceph cluster"
+    )
+    osd_prepare_pods = get_osd_prepare_pods()
+    if not osd_prepare_pods:
+        logger.warning("No rook-ceph-osd-prepare pods found")
+        return True
+
+    for pod in osd_prepare_pods:
+        logs = get_pod_logs(pod.name)
+        if wipe_pattern.search(logs):
+            logger.error(
+                "Unexpected wipe of foreign bluestore data found in pod %r logs",
+                pod.name,
+            )
+            return False
+
+    logger.info("Confirmed: no bluestore wipe in OSD prepare logs")
+    return True
+
+
 def verify_wipe_devices_from_other_clusters():
     """
     Verify that the cluster correctly wiped pre-existing bluestore OSDs from
@@ -512,18 +596,9 @@ def verify_wipe_devices_from_other_clusters():
 
     """
     from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
-    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 
     # Check 1: StorageCluster CR flag
-    sc_obj = get_storage_cluster()
-    sc_data = sc_obj.get(resource_name=constants.DEFAULT_STORAGE_CLUSTER)
-    flag = (
-        sc_data.get("spec", {})
-        .get("managedResources", {})
-        .get("cephCluster", {})
-        .get("cleanupPolicy", {})
-        .get("wipeDevicesFromOtherClusters")
-    )
+    flag = get_wipe_devices_from_other_clusters_flag()
     if flag is True:
         logger.info("StorageCluster has wipeDevicesFromOtherClusters set to true")
     else:

@@ -2278,6 +2278,18 @@ class Deployment(object):
                 assert (
                     verify_wipe_devices_from_other_clusters()
                 ), "Wipe devices from other clusters verification failed"
+            else:
+                from ocs_ci.deployment.helpers.ceph_cluster import (
+                    verify_no_wipe_devices_from_other_clusters,
+                )
+
+                logger.info(
+                    "Verify no wipe of foreign bluestore data occurred "
+                    "(StorageCluster CR flag and OSD prepare logs)"
+                )
+                assert (
+                    verify_no_wipe_devices_from_other_clusters()
+                ), "No-wipe verification failed"
 
             if not config.COMPONENTS["disable_cephfs"]:
                 # Check for CephFilesystem creation in ocp
