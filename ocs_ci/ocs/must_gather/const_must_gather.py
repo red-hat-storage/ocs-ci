@@ -885,6 +885,22 @@ GATHER_COMMANDS_OTHERS_EXCLUDE_4_11 = ["odf-csi-addons-operator.yaml"]
 
 GATHER_COMMANDS_OTHERS_EXCLUDE_4_13 = ["noobaa-db-pg-0-init.log"]
 
+# NooBaa files not produced by the odf4-odf-must-gather-rhel9 image (used from 4.14+).
+# The new image collects NooBaa data via oc adm inspect (API-group subdirs)
+# and oc logs, producing different file names than the old ocs-must-gather image.
+GATHER_COMMANDS_OTHERS_EXCLUDE_4_14 = [
+    "BackingStoreList_crs.yaml",
+    "BucketClassList_crs.yaml",
+    "db-noobaa-db-pg-0-pvc-describe.txt",
+    "NamespaceStoreList_crs.yaml",
+    "noobaa-core-0-core.log",
+    "noobaa-core-0-pod-describe.txt",
+    "noobaa-db-pg-0-db.log",
+    "noobaa-db-pg-0-pod-describe.txt",
+    "noobaa-endpoint-scc-describe.txt",
+    "NooBaaList_crs.yaml",
+]
+
 if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
     GATHER_COMMANDS_OTHERS = list(
         set(GATHER_COMMANDS_OTHERS) - set(GATHER_COMMANDS_OPENSHIFT_DEDICATED_EXCLUDE)
@@ -1050,6 +1066,7 @@ GATHER_COMMANDS_VERSION = {
             - set(
                 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
                 + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_14
             )
         ),
         "OTHERS_MANAGED_SERVICES": list(
@@ -1081,6 +1098,7 @@ GATHER_COMMANDS_VERSION = {
             - set(
                 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
                 + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_14
             )
         ),
         "OTHERS_MANAGED_SERVICES": list(
@@ -1114,6 +1132,7 @@ GATHER_COMMANDS_VERSION = {
             - set(
                 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
                 + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_14
             )
         ),
         "OTHERS_MANAGED_SERVICES": list(
@@ -1147,6 +1166,7 @@ GATHER_COMMANDS_VERSION = {
             - set(
                 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
                 + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_14
             )
         ),
         "OTHERS_MANAGED_SERVICES": list(
@@ -1180,6 +1200,7 @@ GATHER_COMMANDS_VERSION = {
             - set(
                 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
                 + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_14
             )
         ),
         "OTHERS_MANAGED_SERVICES": list(
@@ -1213,6 +1234,7 @@ GATHER_COMMANDS_VERSION = {
             - set(
                 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
                 + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_14
             )
         ),
         "OTHERS_MANAGED_SERVICES": list(
@@ -1253,6 +1275,7 @@ GATHER_COMMANDS_VERSION = {
             - set(
                 GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
                 + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_14
                 + GATHER_COMMANDS_OTHERS_EXCLUDE_4_20
             )
         ),
