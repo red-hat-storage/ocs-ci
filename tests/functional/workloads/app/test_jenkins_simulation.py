@@ -97,8 +97,8 @@ class TestJenkinsSimulation(ManageTest):
                 f"Error message check: error_msg='{error_msg}', "
                 f"present={error_msg in relevant_pod_logs}"
             )
-            assert not (
-                error_msg in relevant_pod_logs
+            assert (
+                error_msg not in relevant_pod_logs
             ), f"Logs should not contain the error message '{error_msg}'"
             logger.info(f"Validated error message '{error_msg}' not present in logs")
 
@@ -106,8 +106,8 @@ class TestJenkinsSimulation(ManageTest):
                 f"Inode info check (BZ 2132270): message='{inode_info}', "
                 f"present={inode_info in relevant_pod_logs}"
             )
-            assert not (
-                inode_info in relevant_pod_logs
+            assert (
+                inode_info not in relevant_pod_logs
             ), f"Logs should not contain the message '{inode_info}'"
             logger.info("Validated inode info message not present (BZ 2132270)")
 
@@ -115,8 +115,8 @@ class TestJenkinsSimulation(ManageTest):
                 f"Kubelet volume stats check: message='{kubelet_volume_stats}', "
                 f"present={kubelet_volume_stats in relevant_pod_logs}"
             )
-            assert not (
-                kubelet_volume_stats in relevant_pod_logs
+            assert (
+                kubelet_volume_stats not in relevant_pod_logs
             ), f"Logs should not contain the message '{kubelet_volume_stats}'"
             logger.info("Validated kubelet volume stats message not present")
 

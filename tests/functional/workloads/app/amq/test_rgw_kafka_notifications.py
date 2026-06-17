@@ -235,15 +235,15 @@ class TestRGWAndKafkaNotifications(E2ETest):
                 logger.info(
                     f"Timestamp event {event_time} matches the pattern {format_string}"
                 )
-            except ValueError as ef:
+            except ValueError:
                 logger.assertion(
                     f"Timestamp validation: event_time='{event_time}', "
                     f"format='{format_string}', valid=False"
                 )
-                logger.error(
+                logger.exception(
                     f"Timestamp event {event_time} doesn't match the pattern {format_string}"
                 )
-                raise ef
+                raise
         else:
             logger.info(
                 f"Skipping timestamp validation for OCS version {ocs_version} (< 4.8)"

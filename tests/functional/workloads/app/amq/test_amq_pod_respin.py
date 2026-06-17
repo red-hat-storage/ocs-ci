@@ -53,11 +53,11 @@ def respin_amq_app_pod(kafka_namespace, pod_pattern):
                     f"Pod {pod_name} respun successfully, all {expected_pod_count} pods running"
                 )
                 break
-        except IndexError as ie:
-            logger.error(
+        except IndexError:
+            logger.exception(
                 f"Pod matching pattern '{pod_pattern}' doesn't exist in namespace {kafka_namespace}"
             )
-            raise ie
+            raise
 
 
 @magenta_squad
