@@ -1,4 +1,4 @@
-import logging
+import loggerging
 import pytest
 import time
 
@@ -28,7 +28,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.utils import ceph_health_check
 
-log = logging.getLogger(__name__)
+logger = loggerging.getLogger(__name__)
 
 OCP_POD_OBJ = ocp.OCP(
     kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
@@ -59,11 +59,11 @@ def set_xattr_with_high_cpu_usage(
         PVC: The PVC object created for extended attribute operations
 
     """
-    log.info("setting extended attributes value for multiple files in MDS server ")
+    logger.test_step("Set up CephFS PVC and pod for extended attribute operations")
     active_mds_node_name = cluster.get_active_mds_info()["node_name"]
     file = constants.EXTENDED_ATTRIBUTES
+    logger.info(f"Active MDS node: {active_mds_node_name}")
 
-    # Creating PVC to attach POD to it
     pvc_obj = pvc_factory(
         interface=constants.CEPHFILESYSTEM,
         access_mode=constants.ACCESS_MODE_RWX,
@@ -71,18 +71,23 @@ def set_xattr_with_high_cpu_usage(
         status=constants.STATUS_BOUND,
         project=OCP(kind="Project", namespace=config.ENV_DATA["cluster_namespace"]),
     )
+    logger.info(f"Created CephFS PVC: {pvc_obj.name}")
 
     pod_obj = deployment_pod_factory(
         interface=constants.CEPHFILESYSTEM,
         pvc=pvc_obj,
         node_name=active_mds_node_name,
     )
+    logger.info(f"Created pod: {pod_obj.name} on node {active_mds_node_name}")
 
+    logger.test_step("Perform extended attribute operations to generate MDS load")
     perform_xattr_only_operations(file=file, pod_obj=pod_obj)
-
+    logger.info(
+        "Extended attribute operations started, waiting 120s for load generation"
+    )
     time.sleep(120)
 
-    log.info("Reducing MDS CPU resources to trigger MDS xattr latency alert")
+    logger.test_step("Reduce MDS CPU resources to trigger xattr latency alert")
     storagecluster_obj.patch(
         resource_name=constants.DEFAULT_STORAGE_CLUSTER,
         params=(
@@ -92,6 +97,7 @@ def set_xattr_with_high_cpu_usage(
         ),
         format_type="merge",
     )
+    logger.info("MDS resources reduced to CPU=250m, Memory=512Mi")
 
     return pvc_obj
 
@@ -111,7 +117,8 @@ def MDSxattr_alert_values(threading_lock, timeout):
         bool: True if alert is found and validated successfully, False otherwise
 
     """
-    return prometheus.validate_alert(
+    logger.info(f"Validating {constants.ALERT_MDSXATTR} alert (timeout: {timeout}s)")
+    result = prometheus.validate_alert(
         threading_lock=threading_lock,
         alert_constant=constants.ALERT_MDSXATTR,
         message="There is a latency in setting the 'xattr' values for Ceph Metadata Servers.",
@@ -127,6 +134,11 @@ def MDSxattr_alert_values(threading_lock, timeout):
         state="pending",
         timeout=timeout,
     )
+    if result:
+        logger.info(f"{constants.ALERT_MDSXATTR} alert validated successfully")
+    else:
+        logger.error(f"{constants.ALERT_MDSXATTR} alert validation failed")
+    return result
 
 
 def ceph_not_health_error():
@@ -138,13 +150,15 @@ def ceph_not_health_error():
               False if health check fails or raises an exception
 
     """
+    logger.debug("Checking Ceph cluster health (tries=45, delay=60s)")
     try:
         ceph_health_check(
             namespace=config.ENV_DATA["cluster_namespace"], tries=45, delay=60
         )
+        logger.info("Ceph health check passed")
         return True
     except Exception as ex:
-        log.warning(f"Ceph health check failed: {ex}")
+        logger.warning(f"Ceph health check failed: {ex}")
         return False
 
 
@@ -168,9 +182,10 @@ def verify_alert_cleared(threading_lock):
     Args:
         threading_lock: Threading lock for Prometheus API calls
     """
+    logger.test_step("Restore MDS resources and verify alert cleared")
     api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
-    log.info("Restoring MDS CPU and memory resources to default values to clear alert")
+    logger.info("Restoring MDS CPU and memory resources to default values")
     storagecluster_obj.patch(
         resource_name=constants.DEFAULT_STORAGE_CLUSTER,
         params=(
@@ -180,13 +195,17 @@ def verify_alert_cleared(threading_lock):
         ),
         format_type="merge",
     )
+    logger.info("MDS resources restored to CPU=2, Memory=6Gi")
 
-    # waiting for sometime for load distribution
+    logger.info("Waiting 400s for load distribution and alert clearance")
     time.sleep(400)
     test_end_time = int(time.time())
+
+    logger.info(f"Checking {constants.ALERT_MDSXATTR} alert is cleared")
     api.check_alert_cleared(
         label=constants.ALERT_MDSXATTR, measure_end_time=test_end_time, time_min=600
     )
+    logger.info(f"{constants.ALERT_MDSXATTR} alert cleared successfully")
 
 
 def recover_mds_pods_if_not_running():
@@ -220,32 +239,33 @@ def recover_mds_pods_if_not_running():
     ]
 
     if not deployments_to_scale:
-        log.info("No MDS deployments needed scaling")
+        logger.info("No MDS deployments needed scaling")
         return
 
-    log.info(f"Found {len(deployments_to_scale)} MDS deployment(s) at 0 replicas")
+    logger.info(f"Found {len(deployments_to_scale)} MDS deployment(s) at 0 replicas")
 
-    # Scale up each deployment from 0 to 1
+    logger.test_step("Scale up MDS deployments from 0 to 1 replica")
     for deployment in deployments_to_scale:
         deployment_name = deployment["metadata"]["name"]
         try:
             helpers.modify_deployment_replica_count(
                 deployment_name=deployment_name, replica_count=1
             )
-            log.info(f"Successfully scaled {deployment_name} to 1 replica")
-        except Exception as e:
-            log.error(f"Failed to scale MDS deployment {deployment_name}: {e}")
+            logger.info(f"Successfully scaled {deployment_name} to 1 replica")
+        except Exception:
+            logger.exception(f"Failed to scale MDS deployment {deployment_name}")
             raise AssertionError(
                 f"Teardown failed: Could not scale MDS deployment {deployment_name} from 0 to 1"
             )
 
+    logger.info("Waiting for MDS pods to reach Running state")
     pod.wait_for_pods_to_be_running(
         namespace=config.ENV_DATA["cluster_namespace"],
         selector=constants.MDS_APP_LABEL,
         timeout=180,
         sleep=10,
     )
-    log.info("All MDS pods are running successfully")
+    logger.info("All MDS pods are running successfully")
 
 
 @blue_squad
@@ -285,9 +305,8 @@ class TestMdsXattrAlerts(E2ETest):
             Alert verification is done at the end of each test method.
 
             """
-
-            log.info(
-                "Restoring MDS CPU and memory resources to default values in teardown"
+            logger.test_step(
+                "Cleanup: Restore MDS CPU and memory resources to defaults"
             )
             storagecluster_obj.patch(
                 resource_name=constants.DEFAULT_STORAGE_CLUSTER,
@@ -298,6 +317,7 @@ class TestMdsXattrAlerts(E2ETest):
                 ),
                 format_type="merge",
             )
+            logger.info("MDS resources restored to CPU=2, Memory=6Gi in teardown")
 
         request.addfinalizer(finalizer)
 
@@ -320,13 +340,22 @@ class TestMdsXattrAlerts(E2ETest):
             4. Verify alert is cleared after test completion
 
         """
-        log.info(
-            "Setting extended attributes and file creation IO started in the background."
-            " Script will look for CephXattrSetLatency  alert"
+        logger.info("Starting test: Verify MDS xattr latency alert is triggered")
+        logger.info(
+            "Extended attributes operations started. "
+            "Monitoring for CephXattrSetLatency alert"
         )
-        assert MDSxattr_alert_values(threading_lock, timeout=1200)
+
+        logger.test_step("Wait for and validate CephXattrSetLatency alert")
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.assertion(
+            f"MDS xattr alert validation: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "CephXattrSetLatency alert validation failed"
 
         verify_alert_cleared(threading_lock)
+
+        logger.info("Test passed: MDS xattr alert triggered and cleared successfully")
 
     @tier4c
     @pytest.mark.polarion_id("OCS-7734")
@@ -352,23 +381,35 @@ class TestMdsXattrAlerts(E2ETest):
             9. Verify alert is cleared after test completion
 
         """
-        log.info(
-            "Setting extended attributes and file creation IO started in the background."
-            " Script will look for CephXattrSetLatency  alert"
+        logger.info(
+            "Starting test: Verify alert persistence after restarting operator and metrics pods"
         )
-        assert MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.info(
+            "Extended attributes operations started. "
+            "Monitoring for CephXattrSetLatency alert"
+        )
 
-        log.info("Restart the rook-operator pod")
+        logger.test_step("Wait for and validate initial CephXattrSetLatency alert")
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.assertion(
+            f"Initial alert validation: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "Initial CephXattrSetLatency alert validation failed"
+
+        logger.test_step("Restart rook-operator pod and re-validate alert")
         operator_pod_obj = get_operator_pods()
         delete_pods(pod_objs=operator_pod_obj)
         OCP_POD_OBJ.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector=constants.OPERATOR_LABEL,
         )
-        log.info("Validating the alert after the rook-operator pod restart")
-        assert MDSxattr_alert_values(threading_lock, timeout=1200)
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.assertion(
+            f"Alert after operator restart: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "Alert validation failed after operator restart"
 
-        log.info("Respin the ocs-metrics-exporter pod")
+        logger.test_step("Restart ocs-metrics-exporter pod and re-validate alert")
         metrics_pods = get_pods_having_label(
             label="app.kubernetes.io/name=ocs-metrics-exporter",
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -377,11 +418,11 @@ class TestMdsXattrAlerts(E2ETest):
         assert metrics_pods, "No ocs-metrics-exporter pods found"
         metrics_pod = metrics_pods[0]
         metrics_pod_name = metrics_pod["metadata"]["name"]
-        log.info(f"Initial ocs-metrics-exporter pod: {metrics_pod_name}")
+        logger.info(f"Initial ocs-metrics-exporter pod: {metrics_pod_name}")
 
         OCP_POD_OBJ.delete(resource_name=metrics_pod_name)
 
-        log.info("Wait for ocs-metrics-exporter pod to come up")
+        logger.info("Wait for ocs-metrics-exporter pod to come up")
         assert OCP_POD_OBJ.wait_for_resource(
             condition="Running",
             selector="app.kubernetes.io/name=ocs-metrics-exporter",
@@ -389,10 +430,17 @@ class TestMdsXattrAlerts(E2ETest):
             timeout=600,
         )
 
-        log.info("Validating the alert after ocs-metrics-exporter pod restart")
-        assert MDSxattr_alert_values(threading_lock, timeout=1200)
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.assertion(
+            f"Alert after metrics-exporter restart: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "Alert validation failed after metrics-exporter restart"
 
         verify_alert_cleared(threading_lock)
+
+        logger.info(
+            "Test passed: Alert persisted correctly after operator and metrics pod restarts"
+        )
 
     @tier2
     @pytest.mark.polarion_id("OCS-7735")
@@ -413,20 +461,37 @@ class TestMdsXattrAlerts(E2ETest):
             5. Re-validate the alert after Prometheus recovery (timeout: 300s)
             6. Verify alert is cleared after test completion
         """
-
-        log.info(
-            "Setting extended attributes and file creation IO started in the background."
-            " Script will look for CephXattrSetLatency  alert"
+        logger.info(
+            "Starting test: Verify alert recovery after Prometheus pod failures"
         )
-        assert MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.info(
+            "Extended attributes operations started. "
+            "Monitoring for CephXattrSetLatency alert"
+        )
 
-        log.info("Bring down the prometheus")
+        logger.test_step("Wait for and validate initial CephXattrSetLatency alert")
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.assertion(
+            f"Initial alert validation: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "Initial CephXattrSetLatency alert validation failed"
+
+        logger.test_step("Delete Prometheus pods and re-validate alert after recovery")
+        logger.info("Deleting Prometheus pods to simulate failure")
         list_of_prometheus_pod_obj = get_prometheus_pods()
         delete_pods(list_of_prometheus_pod_obj)
 
-        assert MDSxattr_alert_values(threading_lock, timeout=300)
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=300)
+        logger.assertion(
+            f"Alert after Prometheus recovery: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "Alert validation failed after Prometheus recovery"
 
         verify_alert_cleared(threading_lock)
+
+        logger.info(
+            "Test passed: Alert recovered successfully after Prometheus pod failures"
+        )
 
     @tier4c
     @pytest.mark.polarion_id("OCS-7736")
@@ -457,40 +522,61 @@ class TestMdsXattrAlerts(E2ETest):
             """
             Teardown to ensure MDS deployments are scaled up and pods are running.
             """
+            logger.test_step("Cleanup: Recover MDS deployments if needed")
             recover_mds_pods_if_not_running()
 
         request.addfinalizer(finalizer)
 
-        log.info(
-            "Setting extended attributes and file creation IO started in the background."
-            " Script will look for CephXattrSetLatency  alert"
+        logger.info(
+            "Starting test: Verify alert persistence after active MDS scale down/up"
         )
-        assert MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.info(
+            "Extended attributes operations started. "
+            "Monitoring for CephXattrSetLatency alert"
+        )
 
+        logger.test_step("Wait for and validate initial CephXattrSetLatency alert")
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.assertion(
+            f"Initial alert validation: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "Initial CephXattrSetLatency alert validation failed"
+
+        logger.test_step("Scale down active MDS deployment and scale back up")
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
         active_mds_pod = cluster.get_active_mds_info()["active_pod"]
         deployment_name = "rook-ceph-mds-" + active_mds
+        logger.info(f"Active MDS daemon: {active_mds}, deployment: {deployment_name}")
 
-        log.info(f"Scale down {deployment_name} to 0")
+        logger.info(f"Scaling down {deployment_name} to 0 replicas")
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=0
         )
         OCP_POD_OBJ.wait_for_delete(resource_name=active_mds_pod)
-        log.info(f"Scale up {deployment_name} to 1")
+        logger.info(f"Scaling up {deployment_name} to 1 replica")
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=1
         )
-        log.info(
-            " Script will be in sleep for 60 seconds to make sure mds scale up completed."
-        )
+        logger.info("Waiting 60s for MDS scale up to complete")
         time.sleep(60)
+
+        logger.info("Waiting for all MDS pods to reach Running state")
         mds_pods = get_mds_pods()
         for pd in mds_pods:
             helpers.wait_for_resource_state(resource=pd, state=constants.STATUS_RUNNING)
 
-        assert MDSxattr_alert_values(threading_lock, timeout=60)
+        logger.test_step("Re-validate alert after MDS scale operations")
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=60)
+        logger.assertion(
+            f"Alert after MDS scale: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "Alert validation failed after MDS scale operations"
 
         verify_alert_cleared(threading_lock)
+
+        logger.info(
+            "Test passed: Alert persisted correctly after active MDS scale down/up"
+        )
 
     @tier2
     @pytest.mark.polarion_id("OCS-7737")
@@ -528,16 +614,29 @@ class TestMdsXattrAlerts(E2ETest):
             """
             Teardown to ensure MDS deployments are scaled up and pods are running.
             """
+            logger.test_step("Cleanup: Recover MDS deployments if needed")
             recover_mds_pods_if_not_running()
 
         request.addfinalizer(finalizer)
 
-        log.info(
-            "Setting extended attributes and file creation IO started in the background."
-            " Script will look for CephXattrSetLatency  alert"
+        logger.info(
+            "Starting test: Verify alert persistence after both active and standby MDS scale down/up"
         )
-        assert MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.info(
+            "Extended attributes operations started. "
+            "Monitoring for CephXattrSetLatency alert"
+        )
 
+        logger.test_step("Wait for and validate initial CephXattrSetLatency alert")
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.assertion(
+            f"Initial alert validation: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "Initial CephXattrSetLatency alert validation failed"
+
+        logger.test_step(
+            "Scale down both active and standby MDS deployments, then scale back up"
+        )
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
         standby_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
         active_mds_d = "rook-ceph-mds-" + active_mds
@@ -545,36 +644,47 @@ class TestMdsXattrAlerts(E2ETest):
         active_mds_pod = cluster.get_active_mds_info()["active_pod"]
         standby_mds_pod = cluster.get_mds_standby_replay_info()["standby_replay_pod"]
         mds_dc_pods = [active_mds_d, standby_mds_d]
+        logger.info(f"Active MDS: {active_mds_d}, Standby MDS: {standby_mds_d}")
 
-        log.info(f"Scale down {active_mds_d} to 0")
+        logger.info(f"Scaling down {active_mds_d} to 0 replicas")
         helpers.modify_deployment_replica_count(
             deployment_name=active_mds_d, replica_count=0
         )
         OCP_POD_OBJ.wait_for_delete(resource_name=active_mds_pod)
 
-        log.info(f"Scale down {standby_mds_d} to 0")
+        logger.info(f"Scaling down {standby_mds_d} to 0 replicas")
         helpers.modify_deployment_replica_count(
             deployment_name=standby_mds_d, replica_count=0
         )
         OCP_POD_OBJ.wait_for_delete(resource_name=standby_mds_pod)
 
         for mds_pod_obj in mds_dc_pods:
-            log.info(f"Scale up {mds_pod_obj} to 1")
+            logger.info(f"Scaling up {mds_pod_obj} to 1 replica")
             helpers.modify_deployment_replica_count(
                 deployment_name=mds_pod_obj, replica_count=1
             )
-        log.info(
-            " Script will be in sleep for 60 seconds to make sure both mds scale up completed."
-        )
+        logger.info("Waiting 60s for both MDS scale up operations to complete")
         time.sleep(60)
 
+        logger.info("Waiting for all MDS pods to reach Running state")
         mds_pods = get_mds_pods()
         for pd in mds_pods:
             helpers.wait_for_resource_state(resource=pd, state=constants.STATUS_RUNNING)
 
-        assert MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.test_step("Re-validate alert after both MDS scale operations")
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.assertion(
+            f"Alert after both MDS scale: expected=True, actual={alert_validated}"
+        )
+        assert (
+            alert_validated
+        ), "Alert validation failed after both MDS scale operations"
 
         verify_alert_cleared(threading_lock)
+
+        logger.info(
+            "Test passed: Alert persisted correctly after both MDS scale down/up"
+        )
 
     @tier4b
     @pytest.mark.polarion_id("OCS-7738")
@@ -605,30 +715,60 @@ class TestMdsXattrAlerts(E2ETest):
 
         def finalizer():
             """Teardown to ensure all nodes are up and cluster is healthy after test"""
+            logger.test_step(
+                "Cleanup: Restart any stopped nodes and verify cluster health"
+            )
             nodes.restart_nodes_by_stop_and_start_teardown()
+            cluster_healthy = is_cluster_healthy()
+            logger.assertion(
+                f"Cluster health after teardown: expected=True, actual={cluster_healthy}"
+            )
             assert (
-                is_cluster_healthy()
+                cluster_healthy
             ), "Cluster is not healthy after node restart in teardown"
 
         request.addfinalizer(finalizer)
 
-        log.info(
-            "Setting extended attributes and file creation IO started in the background."
-            " Script will look for CephXattrSetLatency  alert"
+        logger.info(
+            "Starting test: Verify alert persistence after active MDS node restart"
         )
-        assert MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.info(
+            "Extended attributes operations started. "
+            "Monitoring for CephXattrSetLatency alert"
+        )
 
+        logger.test_step("Wait for and validate initial CephXattrSetLatency alert")
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.assertion(
+            f"Initial alert validation: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "Initial CephXattrSetLatency alert validation failed"
+
+        logger.test_step(
+            "Restart node running active MDS pod and verify cluster health"
+        )
         active_mds_pod_obj = cluster.get_active_mds_info()["active_pod_obj"]
-        log.info("Restart active mds running node")
         active_mds_node = pod.get_pod_node(active_mds_pod_obj)
+        logger.info(f"Restarting node: {active_mds_node.name}")
         nodes.restart_nodes([active_mds_node])
         wait_for_nodes_status(
             [active_mds_node.name], constants.STATUS_READY, timeout=420
         )
-        assert (
-            is_cluster_healthy()
-        ), "Cluster is not healthy after active MDS node restart"
+        cluster_healthy = is_cluster_healthy()
+        logger.assertion(
+            f"Cluster health after node restart: expected=True, actual={cluster_healthy}"
+        )
+        assert cluster_healthy, "Cluster is not healthy after active MDS node restart"
 
-        assert MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.test_step("Re-validate alert after node restart")
+        alert_validated = MDSxattr_alert_values(threading_lock, timeout=1200)
+        logger.assertion(
+            f"Alert after node restart: expected=True, actual={alert_validated}"
+        )
+        assert alert_validated, "Alert validation failed after node restart"
 
         verify_alert_cleared(threading_lock)
+
+        logger.info(
+            "Test passed: Alert persisted correctly after active MDS node restart"
+        )
