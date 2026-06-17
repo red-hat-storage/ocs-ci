@@ -892,6 +892,26 @@ def verify_consumer_configmap(
         )
 
         _handle_converged_client_ceph_names(ceph_data, ceph_data_on_consumer_match)
+    elif internal_consumer and disable_cephfs and not disable_blockpools:
+        """
+        Handle internal consumer with CephFS disabled.
+        Only verify RBD-related configuration.
+        """
+        # Only check RBD configuration
+        ceph_data_on_consumer_match["rbd-rados-ns"] = (
+            ceph_data.get("rbd-rados-ns", "") == "<implicit>"
+        )
+        ceph_data_on_consumer_match["csi-rbd-node-ceph-user"] = (
+            ceph_data.get("csi-rbd-node-ceph-user", "") == "rook-csi-rbd-node"
+        )
+        ceph_data_on_consumer_match["csi-rbd-provisioner-ceph-user"] = (
+            ceph_data.get("csi-rbd-provisioner-ceph-user", "")
+            == "rook-csi-rbd-provisioner"
+        )
+        ceph_data_on_consumer_match["csiop-rbd-client-profile"] = (
+            ceph_data.get("csiop-rbd-client-profile", "")
+            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+        )
     elif (
         not internal_consumer
         and not (disable_blockpools or disable_cephfs)
