@@ -39,51 +39,90 @@ class TestBlackboxExporterProbe(ManageTest):
         """
         logger.info("Starting test: Verify blackbox probe contains OSD and MON IPs")
 
+        logger.test_step("Get odf-blackbox-exporter probe configuration")
         probe = Probe()
         probe_config = probe.get_probe_config("odf-blackbox-exporter")
+        logger.assertion(
+            f"Probe config retrieval: expected=non-empty, actual={'success' if probe_config else 'failed'}"
+        )
         assert probe_config, "Failed to get probe configuration"
 
-        logger.info("Getting OSD pod IPs...")
+        logger.test_step("Get OSD pod IPs from cluster")
         osd_ips = get_pod_ips(
             constants.OSD_APP_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        logger.assertion(
+            f"OSD pods found: expected=non-empty, actual={len(osd_ips) if osd_ips else 0} pods"
         )
         assert osd_ips, "No OSD pods found or no IPs available"
         logger.info(f"Found {len(osd_ips)} OSD pods with IPs")
 
-        logger.info("Getting MON pod IPs...")
+        logger.test_step("Get MON pod IPs from cluster")
         mon_ips = get_pod_ips(
             constants.MON_APP_LABEL, constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        logger.assertion(
+            f"MON pods found: expected=non-empty, actual={len(mon_ips) if mon_ips else 0} pods"
         )
         assert mon_ips, "No MON pods found or no IPs available"
         logger.info(f"Found {len(mon_ips)} MON pods with IPs")
 
-        logger.info("Extracting IPs from probe configuration...")
+        logger.test_step("Extract static target IPs from probe configuration")
         probe_ips = probe.get_static_targets(probe_config)
+        logger.assertion(
+            f"Probe IPs found: expected=non-empty, actual={len(probe_ips) if probe_ips else 0} IPs"
+        )
         assert probe_ips, "No IPs found in probe configuration"
         logger.info(f"Found {len(probe_ips)} IPs in probe configuration")
 
-        logger.info("Verifying OSD IPs are present in probe configuration...")
+        logger.test_step("Verify all OSD pod IPs are present in probe configuration")
         missing_osd_ips = []
         for pod_name, pod_ip in osd_ips.items():
             if pod_ip not in probe_ips:
                 missing_osd_ips.append(f"{pod_name}: {pod_ip}")
-                logger.error(f"OSD pod IP not found in probe: {pod_name} ({pod_ip})")
+                logger.debug(f"Missing OSD pod IP: {pod_name} ({pod_ip})")
 
-        logger.info("Verifying MON IPs are present in probe configuration...")
+        if missing_osd_ips:
+            logger.error(
+                f"Found {len(missing_osd_ips)} OSD pod IPs missing from probe configuration"
+            )
+        else:
+            logger.info(
+                f"All {len(osd_ips)} OSD pod IPs present in probe configuration"
+            )
+
+        logger.test_step("Verify all MON pod IPs are present in probe configuration")
         missing_mon_ips = []
         for pod_name, pod_ip in mon_ips.items():
             if pod_ip not in probe_ips:
                 missing_mon_ips.append(f"{pod_name}: {pod_ip}")
-                logger.error(f"MON pod IP not found in probe: {pod_name} ({pod_ip})")
+                logger.debug(f"Missing MON pod IP: {pod_name} ({pod_ip})")
 
+        if missing_mon_ips:
+            logger.error(
+                f"Found {len(missing_mon_ips)} MON pod IPs missing from probe configuration"
+            )
+        else:
+            logger.info(
+                f"All {len(mon_ips)} MON pod IPs present in probe configuration"
+            )
+
+        logger.assertion(
+            f"OSD IPs validation: expected=0 missing, actual={len(missing_osd_ips)} missing"
+        )
         assert not missing_osd_ips, (
             f"The following OSD pod IPs are missing from probe configuration: "
             f"{missing_osd_ips}"
+        )
+
+        logger.assertion(
+            f"MON IPs validation: expected=0 missing, actual={len(missing_mon_ips)} missing"
         )
         assert not missing_mon_ips, (
             f"The following MON pod IPs are missing from probe configuration: "
             f"{missing_mon_ips}"
         )
+
         logger.info(
             "Test passed: All OSD and MON pod IPs are present in "
             "odf-blackbox-exporter probe configuration"
