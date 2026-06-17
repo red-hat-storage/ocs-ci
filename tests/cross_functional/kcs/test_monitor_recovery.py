@@ -262,9 +262,9 @@ class TestMonitorRecovery(E2ETest):
         if collections.Counter(new_md5_sum) == collections.Counter(self.md5sum):
             logger.info(f"Data integrity verified: checksums match for {self.filename}")
         else:
-            assert (
-                False
-            ), f"Data corruption detected: before={self.md5sum}, after={new_md5_sum}"
+            pytest.fail(
+                f"Data corruption detected: before={self.md5sum}, after={new_md5_sum}"
+            )
 
         logger.test_step("Verify S3 object retrieval after recovery")
         logger.assertion(
@@ -1088,6 +1088,9 @@ def recover_mcg():
     Recovery procedure for noobaa by re-spinning the pods after mon recovery.
     Handles multi-attach errors by deleting stale VolumeAttachment resources.
 
+    Raises:
+        AssertionError: If any NooBaa or RGW pods fail to reach running state
+
     """
     logger.info("Starting MCG recovery by re-spinning noobaa pods")
     noobaa_pods = get_noobaa_pods()
@@ -1101,12 +1104,23 @@ def recover_mcg():
     time.sleep(120)
 
     logger.info("Verifying noobaa pods reached running state")
+    failed_noobaa_pods = []
     respawned_noobaa_pods = get_noobaa_pods()
     for noobaa_pod in respawned_noobaa_pods:
         logger.debug(f"Checking noobaa pod: {noobaa_pod.name}")
         if not handle_multi_attach_error(noobaa_pod, timeout=600):
-            logger.warning(f"Noobaa pod {noobaa_pod.name} did not reach running state")
-    logger.info("MCG noobaa pods recovery completed")
+            logger.error(f"Noobaa pod {noobaa_pod.name} failed to reach running state")
+            failed_noobaa_pods.append(noobaa_pod.name)
+
+    if failed_noobaa_pods:
+        logger.error(
+            f"MCG recovery failed: {len(failed_noobaa_pods)} noobaa pods not running: {failed_noobaa_pods}"
+        )
+        raise AssertionError(f"NooBaa pod recovery failed: {failed_noobaa_pods}")
+
+    logger.info(
+        f"MCG noobaa pods recovery completed: all {len(respawned_noobaa_pods)} pods running"
+    )
 
     if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
         logger.info("On-prem platform detected: recovering RGW pods")
@@ -1121,12 +1135,23 @@ def recover_mcg():
         time.sleep(120)
 
         logger.info("Verifying RGW pods reached running state")
+        failed_rgw_pods = []
         respawned_rgw_pods = get_rgw_pods()
         for rgw_pod in respawned_rgw_pods:
             logger.debug(f"Checking RGW pod: {rgw_pod.name}")
             if not handle_multi_attach_error(rgw_pod, timeout=600):
-                logger.warning(f"RGW pod {rgw_pod.name} did not reach running state")
-        logger.info("RGW pods recovery completed")
+                logger.error(f"RGW pod {rgw_pod.name} failed to reach running state")
+                failed_rgw_pods.append(rgw_pod.name)
+
+        if failed_rgw_pods:
+            logger.error(
+                f"RGW recovery failed: {len(failed_rgw_pods)} RGW pods not running: {failed_rgw_pods}"
+            )
+            raise AssertionError(f"RGW pod recovery failed: {failed_rgw_pods}")
+
+        logger.info(
+            f"RGW pods recovery completed: all {len(respawned_rgw_pods)} pods running"
+        )
     else:
         logger.debug(
             f"Skipping RGW recovery on non-on-prem platform: {config.ENV_DATA['platform']}"
