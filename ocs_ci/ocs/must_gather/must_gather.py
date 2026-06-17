@@ -161,6 +161,7 @@ class MustGather(object):
             if pattern is False:
                 pod_names.append(pod.name)
 
+        pod_path = None
         for dir_name, subdir_list, files_list in os.walk(self.root):
             if re.search("openshift-storage/pods$", dir_name):
                 pod_path = dir_name
@@ -168,10 +169,21 @@ class MustGather(object):
 
         pod_files = []
         logger.info("Get pod names on openshift-storage/pods directory")
-        for pod_file in os.listdir(pod_path):
-            pattern = self.check_pod_name_pattern(pod_file)
-            if pattern is False:
-                pod_files.append(pod_file)
+        if pod_path:
+            for pod_file in os.listdir(pod_path):
+                pattern = self.check_pod_name_pattern(pod_file)
+                if pattern is False:
+                    pod_files.append(pod_file)
+        else:
+            pods_pattern = re.compile(r"openshift-storage/pods/([^/]+)")
+            seen = set()
+            for full_path in self.full_paths:
+                match = pods_pattern.search(full_path)
+                if match and match.group(1) not in seen:
+                    seen.add(match.group(1))
+                    pattern = self.check_pod_name_pattern(match.group(1))
+                    if pattern is False:
+                        pod_files.append(match.group(1))
 
         diff = list(set(pod_files) - set(pod_names)) + list(
             set(pod_names) - set(pod_files)
