@@ -278,7 +278,6 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
 
         logger.test_step(f"Create Vault CSI KMS token in namespace: {BMO_NAME}")
         self.vault.vault_path_token = self.vault.generate_vault_token()
-        logger.info(f"Generated Vault token: {self.vault.vault_path_token[:20]}...")
         self.vault.create_vault_csi_kms_token(namespace=BMO_NAME)
         logger.info(f"Created Vault CSI KMS token in namespace: {BMO_NAME}")
 

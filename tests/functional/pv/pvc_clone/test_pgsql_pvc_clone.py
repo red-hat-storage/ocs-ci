@@ -52,15 +52,9 @@ class TestPvcCloneOfWorkloads(E2ETest):
         pvc_clone_factory,
         sc_name=None,
     ):
-        logger.info(
-            f"Creating and verifying {len(postgres_pvcs_obj)} cloned PVC(s) across 3 iterations"
-        )
+        logger.info(f"Creating and verifying {len(postgres_pvcs_obj)} cloned PVCs")
         for i in range(3):
-            logger.debug(f"Starting clone iteration {i + 1}/3")
-
-            logger.info(
-                f"Iteration {i + 1}: Creating clones of {len(postgres_pvcs_obj)} Postgres PVC(s)"
-            )
+            logger.info(f"Creating clones of {len(postgres_pvcs_obj)} Postgres PVC(s)")
             cloned_pvcs = [
                 pvc_clone_factory(
                     pvc_obj, volume_mode=VOLUME_MODE_FILESYSTEM, storageclass=sc_name
@@ -70,7 +64,7 @@ class TestPvcCloneOfWorkloads(E2ETest):
             logger.info(f"Created {len(cloned_pvcs)} cloned PVC(s), all in Bound state")
 
             logger.info(
-                f"Attaching PostgreSQL pods to {len(cloned_pvcs)} cloned PVC(s): postgres-cloned-{i}"
+                f"Attaching new PostgreSQL pods to {len(cloned_pvcs)} cloned PVCs: postgres-cloned-{i}"
             )
             self.pgsql_obj_list = pgsql.attach_pgsql_pod_to_claim_pvc(
                 pvc_objs=cloned_pvcs,
@@ -79,7 +73,7 @@ class TestPvcCloneOfWorkloads(E2ETest):
             )
             self.sset_list.extend(self.pgsql_obj_list)
             logger.info(
-                f"Attached {len(self.pgsql_obj_list)} PostgreSQL pod(s) to cloned PVCs"
+                f"Attached {len(self.pgsql_obj_list)} PostgreSQL pods to cloned PVCs"
             )
 
             logger.info("Getting file space usage from parent PostgreSQL pods")
@@ -220,7 +214,6 @@ class TestPvcCloneOfWorkloads(E2ETest):
 
         logger.test_step(f"Create Vault CSI KMS token in namespace: {BMO_NAME}")
         self.vault.vault_path_token = self.vault.generate_vault_token()
-        logger.info(f"Generated Vault token: {self.vault.vault_path_token[:20]}...")
         self.vault.create_vault_csi_kms_token(namespace=BMO_NAME)
         logger.info(f"Created Vault CSI KMS token in namespace: {BMO_NAME}")
 
@@ -254,7 +247,15 @@ class TestPvcCloneOfWorkloads(E2ETest):
         logger.info(
             f"Verifying Vault encryption keys for {len(cloned_pvcs) if cloned_pvcs else 0} cloned PVC(s)"
         )
-        for idx, pvc_obj in enumerate(cloned_pvcs if cloned_pvcs else [], 1):
+        logger.assertion(
+            f"Expected at least one cloned PVC before Vault key verification, "
+            f"actual count: {len(cloned_pvcs) if cloned_pvcs else 0}"
+        )
+        assert (
+            cloned_pvcs
+        ), "Expected at least one cloned PVC before Vault key verification"
+
+        for idx, pvc_obj in enumerate(cloned_pvcs, 1):
             pv_obj = pvc_obj.backed_pv_obj
             vol_handle = pv_obj.get().get("spec").get("csi").get("volumeHandle")
             logger.debug(
