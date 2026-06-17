@@ -1105,12 +1105,66 @@ def set_stop_flags_for_all_clusters(stop_requested, graceful_stop):
         ocsci_config.RUN["graceful_stop"] = graceful_stop
 
 
+def _check_disabled_components(item):
+    """
+    Check if test should be skipped based on disabled components.
+
+    This function automatically detects component requirements based on:
+    - Test file path (e.g., tests/functional/object/mcg/ -> requires NooBaa)
+    - Test markers (e.g., @pytest.mark.mcg -> requires NooBaa)
+
+    Args:
+        item: pytest test item
+
+    Raises:
+        pytest.skip: If test requires a disabled component
+    """
+    # Component path patterns - map directory patterns to component requirements
+    component_paths = {
+        "/object/mcg/": ("disable_noobaa", "NooBaa"),
+        "/object/rgw/": ("disable_rgw", "RGW"),
+        "/monitoring/prometheus/alerts/test_rgw": ("disable_rgw", "RGW"),
+        "/monitoring/prometheus/metrics/test_rgw": ("disable_rgw", "RGW"),
+        "/workloads/app/amq/test_rgw": ("disable_rgw", "RGW"),
+        "test_bucket": ("disable_noobaa", "NooBaa"),
+        "test_mcg": ("disable_noobaa", "NooBaa"),
+        "test_noobaa": ("disable_noobaa", "NooBaa"),
+        "cephfs": ("disable_cephfs", "CephFS"),
+    }
+
+    # Component markers - map pytest markers to component requirements
+    component_markers = {
+        "mcg": ("disable_noobaa", "NooBaa"),
+        "rgw": ("disable_rgw", "RGW"),
+    }
+
+    # Get test file path
+    test_path = str(item.fspath)
+
+    # Check if test path indicates a specific component
+    for path_pattern, (disable_key, component_name) in component_paths.items():
+        if path_pattern in test_path:
+            if ocsci_config.COMPONENTS.get(disable_key, False):
+                pytest.skip(f"Test requires {component_name} but it is disabled")
+
+    # Check test markers
+    for marker_name, (disable_key, component_name) in component_markers.items():
+        if item.get_closest_marker(marker_name):
+            if ocsci_config.COMPONENTS.get(disable_key, False):
+                pytest.skip(
+                    f"Test requires {component_name} but it is disabled (marker: {marker_name})"
+                )
+
+
 global consumed_ram_start_test
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     try:
+        # Check if test should be skipped due to disabled components
+        _check_disabled_components(item)
+
         # Check for stop files before starting the test
         stop_requested, graceful_stop, skip_message = check_stop_file()
 
