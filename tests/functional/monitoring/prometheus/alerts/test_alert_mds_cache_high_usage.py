@@ -1,4 +1,4 @@
-import loggerging
+import logging
 import pytest
 import time
 
@@ -26,7 +26,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility import prometheus
 
-logger = loggerging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 # sleep timer (in seconds) for scale up, resource deletion & alert verification

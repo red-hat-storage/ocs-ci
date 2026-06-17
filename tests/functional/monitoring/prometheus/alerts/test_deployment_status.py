@@ -1,4 +1,4 @@
-import loggerging
+import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import blue_squad, provider_mode
@@ -13,7 +13,7 @@ from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
 
 
-logger = loggerging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @provider_mode
