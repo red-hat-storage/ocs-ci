@@ -115,7 +115,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         test_directory_setup,
         nodes,
     ):
-        # check uni bucket replication from multi (aws+azure) namespace bucket to s3-compatible namespace bucket
+        logger.test_step("Setup uni-directional bucket replication")
         prefix_site_1 = "site1"
         target_bucket_name = bucket_factory(bucketclass=target_bucketclass)[0].name
         replication_policy = (
@@ -126,6 +126,11 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         source_bucket_name = bucket_factory(
             bucketclass=source_bucketclass, replication_policy=replication_policy
         )[0].name
+        logger.info(
+            f"Source bucket: {source_bucket_name}, Target bucket: {target_bucket_name}"
+        )
+
+        logger.test_step("Write objects and verify uni-directional replication")
         written_random_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             source_bucket_name,
@@ -140,10 +145,10 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
-        logger.info("Uni-directional bucket replication working as expected")
+        logger.info("Uni-directional bucket replication verified successfully")
 
-        # change from uni-directional to bi-directional replication policy
-        logger.info("Changing the replication policy from uni to bi-directional!")
+        logger.test_step("Change from uni-directional to bi-directional replication")
+        logger.info("Updating replication policy to bi-directional")
         prefix_site_2 = "site2"
         patch_replication_policy_to_bucket(
             target_bucket_name,
@@ -151,12 +156,14 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             source_bucket_name,
             prefix=prefix_site_2,
         )
-        logger.info(
-            "Patch ran successfully! Changed the replication policy from uni to bi directional"
-        )
+        logger.info("Replication policy updated to bi-directional successfully")
 
-        # write objects to the second bucket and see if it's replicated on the other
-        logger.info("checking if bi-directional replication works!!")
+        logger.test_step(
+            "Write objects to target bucket and verify bi-directional replication"
+        )
+        logger.info(
+            "Writing objects to target bucket to test bi-directional replication"
+        )
         written_random_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             target_bucket_name,
@@ -170,13 +177,12 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
-        logger.info("Bi directional bucket replication working as expected")
+        logger.info("Bi-directional bucket replication verified successfully")
 
-        # delete all the s3-compatible namespace buckets objects and then recover it from other namespace bucket on
-        # write
-        logger.info(
-            "checking replication when one of the bucket's objects are deleted!!"
+        logger.test_step(
+            "Delete all objects from target bucket and verify recovery on write"
         )
+        logger.info("Deleting all objects from target bucket to test data recovery")
         try:
             mcg_obj_session.s3_resource.Bucket(
                 target_bucket_name
@@ -203,14 +209,10 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
-        logger.info(
-            "All the objects retrieved back to s3-compatible bucket on new write!!"
-        )
+        logger.info("All objects successfully recovered to target bucket on new write")
 
-        # restart RGW pods and then see if object sync still works
-        logger.info(
-            "Checking if the replication works when there is RGW pod restarts!!"
-        )
+        logger.test_step("Restart RGW pods and verify replication still works")
+        logger.info("Writing new objects and restarting RGW pods")
         written_random_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             target_bucket_name,
@@ -234,10 +236,10 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
-        logger.info("Object sync works after the RGW pod restarted!!")
+        logger.info("Object replication verified successfully after RGW pod restart")
 
-        # write some object to any of the bucket, followed by immediate cluster restart
-        logger.info("Checking replication when there is a cluster reboot!!")
+        logger.test_step("Reboot cluster and verify replication works")
+        logger.info("Writing objects and rebooting cluster")
         written_random_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             target_bucket_name,
@@ -265,7 +267,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
-        logger.info("Objects sync works even when the cluster is rebooted")
+        logger.info("Object replication verified successfully after cluster reboot")
 
 
 @system_test
@@ -314,19 +316,24 @@ class TestLogBasedReplicationWithDisruptions:
            make sure no replication - no deletion sync works
 
         """
-        # entry criteria setup
+        logger.test_step("Setup MCG background features for entry criteria")
         feature_setup_map = setup_mcg_bg_features(
             num_of_buckets=5,
             object_amount=5,
             is_disruptive=True,
             skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
+        logger.info("MCG background features setup completed")
 
+        logger.test_step("Setup log-based replication between buckets")
         mockup_logger, _, source_bucket, target_bucket = (
             aws_log_based_replication_setup()
         )
+        logger.info(
+            f"Log-based replication setup: {source_bucket.name} -> {target_bucket.name}"
+        )
 
-        # upload test objects to the bucket and verify replication
+        logger.test_step("Upload objects and verify log-based replication")
         upload_test_objects_to_source_and_wait_for_replication(
             mcg_obj_session,
             source_bucket,
@@ -334,12 +341,14 @@ class TestLogBasedReplicationWithDisruptions:
             mockup_logger,
             600,
         )
+        logger.info("Initial replication verified successfully")
 
-        # Delete objects in the first set in a batch and perform noobaa pod
-        # restarts at the same time and make sure deletion sync works
-
+        logger.test_step("Delete objects and restart NooBaa pods, verify deletion sync")
         objs_in_bucket = mockup_logger.standard_test_obj_list
         objs_to_delete = random.sample(objs_in_bucket, 3)
+        logger.info(
+            f"Deleting {len(objs_to_delete)} objects while restarting NooBaa pods"
+        )
 
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(
@@ -361,10 +370,14 @@ class TestLogBasedReplicationWithDisruptions:
                 target_bucket.name,
                 timeout=600,
             ), f"Deletion sync failed to complete for the objects {objs_to_delete} deleted in the first bucket set"
+        logger.info("Deletion sync verified successfully after NooBaa pod restart")
 
-        logger.info("Taking backup of noobaa db")
+        logger.test_step("Take NooBaa DB backup")
+        logger.info("Starting NooBaa DB backup")
         ocs_storage_obj, backup_name, noobaa_obj = noobaa_db_backup_locally()
+        logger.info("NooBaa DB backup completed successfully")
 
+        logger.test_step("Disable deletion sync and verify it doesn't work")
         disable_deletion_sync = source_bucket.replication_policy
         disable_deletion_sync["rules"][0]["sync_deletions"] = False
         update_replication_policy(source_bucket.name, disable_deletion_sync)
@@ -376,9 +389,10 @@ class TestLogBasedReplicationWithDisruptions:
             target_bucket.name,
             timeout=300,
         ), "Deletion sync was done but not expected"
+        logger.info("Deletion sync correctly disabled as expected")
 
-        # Do noobaa db recovery and see if the deletion sync works now
-        logger.info("Recovering noobaa db from backup")
+        logger.test_step("Recover NooBaa DB from backup and verify deletion sync works")
+        logger.info("Starting NooBaa DB recovery from backup")
         noobaa_db_recovery_from_local(ocs_storage_obj, backup_name, noobaa_obj)
 
         wait_for_noobaa_pods_running(timeout=420)
@@ -389,13 +403,14 @@ class TestLogBasedReplicationWithDisruptions:
             target_bucket.name,
             timeout=600,
         ), "Deletion sync was not done but expected"
+        logger.info("Deletion sync verified successfully after NooBaa DB recovery")
 
-        # Remove replication policy and upload some objects to the bucket
-        # make sure the replication itself doesn't take place
+        logger.test_step("Remove replication policy and verify replication stops")
         source_bucket.replication_policy = ""
         update_replication_policy(source_bucket.name, None)
+        logger.info("Replication policy removed")
 
-        logger.info("Uploading test objects and waiting for replication to complete")
+        logger.info("Uploading test objects to verify replication doesn't occur")
         mockup_logger.upload_test_objs_and_log(source_bucket.name)
 
         assert not compare_bucket_object_list(
@@ -404,7 +419,9 @@ class TestLogBasedReplicationWithDisruptions:
             target_bucket.name,
             timeout=300,
         ), "Standard replication completed even though replication policy is removed"
+        logger.info("Verified replication stopped after policy removal")
 
+        logger.test_step("Validate MCG background features")
         validate_mcg_bg_features(
             feature_setup_map,
             run_in_bg=False,
@@ -512,23 +529,25 @@ class TestMCGReplicationWithVersioningSystemTest:
 
         """
 
+        logger.test_step("Setup MCG background features for entry criteria")
         feature_setup_map = setup_mcg_bg_features(
             num_of_buckets=5,
             object_amount=5,
             is_disruptive=True,
             skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
+        logger.info("MCG background features setup completed")
 
         prefix_1 = "site_1"
         prefix_2 = "site_2"
         object_key = "ObjectKey-"
 
-        # Reduce the replication delay to 1 minute
-        logger.info("Reduce the bucket replication delay cycle to 1 minute")
+        logger.test_step("Reduce bucket replication delay to 1 minute")
+        logger.info("Reducing replication delay cycle to 1 minute")
         reduce_replication_delay()
+        logger.info("Replication delay reduced successfully")
 
-        # Setup two buckets with bi-directional replication enabled
-        # deletion sync disabled
+        logger.test_step("Setup bi-directional replication between two buckets")
         bucketclass_dict = {
             "interface": "OC",
             "backingstore_dict": {"aws": [(1, "eu-central-1")]},
@@ -542,9 +561,12 @@ class TestMCGReplicationWithVersioningSystemTest:
                 deletion_sync=False,
             )
         )
+        logger.info(
+            f"Bi-directional replication setup: {bucket_1.name} <-> {bucket_2.name}"
+        )
 
-        # Upload object and verify that bucket replication works
-        logger.info(f"Uploading object {object_key} to the bucket {bucket_1.name}")
+        logger.test_step("Upload object and verify initial replication")
+        logger.info(f"Uploading object {object_key} to bucket {bucket_1.name}")
         self.upload_objects_with_retry(
             mcg_obj_session,
             bucket_1,
@@ -554,13 +576,14 @@ class TestMCGReplicationWithVersioningSystemTest:
             pattern=object_key,
             prefix=prefix_1,
         )
+        logger.info("Initial replication verified successfully")
 
-        # Enable object versioning on both the buckets
+        logger.test_step("Enable object versioning on both buckets")
         s3_put_bucket_versioning(mcg_obj_session, bucket_1.name)
         s3_put_bucket_versioning(mcg_obj_session, bucket_2.name)
-        logger.info("Enabled object versioning for both the buckets")
+        logger.info("Object versioning enabled for both buckets")
 
-        # Enable sync versions in both buckets replication policy
+        logger.test_step("Enable version sync in replication policy")
         replication_1 = json.loads(get_replication_policy(bucket_name=bucket_2.name))
         replication_2 = json.loads(get_replication_policy(bucket_name=bucket_1.name))
         replication_1["rules"][0]["sync_versions"] = True
@@ -568,11 +591,9 @@ class TestMCGReplicationWithVersioningSystemTest:
 
         update_replication_policy(bucket_2.name, replication_1)
         update_replication_policy(bucket_1.name, replication_2)
-        logger.info(
-            "Enabled sync versions in the replication policy for both the buckets"
-        )
+        logger.info("Version sync enabled in replication policy for both buckets")
 
-        # Update previously uploaded object with new data and new version
+        logger.test_step("Update object with new version and verify version sync")
         self.upload_objects_with_retry(
             mcg_obj_session,
             bucket_2,
@@ -593,16 +614,10 @@ class TestMCGReplicationWithVersioningSystemTest:
             bucket_2.name,
             obj_key=f"{prefix_2}/{object_key}",
         )
-        logger.info(
-            f"Replication works from {bucket_2.name} to {bucket_1.name} and has all the versions of object {object_key}"
-        )
+        logger.info(f"Version sync verified: {bucket_2.name} -> {bucket_1.name}")
 
-        # Will perform disruptive operations and object uploads, version verifications
-        # parallely.
+        logger.test_step("Perform disruptive operations with version sync verification")
         with ThreadPoolExecutor(max_workers=1) as executor:
-
-            # Update object uploaded previously from the second bucket and
-            # then shutdown the noobaa core and db pod nodes
             noobaa_pods = [
                 get_noobaa_core_pod(),
                 get_noobaa_db_pod(),
@@ -642,15 +657,13 @@ class TestMCGReplicationWithVersioningSystemTest:
                 obj_key=f"{prefix_1}/{object_key}",
             )
             logger.info(
-                f"Replication works from {bucket_1.name} to {bucket_2.name} and"
-                f" has all the versions of object {object_key}"
+                f"Version sync verified after node shutdown: {bucket_1.name} -> {bucket_2.name}"
             )
 
-            logger.info("Starting nodes now...")
+            logger.info("Starting nodes")
             nodes.start_nodes(nodes=node_to_shutdown)
             wait_for_noobaa_pods_running()
-
-            # Update object uploaded previously from the first bucket and then restart the noobaa pods
+            logger.info("Nodes started and NooBaa pods running")
             noobaa_pods = get_noobaa_pods()
             logger.info(
                 f"Updating object {object_key} with new version data in bucket {bucket_2.name}"
@@ -681,28 +694,26 @@ class TestMCGReplicationWithVersioningSystemTest:
                 obj_key=f"{prefix_2}/{object_key}",
             )
             logger.info(
-                f"Replication works from {bucket_2.name} to {bucket_1.name} "
-                f"and has all the versions of object {object_key}"
+                f"Version sync verified after NooBaa pod restart: {bucket_2.name} -> {bucket_1.name}"
             )
             future.result()
 
-        # Take the noobaa db backup and then disable the sync versions
-        # make sure no version sync happens
-        logger.info("Taking backup of noobaa db")
+        logger.test_step("Take NooBaa DB backup, disable version sync, verify no sync")
+        logger.info("Starting NooBaa DB backup")
         ocs_storage_obj, backup_name, noobaa_obj = noobaa_db_backup_locally()
+        logger.info("NooBaa DB backup completed")
 
-        logger.info("Disabling version sync for both the buckets")
+        logger.info("Disabling version sync for both buckets")
         replication_1["rules"][0]["sync_versions"] = False
         replication_2["rules"][0]["sync_versions"] = False
 
         update_replication_policy(bucket_2.name, replication_1)
         update_replication_policy(bucket_1.name, replication_2)
+        logger.info("Version sync disabled")
 
-        # Change the replication cycle delay to 3 minutes
-        logger.info("Reduce the bucket replication delay cycle to 5 minutes")
+        logger.info("Increasing replication delay cycle to 5 minutes")
         reduce_replication_delay(interval=5)
-
-        # Update previously uploaded object with new data and new version
+        logger.info("Replication delay updated")
         self.upload_objects_with_retry(
             mcg_obj_session,
             bucket_1,
@@ -732,22 +743,22 @@ class TestMCGReplicationWithVersioningSystemTest:
             )
         else:
             assert False, "Sync version worked even when sync_versions was disabled!!"
+        logger.info("Verified version sync is disabled")
 
-        # Recover the noobaa db from the backup and perform
-        # object deletion and verify deletion sync works
-        logger.info("Recovering noobaa db from backup")
+        logger.test_step("Recover NooBaa DB and verify version sync works again")
+        logger.info("Starting NooBaa DB recovery from backup")
         noobaa_db_recovery_from_local(ocs_storage_obj, backup_name, noobaa_obj)
 
         wait_for_noobaa_pods_running(timeout=420)
+        logger.info("NooBaa DB recovery completed, pods running")
 
-        logger.info("Enabling version sync for both the buckets")
+        logger.info("Re-enabling version sync for both buckets")
         replication_1["rules"][0]["sync_versions"] = True
         replication_2["rules"][0]["sync_versions"] = True
 
         update_replication_policy(bucket_2.name, replication_1)
         update_replication_policy(bucket_1.name, replication_2)
-
-        # Update previously uploaded object with new data and new version
+        logger.info("Version sync re-enabled")
         self.upload_objects_with_retry(
             mcg_obj_session,
             bucket_1,
@@ -770,10 +781,10 @@ class TestMCGReplicationWithVersioningSystemTest:
             obj_key=f"{prefix_1}/{object_key}",
         )
         logger.info(
-            f"Replication works from {bucket_1.name} to {bucket_2.name} and"
-            f" has all the versions of object {object_key}"
+            f"Version sync verified after DB recovery: {bucket_1.name} -> {bucket_2.name}"
         )
 
+        logger.test_step("Validate MCG background features")
         validate_mcg_bg_features(
             feature_setup_map,
             run_in_bg=False,

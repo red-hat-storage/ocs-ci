@@ -66,13 +66,16 @@ class TestObjectExpirationSystemTest:
         Test object expiration, see if the object is deleted within the expiration + 8 hours buffer time
 
         """
+        logger.test_step("Reduce object expiration interval to 2 minutes")
         reduce_expiration_interval(interval=2)
+        logger.info("Object expiration interval set to 2 minutes")
 
-        # Creating S3 bucket
+        logger.test_step("Create S3 bucket and configure expiration policy")
         bucket = retry(ClientError, tries=3, delay=10)(bucket_factory)()[0].name
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
         obj_data = "Random data" + str(uuid.uuid4().hex)
         expiration_days = 1
+        logger.info(f"S3 bucket created: {bucket}")
 
         expire_rule_4_10 = {
             "Rules": [
@@ -101,23 +104,26 @@ class TestObjectExpirationSystemTest:
             )
 
         PROP_SLEEP_TIME = 10
-        logger.info(
-            f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
-        )
+        logger.info(f"Waiting {PROP_SLEEP_TIME} seconds for policy to propagate")
         sleep(PROP_SLEEP_TIME)
 
-        logger.info(f"Getting object expiration configuration from bucket: {bucket}")
-        logger.info(
-            f"Got configuration: {mcg_obj.s3_client.get_bucket_lifecycle_configuration(Bucket=bucket)}"
+        logger.info(f"Verifying object expiration configuration on bucket: {bucket}")
+        logger.debug(
+            f"Configuration: {mcg_obj.s3_client.get_bucket_lifecycle_configuration(Bucket=bucket)}"
         )
 
-        logger.info(f"Writing {object_key} to bucket: {bucket}")
+        logger.test_step("Upload object and manually expire it")
+        logger.info(f"Writing object {object_key} to bucket {bucket}")
         assert s3_put_object(
             s3_obj=mcg_obj, bucketname=bucket, object_key=object_key, data=obj_data
         ), "Failed: Put Object"
+        logger.info("Object uploaded successfully")
 
+        logger.info("Manually expiring objects in bucket")
         expire_objects_in_bucket(bucket)
+        logger.info("Objects expired manually")
 
+        logger.test_step("Verify objects are deleted after expiration")
         sampler = TimeoutSampler(
             timeout=600,
             sleep=10,
@@ -184,13 +190,16 @@ class TestObjectExpirationSystemTest:
         like node drain, node restart, nb db recovery etc
 
         """
+        logger.test_step("Setup MCG background features for entry criteria")
         feature_setup_map = setup_mcg_bg_features(
             num_of_buckets=5,
             object_amount=5,
             is_disruptive=True,
             skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
+        logger.info("MCG background features setup completed")
 
+        logger.test_step("Create lifecycle policy and bucket configurations")
         lifecycle_policy = LifecyclePolicy(ExpirationRule(days=1))
 
         cloud_providers = {
@@ -213,10 +222,10 @@ class TestObjectExpirationSystemTest:
         expire_rule_prefix = deepcopy(lifecycle_policy.as_dict())
         number_of_buckets = 50
 
-        # Create bulk buckets with expiry rule and no prefix set
-        logger.info(
-            f"Creating first set of {number_of_buckets} buckets with no-prefix expiry rule"
+        logger.test_step(
+            f"Create {number_of_buckets} buckets with no-prefix expiry rule"
         )
+        logger.info(f"Creating first set of {number_of_buckets} buckets")
 
         buckets_without_prefix = self.create_obcs_apply_expire_rule(
             number_of_buckets=number_of_buckets,
@@ -226,11 +235,14 @@ class TestObjectExpirationSystemTest:
             mcg_obj=mcg_obj,
             bucket_factory=bucket_factory,
         )
-
-        # Create another set of bulk buckets with expiry rule and prefix set
         logger.info(
-            f"Create second set of {number_of_buckets} buckets with prefix 'others' expiry rule"
+            f"First set of {number_of_buckets} buckets created with no-prefix expiry rule"
         )
+
+        logger.test_step(
+            f"Create {number_of_buckets} buckets with prefix 'others' expiry rule"
+        )
+        logger.info(f"Creating second set of {number_of_buckets} buckets")
         expire_rule_prefix["Rules"][0]["Filter"]["Prefix"] = "others"
         buckets_with_prefix = self.create_obcs_apply_expire_rule(
             number_of_buckets=number_of_buckets,
@@ -240,6 +252,11 @@ class TestObjectExpirationSystemTest:
             mcg_obj=mcg_obj,
             bucket_factory=bucket_factory,
         )
+        logger.info(
+            f"Second set of {number_of_buckets} buckets created with prefix 'others' expiry rule"
+        )
+
+        logger.test_step("Upload objects with different prefixes and manually expire")
 
         @retry(ClientError, tries=5, delay=5)
         def upload_objects_and_expire():
@@ -351,15 +368,18 @@ class TestObjectExpirationSystemTest:
                         f'[{bucket.name}] Objects in second set of buckets with prefix "perm" expired'
                     )
 
+        logger.info("Starting object upload and expiration process")
         upload_objects_and_expire()
+        logger.info("Objects uploaded and expired manually")
 
-        # Drain the node where noobaa core pod is running
-        logger.info("Drain noobaa core pod node")
+        logger.test_step("Drain NooBaa core pod node during object expiration")
+        logger.info("Draining NooBaa core pod node")
         nb_core_pod_node = get_noobaa_core_pod().get_node()
         drain_nodes([nb_core_pod_node], timeout=300)
+        logger.info("NooBaa core pod node drained successfully")
 
-        # Shutdown the node where noobaa db pod is running
-        logger.info("Shutdown noobaa db pod node")
+        logger.test_step("Shutdown NooBaa DB pod node")
+        logger.info("Shutting down NooBaa DB pod node")
         nb_db_pod = get_noobaa_db_pod()
         nb_db_pod_node = nb_db_pod.get_node()
         nodes.stop_nodes(nodes=get_node_objs([nb_db_pod_node]))
@@ -368,13 +388,14 @@ class TestObjectExpirationSystemTest:
             status=constants.NODE_NOT_READY,
             timeout=300,
         )
+        logger.info("NooBaa DB pod node shut down successfully")
 
-        # Schedule back the noobaa core pod node
-        logger.info("Schedule back the noobaa core pod node")
+        logger.test_step("Schedule back NooBaa core pod node and start DB pod node")
+        logger.info("Scheduling back NooBaa core pod node")
         schedule_nodes([nb_core_pod_node])
+        logger.info("NooBaa core pod node scheduled successfully")
 
-        # Turn on the noobaa db pod node
-        logger.info("Turn on the noobaa db pod node")
+        logger.info("Starting NooBaa DB pod node")
         nodes.start_nodes(nodes=get_node_objs([nb_db_pod_node]))
         wait_for_nodes_status(
             node_names=[nb_db_pod_node],
@@ -382,25 +403,33 @@ class TestObjectExpirationSystemTest:
             timeout=300,
         )
         wait_for_noobaa_pods_running(timeout=1200)
+        logger.info("NooBaa DB pod node started, all NooBaa pods running")
 
-        # check if the objects are expired
+        logger.test_step("Verify object expiration after node disruptions")
         sample_if_objects_expired()
+        logger.info("Object expiration verified after node disruptions")
 
-        # upload objects again and expire
+        logger.test_step(
+            "Upload new objects and expire, then perform NooBaa DB backup/recovery"
+        )
+        logger.info("Uploading new objects and expiring them")
         upload_objects_and_expire()
+        logger.info("Objects uploaded and expired")
 
-        # Perform noobaa db backup and recovery
+        logger.info("Starting NooBaa DB backup and recovery")
         noobaa_db_backup_and_recovery_locally()
         wait_for_noobaa_pods_running(timeout=1200)
+        logger.info("NooBaa DB backup and recovery completed successfully")
 
+        logger.test_step("Verify object expiration after NooBaa DB recovery")
         sample_if_objects_expired()
+        logger.info("Object expiration verified after NooBaa DB recovery")
 
-        # validate mcg entry criteria post test
+        logger.test_step("Validate MCG background features")
         retry(Exception, tries=5, delay=10)(validate_mcg_bg_features)(
             feature_setup_map,
             run_in_bg=False,
             skip_any_features=["nsfs", "rgw kafka", "caching"],
             object_amount=5,
         )
-
-        logger.info("No issues seen with the MCG bg feature validation")
+        logger.info("MCG background features validated successfully")

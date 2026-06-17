@@ -23,7 +23,7 @@ from ocs_ci.helpers.managed_services import (
     verify_osd_used_capacity_greater_than_expected,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -57,7 +57,7 @@ class TestClusterFullAndRecovery(E2ETest):
         2.Verify new PVC1 [FS + RBD] on Bound state
         3.Run FIO on PVC1_FS + PVC1_RBD
         4.Calculate Checksum PVC1_FS + PVC1_RBD
-        5.Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator
+        5.Fill the cluster to "Full ratio" (usually 85%) with benchmark-operator
         6.Verify Alerts are seen ["CephClusterCriticallyFull", "CephOSDNearFull"]
         7.Respin 'osd' ,'mgr', 'mon' pods
         8.Create PVC2 [FS + RBD]
@@ -78,7 +78,8 @@ class TestClusterFullAndRecovery(E2ETest):
         self.project_obj = helpers.create_project(project_name=project_name)
         teardown_project_factory(self.project_obj)
 
-        log.info("Create PVC1 CEPH-RBD, Run FIO and get checksum")
+        logger.test_step("Create RBD PVC, run IO and calculate checksum")
+        logger.info("Creating CEPH-RBD PVC with 2GB size")
         pvc_obj_rbd1 = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=self.project_obj,
@@ -97,14 +98,16 @@ class TestClusterFullAndRecovery(E2ETest):
             runtime=60,
         )
         pod_rbd1_obj.get_fio_results()
-        log.info(f"IO finished on pod {pod_rbd1_obj.name}")
+        logger.info(f"IO finished on pod {pod_rbd1_obj.name}")
         pod_rbd1_obj.md5 = cal_md5sum(
             pod_obj=pod_rbd1_obj,
             file_name="fio-rand-write",
             block=False,
         )
+        logger.info("RBD PVC created, IO completed, and checksum calculated")
 
-        log.info("Create PVC1 CEPH-FS, Run FIO and get checksum")
+        logger.test_step("Create CephFS PVC, run IO and calculate checksum")
+        logger.info("Creating CEPH-FS PVC with 2GB size")
         pvc_obj_fs1 = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
             project=self.project_obj,
@@ -123,23 +126,24 @@ class TestClusterFullAndRecovery(E2ETest):
             runtime=60,
         )
         pod_fs1_obj.get_fio_results()
-        log.info(f"IO finished on pod {pod_fs1_obj.name}")
+        logger.info(f"IO finished on pod {pod_fs1_obj.name}")
         pod_fs1_obj.md5 = cal_md5sum(
             pod_obj=pod_fs1_obj,
             file_name="fio-rand-write",
             block=False,
         )
+        logger.info("CephFS PVC created, IO completed, and checksum calculated")
 
-        log.info(
-            "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
-        )
+        logger.test_step("Fill cluster to 85% using benchmark operator")
+        logger.info("Starting benchmark operator to fill cluster to full ratio")
         size = get_file_size(100)
         self.benchmark_obj = BenchmarkOperatorFIO()
         self.benchmark_obj.setup_benchmark_fio(total_size=size)
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
         self.benchmark_operator_teardown = True
 
-        log.info("Verify used capacity bigger than 85%")
+        logger.test_step("Verify cluster capacity reaches 85%")
+        logger.info("Verifying used capacity is greater than 85%")
         sample = TimeoutSampler(
             timeout=2500,
             sleep=40,
@@ -147,13 +151,16 @@ class TestClusterFullAndRecovery(E2ETest):
             expected_used_capacity=85.0,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error("The after 1800 seconds the used capacity smaller than 85%")
+            logger.error(
+                "After 2500 seconds the used capacity is still smaller than 85%"
+            )
             raise TimeoutExpiredError
+        logger.info("Cluster capacity successfully reached 85%")
 
-        log.info(
-            "Verify Alerts are seen 'CephClusterCriticallyFull' and 'CephOSDNearFull'"
+        logger.test_step("Verify cluster full alerts are triggered")
+        logger.info(
+            "Checking for 'CephClusterCriticallyFull' and 'CephOSDNearFull' alerts"
         )
-        log.info("Verify used capacity bigger than 85%")
         expected_alerts = ["CephOSDCriticallyFull", "CephOSDNearFull"]
         prometheus = PrometheusAPI(threading_lock=threading_lock)
         sample = TimeoutSampler(
@@ -164,19 +171,24 @@ class TestClusterFullAndRecovery(E2ETest):
             threading_lock=threading_lock,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error(f"The alerts {expected_alerts} do not exist after 600 sec")
+            logger.error(f"The alerts {expected_alerts} do not exist after 600 seconds")
             raise TimeoutExpiredError
+        logger.info("Cluster full alerts verified successfully")
 
+        logger.test_step("Respin mon, mgr, and osd pods")
         for pod_name in ("mon", "mgr", "osd"):
-            log.info(f"Respin pod {pod_name}")
+            logger.info(f"Respinning {pod_name} pods")
             disruption = disruption_helpers.Disruptions()
             disruption.set_resource(resource=f"{pod_name}")
             disruption.delete_resource()
+        logger.info("All storage pods respun successfully")
 
-        log.info("Verify all storage pods are running")
+        logger.test_step("Validate all storage pods are running")
         wait_for_storage_pods()
+        logger.info("All storage pods are running")
 
-        log.info("Verify PVC2 [CEPH-FS + CEPH-RBD] are in Pending state")
+        logger.test_step("Create PVC2 and verify they remain in Pending state")
+        logger.info("Creating PVC2 [CEPH-FS + CEPH-RBD] and expecting Pending state")
         pvc_obj_rbd2 = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             project=self.project_obj,
@@ -189,7 +201,7 @@ class TestClusterFullAndRecovery(E2ETest):
             size=2,
             status=constants.STATUS_PENDING,
         )
-        log.info(
+        logger.info(
             "Waiting 20 sec to verify PVC2 [CEPH-FS + CEPH-RBD] are in Pending state."
         )
         time.sleep(20)
@@ -199,8 +211,10 @@ class TestClusterFullAndRecovery(E2ETest):
         helpers.wait_for_resource_state(
             resource=pvc_obj_fs2, state=constants.STATUS_PENDING
         )
+        logger.info("PVC2 [CEPH-FS + CEPH-RBD] verified in Pending state")
 
-        log.info("Create snapshot from PVC1 and verify snapshots on false state")
+        logger.test_step("Create snapshots from PVC1 and verify readyToUse is false")
+        logger.info("Creating snapshots from PVC1")
         snap_rbd1_obj = snapshot_factory(pvc_obj_rbd1, wait=False)
         snap_fs1_obj = snapshot_factory(pvc_obj_fs1, wait=False)
         time.sleep(20)
@@ -216,27 +230,35 @@ class TestClusterFullAndRecovery(E2ETest):
             column=constants.STATUS_READYTOUSE,
             timeout=60,
         )
+        logger.info("Snapshots verified in false readyToUse state")
 
-        log.info("Change Ceph full_ratio from from 85% to 95%")
-        log.info(
+        logger.test_step("Increase Ceph full ratio from 85% to 95%")
+        logger.info("Changing Ceph full_ratio from 85% to 95%")
+        logger.info(
             "Based on doc we need to change the ceph_full_ratio to 88%, but we run "
             "many fio pods therefore, it may not be enough to increase by only 3%"
         )
         change_ceph_full_ratio(95)
+        logger.info("Ceph full_ratio increased to 95%")
 
-        log.info("Delete  benchmark-operator PVCs")
+        logger.test_step("Delete benchmark operator PVCs to free up space")
+        logger.info("Cleaning up benchmark-operator PVCs")
         self.benchmark_obj.cleanup()
         self.benchmark_operator_teardown = False
+        logger.info("Benchmark operator PVCs deleted successfully")
 
-        log.info("Verify PVC2 [CEPH-FS + CEPH-RBD]  are moved to Bound state")
+        logger.test_step("Verify PVC2 [CEPH-FS + CEPH-RBD] move to Bound state")
+        logger.info("Waiting for PVC2 to reach Bound state")
         helpers.wait_for_resource_state(
             resource=pvc_obj_rbd2, state=constants.STATUS_BOUND, timeout=600
         )
         helpers.wait_for_resource_state(
             resource=pvc_obj_fs2, state=constants.STATUS_BOUND, timeout=600
         )
+        logger.info("PVC2 [CEPH-FS + CEPH-RBD] successfully moved to Bound state")
 
-        log.info("Verify snapshots moved from false state to true state")
+        logger.test_step("Verify snapshots move from false to true readyToUse state")
+        logger.info("Checking snapshot readyToUse status")
         snap_fs1_obj.ocp.wait_for_resource(
             condition="true",
             resource_name=snap_rbd1_obj.name,
@@ -249,8 +271,10 @@ class TestClusterFullAndRecovery(E2ETest):
             column=constants.STATUS_READYTOUSE,
             timeout=300,
         )
+        logger.info("Snapshots successfully moved to true readyToUse state")
 
-        log.info(f"Creating a PVC from snapshot [restore] {snap_rbd1_obj.name}")
+        logger.test_step("Restore PVCs from snapshots and verify data integrity")
+        logger.info(f"Creating RBD PVC from snapshot {snap_rbd1_obj.name}")
         restore_pvc_rbd1_obj = snapshot_restore_factory(
             snapshot_obj=snap_rbd1_obj,
             size="2Gi",
@@ -269,7 +293,7 @@ class TestClusterFullAndRecovery(E2ETest):
             block=False,
         )
 
-        log.info(f"Creating a PVC from snapshot [restore] {snap_fs1_obj.name}")
+        logger.info(f"Creating a PVC from snapshot [restore] {snap_fs1_obj.name}")
         restore_pvc_fs1_obj = snapshot_restore_factory(
             snapshot_obj=snap_fs1_obj,
             size="2Gi",
@@ -288,11 +312,21 @@ class TestClusterFullAndRecovery(E2ETest):
             block=False,
         )
 
+        logger.test_step("Verify restored data integrity matches original")
+        logger.assertion(
+            f"CephFS restore md5: expected={pod_fs1_obj.md5}, actual={pod_restore_fs1_obj.md5}, "
+            f"match={pod_restore_fs1_obj.md5 == pod_fs1_obj.md5}"
+        )
         assert pod_restore_fs1_obj.md5 == pod_fs1_obj.md5, (
             f"md5sum of restore_fs1 {pod_restore_fs1_obj.md5} is not equal "
             f"to pod_fs1_obj {pod_fs1_obj.md5}"
+        )
+        logger.assertion(
+            f"RBD restore md5: expected={pod_rbd1_obj.md5}, actual={pod_restore_rbd1_obj.md5}, "
+            f"match={pod_restore_rbd1_obj.md5 == pod_rbd1_obj.md5}"
         )
         assert pod_restore_rbd1_obj.md5 == pod_rbd1_obj.md5, (
             f"md5sum of restore_rbd1 {pod_restore_rbd1_obj.md5} is not equal "
             f"to pod_rbd1_obj {pod_rbd1_obj.md5}"
         )
+        logger.info("Data integrity verified successfully for all restored PVCs")
