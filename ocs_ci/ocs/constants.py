@@ -635,6 +635,13 @@ DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 DEFAULT_VOLUMEGROUPSNAPSHOTCLASS = "ocs-storagecluster-cephfs-groupsnapclass"
 
+# CephFS subvolume metrics UI (RHSTOR-7679)
+CEPHFS_SUBVOLUME_METRICS_CARD_TITLE = "Current top 10 subvolumes on all clusters"
+CEPHFS_SUBVOLUME_POPOVER_TEXT = (
+    "Use subvolumes to find pods with poor performing workloads"
+)
+CEPHFS_SUBVOLUME_DEFAULT_METRIC = "Total IOPS"
+
 # hyperconverged defaults
 HYPERCONVERGED_NAMESPACE = "kubevirt-hyperconverged"
 TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED = os.path.join(
@@ -3841,6 +3848,8 @@ VDBENCH_WORKLOAD_COMPLETION_TIMEOUT = 3600
 VDBENCH_SCALING_TIMEOUT = 180
 # StorageAutoScaler Values
 PROMETHEUS_RECONCILE_TIMEOUT = 660
+# Seconds to wait after IO before querying Prometheus (scrape + rule eval)
+PROMETHEUS_SCRAPE_WAIT = 180
 
 # ODF recovery profiles
 LOW_RECOVERY_OPS = "low_recovery_ops"
