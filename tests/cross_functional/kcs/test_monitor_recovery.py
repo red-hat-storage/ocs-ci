@@ -859,26 +859,100 @@ def corrupt_ceph_monitors():
         wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
 
 
+def handle_multi_attach_error(pod_obj, timeout=300):
+    """
+    Handle multi-attach volume errors by deleting stale VolumeAttachment resources.
+
+    Args:
+        pod_obj: Pod object that may have multi-attach error
+        timeout: Maximum time to wait for pod to become running (default: 300s)
+
+    Returns:
+        bool: True if pod is running, False otherwise
+
+    """
+    logger.info(f"Checking pod {pod_obj.name} for multi-attach errors")
+
+    try:
+        pod_describe = pod_obj.ocp.exec_oc_cmd(
+            f"describe pod {pod_obj.name}", out_yaml_format=False
+        )
+
+        if "Multi-Attach error" in pod_describe:
+            logger.warning(f"Multi-attach error detected for pod {pod_obj.name}")
+
+            pvc_match = re.search(
+                r'Multi-Attach error for volume "([^"]+)"', pod_describe
+            )
+            if pvc_match:
+                pvc_id = pvc_match.group(1)
+                logger.info(f"Found PVC ID with multi-attach error: {pvc_id}")
+
+                # Find and delete stale VolumeAttachment
+                va_ocp = OCP(kind="VolumeAttachment", namespace="")
+                try:
+                    attachments = va_ocp.get()
+                    if attachments and "items" in attachments:
+                        for attachment in attachments["items"]:
+                            if (
+                                attachment.get("spec", {})
+                                .get("source", {})
+                                .get("persistentVolumeName")
+                                == pvc_id
+                            ):
+                                va_name = attachment["metadata"]["name"]
+                                logger.info(
+                                    f"Deleting stale VolumeAttachment: {va_name}"
+                                )
+                                va_ocp.delete(resource_name=va_name)
+                                time.sleep(10)
+                                break
+                except Exception as e:
+                    logger.warning(f"Error handling VolumeAttachment: {e}")
+    except Exception as e:
+        logger.warning(f"Error checking for multi-attach: {e}")
+
+    try:
+        wait_for_resource_state(
+            resource=pod_obj, state=constants.STATUS_RUNNING, timeout=timeout
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Pod {pod_obj.name} failed to reach running state: {e}")
+        return False
+
+
 def recover_mcg():
     """
-    Recovery procedure for noobaa by re-spinning the pods after mon recovery
+    Recovery procedure for noobaa by re-spinning the pods after mon recovery.
+    Handles multi-attach errors by deleting stale VolumeAttachment resources.
 
     """
     logger.info("Re-spinning noobaa pods")
     for noobaa_pod in get_noobaa_pods():
-        noobaa_pod.delete()
+        logger.info(f"Force deleting noobaa pod: {noobaa_pod.name}")
+        noobaa_pod.delete(force=True)
+
+    logger.info("Waiting for noobaa pods to reach running state")
+    time.sleep(120)
+
     for noobaa_pod in get_noobaa_pods():
-        wait_for_resource_state(
-            resource=noobaa_pod, state=constants.STATUS_RUNNING, timeout=600
-        )
+        logger.info(f"Checking noobaa pod: {noobaa_pod.name}")
+        if not handle_multi_attach_error(noobaa_pod, timeout=600):
+            logger.warning(f"Pod {noobaa_pod.name} did not reach running state")
     if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
         logger.info("Re-spinning RGW pods")
         for rgw_pod in get_rgw_pods():
-            rgw_pod.delete()
+            logger.info(f"Force deleting RGW pod: {rgw_pod.name}")
+            rgw_pod.delete(force=True)
+
+        logger.info("Waiting for RGW pods to reach running state")
+        time.sleep(120)
+
         for rgw_pod in get_rgw_pods():
-            wait_for_resource_state(
-                resource=rgw_pod, state=constants.STATUS_RUNNING, timeout=600
-            )
+            logger.info(f"Checking RGW pod: {rgw_pod.name}")
+            if not handle_multi_attach_error(rgw_pod, timeout=600):
+                logger.warning(f"Pod {rgw_pod.name} did not reach running state")
 
 
 def remove_global_id_reclaim():
