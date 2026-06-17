@@ -2751,6 +2751,10 @@ topology = {
         "div[@class='row']//*[normalize-space()='Memory']/following-sibling::span",
         By.XPATH,
     ),
+    "osd_information_sidebar_tab": (
+        "//span[normalize-space()='OSD Information']",
+        By.XPATH,
+    ),
     "observe_sidebar_tab": ("//span[normalize-space()='Observe']", By.XPATH),
     "topology_search_bar": ("//input[@placeholder='Search...']", By.XPATH),
     "topology_search_bar_enter_arrow": ("//button[@aria-label='Search']", By.XPATH),
