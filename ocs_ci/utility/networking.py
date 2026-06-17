@@ -505,11 +505,11 @@ def get_pod_multus_ips(pod_selector, namespace):
     """
     Get multus network IPs for pods matching the selector in a given namespace.
     Only returns IPs from multus secondary networks (not the primary network).
-    Only returns IPs for pods that are in Running state and not terminating.
 
     Args:
         pod_selector (str): Label selector to filter pods (e.g., "app=rook-ceph-osd")
         namespace (str): Namespace to search for pods
+
     Returns:
         dict: Dictionary mapping pod names to list of their multus network IP addresses
     """
