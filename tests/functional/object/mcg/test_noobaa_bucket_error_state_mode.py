@@ -1,18 +1,18 @@
 import logging
 
+import pytest
+
 from ocs_ci.framework.pytest_customization.marks import (
+    mcg,
     post_upgrade,
     red_squad,
-    skipif_ocs_version,
-    skipif_mcg_only,
-)
-from ocs_ci.framework.testlib import (
     runs_on_provider,
     skipif_aws_creds_are_missing,
     skipif_disconnected_cluster,
     skipif_managed_service,
+    skipif_mcg_only,
+    skipif_ocs_version,
     tier2,
-    mcg,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -63,26 +63,20 @@ class TestNooBaaBucketErrorStateMode:
     """
 
     # ------------------------------------------------------------------
-    # Quota error mode tests (EXCEEDING_QUOTA)
+    # Shared fixtures
     # ------------------------------------------------------------------
 
-    # TODO: Replace with actual Polarion ID
-    # @polarion_id("OCS-XXXXX")
-    def test_data_bucket_quota_error_mode(self, mcg_obj, awscli_pod):
+    @pytest.fixture()
+    def quota_exceeded_bucket(self, request, mcg_obj, awscli_pod):
         """
-        Trigger a quota-related bucket mode on a data bucket and verify
-        that the bucket enters EXCEEDING_QUOTA mode.
+        Create a data bucket with a 2Gi quota, upload ~2.5GB to exceed
+        it, and wait for the bucket to enter EXCEEDING_QUOTA mode.
+        Cleanup (tmp files, bucket objects, bucket) is handled via
+        request.addfinalizer.
 
-        Steps:
-            1. Create a data bucket with a 2Gi quota
-            2. Upload ~2.5GB to exceed the quota
-            3. Wait for bucket mode to propagate
-            4. Verify bucket mode is EXCEEDING_QUOTA via NooBaa
-            5. Clean up (tmp files, bucket objects, bucket)
-
-        Args:
-            mcg_obj (MCG): MCG object with S3 connection credentials
-            awscli_pod (Pod): Pod running the AWSCLI tools
+        Returns:
+            tuple: (bucket_name, bucket) — the bucket in EXCEEDING_QUOTA
+                mode, ready for further assertions.
         """
         bucket_name = create_unique_resource_name(
             resource_description="bucket", resource_type="quota"
@@ -91,31 +85,55 @@ class TestNooBaaBucketErrorStateMode:
         logger.info(f"Created bucket {bucket_name} with 2Gi quota")
 
         local_dir = f"/tmp/{bucket_name}"
-        try:
-            try:
-                write_random_test_objects_to_bucket(
-                    io_pod=awscli_pod,
-                    bucket_to_write=bucket_name,
-                    file_dir=local_dir,
-                    amount=5,
-                    bs="500M",
-                    mcg_obj=mcg_obj,
-                )
-            except CommandFailed:
-                logger.warning("Some uploads failed as expected when exceeding quota")
-            logger.info(
-                f"Uploaded data to bucket {bucket_name} "
-                f"(quota 2Gi) to trigger EXCEEDING_QUOTA"
-            )
 
-            wait_for_bucket_mode(mcg_obj, bucket_name, "EXCEEDING_QUOTA")
-        finally:
+        def finalizer():
             awscli_pod.exec_cmd_on_pod(f"rm -rf {local_dir}", out_yaml_format=False)
             try:
                 rm_object_recursive(awscli_pod, bucket_name, mcg_obj)
             except CommandFailed:
                 logger.warning(f"Cleanup of bucket {bucket_name} objects failed")
             bucket.delete()
+
+        request.addfinalizer(finalizer)
+
+        try:
+            write_random_test_objects_to_bucket(
+                io_pod=awscli_pod,
+                bucket_to_write=bucket_name,
+                file_dir=local_dir,
+                amount=5,
+                bs="500M",
+                mcg_obj=mcg_obj,
+            )
+        except CommandFailed:
+            logger.warning("Some uploads failed as expected when exceeding quota")
+        logger.info(
+            f"Uploaded data to bucket {bucket_name} "
+            f"(quota 2Gi) to trigger EXCEEDING_QUOTA"
+        )
+
+        wait_for_bucket_mode(mcg_obj, bucket_name, "EXCEEDING_QUOTA")
+        return bucket_name, bucket
+
+    # ------------------------------------------------------------------
+    # Quota error mode tests (EXCEEDING_QUOTA)
+    # ------------------------------------------------------------------
+
+    # TODO: Replace with actual Polarion ID
+    # @polarion_id("OCS-XXXXX")
+    def test_data_bucket_quota_error_mode(self, quota_exceeded_bucket):
+        """
+        Trigger a quota-related bucket mode on a data bucket and verify
+        that the bucket enters EXCEEDING_QUOTA mode.
+
+        The quota_exceeded_bucket fixture creates a 2Gi-quota bucket,
+        uploads ~2.5GB to exceed it, and verifies the bucket reaches
+        EXCEEDING_QUOTA mode. Cleanup is handled by the fixture.
+
+        Args:
+            quota_exceeded_bucket (tuple): (bucket_name, bucket) already
+                in EXCEEDING_QUOTA mode
+        """
 
     # ------------------------------------------------------------------
     # Resource error mode tests (NOT_ENOUGH_HEALTHY_RESOURCES)
@@ -391,91 +409,59 @@ class TestNooBaaBucketErrorStateMode:
 
     # TODO: Replace with actual Polarion ID
     # @polarion_id("OCS-XXXXX")
-    def test_bucket_error_state_alert(self, mcg_obj, awscli_pod, threading_lock):
+    def test_bucket_error_state_alert(self, quota_exceeded_bucket, threading_lock):
         """
         Verify that the NooBaaBucketErrorState Prometheus alert fires
         with the correct bucket_mode label when a bucket enters an
         error state.
 
-        Uses a quota-exceeded scenario (fastest to trigger) and waits
-        for the alert to fire after 5+ minutes.
+        Uses quota_exceeded_bucket fixture (fastest to trigger) and
+        waits for the alert to fire after 5+ minutes. Cleanup is
+        handled by the fixture.
 
         Steps:
-            1. Create a data bucket with a 2Gi quota
-            2. Upload ~2.5GB to exceed the quota
-            3. Verify bucket enters EXCEEDING_QUOTA mode
-            4. Wait for NooBaaBucketErrorState alert to fire (~5 min)
-            5. Filter alerts by bucket_name and verify
+            1. Receive a bucket already in EXCEEDING_QUOTA mode
+            2. Wait for NooBaaBucketErrorState alert to fire (~5 min)
+            3. Filter alerts by bucket_name and verify
                bucket_mode=EXCEEDING_QUOTA
-            6. Clean up (tmp files, bucket objects, bucket)
 
         Args:
-            mcg_obj (MCG): MCG object with S3 connection credentials
-            awscli_pod (Pod): Pod running the AWSCLI tools
+            quota_exceeded_bucket (tuple): (bucket_name, bucket) already
+                in EXCEEDING_QUOTA mode
             threading_lock: Threading lock for Prometheus API
         """
-        bucket_name = create_unique_resource_name(
-            resource_description="bucket", resource_type="alert-quota"
+        bucket_name, _ = quota_exceeded_bucket
+
+        logger.info(
+            f"Bucket {bucket_name} is in EXCEEDING_QUOTA mode, "
+            f"waiting for Prometheus alert to fire (5+ minutes)"
         )
-        bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj, quota="2Gi")
-        logger.info(f"Created bucket {bucket_name} with 2Gi quota")
 
-        local_dir = f"/tmp/{bucket_name}"
-        try:
-            try:
-                write_random_test_objects_to_bucket(
-                    io_pod=awscli_pod,
-                    bucket_to_write=bucket_name,
-                    file_dir=local_dir,
-                    amount=5,
-                    bs="500M",
-                    mcg_obj=mcg_obj,
-                )
-            except CommandFailed:
-                logger.warning("Some uploads failed as expected when exceeding quota")
-            logger.info(
-                f"Uploaded data to bucket {bucket_name} "
-                f"(quota 2Gi) to trigger EXCEEDING_QUOTA"
-            )
+        prometheus_api = PrometheusAPI(threading_lock=threading_lock)
+        alert_name = "NooBaaBucketErrorState"
+        alerts = wait_for_alert_firing(
+            api=prometheus_api,
+            alert_name=alert_name,
+            timeout=900,
+            expected_message_substr="EXCEEDING_QUOTA",
+        )
 
-            wait_for_bucket_mode(mcg_obj, bucket_name, "EXCEEDING_QUOTA")
-            logger.info(
-                f"Bucket {bucket_name} is in EXCEEDING_QUOTA mode, "
-                f"waiting for Prometheus alert to fire (5+ minutes)"
-            )
-
-            prometheus_api = PrometheusAPI(threading_lock=threading_lock)
-            alert_name = "NooBaaBucketErrorState"
-            alerts = wait_for_alert_firing(
-                api=prometheus_api,
-                alert_name=alert_name,
-                timeout=900,
-                expected_message_substr="EXCEEDING_QUOTA",
-            )
-
-            matching_alert = next(
-                (
-                    alert
-                    for alert in alerts
-                    if alert.get("labels", {}).get("bucket_name") == bucket_name
-                    and alert.get("labels", {}).get("bucket_mode") == "EXCEEDING_QUOTA"
-                ),
-                None,
-            )
-            assert matching_alert, (
-                f"No '{alert_name}' firing instance found for "
-                f"bucket_name={bucket_name} with bucket_mode=EXCEEDING_QUOTA"
-            )
-            alert_labels = matching_alert["labels"]
-            logger.info(
-                f"Alert {alert_name} verified: "
-                f"bucket_name={alert_labels.get('bucket_name')}, "
-                f"bucket_mode={alert_labels.get('bucket_mode')}"
-            )
-        finally:
-            awscli_pod.exec_cmd_on_pod(f"rm -rf {local_dir}", out_yaml_format=False)
-            try:
-                rm_object_recursive(awscli_pod, bucket_name, mcg_obj)
-            except CommandFailed:
-                logger.warning(f"Cleanup of bucket {bucket_name} objects failed")
-            bucket.delete()
+        matching_alert = next(
+            (
+                alert
+                for alert in alerts
+                if alert.get("labels", {}).get("bucket_name") == bucket_name
+                and alert.get("labels", {}).get("bucket_mode") == "EXCEEDING_QUOTA"
+            ),
+            None,
+        )
+        assert matching_alert, (
+            f"No '{alert_name}' firing instance found for "
+            f"bucket_name={bucket_name} with bucket_mode=EXCEEDING_QUOTA"
+        )
+        alert_labels = matching_alert["labels"]
+        logger.info(
+            f"Alert {alert_name} verified: "
+            f"bucket_name={alert_labels.get('bucket_name')}, "
+            f"bucket_mode={alert_labels.get('bucket_mode')}"
+        )
