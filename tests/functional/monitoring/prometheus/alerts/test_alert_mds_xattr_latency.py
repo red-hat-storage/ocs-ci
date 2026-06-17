@@ -1,4 +1,4 @@
-import loggerging
+import logging
 import pytest
 import time
 
@@ -28,7 +28,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.utils import ceph_health_check
 
-logger = loggerging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 OCP_POD_OBJ = ocp.OCP(
     kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]

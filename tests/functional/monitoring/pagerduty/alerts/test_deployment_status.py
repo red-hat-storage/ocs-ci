@@ -1,4 +1,4 @@
-import loggerging
+import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import blue_squad
@@ -14,7 +14,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility import pagerduty
 
 
-logger = loggerging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @blue_squad

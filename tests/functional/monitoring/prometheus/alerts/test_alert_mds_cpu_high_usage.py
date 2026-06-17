@@ -1,4 +1,4 @@
-import loggerging
+import logging
 import pytest
 
 from concurrent.futures import ThreadPoolExecutor
@@ -14,7 +14,7 @@ from ocs_ci.ocs import cluster, constants
 from ocs_ci.utility import prometheus
 from ocs_ci.utility.utils import ceph_health_check_base
 
-logger = loggerging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function")
