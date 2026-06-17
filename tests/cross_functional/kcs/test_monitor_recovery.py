@@ -543,7 +543,7 @@ class MonitorRecovery(object):
             deployment_paths (list): List of paths to deployment yamls
 
         """
-        logger.info("Reverting patches on monitors, mgr and osd")
+        logger.info("Reverting patches on monitors, osd and mgr")
         for dep in deployment_paths:
             logger.info(f"Reverting {dep}")
             revert_patch = f"replace --force -f {dep}"
@@ -595,7 +595,8 @@ class MonitorRecovery(object):
 
     def deployments_to_revert(self):
         """
-        Gets mon, osd and mgr deployments to revert
+        Gets mon, osd and mgr deployments to revert.
+        Returns deployments in order: MON -> OSD -> MGR for proper cluster recovery.
 
         Returns:
             tuple: deployment paths to be reverted
@@ -603,11 +604,11 @@ class MonitorRecovery(object):
         """
         to_revert_patches = (
             get_deployments_having_label(
-                label=constants.OSD_APP_LABEL,
+                label=constants.MON_APP_LABEL,
                 namespace=config.ENV_DATA["cluster_namespace"],
             )
             + get_deployments_having_label(
-                label=constants.MON_APP_LABEL,
+                label=constants.OSD_APP_LABEL,
                 namespace=config.ENV_DATA["cluster_namespace"],
             )
             + get_deployments_having_label(
@@ -666,7 +667,7 @@ class MonitorRecovery(object):
             tmp_lines = out_str.strip().splitlines()
             keyring_data = [line.replace("\t", "").strip() for line in tmp_lines]
             pod_name = keyring_data[0].strip()
-            formatted_data.append(f"{pod_name}:")
+            formatted_data.append(pod_name)
             for block in keyring_data:
                 if block == "[client.admin]" and "[mon.]" in keyring_data:
                     logger.info(
@@ -704,7 +705,7 @@ class MonitorRecovery(object):
             lines = out_osd_str.strip().splitlines()
             osd_keyring_data = [line.replace("\t", "").strip() for line in lines]
             pod_name = osd_keyring_data[0].strip()
-            formatted_data.append(f"{pod_name}:")
+            formatted_data.append(pod_name)
             key = None
             for block in osd_keyring_data:
                 if block.startswith("key ="):
