@@ -9,33 +9,48 @@ import argparse
 import logging
 
 from ocs_ci.utility.framework.fusion_fdf_init import (
-    Initializer,
-    generate_run_id,
+    BaseInitializer,
+)
+from ocs_ci.framework.exceptions import (
+    InvalidDeploymentType,
 )
 from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
+LOG_NAMES = {
+    "fdf-mirror": "fdf-mirror",
+}
 
-class FDFMirrorInitializer:
+
+class FDFMirrorInitializer(BaseInitializer):
     """
     Handles initialization for FDF mirror operations.
 
     This class encapsulates all initialization logic including:
     - CLI argument parsing
     - Configuration initialization
-    - Logging setup
-    - Cluster connection
-    - JUnit report properties
     """
 
-    def __init__(self):
-        """Initialize the FDF Mirror Initializer."""
-        self.init = Initializer("fdf")  # Use "fdf" as base type
-        self.parsed_args = None
-        self.run_id = generate_run_id()
+    def __init__(self, deployment_type: str) -> None:
+        """Initialize the FDF Mirror Initializer
+        Args:
+            deployment_type (str): Type of cluster deployment to init
 
-    def initialize(self, args):
+        Raises:
+            InvalidDeploymentType: If the provided deployment_type is invalid
+        """
+        try:
+            log_basename = LOG_NAMES[deployment_type]
+        except KeyError:
+            raise InvalidDeploymentType(
+                f"Deployment type '{deployment_type}' is invalid. "
+                f"Please provide one of the following: {list(LOG_NAMES.keys())}"
+            )
+        self.parsed_args = None
+        super().__init__(log_basename=log_basename)
+
+    def init_config(self, args):
         """
         Perform complete initialization for FDF mirroring.
 
@@ -51,7 +66,7 @@ class FDFMirrorInitializer:
         self.parsed_args = self._parse_fdf_mirror_args(args)
 
         # Initialize configuration
-        self.init.init_config(self.parsed_args)
+        super().init_config(self.parsed_args)
 
         # Store mirror registry and credentials from CLI args if provided
         if self.parsed_args.mirror_registry:
@@ -68,13 +83,7 @@ class FDFMirrorInitializer:
             )
             logger.info("Using mirror_registry_password from CLI argument")
 
-        # Setup logging
-        self.init.init_logging()
-
-        # Set cluster connection
-        self.init.set_cluster_connection()
-
-        logger.debug("FDF mirror initialization completed")
+        logger.debug("FDF mirror config init completed")
 
         return self.parsed_args
 

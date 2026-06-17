@@ -24,8 +24,15 @@ def main(argv=None):
 
     try:
         # Initialize FDF mirror with all configuration
-        initializer = FDFMirrorInitializer()
-        initializer.initialize(args)
+        initializer = FDFMirrorInitializer("fdf-mirror")
+
+        initializer.init_config(args)
+
+        # Setup logging
+        initializer.init_logging()
+
+        # Set cluster connection
+        initializer.set_cluster_connection()
 
         # Get configuration from initializer
         catalog_image = initializer.get_catalog_image()
