@@ -5,6 +5,7 @@ This module contains functionality required for disconnected installation.
 import glob
 import logging
 import os
+from pathlib import Path
 import tempfile
 
 import yaml
@@ -322,13 +323,18 @@ def mirror_index_image_via_oc_mirror(
                     registries_content = f.read()
 
                 # Use registries.conf.d/ directory
-                registries_conf_d_dir = "/etc/containers/registries.conf.d"
+                # Define the path cleanly using the / operator
+                registries_dir = (
+                    Path.home() / ".config" / "containers" / "registries.conf.d"
+                )
+                # to ensure the directory exists before using it
+                registries_dir.mkdir(parents=True, exist_ok=True)
                 ocs_ci_conf_file = os.path.join(
-                    registries_conf_d_dir, "ocs-ci-fdf-mirrors.conf"
+                    registries_dir, "ocs-ci-fdf-mirrors.conf"
                 )
 
                 # Ensure registries.conf.d directory exists
-                exec_cmd(f"sudo mkdir -p {registries_conf_d_dir}")
+                exec_cmd(f"mkdir -p {registries_dir}")
 
                 # Create temporary file with registry configuration
                 temp_file_path = None
@@ -340,8 +346,8 @@ def mirror_index_image_via_oc_mirror(
                         temp_file_path = temp_file.name
 
                     # Copy to registries.conf.d/ directory and set readable permissions
-                    exec_cmd(f"sudo cp {temp_file_path} {ocs_ci_conf_file}")
-                    exec_cmd(f"sudo chmod 644 {ocs_ci_conf_file}")
+                    exec_cmd(f"cp {temp_file_path} {ocs_ci_conf_file}")
+                    exec_cmd(f"chmod 644 {ocs_ci_conf_file}")
 
                     logger.info(
                         f"Successfully configured registry mirrors at {ocs_ci_conf_file}"
