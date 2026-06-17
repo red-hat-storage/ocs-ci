@@ -109,10 +109,19 @@ class TestBlackboxExporterProbe(ManageTest):
                 missing_ips.append(ip)
                 logger.error(f"Expected IP not found in probe: {ip}")
 
+        logger.info("Checking for unexpected IPs in probe configuration...")
+        extra_ips = [ip for ip in probe_ips if ip not in expected_ips]
+        if extra_ips:
+            logger.warning(f"Unexpected IPs found in probe config: {extra_ips}")
         assert (
             not missing_ips
         ), f"The following IPs are missing from probe configuration: {missing_ips}"
+        assert not extra_ips, (
+            f"The following unexpected IPs are present in probe configuration: {extra_ips}. "
+            f"These may be unreachable or from incorrect network interfaces."
+        )
         logger.info(
             f"Test passed: All {len(expected_ips)} expected OSD and MON pod IPs "
-            f"are present in odf-blackbox-exporter probe configuration"
+            f"are present in odf-blackbox-exporter probe configuration, "
+            f"and no unexpected IPs were found"
         )
