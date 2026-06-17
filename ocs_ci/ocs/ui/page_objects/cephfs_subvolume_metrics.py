@@ -1,6 +1,5 @@
 import logging
 
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 
@@ -32,14 +31,17 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
 
     def verify_cephfs_subvolume_section_visible(self):
         """
-        Verify the card title is visible on the Block and File tab.
+        Verify the card title element is present on the Block and File tab.
+
+        Uses the scoped `card_title_loc` locator rather than a global text
+        search, so the check is specific to the CephFS subvolume card element.
 
         Returns:
-            bool: True if the card title element is visible, False otherwise.
+            bool: True if the card title element is found, False otherwise.
         """
         logger.info("Verifying CephFS subvolume metrics card is visible")
         self.navigate_to_cephfs_subvolume_section()
-        return self.check_element_text(constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE)
+        return len(self.get_elements(self.card_title_loc)) > 0
 
     def get_cephfs_subvolume_metric_toggle_text(self):
         """
@@ -102,13 +104,20 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         headers = self.get_elements(self.col_headers_loc)
         return [h.text.strip() for h in headers]
 
-    def get_cephfs_subvolume_row_count(self):
+    def get_cephfs_subvolume_row_count(self, timeout=30):
         """
         Return the number of rows currently displayed in the subvolume table.
 
+        Waits up to `timeout` seconds for at least one row to appear before
+        reading the count, guarding against async table-load races.
+
+        Args:
+            timeout (int): Maximum seconds to wait for the first row.
+
         Returns:
-            int: Row count (0 if the table is empty or not yet loaded).
+            int: Row count (0 if no rows appear within timeout).
         """
+        self.wait_for_element_to_be_present(self.table_rows_loc, timeout=timeout)
         rows = self.get_elements(self.table_rows_loc)
         logger.info("CephFS subvolume table row count: %d", len(rows))
         return len(rows)
