@@ -722,6 +722,18 @@ class MonitorRecovery(object):
                 logger.info(
                     f"MGR deployment {dep_name}: all {len(mgr_pods)} pods are running"
                 )
+            elif "rook-ceph-mds" in dep_name:
+                logger.debug("Waiting 30s before checking MDS pods")
+                time.sleep(30)
+                mds_pods = get_mds_pods()
+                for mds_pod in mds_pods:
+                    logger.debug(f"Waiting for MDS pod: {mds_pod.name}")
+                    wait_for_resource_state(
+                        resource=mds_pod, state=constants.STATUS_RUNNING, timeout=600
+                    )
+                logger.info(
+                    f"MDS deployment {dep_name}: all {len(mds_pods)} pods are running"
+                )
         logger.info("All deployments successfully reverted")
 
     def backup_deployments(self):
