@@ -177,6 +177,15 @@ class TestCephDefaultValuesCheck(ManageTest):
         # Get expected values - currently only 4.20+ supported
         expected_config = constants.ROOK_CEPH_CONFIG_VALUES_420
 
+        if is_lower_requirements():
+            expected_config = {
+                **expected_config,
+                "global": {
+                    **expected_config["global"],
+                    "mon_target_pg_per_osd": "100",
+                },
+            }
+
         log.info(f"OCS version is {ocs_version}")
         log.info(f"Expected config values: {expected_config}")
 
