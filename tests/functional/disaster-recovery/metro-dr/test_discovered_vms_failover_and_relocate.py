@@ -427,7 +427,10 @@ class TestMDRCNVDiscoveredVM:
         )
         config.switch_to_cluster_by_name(self.primary_cluster_name)
         wait_for_all_resources_deletion(
-            cnv_workloads[0].workload_namespace, timeout=1800
+            cnv_workloads[0].workload_namespace,
+            timeout=1800,
+            discovered_apps=True,
+            vrg_name=cnv_workloads[0].discovered_apps_placement_name,
         )
         logger.info("All discovered apps cleanup validated and completed")
 
@@ -446,7 +449,11 @@ class TestMDRCNVDiscoveredVM:
 
         # Verify resources deletion from failover cluster
         config.switch_to_cluster_by_name(failover_cluster_name)
-        wait_for_all_resources_deletion(cnv_workloads[0].workload_namespace)
+        wait_for_all_resources_deletion(
+            cnv_workloads[0].workload_namespace,
+            discovered_apps=True,
+            vrg_name=cnv_workloads[0].discovered_apps_placement_name,
+        )
         logger.info("All resources deleted from failover cluster after relocate")
 
         # Step 15: Verify VM and data on primary

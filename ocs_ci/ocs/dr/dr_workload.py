@@ -2138,6 +2138,17 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         templating.dump_data_to_temp_yaml(drpc_yaml_data, drpc_data_yaml.name)
         log.info(drpc_data_yaml.name)
         log.info("Deploying CNV workload with recipe DRPC")
+
+        # Configure pvcSelector for VM disk protection
+        drpc_yaml_data["spec"].setdefault("pvcSelector", {})
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"] = [
+            {
+                "key": self.discovered_apps_pvc_selector_key,
+                "operator": "In",
+                "values": [self.discovered_apps_pvc_selector_value],
+            }
+        ]
+
         drpc_yaml_data["spec"]["kubeObjectProtection"][
             "captureInterval"
         ] = self.kubeobject_capture_interval
