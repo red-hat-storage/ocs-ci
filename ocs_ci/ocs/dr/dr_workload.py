@@ -1934,8 +1934,19 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             "discovered_apps_pod_selector_value"
         )
         self.kubeobject_capture_interval_int = generate_kubeobject_capture_interval()
+        self.drpc_recipe_yaml_file = constants.DRPC_RECIPE_PATH
+        self.discovered_apps_vm_name_selector_value = kwargs.get(
+            "discovered_apps_vm_name_selector_value", "vm-.*"
+        )
+        self.recipe_enabled = False
 
-    def deploy_workload(self, shared_drpc_protection=False, dr_protect=True):
+    def deploy_workload(
+        self,
+        shared_drpc_protection=False,
+        dr_protect=True,
+        recipe=False,
+        checkhooks=True,
+    ):
         """
 
         Args:
@@ -1943,6 +1954,8 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                             will share the DRPC and DR protect it using Shared Protection type via UI
             dr_protect (bool): True by default where workload will be DR protected via CLI,
                                 else test case should handle it (via UI)
+            recipe (bool): When True with dr_protect, apply a Ramen Recipe on each managed cluster
+            checkhooks (bool): When recipe is True, include VirtualMachine check hooks in the Recipe
 
         Deployment specific to CNV workload for Discovered/Imperative Apps
 
@@ -1960,7 +1973,17 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         config.switch_acm_ctx()
         if dr_protect:
             self.create_placement()
-            self.create_drpc()
+            if recipe:
+                log.info("Creating CNV workload with Ramen Recipe")
+                self.recipe_enabled = True
+                config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+                for cluster in get_non_acm_cluster_config():
+                    config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                    self.create_cnv_recipe(checkhooks=checkhooks)
+                config.switch_acm_ctx()
+                self.create_drpc_for_apps_with_recipe()
+            else:
+                self.create_drpc()
             self.verify_workload_deployment()
         self.vm_obj = VirtualMachine(
             vm_name=self.vm_name, namespace=self.workload_namespace
@@ -2059,6 +2082,85 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         templating.dump_data_to_temp_yaml(placement_yaml_data, placement_yaml.name)
         log.info(f"Creating Placement for workload {self.workload_name}")
         run_cmd(f"oc create -f {placement_yaml.name}")
+
+    def create_cnv_recipe(self, checkhooks=True):
+        """
+        Create a Ramen Recipe for CNV discovered (kubevirt) workloads, optionally with VM check hooks.
+        """
+        recipe_path = (
+            constants.RECIPE_CNV_DISCOVERED_VM_CHECKHOOKS_PATH
+            if checkhooks
+            else constants.RECIPE_CNV_DISCOVERED_VM_PATH
+        )
+        recipe_yaml_data = templating.load_yaml(recipe_path)
+        recipe_yaml_data["metadata"]["name"] = self.workload_namespace
+        spec = recipe_yaml_data["spec"]
+        group0 = spec["groups"][0]
+        group0["includedNamespaces"] = [self.workload_namespace]
+        group0["labelSelector"]["matchExpressions"][0][
+            "key"
+        ] = self.discovered_apps_pod_selector_key
+        group0["labelSelector"]["matchExpressions"][0]["values"] = [
+            self.discovered_apps_pod_selector_value
+        ]
+        if checkhooks and spec.get("hooks"):
+            spec["hooks"][0]["namespace"] = self.workload_namespace
+            spec["hooks"][0][
+                "nameSelector"
+            ] = self.discovered_apps_vm_name_selector_value
+
+        recipe_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="recipe-cnv", delete=False
+        )
+        templating.dump_data_to_temp_yaml(recipe_yaml_data, recipe_yaml.name)
+        log.info(f"Creating CNV recipe for workload {self.workload_name}")
+        run_cmd(f"oc create -f {recipe_yaml.name} -n {self.workload_namespace}")
+
+    def create_drpc_for_apps_with_recipe(self):
+        """
+        Create DRPC for discovered CNV apps protected via a Ramen Recipe (recipeRef).
+        """
+        drpc_yaml_data = templating.load_yaml(self.drpc_recipe_yaml_file)
+        drpc_yaml_data["spec"].setdefault("kubeObjectProtection", {})
+        drpc_yaml_data["spec"]["kubeObjectProtection"].setdefault("kubeObjectSelector")
+        drpc_yaml_data["spec"]["protectedNamespaces"] = [self.workload_namespace]
+        drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
+        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESPACE
+        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+        drpc_yaml_data["spec"]["placementRef"]["name"] = (
+            self.discovered_apps_placement_name + "-plmnt-1"
+        )
+        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESPACE
+        drpc_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drpc_data_yaml.name)
+        log.info(drpc_data_yaml.name)
+        log.info("Deploying CNV workload with recipe DRPC")
+
+        # Configure pvcSelector for VM disk protection
+        drpc_yaml_data["spec"].setdefault("pvcSelector", {})
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"] = [
+            {
+                "key": self.discovered_apps_pvc_selector_key,
+                "operator": "In",
+                "values": [self.discovered_apps_pvc_selector_value],
+            }
+        ]
+
+        drpc_yaml_data["spec"]["kubeObjectProtection"][
+            "captureInterval"
+        ] = self.kubeobject_capture_interval
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
+            "name"
+        ] = self.workload_namespace
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
+            "namespace"
+        ] = self.workload_namespace
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drpc_data_yaml.name)
+        log.info("Creating DRPC (recipe)")
+        run_cmd(f"oc create -f {drpc_data_yaml.name}")
 
     def create_drpc(self):
         """
@@ -2193,6 +2295,15 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
                 ignore_error=True,
             )
+            if self.recipe_enabled:
+                log.info(f"Deleting recipe from {cluster.ENV_DATA['cluster_name']}")
+                run_cmd(
+                    cmd=(
+                        f"oc delete recipe {self.workload_namespace} "
+                        f"-n {self.workload_namespace}"
+                    ),
+                    ignore_error=True,
+                )
             if not skip_resource_deletion_verification:
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,

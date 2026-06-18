@@ -1,0 +1,29 @@
+apiVersion: ramendr.openshift.io/v1alpha1
+kind: Recipe
+metadata:
+  name: PLACEHOLDER
+spec:
+  appType: kubevirt
+  groups:
+  - backupRef: rg1
+    excludedResourceTypes:
+    - configmaps
+    includedNamespaces:
+    - PLACEHOLDER
+    labelSelector:
+      matchExpressions:
+      - key: appname
+        operator: In
+        values:
+        - kubevirt
+    name: rg1
+    type: resource
+  workflows:
+  - failOn: any-error
+    name: backup
+    sequence:
+    - group: rg1
+  - failOn: any-error
+    name: restore
+    sequence:
+    - group: rg1
