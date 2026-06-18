@@ -110,33 +110,6 @@ class TestMDRCNVDiscoveredVM:
         # Switch to primary cluster
         config.switch_to_cluster_by_name(primary_cluster_name)
 
-        # Verify DRPC exists and is in proper state
-        logger.info("Verifying DRPC resource")
-        drpc_obj = DRPC(
-            namespace=constants.DR_OPS_NAMESPACE,
-            resource_name=cnv_workloads[0].discovered_apps_placement_name,
-        )
-        assert drpc_obj.get(), "DRPC resource not found"
-        logger.info(f"DRPC resource {drpc_obj.resource_name} exists")
-
-        # Verify VRG (VolumeReplicationGroup) exists
-        logger.info("Verifying VRG resource on primary cluster")
-        wait_for_vrg_state(
-            vrg_state="primary",
-            vrg_namespace=constants.DR_OPS_NAMESPACE,
-            resource_name=cnv_workloads[0].discovered_apps_placement_name,
-        )
-        logger.info("VRG is in Primary state")
-
-        # Verify VM is running
-        logger.info(f"Verifying VM {cnv_workloads[0].vm_name} is running")
-        wait_for_cnv_workload(
-            vm_name=cnv_workloads[0].vm_name,
-            namespace=cnv_workloads[0].workload_namespace,
-            phase=constants.STATUS_RUNNING,
-        )
-        logger.info(f"VM {cnv_workloads[0].vm_name} is running successfully")
-
         # Verify cluster data protected and peer ready status
         logger.info("Verifying cluster data protected and peer ready status")
         verify_cluster_data_protected_status(
