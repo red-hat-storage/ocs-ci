@@ -23,6 +23,7 @@ from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import acm_ui_specific
 from ocs_ci.utility.utils import (
     expose_ocp_version,
+    get_registry_svc,
     run_cmd,
     get_running_acm_version,
 )
@@ -32,7 +33,6 @@ from ocs_ci.ocs.constants import (
     ACM_PLATOFRM_VSPHERE_CRED_PREFIX,
     VSPHERE_CA_FILE_PATH,
     DATA_DIR,
-    ACM_OCP_RELEASE_IMG_URL_PREFIX,
     ACM_VSPHERE_NETWORK,
     ACM_CLUSTER_DEPLOY_TIMEOUT,
     ACM_CLUSTER_DEPLOYMENT_LABEL_KEY,
@@ -898,7 +898,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
 
     def get_ocp_release_img(self):
         vers = expose_ocp_version(self.cluster_conf.DEPLOYMENT["installer_version"])
-        return f"{ACM_OCP_RELEASE_IMG_URL_PREFIX}:{vers}"
+        return f"{get_registry_svc(vers)}:{vers}"
 
     def post_destroy_ops(self):
         """

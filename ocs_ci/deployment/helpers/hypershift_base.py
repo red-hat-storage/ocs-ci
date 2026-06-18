@@ -29,6 +29,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_release_version,
     get_random_letters,
+    get_registry_svc,
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
@@ -453,12 +454,12 @@ def resolve_ocp_image(ocp_version: str) -> str:
         with config.RunWithProviderConfigContextIfAvailable():
             provider_version = get_ocp_version()
         if "nightly" in provider_version:
-            index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
+            index_image = f"{get_registry_svc(provider_version)}:{provider_version}"
         else:
             index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
     else:
         if "nightly" in ocp_version:
-            index_image = f"{constants.REGISTRY_SVC}:{ocp_version}"
+            index_image = f"{get_registry_svc(ocp_version)}:{ocp_version}"
         else:
             index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
     return index_image
@@ -752,7 +753,9 @@ class HyperShiftBase:
             if not ocp_version:
                 provider_version = get_ocp_version()
                 if "nightly" in provider_version:
-                    index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
+                    index_image = (
+                        f"{get_registry_svc(provider_version)}:{provider_version}"
+                    )
                 else:
                     index_image = (
                         f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
