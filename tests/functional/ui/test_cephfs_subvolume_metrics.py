@@ -8,11 +8,16 @@ import logging
 
 from ocs_ci.framework.testlib import (
     ManageTest,
+    polarion_id,
     skipif_ocs_version,
     tier1,
     ui,
 )
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    skipif_external_mode,
+    skipif_mcg_only,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.ui.page_objects.cephfs_subvolume_metrics import (
@@ -25,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 @green_squad
 @skipif_ocs_version("<4.22")
+@skipif_mcg_only
+@skipif_external_mode
 class TestCephFSSubvolumeMetricsSectionReachable(ManageTest):
     """
     TC1 — Verify the CephFS subvolume metrics card is reachable on the
@@ -33,6 +40,7 @@ class TestCephFSSubvolumeMetricsSectionReachable(ManageTest):
     Testcase: Metrics presence and correctness - Subvolume metrics section reachable
     """
 
+    @polarion_id("OCS-8010")
     @tier1
     @ui
     def test_cephfs_subvolume_metrics_section_reachable(self, setup_ui_class):
