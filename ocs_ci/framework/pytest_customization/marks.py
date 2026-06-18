@@ -278,6 +278,11 @@ stretchcluster_required = compose(
     stretchcluster_required_skipif, pytest.mark.stretchcluster_required
 )
 
+skipif_less_than_five_workers = pytest.mark.skipif(
+    config.ENV_DATA["worker_replicas"] < 5,
+    reason="This test cannot run on setup having less than five worker nodes",
+)
+
 skipif_ec_pools_disabled = pytest.mark.skipif(
     config.DEPLOYMENT.get("ec_default_pools") is not True,
     reason="Test runs only on EC pools",
