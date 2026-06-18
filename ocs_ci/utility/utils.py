@@ -1313,6 +1313,26 @@ def download_ga_oc_client_as_bootstrap(bin_dir, target_version):
         os.chdir(previous_dir)
 
 
+def get_registry_svc(version):
+    """
+    Get the CI registry image path for the given OCP version.
+
+    OCP 5.x uses a different image stream name (release-5) than
+    OCP 4.x (release).
+
+    Args:
+        version (str): OCP version string (e.g. "5.0.0-0.nightly-2026-06-18-000016")
+
+    Returns:
+        str: Registry image path (e.g. "registry.ci.openshift.org/ocp/release-5")
+
+    """
+    major = version.split(".")[0]
+    if int(major) >= 5:
+        return "registry.ci.openshift.org/ocp/release-5"
+    return constants.REGISTRY_SVC
+
+
 @retry(CommandFailed, tries=2, delay=5, backoff=2)
 def get_openshift_installer(
     version=None,
@@ -1371,7 +1391,7 @@ def get_openshift_installer(
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         cmd = (
             f"oc adm release extract --registry-config {pull_secret_path} --command={installer_filename} "
-            f"--to ./ registry.ci.openshift.org/ocp/release:{version}"
+            f"--to ./ {get_registry_svc(version)}:{version}"
         )
         exec_cmd(cmd)
         # return to the previous working directory
@@ -1542,12 +1562,13 @@ def _try_extract_from_fallback_ga_image(binary, original_image, bin_dir):
     """
     # Check if this looks like a nightly build that we can fallback
     if (
-        "registry.ci.openshift.org/ocp/release:" in original_image
+        "registry.ci.openshift.org/ocp/release" in original_image
         and "nightly" in original_image
     ):
         try:
             # Extract version from nightly image name
             # e.g., "registry.ci.openshift.org/ocp/release:4.22.0-0.nightly-2026-06-10-104337"
+            # or "registry.ci.openshift.org/ocp/release-5:5.0.0-0.nightly-2026-06-18-000016"
             image_tag = original_image.split(":")[
                 -1
             ]  # "4.22.0-0.nightly-2026-06-10-104337"
@@ -2007,7 +2028,7 @@ def get_nightly_oc_via_ga(version, tarball="openshift-client.tar.gz"):
             # extract oc
             cmd = (
                 f"{tmp_oc_path}/oc adm release extract -a {pull_secret_path} --command={oc_type} "
-                f"registry.ci.openshift.org/ocp/release:{version} --to ."
+                f"{get_registry_svc(version)}:{version} --to ."
             )
             exec_cmd(cmd)
             delete_file(tarball)
