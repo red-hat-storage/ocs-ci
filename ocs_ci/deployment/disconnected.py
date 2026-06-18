@@ -329,12 +329,8 @@ def mirror_index_image_via_oc_mirror(
                 )
                 # to ensure the directory exists before using it
                 registries_dir.mkdir(parents=True, exist_ok=True)
-                ocs_ci_conf_file = os.path.join(
-                    registries_dir, "ocs-ci-fdf-mirrors.conf"
-                )
 
-                # Ensure registries.conf.d directory exists
-                exec_cmd(f"mkdir -p {registries_dir}")
+                ocs_ci_conf_file = registries_dir / "ocs-ci-fdf-mirrors.conf"
 
                 # Create temporary file with registry configuration
                 temp_file_path = None
