@@ -2181,6 +2181,17 @@ class BaremetalNodes(NodesBase):
         """
         self.baremetal.restart_baremetal_machines(nodes, force=force)
 
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart baremetal machines by stop and start (IPMI power cycle).
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force BM stop, False otherwise
+
+        """
+        self.restart_nodes(nodes, force=force)
+
     def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all BMs are up by the end of the test
