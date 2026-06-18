@@ -17,7 +17,11 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility import prometheus
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.exceptions import ResourceNotFoundError, CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import (
+    ResourceNotFoundError,
+    CommandFailed,
+    ResourceWrongStatusException,
+)
 from ocs_ci.ocs.node import (
     get_worker_nodes,
     get_node_objs,
@@ -153,7 +157,11 @@ class TestFiveMonInCluster(ManageTest):
                     logger.error("Failed to scale mon count back to 3 during teardown")
                 else:
                     logger.info("Successfully scaled mon count back to 3")
-        except (CommandFailed, ResourceWrongStatusException, AttributeError) as ex:
+        except (
+            CommandFailed,
+            ResourceWrongStatusException,
+            AttributeError,
+        ) as ex:
             logger.error(f"Error during mon count teardown: {ex}")
             exceptions.append(ex)
 
@@ -187,7 +195,10 @@ class TestFiveMonInCluster(ManageTest):
 
         """
 
-        target_msg = "The current number of Ceph monitors can be increased in order to improve cluster resilience."
+        target_msg = (
+            "The current number of Ceph monitors can be increased in order to "
+            "improve cluster resilience."
+        )
         target_label = constants.ALERT_CEPHMONLOWCOUNT
 
         list_mons = self.ceph_cluster.get_mons_from_cluster()
@@ -225,7 +236,9 @@ class TestFiveMonInCluster(ManageTest):
             )
 
         if test_pass:
-            params_neg = '{"spec":{"managedResources":{"cephCluster":{"monCount": 4}}}}'
+            params_neg = (
+                '{"spec":{"managedResources":{"cephCluster":{"monCount": 4}}}}'
+            )
             params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 5}}}}'
 
             # Negative test: Verify that monCount=4 is rejected (only 3 and 5 are valid)
