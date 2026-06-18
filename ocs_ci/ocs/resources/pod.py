@@ -4251,6 +4251,29 @@ def fetch_rgw_pod_restart_count(namespace=None):
     return rgw_pod_restart_count
 
 
+def verify_mon_pod_running(mon_count):
+    """
+    Verify that all the mon pods are in Running state.
+    Args:
+        mon_count(int): Expected number of mon pods to which should be in running state
+
+    Returns:
+        bool: True if all mon pods are in running state, False otherwise
+    """
+    pod_objs = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    ret = pod_objs.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.MON_APP_LABEL,
+        resource_count=mon_count,
+        dont_allow_other_resources=True,
+        timeout=660,
+    )
+    logger.info(f"Waited for all mon pods to come up and running {ret}")
+    return ret
+
+
 def get_pod_used_memory_in_mebibytes(podname):
     """
     Get a pod's used memory in MiB
