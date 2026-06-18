@@ -2563,6 +2563,41 @@ validation_4_22 = {
         "//button[@id='{0}-link'] | //li[@id='{0}-link']",
         By.XPATH,
     ),
+    "cephfs_subvolume_card_title": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_metric_toggle": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::button[@aria-expanded][1]",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_metric_option": (
+        "//button[@role='option' and normalize-space(.)='{0}']",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_table_rows": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::div[contains(@class,'odf-loading-box')]"
+        "//table/tbody/tr",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_help_button": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::button[@aria-label='Help'"
+        " and contains(@class,'odf-field-level-help')][1]",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_popover_body": (
+        "//div[@role='dialog' and @aria-modal='true' and @aria-label='Help']",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_col_headers": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::div[contains(@class,'odf-loading-box')]"
+        "//table/thead/tr/th",
+        By.XPATH,
+    ),
 }
 
 topology = {
