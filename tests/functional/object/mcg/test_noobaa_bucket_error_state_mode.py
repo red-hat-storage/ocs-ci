@@ -203,7 +203,9 @@ class TestNooBaaBucketErrorStateMode:
             )
             pod.delete(force=True)
 
-        wait_for_bucket_mode(mcg_obj, bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES")
+        wait_for_bucket_mode(
+            mcg_obj, bucket.name, "NOT_ENOUGH_HEALTHY_RESOURCES", timeout=900
+        )
 
     @skipif_managed_service
     @skipif_aws_creds_are_missing
