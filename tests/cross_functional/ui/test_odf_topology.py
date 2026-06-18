@@ -397,9 +397,19 @@ class TestODFTopology(object):
             name_suffix="osd_information", region="right_side"
         )
         logger.info(f"OSD Information screenshots: {osd_screenshots}")
-        osd_details_llm = llm_client.query_screenshot_json(osd_screenshots, osd_prompt)
-        logger.info(f"LLM extracted OSD details: {osd_details_llm}")
-        osd_details_ui = osd_details_llm.get("osds", [])
+
+        # Query each screenshot individually and merge OSD lists by heading
+        # to handle multi-OSD nodes where scrolling splits content across shots
+        seen_headings = set()
+        osd_details_ui = []
+        for osd_shot in osd_screenshots:
+            shot_result = llm_client.query_screenshot_json(osd_shot, osd_prompt)
+            for osd_entry in shot_result.get("osds", []):
+                h = osd_entry.get("heading", "")
+                if h and h not in seen_headings:
+                    seen_headings.add(h)
+                    osd_details_ui.append(osd_entry)
+        logger.info(f"LLM extracted OSD details (merged): {osd_details_ui}")
 
         if len(osd_details_ui) != node_osd_count_cli:
             mismatches["osd_info_count"] = {
@@ -407,35 +417,32 @@ class TestODFTopology(object):
                 "llm": str(len(osd_details_ui)),
             }
 
-        cli_pod_names = {ref["pod_name"] for ref in osd_reference}
-        cli_osd_ips = {ref["osd_ip"] for ref in osd_reference}
-        cli_device_classes = {ref["device_class"] for ref in osd_reference}
+        cli_by_pod = {ref["pod_name"]: ref for ref in osd_reference}
 
         for osd_ui in osd_details_ui:
             heading = osd_ui.get("heading", "unknown")
-            ui_device_class = osd_ui.get("device_class", "")
-            ui_osd_ip = osd_ui.get("osd_ip", "")
-            ui_node_ip = osd_ui.get("node_ip", "")
             ui_pod_name = osd_ui.get("pod_name", "")
-            if ui_device_class and ui_device_class not in cli_device_classes:
+            ref = cli_by_pod.get(ui_pod_name)
+            if not ref:
+                mismatches[f"{heading}_pod_name"] = {
+                    "cli": str(set(cli_by_pod.keys())),
+                    "llm": ui_pod_name,
+                }
+                continue
+            if osd_ui.get("device_class", "") != ref["device_class"]:
                 mismatches[f"{heading}_device_class"] = {
-                    "cli": str(cli_device_classes),
-                    "llm": ui_device_class,
+                    "cli": ref["device_class"],
+                    "llm": osd_ui.get("device_class", ""),
                 }
-            if ui_osd_ip and ui_osd_ip not in cli_osd_ips:
+            if osd_ui.get("osd_ip", "") != ref["osd_ip"]:
                 mismatches[f"{heading}_osd_ip"] = {
-                    "cli": str(cli_osd_ips),
-                    "llm": ui_osd_ip,
+                    "cli": ref["osd_ip"],
+                    "llm": osd_ui.get("osd_ip", ""),
                 }
-            if ui_node_ip and ui_node_ip != node_internal_ip:
+            if osd_ui.get("node_ip", "") != node_internal_ip:
                 mismatches[f"{heading}_node_ip"] = {
                     "cli": node_internal_ip,
-                    "llm": ui_node_ip,
-                }
-            if ui_pod_name and ui_pod_name not in cli_pod_names:
-                mismatches[f"{heading}_pod_name"] = {
-                    "cli": str(cli_pod_names),
-                    "llm": ui_pod_name,
+                    "llm": osd_ui.get("node_ip", ""),
                 }
 
         topology_tab.nodes_view.close_sidebar()
