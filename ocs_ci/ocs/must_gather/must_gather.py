@@ -81,7 +81,13 @@ class MustGather(object):
             )
             logger.debug(f"Using CSV version for must-gather validation: {ocs_version}")
         if ocs_version not in GATHER_COMMANDS_VERSION:
-            fallback = max(v for v in GATHER_COMMANDS_VERSION if v <= ocs_version)
+            candidates = [v for v in GATHER_COMMANDS_VERSION if v <= ocs_version]
+            if not candidates:
+                raise ValueError(
+                    f"No must-gather data for OCS {ocs_version}; "
+                    f"available versions: {sorted(GATHER_COMMANDS_VERSION)}"
+                )
+            fallback = max(candidates)
             logger.warning(
                 f"No must-gather data for {ocs_version}, falling back to {fallback}"
             )
