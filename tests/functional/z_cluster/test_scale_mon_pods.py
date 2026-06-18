@@ -17,7 +17,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility import prometheus
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.exceptions import ResourceNotFoundError, CommandFailed
+from ocs_ci.ocs.exceptions import ResourceNotFoundError, CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.node import (
     get_worker_nodes,
     get_node_objs,
@@ -76,6 +76,7 @@ class TestFiveMonInCluster(ManageTest):
 
         Returns:
             Bool: True if all worker nodes have rack labels and there are at least 5 unique racks, False otherwise.
+
         """
         worker_nodes = get_worker_nodes()
         node_h = ocp.OCP(kind="node")
@@ -152,7 +153,7 @@ class TestFiveMonInCluster(ManageTest):
                     logger.error("Failed to scale mon count back to 3 during teardown")
                 else:
                     logger.info("Successfully scaled mon count back to 3")
-        except Exception as ex:
+        except (CommandFailed, ResourceWrongStatusException, AttributeError) as ex:
             logger.error(f"Error during mon count teardown: {ex}")
             exceptions.append(ex)
 
@@ -165,7 +166,7 @@ class TestFiveMonInCluster(ManageTest):
                 self.racks = [f"rack{i % target_racks}" for i in range(len(self.nodes))]
                 logger.info("Teardown: Reassigning rack labels")
                 self.assign_dummy_racks()
-        except Exception as ex:
+        except (CommandFailed, AttributeError) as ex:
             logger.error(f"Error during rack label teardown: {ex}")
             exceptions.append(ex)
         # If any exceptions occurred, raise the first one after all cleanup attempts
@@ -174,6 +175,7 @@ class TestFiveMonInCluster(ManageTest):
             raise exceptions[0]
 
     @post_ocs_upgrade
+    @ignore_leftovers
     @pytest.mark.polarion_id("OCS-5664")
     def test_scale_mons_in_cluster_to_five(self, threading_lock):
         """
@@ -324,6 +326,7 @@ class TestFiveMonInCluster(ManageTest):
         )
 
     @pytest.mark.polarion_id("OCS-5667")
+    @ignore_leftovers
     def test_node_maintenance_post_five_mon_update(
         self,
         pvc_factory,
