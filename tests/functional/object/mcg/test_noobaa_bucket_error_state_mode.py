@@ -11,10 +11,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_disconnected_cluster,
     skipif_managed_service,
     skipif_mcg_only,
-    skipif_ocs_version,
     tier2,
 )
-from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.bucket_utils import (
     copy_objects,
     get_bucket_mode,
@@ -37,7 +36,6 @@ logger = logging.getLogger(__name__)
 @post_upgrade
 @runs_on_provider
 @skipif_disconnected_cluster
-@skipif_ocs_version("<4.22")
 class TestNooBaaBucketErrorStateMode:
     """
     Tests for RHSTOR-7732: verify that NooBaa buckets enter the
@@ -165,7 +163,7 @@ class TestNooBaaBucketErrorStateMode:
         """
         bucketclass_dict = {
             "interface": "OC",
-            "backingstore_dict": {"pv": [(1, 17, constants.DEFAULT_STORAGECLASS_RBD)]},
+            "backingstore_dict": {"pv": [(1, 17, DEFAULT_STORAGECLASS_RBD)]},
         }
         bucket = bucket_factory(
             amount=1,
@@ -324,7 +322,7 @@ class TestNooBaaBucketErrorStateMode:
 
         bucketclass_dict = {
             "interface": "OC",
-            "backingstore_dict": {"pv": [(1, 17, constants.DEFAULT_STORAGECLASS_RBD)]},
+            "backingstore_dict": {"pv": [(1, 17, DEFAULT_STORAGECLASS_RBD)]},
         }
         bucket = bucket_factory(
             amount=1,
