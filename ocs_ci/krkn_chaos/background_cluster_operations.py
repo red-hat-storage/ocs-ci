@@ -1241,6 +1241,14 @@ class BackgroundClusterOperations:
             rotator.wait_for_rotation(component, target, timeout=timeout)
 
         ceph_health_check(namespace=self.namespace)
+        # TODO(cephx-keyrotation): Remove this call when rook-ceph-tools reloads
+        # rotated CephX keys without requiring a pod restart.
+        log.warning(
+            "TEMPORARY WORKAROUND (remove when cephx toolbox key-reload is fixed): "
+            "restarting rook-ceph-tools after CephX key rotation for %s",
+            config_key,
+        )
+        rotator.restart_ceph_tools_pod_after_keyrotation()
         log.info(f"CephX key rotation background operation completed for {config_key}")
 
     # ==========================================================================

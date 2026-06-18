@@ -2402,6 +2402,38 @@ class CephXKeyRotation:
         operator_pod.delete()
         return operator_name
 
+    # TODO(cephx-keyrotation): Remove restart_ceph_tools_pod_after_keyrotation and its
+    # call site in background_cluster_operations._cephx_keyrotation_operation once
+    # rook-ceph-tools reloads CephX keys after rotation without a pod restart.
+    def restart_ceph_tools_pod_after_keyrotation(self, timeout=300):
+        """
+        Temporary workaround: restart rook-ceph-tools after CephX key rotation.
+
+        Deletes the toolbox pod so its deployment recreates it with updated
+        CephX credentials.
+
+        .. warning::
+            This is a short-term workaround only. Remove this method and its
+            caller when the upstream toolbox key-reload issue is fixed.
+        """
+        tools_pod = get_ceph_tools_pod(namespace=self.namespace)
+        pod_name = tools_pod.name
+        log.warning(
+            "TEMPORARY WORKAROUND (remove when cephx toolbox key-reload is fixed): "
+            "restarting rook-ceph-tools pod %s after CephX key rotation",
+            pod_name,
+        )
+        tools_pod.delete()
+        tools_pod.ocp.wait_for_delete(resource_name=pod_name, timeout=timeout)
+        new_tools_pod = get_ceph_tools_pod(wait=True, namespace=self.namespace)
+        log.warning(
+            "TEMPORARY WORKAROUND complete: rook-ceph-tools pod %s is Running; "
+            "remove restart_ceph_tools_pod_after_keyrotation once toolbox reloads "
+            "rotated keys without a restart",
+            new_tools_pod.name,
+        )
+        return new_tools_pod
+
     def wait_for_rook_ceph_operator_ready(
         self, previous_pod_name=None, timeout=300, sleep=15
     ):
