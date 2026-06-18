@@ -2396,7 +2396,7 @@ def is_ec_pool_supported():
     Check if erasure coded RBD pools are supported on this cluster.
 
     All conditions must be met:
-    - Platform is vSphere or baremetal
+    - Platform is on-prem or HCI (vSphere, baremetal, ibm_hci, etc.)
     - Cluster uses local storage (LSO / no-provisioner / localblock)
     - Failure domain is 'host'
     - At least 3 OSDs are running
@@ -2408,11 +2408,14 @@ def is_ec_pool_supported():
     from ocs_ci.ocs.resources import pod
 
     cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
-    if cluster_type == "provider":
+    if cluster_type in ["hci_client", "consumer"]:
         return False
 
     platform = config.ENV_DATA["platform"].lower()
-    if platform not in constants.ON_PREM_PLATFORMS:
+    if (
+        platform not in constants.ON_PREM_PLATFORMS
+        and platform not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+    ):
         return False
     if not is_lso_cluster():
         return False
