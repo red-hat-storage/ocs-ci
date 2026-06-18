@@ -177,6 +177,9 @@ class BaseUI:
         self.bucket_tab = self.deep_get(
             locators_for_current_ocp_version(), "bucket_tab"
         )
+        self.s3_vector_loc = self.deep_get(
+            locators_for_current_ocp_version(), "s3_vector_tab"
+        )
         self.data_foundation_overview = self.deep_get(
             locators_for_current_ocp_version(), "data_foundation_overview"
         )
