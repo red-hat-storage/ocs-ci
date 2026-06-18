@@ -236,9 +236,7 @@ class TestFiveMonInCluster(ManageTest):
             )
 
         if test_pass:
-            params_neg = (
-                '{"spec":{"managedResources":{"cephCluster":{"monCount": 4}}}}'
-            )
+            params_neg = '{"spec":{"managedResources":{"cephCluster":{"monCount": 4}}}}'
             params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 5}}}}'
 
             # Negative test: Verify that monCount=4 is rejected (only 3 and 5 are valid)
