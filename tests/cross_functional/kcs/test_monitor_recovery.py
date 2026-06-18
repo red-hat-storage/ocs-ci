@@ -67,6 +67,7 @@ class TestMonitorRecovery(E2ETest):
     @pytest.fixture(autouse=True)
     def mon_recovery_setup(
         self,
+        request,
         deployment_pod_factory,
         mcg_obj,
         bucket_factory,
@@ -75,6 +76,51 @@ class TestMonitorRecovery(E2ETest):
         Creates project, pvcs, dc-pods and obcs
 
         """
+
+        def finalizer():
+            """
+            Teardown: Force delete pods and clean up volume attachments
+            """
+            logger.test_step("Teardown: Clean up test resources")
+            logger.info("Force deleting test pods to release PVCs")
+            for dc_pod in self.dc_pods:
+                try:
+                    logger.debug(f"Force deleting pod: {dc_pod.name}")
+                    dc_pod.delete(force=True, wait=False)
+                except Exception as e:
+                    logger.warning(f"Failed to delete pod {dc_pod.name}: {e}")
+
+            logger.info("Waiting 30s for pods to terminate")
+            time.sleep(30)
+
+            logger.info("Cleaning up stale volume attachments")
+            try:
+                va_ocp = OCP(kind="VolumeAttachment", namespace="")
+                attachments = va_ocp.get()
+                if attachments and "items" in attachments:
+                    deleted_count = 0
+                    for attachment in attachments["items"]:
+                        if not attachment.get("status", {}).get("attached", False):
+                            va_name = attachment["metadata"]["name"]
+                            logger.debug(
+                                f"Deleting unattached VolumeAttachment: {va_name}"
+                            )
+                            try:
+                                va_ocp.delete(resource_name=va_name)
+                                deleted_count += 1
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to delete VolumeAttachment {va_name}: {e}"
+                                )
+                    if deleted_count > 0:
+                        logger.info(f"Deleted {deleted_count} stale volume attachments")
+                    else:
+                        logger.debug("No stale volume attachments found")
+            except Exception:
+                logger.exception("Error during volume attachment cleanup")
+
+        request.addfinalizer(finalizer)
+
         self.filename = "sample_file.txt"
         self.object_key = "obj-key"
         self.object_data = "string data"
@@ -1103,9 +1149,46 @@ def recover_mcg():
     logger.info("Waiting 120s for noobaa pods to respawn")
     time.sleep(120)
 
-    logger.info("Verifying noobaa pods reached running state")
-    failed_noobaa_pods = []
+    logger.info("Waiting for postgres cluster pods to spawn (timeout: 300s)")
+    max_wait_time = 300
+    start_time = time.time()
+    expected_pg_pods = 2
+    active_pg_pods = []
+
+    while time.time() - start_time < max_wait_time:
+        noobaa_db_pods = pod.get_pods_having_label(
+            constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
+            config.ENV_DATA["cluster_namespace"],
+        )
+        active_pg_pods = [
+            p
+            for p in noobaa_db_pods
+            if p.get("metadata", {}).get("deletionTimestamp") is None
+        ]
+        if len(active_pg_pods) >= expected_pg_pods:
+            elapsed = int(time.time() - start_time)
+            logger.info(
+                f"All {len(active_pg_pods)} postgres cluster pods spawned after {elapsed}s"
+            )
+            break
+        logger.debug(
+            f"Postgres pods: active={len(active_pg_pods)}, total={len(noobaa_db_pods)}, "
+            f"expected={expected_pg_pods}, elapsed={int(time.time() - start_time)}s"
+        )
+        time.sleep(10)
+    else:
+        logger.warning(
+            f"Timeout waiting for postgres pods after {max_wait_time}s: "
+            f"found {len(active_pg_pods)}/{expected_pg_pods} expected"
+        )
+
+    logger.info("Verifying all noobaa pods reached running state")
     respawned_noobaa_pods = get_noobaa_pods()
+    logger.info(
+        f"Found {len(respawned_noobaa_pods)} noobaa pods to verify (includes postgres cluster)"
+    )
+    failed_noobaa_pods = []
+
     for noobaa_pod in respawned_noobaa_pods:
         logger.debug(f"Checking noobaa pod: {noobaa_pod.name}")
         if not handle_multi_attach_error(noobaa_pod, timeout=600):
@@ -1248,6 +1331,27 @@ def ceph_fs_recovery():
                 f"ceph fs reset {defaults.CEPHFILESYSTEM_NAME} --yes-i-really-mean-it"
             )
             logger.info("CephFS reset successful after recreation")
+
+            logger.info("Verifying MDS pods reach running state after CephFS creation")
+            mds_pods = get_mds_pods()
+            logger.info(f"Found {len(mds_pods)} MDS pods to verify")
+            failed_mds_pods = []
+            for mds_pod in mds_pods:
+                logger.debug(f"Checking MDS pod: {mds_pod.name}")
+                if not handle_multi_attach_error(mds_pod, timeout=600):
+                    logger.warning(
+                        f"MDS pod {mds_pod.name} did not reach running state"
+                    )
+                    failed_mds_pods.append(mds_pod.name)
+
+            if failed_mds_pods:
+                logger.warning(
+                    f"{len(failed_mds_pods)} MDS pods did not reach running state: {failed_mds_pods}"
+                )
+            else:
+                logger.info(
+                    f"All {len(mds_pods)} MDS pods are running after CephFS creation"
+                )
         except CommandFailed:
             logger.exception(
                 f"Failed to recover CephFS: {defaults.CEPHFILESYSTEM_NAME}"
