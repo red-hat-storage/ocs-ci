@@ -271,8 +271,6 @@ class TestMonitorRecovery(E2ETest):
         mon_recovery.patch_sleep_on_mds()
         logger.info("Resetting CephFS")
         ceph_fs_recovery()
-        logger.info("Reverting MDS deployments to original configuration")
-        mon_recovery.revert_patches(mds_revert)
         logger.info("Scaling back rook and ocs operators after CephFS recovery")
         mon_recovery.scale_rook_ocs_operators(replica=1)
 
@@ -499,6 +497,9 @@ class MonitorRecovery(object):
         Prepares the script to retrieve the `monstore` cluster map from OSDs
 
         """
+        logger.info(
+            f"Preparing mon-store recovery script: {self.backup_dir}/recover_mon.sh"
+        )
         recover_mon = f"""
         #!/bin/bash
         ms=/tmp/monstore
@@ -537,6 +538,7 @@ class MonitorRecovery(object):
         with open(f"{self.backup_dir}/recover_mon.sh", "w") as file:
             file.write(recover_mon)
         exec_cmd(cmd=f"chmod +x {self.backup_dir}/recover_mon.sh")
+        logger.info("Mon-store recovery script prepared successfully")
 
     @retry(CommandFailed, tries=15, delay=5, backoff=1)
     def run_mon_store(self):
@@ -768,6 +770,7 @@ class MonitorRecovery(object):
             tuple: deployment paths to be reverted
 
         """
+        logger.debug("Identifying deployments to revert")
         to_revert_patches = (
             get_deployments_having_label(
                 label=constants.MON_APP_LABEL,
@@ -786,6 +789,10 @@ class MonitorRecovery(object):
             label=constants.MDS_APP_LABEL,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
+        logger.debug(
+            f"Found {len(to_revert_patches)} MON/OSD/MGR deployments and {len(to_revert_mds)} MDS deployments"
+        )
+
         to_revert_patches_path = []
         to_revert_mds_path = []
         for dep in to_revert_patches:
@@ -793,7 +800,6 @@ class MonitorRecovery(object):
                 join(self.backup_dir, dep["metadata"]["name"] + ".yaml")
             )
         for dep in to_revert_mds:
-            logger.info(dep)
             to_revert_mds_path.append(
                 join(self.backup_dir, dep["metadata"]["name"] + ".yaml")
             )
@@ -850,10 +856,10 @@ class MonitorRecovery(object):
                 elif "caps" in block:
                     caps.append(block.strip())
                 if key:
-                    logger.info("Found key entry in keyring data")
+                    logger.debug("Found key entry in keyring data")
                     formatted_data.append(f"    key = {key}")
                 for cap in caps:
-                    logger.info(f"Found cap :{cap}")
+                    logger.debug(f"Found cap: {cap}")
                     formatted_data.append(f"    {cap}")
         with open(f"{self.keyring_dir}/keyring-mon-a", "w") as f:
             f.write("\n".join(formatted_data))
@@ -1313,9 +1319,52 @@ def remove_global_id_reclaim():
     logger.info("Global ID reclaim warning removal completed")
 
 
+def replace_mds_deployments():
+    """
+    Backup and replace MDS deployments to recover from CephFS reset
+
+    This function backs up the MDS deployments and replaces them using oc replace --force
+
+    """
+    logger.info("Replacing MDS deployments to recover from CephFS reset")
+
+    mds_deployment_names = [
+        "rook-ceph-mds-ocs-storagecluster-cephfilesystem-a",
+        "rook-ceph-mds-ocs-storagecluster-cephfilesystem-b",
+    ]
+
+    dep_ocp = OCP(kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+
+    with tempfile.TemporaryDirectory() as backup_dir:
+        logger.info(
+            f"Backing up {len(mds_deployment_names)} MDS deployments to temporary directory"
+        )
+        logger.debug(f"Backup directory: {backup_dir}")
+
+        for deployment in mds_deployment_names:
+            logger.debug(f"Backing up deployment: {deployment}")
+            deployment_get = dep_ocp.get(resource_name=deployment)
+            deployment_yaml = join(backup_dir, deployment + ".yaml")
+            templating.dump_data_to_temp_yaml(deployment_get, deployment_yaml)
+
+        logger.info(f"Successfully backed up {len(mds_deployment_names)} deployments")
+
+        logger.info(f"Replacing {len(mds_deployment_names)} MDS deployments")
+        for deployment in mds_deployment_names:
+            deployment_yaml = join(backup_dir, deployment + ".yaml")
+            logger.debug(f"Replacing deployment: {deployment}")
+            exec_cmd(
+                f"oc replace --force -f {deployment_yaml} -n {defaults.ROOK_CLUSTER_NAMESPACE}"
+            )
+
+        logger.info(
+            f"Successfully replaced {len(mds_deployment_names)} MDS deployments"
+        )
+
+
 def ceph_fs_recovery():
     """
-    Resets the CephFS
+    Resets the CephFS and replaces MDS deployments
 
     """
     logger.info(
@@ -1343,32 +1392,30 @@ def ceph_fs_recovery():
                 f"ceph fs reset {defaults.CEPHFILESYSTEM_NAME} --yes-i-really-mean-it"
             )
             logger.info("CephFS reset successful after recreation")
-
-            logger.info("Verifying MDS pods reach running state after CephFS creation")
-            mds_pods = get_mds_pods()
-            logger.info(f"Found {len(mds_pods)} MDS pods to verify")
-            failed_mds_pods = []
-            for mds_pod in mds_pods:
-                logger.debug(f"Checking MDS pod: {mds_pod.name}")
-                if not handle_multi_attach_error(mds_pod, timeout=600):
-                    logger.warning(
-                        f"MDS pod {mds_pod.name} did not reach running state"
-                    )
-                    failed_mds_pods.append(mds_pod.name)
-
-            if failed_mds_pods:
-                logger.warning(
-                    f"{len(failed_mds_pods)} MDS pods did not reach running state: {failed_mds_pods}"
-                )
-            else:
-                logger.info(
-                    f"All {len(mds_pods)} MDS pods are running after CephFS creation"
-                )
         except CommandFailed:
             logger.exception(
                 f"Failed to recover CephFS: {defaults.CEPHFILESYSTEM_NAME}"
             )
             raise
+
+    replace_mds_deployments()
+
+    logger.info("Verifying MDS pods reach running state after CephFS recovery")
+    mds_pods = get_mds_pods()
+    logger.info(f"Found {len(mds_pods)} MDS pods to verify")
+    failed_mds_pods = []
+    for mds_pod in mds_pods:
+        logger.debug(f"Checking MDS pod: {mds_pod.name}")
+        if not handle_multi_attach_error(mds_pod, timeout=600):
+            logger.warning(f"MDS pod {mds_pod.name} did not reach running state")
+            failed_mds_pods.append(mds_pod.name)
+
+    if failed_mds_pods:
+        logger.warning(
+            f"{len(failed_mds_pods)} MDS pods did not reach running state: {failed_mds_pods}"
+        )
+    else:
+        logger.info(f"All {len(mds_pods)} MDS pods are running after CephFS recovery")
 
 
 def get_spun_dc_pods(pod_list):
