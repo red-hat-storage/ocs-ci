@@ -50,63 +50,88 @@ class TestOBCLabelBucketTagging:
         6. Verify the bucket has matching S3 tags
         7. Verify NooBaa_bucket_tagging metric reflects the labels
         """
+        logger.test_step("Create OBC and verify initial state")
         obc_name = bucket_factory(amount=1, interface="OC")[0].name
         obc_obj = OBC(obc_name)
         bucket_name = obc_obj.bucket_name
         expected_labels = {OBC_LABEL_KEY: OBC_LABEL_VALUE}
-        logger.info(f"Created OBC {obc_name} with S3 bucket {bucket_name}")
+        logger.info(f"Created OBC '{obc_name}' with S3 bucket '{bucket_name}'")
 
-        # Bucket should have no tags before OBC labels are applied
+        logger.test_step("Verify bucket has no tags before labeling OBC")
         with pytest.raises(boto3exception.ClientError) as exc:
             get_bucket_tagging(obc_obj.s3_client, bucket_name)
+        logger.assertion(
+            f"Bucket tagging error: expected='NoSuchTagSet', "
+            f"actual='{exc.value.response['Error']['Code']}'"
+        )
         assert (
             exc.value.response["Error"]["Code"] == "NoSuchTagSet"
         ), f"Expected NoSuchTagSet before labeling, got {exc.value.response}"
 
+        logger.test_step(
+            "Verify NooBaa_bucket_tagging metric is absent before label update"
+        )
         metric_before = get_noobaa_bucket_tagging_metric_results(
             NOOBAA_BUCKET_TAGGING_METRIC,
             bucket_name,
             threading_lock,
+        )
+        logger.assertion(
+            f"NooBaa_bucket_tagging metric before labeling: "
+            f"results_count={len(metric_before)}, expected=0"
         )
         assert not metric_before, (
             f"Expected no {NOOBAA_BUCKET_TAGGING_METRIC} results before labeling, "
             f"got {metric_before}"
         )
         logger.info(
-            f"No {NOOBAA_BUCKET_TAGGING_METRIC} results for bucket {bucket_name} "
-            "before label update"
+            f"Confirmed no {NOOBAA_BUCKET_TAGGING_METRIC} results for bucket '{bucket_name}'"
         )
 
-        # Add labels to the OBC
+        logger.test_step("Add labels to OBC")
         obc_ocp = OCP(
             kind="obc",
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=obc_name,
         )
         label = f"{OBC_LABEL_KEY}={OBC_LABEL_VALUE}"
-        assert obc_ocp.add_label(
-            resource_name=obc_name, label=label
-        ), f"Failed to add label {label} to OBC {obc_name}"
+        label_added = obc_ocp.add_label(resource_name=obc_name, label=label)
+        logger.info(f"Added label '{label}' to OBC '{obc_name}'")
+        logger.assertion(f"Label addition: success={label_added}")
+        assert label_added, f"Failed to add label {label} to OBC {obc_name}"
 
-        # Verify OBC metadata contains the label
+        logger.test_step("Verify OBC metadata contains the labels")
         obc_labels = (
             obc_ocp.get(resource_name=obc_name).get("metadata", {}).get("labels", {})
+        )
+        logger.assertion(
+            f"OBC labels check: expected={expected_labels}, "
+            f"actual={obc_labels}, "
+            f"match={obc_labels.get(OBC_LABEL_KEY) == OBC_LABEL_VALUE}"
         )
         assert (
             obc_labels.get(OBC_LABEL_KEY) == OBC_LABEL_VALUE
         ), f"OBC {obc_name} labels {obc_labels} missing {expected_labels}"
 
-        # Step 6: verify bucket S3 tags match OBC labels
+        logger.test_step("Verify bucket S3 tags match OBC labels")
         bucket_tags = verify_bucket_tagging_matches_labels(
             obc_obj.s3_client,
             bucket_name,
             expected_labels,
         )
         tag_set = get_bucket_tagging(obc_obj.s3_client, bucket_name)
-        assert tag_set_to_dict(tag_set) == bucket_tags
+        tag_set_dict = tag_set_to_dict(tag_set)
+        logger.assertion(
+            f"S3 tags verification: expected={bucket_tags}, "
+            f"actual={tag_set_dict}, "
+            f"match={tag_set_dict == bucket_tags}"
+        )
+        assert tag_set_dict == bucket_tags
 
-        # Verify NooBaa_bucket_tagging metric reflects OBC labels (gauge updated
-        # by the stats aggregator, which runs on a ~5 minute cycle).
+        logger.test_step(
+            "Verify NooBaa_bucket_tagging metric reflects OBC labels "
+            f"(timeout: {NOOBAA_BUCKET_TAGGING_METRIC_TIMEOUT}s)"
+        )
         metric_after = verify_noobaa_bucket_tagging_metric(
             NOOBAA_BUCKET_TAGGING_METRIC,
             bucket_name,
