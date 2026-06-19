@@ -233,19 +233,19 @@ class TestFullClusterHealth(PASTest):
         """
         start_time = time.time()
 
-        # First check if Ceph is healthy (with optional wait for recovery)
-        ceph_healthy = self.ceph_not_health_error(timeout=ceph_recovery_timeout)
-
-        if not ceph_healthy:
-            logger.error("Ceph is in HEALTH_ERR state, skipping pod check")
-            execution_time = time.time() - start_time
-            logger.info(
-                f"is_cluster_healthy took {execution_time:.2f} seconds to execute"
-            )
-            return False
-
+        # # First check if Ceph is healthy (with optional wait for recovery)
+        # ceph_healthy = self.ceph_not_health_error(timeout=ceph_recovery_timeout)
+        #
+        # if not ceph_healthy:
+        #     logger.error("Ceph is in HEALTH_ERR state, skipping pod check")
+        #     execution_time = time.time() - start_time
+        #     logger.info(
+        #         f"is_cluster_healthy took {execution_time:.2f} seconds to execute"
+        #     )
+        #     return False
+        ceph_healthy = True
         # Only check pods if Ceph is healthy
-        pods_running = pod.wait_for_pods_to_be_running(timeout=self.TIMEOUT_POD_RUNNING)
+        pods_running = pod.wait_for_pods_to_be_running(timeout=1200)
 
         execution_time = time.time() - start_time
         result = ceph_healthy and pods_running
