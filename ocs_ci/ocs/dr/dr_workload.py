@@ -913,7 +913,7 @@ class BusyBox_AppSet(DRWorkload):
             if _app_set["kind"] == constants.APPLICATION_SET:
                 return _app_set["spec"]["template"]["spec"]["destination"]["namespace"]
 
-    def _get_applicaionset_name(self):
+    def _get_applicationset_name(self):
         """
         Get ApplicationSet name
 
@@ -933,12 +933,12 @@ class BusyBox_AppSet(DRWorkload):
         """
 
         self.check_pod_pvc_status(skip_replication_resources=False)
-        config.switch_acm_ctx()
-        appset_resource_name = (
-            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
-        )
 
         if self.appset_model == "pull":
+            config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+            appset_resource_name = (
+                self._get_applicationset_name() + "-" + self.preferred_primary_cluster
+            )
             sampler = TimeoutSampler(
                 120, sleep=5, func=self.check_workload_health_status
             )
@@ -949,14 +949,14 @@ class BusyBox_AppSet(DRWorkload):
 
     def check_workload_health_status(self):
         """
-        Checks the health status of the workload and returns whether it is healthy.
+        Checks workload health on the primary managed cluster.
 
         Returns:
             bool: True if the health status is "Healthy", False otherwise
 
         """
         appset_resource_name = (
-            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
+            self._get_applicationset_name() + "-" + self.preferred_primary_cluster
         )
         appset_obj = ocp.OCP(
             kind=constants.APPLICATION_ARGOCD,
@@ -964,7 +964,10 @@ class BusyBox_AppSet(DRWorkload):
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
         )
         health_status = appset_obj.get().get("status").get("health").get("status")
-        log.info(f"{appset_resource_name} health status: {health_status}")
+        log.info(
+            f"{appset_resource_name} health status on cluster "
+            f"{self.preferred_primary_cluster}: {health_status}"
+        )
         return health_status == "Healthy"
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
