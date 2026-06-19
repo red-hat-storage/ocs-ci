@@ -45,6 +45,7 @@ from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
 from ocs_ci.helpers.helpers import wait_for_resource_state, get_secret_names
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, run_cmd, TimeoutSampler
+from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 from ocs_ci.ocs.node import get_node_objs
 
 logger = logging.getLogger(__name__)
@@ -1069,37 +1070,6 @@ def corrupt_ceph_monitors():
     )
 
 
-def verify_pods_running(pod_list, pod_type="pod", timeout=600):
-    """
-    Verify that a list of pods reach running state, with sandbox error recovery.
-
-    Args:
-        pod_list: List of pod objects to verify
-        pod_type: Type of pods for logging (e.g., "noobaa", "RGW", "MDS")
-        timeout: Maximum time to wait for each pod
-
-    Returns:
-        list: List of failed pod names (empty if all succeeded)
-    """
-    logger.info(f"Verifying {len(pod_list)} {pod_type} pods reach running state")
-    failed_pods = []
-
-    for pod_obj in pod_list:
-        logger.debug(f"Checking {pod_type} pod: {pod_obj.name}")
-        if not check_and_recover_sandbox_errors(pod_obj, timeout=timeout):
-            logger.error(f"{pod_type} pod {pod_obj.name} failed to reach running state")
-            failed_pods.append(pod_obj.name)
-
-    if failed_pods:
-        logger.error(
-            f"{pod_type} recovery failed: {len(failed_pods)} pods not running: {failed_pods}"
-        )
-    else:
-        logger.info(f"All {len(pod_list)} {pod_type} pods are running")
-
-    return failed_pods
-
-
 def check_and_recover_sandbox_errors(pod_obj, timeout=600):
     """
     Check if a pod has sandbox errors and recover by power cycling its node.
@@ -1142,12 +1112,14 @@ def check_and_recover_sandbox_errors(pod_obj, timeout=600):
         )
 
         has_sandbox_error = False
+        has_rwop_error = False
         error_messages = []
 
         for event in events.get("items", []):
             msg = event.get("message", "")
             reason = event.get("reason", "")
 
+            # Check for sandbox errors
             if any(
                 err in msg
                 for err in [
@@ -1160,18 +1132,38 @@ def check_and_recover_sandbox_errors(pod_obj, timeout=600):
                 has_sandbox_error = True
                 error_messages.append(f"{reason}: {msg[:150]}")
 
-        if not has_sandbox_error:
+            # Check for ReadWriteOncePod volume already in use error
+            if any(
+                err in msg
+                for err in [
+                    "ReadWriteOncePod access mode and is already in use",
+                    "volume is already exclusively attached",
+                ]
+            ):
+                has_rwop_error = True
+                error_messages.append(f"{reason}: {msg[:150]}")
+
+        if not has_sandbox_error and not has_rwop_error:
             logger.debug(
-                f"Pod {pod_name} has no sandbox errors, using standard recovery"
+                f"Pod {pod_name} has no sandbox or RWOP errors, using standard recovery"
             )
             return handle_multi_attach_error(pod_obj, timeout)
 
-        logger.warning(f"Pod {pod_name} on node {node_name} has sandbox errors:")
+        error_type = (
+            "sandbox/RWOP"
+            if (has_sandbox_error and has_rwop_error)
+            else ("sandbox" if has_sandbox_error else "ReadWriteOncePod")
+        )
+        logger.warning(f"Pod {pod_name} on node {node_name} has {error_type} errors:")
         for msg in error_messages[:3]:
             logger.warning(f"  - {msg}")
 
         logger.info(f"Recovering pod {pod_name} by restarting node {node_name}")
 
+        # Get platform-specific nodes object
+        nodes_platform = PlatformNodesFactory().get_nodes_platform()
+
+        # Get all node objects to find the target node
         node_objs = get_node_objs()
         target_node = None
         for n in node_objs:
@@ -1183,14 +1175,16 @@ def check_and_recover_sandbox_errors(pod_obj, timeout=600):
             logger.error(f"Could not find node object for {node_name}")
             return handle_multi_attach_error(pod_obj, timeout)
 
-        logger.info(f"Stopping node {node_name}...")
-        target_node.stop_nodes([target_node])
+        logger.info(
+            f"Stopping node {node_name} using platform: {nodes_platform.__class__.__name__}"
+        )
+        nodes_platform.stop_nodes([target_node])
 
         logger.info("Waiting 30s for node to stop...")
         time.sleep(30)
 
         logger.info(f"Starting node {node_name}...")
-        target_node.start_nodes([target_node])
+        nodes_platform.start_nodes([target_node])
 
         logger.info(f"Waiting for node {node_name} to become Ready...")
         ocp_node = OCP(kind=constants.NODE)
@@ -1220,6 +1214,37 @@ def check_and_recover_sandbox_errors(pod_obj, timeout=600):
     except Exception as e:
         logger.error(f"Error during sandbox error recovery for {pod_obj.name}: {e}")
         return handle_multi_attach_error(pod_obj, timeout)
+
+
+def verify_pods_running(pod_list, pod_type="pod", timeout=600):
+    """
+    Verify that a list of pods reach running state, with sandbox error recovery.
+
+    Args:
+        pod_list: List of pod objects to verify
+        pod_type: Type of pods for logging (e.g., "noobaa", "RGW", "MDS")
+        timeout: Maximum time to wait for each pod
+
+    Returns:
+        list: List of failed pod names (empty if all succeeded)
+    """
+    logger.info(f"Verifying {len(pod_list)} {pod_type} pods reach running state")
+    failed_pods = []
+
+    for pod_obj in pod_list:
+        logger.debug(f"Checking {pod_type} pod: {pod_obj.name}")
+        if not check_and_recover_sandbox_errors(pod_obj, timeout=timeout):
+            logger.error(f"{pod_type} pod {pod_obj.name} failed to reach running state")
+            failed_pods.append(pod_obj.name)
+
+    if failed_pods:
+        logger.error(
+            f"{pod_type} recovery failed: {len(failed_pods)} pods not running: {failed_pods}"
+        )
+    else:
+        logger.info(f"All {len(pod_list)} {pod_type} pods are running")
+
+    return failed_pods
 
 
 def handle_multi_attach_error(pod_obj, timeout=300):
@@ -1321,43 +1346,8 @@ def recover_mcg():
     logger.info("Waiting 120s for noobaa pods to respawn")
     time.sleep(120)
 
-    logger.info("Waiting for postgres cluster pods to spawn (timeout: 300s)")
-    max_wait_time = 300
-    start_time = time.time()
-    expected_pg_pods = 2
-    active_pg_pods = []
-
-    while time.time() - start_time < max_wait_time:
-        noobaa_db_pods = pod.get_pods_having_label(
-            constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
-            config.ENV_DATA["cluster_namespace"],
-        )
-        active_pg_pods = [
-            p
-            for p in noobaa_db_pods
-            if p.get("metadata", {}).get("deletionTimestamp") is None
-        ]
-        if len(active_pg_pods) >= expected_pg_pods:
-            elapsed = int(time.time() - start_time)
-            logger.info(
-                f"All {len(active_pg_pods)} postgres cluster pods spawned after {elapsed}s"
-            )
-            break
-        logger.debug(
-            f"Postgres pods: active={len(active_pg_pods)}, total={len(noobaa_db_pods)}, "
-            f"expected={expected_pg_pods}, elapsed={int(time.time() - start_time)}s"
-        )
-        time.sleep(10)
-    else:
-        logger.warning(
-            f"Timeout waiting for postgres pods after {max_wait_time}s: "
-            f"found {len(active_pg_pods)}/{expected_pg_pods} expected"
-        )
-
     respawned_noobaa_pods = get_noobaa_pods()
-    logger.info(
-        f"Found {len(respawned_noobaa_pods)} noobaa pods to verify (includes postgres cluster)"
-    )
+    logger.info(f"Found {len(respawned_noobaa_pods)} noobaa pods to verify")
 
     failed_noobaa_pods = verify_pods_running(
         respawned_noobaa_pods, pod_type="noobaa", timeout=600
