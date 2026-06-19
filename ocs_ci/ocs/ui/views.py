@@ -1089,6 +1089,26 @@ acm_page_nav_420 = {
     ),
 }
 
+acm_page_nav_422 = {
+    # PF6: button text lives in a child span, so match on the span text
+    "Infrastructure": (
+        "//button[normalize-space()='Infrastructure'"
+        " or .//span[normalize-space()='Infrastructure']]",
+        By.XPATH,
+    ),
+    # PF6: Data Services button text lives in a child span
+    "data-services": (
+        "//button[normalize-space()='Data Services'"
+        " or .//span[normalize-space()='Data Services']]",
+        By.XPATH,
+    ),
+    # PF6: cluster status is a button whose text is inside pf-v6-c-button__text span
+    "cluster_status_check": (
+        "//button[normalize-space()='{0}'" " or .//span[normalize-space()='{0}']]",
+        By.XPATH,
+    ),
+}
+
 acm_configuration = {
     "cluster-sets": (
         "//a[normalize-space()='Cluster sets'] | //button[.//span[normalize-space()='Cluster sets']]",
@@ -3636,6 +3656,46 @@ external_systems = {
         By.XPATH,
     ),
 }
+
+# Agnostic DR — locators for the ACM "Create DRPolicy" wizard
+# (3rd-party / mock-storage path, no ODF storage cluster required)
+agnostic_dr_page = {
+    # Policies tab: open wizard
+    "create-drpolicy-btn": (
+        "//button[.//span[normalize-space()='Create DRPolicy']]",
+        By.XPATH,
+    ),
+    # Step 1: policy name + cluster selection
+    "drpolicy-name-input": ("#policy-name", By.CSS_SELECTOR),
+    "cluster-row-checkbox": (
+        "//tr[td[normalize-space()='{}']]//td[1]/label/input",
+        By.XPATH,
+    ),
+    "scheduling-interval-input": (
+        "input[aria-label='Input'][type='number']",
+        By.CSS_SELECTOR,
+    ),
+    # S3 profile — cluster 1 (c1-* fields)
+    "c1-bucket-name": ("#c1-bucketName", By.CSS_SELECTOR),
+    "c1-endpoint": ("#c1-endpoint", By.CSS_SELECTOR),
+    "c1-access-key-id": ("#c1-accessKeyId", By.CSS_SELECTOR),
+    "c1-secret-key": ("#c1-secretKey", By.CSS_SELECTOR),
+    "c1-region": ("#c1-region", By.CSS_SELECTOR),
+    "c1-s3-profile-name": ("#c1-s3ProfileName", By.CSS_SELECTOR),
+    # S3 profile — cluster 2 (c2-* fields)
+    "c2-bucket-name": ("#c2-bucketName", By.CSS_SELECTOR),
+    "c2-endpoint": ("#c2-endpoint", By.CSS_SELECTOR),
+    "c2-access-key-id": ("#c2-accessKeyId", By.CSS_SELECTOR),
+    "c2-secret-key": ("#c2-secretKey", By.CSS_SELECTOR),
+    "c2-region": ("#c2-region", By.CSS_SELECTOR),
+    "c2-s3-profile-name": ("#c2-s3ProfileName", By.CSS_SELECTOR),
+    # Submit wizard
+    "drpolicy-create-btn": (
+        "//button[.//span[normalize-space()='Create']]",
+        By.XPATH,
+    ),
+}
+
 locators = {
     "4.22": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -3683,7 +3743,9 @@ locators = {
             **acm_configuration_4_20,
             **acm_configuration_4_21,
             **acm_configuration_4_22,
+            **acm_page_nav_422,
         },
+        "agnostic_dr_page": agnostic_dr_page,
         "validation": {
             **validation,
             **validation_4_8,

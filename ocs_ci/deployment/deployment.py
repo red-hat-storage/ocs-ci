@@ -46,6 +46,8 @@ from ocs_ci.deployment.ingress_node_firewall import (
 from ocs_ci.deployment.helpers.lso_helpers import (
     setup_local_storage,
     cleanup_nodes_for_lso_install,
+    create_local_pvs,
+    lso_operator_installed,
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.metallb import MetalLBInstaller
@@ -63,6 +65,15 @@ from ocs_ci.helpers.dr_helpers import (
     create_ingress_cert_dr,
     create_multiclusterservice_dr,
     setup_fdf_catsrc_for_hub,
+)
+from ocs_ci.helpers.storage_agnostic_dr_helpers import (
+    create_dr_policy_ui,
+    create_recipe_crd,
+    deploy_minio,
+    install_mock_storage,
+    install_volsync_from_helm,
+    install_volume_group_snapshot_class_crd,
+    create_volume_group_replication_class,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -680,12 +691,27 @@ class Deployment(object):
                         pm_data = package_manifest.get()
                         pm_list = pm_data if isinstance(pm_data, list) else [pm_data]
                         required_oadp_version = config.ENV_DATA["oadp_version"]
-                        logger.info("Creating Namespace")
-                        # creating Namespace and operator group for cert-manager
                         logger.info(
                             "Creating namespace and operator group for Openshift-oadp"
                         )
-                        run_cmd(f"oc apply -f {constants.OADP_NS_YAML}")
+                        existing_ogs = ocp.OCP(
+                            kind=constants.OPERATOR_GROUP,
+                            namespace=constants.OADP_NAMESPACE,
+                        ).get(dont_raise=True)
+                        og_items = (existing_ogs or {}).get("items", [])
+                        if og_items:
+                            logger.info(
+                                "OperatorGroup already exists in %s, "
+                                "skipping to avoid multiple OperatorGroups conflict",
+                                constants.OADP_NAMESPACE,
+                            )
+                            run_cmd(
+                                f"oc create namespace {constants.OADP_NAMESPACE}"
+                                f" --dry-run=client -o yaml | oc apply -f -",
+                                shell=True,
+                            )
+                        else:
+                            run_cmd(f"oc apply -f {constants.OADP_NS_YAML}")
                         logger.info("Creating OADP Operator Subscription")
                         oadp_subscription_yaml_data = templating.load_yaml(
                             constants.OADP_SUBSCRIPTION_YAML
@@ -779,9 +805,118 @@ class Deployment(object):
         if config.ENV_DATA.get("skip_dr_deployment", False):
             return
         if config.multicluster:
+            if config.ENV_DATA.get("agnostic_dr", False):
+                self.do_deploy_agnostic_dr()
+                return
             dr_conf = self.get_rdr_conf()
             deploy_dr = get_multicluster_dr_deployment()(dr_conf)
             deploy_dr.deploy()
+
+    def do_deploy_agnostic_dr(self):
+        """
+        Deploy agnostic DR infrastructure on managed clusters.
+
+        This path is taken when agnostic_dr: true is set in ENV_DATA.
+        It installs LSO + local PVs, VolSync (via Helm), the mock storage
+        operator, and MinIO on the primary and secondary clusters instead of
+        full ODF/MCO, then installs MCO on the hub and creates the DRPolicy.
+        """
+        logger.info("Starting agnostic DR deployment on managed clusters")
+        restore_index = config.cur_index
+        for cluster in get_non_acm_cluster_config():
+            cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+            config.switch_ctx(cluster_index)
+            cluster_name = config.ENV_DATA.get(
+                "cluster_name", f"cluster-{cluster_index}"
+            )
+            logger.info(
+                "Setting up local storage and PVs on cluster '%s'", cluster_name
+            )
+            if lso_operator_installed():
+                logger.info(
+                    "LSO already installed on cluster '%s', skipping",
+                    cluster_name,
+                )
+            else:
+                setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
+            existing_pvs = ocp.OCP(kind=constants.PV).get(dont_raise=True)
+            pv_items = (existing_pvs or {}).get("items", [])
+            local_pvs = [
+                p
+                for p in pv_items
+                if p.get("metadata", {}).get("name", "").startswith("local-pv-disk-")
+            ]
+            if local_pvs:
+                logger.info(
+                    f"Local PVs already exist on cluster '{cluster_name}',"
+                    f" skipping PV creation"
+                )
+            else:
+                create_local_pvs()
+        config.switch_ctx(restore_index)
+        install_volsync_from_helm()
+        install_mock_storage()
+        minio_endpoints = deploy_minio()
+        create_volume_group_replication_class()
+
+        install_volume_group_snapshot_class_crd()
+        create_recipe_crd()
+
+        live_deployment = config.DEPLOYMENT.get("live_deployment")
+        if not live_deployment:
+            for cluster in get_non_acm_cluster_config():
+                cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+                config.switch_ctx(cluster_index)
+                cluster_name = config.ENV_DATA.get(
+                    "cluster_name", f"cluster-{cluster_index}"
+                )
+                logger.info(
+                    "Updating redhat-operators catalog source and"
+                    " applying IDMS on managed cluster '%s'",
+                    cluster_name,
+                )
+                create_catalog_source()
+            config.switch_ctx(restore_index)
+
+        dr_conf = self.get_rdr_conf()
+        rdr_deploy = RDRMultiClusterDROperatorsDeploy(dr_conf)
+
+        acm_indexes = get_all_acm_indexes()
+        for i in acm_indexes:
+            config.switch_ctx(i)
+            orchestrator_controller = ocp.OCP(
+                kind=constants.DEPLOYMENT,
+                resource_name=constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER,
+                namespace=constants.OPENSHIFT_OPERATORS,
+            )
+            if orchestrator_controller.is_exist():
+                orchestrator_controller.wait_for_resource(
+                    condition="1", column="AVAILABLE", resource_count=1, timeout=300
+                )
+            else:
+                rdr_deploy.deploy_dr_multicluster_orchestrator()
+                enable_mco_console_plugin()
+
+        config.switch_acm_ctx()
+
+        for cluster in get_non_acm_cluster_config():
+            cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+            config.switch_ctx(cluster_index)
+            cluster_name = config.ENV_DATA.get(
+                "cluster_name", f"cluster-{cluster_index}"
+            )
+            logger.info(
+                "Creating DataProtectionApplication on cluster '%s'",
+                cluster_name,
+            )
+            run_cmd(
+                f"oc apply -f {constants.DPA_DISCOVERED_APPS_PATH}",
+            )
+        config.switch_ctx(restore_index)
+
+        create_dr_policy_ui(minio_endpoints)
+
+        logger.info("Agnostic DR deployment completed successfully")
 
     def do_deploy_lvmo(self):
         """
