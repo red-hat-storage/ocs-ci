@@ -9,6 +9,7 @@ import random
 
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,19 @@ def create_index(
         "distanceMetric": distance_metric,
     }
     params.update(kwargs)
-    return s3vectors_client.create_index(**params)
+    try:
+        return s3vectors_client.create_index(**params)
+    except ClientError as e:
+        # botocore retries CreateIndex on InternalFailure; if the first call
+        # succeeded but the response was lost, subsequent retries get
+        # VECTOR_INDEX_ALREADY_OWNED_BY_YOU — the index exists and we own it,
+        # which is the desired state.
+        if "VECTOR_INDEX_ALREADY_OWNED_BY_YOU" in str(e):
+            logger.warning(
+                "Index '%s' already owned; treating create as idempotent", index_name
+            )
+            return {"ResponseMetadata": {"HTTPStatusCode": 200}}
+        raise
 
 
 def delete_index(s3vectors_client, **kwargs):

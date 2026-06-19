@@ -3395,6 +3395,38 @@ s3_vector_tab = {
         "//button[@id='{}-link']",
         By.XPATH,
     ),
+    # Shared kebab toggle for any named table row (index rows and bucket rows
+    # share the same DOM pattern; callers differ only by which page they are on).
+    "row_kebab_by_name": (
+        "//tr[.//a[normalize-space()='{}']]//button[@aria-label='Kebab toggle']",
+        By.XPATH,
+    ),
+    # Delete index via row kebab on the bucket detail page
+    "delete_index_option": (
+        "//button[normalize-space()='Delete index']",
+        By.XPATH,
+    ),
+    "delete_index_name_input": (
+        "//input[@aria-label='Index name input']",
+        By.XPATH,
+    ),
+    "delete_index_confirm_button": (
+        "//div[@role='dialog']//button[.//span[text()='Delete index']]",
+        By.XPATH,
+    ),
+    # Delete vector bucket from the S3 Vector tab bucket list
+    "delete_vector_bucket_option": (
+        "//button[normalize-space()='Delete bucket']",
+        By.XPATH,
+    ),
+    "delete_vector_bucket_name_input": (
+        "//input[@aria-label='Bucket name input']",
+        By.XPATH,
+    ),
+    "delete_vector_bucket_confirm_button": (
+        "//div[@role='dialog']//button[.//span[text()='Delete bucket']]",
+        By.XPATH,
+    ),
 }
 locate_aws_regions = {
     "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
