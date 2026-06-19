@@ -8,6 +8,10 @@ ENV_DATA:
   # Number of extra disks to add per worker node for LSO local PVs.
   extra_disks: 2
 
+  # Skip DRPolicy creation during agnostic DR deployment.
+  # Useful when reusing an existing cluster with DRPolicy already created.
+  # skip_drpolicy: true
+
   # ODF StorageCluster is not deployed in agnostic mode; LSO is installed
   # directly without creating a LocalVolumeSet CR.
   skip_ocs_deployment: true

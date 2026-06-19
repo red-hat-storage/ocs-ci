@@ -600,7 +600,7 @@ class TestAgnosticDRFailoverAndRelocate:
         drpolicy_obj.delete(resource_name=policy_name, wait=True, timeout=900)
         logger.info("DRPolicy '%s' deleted", policy_name)
 
-    @pytest.mark.polarion_id("OCS-8009")
+    @pytest.mark.polarion_id("OCS-8015")
     def test_agnostic_dr_cnv_failover_and_relocate(
         self,
         cnv_dr_workload,
@@ -620,12 +620,16 @@ class TestAgnosticDRFailoverAndRelocate:
             vm_type=constants.VM_VOLUME_PVC,
         )[0]
 
-        primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            cnv_wl.workload_namespace, cnv_wl.workload_type
-        )
-        secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            cnv_wl.workload_namespace, cnv_wl.workload_type
-        )
+        primary_cluster_name = cnv_wl.preferred_primary_cluster
+        managed_clusters = get_non_acm_cluster_config()
+        secondary_cluster_name = [
+            c.ENV_DATA.get(
+                "cluster_name",
+                f"cluster-{c.MULTICLUSTER['multicluster_index']}",
+            )
+            for c in managed_clusters
+            if c.ENV_DATA.get("cluster_name") != primary_cluster_name
+        ][0]
         primary_cluster_config = config.clusters[
             config.get_cluster_index_by_name(primary_cluster_name)
         ]
@@ -742,6 +746,7 @@ class TestAgnosticDRFailoverAndRelocate:
             namespace=cnv_wl.workload_namespace,
             workload_type=cnv_wl.workload_type,
             workload_placement_name=cnv_wl.cnv_workload_placement_name,
+            timeout=900,
         )
 
         logger.test_step("Verify VM running on primary after relocate")
