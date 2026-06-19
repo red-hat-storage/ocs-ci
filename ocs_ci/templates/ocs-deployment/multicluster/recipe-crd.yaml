@@ -1,0 +1,597 @@
+kind: CustomResourceDefinition
+apiVersion: apiextensions.k8s.io/v1
+metadata:
+  name: recipes.ramendr.openshift.io
+spec:
+  group: ramendr.openshift.io
+  names:
+    plural: recipes
+    singular: recipe
+    kind: Recipe
+    listKind: RecipeList
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          description: Recipe is the Schema for the recipes API
+          type: object
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: RecipeSpec defines the desired state of Recipe
+              type: object
+              required:
+                - appType
+              properties:
+                appType:
+                  description: |-
+                    Type of application the recipe is designed for. (AppType is not used yet. For now, we will
+                    match the name of the app CR)
+                  type: string
+                groups:
+                  description: List of one or multiple groups
+                  type: array
+                  items:
+                    description: |-
+                      Groups defined in the recipe refine / narrow-down the scope of its parent groups defined in the
+                      Application CR. Recipe groups are always be associated to a parent group in Application CR -
+                      explicitly or implicitly. Recipe groups can be used in the context of backup and/or restore workflows
+                    type: object
+                    required:
+                      - name
+                      - type
+                    properties:
+                      restoreStatus:
+                        description: RestoreStatus restores status if set to all the includedResources specified. Specify '*' to restore all statuses for all the CRs
+                        type: object
+                        properties:
+                          excludedResources:
+                            description: List of resource types to exclude.
+                            type: array
+                            items:
+                              type: string
+                          includedResources:
+                            description: 'List of resource types to include. If unspecified, all resource types are included.'
+                            type: array
+                            items:
+                              type: string
+                      excludedResourceTypes:
+                        description: List of resource types to exclude
+                        type: array
+                        items:
+                          type: string
+                      excludedNamespaces:
+                        description: List of namespace to exclude
+                        type: array
+                        items:
+                          type: string
+                      restoreOverwriteResources:
+                        description: Whether to overwrite resources during restore. Default to false.
+                        type: boolean
+                      includedNamespacesByLabel:
+                        description: Selects namespaces by label
+                        type: object
+                        properties:
+                          matchExpressions:
+                            description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                            type: array
+                            items:
+                              description: |-
+                                A label selector requirement is a selector that contains values, a key, and an operator that
+                                relates the key and values.
+                              type: object
+                              required:
+                                - key
+                                - operator
+                              properties:
+                                key:
+                                  description: key is the label key that the selector applies to.
+                                  type: string
+                                operator:
+                                  description: |-
+                                    operator represents a key's relationship to a set of values.
+                                    Valid operators are In, NotIn, Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: |-
+                                    values is an array of string values. If the operator is In or NotIn,
+                                    the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                    the values array must be empty. This array is replaced during a strategic
+                                    merge patch.
+                                  type: array
+                                  items:
+                                    type: string
+                                  x-kubernetes-list-type: atomic
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            description: |-
+                              matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                              map is equivalent to an element of matchExpressions, whose key field is "key", the
+                              operator is "In", and the values array contains only "value". The requirements are ANDed.
+                            type: object
+                            additionalProperties:
+                              type: string
+                        x-kubernetes-map-type: atomic
+                      parent:
+                        description: |-
+                          Name of the parent group defined in the associated Application CR. Optional - If unspecified,
+                          parent group is represented by the implicit default group of Application CR (implies the
+                          Application CR does not specify groups explicitly).
+                        type: string
+                      selectResource:
+                        description: Determines the resource type which the fields labelSelector and nameSelector apply to for selecting PVCs. Default selection is pvc. Valid for volume groups only.
+                        type: string
+                        enum:
+                          - pvc
+                          - pod
+                          - deployment
+                          - statefulset
+                      nameSelector:
+                        description: 'If specified, resource''s object name needs to match this expression. Valid for volume groups only.'
+                        type: string
+                      name:
+                        description: Name of the group
+                        type: string
+                      essential:
+                        description: 'Defaults to true, if set to false, a failure is not necessarily handled as fatal'
+                        type: boolean
+                      includedResourceTypes:
+                        description: 'List of resource types to include. If unspecified, all resource types are included.'
+                        type: array
+                        items:
+                          type: string
+                      backupRef:
+                        description: |-
+                          Used for groups solely used in restore workflows to refer to another group that is used in
+                          backup workflows.
+                        type: string
+                      includeClusterResources:
+                        description: |-
+                          Whether to include any cluster-scoped resources. If nil or true, cluster-scoped resources are
+                          included if they are associated with the included namespace-scoped resources
+                        type: boolean
+                      labelSelector:
+                        description: Select items based on label
+                        type: object
+                        properties:
+                          matchExpressions:
+                            description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                            type: array
+                            items:
+                              description: |-
+                                A label selector requirement is a selector that contains values, a key, and an operator that
+                                relates the key and values.
+                              type: object
+                              required:
+                                - key
+                                - operator
+                              properties:
+                                key:
+                                  description: key is the label key that the selector applies to.
+                                  type: string
+                                operator:
+                                  description: |-
+                                    operator represents a key's relationship to a set of values.
+                                    Valid operators are In, NotIn, Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: |-
+                                    values is an array of string values. If the operator is In or NotIn,
+                                    the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                    the values array must be empty. This array is replaced during a strategic
+                                    merge patch.
+                                  type: array
+                                  items:
+                                    type: string
+                                  x-kubernetes-list-type: atomic
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            description: |-
+                              matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                              map is equivalent to an element of matchExpressions, whose key field is "key", the
+                              operator is "In", and the values array contains only "value". The requirements are ANDed.
+                            type: object
+                            additionalProperties:
+                              type: string
+                        x-kubernetes-map-type: atomic
+                      includedNamespaces:
+                        description: List of namespaces to include.
+                        type: array
+                        items:
+                          type: string
+                      type:
+                        description: 'Determines the type of group - volume data only, resources only'
+                        type: string
+                        enum:
+                          - volume
+                          - resource
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
+                hooks:
+                  description: List of one or multiple hooks
+                  type: array
+                  items:
+                    description: Hooks are actions to take during recipe processing
+                    type: object
+                    required:
+                      - name
+                      - namespace
+                      - type
+                    properties:
+                      timeout:
+                        description: 'Default timeout in seconds applied to custom and built-in operations. If not specified, equals to 30s.'
+                        type: integer
+                      skipHookIfNotPresent:
+                        description: Flag to skip a Hook.
+                        type: boolean
+                        default: false
+                      singlePodOnly:
+                        description: |-
+                          Boolean flag that indicates whether to execute command on a single pod or on all pods that
+                          match the selector
+                        type: boolean
+                      onError:
+                        description: Default behavior in case of failing operations (custom or built-in ops). Defaults to Fail.
+                        type: string
+                        default: fail
+                        enum:
+                          - fail
+                          - continue
+                      selectResource:
+                        description: Resource type to that a hook applies to
+                        type: string
+                      nameSelector:
+                        description: 'If specified, resource''s object name needs to match this expression'
+                        type: string
+                      name:
+                        description: 'Hook name, unique within the Recipe CR'
+                        type: string
+                      chks:
+                        description: Set of checks that the hook can apply
+                        type: array
+                        items:
+                          description: Operation to be invoked by the hook
+                          type: object
+                          required:
+                            - name
+                          properties:
+                            condition:
+                              description: The condition to check for
+                              type: string
+                            name:
+                              description: Name of the check. Needs to be unique within the hook
+                              type: string
+                            onError:
+                              description: How to handle when check does not become true. Defaults to Fail.
+                              type: string
+                            timeout:
+                              description: 'How long to wait for the check to execute, in seconds'
+                              type: integer
+                        x-kubernetes-list-map-keys:
+                          - name
+                        x-kubernetes-list-type: map
+                      essential:
+                        description: 'Defaults to true, if set to false, a failure is not necessarily handled as fatal'
+                        type: boolean
+                      ops:
+                        description: Set of operations that the hook can be invoked for
+                        type: array
+                        items:
+                          description: Operation to be invoked by the hook
+                          type: object
+                          required:
+                            - command
+                            - name
+                          properties:
+                            command:
+                              description: The command to execute
+                              type: string
+                              minLength: 1
+                            container:
+                              description: The container where the command should be executed
+                              type: string
+                            inverseOp:
+                              description: Name of another operation that reverts the effect of this operation (e.g. quiesce vs. unquiesce)
+                              type: string
+                            name:
+                              description: Name of the operation. Needs to be unique within the hook
+                              type: string
+                            onError:
+                              description: How to handle command returning with non-zero exit code. Defaults to Fail.
+                              type: string
+                            timeout:
+                              description: 'How long to wait for the command to execute, in seconds'
+                              type: integer
+                        x-kubernetes-list-map-keys:
+                          - name
+                        x-kubernetes-list-type: map
+                      labelSelector:
+                        description: 'If specified, resource object needs to match this label selector'
+                        type: object
+                        properties:
+                          matchExpressions:
+                            description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                            type: array
+                            items:
+                              description: |-
+                                A label selector requirement is a selector that contains values, a key, and an operator that
+                                relates the key and values.
+                              type: object
+                              required:
+                                - key
+                                - operator
+                              properties:
+                                key:
+                                  description: key is the label key that the selector applies to.
+                                  type: string
+                                operator:
+                                  description: |-
+                                    operator represents a key's relationship to a set of values.
+                                    Valid operators are In, NotIn, Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: |-
+                                    values is an array of string values. If the operator is In or NotIn,
+                                    the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                    the values array must be empty. This array is replaced during a strategic
+                                    merge patch.
+                                  type: array
+                                  items:
+                                    type: string
+                                  x-kubernetes-list-type: atomic
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            description: |-
+                              matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                              map is equivalent to an element of matchExpressions, whose key field is "key", the
+                              operator is "In", and the values array contains only "value". The requirements are ANDed.
+                            type: object
+                            additionalProperties:
+                              type: string
+                        x-kubernetes-map-type: atomic
+                      type:
+                        description: Hook type
+                        type: string
+                        enum:
+                          - exec
+                          - scale
+                          - check
+                      namespace:
+                        description: Namespace
+                        type: string
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
+                volumes:
+                  description: Volumes to protect from disaster
+                  type: object
+                  required:
+                    - name
+                    - type
+                  properties:
+                    restoreStatus:
+                      description: RestoreStatus restores status if set to all the includedResources specified. Specify '*' to restore all statuses for all the CRs
+                      type: object
+                      properties:
+                        excludedResources:
+                          description: List of resource types to exclude.
+                          type: array
+                          items:
+                            type: string
+                        includedResources:
+                          description: 'List of resource types to include. If unspecified, all resource types are included.'
+                          type: array
+                          items:
+                            type: string
+                    excludedResourceTypes:
+                      description: List of resource types to exclude
+                      type: array
+                      items:
+                        type: string
+                    excludedNamespaces:
+                      description: List of namespace to exclude
+                      type: array
+                      items:
+                        type: string
+                    restoreOverwriteResources:
+                      description: Whether to overwrite resources during restore. Default to false.
+                      type: boolean
+                    includedNamespacesByLabel:
+                      description: Selects namespaces by label
+                      type: object
+                      properties:
+                        matchExpressions:
+                          description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                          type: array
+                          items:
+                            description: |-
+                              A label selector requirement is a selector that contains values, a key, and an operator that
+                              relates the key and values.
+                            type: object
+                            required:
+                              - key
+                              - operator
+                            properties:
+                              key:
+                                description: key is the label key that the selector applies to.
+                                type: string
+                              operator:
+                                description: |-
+                                  operator represents a key's relationship to a set of values.
+                                  Valid operators are In, NotIn, Exists and DoesNotExist.
+                                type: string
+                              values:
+                                description: |-
+                                  values is an array of string values. If the operator is In or NotIn,
+                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                  the values array must be empty. This array is replaced during a strategic
+                                  merge patch.
+                                type: array
+                                items:
+                                  type: string
+                                x-kubernetes-list-type: atomic
+                          x-kubernetes-list-type: atomic
+                        matchLabels:
+                          description: |-
+                            matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                            map is equivalent to an element of matchExpressions, whose key field is "key", the
+                            operator is "In", and the values array contains only "value". The requirements are ANDed.
+                          type: object
+                          additionalProperties:
+                            type: string
+                      x-kubernetes-map-type: atomic
+                    parent:
+                      description: |-
+                        Name of the parent group defined in the associated Application CR. Optional - If unspecified,
+                        parent group is represented by the implicit default group of Application CR (implies the
+                        Application CR does not specify groups explicitly).
+                      type: string
+                    selectResource:
+                      description: Determines the resource type which the fields labelSelector and nameSelector apply to for selecting PVCs. Default selection is pvc. Valid for volume groups only.
+                      type: string
+                      enum:
+                        - pvc
+                        - pod
+                        - deployment
+                        - statefulset
+                    nameSelector:
+                      description: 'If specified, resource''s object name needs to match this expression. Valid for volume groups only.'
+                      type: string
+                    name:
+                      description: Name of the group
+                      type: string
+                    essential:
+                      description: 'Defaults to true, if set to false, a failure is not necessarily handled as fatal'
+                      type: boolean
+                    includedResourceTypes:
+                      description: 'List of resource types to include. If unspecified, all resource types are included.'
+                      type: array
+                      items:
+                        type: string
+                    backupRef:
+                      description: |-
+                        Used for groups solely used in restore workflows to refer to another group that is used in
+                        backup workflows.
+                      type: string
+                    includeClusterResources:
+                      description: |-
+                        Whether to include any cluster-scoped resources. If nil or true, cluster-scoped resources are
+                        included if they are associated with the included namespace-scoped resources
+                      type: boolean
+                    labelSelector:
+                      description: Select items based on label
+                      type: object
+                      properties:
+                        matchExpressions:
+                          description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                          type: array
+                          items:
+                            description: |-
+                              A label selector requirement is a selector that contains values, a key, and an operator that
+                              relates the key and values.
+                            type: object
+                            required:
+                              - key
+                              - operator
+                            properties:
+                              key:
+                                description: key is the label key that the selector applies to.
+                                type: string
+                              operator:
+                                description: |-
+                                  operator represents a key's relationship to a set of values.
+                                  Valid operators are In, NotIn, Exists and DoesNotExist.
+                                type: string
+                              values:
+                                description: |-
+                                  values is an array of string values. If the operator is In or NotIn,
+                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                  the values array must be empty. This array is replaced during a strategic
+                                  merge patch.
+                                type: array
+                                items:
+                                  type: string
+                                x-kubernetes-list-type: atomic
+                          x-kubernetes-list-type: atomic
+                        matchLabels:
+                          description: |-
+                            matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                            map is equivalent to an element of matchExpressions, whose key field is "key", the
+                            operator is "In", and the values array contains only "value". The requirements are ANDed.
+                          type: object
+                          additionalProperties:
+                            type: string
+                      x-kubernetes-map-type: atomic
+                    includedNamespaces:
+                      description: List of namespaces to include.
+                      type: array
+                      items:
+                        type: string
+                    type:
+                      description: 'Determines the type of group - volume data only, resources only'
+                      type: string
+                      enum:
+                        - volume
+                        - resource
+                workflows:
+                  description: Workflow is the sequence of actions to take
+                  type: array
+                  items:
+                    description: Workflow is the sequence of actions to take
+                    type: object
+                    required:
+                      - name
+                      - sequence
+                    properties:
+                      failOn:
+                        description: 'Implies behaviour in case of failure: any-error (default), essential-error, full-error'
+                        type: string
+                        default: any-error
+                        enum:
+                          - any-error
+                          - essential-error
+                          - full-error
+                      name:
+                        description: |-
+                          Name of recipe. Names "backup" and "restore" are reserved and implicitly used by default for
+                          backup or restore respectively
+                        type: string
+                      sequence:
+                        description: |-
+                          List of the names of groups or hooks, in the order in which they should be executed
+                          Format: <group|hook>: <group or hook name>[/<hook op>]
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties:
+                            type: string
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
+            status:
+              description: RecipeStatus defines the observed state of Recipe
+              type: object
+      subresources:
+        status: {}
+  conversion:
+    strategy: None
