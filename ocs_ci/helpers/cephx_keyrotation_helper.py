@@ -171,6 +171,43 @@ class CephXKeyRotation:
         managed = (sc.get("spec", {}) or {}).get("managedResources") or {}
         return managed.get("cephCluster") or {}
 
+    def get_cephcluster_reconcile_strategy(self):
+        """Return StorageCluster ``managedResources.cephCluster.reconcileStrategy``."""
+        return self.get_storagecluster_managed_cephcluster().get("reconcileStrategy")
+
+    def patch_storagecluster_cephcluster_reconcile_strategy(self, strategy):
+        """Patch ``managedResources.cephCluster.reconcileStrategy`` on StorageCluster."""
+        cc_spec = self.get_storagecluster_managed_cephcluster()
+        patch_ops = []
+        strategy_path = "/spec/managedResources/cephCluster/reconcileStrategy"
+
+        if not cc_spec:
+            patch_ops.append(
+                {
+                    "op": "add",
+                    "path": "/spec/managedResources/cephCluster",
+                    "value": {"reconcileStrategy": strategy},
+                }
+            )
+        elif "reconcileStrategy" in cc_spec:
+            patch_ops.append(
+                {"op": "replace", "path": strategy_path, "value": strategy}
+            )
+        else:
+            patch_ops.append({"op": "add", "path": strategy_path, "value": strategy})
+
+        log.info(
+            "Patching StorageCluster managedResources.cephCluster.reconcileStrategy "
+            f"to {strategy}"
+        )
+        sc_obj = OCP(
+            kind=constants.STORAGECLUSTER,
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            namespace=self.namespace,
+        )
+        sc_obj.patch(params=json.dumps(patch_ops), format_type="json")
+        self._storagecluster_obj = None
+
     def get_storagecluster_allowed_ciphers(self):
         """Return allowedCiphers from StorageCluster managedResources.cephCluster."""
         cc_spec = self.get_storagecluster_managed_cephcluster()
@@ -828,17 +865,24 @@ class CephXKeyRotation:
 
         return current + 1
 
+    def get_current_rook_daemon_key_generation(self):
+        """
+        Return the highest daemon keyGeneration across spec and status.
+
+        Includes MON, MGR, and OSD on CephCluster plus MDS on CephFilesystem.
+        """
+        current = self.get_spec_key_generation(self.COMPONENT_DAEMON)
+        for entity in self.ROOK_DAEMON_STATUS_ENTITIES:
+            current = max(current, self.get_status_key_generation(entity))
+        return max(current, self.get_filesystem_daemon_key_generation())
+
     def get_next_rook_daemon_key_generation(self):
         """
         Return a generation value to trigger rotation for Rook daemons only.
 
         Considers MON, MGR, and OSD on CephCluster plus MDS on CephFilesystem.
         """
-        current = self.get_spec_key_generation(self.COMPONENT_DAEMON)
-        for entity in self.ROOK_DAEMON_STATUS_ENTITIES:
-            current = max(current, self.get_status_key_generation(entity))
-        current = max(current, self.get_filesystem_daemon_key_generation())
-        return current + 1
+        return self.get_current_rook_daemon_key_generation() + 1
 
     def rotate_component_keys(
         self,
@@ -1272,29 +1316,44 @@ class CephXKeyRotation:
         Ensure ``spec.security.cephx.daemon`` uses KeyGeneration policy.
 
         Args:
-            key_generation (int): Minimum desired generation in spec.
+            key_generation (int): Minimum desired generation in spec. When the
+                cluster already has a higher generation (for example after a
+                prior test or background rotation), the existing generation is
+                preserved because keyGeneration cannot be decreased.
 
         Returns:
             int: Generation configured in spec.
         """
-        current = self.get_spec_key_generation(self.COMPONENT_DAEMON)
+        spec_generation = self.get_spec_key_generation(self.COMPONENT_DAEMON)
+        current_generation = self.get_current_rook_daemon_key_generation()
+        daemon_spec = self.get_spec_cephx().get(self.COMPONENT_DAEMON, {}) or {}
+        policy = daemon_spec.get("keyRotationPolicy")
+
         if (
-            self.get_spec_cephx()
-            .get(self.COMPONENT_DAEMON, {})
-            .get("keyRotationPolicy")
-            == self.KEY_ROTATION_POLICY_KEY_GENERATION
-            and current >= key_generation
+            policy == self.KEY_ROTATION_POLICY_KEY_GENERATION
+            and current_generation >= key_generation
         ):
             log.info(
-                f"Daemon CephX key rotation already enabled at generation {current}"
+                "Daemon CephX key rotation already enabled at generation "
+                f"{spec_generation or current_generation}"
             )
-            return current
+            return spec_generation or current_generation
+
+        effective_generation = max(key_generation, current_generation)
+        if effective_generation > key_generation:
+            log.info(
+                "Preserving daemon keyGeneration %s (requested minimum %s); "
+                "keyGeneration cannot be decreased",
+                effective_generation,
+                key_generation,
+            )
 
         log.info(
-            f"Enabling daemon CephX KeyGeneration policy at generation {key_generation}"
+            "Enabling daemon CephX KeyGeneration policy at generation "
+            f"{effective_generation}"
         )
         return self.rotate_component_keys(
-            self.COMPONENT_DAEMON, key_generation=key_generation
+            self.COMPONENT_DAEMON, key_generation=effective_generation
         )
 
     def get_spec_rotation_policy(self, component):

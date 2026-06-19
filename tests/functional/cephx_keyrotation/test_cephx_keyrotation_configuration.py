@@ -111,6 +111,7 @@ class TestCephXAllowedCiphers:
     @pytest.fixture(autouse=True)
     def _teardown(self, request):
         """Restore StorageCluster security passthrough after custom cipher test."""
+        request.node._cephx_reconcile_strategy_restore = None
 
         def fin():
             rotator = CephXKeyRotation()
@@ -119,6 +120,17 @@ class TestCephXAllowedCiphers:
             )
             try:
                 rotator.remove_storagecluster_cephcluster_security()
+                restore_strategy = getattr(
+                    request.node, "_cephx_reconcile_strategy_restore", None
+                )
+                if restore_strategy is not None:
+                    log.info(
+                        "Teardown: restoring StorageCluster "
+                        f"cephCluster.reconcileStrategy={restore_strategy}"
+                    )
+                    rotator.patch_storagecluster_cephcluster_reconcile_strategy(
+                        restore_strategy
+                    )
                 rotator.wait_for_allowed_ciphers(
                     constants.CEPHX_DEFAULT_ALLOWED_CIPHERS,
                     timeout=600,
@@ -131,7 +143,7 @@ class TestCephXAllowedCiphers:
         request.addfinalizer(fin)
 
     @tier1
-    def test_cephx_allowed_ciphers_configuration(self, cephx_bootstrap_setup):
+    def test_cephx_allowed_ciphers_configuration(self, cephx_bootstrap_setup, request):
         """
         Verify default and custom allowedCiphers passthrough from StorageCluster.
 
@@ -172,6 +184,15 @@ class TestCephXAllowedCiphers:
             "Part A passed: default allowedCiphers=%s on CephCluster",
             list(constants.CEPHX_DEFAULT_ALLOWED_CIPHERS),
         )
+
+        reconcile_strategy = rotator.get_cephcluster_reconcile_strategy()
+        if reconcile_strategy == "ignore":
+            log.info(
+                "StorageCluster cephCluster.reconcileStrategy is ignore; "
+                "temporarily setting manage to verify allowedCiphers passthrough"
+            )
+            request.node._cephx_reconcile_strategy_restore = reconcile_strategy
+            rotator.patch_storagecluster_cephcluster_reconcile_strategy("manage")
 
         rotator.patch_storagecluster_allowed_ciphers(
             constants.CEPHX_CUSTOM_ALLOWED_CIPHERS
