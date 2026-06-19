@@ -6155,3 +6155,65 @@ def get_noobaa_cli_config():
         return constants.ODF_CLI_LOCAL_PATH, "noobaa"
     else:
         return constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, ""
+
+
+def auto_configure_acm():
+    """
+    Auto-configure ACM as released or unreleased based on OCP version
+    If explicitly configured by user, skips auto-configuration.
+    Uses OCP version mappings with safe defaults (unreleased) for unknown versions.
+    """
+    # If explicitly configured by user, skip auto-configuration
+    if config.ENV_DATA.get("acm_hub_unreleased") is not None:
+        log.info(
+            f"ACM explicitly configured: acm_hub_unreleased={config.ENV_DATA['acm_hub_unreleased']}"
+        )
+        return
+    # Get OCP version
+    ocp_version = version_module.get_semantic_ocp_version_from_config()
+    # Look up in mapping, default to True (unreleased) for unknown versions
+    acm_unreleased = defaults.ocp_to_acm_unreleased_mapping.get(f"{ocp_version}", True)
+    config.ENV_DATA["acm_hub_unreleased"] = acm_unreleased
+    if f"{ocp_version}" in defaults.ocp_to_acm_unreleased_mapping:
+        log.info(
+            f"OCP {ocp_version} → ACM: {'UNRELEASED' if acm_unreleased else 'RELEASED'}"
+        )
+    else:
+        log.info(f"OCP {ocp_version} not in mapping → ACM: UNRELEASED (safe default)")
+
+
+def auto_configure_submariner():
+    """
+    Auto-configure Submariner as released or unreleased based on OCP version.
+    If explicitly configured by user, skips auto-configuration.
+    Uses OCP version mappings with safe defaults (unreleased) for unknown versions.
+    """
+    # Set submariner_source default if not provided by user
+    if config.ENV_DATA.get("submariner_source") is None:
+        config.ENV_DATA["submariner_source"] = "downstream"
+        log.info("Submariner source not specified, defaulting to: downstream")
+
+    # If explicitly configured by user, skip auto-configuration
+    if config.ENV_DATA.get("submariner_release_type") is not None:
+        log.info(
+            f"Submariner explicitly configured: release_type={config.ENV_DATA['submariner_release_type']}"
+        )
+        return
+    # Get OCP version
+    ocp_version = version_module.get_semantic_ocp_version_from_config()
+    # Look up in mapping, default to True (unreleased) for unknown versions
+    submariner_unreleased = defaults.ocp_to_submariner_unreleased_mapping.get(
+        f"{ocp_version}", True
+    )
+    config.ENV_DATA["submariner_release_type"] = (
+        "unreleased" if submariner_unreleased else "released"
+    )
+
+    if f"{ocp_version}" in defaults.ocp_to_submariner_unreleased_mapping:
+        log.info(
+            f"OCP {ocp_version} → Submariner: {'UNRELEASED' if submariner_unreleased else 'RELEASED'}"
+        )
+    else:
+        log.info(
+            f"OCP {ocp_version} not in mapping → Submariner: UNRELEASED (safe default)"
+        )
