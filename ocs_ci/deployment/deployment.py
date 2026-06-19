@@ -3820,11 +3820,14 @@ class MultiClusterDROperatorsDeploy(object):
 
         """
         logger.info("[ramenctl-e2e] Building ramenctl binary")
+        logger.info(f"[ramenctl-e2e] Build directory: {ramenctl_dir}")
 
         build_cmd = f"cd {ramenctl_dir} && make ramenctl"
+        logger.info(f"[ramenctl-e2e] Build command: {build_cmd}")
         try:
-            run_cmd(build_cmd, timeout=600)
+            output = run_cmd(build_cmd, timeout=600, shell=True)
             logger.info("[ramenctl-e2e] ramenctl binary built successfully")
+            logger.info(f"[ramenctl-e2e] Build output:\n{output}")
         except CommandFailed as e:
             logger.error(
                 f"[ramenctl-e2e] Failed to build ramenctl binary: {e}"
@@ -3839,8 +3842,9 @@ class MultiClusterDROperatorsDeploy(object):
             return False
 
         verify_cmd = f"cd {ramenctl_dir} && ./ramenctl --version"
+        logger.info(f"[ramenctl-e2e] Verifying binary with command: {verify_cmd}")
         try:
-            version_output = run_cmd(verify_cmd)
+            version_output = run_cmd(verify_cmd, shell=True)
             logger.info(
                 f"[ramenctl-e2e] ramenctl binary ready at {binary_path}: "
                 f"{version_output.strip()}"
@@ -3868,9 +3872,11 @@ class MultiClusterDROperatorsDeploy(object):
         logger.info("[ramenctl-e2e] Generating ramenctl configuration")
 
         init_cmd = f"cd {ramenctl_dir} && ./ramenctl init"
+        logger.info(f"[ramenctl-e2e] Init command: {init_cmd}")
         try:
-            run_cmd(init_cmd, timeout=60)
+            output = run_cmd(init_cmd, timeout=60, shell=True)
             logger.info("[ramenctl-e2e] Generated default config with ramenctl init")
+            logger.info(f"[ramenctl-e2e] Init output:\n{output}")
         except CommandFailed as e:
             logger.error(f"[ramenctl-e2e] Failed to run ramenctl init: {e}")
             return None
@@ -3888,9 +3894,9 @@ class MultiClusterDROperatorsDeploy(object):
             with open(config_file, "w") as f:
                 yaml.dump(ramenctl_config, f, default_flow_style=False)
             logger.info(f"[ramenctl-e2e] Updated config at {config_file}")
-            logger.debug(
-                f"[ramenctl-e2e] Config content:\n"
-                f"{yaml.dump(ramenctl_config, default_flow_style=False)}"
+            config_content = yaml.dump(ramenctl_config, default_flow_style=False)
+            logger.info(
+                f"[ramenctl-e2e] Config content:\n{config_content}"
             )
         except IOError as e:
             logger.error(f"[ramenctl-e2e] Failed to write config file: {e}")
@@ -3929,9 +3935,9 @@ class MultiClusterDROperatorsDeploy(object):
                 hub_dest = os.path.join(ramenctl_dir, "hub.yaml")
                 shutil.copy(hub_kubeconfig, hub_dest)
                 clusters_config["hub"] = {"kubeconfig": "hub.yaml"}
-                logger.debug(f"[ramenctl-e2e] Copied hub kubeconfig to {hub_dest}")
+                logger.info(f"[ramenctl-e2e] Copied hub kubeconfig from {hub_kubeconfig} to {hub_dest}")
             else:
-                logger.warning("[ramenctl-e2e] Hub kubeconfig not found")
+                logger.warning(f"[ramenctl-e2e] Hub kubeconfig not found at {hub_kubeconfig}")
 
             clusters_config["passive-hub"] = {"kubeconfig": ""}
 
@@ -3958,13 +3964,15 @@ class MultiClusterDROperatorsDeploy(object):
                 logger.warning("[ramenctl-e2e] No DR-policy managed clusters found")
 
             for idx, cluster in enumerate(filtered_clusters, start=1):
+                cluster_name = cluster.ENV_DATA.get("cluster_name", f"cluster-{idx}")
                 cluster_kubeconfig = cluster.RUN.get("kubeconfig")
+                logger.info(f"[ramenctl-e2e] Processing cluster c{idx} ({cluster_name}), kubeconfig: {cluster_kubeconfig}")
                 if cluster_kubeconfig and os.path.exists(cluster_kubeconfig):
                     cluster_dest = os.path.join(ramenctl_dir, f"c{idx}.yaml")
                     shutil.copy(cluster_kubeconfig, cluster_dest)
                     clusters_config[f"c{idx}"] = {"kubeconfig": f"c{idx}.yaml"}
-                    logger.debug(
-                        f"[ramenctl-e2e] Copied c{idx} kubeconfig to {cluster_dest}"
+                    logger.info(
+                        f"[ramenctl-e2e] Copied c{idx} kubeconfig from {cluster_kubeconfig} to {cluster_dest}"
                     )
 
             dr_policy_name = self.dr_policy_name
@@ -4122,9 +4130,9 @@ class MultiClusterDROperatorsDeploy(object):
         e2e_timeout = 7200
 
         try:
-            output = run_cmd(e2e_cmd, timeout=e2e_timeout)
+            output = run_cmd(e2e_cmd, timeout=e2e_timeout, shell=True)
             logger.info(f"[ramenctl-e2e] E2E tests completed successfully")
-            logger.debug(f"[ramenctl-e2e] Test output:\n{output}")
+            logger.info(f"[ramenctl-e2e] Test output:\n{output}")
             logger.info(f"[ramenctl-e2e] Test results available at: {output_path}")
         except CommandFailed as e:
             logger.error(f"[ramenctl-e2e] E2E tests failed: {e}")
