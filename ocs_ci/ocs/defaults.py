@@ -170,3 +170,28 @@ CRUSH_DEVICE_CLASS = "ssd"
 # IBM Cloud
 IBM_CLOUD_LOAD_BALANCER_QUOTA = 50
 IBM_CLOUD_REGIONS = {"us-south", "us-east"}
+ocp_to_acm_unreleased_mapping = {
+    "4.14": False,
+    "4.15": False,
+    "4.16": False,
+    "4.17": False,
+    "4.18": False,
+    "4.19": False,
+    "4.20": False,
+    "4.21": False,
+    "4.22": True,
+    "4.23": True,
+}
+
+ocp_to_submariner_unreleased_mapping = {
+    "4.14": False,
+    "4.15": False,
+    "4.16": False,
+    "4.17": False,
+    "4.18": False,
+    "4.19": False,
+    "4.20": False,
+    "4.21": False,
+    "4.22": False,
+    "4.23": True,
+}
