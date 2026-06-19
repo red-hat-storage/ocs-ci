@@ -2178,6 +2178,7 @@ class Deployment(object):
         """
         Handle ACM HUB deployment
         """
+
         if self.acm_operator_installed():
             logger.info("ACM Operator is already installed")
             self.deploy_multicluster_hub()
