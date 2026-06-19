@@ -766,9 +766,13 @@ class BusyBox_AppSet(DRWorkload):
         self.appset_pvc_selector = kwargs.get("workload_pvc_selector")
         self.appset_model = kwargs.get("appset_model")
 
-    def deploy_workload(self):
+    def deploy_workload(self, skip_replication_resources=False):
         """
         Deployment specific to busybox workload
+
+        Args:
+            skip_replication_resources (bool): If True, skip VGR/VR
+                checks during workload deployment verification.
 
         """
 
@@ -780,9 +784,19 @@ class BusyBox_AppSet(DRWorkload):
                 pvc_type = constants.RBD_INTERFACE
             elif self.pvc_interface == constants.CEPHFILESYSTEM:
                 pvc_type = constants.CEPHFS_INTERFACE
-            self.workload_namespace = (
-                create_unique_resource_name("workload", "appset")[:25] + "-" + pvc_type
+            agnostic_dr = any(
+                c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters
             )
+            if agnostic_dr:
+                self.workload_namespace = create_unique_resource_name(
+                    "workload-offload", "appset"
+                )[:25]
+            else:
+                self.workload_namespace = (
+                    create_unique_resource_name("workload", "appset")[:25]
+                    + "-"
+                    + pvc_type
+                )
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["metadata"]["name"] = f"{self.appset_placement_name}-drpc"
@@ -869,7 +883,9 @@ class BusyBox_AppSet(DRWorkload):
         self.check_pod_pvc_status(skip_replication_resources=True)
         self.add_annotation_to_placement()
         run_cmd(f"oc create -f {self.drcp_data_yaml.name}")
-        self.verify_workload_deployment()
+        self.verify_workload_deployment(
+            skip_replication_resources=skip_replication_resources
+        )
 
     def _deploy_prereqs(self):
         """
@@ -926,13 +942,19 @@ class BusyBox_AppSet(DRWorkload):
             if _app_set["kind"] == constants.APPLICATION_SET:
                 return _app_set["metadata"]["name"]
 
-    def verify_workload_deployment(self):
+    def verify_workload_deployment(self, skip_replication_resources=False):
         """
         Verify busybox workload
 
-        """
+        Args:
+            skip_replication_resources (bool): If True, skip VGR/VR checks.
 
-        self.check_pod_pvc_status(skip_replication_resources=False)
+        """
+        self.check_pod_pvc_status(skip_replication_resources=skip_replication_resources)
+        config.switch_acm_ctx()
+        appset_resource_name = (
+            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
+        )
 
         if self.appset_model == "pull":
             config.switch_to_cluster_by_name(self.preferred_primary_cluster)
@@ -1011,10 +1033,13 @@ class BusyBox_AppSet(DRWorkload):
                     workload_cleanup=True,
                 )
 
-            log.info("Verify backend images or subvolumes are deleted")
-            for cluster in get_non_acm_cluster_config():
-                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                dr_helpers.wait_for_backend_volume_deletion(backend_volumes)
+            if backend_volumes:
+                log.info("Verify backend images or subvolumes are deleted")
+                for cluster in get_non_acm_cluster_config():
+                    config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                    dr_helpers.wait_for_backend_volume_deletion(backend_volumes)
+            else:
+                log.info("No Ceph backend volumes to verify deletion for")
 
         except (
             TimeoutExpired,
@@ -1284,7 +1309,8 @@ class CnvWorkload(DRWorkload):
         Verify cnv workload deployment
 
         """
-        self.check_pod_pvc_status(skip_replication_resources=False)
+        agnostic_dr = any(c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters)
+        self.check_pod_pvc_status(skip_replication_resources=agnostic_dr)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
