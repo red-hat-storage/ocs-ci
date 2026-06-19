@@ -4,6 +4,8 @@ from ocs_ci.ocs.constants import CLOUD_PLATFORMS, MANAGED_SERVICE_PLATFORMS
 
 log = logging.getLogger(__name__)
 
+pytest_plugins = ["tests.cross_functional.conftest"]
+
 
 def pytest_collection_modifyitems(items):
     """

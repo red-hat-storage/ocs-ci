@@ -5312,6 +5312,34 @@ def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     return nb_db_pod
 
 
+def get_secondary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get a NooBaa DB replica pod assigned by the CNPG operator.
+
+    Returns:
+        Pod: The NooBaa DB replica pod object
+
+    Raises:
+        ResourceNotFoundError: If no NooBaa DB replica pod is found
+
+    """
+    from ocs_ci.ocs.resources import pod
+
+    try:
+        nb_db_pod = pod.Pod(
+            **pod.get_pods_having_label(
+                label=constants.NB_DB_REPLICA_POD_LABEL,
+                namespace=namespace,
+            )[0]
+        )
+    except IndexError:
+        raise ResourceNotFoundError(
+            f"The NooBaa DB pod with label {constants.NB_DB_REPLICA_POD_LABEL} "
+            f"was not found in namespace {namespace}"
+        )
+    return nb_db_pod
+
+
 def exec_nb_db_query(query):
     """
     Send a psql query to the Noobaa DB

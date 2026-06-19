@@ -79,7 +79,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
@@ -10327,3 +10327,122 @@ def distribute_storage_classes_to_all_consumers():
 def disable_debug_logs():
     log.info("Disabling debug logs for the current session")
     logging.disable(logging.DEBUG)
+
+
+@pytest.fixture()
+def noobaa_db_backup_patch(request):
+    """
+    Patch custom NooBaa DB backup configuration on the storage cluster.
+
+    Based on CNPG backup support added in ocs-ci PR #14550 / #14317.
+
+    """
+    ocs_storage_obj = OCP(
+        kind="storagecluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+
+    initial_db_backup_info = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+        "multiCloudGateway"
+    ]["dbBackup"]
+    log.info(f"Initial dbBackup value: {initial_db_backup_info}")
+
+    def factory(schedule_cron_interval, num_backups, snapshot_class):
+        db_backup_param = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"dbBackup": {{"schedule": "*/{schedule_cron_interval} * * * *", '
+            f'"volumeSnapshot": {{"maxSnapshots": {num_backups}, '
+            f'"volumeSnapshotClass": "{snapshot_class}"}}}}}}}}}}'
+        )
+        ocs_storage_obj.patch(params=db_backup_param, format_type="merge")
+        log.info(
+            "DB backup info patched with maxSnapshots=%s, schedule=*/%s * * * *",
+            num_backups,
+            schedule_cron_interval,
+        )
+        time.sleep(15)
+
+    def finalizer():
+        if initial_db_backup_info is None:
+            backup_params = (
+                '[{"op": "remove", "path": "/spec/multiCloudGateway/dbBackup"}]'
+            )
+            ocs_storage_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=backup_params,
+                format_type="json",
+            )
+            log.info("Removed backup section from storage cluster")
+        else:
+            db_backup_restore_param = json.dumps(
+                {"spec": {"multiCloudGateway": {"dbBackup": initial_db_backup_info}}}
+            )
+            ocs_storage_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=db_backup_restore_param,
+                format_type="merge",
+            )
+            log.info("Restored original dbBackup value")
+
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+        backup_names = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "Backup"
+        )
+        for bkp_name in backup_names:
+            backup_obj.delete(resource_name=bkp_name, force=True)
+            backup_obj.wait_for_delete(resource_name=bkp_name)
+
+        volumesnapshot_obj = OCP(
+            kind="volumesnapshot", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        volumesnapshot_names = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster-scheduled-backup", "volumesnapshot"
+        )
+        for volumesnapshot_name in volumesnapshot_names:
+            volumesnapshot_obj.delete(resource_name=volumesnapshot_name, force=True)
+            volumesnapshot_obj.wait_for_delete(resource_name=volumesnapshot_name)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_recovery_patch(request):
+    """
+    Patch NooBaa DB recovery configuration on the storage cluster.
+
+    Based on CNPG recovery support added in ocs-ci PR #14550 / #14317.
+
+    """
+    ocs_storage_obj = OCP(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+
+    def factory(backup_name):
+        db_recovery_param = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"dbRecovery": {{"volumeSnapshotName": "{backup_name}"}}}}}}}}'
+        )
+        ocs_storage_obj.patch(params=db_recovery_param, format_type="merge")
+        log.info("DB recovery info patched with backup %s", backup_name)
+        time.sleep(15)
+
+    def finalizer():
+        recovery_params = (
+            '[{"op": "remove", "path": "/spec/multiCloudGateway/dbRecovery"}]'
+        )
+        try:
+            ocs_storage_obj.patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=recovery_params,
+                format_type="json",
+            )
+        except Exception as exc:
+            log.error(exc)
+        log.info("Removed recovery section from storage cluster")
+
+    request.addfinalizer(finalizer)
+    return factory

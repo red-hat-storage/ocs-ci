@@ -4754,8 +4754,25 @@ def retrieve_cli_binary(cli_type="mcg"):
         f"{image} --confirm "
         f"--path {get_architecture_path(cli_type)}:{local_cli_dir}"
     )
+
+    extracted_cli_path = os.path.join(local_cli_dir, remote_cli_basename)
+    if not os.path.exists(extracted_cli_path):
+        extracted_cli_candidates = [
+            entry.path
+            for entry in os.scandir(local_cli_dir)
+            if entry.is_file() and os.access(entry.path, os.X_OK)
+        ]
+        if len(extracted_cli_candidates) == 1:
+            extracted_cli_path = extracted_cli_candidates[0]
+        else:
+            raise FileNotFoundError(
+                f"Extracted {cli_type} CLI binary not found at expected path "
+                f"{extracted_cli_path}. Found executable candidates: "
+                f"{[entry for entry in extracted_cli_candidates]}"
+            )
+
     os.rename(
-        os.path.join(local_cli_dir, remote_cli_basename),
+        extracted_cli_path,
         local_cli_path,
     )
     # Add an executable bit in order to allow usage of the binary

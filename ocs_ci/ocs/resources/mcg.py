@@ -175,24 +175,73 @@ class MCG:
         """
 
         def internal_retrieval_logic():
+            # Generate unique credentials for token retrieval (don't use admin account)
+            import uuid
+
+            token_suffix = uuid.uuid4().hex[:8]
+            token_email = f"token-user-{token_suffix}@noobaa.io"
+            token_password = f"TokenUser-{token_suffix}!"
+            
             try:
+                # Try to create account - this returns a token
                 rpc_response = self.send_rpc_query(
-                    "auth_api",
-                    "create_auth",
+                    "account_api",
+                    "create_account",
                     params={
-                        "role": "admin",
-                        "system": "noobaa",
-                        "email": self.noobaa_user,
-                        "password": self.noobaa_password,
+                        "name": token_email,
+                        "email": token_email,  # Use unique email, not admin
+                        "password": token_password,
+                        "has_login": True,
+                        "s3_access": True,
                     },
                 )
                 return rpc_response.json().get("reply").get("token")
 
+            except CommandFailed as e:
+                # If account already exists, delete it and recreate to get a fresh token
+                if "already registered" in str(e).lower():
+                    logger.info(
+                        f"Account already exists, deleting and recreating to get token"
+                    )
+                    try:
+                        # Delete the existing account
+                        self.send_rpc_query(
+                            "account_api",
+                            "delete_account",
+                            params={
+                                "email": token_email,
+                            },
+                        )
+                        logger.info(f"Deleted existing account {token_email}")
+                        
+                        # Recreate the account to get a fresh token
+                        rpc_response = self.send_rpc_query(
+                            "account_api",
+                            "create_account",
+                            params={
+                                "name": token_email,
+                                "email": token_email,  # Use unique email, not admin
+                                "password": token_password,
+                                "has_login": True,
+                                "s3_access": True,
+                            },
+                        )
+                        return rpc_response.json().get("reply").get("token")
+                    except (json.JSONDecodeError, CommandFailed) as recreate_error:
+                        logger.warning(
+                            f"Failed to delete/recreate account: {str(recreate_error)}. "
+                            "NooBaa might be unhealthy. Retrying"
+                        )
+                        return None
+                else:
+                    logger.warning(
+                        f"Failed to create account: {str(e)}. "
+                        "NooBaa might be unhealthy. Retrying"
+                    )
+                    return None
             except json.JSONDecodeError:
                 logger.warning(
-                    "RPC did not respond with a JSON. Response: \n" + str(rpc_response)
-                )
-                logger.warning(
+                    "RPC did not respond with a JSON. "
                     "Failed to retrieve token, NooBaa might be unhealthy. Retrying"
                 )
                 return None
@@ -1204,7 +1253,7 @@ class MCG:
         self.noobaa_password = admin_credentials["password"]
 
         self.data_to_mask.extend(flatten_multilevel_dict(admin_credentials))
-        self.noobaa_token = self.retrieve_nb_token()
+        self.noobaa_token = None
 
         self.s3_resource = boto3.resource(
             "s3",
