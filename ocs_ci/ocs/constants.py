@@ -535,7 +535,7 @@ KAFKA_ENDPOINT = f"my-cluster-kafka-bootstrap.{AMQ_NAMESPACE}.svc.cluster.local:
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 RGW_KAFKA_NOTIFY = "https://github.com/sagihirshfeld/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
-CODESPEED_URL = "http://10.0.78.167:8000/"
+CODESPEED_URL = "http://10.0.146.27:8000/"
 KAFKA_PODS_LABEL = "strimzi.io/pool-name=broker"
 KAFKA_KIND_LABEL = "strimzi.io/kind=Kafka"
 
