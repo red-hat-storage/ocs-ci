@@ -7005,16 +7005,28 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
                 namespace=config.ENV_DATA["cluster_namespace"],
             ).get()["items"]
         ]
+    # If there are custom pools there will be multiple radosnamespace for internal storageconsumer and
+    # remote storageconsumers. The default interal cephblockpoolradosnamespace will start with
+    # ocs-storagecluster-cephblockpool or replicated-metadata-pool
     if storageconsumer == constants.INTERNAL_STORAGE_CONSUMER_NAME:
         cephbpradosns = list(
-            filter(lambda x: "-builtin-implicit" in x, cephblockpool_rns_names)
+            filter(
+                lambda x: "replicated-metadata-pool-builtin-implicit" in x
+                or "ocs-storagecluster-cephblockpool-builtin-implicit" in x,
+                cephblockpool_rns_names,
+            )
         )[0]
     else:
         cephbpradosns = list(
-            filter(lambda x: f"-{storageconsumer}" in x, cephblockpool_rns_names)
+            filter(
+                lambda x: f"replicated-metadata-pool-{storageconsumer}" in x
+                or f"ocs-storagecluster-cephblockpool-{storageconsumer}" in x,
+                cephblockpool_rns_names,
+            )
         )[0]
     logger.info(
-        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
+        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. "
+        f"StorageConsumer is {storageconsumer}. Cephblockpoolradosnamespace is {cephbpradosns}."
     )
 
     # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clusters have it,
