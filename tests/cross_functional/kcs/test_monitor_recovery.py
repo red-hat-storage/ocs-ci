@@ -44,7 +44,8 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
 from ocs_ci.helpers.helpers import wait_for_resource_state, get_secret_names
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, run_cmd
+from ocs_ci.utility.utils import exec_cmd, run_cmd, TimeoutSampler
+from ocs_ci.ocs.node import get_node_objs
 
 logger = logging.getLogger(__name__)
 
@@ -655,7 +656,7 @@ class MonitorRecovery(object):
 
         for mon in other_mons:
             mon_id = mon.get().get("metadata").get("labels").get("ceph_daemon_id")
-            logger.info(f"Copying store.db to monitor: {mon.name} (mon-{mon_id})")
+            logger.debug(f"Copying store.db to monitor: {mon.name} (mon-{mon_id})")
 
             cmd = (
                 f"cp {self.backup_dir}/store.db "
@@ -690,7 +691,7 @@ class MonitorRecovery(object):
             revert_patch = f"replace --force -f {dep}"
             self.ocp_obj.exec_oc_cmd(revert_patch)
 
-            logger.info(
+            logger.debug(
                 f"Waiting for pods from deployment {dep_name} to reach running state"
             )
 
@@ -1068,6 +1069,159 @@ def corrupt_ceph_monitors():
     )
 
 
+def verify_pods_running(pod_list, pod_type="pod", timeout=600):
+    """
+    Verify that a list of pods reach running state, with sandbox error recovery.
+
+    Args:
+        pod_list: List of pod objects to verify
+        pod_type: Type of pods for logging (e.g., "noobaa", "RGW", "MDS")
+        timeout: Maximum time to wait for each pod
+
+    Returns:
+        list: List of failed pod names (empty if all succeeded)
+    """
+    logger.info(f"Verifying {len(pod_list)} {pod_type} pods reach running state")
+    failed_pods = []
+
+    for pod_obj in pod_list:
+        logger.debug(f"Checking {pod_type} pod: {pod_obj.name}")
+        if not check_and_recover_sandbox_errors(pod_obj, timeout=timeout):
+            logger.error(f"{pod_type} pod {pod_obj.name} failed to reach running state")
+            failed_pods.append(pod_obj.name)
+
+    if failed_pods:
+        logger.error(
+            f"{pod_type} recovery failed: {len(failed_pods)} pods not running: {failed_pods}"
+        )
+    else:
+        logger.info(f"All {len(pod_list)} {pod_type} pods are running")
+
+    return failed_pods
+
+
+def check_and_recover_sandbox_errors(pod_obj, timeout=600):
+    """
+    Check if a pod has sandbox errors and recover by power cycling its node.
+    After node recovery, delegates to handle_multi_attach_error for volume issues.
+
+    This is a lightweight helper specifically for recover_mcg() and ceph_fs_recovery()
+    to handle FailedCreatePodSandBox errors during pod recovery.
+
+    Args:
+        pod_obj: Pod object to check
+        timeout: Maximum time to wait for recovery (default: 600s)
+
+    Returns:
+        bool: True if pod reaches running state, False otherwise
+
+    """
+    try:
+        pod_name = pod_obj.name
+        namespace = pod_obj.namespace
+
+        pod_status = pod_obj.get().get("status", {})
+        phase = pod_status.get("phase")
+
+        if phase == constants.STATUS_RUNNING:
+            logger.debug(f"Pod {pod_name} is already running, no recovery needed")
+            return True
+
+        node_name = pod_obj.get().get("spec", {}).get("nodeName")
+
+        if not node_name:
+            logger.debug(f"Pod {pod_name} not scheduled to a node yet")
+            return handle_multi_attach_error(pod_obj, timeout)
+
+        logger.info(f"Pod {pod_name} is in phase '{phase}', checking for errors...")
+
+        ocp_pod = OCP(kind=constants.POD, namespace=namespace)
+        events = ocp_pod.exec_oc_cmd(
+            f"get events --field-selector involvedObject.name={pod_name} "
+            f"-n {namespace} -o json"
+        )
+
+        has_sandbox_error = False
+        error_messages = []
+
+        for event in events.get("items", []):
+            msg = event.get("message", "")
+            reason = event.get("reason", "")
+
+            if any(
+                err in msg
+                for err in [
+                    "FailedCreatePodSandBox",
+                    "DeadlineExceeded",
+                    "stream terminated",
+                    "context deadline exceeded",
+                ]
+            ):
+                has_sandbox_error = True
+                error_messages.append(f"{reason}: {msg[:150]}")
+
+        if not has_sandbox_error:
+            logger.debug(
+                f"Pod {pod_name} has no sandbox errors, using standard recovery"
+            )
+            return handle_multi_attach_error(pod_obj, timeout)
+
+        logger.warning(f"Pod {pod_name} on node {node_name} has sandbox errors:")
+        for msg in error_messages[:3]:
+            logger.warning(f"  - {msg}")
+
+        logger.info(f"Recovering pod {pod_name} by restarting node {node_name}")
+
+        node_objs = get_node_objs()
+        target_node = None
+        for n in node_objs:
+            if n.name == node_name:
+                target_node = n
+                break
+
+        if not target_node:
+            logger.error(f"Could not find node object for {node_name}")
+            return handle_multi_attach_error(pod_obj, timeout)
+
+        logger.info(f"Stopping node {node_name}...")
+        target_node.stop_nodes([target_node])
+
+        logger.info("Waiting 30s for node to stop...")
+        time.sleep(30)
+
+        logger.info(f"Starting node {node_name}...")
+        target_node.start_nodes([target_node])
+
+        logger.info(f"Waiting for node {node_name} to become Ready...")
+        ocp_node = OCP(kind=constants.NODE)
+        for sample in TimeoutSampler(
+            timeout=300, sleep=10, func=ocp_node.get, resource_name=node_name
+        ):
+            node_status = sample
+            conditions = node_status.get("status", {}).get("conditions", [])
+            for condition in conditions:
+                if (
+                    condition.get("type") == "Ready"
+                    and condition.get("status") == "True"
+                ):
+                    logger.info(f"Node {node_name} is Ready")
+                    break
+            else:
+                continue
+            break
+
+        logger.info("Waiting 60s for pod to stabilize after node restart...")
+        time.sleep(60)
+
+        logger.info("Node restart complete, checking for volume attachment issues...")
+
+        return handle_multi_attach_error(pod_obj, timeout)
+
+    except Exception as e:
+        logger.error(f"Error during sandbox error recovery for {pod_obj.name}: {e}")
+        return handle_multi_attach_error(pod_obj, timeout)
+
+
 def handle_multi_attach_error(pod_obj, timeout=300):
     """
     Handle multi-attach volume errors by deleting stale VolumeAttachment resources.
@@ -1200,28 +1354,17 @@ def recover_mcg():
             f"found {len(active_pg_pods)}/{expected_pg_pods} expected"
         )
 
-    logger.info("Verifying all noobaa pods reached running state")
     respawned_noobaa_pods = get_noobaa_pods()
     logger.info(
         f"Found {len(respawned_noobaa_pods)} noobaa pods to verify (includes postgres cluster)"
     )
-    failed_noobaa_pods = []
 
-    for noobaa_pod in respawned_noobaa_pods:
-        logger.debug(f"Checking noobaa pod: {noobaa_pod.name}")
-        if not handle_multi_attach_error(noobaa_pod, timeout=600):
-            logger.error(f"Noobaa pod {noobaa_pod.name} failed to reach running state")
-            failed_noobaa_pods.append(noobaa_pod.name)
+    failed_noobaa_pods = verify_pods_running(
+        respawned_noobaa_pods, pod_type="noobaa", timeout=600
+    )
 
     if failed_noobaa_pods:
-        logger.error(
-            f"MCG recovery failed: {len(failed_noobaa_pods)} noobaa pods not running: {failed_noobaa_pods}"
-        )
         raise AssertionError(f"NooBaa pod recovery failed: {failed_noobaa_pods}")
-
-    logger.info(
-        f"MCG noobaa pods recovery completed: all {len(respawned_noobaa_pods)} pods running"
-    )
 
     if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
         logger.info("On-prem platform detected: recovering RGW pods")
@@ -1235,24 +1378,13 @@ def recover_mcg():
         logger.info("Waiting 120s for RGW pods to respawn")
         time.sleep(120)
 
-        logger.info("Verifying RGW pods reached running state")
-        failed_rgw_pods = []
         respawned_rgw_pods = get_rgw_pods()
-        for rgw_pod in respawned_rgw_pods:
-            logger.debug(f"Checking RGW pod: {rgw_pod.name}")
-            if not handle_multi_attach_error(rgw_pod, timeout=600):
-                logger.error(f"RGW pod {rgw_pod.name} failed to reach running state")
-                failed_rgw_pods.append(rgw_pod.name)
+        failed_rgw_pods = verify_pods_running(
+            respawned_rgw_pods, pod_type="RGW", timeout=600
+        )
 
         if failed_rgw_pods:
-            logger.error(
-                f"RGW recovery failed: {len(failed_rgw_pods)} RGW pods not running: {failed_rgw_pods}"
-            )
             raise AssertionError(f"RGW pod recovery failed: {failed_rgw_pods}")
-
-        logger.info(
-            f"RGW pods recovery completed: all {len(respawned_rgw_pods)} pods running"
-        )
     else:
         logger.debug(
             f"Skipping RGW recovery on non-on-prem platform: {config.ENV_DATA['platform']}"
@@ -1416,19 +1548,13 @@ def ceph_fs_recovery():
         f"Found {len(mds_pods)} active MDS pods to verify "
         f"(filtered out {len(all_mds_pods) - len(mds_pods)} terminating pods)"
     )
-    failed_mds_pods = []
-    for mds_pod in mds_pods:
-        logger.debug(f"Checking MDS pod: {mds_pod.name}")
-        if not handle_multi_attach_error(mds_pod, timeout=600):
-            logger.warning(f"MDS pod {mds_pod.name} did not reach running state")
-            failed_mds_pods.append(mds_pod.name)
+
+    failed_mds_pods = verify_pods_running(mds_pods, pod_type="MDS", timeout=600)
 
     if failed_mds_pods:
         logger.warning(
             f"{len(failed_mds_pods)} MDS pods did not reach running state: {failed_mds_pods}"
         )
-    else:
-        logger.info(f"All {len(mds_pods)} MDS pods are running after CephFS recovery")
 
 
 def get_spun_dc_pods(pod_list):
