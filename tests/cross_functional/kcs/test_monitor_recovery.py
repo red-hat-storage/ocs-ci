@@ -1400,9 +1400,22 @@ def ceph_fs_recovery():
 
     replace_mds_deployments()
 
+    logger.info(
+        "Waiting 3 minutes for old MDS pods to terminate after deployment replacement"
+    )
+    time.sleep(180)
+
     logger.info("Verifying MDS pods reach running state after CephFS recovery")
-    mds_pods = get_mds_pods()
-    logger.info(f"Found {len(mds_pods)} MDS pods to verify")
+    all_mds_pods = get_mds_pods()
+    mds_pods = [
+        pod
+        for pod in all_mds_pods
+        if not pod.get().get("metadata", {}).get("deletionTimestamp")
+    ]
+    logger.info(
+        f"Found {len(mds_pods)} active MDS pods to verify "
+        f"(filtered out {len(all_mds_pods) - len(mds_pods)} terminating pods)"
+    )
     failed_mds_pods = []
     for mds_pod in mds_pods:
         logger.debug(f"Checking MDS pod: {mds_pod.name}")
