@@ -1,0 +1,5 @@
+ENV_DATA:
+  submariner_source: "downstream"
+  submariner_release_type: "released"
+  submariner_channel: ""
+  subctl_version: "subctl-rhel9:v0.21"
