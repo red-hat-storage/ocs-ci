@@ -914,7 +914,10 @@ class Deployment(object):
             )
         config.switch_ctx(restore_index)
 
-        create_dr_policy_ui(minio_endpoints)
+        if config.ENV_DATA.get("skip_drpolicy"):
+            logger.info("Skipping DRPolicy creation (skip_drpolicy=true)")
+        else:
+            create_dr_policy_ui(minio_endpoints)
 
         logger.info("Agnostic DR deployment completed successfully")
 

@@ -953,7 +953,7 @@ class BusyBox_AppSet(DRWorkload):
         self.check_pod_pvc_status(skip_replication_resources=skip_replication_resources)
         config.switch_acm_ctx()
         appset_resource_name = (
-            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
+            self._get_applicationset_name() + "-" + self.preferred_primary_cluster
         )
 
         if self.appset_model == "pull":
@@ -1593,6 +1593,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             vrg_name (str): Name of vrg
 
         """
+        agnostic_dr = any(c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count,
@@ -1600,6 +1601,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.workload_namespace,
             discovered_apps=True,
             vrg_name=vrg_name or self.discovered_apps_placement_name,
+            skip_replication_resources=agnostic_dr,
         )
 
     def create_recipe_with_checkhooks(self):
@@ -2148,7 +2150,8 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         Verify cnv workload deployment
 
         """
-        self.check_pod_pvc_status(skip_replication_resources=False)
+        agnostic_dr = any(c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters)
+        self.check_pod_pvc_status(skip_replication_resources=agnostic_dr)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """

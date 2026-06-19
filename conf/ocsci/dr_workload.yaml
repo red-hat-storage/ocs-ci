@@ -391,4 +391,35 @@ ENV_DATA:
     }
   ]
 
+  dr_workload_appset_agnostic_dr: [
+    { name: "agnostic-busybox-1", workload_dir: "rdr/agnostic-dr/busybox/appset/appset-busybox-1.yaml",
+      dr_workload_app_placement_name: "busybox-1-placement",
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app1_agnostic_dr'}, pod_count: 3, pvc_count: 3,
+      workload_path: "rdr/agnostic-dr/busybox/workloads/app-busybox-1"
+    },
+  ]
+
+  dr_cnv_workload_appset_agnostic_dr: [
+    { name: "vm-appset-pull-1", appset_model: "pull",
+      workload_dir: "rdr/agnostic-dr/cnv-workload/appset/vm-appset-pull-1",
+      dr_workload_app_placement_name: "vm-appset-pull-1-placement",
+      vm_name: "vm-workload-1", vm_secret: "vm-secret-1", vm_username: "cirros",
+      dr_workload_app_pvc_selector: { 'appname': 'kubevirt' },
+      pod_count: 1, pvc_count: 1,
+    },
+  ]
+
+  dr_cnv_discovered_apps_agnostic_dr: [
+    { name: "vm-agnostic-disc-1",
+      workload_dir: "rdr/agnostic-dr/cnv-workload/vm-workload-1",
+      pod_count: 1, pvc_count: 1,
+      dr_workload_app_pod_selector_key: "appname",
+      dr_workload_app_pod_selector_value: "kubevirt",
+      dr_workload_app_pvc_selector_key: "appname",
+      dr_workload_app_pvc_selector_value: "kubevirt",
+      dr_workload_app_placement_name: "vm-agnostic-disc-1",
+      vm_name: "vm-workload-1", vm_secret: "vm-secret-1", vm_username: "cirros",
+    },
+  ]
+
   # dr_policy_name: PLACEHOLDER

@@ -8288,6 +8288,10 @@ def cnv_dr_workload(request):
         for workload_type, data_key, num_of_vm in workload_types[vm_type]:
             for index in range(num_of_vm):
                 workload_details = ocsci_config.ENV_DATA[data_key][index]
+                placement_name = workload_details["dr_workload_app_placement_name"]
+                if agnostic_dr:
+                    run_id = str(ocsci_config.RUN["run_id"])[-6:]
+                    placement_name = f"{placement_name}-{run_id}"
                 workload = CnvWorkload(
                     workload_type=workload_type,
                     workload_dir=workload_details["workload_dir"],
@@ -8297,9 +8301,7 @@ def cnv_dr_workload(request):
                     workload_name=workload_details["name"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
-                    workload_placement_name=workload_details[
-                        "dr_workload_app_placement_name"
-                    ],
+                    workload_placement_name=placement_name,
                     workload_pvc_selector=workload_details[
                         "dr_workload_app_pvc_selector"
                     ],
@@ -8322,6 +8324,12 @@ def cnv_dr_workload(request):
         return instances
 
     def teardown():
+        agnostic_dr_skip = any(
+            c.ENV_DATA.get("agnostic_dr", False) for c in ocsci_config.clusters
+        )
+        if agnostic_dr_skip:
+            log.info("Skipping CNV workload teardown for agnostic DR")
+            return
         for instance in instances:
             try:
                 instance.delete_workload()

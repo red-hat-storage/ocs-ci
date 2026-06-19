@@ -302,6 +302,7 @@ def relocate(
     multi_ns=False,
     workload_instances_shared=None,
     vm_auto_cleanup=False,
+    timeout=300,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -318,6 +319,7 @@ def relocate(
         multi_ns (bool): Multi Namespace
         workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
         vm_auto_cleanup (bool): If true, cleanup will not be initiated after relocate action, False otherwise.
+        timeout (int): Timeout in seconds to wait for Relocated phase (default 300).
 
     """
     restore_index = config.cur_index
@@ -352,7 +354,7 @@ def relocate(
     relocate_condition = constants.STATUS_RELOCATED
     if discovered_apps:
         relocate_condition = constants.STATUS_RELOCATING
-    drpc_obj.wait_for_phase(relocate_condition)
+    drpc_obj.wait_for_phase(relocate_condition, timeout=timeout)
 
     if multi_ns:
         logger.info("Doing Cleanup Operations")
