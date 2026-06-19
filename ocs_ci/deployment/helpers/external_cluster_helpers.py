@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import json
 import logging
 import re
+import shlex
 import tempfile
 import uuid
 import os
@@ -407,12 +408,22 @@ class ExternalCluster(object):
             str: PEM-encoded certificate
 
         Raises:
-            ExternalClusterExporterRunFailed: If certificate fetch fails
+            ExternalClusterExporterRunFailed: If certificate fetch fails or endpoint format is invalid
 
         """
+        # Validate RGW endpoint format to prevent command injection
+        # Expected format: host:port or [ipv6]:port
+        endpoint_pattern = r"^\[?[A-Za-z0-9:._-]+\]?:\d{1,5}$"
+        if not re.fullmatch(endpoint_pattern, rgw_endpoint):
+            raise ExternalClusterExporterRunFailed(
+                f"Invalid RGW endpoint format: {rgw_endpoint}. "
+                f"Expected format: 'host:port' or '[ipv6]:port'"
+            )
+
         # Use openssl s_client to fetch the server certificate
+        # Use shlex.quote() to safely escape the endpoint parameter
         cmd = (
-            f"echo | openssl s_client -connect {rgw_endpoint} -showcerts 2>/dev/null | "
+            f"echo | openssl s_client -connect {shlex.quote(rgw_endpoint)} -showcerts 2>/dev/null | "
             f"openssl x509 -outform PEM"
         )
 
@@ -1728,9 +1739,7 @@ def get_and_apply_rgw_cert_ca(apply=True):
                 "Could not determine Ceph version, falling back to rgw_cert_ca URL"
             )
         else:
-            logger.info(
-                f"Ceph version {ceph_version} < 18.0, using rgw_cert_ca URL"
-            )
+            logger.info(f"Ceph version {ceph_version} < 18.0, using rgw_cert_ca URL")
         download_file(
             config.EXTERNAL_MODE["rgw_cert_ca"],
             rgw_cert_ca_path,
