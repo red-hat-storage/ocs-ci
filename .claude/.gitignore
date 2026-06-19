@@ -1,3 +1,7 @@
 # Z-stream agent run outputs (logs, issue JSON per run)
 agents/zstream/run_record/*
 !agents/zstream/run_record/.gitkeep
+
+# Shared vector DB local storage (Qdrant data, manifest)
+vectorDB/data/*
+!vectorDB/data/.gitkeep
