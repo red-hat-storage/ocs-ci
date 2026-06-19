@@ -1394,18 +1394,15 @@ def wait_for_all_resources_deletion(
                 resource_name=pod_obj.name, timeout=timeout, sleep=5
             )
 
-    check_state = not workload_cleanup
-    wait_for_replication_resources_deletion(
-        namespace,
-        timeout,
-        check_state,
-        discovered_apps,
-        vrg_name,
-        skip_vrg_check,
-        workload_cleanup=workload_cleanup,
-    )
+    agnostic_dr = any(c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters)
+    if not agnostic_dr:
+        check_state = not workload_cleanup
+        wait_for_replication_resources_deletion(
+            namespace, timeout, check_state, discovered_apps, vrg_name, skip_vrg_check
+        )
 
-    if workload_cleanup or "cephfs" not in namespace:
+    agnostic_dr = any(c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters)
+    if not agnostic_dr and (workload_cleanup or "cephfs" not in namespace):
         logger.info("Waiting for all PVCs to be deleted")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
 
@@ -1414,7 +1411,7 @@ def wait_for_all_resources_deletion(
                 resource_name=pvc_obj.name, timeout=timeout, sleep=5
             )
 
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr" and not agnostic_dr:
         if workload_cleanup or "cephfs" not in namespace:
             logger.info("Waiting for all PVs to be deleted")
             wait_for_resource_count(
@@ -1522,6 +1519,14 @@ def get_backend_volumes_for_pvcs(namespace):
                 constants.CUSTOM_CEPHFS_STORAGECLASS,
             ]:
                 backend_volume = pvc_obj.get_cephfs_subvolume_name
+            else:
+                logger.info(
+                    "Skipping PVC '%s' with StorageClass '%s'"
+                    " (no Ceph backend volume)",
+                    pvc_obj.name,
+                    pvc_obj.backed_sc,
+                )
+                continue
 
             backend_volumes.append(backend_volume)
 
@@ -1701,7 +1706,7 @@ def get_all_drpolicy():
 _ramen_hub_pod_bounced = False
 
 
-@retry(UnexpectedBehaviour, tries=10, delay=30, backoff=2, max_delay=120)
+@retry(UnexpectedBehaviour, tries=7, delay=10, backoff=2)
 def validate_drpolicy_grouping(drpolicy_name=None):
     """
     Validate DRPolicy configuration for CG behavior.
