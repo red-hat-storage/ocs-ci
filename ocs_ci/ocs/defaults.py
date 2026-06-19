@@ -183,3 +183,29 @@ HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 2
 HYPERSHIFT_MEMORY_DEFAULT = "12Gi"
 HYPERSHIFT_CPU_CORES_DEFAULT = 6
 HOSTED_ODF_REGISTRY_DEFAULT = "quay.io/rhceph-dev/ocs-registry"
+
+ocp_to_acm_unreleased_mapping = {
+    "4.14": False,
+    "4.15": False,
+    "4.16": False,
+    "4.17": False,
+    "4.18": False,
+    "4.19": False,
+    "4.20": False,
+    "4.21": False,
+    "4.22": True,
+    "4.23": True,
+}
+
+ocp_to_submariner_unreleased_mapping = {
+    "4.14": False,
+    "4.15": False,
+    "4.16": False,
+    "4.17": False,
+    "4.18": False,
+    "4.19": False,
+    "4.20": False,
+    "4.21": False,
+    "4.22": False,
+    "4.23": True,
+}
