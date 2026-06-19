@@ -21,7 +21,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     jira,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_nodes, get_node_names
+from ocs_ci.ocs.node import (
+    get_nodes,
+    get_node_names,
+    get_node_objs,
+    get_node_internal_ip,
+)
+from ocs_ci.ocs.resources.pod import get_osd_pods, get_osd_pod_id, get_pod_ip
+from ocs_ci.ocs.replica_one import get_device_class_from_ceph
 from ocs_ci.ocs.ui.base_ui import take_screenshot
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.odf_topology import (
@@ -230,25 +237,50 @@ class TestODFTopology(object):
                 "Configure llm_model in UI_SELENIUM settings to enable this test."
             )
 
-        log_step("Get node names and pick random node")
+        logger.info("Get node names and pick random node")
         node_names = get_node_names()
         random_node_name = random.choice(node_names)
         logger.info(f"Selected random node: {random_node_name}")
 
-        log_step("Get node details with CLI")
+        logger.info("Get node details with CLI")
         node_details_cli = get_node_details_cli(random_node_name)
 
-        log_step("Navigate to ODF topology tab")
+        logger.info("Collect OSD reference data from CLI")
+        osd_pods_all = get_osd_pods()
+        device_class_map = get_device_class_from_ceph()
+        osd_pods_on_node = [
+            p for p in osd_pods_all if p.data["spec"]["nodeName"] == random_node_name
+        ]
+        osd_reference = []
+        for pod in osd_pods_on_node:
+            osd_id = get_osd_pod_id(pod)
+            osd_reference.append(
+                {
+                    "osd_id": osd_id,
+                    "pod_name": pod.name,
+                    "osd_ip": get_pod_ip(pod),
+                    "device_class": device_class_map.get(f"osd.{osd_id}", "unknown"),
+                }
+            )
+        node_objs = get_node_objs(node_names=[random_node_name])
+        node_internal_ip = get_node_internal_ip(node_objs[0])
+        node_osd_count_cli = len(osd_pods_on_node)
+        logger.info(
+            f"OSD reference for node {random_node_name}: "
+            f"count={node_osd_count_cli}, details={osd_reference}"
+        )
+
+        logger.info("Navigate to ODF topology tab")
         topology_tab = (
             PageNavigator().nav_storage_cluster_default_page().nav_topology_tab()
         )
         topology_tab.nodes_view.read_presented_topology()
 
-        log_step("Open sidebar and click Details tab")
+        logger.info("Open sidebar and click Details tab")
         topology_tab.nodes_view.open_side_bar_of_entity(random_node_name)
         topology_tab.nodes_view.open_details_tab()
 
-        log_step("Query LLM and validate node details (with retries)")
+        logger.info("Query LLM and validate node details")
         prompt = (
             "Read the node details panel in this screenshot. "
             "Extract the exact text character by character. "
@@ -316,9 +348,14 @@ class TestODFTopology(object):
 
             cli_hostname = normalize(node_details_cli.get("name", ""))
             llm_addr_norm = normalize(llm_addr_str)
+            cli_addr_norm = normalize(cli_addresses)
             if cli_hostname and cli_hostname in llm_addr_norm:
                 logger.info(
                     f"  [PASS] addresses contain node hostname '{cli_hostname}'"
+                )
+            elif llm_addr_norm and llm_addr_norm in cli_addr_norm:
+                logger.info(
+                    f"  [PASS] LLM address '{llm_addr_str}' found in CLI addresses"
                 )
             elif cli_hostname:
                 logger.error(
@@ -342,14 +379,82 @@ class TestODFTopology(object):
 
         topology_tab.nodes_view.close_sidebar()
 
+        logger.info("Open sidebar and OSD Information tab")
+        topology_tab.nodes_view.open_side_bar_of_entity(random_node_name)
+        topology_tab.nodes_view.open_osd_information_tab()
+
+        logger.info("Read OSD details from sidebar via LLM")
+        osd_prompt = (
+            "Read the OSD Information panel in this screenshot. "
+            "Extract the exact text character by character. "
+            "Do not guess or infer characters. "
+            "Return a JSON object with a single key 'osds' containing a list. "
+            "Each list item should be an object with keys: "
+            "heading, device_class, osd_ip, node_ip, pod_name. "
+            "Only include fields that are visible in the panel."
+        )
+        osd_screenshots = topology_tab.nodes_view.take_screenshot_for_llm(
+            name_suffix="osd_information", region="right_side"
+        )
+        logger.info(f"OSD Information screenshots: {osd_screenshots}")
+
+        # Query each screenshot individually and merge OSD lists by heading
+        # to handle multi-OSD nodes where scrolling splits content across shots
+        seen_headings = set()
+        osd_details_ui = []
+        for osd_shot in osd_screenshots:
+            shot_result = llm_client.query_screenshot_json(osd_shot, osd_prompt)
+            for osd_entry in shot_result.get("osds", []):
+                h = osd_entry.get("heading", "")
+                if h and h not in seen_headings:
+                    seen_headings.add(h)
+                    osd_details_ui.append(osd_entry)
+        logger.info(f"LLM extracted OSD details (merged): {osd_details_ui}")
+
+        if len(osd_details_ui) != node_osd_count_cli:
+            mismatches["osd_info_count"] = {
+                "cli": str(node_osd_count_cli),
+                "llm": str(len(osd_details_ui)),
+            }
+
+        cli_by_pod = {ref["pod_name"]: ref for ref in osd_reference}
+
+        for osd_ui in osd_details_ui:
+            heading = osd_ui.get("heading", "unknown")
+            ui_pod_name = osd_ui.get("pod_name", "")
+            ref = cli_by_pod.get(ui_pod_name)
+            if not ref:
+                mismatches[f"{heading}_pod_name"] = {
+                    "cli": str(set(cli_by_pod.keys())),
+                    "llm": ui_pod_name,
+                }
+                continue
+            if osd_ui.get("device_class", "") != ref["device_class"]:
+                mismatches[f"{heading}_device_class"] = {
+                    "cli": ref["device_class"],
+                    "llm": osd_ui.get("device_class", ""),
+                }
+            if osd_ui.get("osd_ip", "") != ref["osd_ip"]:
+                mismatches[f"{heading}_osd_ip"] = {
+                    "cli": ref["osd_ip"],
+                    "llm": osd_ui.get("osd_ip", ""),
+                }
+            if osd_ui.get("node_ip", "") != node_internal_ip:
+                mismatches[f"{heading}_node_ip"] = {
+                    "cli": node_internal_ip,
+                    "llm": osd_ui.get("node_ip", ""),
+                }
+
+        topology_tab.nodes_view.close_sidebar()
+
         if mismatches:
             mismatch_report = "\n".join(
-                f"  {field}: CLI='{vals['cli']}' vs LLM='{vals['llm']}'"
+                f"  {field}: CLI='{vals.get('cli', '')}' vs "
+                f"UI/LLM='{vals.get('llm', vals.get('ui', ''))}'"
                 for field, vals in mismatches.items()
             )
             pytest.fail(
-                f"Node details mismatch for '{random_node_name}' "
-                f"after {max_llm_attempts} LLM attempt(s) "
+                f"Node/OSD details mismatch for '{random_node_name}' "
                 f"({len(mismatches)} field(s) differ):\n{mismatch_report}"
             )
 

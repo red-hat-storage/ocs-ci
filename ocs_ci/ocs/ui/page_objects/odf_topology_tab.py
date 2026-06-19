@@ -308,6 +308,15 @@ class TopologySidebar(BaseUI):
         self.do_click(self.topology_loc["observe_sidebar_tab"], enable_screenshot=True)
         logger.info("Observe tab is open")
 
+    def open_osd_information_tab(self):
+        """
+        Opens the OSD Information tab in the sidebar.
+        """
+        self.do_click(
+            self.topology_loc["osd_information_sidebar_tab"], enable_screenshot=True
+        )
+        logger.info("OSD Information tab is open")
+
     def get_number_of_alerts(self):
         """
         Retrieves the number of alerts categorized by severity level.
