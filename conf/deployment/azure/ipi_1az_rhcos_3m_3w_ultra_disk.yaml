@@ -7,14 +7,14 @@ DEPLOYMENT:
   openshift_install_timeout: 4800
   allow_lower_instance_requirements: false
   # Enable Ultra SSD capability on worker nodes
-  azure_ultra_ssd_enabled: true
+  # azure_ultra_ssd_enabled: true
 ENV_DATA:
   platform: 'azure'
   deployment_type: 'ipi'
   region: 'centralus'
   azure_base_domain_resource_group_name: 'odfqe'
-  # azure_performance_plus: true
-  # azure_performance_plus_disk_type: 'UltraSSD_LRS'
+  azure_performance_plus: true
+  azure_performance_plus_disk_type: 'PremiumV2_LRS'
   # Enable Ultra SSD capability on worker nodes (required for Ultra Disk)
   # azure_ultra_ssd_enabled: true
   worker_availability_zones:
@@ -24,7 +24,7 @@ ENV_DATA:
   worker_replicas: 3
   master_replicas: 3
   master_instance_type: 'Standard_D8s_v3'
-  worker_instance_type: 'Standard_E8bds_v5'
+  worker_instance_type: 'Standard_E16bs_v5'
 REPORTING:
   polarion:
     deployment_id: 'OCS-ULTRA'
