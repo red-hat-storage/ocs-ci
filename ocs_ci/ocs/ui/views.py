@@ -76,6 +76,11 @@ login_4_19 = {
     "click_login": ("co-login-button", By.ID),
 }
 
+# Client cluster OAuth login locators (HCI client clusters only)
+login_client_oauth = {
+    "click_login": ("//button[@type='submit']", By.XPATH),
+}
+
 deployment = {
     "click_install_ocs": (
         'a[data-test-id="operator-install-btn"], a[data-test="catalog-details-modal-cta"]',
@@ -136,8 +141,8 @@ deployment = {
     ),
     "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
     "choose_local_storage_version": (
-        'a[data-test="local-storage-operator-redhat-operators-openshift-marketplace"]',
-        By.CSS_SELECTOR,
+        "//button[@aria-labelledby='local-storage-operator-{}-openshift-marketplace']",
+        By.XPATH,
     ),
     "click_install_lso": (
         'a[data-test-id="operator-install-btn"], a[data-test="catalog-details-modal-cta"]',
@@ -145,10 +150,6 @@ deployment = {
     ),
     "yes": ("//*[contains(text(), 'Yes')]", By.XPATH),
     "next": ("//*[contains(text(), 'Next')]", By.XPATH),
-    "choose_local_storage_version_non_ga": (
-        'a[data-test="local-storage-operator-optional-operators-openshift-marketplace"]',
-        By.CSS_SELECTOR,
-    ),
     "enable_in_transit_encryption": (
         'input[data-test="in-transit-encryption-checkbox"]',
         By.CSS_SELECTOR,
@@ -227,9 +228,30 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
-    "create_storage_system": ("//button[text()='Create storage system']", By.XPATH),
+    "create_storage_system": (
+        "//button[.//span[text()='Create storage system']]",
+        By.XPATH,
+    ),
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
-    "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
+    "refresh_popup": (
+        "//button[normalize-space()='Refresh web console']",
+        By.XPATH,
+    ),
+    "view_installed_operators_btn": (
+        "a[data-test='view-installed-operators-btn']",
+        By.CSS_SELECTOR,
+    ),
+    "dismiss_welcome_modal": (
+        "button[aria-label='Close'], "
+        "[class*='c-modal-box'] button[class*='m-plain'], "
+        "[class*='l-bullseye'] button[class*='m-plain']",
+        By.CSS_SELECTOR,
+    ),
+    "odf_operator_row_succeeded": (
+        "//tr[.//a[contains(@data-test-operator-row,'{}')]]"
+        "//span[@data-test='status-text' and contains(text(),'Succeeded')]",
+        By.XPATH,
+    ),
     "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
     "expand_advanced_mode": (
         'button[class*="c-select__toggle"]',
@@ -360,6 +382,105 @@ deployment_4_21 = {
     ),
 }
 
+deployment_4_22 = {
+    "enable_forceful_deployment": (
+        "input#enable-forceful-deployment",
+        By.CSS_SELECTOR,
+    ),
+    "forceful_deployment_confirmation": (
+        "input#forceful-deployment-confirmation",
+        By.CSS_SELECTOR,
+    ),
+    "next_button_element": (
+        "//button[normalize-space(.)='Next']",
+        By.XPATH,
+    ),
+    "use_erasure_coding": ("input#use-erasure-coding", By.CSS_SELECTOR),
+    # Perspective switcher for ACM hub cluster (PF v6)
+    "perspective_switcher_toggle": (
+        'button[data-test-id="perspective-switcher-toggle"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_core_platform": (
+        "//h2[normalize-space()='Core platform']"
+        "/ancestor::button[contains(@class, 'c-menu__item')]",
+        By.XPATH,
+    ),
+    # PF v6 sidebar navigation locators
+    "operators_tab": (
+        "//*[contains(@class, 'nav__link') and " "normalize-space()='Operators']",
+        By.XPATH,
+    ),
+    "installed_operators_tab": (
+        "//*[contains(@class, 'nav__link') and "
+        "normalize-space()='Installed Operators']",
+        By.XPATH,
+    ),
+    # MCO operator locators for rebranding validation
+    "mco_operator_row": (
+        "//a[@data-test-operator-row='DF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "mco_operator_row_old_name": (
+        "//a[@data-test-operator-row='ODF Multicluster Orchestrator']",
+        By.XPATH,
+    ),
+    "operator_display_name": (
+        "//h1[contains(@class, 'co-clusterserviceversion-details__name')]",
+        By.XPATH,
+    ),
+    "operator_provider": (
+        "//span[contains(text(), 'Provided by')]/following-sibling::span",
+        By.XPATH,
+    ),
+    "operator_description": (
+        "//h5[normalize-space()='Description']/following-sibling::p",
+        By.XPATH,
+    ),
+    "operator_installed_status": (
+        "//span[contains(@class, 'co-icon-and-text')][contains(text(), 'Installed')]",
+        By.XPATH,
+    ),
+    "operator_capability_basic_install": (
+        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
+        "//dt[text()='Capability Level']/following-sibling::dd"
+        "//span[contains(text(), 'Basic Install')]",
+        By.XPATH,
+    ),
+    "operator_capability_seamless_upgrades": (
+        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
+        "//dt[text()='Capability Level']/following-sibling::dd"
+        "//span[contains(text(), 'Seamless Upgrades')]",
+        By.XPATH,
+    ),
+    "operator_channel": (
+        "//dt[text()='Channel']/following-sibling::dd",
+        By.XPATH,
+    ),
+    "operator_installed_version": (
+        "//dt[text()='Installed Version']/following-sibling::dd",
+        By.XPATH,
+    ),
+    "ec_scheme_table_rows": (
+        "//table[@aria-label='Erasure coding scheme selection']//tbody/tr",
+        By.XPATH,
+    ),
+    "ec_scheme_radio": (
+        "//tr[.//td[@data-label='Scheme (k+m)' and "
+        "starts-with(normalize-space(.), '{}')]]"
+        "//input[@name='radioGroup']",
+        By.XPATH,
+    ),
+    "_ec_row_scheme_cell": (
+        ".//td[@data-label='Scheme (k+m)']",
+        By.XPATH,
+    ),
+    "_ec_row_effective_capacity_cell": (
+        ".//td[@data-label='Effective capacity']",
+        By.XPATH,
+    ),
+}
+
 generic_locators = {
     "project_selector": (
         "//span[contains(@class, 'c-menu-toggle__text') and contains(text(), 'Project:')]",
@@ -408,8 +529,14 @@ generic_locators = {
         By.CSS_SELECTOR,
     ),
     "confirm_dilog_input": ("//input[@placeholder='{}']", By.XPATH),
-    "confirm_delete_resource": ("//button[contains(text(), 'Delete')]", By.XPATH),
-    "cancel_delete_resource": ("//button[contains(text(), 'Cancel')]", By.XPATH),
+    "confirm_delete_resource": (
+        "//button[contains(normalize-space(), 'Delete')]",
+        By.XPATH,
+    ),
+    "cancel_delete_resource": (
+        "//button[contains(normalize-space(), 'Cancel')]",
+        By.XPATH,
+    ),
     "close_dialog": ("button[aria-label='Close']", By.XPATH),
     "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
     "ocs_operator": ('//h1[text()="OpenShift Container Storage"]', By.XPATH),
@@ -434,7 +561,7 @@ generic_locators = {
     ),
     "searchbar-dropdown": (
         "//div[contains(@class, 'toolbar__item')]//span[contains(@class, 'dropdown__toggle-text')] | "
-        "//div[contains(@class, 'input-group') and contains(@class, 'co-filter-group')]//button/span",
+        "//div[contains(@class, 'input-group')]//button/span",
         By.XPATH,
     ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
@@ -442,7 +569,8 @@ generic_locators = {
     "searchbar-select-label": ("//button[@id='LABEL-link']", By.XPATH),
     "searchbar_input": (
         "//input[@data-test-id='item-filter'] | "
-        "//input[@placeholder='Search by name...']",
+        "//input[@placeholder='Search by name...'] | "
+        "//input[@placeholder='Filter by Name']",
         By.XPATH,
     ),
     "resource_from_list_by_name": (
@@ -667,11 +795,18 @@ pvc = {
     "search_pvc": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "clone_pvc": ("button[data-test-action='Clone PVC']", By.CSS_SELECTOR),
     "clone_name_input": ("//input[@aria-label='Clone PVC']", By.XPATH),
+    "clone-btn": (
+        'button[form="clone-pvc-form"], button[data-test="confirm-action"], #confirm-action',
+        By.CSS_SELECTOR,
+    ),
     "search-project": ("input[placeholder='Select project...']", By.CSS_SELECTOR),
     "test-project-link": ("//a[normalize-space()='{}']", By.XPATH),
     "expand_pvc": ("button[data-test-action='Expand PVC']", By.CSS_SELECTOR),
     "resize-value": ("//input[@name='requestSizeValue']", By.XPATH),
-    "expand-btn": ("#confirm-action", By.CSS_SELECTOR),
+    "expand-btn": (
+        'button[form="expand-pvc-form"], button[data-test="confirm-action"], #confirm-action',
+        By.CSS_SELECTOR,
+    ),
     "pvc-status": (
         "dd[data-test-id='pvc-status'] span[data-test='status-text']",
         By.CSS_SELECTOR,
@@ -1514,6 +1649,18 @@ acm_configuration_4_21 = {
     ),
 }
 
+acm_configuration_4_22 = {
+    # OCP 4.22 uses PF6 UI: local cluster view shows "Core platform" h2 in the sidebar nav
+    "local-cluster_dropdown": (
+        "//h2[text()='local-cluster'] | "
+        "//span[contains(@class, 'c-menu-toggle__text') "
+        "and text()='local-cluster']/.. | "
+        "//h2[normalize-space()='Fleet Management'] | "
+        "//h2[normalize-space()='Core platform']",
+        By.XPATH,
+    ),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -1542,7 +1689,7 @@ add_capacity = {
     "gp2-csi_sc": ('a[id="gp2-csi-link"]', By.CSS_SELECTOR),
     "gp3-csi_sc": ('a[id="gp3-csi-link"]', By.CSS_SELECTOR),
     "standard_sc": ('a[id="standard-link"]', By.CSS_SELECTOR),
-    "localblock_sc": ('a[id="localblock-link"]', By.CSS_SELECTOR),
+    "localblock_sc": ("a[id='localblock-link'], #localblock-link", By.CSS_SELECTOR),
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
@@ -1582,13 +1729,15 @@ add_capacity_4_12 = {
 
 block_pool_4_12 = {
     "actions_inside_pool": (
-        "//span[text()='Actions']/.. | //button[@data-test='kebab-button']",
+        "//button[@data-test='storage-pool-kebab-button'] | //button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
-        By.XPATH,
+        "li[data-test-action='Delete Pool'] button,"
+        " li[data-test-action='Delete BlockPool'] button",
+        By.CSS_SELECTOR,
     ),
+    "title_pool_details_page": ("//title[@data-telemetry='Details']", By.XPATH),
 }
 block_pool_4_13 = {
     "second_select_replica_2": ("//div[text()='2-way Replication']/..", By.XPATH),
@@ -1682,8 +1831,9 @@ block_pool = {
     ),
     "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
-        By.XPATH,
+        "li[data-test-action='Delete Pool'] button,"
+        " li[data-test-action='Delete BlockPool'] button",
+        By.CSS_SELECTOR,
     ),
     "status_text_in_pool": (
         "//div[contains(@class, '-c-card__body')]//span[@data-test='status-text']",
@@ -1855,7 +2005,7 @@ validation = {
         By.CSS_SELECTOR,
     ),
     "input_value_validator_icon": (
-        "//button[@aria-label='Validation']/child::*[contains(@class, 'c-icon')]",
+        "//button[@aria-label='Validation']",
         By.XPATH,
     ),
     "input_validation_popup_container": (
@@ -2327,6 +2477,27 @@ validation_4_21 = {
         "//span[contains(text(),'Silence alert')]",
         By.XPATH,
     ),
+    "silence_type_indefinite_radio": (
+        "//input[@id='silence-type-indefinite']",
+        By.XPATH,
+    ),
+    "filter_indefinite_checkbox": (
+        "//span[contains(@class,'c-menu__item-text')"
+        " and normalize-space()='Indefinite']/ancestor::label//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "all_checks": (
+        "//button[.//span[normalize-space()='All checks']]",
+        By.XPATH,
+    ),
+    "checks_list": (
+        "//div[contains(@class,'c-menu__content')]",
+        By.XPATH,
+    ),
+    "select_alert": (
+        "//input[@name='checkrow{}']",
+        By.XPATH,
+    ),
     "duration_input": (
         "//input[@name='duration']",
         By.XPATH,
@@ -2344,7 +2515,7 @@ validation_4_21 = {
         By.XPATH,
     ),
     "infra_health_checks": (
-        "//a[text()='View health checks']",
+        "//a[contains(normalize-space(.), 'View health checks')]",
         By.XPATH,
     ),
     # web element returns overall score with text like '66%'
@@ -2368,9 +2539,74 @@ validation_4_21 = {
     "issue_table_rows_locator": ("//table//tbody//tr", By.XPATH),
 }
 
+validation_4_22 = {
+    # OCP 4.22 uses PF6 UI. The "Requested capacity" dropdown button changed
+    # from a div with c-select to a button with c-menu-toggle.
+    "req_capacity_dropdown_selected": (
+        "//div[@id='breakdown-card-title']/following-sibling::*//*[contains(@class, 'c-select__toggle-text')] | "
+        "//button[contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')]"
+        "//span[contains(@class, 'c-menu-toggle__text')]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_btn_one": (
+        "//button[contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')] | "
+        "//div[contains(@class, 'select') and contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_list_option": (
+        "//button[contains(@class, 'c-select__menu-item') and contains(text(), '{0}')] | "
+        "//button[contains(@class, 'c-menu__item')]"
+        "[.//span[contains(@class, 'menu__item-text') and text()='{0}']]",
+        By.XPATH,
+    ),
+    "req_capacity_dropdown_namespace_input_select": (
+        "//button[@id='{0}-link'] | //li[@id='{0}-link']",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_card_title": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_metric_toggle": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::button[@aria-expanded][1]",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_metric_option": (
+        "//button[@role='option' and normalize-space(.)='{0}']",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_table_rows": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::div[contains(@class,'odf-loading-box')]"
+        "//table/tbody/tr",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_help_button": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::button[@aria-label='Help'"
+        " and contains(@class,'odf-field-level-help')][1]",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_popover_body": (
+        "//div[@role='dialog' and @aria-modal='true' and @aria-label='Help']",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_col_headers": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::div[contains(@class,'odf-loading-box')]"
+        "//table/thead/tr/th",
+        By.XPATH,
+    ),
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
-    "node_label": ("//*[contains(@class,'topology__node__label')]", By.XPATH),
+    "node_label": (
+        "//*[contains(@class,'topology__node__label')"
+        " and not(contains(@class,'topology__node__label__'))]",
+        By.XPATH,
+    ),
     # status is in class name of the node_status_axis one from pf-m-warning / pf-m-danger / pf-m-success
     "node_status_class_axis": (
         "//*[contains(@class,'topology__node__label')]//*[contains(text(), '{}')]"
@@ -2427,7 +2663,7 @@ topology = {
         By.XPATH,
     ),
     "close_sidebar": ("//button[@aria-label='Close']//*[name()='svg']", By.XPATH),
-    "back_btn": ("//div[@class='odf-topology__back-button']", By.XPATH),
+    "back_btn": ("//button[contains(@class, 'odf-topology__back-button')]", By.XPATH),
     "alerts_sidebar_tab": ("//span[normalize-space()='Alerts']", By.XPATH),
     "number_of_alerts": (
         "//span[normalize-space()='{}']/preceding-sibling::*//*[@data-test='status-text']",
@@ -2550,6 +2786,10 @@ topology = {
         "div[@class='row']//*[normalize-space()='Memory']/following-sibling::span",
         By.XPATH,
     ),
+    "osd_information_sidebar_tab": (
+        "//span[normalize-space()='OSD Information']",
+        By.XPATH,
+    ),
     "observe_sidebar_tab": ("//span[normalize-space()='Observe']", By.XPATH),
     "topology_search_bar": ("//input[@placeholder='Search...']", By.XPATH),
     "topology_search_bar_enter_arrow": ("//button[@aria-label='Search']", By.XPATH),
@@ -2587,7 +2827,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "storage_class_dropdown": (
-        "//button[@data-test='sc-dropdown']",
+        "//button[@data-test='sc-dropdown']| //button[@data-test='storage-class-dropdown']",
         By.XPATH,
     ),
     "storage_class_noobaa_option": (
@@ -2602,6 +2842,18 @@ bucket_tab = {
     "s3_bucket_name_input": (
         "[data-test='bucket-name']",
         By.CSS_SELECTOR,
+    ),
+    "s3_namespace_store_dropdown_toggle": (
+        "[data-test='nns-dropdown-toggle']",
+        By.CSS_SELECTOR,
+    ),
+    "s3_namespace_store_item": (
+        "//button[@id='{}']",
+        By.XPATH,
+    ),
+    "submit_button_s3": (
+        "//button[@id='create-s3-bucket-btn']",
+        By.XPATH,
     ),
     "submit_button_obc": (
         "button[data-test='obc-create'][type='submit']",
@@ -2624,7 +2876,7 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
     "submit_button_folder": (
-        "//button[contains(@class, 'm-primary')]",
+        "//footer//button[@type='button'][contains(@class, 'm-primary')]",
         By.XPATH,
     ),
     "upload_button": (
@@ -2690,11 +2942,12 @@ bucket_tab = {
         By.XPATH,
     ),
     "versioning_enable_confirm_button": (
-        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'm-primary') and text()='Enable']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class, 'm-primary') and text()='Enable'] | "
+        "//div[@role='dialog']//footer//button[normalize-space(.)='Enable']",
         By.XPATH,
     ),
     "versioning_cancel_confirm_button": (
-        "//div[contains(@class, 'c-modal-box')]//button[contains(@class,  'm-link') and text()='Cancel']",
+        "//div[contains(@class, 'c-modal-box')]//button[contains(@class,  'm-link') and normalize-space(.)='Cancel']",
         By.XPATH,
     ),
     "file_input_directory": (
@@ -2758,11 +3011,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "delete_version_confirm_button": (
-        "//button[contains(@class, 'm-danger') and contains(text(), 'Delete object')]",
+        "//button[contains(@class, 'm-danger') and contains(normalize-space(.), 'Delete object')]",
         By.XPATH,
     ),
     "delete_version_cancel_button": (
-        "//button[contains(@class, 'c-button') and contains(@class, 'm-link') and text()='Cancel']",
+        "//button[contains(@class, 'c-button') and contains(@class, 'm-link') and normalize-space(.)='Cancel']",
         By.XPATH,
     ),
     "version_row_checkboxes": (
@@ -2779,7 +3032,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "policy_editor_start_scratch": (
-        "//button[contains(normalize-space(), 'Start from scratch')]",
+        "//button[contains(normalize-space(), 'Start from scratch')] | "
+        "//button//span[contains(text(),'Start from scratch or use predefined policy config')]",
         By.XPATH,
     ),
     "edit_policy_button": (
@@ -2892,7 +3146,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "create_lifecycle_rule_button": (
-        "//button[text()='Create lifecycle rule']",
+        "//button[contains(normalize-space(),'Create lifecycle rule')]",
         By.XPATH,
     ),
     "lifecycle_rules_list": (
@@ -2904,7 +3158,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "rule_kebab_menu": (
-        "//tr[contains(., '{}')]//button[@data-ouia-component-type='PF5/MenuToggle']",
+        "//tr[contains(., '{}')]//button[contains(@data-ouia-component-type, 'MenuToggle')]",
         By.XPATH,
     ),
     "edit_rule_option": (
@@ -2966,15 +3220,15 @@ bucket_tab = {
         By.XPATH,
     ),
     "lifecycle_create_button": (
-        "//button[text()='Create' and contains(@class, 'pf-m-primary') and @aria-disabled='false']",
+        "//button[contains(normalize-space(),'Create') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_save_button": (
-        "//button[text()='Save' and contains(@class, 'pf-m-primary')]",
+        "//button[contains(normalize-space(),'Save') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_cancel_button": (
-        "//button[text()='Cancel']",
+        "//button[contains(normalize-space(),'Cancel')]",
         By.XPATH,
     ),
     # Current objects (Expiration) section
@@ -3052,13 +3306,107 @@ bucket_tab = {
         By.XPATH,
     ),
 }
+s3_vector_tab = {
+    # S3 Vector sub-tab within Buckets page
+    "s3_vector_tab_button": (
+        "//button[normalize-space()='S3 Vector']",
+        By.XPATH,
+    ),
+    # Vector bucket list
+    "vector_bucket_list_items": (
+        "//td[@data-label='Name']//a",
+        By.XPATH,
+    ),
+    "vector_bucket_link_by_name": (
+        "//td[@data-label='Name']//a[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    # OBC creation for vector bucket - bucket class selection
+    "obc_bucketclass_dropdown": (
+        "//button[@data-test='bc-dropdown']",
+        By.XPATH,
+    ),
+    "obc_bucketclass_input": (
+        'input[id="search-bar"]',
+        By.CSS_SELECTOR,
+    ),
+    # Vector index creation - on bucket detail page.
+    # Button text confirmed as "Create vector index" from s3VectorBucketOverview.js bundle.
+    # No data-test attribute on this button; text match is the only available selector.
+    "create_vector_index_button": (
+        "//button[normalize-space()='Create vector index']",
+        By.XPATH,
+    ),
+    "index_name_input": (
+        "//input[@data-test='vector-index-name']",
+        By.XPATH,
+    ),
+    "dimension_input": (
+        "//div[@id='vector-index-dimension-input']//input[@type='number']",
+        By.XPATH,
+    ),
+    "distance_metric_cosine": (
+        "//input[@id='distance-metric-cosine']",
+        By.XPATH,
+    ),
+    "distance_metric_euclidean": (
+        "//input[@id='distance-metric-euclidean']",
+        By.XPATH,
+    ),
+    "data_type_float32": (
+        "//input[@data-test='data-type-float32']",
+        By.XPATH,
+    ),
+    "create_index_submit_button": (
+        "//button[@data-test='create-vector-index']",
+        By.XPATH,
+    ),
+    # Index list on bucket detail page.
+    "index_list_items": (
+        "//td[@data-label='Name']//a",
+        By.XPATH,
+    ),
+    "index_link_by_name": (
+        "//td[@data-label='Name']//a[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    # Index detail page - info fields.
+    "index_detail_name": (
+        "//dt[normalize-space()='Name']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "index_detail_dimension": (
+        "//dt[normalize-space()='Dimension']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "index_detail_data_type": (
+        "//dt[normalize-space()='DataType']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "index_detail_distance_metric": (
+        "//dt[normalize-space()='Distance metric']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    # The index detail page has no "Vector bucket" description field; the bucket
+    # name appears only in the breadcrumb. breadcrumb-link-1 is a stable
+    # data-test-id attribute set by the ODF console BreadCrumbs component for the
+    # second breadcrumb item (Buckets / <bucket-name> / Vector index).
+    "index_detail_vector_bucket": (
+        "//a[@data-test-id='breadcrumb-link-1']",
+        By.XPATH,
+    ),
+    "obc_bucketclass_item": (
+        "//button[@id='{}-link']",
+        By.XPATH,
+    ),
+}
 locate_aws_regions = {
     "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
 }
 locate_noobaa_regions = {"regions_list": '//*[@id="read-only-cursor-text-area"]'}
 data_foundation_overview = {
-    "view_storage_link": ("//a[contains(text(),'View storage')]", By.XPATH),
-    "view_buckets_link": ("//a[contains(text(),'View buckets')]", By.XPATH),
+    "view_storage_link": ("//a[contains(normalize-space(.),'View storage')]", By.XPATH),
+    "view_buckets_link": ("//a[contains(normalize-space(.),'View buckets')]", By.XPATH),
     "used_capacity_legend": (
         "//*[name()='text' and @id='legend-labels-0']//*[name()='tspan' and contains(text(), 'Used:')]",
         By.XPATH,
@@ -3072,9 +3420,190 @@ data_foundation_overview = {
         By.XPATH,
     ),
 }
+external_systems = {
+    "connect_external_system": (
+        "//button[@data-test='configure-external-systems']",
+        By.XPATH,
+    ),
+    "connect_flash": (
+        "connect-flash-system",
+        By.ID,
+    ),
+    "connect_scale": (
+        "setup-scale-storage",
+        By.ID,
+    ),
+    "next_button": (
+        "//button[contains(text(), 'Next')]",
+        By.XPATH,
+    ),
+    "scale_name": (
+        "name",
+        By.ID,
+    ),
+    "selected_nodes": (
+        "use-selected-nodes",
+        By.ID,
+    ),
+    "mandatory_endpoit": (
+        "mandatory-endpoint-host",
+        By.ID,
+    ),
+    "mandatory_port": (
+        "mandatory-endpoint-port",
+        By.ID,
+    ),
+    "scale_username": (
+        "userName",
+        By.ID,
+    ),
+    "scale_password": (
+        "password",
+        By.ID,
+    ),
+    "filesystem_name": (
+        "fileSystemName",
+        By.ID,
+    ),
+    "connect_scale_final": (
+        "button[data-test='connect-scale-system']",
+        By.CSS_SELECTOR,
+    ),
+    "alert_description": (
+        "[class*='-c-alert__description']",
+        By.CSS_SELECTOR,
+    ),
+    "filter": (
+        "//input[@data-test='name-filter-input']",
+        By.XPATH,
+    ),
+    "actions_button": (
+        "//button[@data-test='kebab-button']",
+        By.XPATH,
+    ),
+    "add_filesystem": (
+        "ADD_REMOTE_FILE_SYSTEM",
+        By.ID,
+    ),
+    "filesystem_name_input": (
+        "input[name='remoteFileSystemName']",
+        By.CSS_SELECTOR,
+    ),
+    "add_button": (
+        "//footer//button[contains(text(), 'Add')]",
+        By.XPATH,
+    ),
+    "scale_link": (
+        "//a[contains(@href, '/odf/external-systems/scale')]",
+        By.XPATH,
+    ),
+    "filesystem_link": (
+        "//td/a[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "delete_filesystem": (
+        "Delete",
+        By.ID,
+    ),
+    "confirm_delete": (
+        "//button[@data-test='delete-action']",
+        By.XPATH,
+    ),
+    "scale_dashboard_link": (
+        "a[href*='scale.spectrum.ibm']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_operator_health": (
+        "div[data-item-id='Operator-health-item'] title",
+        By.CSS_SELECTOR,
+    ),
+    "scale_connection_health": (
+        "div[data-item-id='Connection-health-item'] title",
+        By.CSS_SELECTOR,
+    ),
+    "breadcrumb-link": (
+        "a[data-test-id='breadcrumb-link-0']",
+        By.CSS_SELECTOR,
+    ),
+}
 locators = {
+    "4.22": {
+        "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "login_client_oauth": login_client_oauth,
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
+        "generic": {**generic_locators, **generic_locators_4_19},
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+            **deployment_4_15,
+            **deployment_4_16,
+            **deployment_4_17,
+            **deployment_4_19,
+            **deployment_4_21,
+            **deployment_4_22,
+        },
+        "obc": {**obc, **obc_4_21},
+        "pvc": {
+            **pvc,
+            **pvc_4_7,
+            **pvc_4_8,
+            **pvc_4_9,
+            **pvc_4_12,
+            **pvc_4_14,
+            **pvc_4_19,
+            **pvc_4_21,
+        },
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+            **acm_configuration_4_14,
+            **acm_configuration_4_16,
+            **acm_configuration_4_18,
+            **acm_page_nav_419,
+            **acm_configuration_4_19,
+            **acm_page_nav_420,
+            **acm_configuration_4_20,
+            **acm_configuration_4_21,
+            **acm_configuration_4_22,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
+            **validation_4_13,
+            **validation_4_14,
+            **validation_4_17,
+            **validation_4_18,
+            **validation_4_20,
+            **validation_4_21,
+            **validation_4_22,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+        "topology": topology,
+        "mcg_stores": mcg_stores,
+        "alerting": alerting,
+        "bucket_tab": bucket_tab,
+        "s3_vector_tab": s3_vector_tab,
+        "external_systems": external_systems,
+        "data_foundation_overview": data_foundation_overview,
+        "attach_storage": attach_storage,
+    },
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "login_client_oauth": login_client_oauth,
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
         "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
@@ -3138,11 +3667,13 @@ locators = {
         "mcg_stores": mcg_stores,
         "alerting": alerting,
         "bucket_tab": bucket_tab,
+        "external_systems": external_systems,
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
     },
     "4.20": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
+        "login_client_oauth": login_client_oauth,
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
         "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
@@ -3203,6 +3734,7 @@ locators = {
         "alerting": alerting,
         "bucket_tab": bucket_tab,
         "data_foundation_overview": data_foundation_overview,
+        "external_systems": external_systems,
     },
     "4.19": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},

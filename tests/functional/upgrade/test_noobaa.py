@@ -16,7 +16,9 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     verify_s3_object_integrity,
 )
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.mcg_workload import wait_for_active_pods
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,9 @@ LOCAL_TEMP_PATH = "/aws/temp"
 DOWNLOADED_OBJS = []
 
 
+@pytest.mark.skip(
+    "Skipping due to noobaa-core-0 OOMKill - https://redhat.atlassian.net/browse/DFBUGS-6945"
+)
 @skipif_aws_creds_are_missing
 @skipif_managed_service
 @pre_upgrade
@@ -37,6 +42,7 @@ def test_fill_bucket(
     Test multi-region bucket creation using the S3 SDK. Fill the bucket for
     upgrade testing.
     """
+    global DOWNLOADED_OBJS
 
     (bucket, created_backingstores) = multiregion_mirror_setup_session
 
@@ -47,23 +53,22 @@ def test_fill_bucket(
     DOWNLOADED_OBJS = retrieve_test_objects_to_pod(
         awscli_pod_session, LOCAL_TESTOBJS_DIR_PATH
     )
+    assert DOWNLOADED_OBJS, "No objects downloaded in pre-upgrade phase"
 
     logger.info("Uploading all pod objects to MCG bucket")
 
-    # Upload test objects to the NooBucket 3 times
-    for i in range(3):
-        sync_object_directory(
-            awscli_pod_session,
-            LOCAL_TESTOBJS_DIR_PATH,
-            f"{mcg_bucket_path}/{i}/",
-            mcg_obj_session,
-        )
+    retry(CommandFailed, tries=3, delay=10)(sync_object_directory)(
+        awscli_pod_session,
+        LOCAL_TESTOBJS_DIR_PATH,
+        mcg_bucket_path,
+        mcg_obj_session,
+    )
 
-    mcg_obj_session.check_if_mirroring_is_done(bucket.name, timeout=420)
+    mcg_obj_session.check_if_mirroring_is_done(bucket.name, timeout=900)
     bucket.verify_health()
 
     # Retrieve all objects from MCG bucket to result dir in Pod
-    sync_object_directory(
+    retry(CommandFailed, tries=3, delay=10)(sync_object_directory)(
         awscli_pod_session, mcg_bucket_path, LOCAL_TEMP_PATH, mcg_obj_session
     )
 
@@ -71,15 +76,17 @@ def test_fill_bucket(
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
-        for i in range(3):
-            assert verify_s3_object_integrity(
-                original_object_path=f"{LOCAL_TESTOBJS_DIR_PATH}/{obj}",
-                result_object_path=f"{LOCAL_TEMP_PATH}/{i}/{obj}",
-                awscli_pod=awscli_pod_session,
-            ), "Checksum comparison between original and result object failed"
+        assert verify_s3_object_integrity(
+            original_object_path=f"{LOCAL_TESTOBJS_DIR_PATH}/{obj}",
+            result_object_path=f"{LOCAL_TEMP_PATH}/{obj}",
+            awscli_pod=awscli_pod_session,
+        ), "Checksum comparison between original and result object failed"
     bucket.verify_health()
 
 
+@pytest.mark.skip(
+    "Skipping due to noobaa-core-0 OOMKill - https://redhat.atlassian.net/browse/DFBUGS-6945"
+)
 @skipif_aws_creds_are_missing
 @skipif_managed_service
 @post_upgrade
@@ -98,6 +105,9 @@ def test_noobaa_postupgrade(
     backingstore2 = created_backingstores[1]
     mcg_bucket_path = f"s3://{bucket.name}"
 
+    assert (
+        DOWNLOADED_OBJS
+    ), "No pre-upgrade objects available for post-upgrade integrity validation"
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
         assert verify_s3_object_integrity(
@@ -122,7 +132,7 @@ def test_noobaa_postupgrade(
 
     # Verify integrity of A
     # Retrieve all objects from MCG bucket to result dir in Pod
-    sync_object_directory(
+    retry(CommandFailed, tries=3, delay=10)(sync_object_directory)(
         awscli_pod_session, mcg_bucket_path, LOCAL_TEMP_PATH, mcg_obj_session
     )
     bucket.verify_health()

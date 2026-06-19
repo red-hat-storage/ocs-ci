@@ -56,10 +56,10 @@ class TestCephfsStress(E2ETest):
 
             cephfs_stress_job_obj = stress_mgr.create_cephfs_stress_job(
                 pvc_name=pvc_obj.name,
-                multiplication_factors="1,2",
-                parallelism=2,
-                completions=2,
-                base_file_count=100,
+                multiplication_factors="1,2,3,4",
+                parallelism=6,
+                completions=6,
+                base_file_count=50000,
             )
             logger.info(
                 f"The CephFS-stress Job {cephfs_stress_job_obj.name} has been submitted"

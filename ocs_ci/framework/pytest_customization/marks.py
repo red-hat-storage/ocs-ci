@@ -106,6 +106,7 @@ rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
 chaos = pytest.mark.chaos
+ec_allowed = pytest.mark.ec_allowed
 
 tier_marks = [
     tier1,
@@ -277,6 +278,16 @@ stretchcluster_required = compose(
     stretchcluster_required_skipif, pytest.mark.stretchcluster_required
 )
 
+skipif_less_than_five_workers = pytest.mark.skipif(
+    config.ENV_DATA["worker_replicas"] < 5,
+    reason="This test cannot run on setup having less than five worker nodes",
+)
+
+skipif_ec_pools_disabled = pytest.mark.skipif(
+    config.DEPLOYMENT.get("ec_default_pools") is not True,
+    reason="Test runs only on EC pools",
+)
+
 sts_deployment_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("sts_enabled") is False,
     reason="Test runs only on the AWS STS enabled cluster deployments",
@@ -410,6 +421,10 @@ ms_provider_and_consumer_required = pytest.mark.skipif(
         and config.is_consumer_exist()
     ),
     reason="Test runs ONLY on Managed service with provider and consumer clusters",
+)
+fdf_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("fdf_cluster"),
+    reason="Test runs ONLY on FDF cluster",
 )
 
 

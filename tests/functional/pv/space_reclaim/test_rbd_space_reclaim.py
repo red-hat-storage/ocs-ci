@@ -5,16 +5,16 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, ec_allowed
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier1,
     tier2,
-    polarion_id,
     skipif_managed_service,
     skipif_external_mode,
 )
+from ocs_ci.ocs.cluster import is_ec_pool_supported
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -25,10 +25,17 @@ from ocs_ci.ocs.resources.pod import (
     check_file_existence,
     delete_pods,
 )
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import fetch_used_size, default_storage_class
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture
+def erasure_coded():
+    """Default pool type: replicated. Overridden per-test via parametrize."""
+    return False
 
 
 @green_squad
@@ -40,7 +47,9 @@ class TestRbdSpaceReclaim(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, storageclass_factory, create_pvcs_and_pods):
+    def setup(
+        self, project_factory, storageclass_factory, create_pvcs_and_pods, erasure_coded
+    ):
         """
         Create PVCs and pods
 
@@ -54,7 +63,10 @@ class TestRbdSpaceReclaim(ManageTest):
                 interface=constants.CEPHBLOCKPOOL,
                 replica=self.pool_replica,
                 new_rbd_pool=True,
+                erasure_coded=erasure_coded,
             )
+        self.data_pool = helpers.get_data_pool_name(sc_obj=self.sc_obj)
+        self.pool_size_factor = helpers.get_pool_size_factor(self.data_pool)
 
         self.pvc, self.pod = create_pvcs_and_pods(
             pvc_size=pvc_size_gi,
@@ -64,11 +76,27 @@ class TestRbdSpaceReclaim(ManageTest):
             sc_rbd=self.sc_obj,
         )
 
-    @polarion_id("OCS-2741")
+    @pytest.mark.parametrize(
+        "erasure_coded",
+        [
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-2741")]),
+            pytest.param(
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7974"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
     @tier1
     @skipif_external_mode
     @skipif_managed_service
-    def test_rbd_space_reclaim(self):
+    def test_rbd_space_reclaim(self, erasure_coded):
         """
         Test to verify RBD space reclamation
 
@@ -90,8 +118,7 @@ class TestRbdSpaceReclaim(ManageTest):
         fio_filename2 = "fio_file2"
 
         # Fetch the used size of pool
-        cbp_name = self.sc_obj.get().get("parameters").get("pool")
-        used_size_before_io = fetch_used_size(cbp_name)
+        used_size_before_io = fetch_used_size(self.data_pool)
         log.info(f"Used size before IO is {used_size_before_io}")
 
         # Create two 10 GB file
@@ -106,8 +133,8 @@ class TestRbdSpaceReclaim(ManageTest):
             pod_obj.get_fio_results()
 
         # Verify used size after IO
-        exp_used_size_after_io = used_size_before_io + (20 * self.pool_replica)
-        used_size_after_io = fetch_used_size(cbp_name, exp_used_size_after_io)
+        exp_used_size_after_io = used_size_before_io + (20 * self.pool_size_factor)
+        used_size_after_io = fetch_used_size(self.data_pool, exp_used_size_after_io)
         log.info(f"Used size after IO is {used_size_after_io}")
 
         # Delete one file
@@ -135,7 +162,7 @@ class TestRbdSpaceReclaim(ManageTest):
 
         # Verify space is reclaimed by checking the used size of the RBD pool
         used_after_reclaiming_space = fetch_used_size(
-            cbp_name, used_size_after_io - (10 * self.pool_replica)
+            self.data_pool, used_size_after_io - (10 * self.pool_size_factor)
         )
         log.info(
             f"Space has been reclaimed. Used size after io is {used_after_reclaiming_space}."
@@ -148,11 +175,27 @@ class TestRbdSpaceReclaim(ManageTest):
         if check_file_existence(pod_obj=pod_obj, file_path=file_path):
             log.info(f"{fio_filename2} is intact")
 
-    @polarion_id("OCS-2774")
+    @pytest.mark.parametrize(
+        "erasure_coded",
+        [
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-2774")]),
+            pytest.param(
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7975"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
     @tier2
     @skipif_managed_service
     @skipif_external_mode
-    def test_rbd_space_reclaim_no_space(self):
+    def test_rbd_space_reclaim_no_space(self, erasure_coded):
         """
         Test to verify RBD space reclamation
 
@@ -172,8 +215,7 @@ class TestRbdSpaceReclaim(ManageTest):
         fio_filename2 = "fio_file2"
 
         # Fetch the used size of pool
-        cbp_name = self.sc_obj.get().get("parameters").get("pool")
-        used_size_before_io = fetch_used_size(cbp_name)
+        used_size_before_io = fetch_used_size(self.data_pool)
         log.info(f"Used size before IO is {used_size_before_io}")
 
         # Create a 10 GB file
@@ -188,8 +230,8 @@ class TestRbdSpaceReclaim(ManageTest):
             pod_obj.get_fio_results()
 
         # Verify used size after IO
-        exp_used_size_after_io = used_size_before_io + (20 * self.pool_replica)
-        used_size_after_io = fetch_used_size(cbp_name, exp_used_size_after_io)
+        exp_used_size_after_io = used_size_before_io + (20 * self.pool_size_factor)
+        used_size_after_io = fetch_used_size(self.data_pool, exp_used_size_after_io)
         log.info(f"Used size after IO is {used_size_after_io}")
 
         # Create ReclaimSpaceJob
@@ -199,15 +241,33 @@ class TestRbdSpaceReclaim(ManageTest):
         self.reclaim_space_job(reclaim_space_job)
 
         # Verify space is reclaimed by checking the used size of the RBD pool
-        used_after_reclaiming_space = fetch_used_size(cbp_name, used_size_after_io)
+        used_after_reclaiming_space = fetch_used_size(
+            self.data_pool, used_size_after_io
+        )
         log.info(
             f"Memory remains intact. Used size after io is {used_after_reclaiming_space}."
         )
 
-    @polarion_id("OCS-3733")
+    @pytest.mark.parametrize(
+        "erasure_coded",
+        [
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-3733")]),
+            pytest.param(
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7976"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
     @tier2
     @skipif_external_mode
-    def test_no_volume_mounted(self):
+    def test_no_volume_mounted(self, erasure_coded):
         """
         Test reclaimspace job with no volume mounted
 
@@ -227,8 +287,7 @@ class TestRbdSpaceReclaim(ManageTest):
         fio_filename1 = "fio_file1"
 
         # Fetch the used size of pool
-        cbp_name = self.sc_obj.get().get("parameters").get("pool")
-        used_size_before_io = fetch_used_size(cbp_name)
+        used_size_before_io = fetch_used_size(self.data_pool)
         log.info(f"Used size before IO is {used_size_before_io}")
 
         # Create a 10 GB file
@@ -242,8 +301,8 @@ class TestRbdSpaceReclaim(ManageTest):
         pod_obj.get_fio_results()
 
         # Verify used size after IO
-        exp_used_size_after_io = used_size_before_io + (10 * self.pool_replica)
-        used_size_after_io = fetch_used_size(cbp_name, exp_used_size_after_io)
+        exp_used_size_after_io = used_size_before_io + (10 * self.pool_size_factor)
+        used_size_after_io = fetch_used_size(self.data_pool, exp_used_size_after_io)
         log.info(f"Used size after IO is {used_size_after_io}")
 
         # Delete the file

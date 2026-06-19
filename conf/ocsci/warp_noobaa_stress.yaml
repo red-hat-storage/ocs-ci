@@ -1,0 +1,20 @@
+# Krkn + Warp (MinIO S3 bench) on MCG/NooBaa; pass with --ocsci-conf alongside your test command.
+
+ENV_DATA:
+  krkn_config:
+    workloads:
+      - WARP_WORKLOAD
+    run_workload: true
+    enable_verification: false  # Warp validates its own runs
+
+    warp_config:
+      namespace: "default"  # or openshift-storage / custom
+      num_workloads: 1
+      workload_type: "mixed"  # mixed | put | get | delete | stat
+      duration: "10m"  # e.g. 30s, 10m, 1h
+      concurrent: 1
+      objects: 1000
+      obj_size: "1MiB"  # smaller = more metadata stress
+
+    background_cluster_operations:
+      enabled: false  # set true to add snapshot/clone etc. during chaos

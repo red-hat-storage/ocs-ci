@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 @tier1
 @turquoise_squad
 @skipif_ocs_version("<4.16")
-class TestFailoverAndRelocateWithDiscoveredApps:
+class TestFailoverAndRelocateWithDiscoveredAppsMultiNs:
     """
-    Test Failover and Relocate with Discovered Apps
+    Test Failover and Relocate with Discovered Apps spread across multiple namespaces.
 
     """
 
@@ -38,14 +38,11 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             ),
         ],
     )
-    def test_failover_and_relocate_discovered_apps(
+    def test_failover_and_relocate_discovered_apps_multi_ns(
         self, pvc_interface, discovered_apps_dr_workload
     ):
         """
-        Tests to verify application failover and Relocate with Discovered Apps
-        There are two test cases:
-            1) Failover to secondary cluster when primary cluster is UP
-            2) Relocate back to primary
+        Tests to verify failover and relocate with discovered applications spread across multiple namespaces.
 
         """
         rdr_workload = discovered_apps_dr_workload(

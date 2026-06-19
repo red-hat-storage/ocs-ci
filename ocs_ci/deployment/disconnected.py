@@ -383,7 +383,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
     logger.info(
         f"Prepare for disconnected OCS {'upgrade' if upgrade else 'installation'}"
     )
-    # Disable the default OperatorSources
+    # Disable the default sources
     disable_default_sources()
 
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
@@ -459,6 +459,12 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
     if config.DEPLOYMENT.get("live_deployment"):
         # create redhat-operators CatalogSource
         catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
+
+        # workaround for https://github.com/red-hat-storage/ocs-ci/issues/15085
+        # Remove extractContent for disconnected deployments to avoid init container issues
+        # in air-gapped environments while keeping memoryTarget to prevent OOM
+        if "grpcPodConfig" in catalog_source_data.get("spec", {}):
+            catalog_source_data["spec"]["grpcPodConfig"].pop("extractContent", None)
 
         catalog_source_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="catalog_source_manifest", delete=False

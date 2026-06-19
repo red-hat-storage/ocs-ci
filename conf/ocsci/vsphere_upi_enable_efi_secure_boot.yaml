@@ -1,0 +1,5 @@
+---
+# this configuration file enables EFI Secure boot and is applicable for vSphere
+# UPI deployment
+ENV_DATA:
+  enable_efi_secure_boot: True

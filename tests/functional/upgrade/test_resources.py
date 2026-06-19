@@ -172,6 +172,7 @@ def deprecated_test_noobaa_service_mon_after_ocs_upgrade():
 @skipif_hci_client
 @skipif_mcg_only
 @jira("DFBUGS-5211")
+@jira("DFBUGS-7007")
 @pytest.mark.polarion_id("OCS-7419")
 @purple_squad
 def test_blackbox_pod_after_upgrade():
@@ -183,10 +184,17 @@ def test_blackbox_pod_after_upgrade():
     if ocs_version <= version.VERSION_4_20:
         pytest.skip("The test is not supported on odf version less than 4.21")
     else:
+        odf_semantic_version = version.get_semantic_running_odf_version()
+        if odf_semantic_version >= version.get_semantic_version("4.21.7-1"):
+            blackbox_label = constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
+            expected_label_key = "app"
+        else:
+            blackbox_label = constants.BLACKBOX_POD_LABEL
+            expected_label_key = "app.kubernetes.io/name"
         ocp_obj = ocp.OCP(
             kind=constants.POD,
             namespace=config.ENV_DATA["cluster_namespace"],
-            selector=constants.BLACKBOX_POD_LABEL,
+            selector=blackbox_label,
         )
         Pods = ocp_obj.get()
         pods = Pods.get("items", [])
@@ -196,7 +204,7 @@ def test_blackbox_pod_after_upgrade():
             pod_name = pod["metadata"]["name"]
             labels = pod["metadata"].get("labels", {})
             assert (
-                labels.get("app.kubernetes.io/name") == "odf-blackbox-exporter"
+                labels.get(expected_label_key) == "odf-blackbox-exporter"
             ), f"Unexpected pod label on {pod_name}"
 
         log.info("Blackbox exporter pod exists after upgrade")

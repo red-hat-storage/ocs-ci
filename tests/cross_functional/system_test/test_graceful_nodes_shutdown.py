@@ -30,6 +30,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_no_kms,
     skipif_ocs_version,
     magenta_squad,
+    jira,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
@@ -38,6 +39,7 @@ from ocs_ci.ocs.resources.fips import check_fips_enabled
 logger = logging.getLogger(__name__)
 
 
+@jira("OCPBUGS-58027")
 class TestGracefulNodesShutdown(E2ETest):
     """
     Test uncorrupted data and operational cluster after graceful nodes shutdown

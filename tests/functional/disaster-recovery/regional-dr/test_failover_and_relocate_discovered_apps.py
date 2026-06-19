@@ -115,19 +115,18 @@ class TestFailoverAndRelocateWithDiscoveredApps:
     )
     def test_failover_and_relocate_discovered_apps(
         self,
-        discovered_apps_dr_workload,
         primary_cluster_down,
         pvc_interface,
-        nodes_multicluster,
         kubeobject,
         recipe,
         iterations,
+        discovered_apps_dr_workload,
+        nodes_multicluster,
+        node_restart_teardown,
     ):
         """
-        Tests to verify application failover and Relocate with Discovered Apps
-        There are two test cases:
-            1) Failover to secondary cluster when primary cluster is UP
-            2) Relocate back to primary
+        Tests to verify application failover and relocate with discovered applications
+        Covers primary cluster up or down, and single or multiple (3) iterations.
 
         """
         rdr_workloads = discovered_apps_dr_workload(

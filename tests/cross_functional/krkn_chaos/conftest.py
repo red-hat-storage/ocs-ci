@@ -1,5 +1,8 @@
 import pytest
 import os
+import subprocess
+import tarfile
+import time
 import fauxfactory
 import yaml
 import logging
@@ -7,15 +10,90 @@ from ocs_ci.ocs.constants import (
     KRKN_DIR,
     KRKN_CHAOS_DIR,
     KRKN_CHAOS_SCENARIO_DIR,
+    KRKNCTL_BINARY_TAR,
+    KRKNCTL,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, download_with_retries
+from ocs_ci.resiliency.resiliency_tools import (
+    CEPH_CRASH_POLL_INTERVAL,
+    CephStatusTool,
+    ceph_crash_monitor,
+)
+from ocs_ci.krkn_chaos.krkn_helpers import CephHealthHelper
+from ocs_ci.krkn_chaos.krkn_config_generator import ensure_krkn_resiliency_support_files
+from ocs_ci.ocs import constants
 
 from contextlib import suppress
 
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Generic Krkn chaos test lifecycle fixture (autouse for all tests in this dir)
+# =============================================================================
+# Add any shared setup/teardown for krkn chaos tests here (e.g. crash archiving,
+# baseline checks, final reporting). This runs once per test.
+# =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def krkn_chaos_test_lifecycle(request):
+    """
+    Common lifecycle for all Krkn chaos tests in this directory.
+
+    - At test start: archive any existing Ceph crashes so the test starts from a clean baseline.
+    - During the entire test (workload setup, krkn/krknctl run, teardown): background
+      Ceph crash monitor checks every CEPH_CRASH_POLL_INTERVAL seconds.
+    - finalizer: check for Ceph crashes introduced during the test; log them and raise AssertionError if any are found.
+
+    Extend this fixture's setup/finalizer when adding more shared behavior for
+    krkn chaos tests.
+    """
+    # ----- Setup: run at beginning of test -----
+    try:
+        ceph_status = CephStatusTool()
+        ceph_status.archive_ceph_crashes()
+        log.info(
+            "Krkn chaos test lifecycle: archived pre-existing Ceph crashes (baseline)"
+        )
+    except Exception as e:
+        log.warning(
+            "Krkn chaos test lifecycle: could not archive pre-existing Ceph crashes: %s",
+            e,
+        )
+
+    # ----- Finalizer: run after test (pass or fail) -----
+    def _krkn_chaos_finalizer():
+        try:
+            health_helper = CephHealthHelper(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            no_crashes, crash_details = health_helper.check_ceph_crashes(
+                None, "chaos test"
+            )
+            if not no_crashes:
+                details = crash_details or "Ceph crash detected (details unavailable)"
+                log.error("Ceph crashes detected during chaos test:\n%s", details)
+                raise AssertionError(details)
+        except AssertionError:
+            raise
+        except Exception as e:
+            log.warning(
+                "Krkn chaos test lifecycle: could not run Ceph crash finalizer: %s",
+                e,
+            )
+
+    request.addfinalizer(_krkn_chaos_finalizer)
+
+    with ceph_crash_monitor(enabled=True, context="krkn chaos test"):
+        log.info(
+            "Krkn chaos test lifecycle: background Ceph crash monitor active "
+            "for entire test (every %ss, including workload setup)",
+            CEPH_CRASH_POLL_INTERVAL,
+        )
+        yield
 
 
 @pytest.fixture(scope="session")
@@ -116,6 +194,127 @@ def krkn_setup():
     log.info("  - Krkn venv: %s", krkn_venv)
     log.info("  - Krkn run script: %s", krkn_run_script)
 
+    ensure_krkn_resiliency_support_files()
+
+
+@pytest.fixture(scope="session")
+def krknctl_setup():
+    """
+    Set up krknctl binary and podman for krknctl chaos testing.
+
+    1. Download the krknctl tar from KRKNCTL_BINARY_TAR and extract it into
+       the ocs_ci data directory (KRKNCTL). The tar contains only the
+       krknctl binary, so it can be run from data/krknctl/krknctl.
+    2. Make the krknctl binary executable.
+    3. Enable and start the podman service so it is running.
+
+    This fixture does not return anything.
+    """
+    os.makedirs(KRKNCTL, exist_ok=True)
+
+    tar_filename = os.path.basename(KRKNCTL_BINARY_TAR)
+    tar_path = os.path.join(KRKNCTL, tar_filename)
+    krknctl_binary = os.path.join(KRKNCTL, "krknctl")
+
+    if os.path.exists(krknctl_binary):
+        log.info("Removing existing krknctl binary at %s", krknctl_binary)
+        os.remove(krknctl_binary)
+
+    if not os.path.exists(tar_path):
+        log.info("Downloading krknctl binary from %s", KRKNCTL_BINARY_TAR)
+        downloaded = download_with_retries(KRKNCTL_BINARY_TAR, tar_path)
+        if not downloaded:
+            raise CommandFailed(
+                f"Failed to download krknctl tar from {KRKNCTL_BINARY_TAR}"
+            )
+    else:
+        log.info("Using existing krknctl tar at %s", tar_path)
+
+    log.info("Extracting krknctl tar into %s", KRKNCTL)
+    with tarfile.open(tar_path, "r:gz") as tf:
+        tf.extractall(path=KRKNCTL)
+
+    if not os.path.isfile(krknctl_binary):
+        raise CommandFailed(
+            f"krknctl binary not found at {krknctl_binary} after extracting {tar_path}"
+        )
+
+    log.info("Making krknctl binary executable: %s", krknctl_binary)
+    os.chmod(krknctl_binary, 0o755)
+
+    # Enable and start podman so krknctl can run scenarios in containers.
+    # Use sudo so this works when the test runs as a non-root user (e.g. jenkins).
+    # Enable both podman.socket and podman.service so the API is available to krknctl.
+    log.info("Enabling and starting podman (socket and service) via sudo")
+    podman_ok = False
+    for service_name in ("podman.socket", "podman"):
+        try:
+            run_cmd(f"sudo systemctl enable --now {service_name}", timeout=30)
+            run_cmd(f"sudo systemctl is-active --quiet {service_name}", timeout=5)
+            log.info("Podman '%s' is enabled and running", service_name)
+            podman_ok = True
+        except (CommandFailed, Exception) as e:
+            log.debug("Could not enable/start %s: %s", service_name, e)
+    if not podman_ok:
+        log.warning(
+            "Could not enable/start podman.socket or podman; "
+            "krknctl may require podman to be running."
+        )
+
+    # krknctl runs scenarios in containers; require podman or docker to be usable.
+    container_runtime_ok = False
+    for runtime, check_cmd in (("podman", "podman info"), ("docker", "docker info")):
+        if runtime == "podman":
+            for service_name in ("podman.socket", "podman"):
+                try:
+                    run_cmd(f"sudo systemctl start {service_name}", timeout=15)
+                    log.info("Started podman: %s", service_name)
+                except (CommandFailed, Exception) as e:
+                    log.debug("Could not start %s: %s", service_name, e)
+        try:
+            run_cmd(check_cmd, timeout=15, ignore_error=False)
+            log.info("Container runtime '%s' is available for krknctl", runtime)
+            container_runtime_ok = True
+            break
+        except (CommandFailed, Exception) as e:
+            log.debug("Container runtime '%s' not available: %s", runtime, e)
+            continue
+    if not container_runtime_ok:
+        pytest.skip(
+            "Neither podman nor docker is available or usable. "
+            "krknctl requires a container runtime to run chaos scenarios. "
+            "Install podman or docker and ensure the service is running (e.g. systemctl start podman)."
+        )
+
+    # krknctl expects a container API socket (DOCKER_HOST). For rootless podman, start the
+    # user's podman API service so the socket exists and set DOCKER_HOST for krknctl subprocesses.
+    if os.geteuid() != 0:
+        xdg_runtime = os.environ.get("XDG_RUNTIME_DIR") or os.path.join(
+            "/run", "user", str(os.getuid())
+        )
+        rootless_socket = os.path.join(xdg_runtime, "podman", "podman.sock")
+        if not os.path.exists(rootless_socket):
+            try:
+                log.info("Starting rootless podman system service for krknctl")
+                _proc = subprocess.Popen(
+                    ["podman", "system", "service", "--time=3600"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    env=os.environ.copy(),
+                )
+                for _ in range(10):
+                    time.sleep(0.5)
+                    if os.path.exists(rootless_socket):
+                        break
+                if not os.path.exists(rootless_socket):
+                    _proc.terminate()
+                    log.warning("Rootless podman socket did not appear")
+            except Exception as e:
+                log.debug("Could not start rootless podman service: %s", e)
+        if os.path.exists(rootless_socket):
+            os.environ["DOCKER_HOST"] = f"unix://{rootless_socket}"
+            log.info("Set DOCKER_HOST=%s for krknctl", os.environ["DOCKER_HOST"])
+
 
 @pytest.fixture(scope="session")
 def krkn_scenarios_list():
@@ -148,50 +347,6 @@ def krkn_scenario_directory():
     dir_path = os.path.join(KRKN_CHAOS_SCENARIO_DIR, random_dir_name)
     os.makedirs(dir_path, exist_ok=True)
     return dir_path
-
-
-class WorkloadOps:
-    """
-    Helper to manage VDBENCH workloads life cycle (create -> validate -> cleanup).
-    """
-
-    def __init__(self, proj_obj, workloads):
-        self.proj_obj = proj_obj
-        self.workloads = workloads
-
-    @property
-    def namespace(self):
-        return self.proj_obj.namespace
-
-    def validate_and_cleanup(self):
-        """
-        Validate workload results and stop/cleanup all workloads.
-        """
-        validation_errors = []
-        for workload in self.workloads:
-            try:
-                result = workload.workload_impl.get_all_deployment_pod_logs()
-                workload.stop_workload()
-
-                if not result:
-                    validation_errors.append(
-                        f"Workload {workload.workload_impl.deployment_name} returned no logs after network outage"
-                    )
-                elif "error" in result.lower():
-                    validation_errors.append(
-                        f"Workload {workload.workload_impl.deployment_name} failed after network outage"
-                    )
-
-                workload.cleanup_workload()
-
-            except UnexpectedBehaviour as e:
-                validation_errors.append(
-                    f"Failed to get results for workload {workload.workload_impl.deployment_name}: {e}"
-                )
-
-        if validation_errors:
-            log.error("Workload validation errors:\n" + "\n".join(validation_errors))
-            pytest.fail("Workload validation failed.")
 
 
 @pytest.fixture
@@ -271,6 +426,48 @@ def workload_ops(request, project_factory, multi_pvc_factory, storageclass_facto
                 log.error(f"  ✗ Failed to load fixture '{fixture_name}': {e}")
                 # Don't fail immediately - let factory handle missing fixtures
 
+    # If workloads are exclusively non-VDBENCH (e.g. CNV_ONLY), pre-load VDBENCH
+    # fixtures so KrknWorkloadFactory.create_workload_ops can fall back when the
+    # primary type yields no workloads (CNV optional / empty VMs, etc.).
+    if KrknWorkloadConfig.VDBENCH not in workload_types:
+        vdbench_required = KrknWorkloadRegistry.get_required_fixtures(
+            KrknWorkloadConfig.VDBENCH
+        )
+        log.info(
+            "Pre-loading VDBENCH fixtures for factory fallback: %s",
+            vdbench_required,
+        )
+        for fixture_name in vdbench_required:
+            if fixture_name in fixtures:
+                continue
+            try:
+                fixtures[fixture_name] = request.getfixturevalue(fixture_name)
+                log.debug("  ✓ Loaded fallback fixture: %s", fixture_name)
+            except Exception as e:
+                log.warning(
+                    "Could not load VDBENCH fallback fixture '%s': %s",
+                    fixture_name,
+                    e,
+                )
+
+    # Load KMS factory when encrypted RBD is configured (tenant Vault token, etc.)
+    pv_encryption_kms_setup_factory = None
+    if config.use_encrypted_pvc():
+        try:
+            pv_encryption_kms_setup_factory = request.getfixturevalue(
+                "pv_encryption_kms_setup_factory"
+            )
+            log.info(
+                "Loaded pv_encryption_kms_setup_factory for encrypted VDBENCH PVCs"
+            )
+        except Exception as e:
+            log.warning(
+                "Encrypted PVCs are enabled in Krkn config but "
+                "pv_encryption_kms_setup_factory could not be loaded: %s. "
+                "Encrypted RBD provisioning may fail without tenant KMS resources.",
+                e,
+            )
+
     # Create workload factory and workloads using registry-based approach
     factory = KrknWorkloadFactory()
     ops = factory.create_workload_ops(
@@ -278,6 +475,7 @@ def workload_ops(request, project_factory, multi_pvc_factory, storageclass_facto
         multi_pvc_factory,
         loaded_fixtures=fixtures,  # Pass all loaded fixtures
         storageclass_factory=storageclass_factory,  # Pass storageclass factory for encrypted PVCs
+        pv_encryption_kms_setup_factory=pv_encryption_kms_setup_factory,
     )
 
     try:
@@ -285,6 +483,8 @@ def workload_ops(request, project_factory, multi_pvc_factory, storageclass_facto
     finally:
         # Best-effort cleanup if the test aborted before calling validate_and_cleanup
         log.info("Performing best-effort workload cleanup")
+        with suppress(Exception):
+            ops._stop_rgw_background_provisioner()
         for w in ops.workloads:
             with suppress(Exception):
                 if hasattr(w, "stop_workload"):

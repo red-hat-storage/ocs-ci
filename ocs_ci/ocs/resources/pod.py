@@ -1129,6 +1129,26 @@ def get_noobaa_endpoint_pods():
     return noobaa_endpoint_pods
 
 
+def get_noobaa_pvpool_pods(backingstore_name, namespace=None):
+    """
+    Fetches the PVPool agent pods for a given NooBaa backingstore.
+
+    Args:
+        backingstore_name (str): Name of the PVPool backingstore
+        namespace (str): Namespace of the backingstore. Defaults to
+            the cluster namespace from ENV_DATA
+
+    Returns:
+        list: List of Pod objects for the given backingstore
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pod_data_list = get_pods_having_label(
+        label=f"pool={backingstore_name}", namespace=namespace
+    )
+    return [Pod(**pod_data) for pod_data in pod_data_list]
+
+
 def get_odf_operator_controller_manager(
     ocs_label=constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL, namespace=None
 ):
@@ -2247,6 +2267,53 @@ def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provis
                 break
     assert leader_pod, "Couldn't identify plugin provisioner leader pod."
     logger.info(f"Plugin provisioner leader pod is {leader_pod.name}")
+    return leader_pod
+
+
+def get_odf_external_snapshotter_leader(namespace=None):
+    """
+    Get ODF external snapshotter operator leader pod
+
+    Args:
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        Pod: ODF external snapshotter operator leader pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    non_leader_msg = "Failed to acquire lease"
+    lease_acq_msg = "Successfully acquired lease"
+    lease_renew_msg = "Successfully renewed lease"
+    leader_pod = ""
+
+    # Get all ODF external snapshotter pods
+    pods = get_pods_having_label(constants.ODF_EXTERNAL_SNAPSHOTTER, namespace)
+    odf_snapshotter_pods = [Pod(**pod) for pod in pods]
+
+    pods_log = {}
+    for pod in odf_snapshotter_pods:
+        pods_log[pod] = get_pod_logs(
+            pod_name=pod.name,
+            container="odf-external-snapshotter-operator",
+            namespace=namespace,
+        ).split("\n")
+
+    for pod, log_list in pods_log.items():
+        log_list.reverse()
+        for log_msg in log_list:
+            # Check for last occurrence of leader message
+            # This will be the first occurrence in reversed list.
+            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
+                curr_index = log_list.index(log_msg)
+                # Ensure that there is no non leader message logged after
+                # the last occurrence of leader message
+                if not any(non_leader_msg in msg for msg in log_list[:curr_index]):
+                    leader_pod = pod
+                break
+    assert leader_pod, "Couldn't identify ODF external snapshotter leader pod."
+    logger.info(f"ODF external snapshotter leader pod is {leader_pod.name}")
     return leader_pod
 
 
@@ -4182,6 +4249,29 @@ def fetch_rgw_pod_restart_count(namespace=None):
     rgw_pod_restart_count = restart_count_for_rgw_pod[rgw_pod_obj.name]
     logger.info(f"restart count for rgw pod is: {rgw_pod_restart_count}")
     return rgw_pod_restart_count
+
+
+def verify_mon_pod_running(mon_count):
+    """
+    Verify that all the mon pods are in Running state.
+    Args:
+        mon_count(int): Expected number of mon pods to which should be in running state
+
+    Returns:
+        bool: True if all mon pods are in running state, False otherwise
+    """
+    pod_objs = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    ret = pod_objs.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.MON_APP_LABEL,
+        resource_count=mon_count,
+        dont_allow_other_resources=True,
+        timeout=660,
+    )
+    logger.info(f"Waited for all mon pods to come up and running {ret}")
+    return ret
 
 
 def get_pod_used_memory_in_mebibytes(podname):

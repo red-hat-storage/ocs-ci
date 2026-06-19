@@ -1,0 +1,192 @@
+# CodeRabbit Configuration for OCS-CI
+# Documentation: https://docs.coderabbit.ai/reference/configuration
+
+# Interface language
+language: "en-US"
+
+# Tone configuration
+tone_instructions: "Be concise and focus on test reliability, maintainability, and adherence to project conventions."
+
+# Review configuration
+reviews:
+  # Review profile: "chill" for lighter feedback, "assertive" for more thorough
+  profile: "assertive"
+
+  # Display options
+  high_level_summary: true
+  poem: false  # Skip poems in walkthrough
+  review_status: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  collapse_walkthrough: false
+
+  # Path filters - focus on source and test code
+  path_filters:
+    - "ocs_ci/**"
+    - "tests/**"
+    - "conf/**"
+    - "!docs/**"
+    - "!*.md"
+    - "!.github/**"
+
+  # Path-specific instructions
+  path_instructions:
+    - path: "tests/**/*.py"
+      instructions: |
+        Focus on:
+        - Proper pytest fixture usage
+        - Test isolation and independence
+        - Clear assertions with descriptive messages
+        - Proper cleanup and teardown
+        - Use of OCS-CI framework patterns
+
+    - path: "ocs_ci/**/*.py"
+      instructions: |
+        Focus on:
+        - Code maintainability and readability
+        - Proper error handling
+        - Documentation for complex logic
+        - Adherence to existing patterns in the codebase
+        - Avoid introducing security vulnerabilities (command injection, etc.)
+
+  # Auto-review configuration
+  auto_review:
+    enabled: true
+    drafts: false  # Don't review draft PRs
+    auto_incremental_review: true  # Re-review on each push
+
+    # Review PRs targeting master and all release branches
+    base_branches:
+      - "release-.*"  # Matches release-4.21, release-4.22, etc.
+
+    # Ignore WIP and draft PRs
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "DRAFT"
+      - "DNM"
+
+    # Skip dependabot PRs (if used)
+    ignore_usernames:
+      - "dependabot"
+      - "dependabot[bot]"
+      - "openshift-cherrypick-robot"
+
+  # Pre-merge checks
+  pre_merge_checks:
+    # Require docstrings for public functions/classes
+    docstrings:
+      mode: "warning"
+      threshold: 70
+
+    # Ensure PR has a proper title
+    title:
+      mode: "warning"
+      requirements: "Title should be concise and descriptive (under 72 characters)"
+
+    # Ensure PR has a description
+    description:
+      mode: "warning"
+
+  # Code improvement suggestions
+  finishing_touches:
+    # Suggest docstring improvements
+    docstrings:
+      enabled: true
+
+    # Suggest unit test additions
+    unit_tests:
+      enabled: true
+
+    # Code simplification suggestions
+    simplify:
+      enabled: true
+
+  # Enable Python tools
+  tools:
+    # Ruff for Python linting (modern replacement for flake8)
+    ruff:
+      enabled: true
+
+    # Shellcheck for shell scripts
+    shellcheck:
+      enabled: true
+
+  # Labeling
+  suggested_labels: true
+  auto_apply_labels: false  # Suggest but don't auto-apply
+
+  labeling_instructions:
+    - label: "bug"
+      instructions: "Apply when PR fixes a bug or regression"
+
+    - label: "enhancement"
+      instructions: "Apply when PR adds new functionality or improves existing features"
+
+    - label: "tests"
+      instructions: "Apply when PR primarily adds or modifies tests"
+
+    - label: "refactoring"
+      instructions: "Apply when PR refactors existing code without changing functionality"
+
+    - label: "documentation"
+      instructions: "Apply when PR updates documentation"
+
+  # Reviewer suggestions
+  suggested_reviewers: true
+  auto_assign_reviewers: false
+
+# Chat configuration
+chat:
+  auto_reply: true
+  art: false  # Disable ASCII art
+
+# Knowledge base configuration
+knowledge_base:
+  # Enable learning from past reviews
+  learnings:
+    scope: "global"  # Share learnings across the organization
+
+  # Enable issue context
+  issues:
+    scope: "global"
+
+  # Enable PR context
+  pull_requests:
+    scope: "global"
+
+  # Code guidelines - look for common guideline files
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "CLAUDE.md"
+      - "docs/coding_guidelines.md"
+      - "docs/logging_guide.md"
+      - "docs/fixture_usage.md"
+      - ".github/CONTRIBUTING.md"
+      - "**/.cursorrules"
+
+# Code generation preferences
+code_generation:
+  # Python docstring style
+  docstrings:
+    language: "en-US"
+    path_instructions:
+      - path: "**/*.py"
+        instructions: |
+          Use clear, concise docstrings following project conventions.
+          Include:
+          - Brief description of function/class purpose
+          - Args/Returns sections where appropriate
+          - Example usage for complex functions
+
+  # Unit test generation
+  unit_tests:
+    path_instructions:
+      - path: "**/*.py"
+        instructions: |
+          Generate pytest-style tests following OCS-CI conventions:
+          - Use appropriate fixtures
+          - Clear test names describing what is being tested
+          - Proper setup/teardown
+          - Test both happy path and edge cases

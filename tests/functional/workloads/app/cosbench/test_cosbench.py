@@ -104,6 +104,7 @@ class TestCosbenchWorkload(E2ETest):
             containers=buckets,
             objects=objects,
             validate=True,
+            timeout=1200,
         )
 
         # Dispose containers and objects

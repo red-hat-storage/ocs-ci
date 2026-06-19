@@ -3,6 +3,7 @@ import logging
 import threading
 import pytest
 from ocs_ci.framework.pytest_customization.marks import blue_squad, tier1, polarion_id
+from ocs_ci.helpers.helpers import default_ceph_block_pool
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.utility.prometheus import PrometheusAPI
@@ -180,7 +181,7 @@ def get_ceph_rbd_metrics(pvc_obj):
     """
     ceph_toolbox = pod_helpers.get_ceph_tools_pod()
     pv_data = pvc_obj.backed_pv_obj.get()
-    rbd_pool = constants.DEFAULT_BLOCKPOOL
+    rbd_pool = default_ceph_block_pool()
     rbd_image = (
         pv_data.get("spec", {})
         .get("csi", {})

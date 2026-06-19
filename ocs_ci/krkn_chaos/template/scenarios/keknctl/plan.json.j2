@@ -1,0 +1,765 @@
+{
+  "_comment": {
+    "_comment": "Jinja2 krknctl plan catalog: each block defines a krkn-hub scenario. Labels, images, and options are filled from template variables and krkn chaos configuration."
+  },
+  "root_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:dummy-scenario",
+    "name": "dummy-scenario",
+    "env": {
+      "END": "10",
+      "EXIT_STATUS": "0"
+    }
+  },
+  "application-outages_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
+    "name": "application-outages",
+    "env": {
+      "BLOCK_TRAFFIC_TYPE": "[Ingress, Egress]",
+      "DURATION": "600",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "{app: rook-ceph-mgr}",
+      "WAIT_DURATION": "60",
+      "KRKN_DEBUG": "False"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "application-outages-ingress-only_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
+    "name": "application-outages",
+    "env": {
+      "BLOCK_TRAFFIC_TYPE": "[Ingress]",
+      "DURATION": "300",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "{app: rook-ceph-mgr}",
+      "WAIT_DURATION": "60",
+      "KRKN_DEBUG": "False"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "application-outages-egress-only_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
+    "name": "application-outages",
+    "env": {
+      "BLOCK_TRAFFIC_TYPE": "[Egress]",
+      "DURATION": "300",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "{app: rook-ceph-mon}",
+      "WAIT_DURATION": "60",
+      "KRKN_DEBUG": "False"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "application-outages-osd_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
+    "name": "application-outages",
+    "env": {
+      "BLOCK_TRAFFIC_TYPE": "[Ingress, Egress]",
+      "DURATION": "300",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "{app: rook-ceph-osd}",
+      "WAIT_DURATION": "60",
+      "KRKN_DEBUG": "False"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "application-outages-rgw_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
+    "name": "application-outages",
+    "env": {
+      "BLOCK_TRAFFIC_TYPE": "[Ingress, Egress]",
+      "DURATION": "300",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "{app: rook-ceph-rgw}",
+      "WAIT_DURATION": "60",
+      "KRKN_DEBUG": "False"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "application-outages-mds_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
+    "name": "application-outages",
+    "env": {
+      "BLOCK_TRAFFIC_TYPE": "[Ingress, Egress]",
+      "DURATION": "300",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "{app: rook-ceph-mds}",
+      "WAIT_DURATION": "60",
+      "KRKN_DEBUG": "False"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "application-outages-noobaa_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
+    "name": "application-outages",
+    "env": {
+      "BLOCK_TRAFFIC_TYPE": "[Ingress, Egress]",
+      "DURATION": "300",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "{app: noobaa}",
+      "WAIT_DURATION": "60",
+      "KRKN_DEBUG": "False"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "application-outages-operator_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:application-outages",
+    "name": "application-outages",
+    "env": {
+      "BLOCK_TRAFFIC_TYPE": "[Ingress, Egress]",
+      "DURATION": "300",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "{app: rook-ceph-operator}",
+      "WAIT_DURATION": "60",
+      "KRKN_DEBUG": "False"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "container-scenarios_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:container-scenarios",
+    "name": "container-scenarios",
+    "env": {
+      "ACTION": "1",
+      "CONTAINER_NAME": "",
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "60",
+      "LABEL_SELECTOR": "app=rook-ceph-osd",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "container-scenarios-osd_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:container-scenarios",
+    "name": "container-scenarios",
+    "env": {
+      "ACTION": "1",
+      "CONTAINER_NAME": "",
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "LABEL_SELECTOR": "app=rook-ceph-osd",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "container-scenarios-mds_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:container-scenarios",
+    "name": "container-scenarios",
+    "env": {
+      "ACTION": "1",
+      "CONTAINER_NAME": "{{ ceph_mds_container | default('mds') }}",
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "LABEL_SELECTOR": "app=rook-ceph-mds",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "container-scenarios-mon_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:container-scenarios",
+    "name": "container-scenarios",
+    "env": {
+      "ACTION": "1",
+      "CONTAINER_NAME": "{{ ceph_mon_container | default('mon') }}",
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "LABEL_SELECTOR": "app=rook-ceph-mon",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "container-scenarios-mgr_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:container-scenarios",
+    "name": "container-scenarios",
+    "env": {
+      "ACTION": "1",
+      "CONTAINER_NAME": "{{ ceph_mgr_container | default('mgr') }}",
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "LABEL_SELECTOR": "app=rook-ceph-mgr",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "container-scenarios-rgw_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:container-scenarios",
+    "name": "container-scenarios",
+    "env": {
+      "ACTION": "1",
+      "CONTAINER_NAME": "{{ ceph_rgw_container | default('rgw') }}",
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "LABEL_SELECTOR": "app=rook-ceph-rgw",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "network-chaos-egress-latency_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:network-chaos",
+    "name": "network-chaos",
+    "env": {
+      "DURATION": "240",
+      "EGRESS": "{latency: 100ms}",
+      "EXECUTION": "parallel",
+      "INSTANCE_COUNT": "{{ worker_instance_count }}",
+      "LABEL_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TRAFFIC_TYPE": "egress",
+      "WAIT_DURATION": "240"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "network-chaos-egress-serial_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:network-chaos",
+    "name": "network-chaos",
+    "env": {
+      "DURATION": "300",
+      "EGRESS": "{bandwidth: 100mbit}",
+      "EXECUTION": "serial",
+      "INSTANCE_COUNT": "{{ worker_instance_count }}",
+      "LABEL_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TRAFFIC_TYPE": "egress",
+      "WAIT_DURATION": "300"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "network-chaos_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:network-chaos",
+    "name": "network-chaos",
+    "env": {
+      "DURATION": "300",
+      "EGRESS": "{bandwidth: 100mbit}",
+      "EXECUTION": "parallel",
+      "INSTANCE_COUNT": "{{ worker_instance_count }}",
+      "LABEL_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TRAFFIC_TYPE": "egress",
+      "WAIT_DURATION": "300"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "network-chaos-ingress-latency_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:network-chaos",
+    "name": "network-chaos",
+    "env": {
+      "DURATION": "240",
+      "NETWORK_PARAMS": "{latency: 80ms,loss: 40%}",
+      "EXECUTION": "parallel",
+      "INSTANCE_COUNT": "{{ worker_instance_count }}",
+      "LABEL_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TRAFFIC_TYPE": "ingress",
+      "WAIT_DURATION": "240"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "network-chaos-egress-loss_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:network-chaos",
+    "name": "network-chaos",
+    "env": {
+      "DURATION": "240",
+      "NETWORK_PARAMS": "{bandwidth: 80mbit,loss: 0.02,latency: 25ms}",
+      "EXECUTION": "parallel",
+      "INSTANCE_COUNT": "{{ net_instance_count | default(worker_instance_count) }}",
+      "INTERFACES": "{{ net_interfaces | default('[]') }}",
+      "LABEL_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TRAFFIC_TYPE": "egress",
+      "WAIT_DURATION": "240"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-cpu-hog_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-cpu-hog",
+    "name": "node-cpu-hog",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NODE_CPU_CORE": "2",
+      "NODE_CPU_PERCENTAGE": "95",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TOTAL_CHAOS_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-cpu-hog-mild_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-cpu-hog",
+    "name": "node-cpu-hog",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NODE_CPU_CORE": "1",
+      "NODE_CPU_PERCENTAGE": "85",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TOTAL_CHAOS_DURATION": "120"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-io-hog_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-io-hog",
+    "name": "node-io-hog",
+    "env": {
+      "IO_BLOCK_SIZE": "1m",
+      "IO_WORKERS": "5",
+      "IO_WRITE_BYTES": "10m",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TOTAL_CHAOS_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-io-hog-heavy_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-io-hog",
+    "name": "node-io-hog",
+    "env": {
+      "IO_BLOCK_SIZE": "4m",
+      "IO_WORKERS": "{{ io_workers | default('8') }}",
+      "IO_WRITE_BYTES": "50m",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "TOTAL_CHAOS_DURATION": "240"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-memory-hog_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-memory-hog",
+    "name": "node-memory-hog",
+    "env": {
+      "MEMORY_CONSUMPTION_PERCENTAGE": "90%",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "NUMBER_OF_WORKERS": "{{ workers | default('4') }}",
+      "TOTAL_CHAOS_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-memory-hog-moderate_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-memory-hog",
+    "name": "node-memory-hog",
+    "env": {
+      "MEMORY_CONSUMPTION_PERCENTAGE": "70%",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "NUMBER_OF_WORKERS": "{{ workers | default('2') }}",
+      "TOTAL_CHAOS_DURATION": "120"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-network-filter_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-network-filter",
+    "name": "node-network-filter",
+    "env": {
+      "NODE_SELECTOR": "{{ node_selector | default('node-role.kubernetes.io/worker=') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "INSTANCE_COUNT": "{{ worker_instance_count }}",
+      "EXECUTION": "parallel",
+      "INGRESS": "true",
+      "EGRESS": "true",
+      "PORTS": "8080,8443",
+      "PROTOCOLS": "tcp",
+      "TOTAL_CHAOS_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-network-chaos-egress-only_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-network-chaos",
+    "name": "pod-network-chaos",
+    "env": {
+      "EGRESS_PORTS": "[]",
+      "INGRESS_PORTS": "[]",
+      "INSTANCE_COUNT": "{{ worker_instance_count }}",
+      "LABEL_SELECTOR": "app=rook-ceph-osd",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "TEST_DURATION": "120",
+      "TRAFFIC_TYPE": "[egress]",
+      "WAIT_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-network-chaos_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-network-chaos",
+    "name": "pod-network-chaos",
+    "env": {
+      "EGRESS_PORTS": "[]",
+      "INGRESS_PORTS": "[]",
+      "INSTANCE_COUNT": "{{ worker_instance_count }}",
+      "LABEL_SELECTOR": "app=rook-ceph-osd",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "TEST_DURATION": "180",
+      "TRAFFIC_TYPE": "[ingress,egress]",
+      "WAIT_DURATION": "300"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-network-chaos-ingress-only_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-network-chaos",
+    "name": "pod-network-chaos",
+    "env": {
+      "EGRESS_PORTS": "[]",
+      "INGRESS_PORTS": "[]",
+      "INSTANCE_COUNT": "{{ worker_instance_count }}",
+      "LABEL_SELECTOR": "app=rook-ceph-osd",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "TEST_DURATION": "120",
+      "TRAFFIC_TYPE": "[ingress]",
+      "WAIT_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-network-filter_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-network-filter",
+    "name": "pod-network-filter",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "POD_SELECTOR": "app=rook-ceph-osd",
+      "INSTANCE_COUNT": "{{ worker_instance_count }}",
+      "EXECUTION": "parallel",
+      "INGRESS": "true",
+      "EGRESS": "true",
+      "PORTS": "8080,8443",
+      "PROTOCOLS": "tcp",
+      "TOTAL_CHAOS_DURATION": "180"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios-mon_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "180",
+      "KILL_TIMEOUT": "240",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "{{ mon_pod_label | default('app=rook-ceph-mon') }}",
+      "WAIT_DURATION": "1"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios-mgr_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "KILL_TIMEOUT": "180",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "{{ mgr_pod_label | default('app=rook-ceph-mgr') }}",
+      "WAIT_DURATION": "1"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios-noobaa_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "180",
+      "KILL_TIMEOUT": "300",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "{{ noobaa_pod_label | default('app=noobaa') }}",
+      "WAIT_DURATION": "30"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "KILL_TIMEOUT": "180",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "app=rook-ceph-osd",
+      "WAIT_DURATION": "1"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios-multi-disruption_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "{{ pod_disruption_count | default('3') }}",
+      "EXPECTED_RECOVERY_TIME": "180",
+      "KILL_TIMEOUT": "300",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": "{{ pod_name_pattern | default('.*') }}",
+      "POD_LABEL": "app=rook-ceph-osd",
+      "WAIT_DURATION": "30"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios-rbd-plugin_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "KILL_TIMEOUT": "180",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "{{ rbd_plugin_pod_label | default('app=openshift-storage.rbd.csi.ceph.com-nodeplugin') }}",
+      "WAIT_DURATION": "1"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios-cephfs-plugin_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "KILL_TIMEOUT": "180",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "{{ cephfs_plugin_pod_label | default('app=openshift-storage.cephfs.csi.ceph.com-nodeplugin') }}",
+      "WAIT_DURATION": "1"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios-mds_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "120",
+      "KILL_TIMEOUT": "180",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "{{ mds_pod_label | default('app=rook-ceph-mds') }}",
+      "WAIT_DURATION": "1"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios-rgw_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "180",
+      "KILL_TIMEOUT": "240",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "{{ rgw_pod_label | default('app=rook-ceph-rgw') }}",
+      "WAIT_DURATION": "5"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "pod-scenarios-operator_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:pod-scenarios",
+    "name": "pod-scenarios",
+    "env": {
+      "DISRUPTION_COUNT": "1",
+      "EXPECTED_RECOVERY_TIME": "300",
+      "KILL_TIMEOUT": "360",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "NAME_PATTERN": ".*",
+      "POD_LABEL": "{{ operator_pod_label | default('app=rook-ceph-operator') }}",
+      "WAIT_DURATION": "30"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "service-disruption-scenarios_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:service-disruption-scenarios",
+    "name": "service-disruption-scenarios",
+    "env": {
+      "DELETE_COUNT": "1",
+      "LABEL_SELECTOR": "",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "RUNS": "1"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "service-disruption-scenarios-rook_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:service-disruption-scenarios",
+    "name": "service-disruption-scenarios",
+    "env": {
+      "DELETE_COUNT": "1",
+      "LABEL_SELECTOR": "{{ svc_label_selector | default('') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "RUNS": "{{ svc_disruption_runs | default('1') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "syn-flood_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:syn-flood",
+    "name": "syn-flood",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "TARGET_SERVICE_LABEL": "app=rook-ceph-osd",
+      "TARGET_PORT": "8080",
+      "TOTAL_CHAOS_DURATION": "180",
+      "NUMBER_OF_PODS": "2"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "syn-flood-mgr_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:syn-flood",
+    "name": "syn-flood",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "TARGET_SERVICE_LABEL": "app=rook-ceph-mgr",
+      "TARGET_PORT": "8080",
+      "TOTAL_CHAOS_DURATION": "120",
+      "NUMBER_OF_PODS": "2"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "syn-flood-mds_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:syn-flood",
+    "name": "syn-flood",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "TARGET_SERVICE_LABEL": "app=rook-ceph-mds",
+      "TARGET_PORT": "8080",
+      "TOTAL_CHAOS_DURATION": "120",
+      "NUMBER_OF_PODS": "2"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "syn-flood-rgw_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:syn-flood",
+    "name": "syn-flood",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "TARGET_SERVICE_LABEL": "app=rook-ceph-rgw",
+      "TARGET_PORT": "8080",
+      "TOTAL_CHAOS_DURATION": "180",
+      "NUMBER_OF_PODS": "2"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "syn-flood-noobaa_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:syn-flood",
+    "name": "syn-flood",
+    "env": {
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "TARGET_SERVICE_LABEL": "app=noobaa",
+      "TARGET_PORT": "8080",
+      "TOTAL_CHAOS_DURATION": "120",
+      "NUMBER_OF_PODS": "2"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "time-scenarios_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:time-scenarios",
+    "name": "time-scenarios",
+    "env": {
+      "ACTION": "{{ time_action | default('skew_date') }}",
+      "CONTAINER_NAME": "{{ time_container | default('') }}",
+      "LABEL_SELECTOR": "{{ time_label_selector | default('app=rook-ceph-mon') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "OBJECT_NAME": "{{ time_object_name | default('[]') }}",
+      "OBJECT_TYPE": "{{ time_object_type | default('pod') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "time-scenarios-osd_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:time-scenarios",
+    "name": "time-scenarios",
+    "env": {
+      "ACTION": "{{ time_action | default('skew_date') }}",
+      "CONTAINER_NAME": "{{ time_container | default('') }}",
+      "LABEL_SELECTOR": "{{ time_label_selector | default('app=rook-ceph-osd') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "OBJECT_NAME": "{{ time_object_name | default('[]') }}",
+      "OBJECT_TYPE": "{{ time_object_type | default('pod') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "time-scenarios-mgr_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:time-scenarios",
+    "name": "time-scenarios",
+    "env": {
+      "ACTION": "{{ time_action | default('skew_date') }}",
+      "CONTAINER_NAME": "{{ time_container | default('') }}",
+      "LABEL_SELECTOR": "{{ time_label_selector | default('app=rook-ceph-mgr') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "OBJECT_NAME": "{{ time_object_name | default('[]') }}",
+      "OBJECT_TYPE": "{{ time_object_type | default('pod') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "time-scenarios-mds_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:time-scenarios",
+    "name": "time-scenarios",
+    "env": {
+      "ACTION": "{{ time_action | default('skew_date') }}",
+      "CONTAINER_NAME": "{{ time_container | default('') }}",
+      "LABEL_SELECTOR": "{{ time_label_selector | default('app=rook-ceph-mds') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "OBJECT_NAME": "{{ time_object_name | default('[]') }}",
+      "OBJECT_TYPE": "{{ time_object_type | default('pod') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "time-scenarios-rgw_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:time-scenarios",
+    "name": "time-scenarios",
+    "env": {
+      "ACTION": "{{ time_action | default('skew_date') }}",
+      "CONTAINER_NAME": "{{ time_container | default('') }}",
+      "LABEL_SELECTOR": "{{ time_label_selector | default('app=rook-ceph-rgw') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "OBJECT_NAME": "{{ time_object_name | default('[]') }}",
+      "OBJECT_TYPE": "{{ time_object_type | default('pod') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "time-scenarios-noobaa_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:time-scenarios",
+    "name": "time-scenarios",
+    "env": {
+      "ACTION": "{{ time_action | default('skew_date') }}",
+      "CONTAINER_NAME": "{{ time_container | default('') }}",
+      "LABEL_SELECTOR": "{{ time_label_selector | default('app=noobaa') }}",
+      "NAMESPACE": "{{ namespace | default('openshift-storage') }}",
+      "OBJECT_NAME": "{{ time_object_name | default('[]') }}",
+      "OBJECT_TYPE": "{{ time_object_type | default('pod') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "kubevirt-outage_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:kubevirt-outage",
+    "name": "kubevirt-outage",
+    "env": {
+      "NAMESPACE": "{{ kubevirt_namespace | default('default') }}",
+      "VM_NAME": "{{ kubevirt_vm_name | default('') }}",
+      "TIMEOUT": "{{ kubevirt_timeout | default('60') }}",
+      "KILL_COUNT": "{{ kubevirt_kill_count | default('1') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  },
+  "node-scenarios_{{ suffix }}": {
+    "image": "quay.io/krkn-chaos/krkn-hub:node-scenarios",
+    "name": "node-scenarios",
+    "env": {
+      "ACTION": "{{ node_scenario_action | default('stop_start_kubelet_scenario') }}",
+      "LABEL_SELECTOR": "{{ node_scenario_label | default('node-role.kubernetes.io/worker') }}",
+      "EXCLUDE_LABEL": "{{ exclude_label | default('') }}",
+      "NODE_NAME": "{{ node_name | default('') }}",
+      "INSTANCE_COUNT": "{{ node_instance_count | default(worker_instance_count) }}",
+      "RUNS": "{{ node_scenario_runs | default('1') }}",
+      "KUBE_CHECK": "{{ kube_check | default('true') }}",
+      "PARALLEL": "{{ parallel | default('false') }}",
+      "CLOUD_TYPE": "{{ cloud_type | default('aws') }}",
+      "TIMEOUT": "{{ node_scenario_timeout | default('180') }}",
+      "DURATION": "{{ node_scenario_duration | default('120') }}",
+      "DISABLE_SSL_VERIFICATION": "{{ disable_ssl_verification | default('false') }}",
+      "VSPHERE_IP": "{{ vsphere_ip | default('') }}",
+      "VSPHERE_USERNAME": "{{ vsphere_user | default('') }}",
+      "VSPHERE_PASSWORD": "{{ vsphere_pass | default('') }}",{# pragma: allowlist secret #}
+      "AWS_ACCESS_KEY_ID": "{{ aws_access_key_id | default('') }}",
+      "AWS_SECRET_ACCESS_KEY": "{{ aws_secret_access_key | default('') }}",{# pragma: allowlist secret #}
+      "AWS_DEFAULT_REGION": "{{ aws_region | default('') }}",
+      "BMC_USER": "{{ bmc_user | default('') }}",
+      "BMC_PASSWORD": "{{ bmc_password | default('') }}",{# pragma: allowlist secret #}
+      "BMC_ADDR": "{{ bmc_addr | default('') }}",
+      "DISKS": "{{ disks | default('') }}",
+      "IBMC_URL": "{{ ibm_url | default('') }}",
+      "IBMC_POWER_URL": "{{ ibm_power_url | default('') }}",
+      "IBMC_POWER_CRN": "{{ ibm_power_crn | default('') }}",
+      "IBMC_APIKEY": "{{ ibm_apikey | default('') }}",{# pragma: allowlist secret #}
+      "AZURE_TENANT_ID": "{{ azure_tenant_id | default('') }}",
+      "AZURE_CLIENT_ID": "{{ azure_client_id | default('') }}",
+      "AZURE_CLIENT_SECRET": "{{ azure_client_secret | default('') }}",{# pragma: allowlist secret #}
+      "AZURE_SUBSCRIPTION_ID": "{{ azure_subscription_id | default('') }}"
+    },
+    "depends_on": "root_{{ suffix }}"
+  }
+}

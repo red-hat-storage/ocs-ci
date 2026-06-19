@@ -65,8 +65,8 @@ class BackingStoreTab(ObjectStorage, CreateResourceForm):
             bool: True if backing store is Ready, False otherwise
         """
         logger.info("Verifying the status of noobaa backing store is Ready")
-        backingstore_status = self.get_element_text(
-            self.validation_loc["bucketclass-status"]
+        backingstore_status = self.get_element_attribute(
+            self.validation_loc["bucketclass-status"], "textContent"
         )
         is_ready = backingstore_status == "Ready"
         if not is_ready:

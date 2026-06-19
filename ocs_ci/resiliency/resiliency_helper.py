@@ -38,7 +38,10 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
 )
 from ocs_ci.ocs.resources.pod import delete_pod_by_phase
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.resiliency.resiliency_tools import (
+    CephStatusTool,
+    raise_if_ceph_crashes_detected,
+)
 from concurrent.futures import (
     ThreadPoolExecutor,
     as_completed,
@@ -234,6 +237,7 @@ class Resiliency:
         self.scenario_name = scenario
         self.failure_method = failure_method
         self.cephtool = CephStatusTool()
+        self.config = ResiliencyConfig()
         self.resiliency_failures = ResiliencyFailures(scenario, self.failure_method)
 
     def pre_scenario_check(self):
@@ -244,13 +248,7 @@ class Resiliency:
 
     def post_scenario_check(self):
         """Perform health checks and gather logs after scenario execution."""
-
-        log.info("Removing any existing Ceph crash logs...")
-        ceph_crashes = self.cephtool.check_ceph_crashes()
-        if ceph_crashes:
-            log.error(f"Ceph crash logs found: {ceph_crashes}")
-            raise Exception("Ceph crash logs found after scenario execution.")
-
+        self._check_ceph_crash_during_run("resiliency post-scenario check")
         log.info("Checking Ceph health...")
         if not ceph_health_check(fix_ceph_health=True, tries=25):
             log.error("Ceph health check failed after scenario execution.")
@@ -269,18 +267,37 @@ class Resiliency:
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
 
+    def _check_ceph_crash_during_run(self, context):
+        """Fail fast when STOP_WHEN_CEPH_CRASHED is enabled and a crash is present."""
+        if not self.config.stop_when_ceph_crashed:
+            return
+        raise_if_ceph_crashes_detected(
+            self.cephtool,
+            context,
+            poll_interval=0,
+        )
+
     def start(self):
         """Start running all failure scenarios under this configuration."""
+        # Background monitoring is handled by resiliency_test_lifecycle autouse fixture
+        # for the full test (including workload setup). Run synchronous checks here
+        # between failure cases for faster detection.
         for failure_case in self.resiliency_failures:
             if not isinstance(failure_case, dict):
                 log.error("Failure case is not a valid dictionary.")
                 continue
+            self._check_ceph_crash_during_run(
+                f"resiliency {self.scenario_name} (between failure cases)"
+            )
             self.pre_scenario_check()
             log.info(f"Running failure case: {failure_case}")
             try:
                 self.inject_failure(failure_case)
             except (TimeoutExpiredError, CommandFailed, CephHealthException) as e:
                 log.error(f"Failure case execution failed: {e}")
+            self._check_ceph_crash_during_run(
+                f"resiliency {self.scenario_name} (after failure injection)"
+            )
             self.post_scenario_check()
 
     def inject_failure(self, failure):

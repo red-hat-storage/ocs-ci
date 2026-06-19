@@ -1,3 +1,4 @@
+import binascii
 import tempfile
 from datetime import datetime, timedelta
 from functools import reduce
@@ -73,6 +74,7 @@ from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 log = logging.getLogger(__name__)
 
 # variables
+_oc_plugin_list_cache = None
 mounting_dir = "/mnt/cephfs/"
 clients = []
 md5sum_list1 = []
@@ -806,22 +808,25 @@ def exec_cmd(
     ):
         kube_index = 1
         # check if we have an oc plugin in the command
-        plugin_list = "oc plugin list"
-        cp = subprocess.run(
-            shlex.split(plugin_list),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        global _oc_plugin_list_cache
+        if _oc_plugin_list_cache is None:
+            cp = subprocess.run(
+                shlex.split("oc plugin list"),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if cp.returncode == 0:
+                _oc_plugin_list_cache = cp.stdout.decode().splitlines()
+
         subcmd = cmd[1].split("-")
         if len(subcmd) > 1:
             subcmd = "_".join(subcmd)
         if not isinstance(subcmd, str) and isinstance(subcmd, list):
             subcmd = str(subcmd[0])
 
-        for l in cp.stdout.decode().splitlines():
+        plugin_lines = _oc_plugin_list_cache or []
+        for l in plugin_lines:
             if subcmd in l:
-                # If oc cmdline has plugin name then we need to push the
-                # --kubeconfig to next index
                 kube_index = 2
                 log.info(f"Found oc plugin {subcmd}")
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
@@ -834,15 +839,17 @@ def exec_cmd(
         log.info(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
-        completed_process = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            timeout=timeout,
-            env=_env,
-            **kwargs,
-        )
+        run_kw = {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "timeout": timeout,
+            "env": _env,
+        }
+        # subprocess.run forbids stdin= and input= together; when callers pass input,
+        # stdin is managed internally. Do not inject stdin=PIPE if the caller set stdin.
+        if "input" not in kwargs and "stdin" not in kwargs:
+            run_kw["stdin"] = subprocess.PIPE
+        completed_process = subprocess.run(cmd, **run_kw, **kwargs)
     finally:
         if threading_lock and cmd[0] == "oc":
             threading_lock.release()
@@ -1049,27 +1056,73 @@ def get_url_content(url, **kwargs):
 def expose_ocp_version(version):
     """
     This helper function exposes latest nightly version or GA version of OCP.
-    When the version string ends with .nightly (e.g. 4.2.0-0.nightly) it will
+    When the version string ends with .nightly (e.g. 4.22.0-0.nightly) it will
     expose the version to latest accepted OCP build
-    (e.g. 4.2.0-0.nightly-2019-08-08-103722)
-    If the version ends with -ga than it will find the latest GA OCP version
-    and will expose 4.2-ga to for example 4.2.22.
+    (e.g. 4.22.0-0.nightly-2026-06-10-151504).
+
+    If the nightly service is unavailable, it will fallback to the latest GA
+    version of the same major.minor version if available (e.g., 4.22.0).
+
+    If the version ends with -ga it will find the latest GA OCP version
+    and will expose 4.22-ga to for example 4.22.0.
 
     Args:
-        version (str): Verison of OCP
+        version (str): Version of OCP (e.g., "4.22.0-0.nightly", "4.22-ga")
 
     Returns:
-        str: Version of OCP exposed to full version if latest nighly passed
+        str: Version of OCP exposed to full version. For nightly requests,
+             returns either the nightly build name or GA fallback version.
+
+    Raises:
+        ValueError: When unable to get version info and no fallback is possible
 
     """
     if version.endswith(".nightly"):
-        latest_nightly_url = (
-            f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
-            f"releasestream/{version}/latest"
-        )
-        version_url_content = get_url_content(latest_nightly_url)
-        version_json = json.loads(version_url_content)
-        return version_json["name"]
+        release_info = get_nightly_release_info(version)
+        if release_info and release_info.get("name"):
+            return release_info["name"]
+        else:
+            # Nightly service unavailable, try fallback to GA version
+            log.warning(f"Nightly release service unavailable for {version}")
+
+            # Extract major.minor version (e.g., "4.22.0-0.nightly" -> "4.22")
+            try:
+                major_minor = version.split(".nightly")[0]  # "4.22.0-0"
+                major_minor = ".".join(major_minor.split(".")[0:2])  # "4.22"
+
+                # Check if this major.minor version has GA releases available
+                if is_ocp_version_gaed(major_minor):
+                    log.warning(
+                        f"OpenShift CI nightly service is unavailable. "
+                        f"Falling back to latest GA version of {major_minor} instead of nightly."
+                    )
+
+                    # Get the latest GA version for this major.minor
+                    ga_version = get_latest_ocp_version(f"stable-{major_minor}")
+                    log.warning(
+                        f"FALLBACK: Using GA version {ga_version} instead of nightly {version}. "
+                        f"This may affect test behavior if nightly-specific features are expected."
+                    )
+                    return str(ga_version)
+                else:
+                    raise ValueError(
+                        f"Unable to get nightly release info for version {version}. "
+                        "The OpenShift CI nightly service is currently unavailable, "
+                        f"and version {major_minor} is not yet GA'ed so no fallback is possible. "
+                        "\n\nThis typically means:\n"
+                        "1. The OpenShift CI release service "
+                        "(amd64.ocp.releases.ci.openshift.org) is experiencing an outage\n"
+                        f"2. Version {major_minor} is still under development and not yet GA'ed\n"
+                        "\nPossible solutions:\n"
+                        "- Wait for the OpenShift CI service to recover\n"
+                        "- Use a different OCP version that is already GA'ed\n"
+                        "- Check the service status at the OpenShift CI console"
+                    )
+            except Exception as parse_error:
+                raise ValueError(
+                    f"Unable to get nightly release info for version {version} "
+                    f"and failed to parse version for GA fallback: {parse_error}"
+                )
     if version.endswith("-ga"):
         channel = config.DEPLOYMENT.get("ocp_channel", "stable")
         ocp_version = version.rstrip("-ga")
@@ -1077,6 +1130,207 @@ def expose_ocp_version(version):
         return get_latest_ocp_version(f"{channel}-{ocp_version}", index)
     else:
         return version
+
+
+@retry(
+    exception_to_check=(requests.exceptions.RequestException, AssertionError),
+    tries=6,  # 6 retries = ~1 minute total
+    delay=10,  # 10 seconds between retries
+    backoff=1,  # No backoff, keep it simple
+    max_delay=10,  # Keep delay constant
+    max_timeout=120,  # 2 minutes max
+)
+def _fetch_nightly_release_info_with_retry(url):
+    """
+    Fetch nightly release info with retry logic for temporary service outages.
+
+    Args:
+        url (str): The API endpoint URL to fetch from
+
+    Returns:
+        dict: Parsed JSON response
+
+    Raises:
+        requests.exceptions.RequestException: For network-related errors
+        AssertionError: For HTTP error status codes
+    """
+    log.debug(f"Attempting to fetch nightly release info from: {url}")
+
+    try:
+        response = requests.get(url, timeout=30)
+
+        # Check for HTTP errors and provide specific messages
+        if response.status_code == 503:
+            raise requests.exceptions.RequestException(
+                "OCP release service temporarily unavailable (HTTP 503). "
+                "This usually indicates the OpenShift CI release service is experiencing an outage."
+            )
+        elif response.status_code == 404:
+            raise requests.exceptions.RequestException(
+                "OCP release stream not found (HTTP 404). "
+                "The requested nightly version may not exist."
+            )
+        elif not response.ok:
+            raise requests.exceptions.RequestException(
+                f"OCP release service returned HTTP {response.status_code}"
+            )
+
+        # Parse and return JSON response
+        release_info = response.json()
+        log.debug(
+            f"Successfully retrieved release info: name={release_info.get('name')}, "
+            f"pullSpec={release_info.get('pullSpec')}"
+        )
+        return release_info
+
+    except requests.exceptions.Timeout:
+        raise requests.exceptions.RequestException(
+            "Timeout while fetching OCP release info. The service may be slow or unavailable."
+        )
+    except requests.exceptions.ConnectionError:
+        raise requests.exceptions.RequestException(
+            "Network connection error while fetching OCP release info. "
+            "Check internet connectivity or if the OpenShift CI service is accessible."
+        )
+
+
+def get_nightly_release_info(version):
+    """
+    Get full release information for a nightly build including pullSpec.
+
+    Args:
+        version (str): Nightly version string (e.g., 4.22.0-0.nightly or
+                      4.22.0-0.nightly-2026-04-18-162844)
+
+    Returns:
+        dict: Release information including 'name', 'pullSpec', 'downloadURL', etc.
+              Returns None if unable to fetch the information.
+
+    """
+    if "nightly" not in version:
+        return None
+
+    # Extract the stream name (e.g., "4.22.0-0.nightly") from full version
+    # The API expects just the stream name, not the full timestamp version
+    if ".nightly" in version:
+        stream_name = version.split(".nightly")[0] + ".nightly"
+    else:
+        # Shouldn't happen, but handle it gracefully
+        stream_name = version
+
+    latest_nightly_url = (
+        f"https://amd64.ocp.releases.ci.openshift.org/api/v1/"
+        f"releasestream/{stream_name}/latest"
+    )
+
+    try:
+        return _fetch_nightly_release_info_with_retry(latest_nightly_url)
+    except Exception as e:
+        log.warning(
+            f"Failed to get nightly release info for {version} after retrying for 1 minute. "
+            f"Error: {e}"
+        )
+        return None
+
+
+def download_ga_oc_client_as_bootstrap(bin_dir, target_version):
+    """
+    Download a GA oc client as bootstrap to enable extraction from pullSpec.
+
+    This function downloads a GA version of the oc client (potentially N-1 or N-2)
+    to use as a bootstrap client for extracting the correct nightly version from
+    the release image pullSpec.
+
+    Args:
+        bin_dir (str): Directory to download the client to
+        target_version (str): Target version to determine which GA version to use
+
+    Returns:
+        bool: True if successfully downloaded a bootstrap client, False otherwise
+
+    """
+    log.info(
+        "Attempting to download a GA oc client as bootstrap for nightly extraction"
+    )
+
+    version_major_minor = str(
+        version_module.get_semantic_version(target_version, only_major_minor=True)
+    )
+
+    previous_dir = os.getcwd()
+    os.chdir(bin_dir)
+    tarball = "openshift-client-bootstrap.tar.gz"
+
+    try:
+        # Try to download N, N-1, or N-2 GA version
+        for current_version_count in range(3):
+            previous_version = version_module.get_previous_version(
+                version_major_minor, current_version_count
+            )
+            log.debug(
+                f"Checking if version {previous_version} (offset {current_version_count}) is GA'ed"
+            )
+
+            if is_ocp_version_gaed(previous_version):
+                log.info(
+                    f"Version {previous_version} is GA'ed, downloading as bootstrap client"
+                )
+                # Temporarily set URL template for GA version
+                original_template = config.DEPLOYMENT.get("ocp_url_template")
+                config.DEPLOYMENT["ocp_url_template"] = (
+                    "https://mirror.openshift.com/pub/openshift-v4/clients/"
+                    "ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
+                )
+
+                try:
+                    ga_version = expose_ocp_version(f"{previous_version}-ga")
+                    url = get_openshift_mirror_url("openshift-client", ga_version)
+                    download_file(url, tarball)
+                    run_cmd(f"tar xzvf {tarball} oc kubectl")
+                    delete_file(tarball)
+                    log.info(
+                        f"Successfully downloaded GA oc client {ga_version} as bootstrap"
+                    )
+                    return True
+                except Exception as e:
+                    log.warning(
+                        f"Failed to download GA version {ga_version} as bootstrap: {e}"
+                    )
+                finally:
+                    # Restore original template
+                    if original_template:
+                        config.DEPLOYMENT["ocp_url_template"] = original_template
+                    else:
+                        config.DEPLOYMENT.pop("ocp_url_template", None)
+
+        log.warning("Could not find any GA'ed version to use as bootstrap")
+        return False
+
+    except Exception as e:
+        log.error(f"Failed to download bootstrap GA oc client: {e}")
+        return False
+    finally:
+        os.chdir(previous_dir)
+
+
+def get_registry_svc(version):
+    """
+    Get the CI registry image path for the given OCP version.
+
+    OCP 5.x uses a different image stream name (release-5) than
+    OCP 4.x (release).
+
+    Args:
+        version (str): OCP version string (e.g. "5.0.0-0.nightly-2026-06-18-000016")
+
+    Returns:
+        str: Registry image path (e.g. "registry.ci.openshift.org/ocp/release-5")
+
+    """
+    major = version.split(".")[0]
+    if int(major) >= 5:
+        return "registry.ci.openshift.org/ocp/release-5"
+    return constants.REGISTRY_SVC
 
 
 @retry(CommandFailed, tries=2, delay=5, backoff=2)
@@ -1137,7 +1391,7 @@ def get_openshift_installer(
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         cmd = (
             f"oc adm release extract --registry-config {pull_secret_path} --command={installer_filename} "
-            f"--to ./ registry.ci.openshift.org/ocp/release:{version}"
+            f"--to ./ {get_registry_svc(version)}:{version}"
         )
         exec_cmd(cmd)
         # return to the previous working directory
@@ -1246,7 +1500,23 @@ def get_rosa_cli(
     """
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     rosa_filename = "rosa"
-    rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
+
+    # Detect platform and architecture
+    system = platform.system()
+    machine = platform.machine()
+    if system == "Darwin":
+        if machine == "arm64":
+            rosa_tarball_name = "rosa_Darwin_arm64.tar.gz"
+        else:
+            rosa_tarball_name = "rosa_Darwin_x86_64.tar.gz"
+    elif system == "Linux":
+        if machine == "aarch64":
+            rosa_tarball_name = "rosa_Linux_arm64.tar.gz"
+        else:
+            rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
+    else:
+        raise NotImplementedError(f"Unsupported platform: {system} {machine}")
+
     rosa_binary_path = os.path.join(bin_dir, rosa_filename)
     if os.path.isfile(rosa_binary_path) and force_download:
         delete_file(rosa_binary_path)
@@ -1278,9 +1548,108 @@ def get_rosa_cli(
     return rosa_binary_path
 
 
+def _try_extract_from_fallback_ga_image(binary, original_image, bin_dir):
+    """
+    Try to extract binary from GA fallback image when nightly registry is unavailable.
+
+    Args:
+        binary (str): type of binary (oc or openshift-install)
+        original_image (str): original nightly image URL that failed
+        bin_dir (str): path to bin folder where to extract the binary
+
+    Returns:
+        bool: True if fallback extraction succeeded, False otherwise
+    """
+    # Check if this looks like a nightly build that we can fallback
+    if (
+        "registry.ci.openshift.org/ocp/release" in original_image
+        and "nightly" in original_image
+    ):
+        try:
+            # Extract version from nightly image name
+            # e.g., "registry.ci.openshift.org/ocp/release:4.22.0-0.nightly-2026-06-10-104337"
+            # or "registry.ci.openshift.org/ocp/release-5:5.0.0-0.nightly-2026-06-18-000016"
+            image_tag = original_image.split(":")[
+                -1
+            ]  # "4.22.0-0.nightly-2026-06-10-104337"
+
+            if ".nightly" in image_tag:
+                # Extract major.minor version
+                major_minor = image_tag.split(".nightly")[0]  # "4.22.0-0"
+                major_minor = ".".join(major_minor.split(".")[0:2])  # "4.22"
+
+                # Check if this version is GA'ed
+                if is_ocp_version_gaed(major_minor):
+                    # Get the latest GA version
+                    ga_version = get_latest_ocp_version(f"stable-{major_minor}")
+
+                    # Construct GA image URL for quay.io
+                    ga_image = (
+                        f"quay.io/openshift-release-dev/ocp-release:{ga_version}-x86_64"
+                    )
+
+                    log.warning(
+                        f"Nightly registry image unavailable: {original_image}. "
+                        f"Attempting fallback to GA image: {ga_image}"
+                    )
+
+                    # Try extracting from the GA image
+                    binary_path = os.path.join(bin_dir, binary)
+                    binary_path_exists = os.path.isfile(binary_path)
+
+                    with TemporaryDirectory() as temp_dir:
+                        pull_secret_path = os.path.join(
+                            constants.DATA_DIR, "pull-secret"
+                        )
+                        cmd = (
+                            f"oc adm release extract -a {pull_secret_path} --to {temp_dir} "
+                            f'--command={binary} "{ga_image}"'
+                        )
+                        exec_cmd(cmd)
+                        temp_binary = os.path.join(temp_dir, binary)
+
+                        if binary_path_exists:
+                            backup_file = f"{binary_path}.bak"
+                            os.rename(binary_path, backup_file)
+                            try:
+                                shutil.move(temp_binary, binary_path)
+                                delete_file(backup_file)
+                                log.info("Deleted backup binaries.")
+                            except FileNotFoundError as ex:
+                                log.error(
+                                    "Something went wrong with copying binary, reverting backup file. "
+                                    f"Exception: {ex}"
+                                )
+                                shutil.move(backup_file, binary_path)
+                                raise ex
+                        else:
+                            shutil.move(temp_binary, binary_path)
+
+                        # Set executable permissions
+                        current_file_permissions = os.stat(binary_path)
+                        os.chmod(
+                            binary_path, current_file_permissions.st_mode | stat.S_IEXEC
+                        )
+
+                    log.warning(
+                        f"FALLBACK SUCCESS: Extracted {binary} from GA image {ga_image} "
+                        "instead of unavailable nightly image. "
+                        "This may affect behavior if nightly-specific features are expected."
+                    )
+                    return True
+
+        except Exception as e:
+            log.warning(f"GA fallback extraction failed: {e}")
+
+    return False
+
+
 def extract_ocp_binary_from_image(binary, image, bin_dir):
     """
-    Extract binary (oc client or openshift installer) from custom OCP image
+    Extract binary (oc client or openshift installer) from custom OCP image.
+
+    If the image is a nightly build from registry.ci.openshift.org and extraction
+    fails, automatically attempts fallback to GA version from quay.io.
 
     Args:
         binary (str): type of binary (oc or openshift-install)
@@ -1288,27 +1657,47 @@ def extract_ocp_binary_from_image(binary, image, bin_dir):
         bin_dir (str): path to bin folder where to extract the binary
 
     """
-    binary_path = os.path.join(bin_dir, binary)
-    binary_path_exists = os.path.isfile(binary_path)
-    with TemporaryDirectory() as temp_dir:
-        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-        cmd = f'oc adm release extract -a {pull_secret_path} --to {temp_dir} --command={binary} "{image}"'
-        exec_cmd(cmd)
-        temp_binary = os.path.join(temp_dir, binary)
-        if binary_path_exists:
-            backup_file = f"{binary_path}.bak"
-            os.rename(binary_path, backup_file)
-            try:
+    try:
+        binary_path = os.path.join(bin_dir, binary)
+        binary_path_exists = os.path.isfile(binary_path)
+        with TemporaryDirectory() as temp_dir:
+            pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+            cmd = f'oc adm release extract -a {pull_secret_path} --to {temp_dir} --command={binary} "{image}"'
+            exec_cmd(cmd)
+            temp_binary = os.path.join(temp_dir, binary)
+            if binary_path_exists:
+                backup_file = f"{binary_path}.bak"
+                os.rename(binary_path, backup_file)
+                try:
+                    shutil.move(temp_binary, binary_path)
+                    delete_file(backup_file)
+                    log.info("Deleted backup binaries.")
+                except FileNotFoundError as ex:
+                    log.error(
+                        f"Something went wrong with copying binary, reverting backup file. Exception: {ex}"
+                    )
+                    shutil.move(backup_file, binary_path)
+                    raise ex
+            else:
                 shutil.move(temp_binary, binary_path)
-                delete_file(backup_file)
-                log.info("Deleted backup binaries.")
-            except FileNotFoundError as ex:
-                log.error(
-                    f"Something went wrong with copying binary, reverting backup file. Exception: {ex}"
-                )
-                shutil.move(backup_file, binary_path)
-        else:
-            shutil.move(temp_binary, binary_path)
+
+        # Set executable permissions
+        current_file_permissions = os.stat(binary_path)
+        os.chmod(binary_path, current_file_permissions.st_mode | stat.S_IEXEC)
+
+    except Exception as e:
+        log.warning(f"Failed to extract {binary} from image {image}: {e}")
+
+        # Try fallback to GA image if this was a nightly build
+        if _try_extract_from_fallback_ga_image(binary, image, bin_dir):
+            return  # Fallback succeeded
+
+        # Fallback didn't work or wasn't applicable, re-raise original error
+        log.error(
+            f"Failed to extract {binary} from {image} and no fallback was possible. "
+            f"Error: {e}"
+        )
+        raise e
 
 
 def get_openshift_client(version=None, bin_dir=None, force_download=False):
@@ -1381,18 +1770,6 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
             download_client = False
 
     if download_client:
-        # Move existing client binaries to backup location
-        client_binary_backup = f"{client_binary_path}.bak"
-        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
-
-        backup_created = False
-        try:
-            os.rename(client_binary_path, client_binary_backup)
-            os.rename(kubectl_binary_path, kubectl_binary_backup)
-            backup_created = True
-        except FileNotFoundError:
-            pass
-
         # Download the client
         log.info(f"Downloading openshift client ({version}).")
         # record current working directory and switch to BIN_DIR
@@ -1400,24 +1777,98 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
         os.chdir(bin_dir)
 
         tarball = "openshift-client.tar.gz"
-        try:
-            url = get_openshift_mirror_url("openshift-client", version)
-            download_file(url, tarball)
-            run_cmd(f"tar xzvf {tarball} oc kubectl")
-            delete_file(tarball)
-        except Exception as e:
-            log.error(f"Failed to download the openshift client. Exception '{e}'")
-            # check given version is GA'ed or not
-            if "nightly" in version:
-                get_nightly_oc_via_ga(version, tarball)
+        download_successful = False
+        backup_created = False
+        client_binary_backup = f"{client_binary_path}.bak"
+        kubectl_binary_backup = f"{kubectl_binary_path}.bak"
+
+        # For nightly builds, try pullSpec extraction first (more reliable than downloadURL)
+        if "nightly" in version and not custom_ocp_image:
+            log.info(
+                "Nightly build detected. Attempting to download via pullSpec "
+                "(more reliable than downloadURL extraction)."
+            )
+            release_info = get_nightly_release_info(version)
+
+            if release_info and release_info.get("pullSpec"):
+                pullspec = release_info["pullSpec"]
+                log.info(f"Using pullSpec: {pullspec}")
+
+                # Check if oc client exists to perform extraction
+                if not client_exist:
+                    log.info(
+                        "No existing oc client found. Downloading GA version as bootstrap "
+                        "to enable extraction from pullSpec."
+                    )
+                    if download_ga_oc_client_as_bootstrap(bin_dir, version):
+                        log.info("Bootstrap GA oc client downloaded successfully.")
+                    else:
+                        log.warning(
+                            "Failed to download bootstrap GA client. "
+                            "Will try downloadURL method as fallback."
+                        )
+
+                # Now try to extract from pullSpec using the available oc (existing or bootstrap)
+                # Note: extract_ocp_binary_from_image() handles its own backup internally
+                if os.path.isfile(client_binary_path):
+                    try:
+                        log.info(f"Extracting oc client from pullSpec: {pullspec}")
+                        extract_ocp_binary_from_image("oc", pullspec, bin_dir)
+                        download_successful = True
+                        log.info(
+                            "Successfully extracted oc client from pullSpec "
+                            "(avoids downloadURL timeout issues)."
+                        )
+                    except Exception as e:
+                        log.warning(
+                            f"Failed to extract oc client from pullSpec: {e}. "
+                            "Falling back to downloadURL method."
+                        )
+            else:
+                log.warning(
+                    "Could not retrieve pullSpec from release stream. "
+                    "Falling back to downloadURL method."
+                )
+
+        # If pullSpec extraction wasn't attempted or failed, try traditional downloadURL method
+        # Create backup before attempting methods that don't handle their own backup
+        if not download_successful:
+            # Move existing client binaries to backup location before trying other download methods
+            try:
+                os.rename(client_binary_path, client_binary_backup)
+                os.rename(kubectl_binary_path, kubectl_binary_backup)
+                backup_created = True
+                log.debug("Created backup of existing client binaries.")
+            except FileNotFoundError:
+                pass
+
+            try:
+                url = get_openshift_mirror_url("openshift-client", version)
+                download_file(url, tarball)
+                run_cmd(f"tar xzvf {tarball} oc kubectl")
+                delete_file(tarball)
+                download_successful = True
+            except Exception as e:
+                log.error(f"Failed to download the openshift client. Exception '{e}'")
+                # check given version is GA'ed or not
+                if "nightly" in version:
+                    get_nightly_oc_via_ga(version, tarball)
+                    # Check if get_nightly_oc_via_ga succeeded
+                    if os.path.isfile(client_binary_path):
+                        download_successful = True
 
         if custom_ocp_image and not skip_if_client_downloaded_from_installer:
             extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
+        # Verify the downloaded/extracted client works
+        client_version_valid = False
         try:
             client_version = run_cmd(f"{client_binary_path} version --client")
+            client_version_valid = True
         except CommandFailed:
             log.error("Unable to get version from downloaded client.")
-        if client_version:
+
+        if client_version_valid:
+            # Download/extraction successful - clean up backups
             try:
                 delete_file(client_binary_backup)
                 delete_file(kubectl_binary_backup)
@@ -1425,15 +1876,57 @@ def get_openshift_client(version=None, bin_dir=None, force_download=False):
             except FileNotFoundError:
                 pass
         else:
+            # Download/extraction failed - handle fallback
+            log.warning(
+                "Failed to download/extract the correct oc client version. "
+                "Attempting fallback strategies."
+            )
+
             if backup_created:
+                # Restore the backup (previous version)
                 os.rename(client_binary_backup, client_binary_path)
                 os.rename(kubectl_binary_backup, kubectl_binary_path)
-                log.info("Restored backup binaries to their original location.")
+                log.warning(
+                    "Restored previous oc client version. Continuing with existing client "
+                    "to avoid deployment failure. NOTE: Version mismatch may cause issues."
+                )
+                try:
+                    client_version = run_cmd(f"{client_binary_path} version --client")
+                except CommandFailed:
+                    client_version = "unknown (restored from backup)"
+            elif os.path.isfile(client_binary_path):
+                # We have a bootstrap client from download_ga_oc_client_as_bootstrap
+                log.warning(
+                    "Using bootstrap GA oc client. Continuing with bootstrap client "
+                    "to avoid deployment failure. NOTE: Version mismatch may cause issues."
+                )
+                try:
+                    client_version = run_cmd(f"{client_binary_path} version --client")
+                except CommandFailed:
+                    client_version = "unknown (bootstrap)"
             else:
-                if not use_system_available_client_and_kubectl(
+                # Try to use system available client as last resort
+                if use_system_available_client_and_kubectl(
                     client_binary_path, kubectl_binary_path
                 ):
-                    raise FileNotFoundError("No system oc client exist to copy from!")
+                    log.warning(
+                        "Using system-available oc client as last resort. "
+                        "NOTE: Version mismatch may cause issues."
+                    )
+                    try:
+                        client_version = run_cmd(
+                            f"{client_binary_path} version --client"
+                        )
+                    except CommandFailed:
+                        client_version = "unknown (system)"
+                else:
+                    log.error(
+                        "All oc client download methods failed and no fallback available."
+                    )
+                    raise FileNotFoundError(
+                        "Failed to download oc client and no fallback available!"
+                    )
+
         if not os.path.exists("kubectl"):
             log.info("Creating kubectl link to oc binary.")
             os.link("oc", "kubectl")
@@ -1535,7 +2028,7 @@ def get_nightly_oc_via_ga(version, tarball="openshift-client.tar.gz"):
             # extract oc
             cmd = (
                 f"{tmp_oc_path}/oc adm release extract -a {pull_secret_path} --command={oc_type} "
-                f"registry.ci.openshift.org/ocp/release:{version} --to ."
+                f"{get_registry_svc(version)}:{version} --to ."
             )
             exec_cmd(cmd)
             delete_file(tarball)
@@ -1584,7 +2077,7 @@ def get_vault_cli(bind_dir=None, force_download=False):
         os.chdir(bin_dir)
         url = f"{constants.VAULT_DOWNLOAD_BASE_URL}/{version}/{zip_file}"
         download_file(url, zip_file)
-        run_cmd(f"unzip {zip_file}")
+        run_cmd(f"unzip -o {zip_file}")
         delete_file(zip_file)
         os.chdir(previous_dir)
     vault_ver = run_cmd(f"{vault_binary_path} version")
@@ -3161,6 +3654,9 @@ def ceph_health_recover(
                 " This might be because of product bug, so please do not ignore this error and"
                 " analyze why this has happened!"
             )
+    raise CephHealthNotRecoveredException(
+        f"No known fix pattern matched for health status: {health_status}"
+    )
 
 
 def ceph_health_check(
@@ -3703,7 +4199,7 @@ def get_ocs_olm_operator_tags(limit=100):
     return all_tags
 
 
-@retry(requests.RequestException, 10, 30, 1)
+@retry(requests.RequestException, 20, 30, 1)
 def query_quay_for_operator_tags(
     image: str, headers: dict, limit: int, page: int
 ) -> list:
@@ -3734,7 +4230,9 @@ def query_quay_for_operator_tags(
         timeout=120,
     )
     if not resp.ok:
-        raise requests.RequestException(resp.json())
+        raise requests.RequestException(
+            f"Quay API returned {resp.status_code}: {resp.text[:200]}"
+        )
     tags = resp.json()["tags"]
     return tags
 
@@ -4709,6 +5207,10 @@ def mirror_image(image, cluster_config=None):
             mirror_base = f"{mirror_registry}/{mirror_registry_path}"
 
         mirrored_image = mirror_base + re.sub(r"^[^/]*", "", orig_image_full)
+        # remove the sha256 hash from the mirrored image (if present) and replace it by temporary custom tag:
+        if "@sha256" in mirrored_image:
+            mirrored_image = mirrored_image.split("@")[0]
+            mirrored_image += f":odf-qe-temp-tag-{get_random_str(10)}"
         # mirror the image
         log.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
@@ -4974,25 +5476,36 @@ def get_module_ip(terraform_state_file, module):
     with open(terraform_state_file) as fd:
         obj = json.loads(fd.read())
 
-        if config.ENV_DATA.get("folder_structure"):
+        # Auto-detect terraform state file format
+        # Newer terraform versions use "resources", older versions use "modules"
+        if "resources" in obj:
             resources = obj["resources"]
             log.debug(f"Extracting module information for {module}")
-            log.debug(f"Resource in {terraform_state_file}: {resources}")
+            log.debug(f"Resources in {terraform_state_file}: {resources}")
+
             for resource in resources:
                 if resource.get("module") == module and resource.get("mode") == "data":
                     for each_resource in resource["instances"]:
                         resource_body = each_resource["attributes"]["body"]
                         ips.append(resource_body.split('"')[3])
-        else:
+
+            return ips
+
+        elif "modules" in obj:
             modules = obj["modules"]
             target_module = module.split("_")[1]
             log.debug(f"Extracting module information for {module}")
             log.debug(f"Modules in {terraform_state_file}: {modules}")
+
             for each_module in modules:
                 if target_module in each_module["path"]:
                     return each_module["outputs"]["ip_addresses"]["value"]
-
-        return ips
+        else:
+            raise KeyError(
+                f"Terraform state file {terraform_state_file} does not contain "
+                "'resources' or 'modules' key. Unable to extract module information."
+            )
+    return ips
 
 
 def set_aws_region(region=None):
@@ -5598,10 +6111,16 @@ def get_client_type_by_name(cluster_name):
         get_hosted_cluster_type,
     )
 
-    if not is_hosted_cluster(cluster_name):
-        return constants.NON_HOSTED_CLUSTER
+    # Store original context index to restore later
+    orig_index = config.cur_index
+    try:
+        config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
+        if not is_hosted_cluster(cluster_name):
+            return constants.NON_HOSTED_CLUSTER
 
-    return get_hosted_cluster_type(cluster_name)
+        return get_hosted_cluster_type(cluster_name)
+    finally:
+        config.switch_ctx(orig_index)
 
 
 def switch_to_correct_client_type(client_type):
@@ -5780,21 +6299,83 @@ def archive_ceph_crashes(toolbox_pod):
     toolbox_pod.exec_ceph_cmd("ceph crash archive-all")
 
 
+def format_ceph_crash_summary_lines(crashes):
+    """Build per-crash summary lines for logs/assertions (every crash, no cap)."""
+    lines = []
+    for i, crash in enumerate(crashes, 1):
+        if isinstance(crash, dict):
+            crash_id = crash.get("crash_id", "unknown")
+            timestamp = crash.get("timestamp", "unknown")
+            entity = crash.get("entity_name", "unknown")
+        else:
+            crash_id = str(crash)
+            timestamp = entity = "unknown"
+        lines.append(
+            f"  {i}. Crash ID: {crash_id}, Entity: {entity}, Time: {timestamp}"
+        )
+    return lines
+
+
+def log_all_ceph_crash_details(toolbox_pod):
+    """
+    Log summary and full ``ceph crash info`` output for every unarchived crash.
+
+    Args:
+        toolbox_pod (obj): Ceph toolbox pod object
+
+    Returns:
+        list: Crash entries from ``ceph crash ls`` (dicts with crash_id, etc.)
+    """
+    crashes = []
+    try:
+        raw = toolbox_pod.exec_ceph_cmd("ceph crash ls")
+        crashes = raw if raw else []
+    except (CommandFailed, subprocess.TimeoutExpired) as ex:
+        log.error("Failed to list ceph crashes: %s", ex)
+        for crash_id in get_ceph_crashes(toolbox_pod):
+            crashes.append({"crash_id": crash_id})
+
+    if not crashes:
+        return []
+
+    total = len(crashes)
+    log.error("Found %s Ceph crash(es); logging ``ceph crash info`` for each:", total)
+    for index, crash in enumerate(crashes, start=1):
+        if isinstance(crash, dict):
+            crash_id = crash.get("crash_id", "unknown")
+            entity = crash.get("entity_name", "unknown")
+            timestamp = crash.get("timestamp", "unknown")
+        else:
+            crash_id = str(crash)
+            entity = "unknown"
+            timestamp = "unknown"
+        log.error(
+            "Ceph crash %s/%s — ID: %s, Entity: %s, Time: %s",
+            index,
+            total,
+            crash_id,
+            entity,
+            timestamp,
+        )
+        try:
+            crash_info = toolbox_pod.exec_ceph_cmd(
+                f"ceph crash info {crash_id}", out_yaml_format=False
+            )
+            log.error("ceph crash info %s:\n%s", crash_id, crash_info)
+        except (CommandFailed, subprocess.TimeoutExpired) as ex:
+            log.error("Failed to get ceph crash info for %s: %s", crash_id, ex)
+    return crashes
+
+
 def ceph_crash_info_display(toolbox_pod):
     """
-    Displays ceph crash information
+    Displays ceph crash information for every crash.
 
     Args:
         toolbox_pod (obj): Ceph toolbox pod object
 
     """
-    ceph_crashes = get_ceph_crashes(toolbox_pod)
-    for each_crash in ceph_crashes:
-        log.error(f"ceph crash: {each_crash}")
-        crash_info = toolbox_pod.exec_ceph_cmd(
-            f"ceph crash info {each_crash}", out_yaml_format=False
-        )
-        log.error(crash_info)
+    log_all_ceph_crash_details(toolbox_pod)
 
 
 def add_time_report_to_email(session, soup):
@@ -5831,72 +6412,6 @@ def get_oadp_version(namespace=constants.OADP_NAMESPACE):
         if "oadp-operator" in csv["metadata"]["name"]:
             # extract version string
             return csv["spec"]["version"]
-
-
-def create_unreleased_oadp_catalog():
-    """
-    Creates catalog for unreleased OADP operator.
-
-    Raises:
-        TagNotFoundException: if no image tag for oadp oprator found in brew
-
-    """
-    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False, timeout=120)
-    json_data = resp.json()["raw_messages"]
-    image_tag = None
-    ocp_version = version_module.get_semantic_ocp_version_from_config()
-    nvr = None
-    image = None
-
-    for item in json_data:
-        pipeline = item.get("msg", {}).get("pipeline", {})
-        if pipeline.get("status") != "complete":
-            continue
-        index_image = pipeline.get("index_image", {})
-        index_image_str = index_image.get(f"v{ocp_version}")
-        if not index_image_str:
-            continue
-        try:
-            image_tag = index_image_str.split(":")[1]
-            nvr = item.get("msg", {}).get("artifact", {}).get("nvr")
-            break
-        except IndexError:
-            continue
-
-    if image_tag:
-        # Importing here to avoid circular dependency
-        from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
-        from ocs_ci.ocs.resources.catalog_source import CatalogSource
-
-        image = f"{constants.BREW_REPO}:{image_tag}"
-        log.info(
-            f"Creating catalog for OADP operator brew image NVR: {nvr} "
-            f"for OCP: v{ocp_version}. Image: {image}"
-        )
-        brew_catalog_data = load_yaml(constants.BREW_CATALOG_YAML)
-        brew_catalog_data["spec"]["image"] = image
-        brew_catalog_data["spec"]["displayName"] = constants.OADP_CATALOG_NAME
-        brew_catalog_data["metadata"]["name"] = constants.OADP_CATALOG_NAME
-        brew_catalog_data_yaml = NamedTemporaryFile(
-            mode="w+", prefix="brew-catalog", delete=False
-        )
-        dump_data_to_temp_yaml(brew_catalog_data, brew_catalog_data_yaml.name)
-        run_cmd(f"oc apply -f {constants.BREW_ICSP}", timeout=300)
-        wait_for_machineconfigpool_status("all")
-        run_cmd(f"oc apply -f {brew_catalog_data_yaml.name}", timeout=300)
-        catalog_source = CatalogSource(
-            resource_name=constants.OADP_CATALOG_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-        # Wait for catalog source is ready
-        catalog_source.wait_for_state("READY")
-        if config.MULTICLUSTER["acm_cluster"]:
-            run_cmd(
-                f"oc -n {constants.ACM_HUB_NAMESPACE} annotate mch multiclusterhub installer.open-cluster-management.io"
-                f'/oadp-subscription-spec=\'{{"source": "{constants.OADP_CATALOG_NAME}"}}\' --overwrite'
-            )
-    else:
-        raise TagNotFoundException("No brew image for oadp operator found!")
 
 
 def get_acm_version(namespace=constants.ACM_HUB_NAMESPACE):
@@ -6068,6 +6583,47 @@ def get_role_arn_from_sub():
         return role_arn
     else:
         raise ClusterNotInSTSModeException
+
+
+def get_azure_sts_creds_from_sub():
+    """
+    Get Azure STS credentials (managed identity) from the ODF Subscription.
+
+    Returns:
+        dict: Keys are ``client_id``, ``tenant_id``,
+            ``subscription_id``, and ``resource_group``.
+
+    Raises:
+        ClusterNotInSTSModeException: If cluster not in STS mode
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    if not config.DEPLOYMENT.get("sts_enabled"):
+        raise ClusterNotInSTSModeException
+
+    env_key_map = {
+        "CLIENTID": "client_id",
+        "TENANTID": "tenant_id",
+        "SUBSCRIPTIONID": "subscription_id",
+        "RESOURCEGROUP": "resource_group",
+    }
+    odf_sub = OCP(
+        kind=constants.SUBSCRIPTION,
+        resource_name=constants.ODF_SUBSCRIPTION,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    creds = {}
+    env_items = odf_sub.get().get("spec", {}).get("config", {}).get("env", [])
+    for item in env_items:
+        if item["name"] in env_key_map:
+            creds[env_key_map[item["name"]]] = item["value"]
+
+    required = {"client_id", "tenant_id", "subscription_id"}
+    if not required.issubset(creds):
+        raise ClusterNotInSTSModeException
+
+    return creds
 
 
 def get_glibc_version():
@@ -6717,44 +7273,426 @@ def create_kubeconfig(kubeconfig_path):
         kubeconfig_path (str): kubeconfig file location
 
     """
-    if not os.path.isfile(kubeconfig_path):
-        if config.RUN.get("kubeadmin_password") and config.RUN.get("ocp_url"):
-            log.info(
-                "Generating kubeconfig file from provided kubeadmin password and OCP URL"
-            )
-            # check and correct OCP URL (change it to API url if console url provided and add port if needed
-            ocp_api_url = config.RUN.get("ocp_url").replace(
-                "console-openshift-console.apps", "api"
-            )
-            if ":6443" not in ocp_api_url:
-                ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
+    if config.RUN.get("kubeadmin_password") and config.RUN.get("ocp_url"):
+        log.info(
+            "Generating kubeconfig file from provided kubeadmin password and OCP URL"
+        )
+        # check and correct OCP URL (change it to API url if console url provided and add port if needed
+        ocp_api_url = config.RUN.get("ocp_url").replace(
+            "console-openshift-console.apps", "api"
+        )
+        if ":6443" not in ocp_api_url:
+            ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
 
-            cmd = (
-                f"oc login --username {config.RUN['username']} "
-                f"--password {config.RUN['kubeadmin_password']} "
-                f"{ocp_api_url} "
-                f"--kubeconfig {kubeconfig_path} "
-                "--insecure-skip-tls-verify=true"
-            )
-            result = exec_cmd(cmd, secrets=(config.RUN["kubeadmin_password"],))
-            if result.returncode:
-                log.warning(f"executed command: {cmd}")
-                log.warning(f"returncode: {result.returncode}")
-                log.warning(f"stdout: {result.stdout}")
-                log.warning(f"stderr: {result.stderr}")
-            else:
-                log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
-
-            kubeadmin_password_file = os.path.join(
-                config.ENV_DATA["cluster_path"], config.RUN["password_location"]
-            )
-            if not os.path.isfile(kubeadmin_password_file):
-                with open(kubeadmin_password_file, "w") as fd:
-                    fd.write(config.RUN.get("kubeadmin_password"))
-                log.info("Created kubeadmin-password file")
-
+        cmd = (
+            f"oc login --username {config.RUN['username']} "
+            f"--password {config.RUN['kubeadmin_password']} "
+            f"{ocp_api_url} "
+            f"--kubeconfig {kubeconfig_path} "
+            "--insecure-skip-tls-verify=true"
+        )
+        result = exec_cmd(cmd, secrets=(config.RUN["kubeadmin_password"],))
+        if result.returncode:
+            log.warning(f"executed command: {cmd}")
+            log.warning(f"returncode: {result.returncode}")
+            log.warning(f"stdout: {result.stdout}")
+            log.warning(f"stderr: {result.stderr}")
         else:
-            raise ConfigurationError(
-                "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
-                "environment variables were not provided."
+            log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+
+        kubeadmin_password_file = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["password_location"]
+        )
+        if not os.path.isfile(kubeadmin_password_file):
+            with open(kubeadmin_password_file, "w") as fd:
+                fd.write(config.RUN.get("kubeadmin_password"))
+            log.info("Created kubeadmin-password file")
+
+    elif not os.path.isfile(kubeconfig_path):
+        raise ConfigurationError(
+            "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
+            "environment variables were not provided."
+        )
+
+
+def genereate_cred_file_rack():
+    """
+    Generate credentials file for rack based on cluster name
+
+    This function retrieves the cluster name from config, fetches all kickstart configmaps
+    from the ibm-spectrum-fusion-ns namespace, parses the compute node data, fetches
+    credentials from node secrets, and generates a dictionary mapping rack serial numbers
+    to node details (OCPRole, ipv6, ipv4, manufacturer, role, username, password) along with
+    rack information. The file is saved as <cluster_name>.json.
+
+    Returns:
+        dict: Dictionary with rack serial numbers as keys, each containing nodes and rackInfo.
+
+              - nodes: dict of nodes with their OCPRole, ipv6, ipv4, manufacturer, role, username,
+                and password information (credentials fetched from node secrets)
+              - rackInfo: dict containing rack information including ibmSerialNumber
+
+    Example::
+
+            {
+                "l001": {
+                    "nodes": {
+                        "control-2-ru2": {
+                            "ipv6": "2001:db8::1",
+                            "ipv4": "0.0.0.0",
+                            "manufacturer": "Lenovo",
+                            "role": "master",
+                            "username": "USERNAME",
+                            "password": "PASSWORD"
+                        },
+                        "compute-2-ru3": {
+                            "ipv6": "2001:db8::2",
+                            "ipv4": "0.0.0.0",
+                            "manufacturer": "Lenovo",
+                            "role": "worker",
+                            "username": "USERNAME",
+                            "password": "PASSWORD"
+                        }
+                    },
+                    "rackInfo": {
+                        "SerialNumber": "RACK_NUMBER",
+                        "ibmMTM": "R42",
+                        "rackGen": 2,
+                        "storageType": "fdf"
+                    }
+                }
+            }
+
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.ocp import OCP
+
+    # Get cluster name from config
+    cluster_name = config.ENV_DATA.get("cluster_name")
+    log.info(f"Using cluster name: {cluster_name}")
+
+    rack_dict = {}
+
+    # Fetch rack IP mapping from GitHub
+    rack_ip_mapping = {}
+    try:
+        # Get GitHub configuration from auth.yaml
+        github_config = config.AUTH.get("ibm_hci", {})
+        rack_config_url = github_config.get(
+            "rack_config_url",
+        )
+        github_token = github_config.get("github_token")
+
+        # Prepare headers with authentication token if available
+        headers = {}
+        if github_token:
+            headers["Authorization"] = f"token {github_token}"
+            log.info("Using GitHub personal access token for authentication")
+        else:
+            log.warning(
+                "No GitHub token found in auth.yaml, attempting unauthenticated request"
             )
+
+        response = requests.get(rack_config_url, headers=headers, timeout=30)
+        response.raise_for_status()
+        rack_config_data = response.json()
+
+        # Build a mapping of rack_name to IP
+        for key, value in rack_config_data.items():
+            # Key format is "IP_RACKNAME", e.g., "10.0.0.0_L001"
+            if "_" in key:
+                ip_address = key.split("_")[0]
+                rack_name = value.get("rack_name", "").upper()
+                if rack_name:
+                    rack_ip_mapping[rack_name] = ip_address
+    except Exception as e:
+        log.warning(f"Failed to fetch rack IP mapping from GitHub: {e}")
+
+    # Get all configmaps in the fusion namespace
+    cm_obj = OCP(kind=constants.CONFIGMAP, namespace=constants.FUSION_NAMESPACE)
+    configmaps = cm_obj.get()
+
+    # Filter configmaps that start with "kickstart-"
+    for cm in configmaps.get("items", []):
+        cm_name = cm.get("metadata", {}).get("name", "")
+
+        if not cm_name.startswith("kickstart-"):
+            continue
+
+        # Extract rack serial number from configmap name (e.g., "kickstart-l001" -> "l001")
+        rack_serial = cm_name.replace("kickstart-", "")
+
+        # Get the data from the configmap
+        cm_data = cm.get("data", {})
+
+        # The configmap data is stored as a JSON string in a key
+        # Find the key that contains the JSON data (usually the rack serial or similar)
+        json_data = None
+        for key, value in cm_data.items():
+            try:
+                json_data = json.loads(value)
+                break
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+        if not json_data:
+            log.warning(f"No valid JSON data found in configmap {cm_name}")
+            continue
+
+        # Initialize rack entry if not exists
+        if rack_serial not in rack_dict:
+            rack_dict[rack_serial] = {"nodes": {}, "rackInfo": {}}
+
+        # Extract rack information
+        rack_info = json_data.get("rackInfo", {})
+        if rack_info:
+            rack_dict[rack_serial]["rackInfo"] = {
+                "ibmSerialNumber": rack_info.get("ibmSerialNumber"),
+                "ibmMTM": rack_info.get("ibmMTM"),
+                "serial": rack_info.get("serial"),
+                "rackGen": rack_info.get("rackGen"),
+                "storageType": rack_info.get("storageType"),
+                "isfModel": rack_info.get("isfModel"),
+                "ipStack": rack_info.get("ipStack"),
+            }
+
+            # Add rack IP from the mapping if available
+            rack_serial_upper = rack_serial.upper()
+            if rack_serial_upper in rack_ip_mapping:
+                rack_dict[rack_serial]["rackInfo"]["rackIP"] = rack_ip_mapping[
+                    rack_serial_upper
+                ]
+
+        # Extract compute node information
+        compute_nodes = json_data.get("computeNodeIntegratedManagementModules", [])
+
+        # Get all nodes from the cluster to determine roles
+        node_obj = OCP(kind=constants.NODE)
+        all_nodes = node_obj.get()
+
+        for node in compute_nodes:
+            ocp_role = node.get("OCPRole")
+            ipv6 = node.get("ipv6")
+            ipv4 = node.get("ipv4")
+            manufacturer = node.get("manufacturer")
+            secret_name = node.get("secretName")
+
+            if ocp_role and (ipv6 or ipv4) and manufacturer:
+                # Find the actual node in the cluster by matching the OCPRole name
+                role = "unknown"
+                for k8s_node in all_nodes.get("items", []):
+                    node_name = k8s_node.get("metadata", {}).get("name", "")
+                    # Check if the OCPRole matches the beginning of the node name
+                    if node_name.startswith(ocp_role):
+                        # Get the role from node labels
+                        labels = k8s_node.get("metadata", {}).get("labels", {})
+                        # Check for master/control-plane role
+                        if (
+                            labels.get("node-role.kubernetes.io/master") == ""
+                            or labels.get("node-role.kubernetes.io/control-plane") == ""
+                        ):
+                            role = "master"
+                        # Check for worker role
+                        elif labels.get("node-role.kubernetes.io/worker") == "":
+                            role = "worker"
+                        else:
+                            # If no standard role found, try to get any role from labels
+                            for label_key in labels:
+                                if label_key.startswith("node-role.kubernetes.io/"):
+                                    role = label_key.replace(
+                                        "node-role.kubernetes.io/", ""
+                                    )
+                                    break
+                        break
+
+                # Initialize node entry with both IPv6 and IPv4
+                node_entry = {
+                    "ipv6": ipv6,
+                    "ipv4": ipv4,
+                    "manufacturer": manufacturer,
+                    "role": role,
+                }
+
+                # Fetch credentials from the node secret if secret_name is available
+                if secret_name:
+                    try:
+                        secret_obj = OCP(
+                            kind=constants.SECRET,
+                            namespace=constants.FUSION_NAMESPACE,
+                            resource_name=secret_name,
+                        )
+                        secret_data = secret_obj.get()
+
+                        if not secret_data:
+                            log.error(
+                                f"Failed to retrieve secret {secret_name} for node {ocp_role}: "
+                                "Secret data is empty"
+                            )
+                            raise ValueError(f"Empty secret data for {secret_name}")
+
+                        data = secret_data.get("data", {})
+
+                        # Verify required fields exist
+                        if (
+                            "isfmgmtUserName" not in data
+                            or "isfmgmtUserPasswrd" not in data
+                        ):
+                            log.error(
+                                f"Secret {secret_name} for node {ocp_role} is missing required fields: "
+                                f"isfmgmtUserName={'present' if 'isfmgmtUserName' in data else 'MISSING'}, "
+                                f"isfmgmtUserPasswrd={'present' if 'isfmgmtUserPasswrd' in data else 'MISSING'}"
+                            )
+                            raise KeyError(
+                                f"Secret {secret_name} missing required credential fields"
+                            )
+
+                        username_encoded = data.get("isfmgmtUserName")
+                        password_encoded = data.get("isfmgmtUserPasswrd")
+
+                        # Decode from base64 with error handling
+                        try:
+                            username = base64.b64decode(username_encoded).decode(
+                                "utf-8"
+                            )
+                            password = base64.b64decode(password_encoded).decode(
+                                "utf-8"
+                            )
+                        except (binascii.Error, UnicodeDecodeError) as decode_err:
+                            log.error(
+                                f"Failed to decode credentials from secret {secret_name} "
+                                f"for node {ocp_role}: {decode_err}"
+                            )
+                            raise ValueError(
+                                f"Invalid base64 encoding in secret {secret_name}"
+                            ) from decode_err
+
+                        node_entry["username"] = username
+                        node_entry["password"] = password
+
+                    except Exception as e:
+                        log.error(
+                            f"Failed to fetch/decode secret {secret_name} for node {ocp_role}: {e}"
+                        )
+                        # Re-raise to fail fast instead of continuing with missing credentials
+                        raise
+
+                rack_dict[rack_serial]["nodes"][ocp_role] = node_entry
+
+    # Save rack_dict to JSON file with cluster name
+    from pathlib import Path
+    from datetime import datetime
+
+    # Create directory if it doesn't exist
+    rack_dir = Path(constants.IBM_HCI_RACK_DIR)
+    rack_dir.mkdir(parents=True, exist_ok=True)
+
+    # Define file path using cluster name
+    file_path = rack_dir / f"{cluster_name}.json"
+
+    # Create backup if file already exists
+    if file_path.exists():
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = rack_dir / f"{cluster_name}_backup_{timestamp}.json"
+        shutil.copy2(file_path, backup_path)
+        # Set restrictive permissions on backup (owner read/write only)
+        backup_path.chmod(0o600)
+        log.info(f"Created backup of existing file: {backup_path}")
+
+    # Write to JSON file with restrictive permissions
+    # Create file with owner-only read/write permissions
+    import os
+
+    fd = os.open(file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(rack_dict, f, indent=2)
+    log.info(f"Rack details saved to {file_path} with restrictive permissions (0o600)")
+
+    # Also save a timestamped backup copy in home directory
+    try:
+        home_dir = Path.home()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        home_backup_path = home_dir / f"{cluster_name}_rack_backup_{timestamp}.json"
+
+        # Write backup to home directory with restrictive permissions
+        fd_backup = os.open(
+            home_backup_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
+        )
+        with os.fdopen(fd_backup, "w") as f_backup:
+            json.dump(rack_dict, f_backup, indent=2)
+        log.info(f"Backup copy saved to home directory: {home_backup_path}")
+    except Exception as e:
+        log.warning(f"Failed to create backup in home directory: {e}")
+
+    # Log summary without exposing credentials
+    num_racks = len(rack_dict)
+    total_nodes = sum(
+        len(rack_data.get("nodes", {})) for rack_data in rack_dict.values()
+    )
+    log.info(
+        f"Rack details summary: {num_racks} rack(s), {total_nodes} node(s) configured. "
+        f"File location: {file_path}"
+    )
+
+    return rack_dict
+
+
+def auto_configure_acm():
+    """
+    Auto-configure ACM as released or unreleased based on OCP version
+    If explicitly configured by user, skips auto-configuration.
+    Uses OCP version mappings with safe defaults (unreleased) for unknown versions.
+    """
+    # If explicitly configured by user, skip auto-configuration
+    if config.ENV_DATA.get("acm_hub_unreleased") is not None:
+        log.info(
+            f"ACM explicitly configured: acm_hub_unreleased={config.ENV_DATA['acm_hub_unreleased']}"
+        )
+        return
+    # Get OCP version
+    ocp_version = version_module.get_semantic_ocp_version_from_config()
+    # Look up in mapping, default to True (unreleased) for unknown versions
+    acm_unreleased = defaults.ocp_to_acm_unreleased_mapping.get(f"{ocp_version}", True)
+    config.ENV_DATA["acm_hub_unreleased"] = acm_unreleased
+    if f"{ocp_version}" in defaults.ocp_to_acm_unreleased_mapping:
+        log.info(
+            f"OCP {ocp_version} → ACM: {'UNRELEASED' if acm_unreleased else 'RELEASED'}"
+        )
+    else:
+        log.info(f"OCP {ocp_version} not in mapping → ACM: UNRELEASED (safe default)")
+
+
+def auto_configure_submariner():
+    """
+    Auto-configure Submariner as released or unreleased based on OCP version.
+    If explicitly configured by user, skips auto-configuration.
+    Uses OCP version mappings with safe defaults (unreleased) for unknown versions.
+    """
+    # Set submariner_source default if not provided by user
+    if config.ENV_DATA.get("submariner_source") is None:
+        config.ENV_DATA["submariner_source"] = "downstream"
+        log.info("Submariner source not specified, defaulting to: downstream")
+
+    # If explicitly configured by user, skip auto-configuration
+    if config.ENV_DATA.get("submariner_release_type") is not None:
+        log.info(
+            f"Submariner explicitly configured: release_type={config.ENV_DATA['submariner_release_type']}"
+        )
+        return
+    # Get OCP version
+    ocp_version = version_module.get_semantic_ocp_version_from_config()
+    # Look up in mapping, default to True (unreleased) for unknown versions
+    submariner_unreleased = defaults.ocp_to_submariner_unreleased_mapping.get(
+        f"{ocp_version}", True
+    )
+    config.ENV_DATA["submariner_release_type"] = (
+        "unreleased" if submariner_unreleased else "released"
+    )
+
+    if f"{ocp_version}" in defaults.ocp_to_submariner_unreleased_mapping:
+        log.info(
+            f"OCP {ocp_version} → Submariner: {'UNRELEASED' if submariner_unreleased else 'RELEASED'}"
+        )
+    else:
+        log.info(
+            f"OCP {ocp_version} not in mapping → Submariner: UNRELEASED (safe default)"
+        )

@@ -141,6 +141,12 @@ class AZUREIPI(AZUREBase):
         """
         if config.DEPLOYMENT.get("sts_enabled"):
             self.azure_util.set_auth_env_vars()
+            self.azure_util.az_login()
+            self.azure_util.delete_noobaa_managed_identity(
+                cluster_name=self.cluster_name,
+                resource_group=self.cluster_name,
+                subscription_id=config.AUTH["azure_auth"]["subscription_id"],
+            )
             cco.delete_oidc_resource_group(
                 self.cluster_name,
                 config.ENV_DATA["region"],

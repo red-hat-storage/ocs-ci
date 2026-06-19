@@ -83,7 +83,7 @@ class PVC(OCS):
         data = dict()
         data["api_version"] = self.api_version
         data["kind"] = "PersistentVolume"
-        data["metadata"] = {"name": self.backed_pv, "namespace": self.namespace}
+        data["metadata"] = {"name": self.backed_pv}
         pv_obj = OCS(**data)
         pv_obj.ocp.cluster_kubeconfig = self.ocp.cluster_kubeconfig
         pv_obj.reload()
@@ -425,12 +425,13 @@ def get_deviceset_pvcs():
         namespace=config.ENV_DATA["cluster_namespace"],
     )
     ocs_pvc_obj = get_all_pvc_objs(namespace=config.ENV_DATA["cluster_namespace"])
-    deviceset_prefix = (
-        storage_cluster_obj.get().get("spec").get("storageDeviceSets")[0].get("name")
-    )
+    deviceset_prefixes = [
+        ds.get("name")
+        for ds in storage_cluster_obj.get().get("spec").get("storageDeviceSets")
+    ]
     deviceset_pvcs = []
     for pvc_obj in ocs_pvc_obj:
-        if pvc_obj.name.startswith(deviceset_prefix):
+        if any(pvc_obj.name.startswith(p) for p in deviceset_prefixes):
             deviceset_pvcs.append(pvc_obj)
     assert deviceset_pvcs, "Failed to find the deviceset PVCs"
     return deviceset_pvcs

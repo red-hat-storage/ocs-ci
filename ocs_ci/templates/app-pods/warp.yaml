@@ -25,9 +25,14 @@ spec:
       - name: warp
         image: quay.io/ocsci/warp:latest
         resources:
+          requests:
+            memory: "512Mi"
+            cpu: "100m"
           limits:
-            memory: "2048Mi"
-            cpu: "150m"
+            # Mixed/long-duration Warp runs can spike during analysis; chaos + S3 stress
+            # often needs more than 4Gi on busy clusters.
+            memory: "8Gi"
+            cpu: "2000m"
         command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
         imagePullPolicy: IfNotPresent
         volumeMounts:

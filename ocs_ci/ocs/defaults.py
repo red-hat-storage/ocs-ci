@@ -170,6 +170,9 @@ MUST_GATHER_UPSTREAM_IMAGE = "quay.io/ocs-dev/ocs-must-gather"
 MUST_GATHER_UPSTREAM_TAG = "latest"
 MUST_GATHER_TIMEOUT = 3600
 
+# AI / Claude Code defaults:
+AI_GCP_CREDENTIALS_PATH = os.path.expanduser("~/.gcp/gcp-auth.json")
+
 # CrushDeviceClass
 CRUSH_DEVICE_CLASS = "ssd"
 
@@ -191,3 +194,32 @@ INGRESS_SSL_CA_CERT = os.path.join(constants.DATA_DIR, "ca.crt")
 API_SSL_CERT = os.path.join(constants.DATA_DIR, "api-cert.crt")
 API_SSL_KEY = os.path.join(constants.DATA_DIR, "api-cert.key")
 API_SSL_CA_CERT = os.path.join(constants.DATA_DIR, "ca.crt")
+
+ocp_to_acm_unreleased_mapping = {
+    "4.14": False,
+    "4.15": False,
+    "4.16": False,
+    "4.17": False,
+    "4.18": False,
+    "4.19": False,
+    "4.20": False,
+    "4.21": False,
+    "4.22": True,
+    "4.23": True,
+}
+
+ocp_to_submariner_unreleased_mapping = {
+    "4.14": False,
+    "4.15": False,
+    "4.16": False,
+    "4.17": False,
+    "4.18": False,
+    "4.19": False,
+    "4.20": False,
+    "4.21": False,
+    "4.22": False,
+    "4.23": True,
+}
+
+# Storage cluster related defaults
+DEVICE_TYPE = "SSD"

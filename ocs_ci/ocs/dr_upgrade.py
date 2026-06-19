@@ -181,61 +181,216 @@ class DRUpgrade(OCSUpgrade):
         ), "CSV version not upgraded"
         check_all_csvs_are_succeeded(namespace=self.namespace)
 
+    def _get_current_operator_pod_and_csv(self):
+        """
+        Get the current running pod and succeeded CSV for the DR operator.
+
+        This method filters out old/terminated resources and selects the newest
+        running pod and succeeded CSV. It's designed to avoid selecting stale
+        resources from previous ReplicaSets during upgrades.
+
+        Returns:
+            tuple: (pod_name, pod_status, csv_name, csv_version) or (None, None, None, None)
+                   if no valid resources found
+        """
+        # Get all pods matching the pattern
+        all_pods = pod.get_all_pods(namespace=self.namespace)
+        matching_pods = [
+            p for p in all_pods if self.pod_name_pattern in p.get()["metadata"]["name"]
+        ]
+
+        if not matching_pods:
+            log.warning(f"No pods found matching pattern: {self.pod_name_pattern}")
+            return None, None, None, None
+
+        # Sort by creation timestamp (newest first) and filter by status
+        matching_pods.sort(
+            key=lambda x: x.get()["metadata"].get("creationTimestamp", ""),
+            reverse=True,
+        )
+
+        pod_name = None
+        pod_status = None
+
+        # Check pod statuses - prefer Running, but report error states immediately
+        for p in matching_pods:
+            p_name = p.get()["metadata"]["name"]
+            p_status = p.get()["status"]["phase"]
+
+            # Check for error states that indicate real problems
+            container_statuses = p.get()["status"].get("containerStatuses", [])
+            has_error = any(
+                cs.get("state", {}).get("waiting", {}).get("reason")
+                in ["CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull"]
+                for cs in container_statuses
+            )
+
+            if has_error:
+                log.error(
+                    f"Pod {p_name} has error state, container statuses: {container_statuses}"
+                )
+                # Continue checking other pods, newest might be healthy
+
+            if p_status == "Running":
+                pod_name = p_name
+                pod_status = p_status
+                log.info(f"Found running pod: {pod_name}")
+                break
+            elif p_status in ["Pending", "ContainerCreating"]:
+                log.info(
+                    f"Pod {p_name} is in transitional state: {p_status}, "
+                    "will retry if no Running pod found"
+                )
+                if not pod_name:
+                    pod_name = p_name
+                    pod_status = p_status
+            elif p_status in ["Terminating", "Terminated", "Failed"]:
+                log.debug(
+                    f"Skipping pod {p_name} in terminal/terminating state: {p_status}"
+                )
+
+        if not pod_name:
+            log.warning(
+                f"No suitable pod found for {self.pod_name_pattern}. "
+                f"Checked {len(matching_pods)} pods."
+            )
+            return None, None, None, None
+
+        # Get CSV data - filter for operator name and Succeeded phase
+        csv_objs = CSV(namespace=self.namespace)
+        csv_list = csv_objs.get()["items"]
+
+        matching_csvs = [
+            csv for csv in csv_list if self.operator_name in csv["metadata"]["name"]
+        ]
+
+        if not matching_csvs:
+            log.warning(f"No CSVs found for operator: {self.operator_name}")
+            return pod_name, pod_status, None, None
+
+        # Sort by creation timestamp (newest first)
+        matching_csvs.sort(
+            key=lambda x: x["metadata"].get("creationTimestamp", ""), reverse=True
+        )
+
+        csv_name = None
+        csv_version = None
+
+        # Prefer Succeeded CSVs, but report if all are in transitional/error states
+        for csv in matching_csvs:
+            c_name = csv["metadata"]["name"]
+            c_phase = csv.get("status", {}).get("phase", "Unknown")
+
+            if c_phase == "Succeeded":
+                csv_name = c_name
+                csv_obj = CSV(namespace=self.namespace, resource_name=csv_name)
+                csv_version = csv_obj.get_resource(
+                    resource_name=csv_name, column="VERSION"
+                )
+                log.info(f"Found Succeeded CSV: {csv_name}, version: {csv_version}")
+                break
+            elif c_phase in ["Installing", "Pending"]:
+                log.info(
+                    f"CSV {c_name} is in transitional phase: {c_phase}, will retry"
+                )
+                if not csv_name:
+                    csv_name = c_name
+                    csv_obj = CSV(namespace=self.namespace, resource_name=csv_name)
+                    csv_version = csv_obj.get_resource(
+                        resource_name=csv_name, column="VERSION"
+                    )
+            elif c_phase in ["Failed"]:
+                log.error(f"CSV {c_name} is in Failed phase")
+
+        return pod_name, pod_status, csv_name, csv_version
+
     def collect_data(self):
         """
-        Collect DR operator related pods and csv data
-        """
-        pod_data = pod.get_all_pods(namespace=self.namespace)
-        for p in pod_data:
-            if self.pod_name_pattern in p.get()["metadata"]["name"]:
-                pod_obj = OCP(
-                    namespace=self.namespace,
-                    resource_name=p.get()["metadata"]["name"],
-                    kind="Pod",
-                )
-                if self.upgrade_phase == "pre_upgrade":
-                    self.pre_upgrade_data["age"] = pod_obj.get_resource(
-                        resource_name=p.get()["metadata"]["name"], column="AGE"
-                    )
-                    self.pre_upgrade_data["pod_status"] = pod_obj.get_resource_status(
-                        resource_name=p.get()["metadata"]["name"]
-                    )
-                if self.upgrade_phase == "post_upgrade":
-                    self.post_upgrade_data["age"] = pod_obj.get_resource(
-                        resource_name=p.get()["metadata"]["name"], column="AGE"
-                    )
-                    self.post_upgrade_data["pod_status"] = pod_obj.get_resource_status(
-                        resource_name=p.get()["metadata"]["name"]
-                    )
+        Collect DR operator related pods and csv data with retry mechanism.
 
-        # get pre-upgrade csv
-        csv_objs = CSV(namespace=self.namespace)
-        for csv in csv_objs.get()["items"]:
-            if self.operator_name in csv["metadata"]["name"]:
-                csv_obj = CSV(
-                    namespace=self.namespace, resource_name=csv["metadata"]["name"]
-                )
-                if self.upgrade_phase == "pre_upgrade":
-                    self.pre_upgrade_data["version"] = csv_obj.get_resource(
-                        resource_name=csv_obj.resource_name, column="VERSION"
+        This method waits for the operator pod to be Running and CSV to be Succeeded,
+        retrying if resources are in transitional states (Pending, Installing, etc.).
+        """
+        timeout = 300  # 5 minutes timeout for operator to stabilize
+        sleep = 10
+
+        log.info(
+            f"Collecting {self.upgrade_phase} data for {self.operator_name} "
+            f"(timeout: {timeout}s)"
+        )
+
+        pod_name = None
+        pod_status = None
+        csv_name = None
+        csv_version = None
+
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=self._get_current_operator_pod_and_csv,
+        ):
+            pod_name, pod_status, csv_name, csv_version = sample
+
+            # Check if we have stable resources
+            if pod_status == "Running" and csv_version and csv_name:
+                # Verify CSV is in Succeeded state by checking again
+                csv_obj = CSV(namespace=self.namespace, resource_name=csv_name)
+                csv_phase = csv_obj.get()["status"]["phase"]
+                if csv_phase == "Succeeded":
+                    log.info(
+                        f"Operator resources stable: pod={pod_name} ({pod_status}), "
+                        f"csv={csv_name} ({csv_phase}, v{csv_version})"
                     )
-                    try:
-                        self.pre_upgrade_data["version"]
-                    except KeyError:
-                        log.error(
-                            f"Couldn't capture Pre-upgrade CSV version for {self.operator_name}"
-                        )
-                if self.upgrade_phase == "post_upgrade":
-                    if self.upgrade_version in csv["metadata"]["name"]:
-                        self.post_upgrade_data["version"] = csv_obj.get_resource(
-                            resource_name=csv_obj.resource_name, column="VERSION"
-                        )
-                    try:
-                        self.post_upgrade_data["version"]
-                    except KeyError:
-                        log.error(
-                            f"Couldn't capture Post upgrade CSV version for {self.operator_name}"
-                        )
+                    break
+                else:
+                    log.info(
+                        f"CSV {csv_name} phase is {csv_phase}, waiting for Succeeded"
+                    )
+            else:
+                log.info(
+                    f"Waiting for operator to stabilize: "
+                    f"pod={pod_name} ({pod_status}), csv={csv_name} (v{csv_version})"
+                )
+
+        # Store collected data based on phase
+        if self.upgrade_phase == "pre_upgrade":
+            if pod_name:
+                pod_obj = OCP(
+                    namespace=self.namespace, resource_name=pod_name, kind="Pod"
+                )
+                self.pre_upgrade_data["age"] = pod_obj.get_resource(
+                    resource_name=pod_name, column="AGE"
+                )
+                self.pre_upgrade_data["pod_status"] = pod_status
+            if csv_version:
+                self.pre_upgrade_data["version"] = csv_version
+                log.info(
+                    f"Pre-upgrade CSV version for {self.operator_name}: {csv_version}"
+                )
+            else:
+                log.error(
+                    f"Couldn't capture Pre-upgrade CSV version for {self.operator_name}"
+                )
+
+        if self.upgrade_phase == "post_upgrade":
+            if pod_name:
+                pod_obj = OCP(
+                    namespace=self.namespace, resource_name=pod_name, kind="Pod"
+                )
+                self.post_upgrade_data["age"] = pod_obj.get_resource(
+                    resource_name=pod_name, column="AGE"
+                )
+                self.post_upgrade_data["pod_status"] = pod_status
+            if csv_version:
+                self.post_upgrade_data["version"] = csv_version
+                log.info(
+                    f"Post-upgrade CSV version for {self.operator_name}: {csv_version}"
+                )
+            else:
+                log.error(
+                    f"Couldn't capture Post upgrade CSV version for {self.operator_name}"
+                )
+
         # Make sure all csvs are in succeeded state
         check_all_csvs_are_succeeded(namespace=self.namespace)
 
@@ -329,9 +484,30 @@ class DRClusterOperatorUpgrade(DRUpgrade):
 
     def run_upgrade(self):
         self.collect_data()
+
+        # Ensure we captured pre-upgrade version
+        pre_version = self.pre_upgrade_data.get("version", "")
+        assert pre_version, (
+            f"Failed to capture pre-upgrade CSV version for {self.operator_name}. "
+            "Cannot proceed with upgrade or validation."
+        )
+
         assert (
             self.pre_upgrade_data.get("pod_status", "") == "Running"
         ), "ramen-dr-operator pod is not in Running status"
+
+        # Check if the current CSV version already matches the target upgrade version
+        if self.upgrade_version in pre_version:
+            log.info(
+                f"DR cluster operator is already at version {pre_version} "
+                f"which matches target upgrade version {self.upgrade_version}. "
+                f"Skipping upgrade execution and performing validation only."
+            )
+            self.upgrade_phase = "post_upgrade"
+            self.collect_data()
+            self.validate_upgrade()
+            return
+
         super().run_upgrade()
         self.upgrade_phase = "post_upgrade"
         self.collect_data()
@@ -340,4 +516,35 @@ class DRClusterOperatorUpgrade(DRUpgrade):
     def validate_upgrade(self):
         # validate csv odr-cluster-operator.v4.13.5-rhodf VERSION, PHASE
         # validate pod/ramen-dr-cluster-operator-
-        return super().validate_upgrade()
+
+        # Ensure we have both pre and post upgrade versions
+        pre_version = self.pre_upgrade_data.get("version", "")
+        post_version = self.post_upgrade_data.get("version", "")
+
+        assert pre_version, (
+            f"Pre-upgrade CSV version for {self.operator_name} was not captured. "
+            "Cannot validate upgrade."
+        )
+        assert post_version, (
+            f"Post-upgrade CSV version for {self.operator_name} was not captured. "
+            "Cannot validate upgrade."
+        )
+
+        # Check if pod is running
+        assert (
+            self.post_upgrade_data.get("pod_status", "") == "Running"
+        ), f"Pod {self.pod_name_pattern} not in Running state post upgrade"
+
+        # Check if post-upgrade version matches target upgrade version
+        assert self.upgrade_version in post_version, (
+            f"Post-upgrade CSV version {post_version} does not contain "
+            f"target upgrade version {self.upgrade_version}"
+        )
+
+        # Log version information
+        log.info(f"Pre-upgrade version: {pre_version}")
+        log.info(f"Post-upgrade version: {post_version}")
+        log.info(f"Target upgrade version: {self.upgrade_version}")
+
+        # Ensure all CSVs are in succeeded state
+        check_all_csvs_are_succeeded(namespace=self.namespace)

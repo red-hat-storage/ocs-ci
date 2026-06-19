@@ -22,7 +22,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     Pod,
 )
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 
 
@@ -61,7 +61,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
         storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
         storage_cluster = StorageCluster(
             resource_name=storage_cluster_name,
-            namespace=config.ENV_DATA["cluster_namespace"],
+            namespace=namespace,
         )
         self.perf_profile = perf_profile
         try:
@@ -78,12 +78,8 @@ class TestProfileDefaultValuesCheck(ManageTest):
         if exist_performance_profile == self.perf_profile:
             log.info("Performance profile is same as profile that is already present")
         else:
-            ptch = f'{{"spec": {{"resourceProfile":"{self.perf_profile}"}}}}'
-            ptch_cmd = (
-                f"oc patch storagecluster {storage_cluster.data.get('metadata').get('name')} "
-                f"-n {namespace}  --type merge --patch '{ptch}'"
-            )
-            run_cmd(ptch_cmd)
+            patch_params = f'{{"spec": {{"resourceProfile":"{self.perf_profile}"}}}}'
+            storage_cluster.patch(params=patch_params, format_type="merge")
             log.info("Verify storage cluster is in Ready state")
             verify_storage_cluster()
 
@@ -259,7 +255,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
         storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
         storage_cluster = StorageCluster(
             resource_name=storage_cluster_name,
-            namespace=config.ENV_DATA["cluster_namespace"],
+            namespace=namespace,
         )
         try:
             exist_performance_profile = storage_cluster.data["spec"]["resourceProfile"]
@@ -273,12 +269,8 @@ class TestProfileDefaultValuesCheck(ManageTest):
         if exist_performance_profile == self.perf_profile:
             log.info("Performance profile is same as profile that is already present")
         else:
-            ptch = f'{{"spec": {{"resourceProfile":"{self.perf_profile}"}}}}'
-            ptch_cmd = (
-                f"oc patch storagecluster {storage_cluster.data.get('metadata').get('name')} "
-                f"-n {namespace}  --type merge --patch '{ptch}'"
-            )
-            run_cmd(ptch_cmd)
+            patch_params = f'{{"spec": {{"resourceProfile":"{self.perf_profile}"}}}}'
+            storage_cluster.patch(params=patch_params, format_type="merge")
             log.info("Verify storage cluster is on Ready state")
 
             verify_storage_cluster()
@@ -301,14 +293,10 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 )
                 pass
             else:
-                ptch = (
+                patch_params = (
                     f'{{"spec": {{"resourceProfile":"{exist_performance_profile}"}}}}'
                 )
 
                 # Reverting the performance profile back to the original
-                ptch_cmd = (
-                    f"oc patch storagecluster {storage_cluster.data.get('metadata').get('name')}"
-                    f" -n {namespace}  --type merge --patch '{ptch}'"
-                )
-                run_cmd(ptch_cmd)
+                storage_cluster.patch(params=patch_params, format_type="merge")
                 verify_storage_cluster()

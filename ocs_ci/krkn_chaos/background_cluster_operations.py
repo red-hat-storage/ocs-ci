@@ -27,11 +27,12 @@ from contextlib import suppress
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, node as node_helpers, ocp
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import pvc as pvc_helpers
+from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.resources import job as job_helpers
-from ocs_ci.ocs import node as node_helpers
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     CommandFailed,
@@ -443,14 +444,15 @@ class BackgroundClusterOperations:
             log.info(f"Creating clone of PVC {workload_pvc.name}")
 
             # Determine clone YAML based on provisioner
-            if "rbd" in workload_pvc.provisioner:
+            provisioner = (
+                (getattr(workload_pvc, "provisioner", "") or "").strip().lower()
+            )
+            if "rbd" in provisioner:
                 clone_yaml = constants.CSI_RBD_PVC_CLONE_YAML
-            elif "cephfs" in workload_pvc.provisioner:
+            elif "cephfs" in provisioner:
                 clone_yaml = constants.CSI_CEPHFS_PVC_CLONE_YAML
             else:
-                log.warning(
-                    f"Unsupported provisioner for clone: {workload_pvc.provisioner}"
-                )
+                log.warning(f"Unsupported provisioner for clone: {provisioner!r}")
                 return
 
             # Get actual capacity from source PVC (not converted size)
@@ -908,29 +910,34 @@ class BackgroundClusterOperations:
             num_pvcs = min(3, len(self.workloads))
             log.info(f"Will check up to {num_pvcs} workloads for PVCs")
 
-            # Collect PVCs from workloads
+            # Collect PVCs from workloads (coerce OCS → PVC for snapshot APIs)
             workload_pvcs = []
             for idx, workload in enumerate(self.workloads[:num_pvcs]):
                 log.debug(
-                    f"Checking workload {idx+1}/{num_pvcs}: "
+                    f"Checking workload {idx + 1}/{num_pvcs}: "
                     f"type={type(workload).__name__}, "
                     f"has_pvc_objs={hasattr(workload, 'pvc_objs')}, "
                     f"has_pvc_obj={hasattr(workload, 'pvc_obj')}, "
                     f"has_pvc={hasattr(workload, 'pvc')}"
                 )
 
+                raw_list = []
                 if hasattr(workload, "pvc_objs"):
-                    pvc_list = workload.pvc_objs[:1]  # Take first PVC
-                    workload_pvcs.extend(pvc_list)
-                    log.debug(f"  → Found {len(pvc_list)} PVCs in pvc_objs")
+                    raw_list = workload.pvc_objs[:1]  # Take first PVC
+                    log.debug(f"  → Found {len(raw_list)} raw refs in pvc_objs")
                 elif hasattr(workload, "pvc_obj"):
-                    workload_pvcs.append(workload.pvc_obj)
-                    log.debug("  → Found 1 PVC in pvc_obj")
+                    raw_list = [workload.pvc_obj]
+                    log.debug("  → Found 1 raw ref in pvc_obj")
                 elif hasattr(workload, "pvc"):
-                    workload_pvcs.append(workload.pvc)
-                    log.debug("  → Found 1 PVC in pvc")
+                    raw_list = [workload.pvc]
+                    log.debug("  → Found 1 raw ref in pvc")
                 else:
                     log.debug("  → No PVC attributes found")
+
+                for raw in raw_list:
+                    coerced = self._coerce_workload_pvc_to_pvc_instance(raw)
+                    if coerced is not None:
+                        workload_pvcs.append(coerced)
 
             if not workload_pvcs:
                 log.warning(
@@ -945,16 +952,26 @@ class BackgroundClusterOperations:
             log.info("Creating snapshots from workload PVCs")
             snapshots = []
             for pvc_obj in workload_pvcs:
+                if not hasattr(pvc_obj, "create_snapshot"):
+                    log.warning(
+                        "Workload PVC %s is not a PVC instance (type=%s), skipping snapshot",
+                        getattr(pvc_obj, "name", "?"),
+                        type(pvc_obj).__name__,
+                    )
+                    continue
                 try:
                     pvc_obj.reload()
                     snapshot_obj = pvc_obj.create_snapshot(wait=True, timeout=180)
-                    snapshots.append(snapshot_obj)
+                    snapshots.append((snapshot_obj, pvc_obj))
                     self._resources_to_cleanup.append(snapshot_obj)
                     log.info(
                         f"Created snapshot {snapshot_obj.name} from PVC {pvc_obj.name}"
                     )
                 except Exception as e:
-                    log.error(f"Failed to create snapshot from PVC {pvc_obj.name}: {e}")
+                    pvc_name = getattr(pvc_obj, "name", None) if pvc_obj else None
+                    log.error(
+                        f"Failed to create snapshot from PVC {pvc_name or '(unknown)'}: {e}"
+                    )
                     continue
 
             if not snapshots:
@@ -966,10 +983,9 @@ class BackgroundClusterOperations:
             # Step 2: Restore PVCs from snapshots
             log.info("Restoring PVCs from snapshots")
             restored_pvcs = []
-            for idx, snapshot_obj in enumerate(snapshots):
+            for snapshot_obj, source_pvc in snapshots:
                 try:
                     # Get actual capacity from source PVC
-                    source_pvc = workload_pvcs[idx]
                     source_pvc.reload()
                     source_capacity = (
                         source_pvc.data.get("status", {})
@@ -1049,7 +1065,7 @@ class BackgroundClusterOperations:
                 except Exception as e:
                     log.error(f"Failed to cleanup restored PVCs: {e}")
 
-            for snapshot_obj in snapshots:
+            for snapshot_obj, _ in snapshots:
                 try:
                     snapshot_obj.delete()
                     snapshot_obj.ocp.wait_for_delete(
@@ -1068,6 +1084,39 @@ class BackgroundClusterOperations:
     # ==========================================================================
     # Helper Methods
     # ==========================================================================
+
+    def _coerce_workload_pvc_to_pvc_instance(self, pvc_obj):
+        """
+        Normalize a workload PVC reference to :class:`~ocs_ci.ocs.resources.pvc.PVC`.
+
+        Some paths hand back plain :class:`~ocs_ci.ocs.resources.ocs.OCS` objects for
+        ``kind=PersistentVolumeClaim``; snapshot/clone helpers require the ``PVC``
+        subclass (``create_snapshot``, ``resize_pvc``, etc.).
+        """
+        if pvc_obj is None:
+            return None
+        if isinstance(pvc_obj, PVC):
+            return pvc_obj
+        if isinstance(pvc_obj, OCS) and getattr(pvc_obj, "kind", None) == (
+            "PersistentVolumeClaim"
+        ):
+            try:
+                if hasattr(pvc_obj, "reload"):
+                    pvc_obj.reload()
+                return PVC(**pvc_obj.data)
+            except Exception as err:
+                log.warning(
+                    "Could not coerce OCS to PVC (name=%s): %s",
+                    getattr(pvc_obj, "name", "?"),
+                    err,
+                )
+                return None
+        log.debug(
+            "Skipping non-PVC workload reference: type=%s kind=%s",
+            type(pvc_obj).__name__,
+            getattr(pvc_obj, "kind", None),
+        )
+        return None
 
     def _get_random_workload_pvc(self, provisioner_type: Optional[str] = None):
         """
@@ -1093,11 +1142,14 @@ class BackgroundClusterOperations:
                 continue
 
             for pvc_obj in workload_pvcs:
+                coerced = self._coerce_workload_pvc_to_pvc_instance(pvc_obj)
+                if coerced is None:
+                    continue
                 if provisioner_type:
-                    if provisioner_type in pvc_obj.provisioner:
-                        pvcs.append(pvc_obj)
+                    if provisioner_type in coerced.provisioner:
+                        pvcs.append(coerced)
                 else:
-                    pvcs.append(pvc_obj)
+                    pvcs.append(coerced)
 
         return random.choice(pvcs) if pvcs else None
 
@@ -1111,7 +1163,8 @@ class BackgroundClusterOperations:
         from ocs_ci.utility import templating
 
         # Determine interface type based on PVC provisioner
-        if "rbd" in pvc_obj.provisioner.lower():
+        provisioner = getattr(pvc_obj, "provisioner", "") or ""
+        if "rbd" in provisioner.lower():
             pod_dict_path = constants.CSI_RBD_POD_YAML
         else:
             pod_dict_path = constants.CSI_CEPHFS_POD_YAML

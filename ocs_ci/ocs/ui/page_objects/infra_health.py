@@ -17,6 +17,8 @@ SEVERITY_BY_CHECK = {
     constants.ALERT_ODF_DISK_UTILIZATION_HIGH: "Medium",
     constants.ALERT_ODF_CORE_POD_RESTART: "Medium",
     constants.ALERT_ODF_NODE_NIC_BANDWIDTH_SATURATION: "Medium",
+    constants.ALERT_CLUSTERERRORSTATE: "Critical",
+    constants.ALERT_CLUSTERWARNINGSTATE: "Medium",
 }
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,7 @@ DATETIME_RE = re.compile(
     r"((?:\d{1,2}\s+\w+|\w+\s+\d{1,2}),?\s+\d{4},\s+\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)",
     re.IGNORECASE,
 )
-CHECK_RE = re.compile(r"\b(ODF[A-Za-z0-9]+)\b")
+CHECK_RE = re.compile(r"\b((?:ODF|Ceph)[A-Za-z0-9]+)\b")
 
 
 @dataclass
@@ -315,6 +317,7 @@ class InfraHealthOverview(PageNavigator):
 
         time.sleep(5)
         logger.info("Clicking silence button")
+        self.take_screenshot("silence_alerts_page")
         self.do_click(self.validation_loc["silence_popup_button"])
 
     def unsilence_alerts(self):
@@ -322,7 +325,51 @@ class InfraHealthOverview(PageNavigator):
         This method is necessary to unsilence alerts.
         """
         logger.info("Unsilencing alerts")
+        self.take_screenshot("unsilence_alerts_page")
         self.do_click(self.validation_loc["unsilence_alerts"])
+
+    def silence_alerts_indefinitely(self):
+        """
+        This method is necessary to disable alerts.
+        """
+        radio_button = self.find_an_element_by_xpath(
+            self.validation_loc["silence_type_indefinite_radio"][0]
+        )
+        if not radio_button.is_selected():
+            self.do_click(
+                self.validation_loc["silence_type_indefinite_radio"],
+                enable_screenshot=True,
+            )
+            logger.info("Selected 'Indefinite' silence type")
+        else:
+            logger.info("'Indefinite' silence type already selected")
+        logger.info("Clicking silence button")
+        self.take_screenshot("silence_alerts_indefinitely_page")
+        self.do_click(self.validation_loc["silence_popup_button"])
+
+    def disable_alert_by_name(self, alert_check_name):
+        """
+        Disable a single alert by silencing it indefinitely.
+
+        Args:
+            alert_check_name (str): Name of the alert check to disable
+        """
+        logger.info(f"Disabling alert: {alert_check_name}")
+        alerts = self.filter_by_name_or_details(alert_check_name)
+        for count, alert in enumerate(alerts):
+            if alert.check == alert_check_name and alert.end_time is None:
+                self.do_click(
+                    format_locator(self.validation_loc["select_alert"], str(count))
+                )
+        time.sleep(2)
+        self.take_screenshot(f"selected_alert_{alert_check_name}")
+        logger.info("Clicking 'Silence' button")
+        self.do_click(self.validation_loc["silence_alerts"], enable_screenshot=True)
+        self.wait_for_element_to_be_visible(
+            self.validation_loc["silence_popup"], timeout=10
+        )
+        logger.info("Selecting 'Indefinitely' silence type to disable alert")
+        self.silence_alerts_indefinitely()
 
     def unsilence_all_alerts(self):
         """
@@ -348,6 +395,30 @@ class InfraHealthOverview(PageNavigator):
         self.do_send_keys(self.validation_loc["filter_by_details"], alert_name)
         self.select_all_alerts()
         self.take_screenshot(f"unsilence_alert_{alert_name}")
+        self.unsilence_alerts()
+
+    def unsilence_alert_by_type_indefinite(self):
+        """
+        Unsilence alerts filtered by 'Indefinite' silence type.
+        """
+        logger.info("Unsilencing alerts filtered by silence type 'Indefinite'")
+        self.click_silenced_alerts()
+        self.do_click(self.validation_loc["all_checks"])
+        self.wait_for_element_to_be_visible(
+            self.validation_loc["checks_list"], timeout=10
+        )
+        indefinite_checkbox = self.validation_loc["filter_indefinite_checkbox"]
+        checkbox_element = self.find_an_element_by_xpath(indefinite_checkbox[0])
+        is_checked = checkbox_element.is_selected()
+        if not is_checked:
+            logger.info("Indefinite checkbox not checked, clicking it")
+            self.do_click(indefinite_checkbox)
+        else:
+            logger.info("Indefinite checkbox already checked")
+        self.do_click(self.validation_loc["all_checks"])
+        logger.info("Selecting all indefinitely silenced alerts")
+        self.select_all_alerts()
+        self.take_screenshot("all_alerts_indefinite_filter")
         self.unsilence_alerts()
 
     def silence_all_alerts(self, silent_duration: int):

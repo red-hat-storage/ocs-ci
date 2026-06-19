@@ -2,7 +2,8 @@ import pytest
 import logging
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, ec_allowed
+from ocs_ci.ocs.cluster import is_ec_pool_supported
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -169,16 +170,105 @@ class TestCrossScCloneSnapRestore(ManageTest):
         restore_pvc_obj3.delete()
 
     @pytest.mark.parametrize(
-        argnames=["interface_type", "sc1_replica", "sc_replica2", "sc2_compression"],
+        argnames=[
+            "interface_type",
+            "sc1_replica",
+            "sc_replica2",
+            "sc2_compression",
+            "erasure_coded",
+            "sc1_erasure_coded",
+        ],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL], "", "", False),
-            pytest.param(*[constants.CEPHFILESYSTEM], "", "", False),
-            pytest.param(*[constants.CEPHBLOCKPOOL], "", "", True),
-            pytest.param(*[constants.CEPHFILESYSTEM], "", "", True),
-            pytest.param(*[constants.CEPHBLOCKPOOL], 3, 2, False),
-            pytest.param(*[constants.CEPHFILESYSTEM], 3, 2, False),
-            pytest.param(*[constants.CEPHBLOCKPOOL], 2, 3, False),
-            pytest.param(*[constants.CEPHFILESYSTEM], 2, 3, False),
+            pytest.param(*[constants.CEPHBLOCKPOOL], "", "", False, False, False),
+            pytest.param(*[constants.CEPHFILESYSTEM], "", "", False, False, False),
+            pytest.param(*[constants.CEPHBLOCKPOOL], "", "", True, False, False),
+            pytest.param(*[constants.CEPHFILESYSTEM], "", "", True, False, False),
+            pytest.param(*[constants.CEPHBLOCKPOOL], 3, 2, False, False, False),
+            pytest.param(*[constants.CEPHFILESYSTEM], 3, 2, False, False, False),
+            pytest.param(*[constants.CEPHBLOCKPOOL], 2, 3, False, False, False),
+            pytest.param(*[constants.CEPHFILESYSTEM], 2, 3, False, False, False),
+            # SC1=replicated, SC2=EC
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                "",
+                "",
+                False,
+                True,
+                False,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7966"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                3,
+                "",
+                False,
+                True,
+                False,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7967"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                2,
+                "",
+                False,
+                True,
+                False,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7968"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            # SC1=EC, SC2=replicated
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                "",
+                3,
+                False,
+                False,
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7969"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                "",
+                2,
+                False,
+                False,
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7970"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
         ],
     )
     @skipif_mcg_only
@@ -197,6 +287,8 @@ class TestCrossScCloneSnapRestore(ManageTest):
         sc1_replica,
         sc_replica2,
         sc2_compression,
+        erasure_coded,
+        sc1_erasure_coded,
         pvc_factory,
         pod_factory,
         pvc_clone_factory,
@@ -216,11 +308,17 @@ class TestCrossScCloneSnapRestore(ManageTest):
         Args:
             sc1_replica (str/int): Number of replica for the first sc object. If is empty string, use default
             sc2_replica (str/int): Number of replica for the second sc object. If is empty string, use default
-            sc2_compression (bool) If true, sc2 is created with compression = True, otherwise use default
+            sc2_compression (bool): If true, sc2 is created with compression = True, otherwise use default
+            erasure_coded (bool): If true, sc2 is created as an erasure coded pool
+            sc1_erasure_coded (bool): If true, sc1 is created as an erasure coded pool on a new pool
         """
 
-        # Create a Storage Class on default pool
-        if sc1_replica == "":
+        # Create a Storage Class on the first pool
+        if sc1_erasure_coded:
+            sc_obj1 = storageclass_factory(
+                interface=interface_type, new_rbd_pool=True, erasure_coded=True
+            )
+        elif sc1_replica == "":
             sc_obj1 = storageclass_factory(interface=interface_type)
         else:
             sc_obj1 = storageclass_factory(
@@ -243,14 +341,20 @@ class TestCrossScCloneSnapRestore(ManageTest):
                     interface=interface_type,
                     new_rbd_pool=True,
                     compression="aggressive",
+                    erasure_coded=erasure_coded,
                 )
             else:
                 sc_obj2 = storageclass_factory(
-                    interface=interface_type, new_rbd_pool=True
+                    interface=interface_type,
+                    new_rbd_pool=True,
+                    erasure_coded=erasure_coded,
                 )
         else:
             sc_obj2 = storageclass_factory(
-                interface=interface_type, replica=sc_replica2, new_rbd_pool=True
+                interface=interface_type,
+                replica=sc_replica2,
+                new_rbd_pool=True,
+                erasure_coded=erasure_coded,
             )
         pool_name2 = run_cmd(
             f"oc get sc {sc_obj2.name} -o jsonpath={{'.parameters.pool'}}"

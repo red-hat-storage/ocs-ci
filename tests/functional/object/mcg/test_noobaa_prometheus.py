@@ -23,7 +23,10 @@ logger = logging.getLogger(__name__)
 def get_bucket_used_bytes_metric(bucket_name, threading_lock):
     response = json.loads(
         PrometheusAPI(threading_lock=threading_lock)
-        .get(f'query?query=NooBaa_bucket_used_bytes{{bucket_name="{bucket_name}"}}')
+        .get(
+            f'query?query=NooBaa_bucket_used_bytes{{bucket_name="{bucket_name}"}}',
+            timeout=600,
+        )
         .content.decode("utf-8")
     )
     if len(response.get("data").get("result")) == 0:

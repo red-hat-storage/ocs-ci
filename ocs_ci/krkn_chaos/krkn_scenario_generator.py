@@ -3,6 +3,53 @@ from jinja2 import Environment, FileSystemLoader
 from ocs_ci.ocs.constants import KRKN_SCENARIO_TEMPLATE
 
 
+# Signal name to number mapping for container kill scenarios
+SIGNAL_MAP = {
+    "SIGTERM": 15,
+    "SIGKILL": 9,
+    "SIGINT": 2,
+    "SIGHUP": 1,
+}
+
+
+def convert_signal_to_number(signal):
+    """Convert signal name to signal number.
+
+    Args:
+        signal (str or int): Signal name (e.g., "SIGKILL", "SIGTERM") or number (e.g., 9, "9", 15)
+
+    Returns:
+        int: Signal number as integer
+
+    Examples:
+        >>> convert_signal_to_number("SIGKILL")
+        9
+        >>> convert_signal_to_number("SIGTERM")
+        15
+        >>> convert_signal_to_number("9")
+        9
+        >>> convert_signal_to_number(9)
+        9
+    """
+    if isinstance(signal, int):
+        return signal
+    if isinstance(signal, str) and signal.isdigit():
+        return int(signal)
+    if isinstance(signal, str):
+        upper = signal.upper()
+        mapped = SIGNAL_MAP.get(upper)
+        if mapped is None:
+            without_sig = upper.removeprefix("SIG")
+            mapped = SIGNAL_MAP.get(f"SIG{without_sig}")
+        if mapped is not None:
+            return int(mapped)
+        raise ValueError(
+            f"Unsupported kill signal {signal!r}; "
+            f"expected one of {sorted(SIGNAL_MAP)} or a numeric signal"
+        )
+    raise ValueError(f"Unsupported kill signal type: {type(signal).__name__}")
+
+
 class TemplateWriter:
     """Generates YAML from Jinja2 templates."""
 
@@ -104,12 +151,13 @@ class HogScenarios:
         workers="",
         image="quay.io/krkn-chaos/krkn-hog",
         namespace="default",
-        cpu_load_percentage=90,
+        cpu_load_percentage=95,
         cpu_method="all",
         node_name=None,
         node_selector=None,
         number_of_nodes="",
         taints=None,
+        output_name="cpu_hog.yaml",
     ):
         """Generates CPU hog YAML.
 
@@ -119,12 +167,14 @@ class HogScenarios:
             workers (str): Worker configuration (default: "").
             image (str): Container image for the hog (default: "quay.io/krkn-chaos/krkn-hog").
             namespace (str): Target namespace (default: "default").
-            cpu_load_percentage (int): CPU load percentage (default: 90).
+            cpu_load_percentage (int): CPU load percentage (default: 95).
             cpu_method (str): CPU load method (default: "all").
             node_name (str, optional): Specific node name to target.
             node_selector (dict, optional): Node selector dictionary.
             number_of_nodes (int): Number of nodes to target (default: 1).
             taints (list, optional): List of taints to apply (default: empty string if None).
+            output_name (str): Output filename (default: "cpu_hog.yaml"). Use unique names
+                when generating multiple scenarios to avoid overwriting.
 
         Returns:
             str: Path to the generated YAML file.
@@ -142,7 +192,7 @@ class HogScenarios:
             **_get_selector_config(node_name, node_selector),
         }
         return HogScenarios._create_hog(
-            scenario_dir, "cpu-hog.yml.j2", hog_data, "cpu_hog.yaml"
+            scenario_dir, "cpu-hog.yml.j2", hog_data, output_name
         )
 
     @staticmethod
@@ -160,6 +210,7 @@ class HogScenarios:
         node_selector=None,
         number_of_nodes="",
         taints=None,
+        output_name="io_hog.yaml",
     ):
         """Generates IO hog YAML.
 
@@ -177,6 +228,8 @@ class HogScenarios:
             node_selector (dict, optional): Node selector dictionary.
             number_of_nodes (int): Number of nodes to target (default: 3).
             taints (list, optional): List of taints to apply (default: empty string if None).
+            output_name (str): Output filename (default: "io_hog.yaml"). Use unique names
+                when generating multiple scenarios to avoid overwriting.
 
         Returns:
             str: Path to the generated YAML file.
@@ -197,7 +250,7 @@ class HogScenarios:
             **_get_selector_config(node_name, node_selector),
         }
         return HogScenarios._create_hog(
-            scenario_dir, "io-hog.yml.j2", hog_data, "io_hog.yaml"
+            scenario_dir, "io-hog.yml.j2", hog_data, output_name
         )
 
     @staticmethod
@@ -207,11 +260,12 @@ class HogScenarios:
         workers="",
         image="quay.io/krkn-chaos/krkn-hog",
         namespace="default",
-        memory_vm_bytes="90%",
+        memory_vm_bytes="95%",
         node_name=None,
         node_selector=None,
         number_of_nodes="",
         taints=None,
+        output_name="memory_hog.yaml",
     ):
         """Generates Memory hog YAML.
 
@@ -221,11 +275,13 @@ class HogScenarios:
             workers (str): Worker configuration (default: "").
             image (str): Container image for the hog (default: "quay.io/krkn-chaos/krkn-hog").
             namespace (str): Target namespace (default: "default").
-            memory_vm_bytes (str): Memory usage in bytes or percentage (default: "90%").
+            memory_vm_bytes (str): Memory usage in bytes or percentage (default: "95%").
             node_name (str, optional): Specific node name to target.
             node_selector (dict, optional): Node selector dictionary.
             number_of_nodes (int): Number of nodes to target (default: 3).
             taints (list, optional): List of taints to apply (default: empty string if None).
+            output_name (str): Output filename (default: "memory_hog.yaml"). Use unique names
+                when generating multiple scenarios to avoid overwriting.
 
         Returns:
             str: Path to the generated YAML file.
@@ -242,7 +298,7 @@ class HogScenarios:
             **_get_selector_config(node_name, node_selector),
         }
         return HogScenarios._create_hog(
-            scenario_dir, "memory-hog.yml.j2", hog_data, "memory_hog.yaml"
+            scenario_dir, "memory-hog.yml.j2", hog_data, output_name
         )
 
 
@@ -715,91 +771,25 @@ class ContainerScenarios:
         if scenarios is not None:
             # Generate unified scenarios
             if not scenarios:
-                # Build default scenarios directly
-                # OSD is placed at the end to ensure it executes last in container kill scenarios
-                default_namespace = namespace or "openshift-storage"
-                scenarios = [
-                    {
-                        "name": f"nodeplugin_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "CephFS Node Plugin",
-                    },
-                    {
-                        "name": f"mgr_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=rook-ceph-mgr",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "MGR",
-                    },
-                    {
-                        "name": f"rbd_nodeplugin_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.rbd.csi.ceph.com-nodeplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "RBD Node Plugin",
-                    },
-                    {
-                        "name": f"rgw_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=rook-ceph-rgw",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "RGW (RADOS Gateway)",
-                    },
-                    {
-                        "name": f"noobaa_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=noobaa",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "NooBaa",
-                    },
-                    {
-                        "name": f"cephfs_ctrlplugin_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "CephFS Control Plugin",
-                    },
-                    {
-                        "name": f"rbd_ctrlplugin_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "RBD Control Plugin",
-                    },
-                    {
-                        "name": f"osd_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=rook-ceph-osd",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "OSD",
-                    },
-                ]
+                # Delegate to ContainerScenarioHelper to avoid duplicating the
+                # component list (single source of truth in krkn_helpers.py).
+                # Late import to avoid circular dependency.
+                from ocs_ci.krkn_chaos.krkn_helpers import ContainerScenarioHelper
+
+                helper = ContainerScenarioHelper()
+                scenarios = helper.build_unified_scenarios(
+                    namespace=namespace or "openshift-storage",
+                    kill_signal=kill_signal,
+                    count=instance_count,
+                    expected_recovery_time=wait_duration // 2,
+                )
+            else:
+                # Convert kill_signal to number in each provided scenario
+                for scenario in scenarios:
+                    if "kill_signal" in scenario:
+                        scenario["kill_signal"] = convert_signal_to_number(
+                            scenario["kill_signal"]
+                        )
 
             config = {"scenarios": scenarios}
             return ContainerScenarios._create_container_scenario(
@@ -817,10 +807,13 @@ class ContainerScenarios:
                     "Either pod_name or label_selector must be provided for single scenario"
                 )
 
+            # Convert signal name to number
+            kill_signal_number = convert_signal_to_number(kill_signal)
+
             config = {
                 "namespace": namespace,
                 "container_name": container_name,
-                "kill_signal": kill_signal,
+                "kill_signal": kill_signal_number,
                 "instance_count": instance_count,
                 "wait_duration": wait_duration,
                 **_get_pod_selector_config(pod_name, label_selector),
@@ -909,7 +902,7 @@ class NodeScenarios:
     Supported cloud types:
         - aws: Amazon Web Services
         - azure: Microsoft Azure
-        - ibm: IBM Cloud
+        - ibmcloud: IBM Cloud
         - bm: BareMetal
         - vmware: VMware vSphere
 
@@ -929,7 +922,7 @@ class NodeScenarios:
     # Cloud type constants
     CLOUD_AWS = "aws"
     CLOUD_AZURE = "azure"
-    CLOUD_IBM = "ibm"
+    CLOUD_IBM = "ibmcloud"
     CLOUD_BAREMETAL = "bm"
     CLOUD_VMWARE = "vmware"
 
@@ -992,7 +985,7 @@ class NodeScenarios:
 
         Args:
             scenario_dir (str): Directory to write the YAML file.
-            cloud_type (str): Cloud provider type (aws, azure, ibm, bm, vmware).
+            cloud_type (str): Cloud provider type (aws, azure, ibmcloud, bm, vmware).
             scenarios (list, optional): List of scenario dicts for multiple scenarios.
                 Each dict can have all the parameters below.
             actions (list, optional): List of actions for single scenario mode

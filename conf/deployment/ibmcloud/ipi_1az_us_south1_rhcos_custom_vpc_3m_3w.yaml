@@ -2,7 +2,6 @@
 # This conifg is for IBM Cloud IPI deployment with custom VPC where we create
 # VPC and network stuff on by own in ocs-ci in us-south (Dalas).
 DEPLOYMENT:
-  openshift_install_timeout: 4800
   allow_lower_instance_requirements: false
 ENV_DATA:
   platform: 'ibm_cloud'

@@ -6,10 +6,10 @@ from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
-    craft_s3_command,
     create_unique_resource_name,
     default_storage_class,
 )
+from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.exceptions import CommandFailed
