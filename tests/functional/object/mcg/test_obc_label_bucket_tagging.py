@@ -12,20 +12,22 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs.bucket_utils import (
     get_bucket_tagging,
-    get_noobaa_bucket_metric_value,
+    get_noobaa_bucket_tagging_metric_results,
     tag_set_to_dict,
     verify_bucket_tagging_matches_labels,
+    verify_noobaa_bucket_tagging_metric,
 )
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import OBC
-from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
 NOOBAA_BUCKET_TAGGING_METRIC = "NooBaa_bucket_tagging"
 OBC_LABEL_KEY = "test-label"
 OBC_LABEL_VALUE = "verified"
+# NooBaa stats aggregator refreshes bucket metrics about every 5 minutes.
+NOOBAA_BUCKET_TAGGING_METRIC_TIMEOUT = 360
+NOOBAA_BUCKET_TAGGING_METRIC_SLEEP = 15
 
 
 @tier2
@@ -42,11 +44,11 @@ class TestOBCLabelBucketTagging:
         """
         1. Create a new OBC
         2. Verify the bucket has no tags before labeling the OBC
-        3. Record NooBaa_bucket_tagging metric before label update
+        3. Verify NooBaa_bucket_tagging metric is absent before label update
         4. Add labels to the OBC
         5. Verify OBC metadata contains the labels
         6. Verify the bucket has matching S3 tags
-        7. Verify NooBaa_bucket_tagging metric increased after label update
+        7. Verify NooBaa_bucket_tagging metric reflects the labels
         """
         obc_name = bucket_factory(amount=1, interface="OC")[0].name
         obc_obj = OBC(obc_name)
@@ -61,13 +63,18 @@ class TestOBCLabelBucketTagging:
             exc.value.response["Error"]["Code"] == "NoSuchTagSet"
         ), f"Expected NoSuchTagSet before labeling, got {exc.value.response}"
 
-        metric_before = get_noobaa_bucket_metric_value(
+        metric_before = get_noobaa_bucket_tagging_metric_results(
             NOOBAA_BUCKET_TAGGING_METRIC,
             bucket_name,
             threading_lock,
         )
+        assert not metric_before, (
+            f"Expected no {NOOBAA_BUCKET_TAGGING_METRIC} results before labeling, "
+            f"got {metric_before}"
+        )
         logger.info(
-            f"{NOOBAA_BUCKET_TAGGING_METRIC} before label update: {metric_before}"
+            f"No {NOOBAA_BUCKET_TAGGING_METRIC} results for bucket {bucket_name} "
+            "before label update"
         )
 
         # Add labels to the OBC
@@ -98,24 +105,16 @@ class TestOBCLabelBucketTagging:
         tag_set = get_bucket_tagging(obc_obj.s3_client, bucket_name)
         assert tag_set_to_dict(tag_set) == bucket_tags
 
-        # Verify NooBaa_bucket_tagging metric increased
-        metric_after = None
-        for sample in TimeoutSampler(
-            timeout=180,
-            sleep=10,
-            func=get_noobaa_bucket_metric_value,
-            metric_name=NOOBAA_BUCKET_TAGGING_METRIC,
-            bucket_name=bucket_name,
-            threading_lock=threading_lock,
-        ):
-            if sample is not None and (metric_before is None or sample > metric_before):
-                metric_after = sample
-                break
-        if metric_after is None:
-            raise TimeoutExpiredError(
-                f"{NOOBAA_BUCKET_TAGGING_METRIC} did not increase after labeling. "
-                f"before={metric_before}, after={metric_after}"
-            )
+        # Verify NooBaa_bucket_tagging metric reflects OBC labels (gauge updated
+        # by the stats aggregator, which runs on a ~5 minute cycle).
+        metric_after = verify_noobaa_bucket_tagging_metric(
+            NOOBAA_BUCKET_TAGGING_METRIC,
+            bucket_name,
+            expected_labels,
+            threading_lock,
+            timeout=NOOBAA_BUCKET_TAGGING_METRIC_TIMEOUT,
+            sleep=NOOBAA_BUCKET_TAGGING_METRIC_SLEEP,
+        )
         logger.info(
             f"{NOOBAA_BUCKET_TAGGING_METRIC} after label update: {metric_after} "
             f"(before: {metric_before})"
