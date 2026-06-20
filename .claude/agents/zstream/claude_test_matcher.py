@@ -377,21 +377,20 @@ def run_test_matching_claude_stage(
     """
     Stage 3 (Claude): find matching tests for all issues using claude-agent-sdk.
 
-    Optionally seeds Claude with heuristic candidates from test_matcher.py.
+    Optionally seeds Claude with vector DB candidates from test_matcher.py.
 
     Args:
         issues (list): Issues from run record
         top_n (int): Max matches per issue
         model (str | None): Claude model override
-        use_heuristic_hints (bool): Pre-run heuristic matcher for candidate hints
+        use_heuristic_hints (bool): Pre-run vector DB matcher for candidate hints
 
     Returns:
         dict: issue_key -> stage data
 
     """
-    from test_matcher import build_test_index, find_matching_tests_for_issue
+    from test_matcher import find_matching_tests_for_issue
 
-    test_index = build_test_index() if use_heuristic_hints else None
     per_issue: dict[str, dict[str, Any]] = {}
 
     for issue in issues:
@@ -400,8 +399,8 @@ def run_test_matching_claude_stage(
             continue
 
         hints = None
-        if use_heuristic_hints and test_index:
-            hints, _ = find_matching_tests_for_issue(issue, test_index, top_n=15)
+        if use_heuristic_hints:
+            hints, _ = find_matching_tests_for_issue(issue, top_n=15)
 
         try:
             stage_data = match_tests_with_claude_agent_sync(
@@ -418,22 +417,22 @@ def run_test_matching_claude_stage(
             )
         except Exception as exc:
             log.error("Claude test matching failed for %s: %s", key, exc)
-            # Fallback to heuristic matcher so the stage still produces results
-            if use_heuristic_hints and test_index:
-                log.info("Falling back to heuristic test matcher for %s", key)
+            # Fallback to vector DB matcher so the stage still produces results
+            if use_heuristic_hints:
+                log.info("Falling back to vector DB test matcher for %s", key)
                 matches, issue_coverage = find_matching_tests_for_issue(
-                    issue, test_index, top_n=top_n
+                    issue, top_n=top_n
                 )
                 per_issue[key] = {
                     "issue_id": key,
                     "issue_summary": issue.get("summary", ""),
                     "issue_coverage_areas": issue_coverage,
-                    "matcher": "heuristic_fallback",
+                    "matcher": "vector_db_fallback",
                     "claude_error": str(exc),
                     "matching_test_count": len(matches),
                     "matching_tests": matches,
                     "analysis_notes": (
-                        "Claude agent failed; results from heuristic matcher. "
+                        "Claude agent failed; results from vector DB matcher. "
                         f"Error: {exc}"
                     ),
                 }

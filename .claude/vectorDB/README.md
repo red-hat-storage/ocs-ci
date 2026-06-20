@@ -2,7 +2,27 @@
 
 Shared semantic search over ocs-ci code and test metadata using Qdrant. Lives at `.claude/vectorDB/` — not tied to any single agent.
 
-Run all commands from the **ocs-ci repository root**.
+Run all commands from the **ocs-ci repository root** (`ocs-ci/`), not from `.claude/vectorDB/`:
+
+```bash
+cd ~/Documents/ODF/framework/ocs-ci
+python .claude/vectorDB/vector_db_cli.py create
+python .claude/vectorDB/vector_db_cli.py search "noobaa bucket replication"
+```
+
+**Or** use the shell wrapper (works from any directory):
+
+```bash
+.claude/vectorDB/vector_db_cli.sh create
+.claude/vectorDB/vector_db_cli.sh search "noobaa bucket replication"
+```
+
+If your shell is already in `.claude/vectorDB/`, do **not** prefix `.claude/vectorDB/` again — use one of:
+
+```bash
+python vector_db_cli.py create
+./vector_db_cli.sh create
+```
 
 ## Indexed directories
 

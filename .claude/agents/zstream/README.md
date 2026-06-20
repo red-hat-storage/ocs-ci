@@ -184,7 +184,7 @@ Each issue accumulates stage data:
 | `repro_steps_generator.py` | Stage 2: reproduction/verification steps |
 | `topology_mapper.py` | Heuristic fix → topology mapping |
 | `coverage_mapper.py` | Upstream component → test directory / coverage areas |
-| `test_matcher.py` | Stage 3: heuristic test matching |
+| `test_matcher.py` | Stage 3: vector DB test matching |
 | `claude_test_matcher.py` | Stage 3: Claude Agent SDK test matching |
 | `prompts/` | Claude prompts for semantic test matching |
 
@@ -198,7 +198,7 @@ Tests are ranked by:
 4. Topology and component directory hints
 5. Docstring similarity
 
-The Claude matcher uses a two-phase flow: tool-based search (prose analysis), then structured JSON formatting. On failure it falls back to the heuristic matcher.
+The Claude matcher uses a two-phase flow: tool-based search (prose analysis), then structured JSON formatting. On failure it falls back to the vector DB matcher.
 
 ## Roadmap
 

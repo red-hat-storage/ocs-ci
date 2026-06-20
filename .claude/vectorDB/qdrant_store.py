@@ -209,6 +209,7 @@ def search_similar(
                 "class_name": payload.get("class_name"),
                 "docstring": payload.get("docstring", "")[:300],
                 "jira_ids": payload.get("jira_ids", []),
+                "polarion_ids": payload.get("polarion_ids", []),
                 "coverage_areas": payload.get("coverage_areas", []),
                 "pytest_command": payload.get("pytest_command"),
                 "match_reasons": [f"semantic similarity: {point.score:.3f}"],

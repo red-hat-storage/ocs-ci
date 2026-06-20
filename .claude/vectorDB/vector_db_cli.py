@@ -9,13 +9,16 @@ Indexed directories (config.INDEX_DIR_NAMES):
   conf/, Docker_files/, docs/, examples/, external/, ocs_ci/ (ocs-ci),
   scripts/, src/, template_test/, terraform/, tests/
 
-Run from the ocs-ci repository root:
+Run from the ocs-ci repository root (not from this directory):
 
+  cd /path/to/ocs-ci
   python .claude/vectorDB/vector_db_cli.py create
   python .claude/vectorDB/vector_db_cli.py update
   python .claude/vectorDB/vector_db_cli.py status
   python .claude/vectorDB/vector_db_cli.py search "noobaa bucket replication"
   python .claude/vectorDB/vector_db_cli.py cleanup --all
+
+If cwd is already .claude/vectorDB/, use: python vector_db_cli.py <command>
 """
 
 from __future__ import annotations

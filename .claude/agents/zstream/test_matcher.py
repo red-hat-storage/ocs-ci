@@ -1,13 +1,14 @@
 """
 Find ocs-ci automated tests that match issue reproduction and verification steps.
 
-Scans tests/ for test functions and scores them against each issue's
-repro_steps stage output (summary, components, topology, verification steps)
-and inferred code coverage areas (upstream repos, component families, test dirs).
+Uses the shared vector DB (``.claude/vectorDB/``) for semantic similarity search
+against indexed test metadata. Test file parsing helpers remain for vector DB
+indexing (``code_parser.py``).
 """
 
 import logging
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -354,72 +355,114 @@ def _score_test(
     return score, reasons
 
 
+def _vector_results_to_matches(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert vector DB search hits to the stage output format."""
+    matches: list[dict[str, Any]] = []
+    for item in results:
+        coverage_areas = item.get("coverage_areas", [])
+        area_labels = [
+            CODE_COVERAGE_AREAS[a]["label"]
+            for a in coverage_areas
+            if a in CODE_COVERAGE_AREAS
+        ]
+        docstring = item.get("docstring", "")
+        node_id = item.get("node_id") or ""
+        matches.append(
+            {
+                "test_node_id": node_id,
+                "file_path": item.get("file_path"),
+                "test_name": item.get("test_name"),
+                "class_name": item.get("class_name"),
+                "polarion_ids": item.get("polarion_ids", []),
+                "jira_ids": item.get("jira_ids", []),
+                "coverage_areas": coverage_areas,
+                "coverage_area_labels": area_labels,
+                "relevance_score": int(round(item.get("score", 0) * 100)),
+                "match_reasons": item.get("match_reasons", []),
+                "docstring_excerpt": (
+                    docstring[:300] + "..." if len(docstring) > 300 else docstring
+                ),
+                "pytest_command": item.get("pytest_command")
+                or (f"pytest {node_id}" if node_id else None),
+            }
+        )
+    return matches
+
+
 def find_matching_tests_for_issue(
     issue: dict[str, Any],
-    test_index: list[TestCandidate],
+    test_index: list[TestCandidate] | None = None,
     *,
     top_n: int = 10,
     min_score: int = 15,
+    score_threshold: float | None = None,
+    qdrant_url: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """
     Find ocs-ci tests matching an issue's reproduction/verification plan.
 
+    Queries the vector DB for semantically similar test cases. ``test_index`` is
+    ignored (kept for backward compatibility with older callers).
+
     Args:
         issue (dict): Issue from run record (must include repro_steps stage)
-        test_index (list): Pre-built test index
+        test_index (list | None): Deprecated; unused
         top_n (int): Maximum matches to return
-        min_score (int): Minimum relevance score
+        min_score (int): Minimum relevance score on 0-100 scale
+        score_threshold (float | None): Cosine similarity threshold (default from min_score)
+        qdrant_url (str | None): Optional remote Qdrant URL
 
     Returns:
         tuple: (ranked matching tests, issue coverage area metadata)
 
     """
-    issue_key = issue.get("key", "")
-    issue_text, issue_tokens = _issue_search_corpus(issue)
+    del test_index  # vector search replaces filesystem scan + heuristic scoring
+
+    vector_db_dir = Path(__file__).resolve().parents[2] / "vectorDB"
+    if str(vector_db_dir) not in sys.path:
+        sys.path.insert(0, str(vector_db_dir))
+
+    from retrieval import find_similar_tests  # noqa: E402
+
     issue_coverage = infer_issue_coverage_areas(issue)
-    preferred_dirs = _preferred_dirs(issue, issue_coverage)
+    threshold = score_threshold if score_threshold is not None else min_score / 100
 
-    ranked: list[tuple[int, TestCandidate, list[str]]] = []
-    for candidate in test_index:
-        score, reasons = _score_test(
-            issue_key,
-            issue_tokens,
-            issue_text,
-            preferred_dirs,
-            candidate,
-            issue_coverage_areas=issue_coverage.get("coverage_areas"),
+    repro = issue.get("stages", {}).get("repro_steps", {}).get("data", {})
+    query_parts = [
+        issue.get("key", ""),
+        issue.get("summary", ""),
+        issue.get("description", ""),
+        repro.get("issue_summary", ""),
+        repro.get("expected_result", ""),
+    ]
+    query = " ".join(filter(None, query_parts))
+
+    try:
+        results = find_similar_tests(
+            query,
+            top_k=top_n,
+            qdrant_url=qdrant_url,
+            score_threshold=threshold,
+            components=issue.get("components"),
+            reproduction_steps=repro.get("reproduction_steps"),
+            verification_steps=repro.get("verification_steps"),
+            chunk_type="test",
         )
-        if score >= min_score:
-            ranked.append((score, candidate, reasons))
+    except Exception as exc:
+        log.error(
+            "Vector DB test search failed for %s: %s",
+            issue.get("key", ""),
+            exc,
+        )
+        results = []
 
-    ranked.sort(key=lambda item: item[0], reverse=True)
+    matches = _vector_results_to_matches(results)
 
-    matches = []
-    for score, candidate, reasons in ranked[:top_n]:
-        area_labels = [
-            CODE_COVERAGE_AREAS[a]["label"]
-            for a in candidate.coverage_areas
-            if a in CODE_COVERAGE_AREAS
-        ]
-        matches.append(
-            {
-                "test_node_id": candidate.node_id,
-                "file_path": candidate.file_path,
-                "test_name": candidate.test_name,
-                "class_name": candidate.class_name,
-                "polarion_ids": candidate.polarion_ids,
-                "jira_ids": candidate.jira_ids,
-                "coverage_areas": candidate.coverage_areas,
-                "coverage_area_labels": area_labels,
-                "relevance_score": score,
-                "match_reasons": reasons,
-                "docstring_excerpt": (
-                    candidate.docstring[:300] + "..."
-                    if len(candidate.docstring) > 300
-                    else candidate.docstring
-                ),
-                "pytest_command": f"pytest {candidate.node_id}",
-            }
+    if not matches:
+        log.warning(
+            "No vector DB matches for %s (indexed tests in .claude/vectorDB/?). "
+            "Run: python .claude/vectorDB/vector_db_cli.py create",
+            issue.get("key", ""),
         )
 
     return matches, issue_coverage
@@ -443,7 +486,7 @@ def run_test_matching_stage(
         dict: issue_key -> stage data for append_stage_bulk
 
     """
-    test_index = build_test_index(tests_dir=tests_dir)
+    del tests_dir  # vector DB indexes tests/ at build time; no filesystem scan here
     per_issue: dict[str, dict[str, Any]] = {}
 
     for issue in issues:
@@ -458,19 +501,17 @@ def run_test_matching_stage(
                 key,
             )
 
-        matches, issue_coverage = find_matching_tests_for_issue(
-            issue, test_index, top_n=top_n
-        )
+        matches, issue_coverage = find_matching_tests_for_issue(issue, top_n=top_n)
         per_issue[key] = {
             "issue_id": key,
             "issue_summary": issue.get("summary", ""),
             "issue_coverage_areas": issue_coverage,
+            "matcher": "vector_db",
             "matching_test_count": len(matches),
             "matching_tests": matches,
             "analysis_notes": (
-                "Tests ranked by code coverage area overlap (upstream component/repo), "
-                "JIRA link, keyword overlap with reproduction/verification steps, "
-                "component/topology directory hints, and docstring similarity. "
+                "Tests ranked by semantic similarity via the ocs-ci vector DB "
+                "(reproduction/verification steps, summary, components, coverage areas). "
                 "Review top matches before selecting regression scope."
             ),
         }
