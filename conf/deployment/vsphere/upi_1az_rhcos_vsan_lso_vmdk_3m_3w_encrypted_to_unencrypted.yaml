@@ -1,0 +1,26 @@
+---
+# Deploys an LSO-backed ODF cluster via CLI on vSphere UPI (VMDK, 3m/3w).
+# After LSO installs and provisions PVs from clean disks, the LSO operator is
+# scaled down and LUKS headers are written to the backing disks
+# (simulate_bluestore_label_dmcrypt). LSO stays down while the StorageCluster
+# is deployed with wipeDevicesFromOtherClusters so Rook wipes the LUKS headers
+# and provisions new unencrypted OSDs. LSO is restored once OSD pods are Running.
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  type: 'VMDK'
+  provision_type: 'thick'
+  ui_deployment: false
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '65536'
+  fio_storageutilization_min_mbps: 10.0
+  simulate_bluestore_label_dmcrypt: true
+  wipe_devices_from_other_clusters: true
+  encryption_at_rest: false
