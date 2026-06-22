@@ -2312,54 +2312,11 @@ class Deployment(object):
                 timeout=600,
             )
 
-            wipe_devices_from_other_clusters = config.ENV_DATA.get(
-                "wipe_devices_from_other_clusters", False
+            from ocs_ci.deployment.helpers.ceph_cluster import (
+                post_deployment_verify_wipe_devices,
             )
-            odf_forceful_deployment = config.DEPLOYMENT.get(
-                "odf_forceful_deployment", False
-            )
-            simulate_bluestore_label = config.ENV_DATA.get(
-                "simulate_bluestore_label", False
-            )
-            simulate_bluestore_label_dmcrypt = config.ENV_DATA.get(
-                "simulate_bluestore_label_dmcrypt", False
-            )
-            if wipe_devices_from_other_clusters or odf_forceful_deployment:
-                from ocs_ci.deployment.helpers.ceph_cluster import (
-                    verify_wipe_devices_from_other_clusters,
-                    verify_wipe_encrypted_devices_from_other_clusters,
-                )
 
-                if simulate_bluestore_label:
-                    logger.info(
-                        "Verify wipe devices from other clusters "
-                        "(StorageCluster CR flag and OSD prepare logs)"
-                    )
-                    verify_wipe_devices_from_other_clusters()
-                elif simulate_bluestore_label_dmcrypt:
-                    logger.info(
-                        "Verify wipe of encrypted (LUKS) devices from other "
-                        "clusters (StorageCluster CR flag and OSD prepare logs)"
-                    )
-                    verify_wipe_encrypted_devices_from_other_clusters()
-                else:
-                    logger.info(
-                        "Neither simulate_bluestore_label nor "
-                        "simulate_bluestore_label_dmcrypt is set. "
-                        "Skipping simulation-specific wipe verification."
-                    )
-            else:
-                from ocs_ci.deployment.helpers.ceph_cluster import (
-                    verify_no_wipe_devices_from_other_clusters,
-                )
-
-                logger.info(
-                    "Verify no wipe of foreign bluestore data occurred "
-                    "(StorageCluster CR flag and OSD prepare logs)"
-                )
-                assert (
-                    verify_no_wipe_devices_from_other_clusters()
-                ), "No-wipe verification failed"
+            post_deployment_verify_wipe_devices()
 
             if not config.COMPONENTS["disable_cephfs"]:
                 # Check for CephFilesystem creation in ocp
