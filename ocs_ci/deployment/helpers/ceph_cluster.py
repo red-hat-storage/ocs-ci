@@ -605,7 +605,7 @@ def verify_wipe_unencrypted_devices_from_other_clusters():
       succeeded
     - ``ceph-volume raw dmcrypt prepare successful`` — new OSD prepared
       (emitted for both encrypted and unencrypted OSDs)
-    - ``ceph-volume raw prepare .+`` — new OSD creation command
+    - ``ceph-volume .+ raw prepare`` — new OSD creation command
 
     Returns:
         bool: True if all checks pass, False otherwise.
@@ -620,7 +620,7 @@ def verify_wipe_unencrypted_devices_from_other_clusters():
         ),
         re.compile(r'successfully zapped osd\.\d+ path ".+"'),
         re.compile(r"ceph-volume raw dmcrypt prepare successful"),
-        re.compile(r"ceph-volume raw prepare .+"),
+        re.compile(r"ceph-volume .+ raw prepare"),
     ]
 
     osd_prepare_pods = get_osd_prepare_pods()
@@ -660,7 +660,7 @@ def verify_wipe_encrypted_devices_from_other_clusters():
     - ``successfully zapped device ".+"`` — low-level wipe succeeded
     - ``completed wiping device ".+" belonging to a different ceph
       cluster`` — wipe fully complete
-    - ``ceph-volume raw prepare .+`` — new OSD creation command
+    - ``ceph-volume .+ raw prepare`` — new OSD creation command
 
     Returns:
         bool: True if all checks pass, False otherwise.
@@ -676,7 +676,7 @@ def verify_wipe_encrypted_devices_from_other_clusters():
         re.compile(
             r'completed wiping device ".+" belonging to a different ceph cluster'
         ),
-        re.compile(r"ceph-volume raw prepare .+"),
+        re.compile(r"ceph-volume .+ raw prepare"),
     ]
 
     osd_prepare_pods = get_osd_prepare_pods()
