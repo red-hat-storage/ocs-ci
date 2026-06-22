@@ -110,7 +110,9 @@ anywhere else.
 * `mirror_registry` - Hostname of the mirror registry
 * `mirror_registry_user` - Username for disconnected cluster mirror registry
 * `mirror_registry_password` - Password for disconnected cluster mirror registry
-* `opm_index_prune_binary_image` - Required only for IBM Power Systems and IBM Z images: Operator Registry base image with the tag that matches the target OpenShift Container Platform cluster major and minor version.
+* `opm_index_prune_binary_image` - Required only for IBM Power Systems and IBM Z images: Operator Registry base image with the tag that matches the target OpenShift Container Platform cluster major and minor
+* `deploy_mce`- Boolean, Deploy mce if True
+version.
   (for example: `registry.redhat.io/openshift4/ose-operator-registry:v4.9`)
   [doc](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.9/html/operators/administrator-tasks#olm-pruning-index-image_olm-managing-custom-catalogs)
 * `min_noobaa_endpoints` - Sets minimum noobaa endpoints (Workaround for https://github.com/red-hat-storage/ocs-ci/issues/2861)
@@ -138,6 +140,10 @@ anywhere else.
 * `ingress_ssl_key` - Path for the key for custom ingress ssl certificate. (default: `data/ingress-cert.key`)
 * `ingress_ssl_ca_cert` - Path for the CA certificate used for signing the ingress_ssl_cert. (default: `data/ca.crt`)
 * `cert_signing_service_url` - Automatic Certification Authority signing service URL.
+* `custom_ssl_cert_provider` - Provider for ssl certificate, options: `ocs-qe-ca`, `letsencrypt` (default: `ocs-qe-ca`)
+    `ocs-qe-ca` option requires `cert_signing_service_url` parameter
+    `letsencrypt` option requires `certbot_dns_plugin` parameter
+* `certbot_dns_plugin` - Certbot DNS plugin for certificate signed by Let's Encrypt, options: `dns-route53` (default: `dns-route53`)
 * `proxy_http_proxy`, `proxy_https_proxy` - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)
 * `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
 * `disconnected_env_skip_image_mirroring` - skip index image prune and mirroring on disconnected environment (this expects that all the required images will be mirrored outside of ocs-ci)
@@ -145,7 +151,6 @@ anywhere else.
 * `disconnected_false_gateway` - false gateway used to make cluster effectively disconnected
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
-* `in_transit_encryption` - Enable in-transit encryption.
 * `sc_encryption` - Enable StorageClass encryption.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
@@ -161,6 +166,16 @@ anywhere else.
 * `force_download_rosa_cli` - Download the ROSA CLI even if one already exists in the bin_dir
 * `force_download_ocm_cli` - Download the OCM CLI even if one already exists in the bin_dir
 * `ipv6` - ipv6 single stack deployment of OCP and ODF.
+* `fusion_deployment` - Enable Fusion deployment.
+* `fusion_channel` - Channel to deploy Fusion operator with.
+* `fusion_pre_release` - Deploy pre-release version of Fusion.
+* `fusion_pre_release_sds_version` - SDS version, used to build path to Fusion pre-release image.
+* `fusion_pre_release_image` - Pre-release image version of Fusion to deploy.
+* `fdf_deployment` - Enable Fusion Data Foundation deployment.
+* `fdf_pre_release`: Deploy pre-release version of FDF.
+* `fdf_image_tag`: FDF image tag, used to retrieve fdf_pre_release_image_digest.
+* `fdf_pre_release_registry`: Registry where the pre-release image of FDF is hosted.
+* `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
 * `konflux_build` - Set to True if build is made by Konflux build system.
 
 #### REPORTING
@@ -186,6 +201,9 @@ Reporting related config. (Do not store secret data in the repository!).
 * `save_mem_report` - If True, test run memory report CSV file will be saved in `RUN["log_dir"]/stats_log_dir_<run_id>`
   directory along with <test name>.peak_rss_table, <test name>.peak_vms_table reports. The option may be enforced by
   exporting env variable: export SAVE_MEM_REPORT=true
+* `max_mg_fail_attempts` - Maximum attempts to run MG commands to prevent
+  spending time on MG which is timeouting.
+* `rp_additional_info` - any additional information placed to Report Portal launch description
 * `primary_assignee` - Primary assignee name to be added as an attribute in ReportPortal. This allows filtering runs by the primary assignee in RP
 * `backup_assignee` - Backup assignee name to be added as an attribute in ReportPortal. This allows filtering runs by the backup assignee in RP
 * `tarball_mg_logs` - pack MG files to tarball
@@ -219,6 +237,7 @@ higher priority).
 * `skip_ocp_deployment` - Skip the OCP deployment step or not (Default: false)
 * `skip_ocs_deployment` - Skip the OCS deployment step or not (Default: false)
 * `ocs_version` - Version of OCS that is being deployed
+* `acm_version` - Version of acm to be used for this run (applicable mostly to DR scenarios)
 * `vm_template` - VMWare template to use for RHCOS images
 * `fio_storageutilization_min_mbps` - Minimal write speed of FIO used in workload_fio_storageutilization
 * `TF_LOG_LEVEL` - Terraform log level
@@ -240,6 +259,7 @@ higher priority).
 * `rhcos_ami` - AMI to use for RHCOS workers, for UPI deployments
 * `skip_ntp_configuration` - Skip NTP configuration during flexy deployment (Default: false)
 * `encryption_at_rest` - Enable encryption at rest (OCS >= 4.6 only) (Default: false)
+* `in_transit_encryption` - Enable in-transit encryption.
 * `fips` - Enable FIPS (Default: false)
 * `master_num_cpus` - Number of CPUs for each master node
 * `worker_num_cpus` - Number of CPUs for each worker node
@@ -329,7 +349,9 @@ higher priority).
                 (this is a workaround for UEFI boot order getting changed on some servers during the OCP deployment)
 * `hcp_version` - version of HCP client to be deployed on machine running the tests
 * `metallb_version` - MetalLB operator version to install
-* `install_hypershift_upstream` - Install hypershift from upstream or not (Default: false). Necessary for unreleased OCP/CNV versions
+* `deploy_acm_hub_cluster` - Deploy ACM hub cluster or not (Default: false)
+* `cnv_deployment` - Deploy CNV or not (Default: false) necessary for Converged clusters with hosted clients
+* `deploy_hyperconverged` - Deploy hyperconverged operator or not (Default: false).  Necessary for Converged clusters with hosted clients with unreleased OCP version
 * `clusters` - section for hosted clusters
     * `<cluster name>` - name of the cluster
       * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
@@ -340,6 +362,7 @@ higher priority).
       * `hosted_odf_registry` - registry for hosted ODF (default: quay.io/rhceph-dev/ocs-registry)
       * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
       * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"
+      * `storage_quota` - storage quota for the hosted cluster
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
 * `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
@@ -358,6 +381,7 @@ higher priority).
 * `upgrade_osd_requires_healthy_pgs` - If set to true OSD upgrade process won't start until PGs are healthy.
 * `workaround_mark_disks_as_ssd` - WORKAROUND: mark disks as SSD (not rotational - `0` in `/sys/block/*d*/queue/rotational`)
 * `node_labels` - Comma-separated labels to be applied to the nodes in the cluster, e.g. 'cluster.ocs.openshift.io/openshift-storage="",node-role.kubernetes.io/infra=""', default - empty string
+* `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
 
 #### UPGRADE
 
@@ -370,6 +394,9 @@ Upgrade related configuration data.
 * `ocp_arch` - Architecture type of the OCP image
 * `upgrade_logging_channel` - OCP logging channel to upgrade with
 * `upgrade_ui` - Perform upgrade via UI (Not all the versions are supported, please look at the code)
+* `upgrade_acm_version` - ACM version to which we have to upgrade
+* `upgrade_acm_registry_image` - ACM Image tag from brew which should be used to upgrade
+example: <brew_registry_url>/rh-osbs/iib:565330
 
 #### AUTH
 
@@ -382,6 +409,12 @@ auth file or pulled from s3.
   * `username` - username for database
   * `password` - password of database user
   * `port` - port where PgSQL server listen to
+* `jira` - Jira related section for reporting purpose, if not provided it will try to read values from /etc/jira.cfg
+  * `url` - URL of Jira instance
+  * `token` - auth token for Jira
+  * `visibility` - E.g. `{"type": "group", "value": "Red Hat Employee"}` which
+    is used as Default value if not provided to do not expose data to public
+
 
 #### MULTICLUSTER
 
@@ -424,7 +457,13 @@ Configuration specific to external Ceph cluster
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 * `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
-* `rgw_cert_ca` - url pointing to CA certificate used to sign certificate for RGW with SSL
+* `rgw_cert_ca` - URL for the RGW signing CA, used as a **fallback** when automatic certificate retrieval fails
+* For external Ceph **19.0+ (Squid and newer)**: ocs-ci runs ``ceph orch certmgr cert get cephadm_root_ca_cert`` via ``cephadm shell`` on the ``_admin`` node to fetch the cephadm root CA certificate
+* For external Ceph **18.x (Reef)**: ocs-ci fetches the certificate directly from the RGW server endpoint using ``openssl s_client``, since cephadm certmgr is not available in this version
+* For external Ceph **below 18.0**: Falls back to downloading from ``rgw_cert_ca`` URL
+* All methods fall back to ``rgw_cert_ca`` URL if the automatic fetch fails
+* `use_rbd_namespace` - boolean parameter to use RBD namespace in pool
+* `rbd_namespace` - Name of RBD namespace to use in pool
 
 ##### login
 
