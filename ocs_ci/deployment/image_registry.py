@@ -148,8 +148,11 @@ class ImageRegistryConfigurator(object):
             logger.error(f"Failed to create PVC: {e}")
             raise
 
-        # Wait for PVC to be bound
-        self.wait_for_pvc_bound()
+        # Note: We don't wait for PVC to be bound here because storage class uses
+        # WaitForFirstConsumer binding mode. PVC will bind when registry pod tries to use it.
+        logger.info(
+            f"PVC {self.pvc_name} created. It will bind when the image registry pod consumes it."
+        )
 
     def wait_for_pvc_bound(self, timeout=300):
         """
@@ -300,17 +303,22 @@ class ImageRegistryConfigurator(object):
             logger.info("Image registry storage type is not emptyDir")
 
         try:
-            # Step 1: Create PVC
+            # Step 1: Create PVC (it will remain in Pending state with WaitForFirstConsumer)
             self.create_image_registry_pvc(storage_class=storage_class, size=size)
 
-            # Step 2: Patch image registry configuration
+            # Step 2: Patch image registry configuration to use PVC
+            # This will trigger the registry pod to consume the PVC, causing it to bind
             self.patch_image_registry_to_use_pvc()
 
-            # Step 3: Verify configuration
-            self.verify_registry_using_pvc()
-
-            # Step 4: Wait for registry pods to be ready
+            # Step 3: Wait for registry pods to be ready (this also allows PVC to bind)
             self.wait_for_registry_pods_ready()
+
+            # Step 4: Wait for PVC to be bound (should be quick now that pod is using it)
+            logger.info("Waiting for PVC to be bound after registry pod consumes it")
+            self.wait_for_pvc_bound(timeout=300)
+
+            # Step 5: Verify configuration
+            self.verify_registry_using_pvc()
 
             logger.info("Image registry PVC configuration completed successfully")
             return True

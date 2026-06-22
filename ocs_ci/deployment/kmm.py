@@ -12,7 +12,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import exceptions
-from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
@@ -123,13 +122,14 @@ class KMMInstaller(object):
             resource_name=self.subscription_name,
         )
 
-        # Wait for install plan and approve if needed
-        wait_for_install_plan_and_approve(self.namespace, timeout=1500)
-
-        # Wait for CSV to be ready
+        # Since installPlanApproval is set to Automatic, we don't need to wait for manual approval
+        # Just wait for CSV to be ready
+        logger.info(
+            "Waiting for KMM operator CSV to be created and reach Succeeded phase"
+        )
         csv = None
         for csv in TimeoutSampler(
-            timeout=900,
+            timeout=1200,
             sleep=15,
             func=get_csvs_start_with_prefix,
             csv_prefix=self.operator_name,
@@ -144,6 +144,7 @@ class KMMInstaller(object):
             )
 
         csv_name = csv[0]["metadata"]["name"]
+        logger.info(f"Found KMM operator CSV: {csv_name}")
         csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
         csv_obj.wait_for_phase(phase="Succeeded", timeout=900)
         logger.info(f"KMM operator CSV {csv_name} is in Succeeded phase")
