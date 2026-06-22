@@ -2,7 +2,7 @@
 Parse ocs-ci repository files for vector indexing.
 
 Indexes only directories listed in config.INDEX_DIR_NAMES:
-  - test_*.py → per-test-function chunks (via z-stream test_matcher)
+  - test_*.py → per-test-function chunks (via ocs_ci_test_match.matcher)
   - other supported files → per-file chunks
 """
 
@@ -31,11 +31,11 @@ from config import (
 
 log = logging.getLogger(__name__)
 
-_ZSTREAM_DIR = AGENTS_DIR / "zstream"
-if str(_ZSTREAM_DIR) not in sys.path:
-    sys.path.insert(0, str(_ZSTREAM_DIR))
+_TEST_MATCH_DIR = AGENTS_DIR / "ocs_ci_test_match"
+if str(_TEST_MATCH_DIR) not in sys.path:
+    sys.path.insert(0, str(_TEST_MATCH_DIR))
 
-from test_matcher import TestCandidate, _parse_test_file  # noqa: E402
+from matcher import TestCandidate, _parse_test_file  # noqa: E402
 
 
 @dataclass

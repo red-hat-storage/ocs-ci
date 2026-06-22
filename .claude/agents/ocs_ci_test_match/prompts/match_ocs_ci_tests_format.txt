@@ -1,0 +1,11 @@
+Convert the test-matching analysis below into the required JSON schema.
+
+Issue ID: {issue_id}
+Maximum tests to return: {top_n}
+
+## Analysis from test search
+{analysis}
+
+Return ONLY valid JSON with keys: issue_id, matching_test_count, matching_tests, analysis_notes.
+Each item in matching_tests must include: test_node_id, file_path, test_name, relevance_score, match_reasons, coverage_areas (list of area ids), coverage_summary.
+Use real pytest node ids from the analysis. Do not invent test paths.

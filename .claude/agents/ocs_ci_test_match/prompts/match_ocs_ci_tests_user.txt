@@ -1,0 +1,46 @@
+Find ocs-ci automated tests that cover the following JIRA bug reproduction and verification plan.
+
+## Issue
+- **Issue ID:** {issue_id}
+- **Summary:** {issue_summary}
+- **Components:** {components}
+- **Labels:** {labels}
+
+## Code coverage areas (primary matching signal)
+Match tests that exercise these upstream code paths / component families:
+{code_coverage_areas}
+
+- **Upstream repos:** {upstream_repos}
+- **Preferred test directories:**
+{preferred_test_dirs}
+
+## Topology
+- **Type:** {topology_label} ({topology})
+- **Details:** {topology_details}
+- **Footprint:** {footprint} ({cluster_count} cluster(s))
+
+## Environment requirements
+{environment_requirements}
+
+## Reproduction steps
+{reproduction_steps}
+
+## Expected result
+{expected_result}
+
+## Verification steps
+{verification_steps}
+
+## Heuristic candidate tests (optional starting points — verify and refine)
+{heuristic_candidates}
+
+## Instructions
+1. Start from the **code coverage areas** above — search `tests/` under the preferred directories.
+2. Read docstrings, imports, and test logic to confirm the test exercises the affected code path.
+3. Write a detailed analysis (prose, not JSON) listing up to {top_n} candidate tests with:
+   - test_node_id (real pytest path from repo)
+   - coverage_areas (which upstream/component area the test covers)
+   - relevance_score (0-100; highest when test directly covers the fix area)
+   - match_reasons
+   - coverage_summary
+4. Note any coverage gaps if no strong match exists in the affected code area.

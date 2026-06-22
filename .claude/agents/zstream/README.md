@@ -1,6 +1,6 @@
 # Z-Stream Lane C Issue Verification Agent
 
-Automates ODF z-stream qualification intake for bugs in **ON_QA** status: JIRA fetch → reproduction/verification steps → ocs-ci test matching.
+Automates ODF z-stream qualification intake for bugs in **ON_QA** status: JIRA fetch → reproduction/verification steps → ocs-ci test matching (via `ocs_ci_test_match` agent).
 
 Run all commands from the **ocs-ci repository root**.
 
@@ -9,7 +9,7 @@ Run all commands from the **ocs-ci repository root**.
 ```text
 Stage 1: jira_intake      → Fetch ON_QA bugs for target ODF version
 Stage 2: repro_steps      → Generate reproduction & verification steps
-Stage 3: test_matching    → Find ocs-ci tests that cover the fix area
+Stage 3: test_matching    → Find ocs-ci tests (ocs_ci_test_match agent)
 ```
 
 Each stage appends results to a timestamped **run record** under `run_record/`. Stages 2 and 3 require `--run-id` from stage 1.
@@ -27,7 +27,7 @@ pip install atlassian-python-api
 For semantic test matching with Claude Agent SDK (optional):
 
 ```bash
-pip install -r .claude/agents/zstream/requirements-agent.txt
+pip install -r .claude/agents/ocs_ci_test_match/requirements-agent.txt
 ```
 
 ### JIRA credentials
@@ -91,7 +91,9 @@ Use `--no-jira-refresh` to skip re-fetching issues from JIRA and work from the r
 
 ### Stage 3 — Test matching
 
-**Heuristic** (fast, offline — keyword, topology, and code coverage area scoring):
+Delegated to the **ocs-ci-test-match** agent (`.claude/agents/ocs_ci_test_match/`).
+
+**Heuristic** (fast, offline — vector DB semantic search):
 
 ```bash
 python .claude/agents/zstream/zstream_issue_verification.py \
@@ -183,10 +185,11 @@ Each issue accumulates stage data:
 | `run_record.py` | Timestamped runs, shared issues JSON |
 | `repro_steps_generator.py` | Stage 2: reproduction/verification steps |
 | `topology_mapper.py` | Heuristic fix → topology mapping |
-| `coverage_mapper.py` | Upstream component → test directory / coverage areas |
-| `test_matcher.py` | Stage 3: vector DB test matching |
-| `claude_test_matcher.py` | Stage 3: Claude Agent SDK test matching |
-| `prompts/` | Claude prompts for semantic test matching |
+| `coverage_mapper.py` | Re-export shim → `ocs_ci_test_match.coverage_mapper` |
+| `test_matcher.py` | Re-export shim → `ocs_ci_test_match.matcher` |
+| `claude_test_matcher.py` | Re-export shim → `ocs_ci_test_match.claude_matcher` |
+
+Test matching implementation lives in `.claude/agents/ocs_ci_test_match/`. See that package's README for standalone usage.
 
 ## Test matching
 

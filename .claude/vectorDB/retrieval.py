@@ -30,9 +30,9 @@ from qdrant_store import create_collection, get_client, search_similar, upsert_p
 
 log = logging.getLogger(__name__)
 
-_ZSTREAM_DIR = AGENTS_DIR / "zstream"
-if str(_ZSTREAM_DIR) not in sys.path:
-    sys.path.insert(0, str(_ZSTREAM_DIR))
+_TEST_MATCH_DIR = AGENTS_DIR / "ocs_ci_test_match"
+if str(_TEST_MATCH_DIR) not in sys.path:
+    sys.path.insert(0, str(_TEST_MATCH_DIR))
 
 
 def build_query_text(

@@ -33,7 +33,6 @@ for _path in (_ZSTREAM_DIR, _REPO_ROOT):
 
 from repro_steps_generator import STAGE_REPRO_STEPS, run_repro_steps_stage
 from run_record import STAGE_JIRA_INTAKE, STAGE_TEST_MATCHING, RunRecord
-from test_matcher import run_test_matching_stage
 
 log = logging.getLogger(__name__)
 
@@ -172,6 +171,12 @@ def _run_test_matching_stage(
     run_record: RunRecord,
 ) -> list[dict]:
     """Stage 3: find matching ocs-ci tests and update the run record."""
+    _TEST_MATCH_DIR = _ZSTREAM_DIR.parent / "ocs_ci_test_match"
+    if str(_TEST_MATCH_DIR) not in sys.path:
+        sys.path.insert(0, str(_TEST_MATCH_DIR))
+
+    from operations import match_issues
+
     issues = run_record.get_issues()
     if not issues:
         log.error("Run %s has no issues. Run JIRA intake first.", run_record.run_id)
@@ -189,15 +194,14 @@ def _run_test_matching_stage(
         )
 
     if args.use_claude_agent:
-        from claude_test_matcher import run_test_matching_claude_stage
-
-        per_issue = run_test_matching_claude_stage(
+        per_issue = match_issues(
             issues,
             top_n=args.top_tests,
+            use_claude=True,
             model=args.claude_model,
         )
     else:
-        per_issue = run_test_matching_stage(issues, top_n=args.top_tests)
+        per_issue = match_issues(issues, top_n=args.top_tests)
 
     run_record.append_stage_bulk(STAGE_TEST_MATCHING, per_issue)
     return [per_issue[key] for key in sorted(per_issue)]

@@ -57,4 +57,4 @@ python .claude/agents/ocs_ci_run/ocs_ci_run_cli.py abort --job-url <build-url> -
 
 ## Integration
 
-Z-stream Stage 4 verification imports `operations` from this package. See `docs/superpowers/specs/2026-06-20-ocs-ci-run-agent-design.md`.
+Z-stream Stage 4 verification imports `operations` from this package. Stage 3 test matching uses `ocs_ci_test_match`. See `.claude/agents/ocs_ci_test_match/README.md` and `.claude/agents/ocs_ci_run/README.md`.
