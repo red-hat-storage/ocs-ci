@@ -6,6 +6,7 @@ external cluster deployment.
 import json
 import logging
 import re
+import shlex
 import tempfile
 import uuid
 
@@ -13,6 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
+    CommandFailed,
     ExternalClusterCephfsMissing,
     ExternalClusterCephSSHAuthDetailsMissing,
     ExternalClusterExporterRunFailed,
@@ -245,6 +247,52 @@ class ExternalCluster(object):
                 "cephadm_root_ca_cert fetch returned empty output"
             )
         return pem if pem.endswith("\n") else f"{pem}\n"
+
+    def fetch_rgw_server_certificate(self, rgw_endpoint):
+        """
+        Fetch the actual certificate presented by the RGW server for Ceph < 19.0.
+
+        For Reef (18.x), cephadm doesn't have certmgr, so we extract the cert
+        directly from the RGW server endpoint using openssl s_client.
+
+        Args:
+            rgw_endpoint (str): RGW endpoint (e.g., "10.1.112.76:443")
+
+        Returns:
+            str: PEM-encoded certificate
+
+        Raises:
+            ExternalClusterExporterRunFailed: If certificate fetch fails or endpoint format is invalid
+
+        """
+        # Validate RGW endpoint format to prevent command injection
+        # Expected format: host:port or [ipv6]:port
+        endpoint_pattern = r"^\[?[A-Za-z0-9:._-]+\]?:\d{1,5}$"
+        if not re.fullmatch(endpoint_pattern, rgw_endpoint):
+            raise ExternalClusterExporterRunFailed(
+                f"Invalid RGW endpoint format: {rgw_endpoint}. "
+                f"Expected format: 'host:port' or '[ipv6]:port'"
+            )
+
+        # Use openssl s_client to fetch the server certificate
+        # Use shlex.quote() to safely escape the endpoint parameter
+        cmd = (
+            f"echo | openssl s_client -connect {shlex.quote(rgw_endpoint)} -showcerts 2>/dev/null | "
+            f"openssl x509 -outform PEM"
+        )
+
+        ret, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if ret != 0 or not out or "BEGIN CERTIFICATE" not in out:
+            raise ExternalClusterExporterRunFailed(
+                f"Failed to fetch RGW server certificate from {rgw_endpoint}: {err}"
+            )
+
+        pem = out.strip()
+        if not pem.endswith("\n"):
+            pem = f"{pem}\n"
+
+        logger.info(f"Fetched RGW server certificate from {rgw_endpoint} (Ceph < 19.0)")
+        return pem
 
     def get_rgw_endpoint_api_port(self):
         """
@@ -783,7 +831,8 @@ def try_embed_rgw_ca_pem_in_mcg_cli_resources(service_ca_data, sts_dict):
 def get_and_apply_rgw_cert_ca(apply=True):
     """
     Obtain the RGW TLS CA: for external Ceph **19.0+**, fetch ``cephadm_root_ca_cert``
-    from the ``_admin`` node via SSH; otherwise download from ``rgw_cert_ca`` URL.
+    from the ``_admin`` node via SSH; for Ceph **18.x (Reef)**, fetch the certificate
+    directly from the RGW server; otherwise download from ``rgw_cert_ca`` URL.
 
     Args:
         apply (bool): if True, the certificate is applied as trusted CA by the OCP cluster
@@ -800,7 +849,12 @@ def get_and_apply_rgw_cert_ca(apply=True):
     ).name
     config.EXTERNAL_MODE.pop("embedded_external_rgw_ca_pem", None)
 
-    if external_rgw_ca_should_use_cephadm_fetch():
+    ceph_version = _external_ceph_semantic_version_or_none()
+
+    # Ceph 19.0+ (Squid): Use cephadm certmgr
+    if ceph_version and ceph_version >= version.get_semantic_version(
+        "19.0", only_major_minor=True
+    ):
         try:
             host, user, password, ssh_key = get_external_cluster_client("_admin")
             pem = ExternalCluster(
@@ -816,15 +870,69 @@ def get_and_apply_rgw_cert_ca(apply=True):
             logger.warning(
                 "cephadm CA fetch failed (%s); falling back to rgw_cert_ca URL", exc
             )
+            try:
+                download_file(
+                    config.EXTERNAL_MODE["rgw_cert_ca"],
+                    rgw_cert_ca_path,
+                )
+            except Exception:
+                raise CommandFailed(
+                    f"Failed to download RGW CA cert from "
+                    f"{config.EXTERNAL_MODE['rgw_cert_ca']}"
+                )
+
+    # Ceph 18.x (Reef): Fetch directly from RGW server
+    elif ceph_version and ceph_version >= version.get_semantic_version(
+        "18.0", only_major_minor=True
+    ):
+        try:
+            rgw_endpoint = get_rgw_endpoint()
+            ext = get_external_cluster_instance()
+            rgw_port = ext.get_rgw_endpoint_api_port()
+            rgw_full_endpoint = f"{rgw_endpoint}:{rgw_port}"
+
+            pem = ext.fetch_rgw_server_certificate(rgw_full_endpoint)
+            with open(rgw_cert_ca_path, "w", encoding="utf-8") as pem_fd:
+                pem_fd.write(pem)
+            config.EXTERNAL_MODE["embedded_external_rgw_ca_pem"] = pem
+            logger.info(
+                f"Using server certificate from RGW endpoint {rgw_full_endpoint} (Ceph 18.x)"
+            )
+        except Exception as exc:
+            logger.warning(
+                "RGW server certificate fetch failed (%s); falling back to rgw_cert_ca URL",
+                exc,
+            )
+            try:
+                download_file(
+                    config.EXTERNAL_MODE["rgw_cert_ca"],
+                    rgw_cert_ca_path,
+                )
+            except Exception:
+                raise CommandFailed(
+                    f"Failed to download RGW CA cert from "
+                    f"{config.EXTERNAL_MODE['rgw_cert_ca']}"
+                )
+
+    # Older versions or version detection failed: Use rgw_cert_ca URL
+    else:
+        if ceph_version is None:
+            logger.warning(
+                "Could not determine Ceph version, falling back to rgw_cert_ca URL"
+            )
+        else:
+            logger.info(f"Ceph version {ceph_version} < 18.0, using rgw_cert_ca URL")
+        try:
             download_file(
                 config.EXTERNAL_MODE["rgw_cert_ca"],
                 rgw_cert_ca_path,
             )
-    else:
-        download_file(
-            config.EXTERNAL_MODE["rgw_cert_ca"],
-            rgw_cert_ca_path,
-        )
+        except Exception:
+            raise CommandFailed(
+                f"Failed to download RGW CA cert from "
+                f"{config.EXTERNAL_MODE['rgw_cert_ca']}"
+            )
+
     # configure the CA cert to be trusted by the OCP cluster
     if apply:
         ssl_certs.configure_trusted_ca_bundle(ca_cert_path=rgw_cert_ca_path)
