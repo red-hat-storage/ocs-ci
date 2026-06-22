@@ -519,17 +519,20 @@ class TestNfsEnable(ManageTest):
         9:- Verify able to read exported volume
         10:- Verify able to write to the exported volume from external client
         11:- Able to read updated /var/lib/www/html/index.html file from inside the pod
-        12:- unmount
-        13:- Deletion of Pods and PVCs
+        12:- Verify df on the external client reports PVC size, not cluster capacity
+        13:- unmount
+        14:- Deletion of Pods and PVCs
 
         """
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
+
+        pvc_size_gi = 5
 
         logger.test_step("Create NFS PVC and pod with RWX access mode")
         nfs_pvc_obj = helpers.create_pvc(
             sc_name=self.nfs_sc,
             namespace=self.namespace,
-            size="5Gi",
+            size=f"{pvc_size_gi}Gi",
             do_reload=True,
             access_mode=constants.ACCESS_MODE_RWX,
             volume_mode="Filesystem",
@@ -642,6 +645,37 @@ class TestNfsEnable(ManageTest):
             out_yaml_format=False,
         )
         assert result.rstrip() == "hello world" + """\n""" + "test_writing"
+
+        # Verify df on the external client reports PVC size, not cluster capacity
+        df_cmd = f"df -h {self.test_folder}"
+        retcode, stdout, stderr = self.con.exec_cmd(df_cmd)
+        assert retcode == 0, f"df command failed: {stderr}"
+        logger.info("df -h output on external client:\n%s", stdout)
+        # df -h output line format:
+        #   Filesystem  Size  Used  Avail  Use%  Mounted on
+        #   server:/path  5.0G  4.0M  5.0G  1%  /mnt/test
+        df_line = [
+            line for line in stdout.strip().splitlines() if self.test_folder in line
+        ][0]
+        reported_size = df_line.split()[1]
+        logger.info(
+            "df -h reports size '%s' for the NFS mount (PVC is %d Gi)",
+            reported_size,
+            pvc_size_gi,
+        )
+        # The size should be in G (gigabytes), not T (terabytes).
+        # Cluster capacity would appear as e.g. '95T'; a correct quota
+        # appears as e.g. '5.0G'.
+        assert not reported_size.upper().endswith("T"), (
+            f"External NFS mount reports size '{reported_size}' which is "
+            f"terabyte-scale. Expected ~{pvc_size_gi}G (the PVC quota). "
+            "The mount is likely showing cluster capacity instead of the "
+            "PVC quota."
+        )
+        assert reported_size.upper().endswith("G"), (
+            f"External NFS mount reports unexpected size '{reported_size}'. "
+            f"Expected a value in gigabytes (~{pvc_size_gi}G)."
+        )
 
         logger.test_step("Unmount and delete pod and PVC")
         nfs_utils.unmount(self.con, self.test_folder)
