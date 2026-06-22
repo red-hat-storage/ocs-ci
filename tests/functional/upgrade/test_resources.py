@@ -216,7 +216,7 @@ def test_blackbox_pod_after_upgrade():
 @skipif_external_mode
 @skipif_hci_client
 @skipif_mcg_only
-@purple_squad
+@brown_squad
 def test_nfs_driver_pods_not_deployed_by_default_after_upgrade():
     """
     Verify NFS driver pods (csi-nfsplugin / ctrlplugin / nodeplugin) are not
