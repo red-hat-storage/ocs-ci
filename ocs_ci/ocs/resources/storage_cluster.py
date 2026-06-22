@@ -9,6 +9,7 @@ import re
 import tempfile
 import json
 import time
+from typing import Optional
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -1303,6 +1304,55 @@ def verify_storage_system():
         )
 
 
+def get_noobaa_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the NooBaa CR via a single lightweight API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where NooBaa is deployed.
+
+    Returns:
+        Optional[str]: NooBaa phase string (e.g. "Ready", "Configuring"),
+            or None if the CR cannot be retrieved.
+
+    """
+    try:
+        noobaa = OCP(kind="noobaa", namespace=namespace).get(
+            resource_name=constants.NOOBAA_RESOURCE_NAME
+        )
+        return noobaa.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning("Failed to get NooBaa CR (%s) — skipping NooBaa health check", ex)
+        return None
+
+
+def get_storage_cluster_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the StorageCluster CR via a single lightweight
+    API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where the StorageCluster is
+            deployed.
+
+    Returns:
+        Optional[str]: StorageCluster phase string (e.g. "Ready",
+            "Progressing"), or None if the CR cannot be retrieved.
+
+    """
+    try:
+        sc_name = config.ENV_DATA["storage_cluster_name"]
+        sc = OCP(kind=constants.STORAGECLUSTER, namespace=namespace).get(
+            resource_name=sc_name
+        )
+        return sc.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning(
+            "Failed to get StorageCluster CR (%s) — skipping SC phase check", ex
+        )
+        return None
+
+
 def verify_storage_cluster():
     """
     Verify storage cluster status
@@ -1325,7 +1375,51 @@ def verify_storage_cluster():
             timeout = 1800
         else:
             timeout = 600
-        storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+
+        try:
+            storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+        except ResourceWrongStatusException:
+            noobaa_issue = config.RUN.get("noobaa_not_ready_at_setup")
+            if not noobaa_issue:
+                raise
+
+            fresh_sc = storage_cluster.get()
+            conditions = fresh_sc.get("status", {}).get("conditions", [])
+
+            noobaa_is_cause = any(
+                c.get("reason") == constants.NOOBAA_INITIALIZING_REASON
+                and c.get("type") == "Progressing"
+                for c in conditions
+            )
+            ceph_has_issues = any(
+                c.get("reason") in constants.CEPH_CONDITION_REASONS for c in conditions
+            )
+
+            if not noobaa_is_cause or ceph_has_issues:
+                raise
+
+            namespace = config.ENV_DATA["cluster_namespace"]
+            current_nb_phase = get_noobaa_phase(namespace)
+
+            if current_nb_phase == constants.STATUS_READY:
+                config.RUN.pop("noobaa_not_ready_at_setup", None)
+                raise
+
+            if current_nb_phase != noobaa_issue.get("phase"):
+                log.warning(
+                    "NooBaa phase changed from '%s' to '%s'"
+                    " — running full verification",
+                    noobaa_issue["phase"],
+                    current_nb_phase,
+                )
+                raise
+
+            log.warning(
+                "StorageCluster not Ready due to NooBaa (phase: %s),"
+                " which was already unhealthy at test setup."
+                " Waiving SC phase check — version check still runs.",
+                current_nb_phase,
+            )
 
     # verify storage cluster version
     if not config.ENV_DATA.get("disable_storage_cluster_version_check"):
