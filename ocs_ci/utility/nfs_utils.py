@@ -229,6 +229,7 @@ def unmount(con, test_folder):
         (CommandFailed),
         tries=600,
         delay=10,
+        backoff=1,
     )(con.exec_cmd(cmd="umount -f " + test_folder))
 
     # Check mount point unmounted successfully
