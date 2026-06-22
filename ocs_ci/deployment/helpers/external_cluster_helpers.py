@@ -44,7 +44,7 @@ from ocs_ci.utility.utils import (
     upload_file,
     encode,
     decode,
-    download_file,
+    download_with_retries,
     exec_cmd,
     wait_for_machineconfigpool_status,
     create_config_ini_file,
@@ -1700,10 +1700,15 @@ def get_and_apply_rgw_cert_ca(apply=True):
             logger.warning(
                 "cephadm CA fetch failed (%s); falling back to rgw_cert_ca URL", exc
             )
-            download_file(
+            downloaded = download_with_retries(
                 config.EXTERNAL_MODE["rgw_cert_ca"],
                 rgw_cert_ca_path,
             )
+            if not downloaded:
+                raise CommandFailed(
+                    f"Failed to download RGW CA cert from "
+                    f"{config.EXTERNAL_MODE['rgw_cert_ca']}"
+                )
 
     # Ceph 18.x (Reef): Fetch directly from RGW server
     elif ceph_version and ceph_version >= version.get_semantic_version(
@@ -1727,10 +1732,15 @@ def get_and_apply_rgw_cert_ca(apply=True):
                 "RGW server certificate fetch failed (%s); falling back to rgw_cert_ca URL",
                 exc,
             )
-            download_file(
+            downloaded = download_with_retries(
                 config.EXTERNAL_MODE["rgw_cert_ca"],
                 rgw_cert_ca_path,
             )
+            if not downloaded:
+                raise CommandFailed(
+                    f"Failed to download RGW CA cert from "
+                    f"{config.EXTERNAL_MODE['rgw_cert_ca']}"
+                )
 
     # Older versions or version detection failed: Use rgw_cert_ca URL
     else:
@@ -1740,10 +1750,15 @@ def get_and_apply_rgw_cert_ca(apply=True):
             )
         else:
             logger.info(f"Ceph version {ceph_version} < 18.0, using rgw_cert_ca URL")
-        download_file(
+        downloaded = download_with_retries(
             config.EXTERNAL_MODE["rgw_cert_ca"],
             rgw_cert_ca_path,
         )
+        if not downloaded:
+            raise CommandFailed(
+                f"Failed to download RGW CA cert from "
+                f"{config.EXTERNAL_MODE['rgw_cert_ca']}"
+            )
 
     # configure the CA cert to be trusted by the OCP cluster
     if apply:
