@@ -168,21 +168,28 @@ class TestUserInterfaceValidation(object):
         ), f"Expected page title 'External systems', got '{page_title}'"
         empty_state = external_systems.get_empty_state_elements()
         logger.info("Verify empty state message 'No external systems connected'")
-        assert empty_state[
-            "heading_text"
-        ], "Empty state heading 'No external systems connected' not found"
+        assert empty_state["heading_text"] == "No external systems connected", (
+            f"Expected heading 'No external systems connected', "
+            f"got '{empty_state['heading_text']}'"
+        )
         logger.info("Verify description text")
-        assert empty_state[
-            "description_text"
-        ], "Empty state description about configuring storage platform not found"
+        assert empty_state["description_text"] is not None and (
+            "Start configuring your storage platform" in empty_state["description_text"]
+        ), (
+            f"Expected description containing 'Start configuring your storage platform', "
+            f"got '{empty_state['description_text']}'"
+        )
         logger.info("Verify 'Connect external system' button is present")
         assert empty_state[
             "connect_button_enabled"
-        ], "'Connect external systems' button is not enabled"
+        ], "'Connect external systems' button is not visible or not enabled"
         logger.info("Verify 'Explore all supported external systems' link is present")
-        assert empty_state[
-            "explore_link_text"
-        ], "'Explore all supported external systems' link not found"
+        assert (
+            empty_state["explore_link_text"] == "Explore all supported external systems"
+        ), (
+            f"Expected link text 'Explore all supported external systems', "
+            f"got '{empty_state['explore_link_text']}'"
+        )
         logger.info(
             "External Systems empty state validated successfully — "
             "all expected elements are present"
