@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -12,7 +11,6 @@ from ocs_ci.framework.testlib import (
     skipif_hci_client,
 )
 from ocs_ci.ocs.must_gather.must_gather import MustGather
-from ocs_ci.ocs.must_gather.const_must_gather import GATHER_COMMANDS_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +58,6 @@ class TestMustGather(ManageTest):
                 *["OTHERS"], marks=[tier2, pytest.mark.polarion_id("OCS-1583")]
             ),
         ],
-    )
-    @pytest.mark.skipif(
-        float(config.ENV_DATA["ocs_version"]) not in GATHER_COMMANDS_VERSION,
-        reason=(
-            "Skipping must_gather test, because there is not data for this version"
-        ),
     )
     def test_must_gather(self, mustgather, log_type):
         """
