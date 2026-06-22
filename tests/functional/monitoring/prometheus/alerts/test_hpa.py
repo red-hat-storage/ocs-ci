@@ -25,16 +25,23 @@ def test_hpa_maxreplica_alert(threading_lock):
     """
     Test to verify that no HPA max replica alert is triggered
     """
-    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
+    logger.info("Starting test: Verify no HPA max replica mismatch alerts")
 
-    logger.info(
-        f"Verifying whether {constants.ALERT_KUBEHPAREPLICASMISMATCH} "
-        f"has not been triggered"
+    logger.test_step("Initialize Prometheus API and check for HPA alerts")
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
+    target_alert = constants.ALERT_KUBEHPAREPLICASMISMATCH
+    logger.info(f"Checking for alert: {target_alert} (timeout=10s)")
+
+    alerts = api.wait_for_alert(name=target_alert, timeout=10, sleep=1)
+
+    logger.test_step("Verify no HPA replica mismatch alerts are present")
+    alert_count = len(alerts)
+    logger.assertion(
+        f"Alert count for {target_alert}: expected=0, actual={alert_count}"
     )
-    alerts = api.wait_for_alert(
-        name=constants.ALERT_KUBEHPAREPLICASMISMATCH, timeout=10, sleep=1
-    )
-    if len(alerts) > 0:
-        assert (
-            False
-        ), f"Failed: There should be no {constants.ALERT_KUBEHPAREPLICASMISMATCH} alert"
+
+    if alert_count > 0:
+        logger.debug(f"Unexpected alerts found: {alerts}")
+        assert False, f"Failed: There should be no {target_alert} alert"
+
+    logger.info("Test passed: No HPA max replica mismatch alerts detected")
