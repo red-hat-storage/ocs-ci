@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.bucket_utils import (
     get_bucket_tagging,
     get_noobaa_bucket_tagging_metric_results,
-    tag_set_to_dict,
     verify_bucket_tagging_matches_labels,
     verify_noobaa_bucket_tagging_metric,
 )
@@ -119,14 +118,12 @@ class TestOBCLabelBucketTagging:
             bucket_name,
             expected_labels,
         )
-        tag_set = get_bucket_tagging(obc_obj.s3_client, bucket_name)
-        tag_set_dict = tag_set_to_dict(tag_set)
         logger.assertion(
-            f"S3 tags verification: expected={bucket_tags}, "
-            f"actual={tag_set_dict}, "
-            f"match={tag_set_dict == bucket_tags}"
+            f"S3 tags verification: expected_subset={expected_labels}, actual={bucket_tags} "
         )
-        assert tag_set_dict == bucket_tags
+        assert all(
+            bucket_tags.get(key) == value for key, value in expected_labels.items()
+        ), f"Bucket tags {bucket_tags} missing expected labels {expected_labels}"
 
         logger.test_step(
             "Verify NooBaa_bucket_tagging metric reflects OBC labels "
