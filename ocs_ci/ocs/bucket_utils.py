@@ -3681,10 +3681,6 @@ def verify_bucket_tagging_matches_labels(
                 f"{expected_labels}"
             )
             return bucket_tags
-    raise TimeoutExpiredError(
-        f"Bucket {bucket_name} tags did not match expected labels {expected_labels} "
-        f"within {timeout}s"
-    )
 
 
 def get_noobaa_bucket_tagging_metric_results(
