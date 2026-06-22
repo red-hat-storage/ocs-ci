@@ -183,9 +183,6 @@ class BaseUI:
         self.attach_storage_loc = self.deep_get(
             locators_for_current_ocp_version(), "attach_storage"
         )
-        self.external_systems_loc = self.deep_get(
-            locators_for_current_ocp_version(), "external_systems"
-        )
         self._locator_fallback = None
 
     @property

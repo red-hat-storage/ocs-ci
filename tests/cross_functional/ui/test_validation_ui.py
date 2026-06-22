@@ -155,52 +155,34 @@ class TestUserInterfaceValidation(object):
         Steps:
         1. Navigate to Storage -> External systems
         2. Verify page title 'External systems'
-        3. Verify empty state message 'No external systems connected'
-        4. Verify description text about configuring storage platform
-        5. Verify 'Connect external system' button is present
-        6. Verify 'Explore all supported external systems' link is present
+        3. Verify empty state heading, description, Connect button, and Explore link
 
         """
         setup_ui_class_factory()
-
-        nav = PageNavigator()
-        external_systems = nav.nav_external_systems_page()
-
-        logger.info("Verify page loaded — waiting for page stability")
+        external_systems = PageNavigator().nav_external_systems_page()
         external_systems.page_has_loaded()
-
+        page_title = external_systems.get_page_title()
         logger.info("Verify page title 'External systems'")
-        page_title = external_systems.get_element_text(
-            external_systems.external_systems_loc["page_title"]
-        )
         assert (
             page_title == "External systems"
         ), f"Expected page title 'External systems', got '{page_title}'"
+        empty_state = external_systems.get_empty_state_elements()
         logger.info("Verify empty state message 'No external systems connected'")
-        assert external_systems.check_element_text(
-            expected_text="No external systems connected", element="h4"
-        ), "Empty state heading 'No external systems connected' not found"
-
+        assert empty_state[
+            "heading_text"
+        ], "Empty state heading 'No external systems connected' not found"
         logger.info("Verify description text")
-        assert external_systems.check_element_text(
-            expected_text="Start configuring your storage platform",
-        ), "Empty state description about configuring storage platform not found"
-
+        assert empty_state[
+            "description_text"
+        ], "Empty state description about configuring storage platform not found"
         logger.info("Verify 'Connect external system' button is present")
-        connect_button = external_systems.wait_for_element_to_be_visible(
-            external_systems.external_systems_loc["connect_external_system_button"],
-            timeout=10,
-        )
-        assert (
-            connect_button.is_displayed()
-        ), "'Connect external system' button is not visible"
-        assert (
-            connect_button.is_enabled()
-        ), "'Connect external system' button is not enabled"
+        assert empty_state[
+            "connect_button_enabled"
+        ], "'Connect external systems' button is not enabled"
         logger.info("Verify 'Explore all supported external systems' link is present")
-        assert external_systems.check_element_text(
-            expected_text="Explore all supported external systems", element="a"
-        ), "'Explore all supported external systems' link not found"
+        assert empty_state[
+            "explore_link_text"
+        ], "'Explore all supported external systems' link not found"
         logger.info(
             "External Systems empty state validated successfully — "
             "all expected elements are present"
