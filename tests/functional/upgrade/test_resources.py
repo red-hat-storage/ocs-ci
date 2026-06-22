@@ -25,8 +25,10 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_mon_pods,
     get_mgr_pods,
+    get_all_pods,
 )
 from ocs_ci.helpers import helpers
+from ocs_ci.utility import nfs_utils
 
 log = logging.getLogger(__name__)
 
@@ -208,3 +210,41 @@ def test_blackbox_pod_after_upgrade():
             ), f"Unexpected pod label on {pod_name}"
 
         log.info("Blackbox exporter pod exists after upgrade")
+
+
+@post_upgrade
+@skipif_external_mode
+@skipif_hci_client
+@skipif_mcg_only
+@purple_squad
+def test_nfs_driver_pods_not_deployed_by_default_after_upgrade():
+    """
+    Verify NFS driver pods (csi-nfsplugin / ctrlplugin / nodeplugin) are not
+    deployed by default after upgrading ODF from 4.21 to 4.22.
+
+    Starting with ODF 4.22, NFS CSI driver pods should only be present when
+    NFS is explicitly enabled on the StorageCluster. This test confirms that
+    a vanilla upgrade from 4.21 does not leave stale NFS driver pods running.
+
+    Steps:
+    1. Skip if the post-upgrade ODF version is less than 4.22
+    2. Fetch the NFS driver pod selectors for the current version
+    3. Assert that no pods matching any NFS selector exist in the
+       openshift-storage namespace
+
+    """
+    ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+    if ocs_version < version.VERSION_4_22:
+        pytest.skip("Test only applies to ODF 4.22 and above (upgrade from 4.21)")
+
+    nfs_selectors = nfs_utils.provisioner_selectors(nfs_plugins=True)
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    for selector in nfs_selectors:
+        pods = get_all_pods(namespace=namespace, selector=[selector.split("=")[1]])
+        assert not pods, (
+            f"NFS driver pods found with selector '{selector}' after upgrade "
+            "to ODF 4.22. NFS driver pods should not be deployed by default "
+            "unless NFS is explicitly enabled on the StorageCluster."
+        )
+        log.info("No NFS driver pods found for selector '%s' — as expected", selector)
