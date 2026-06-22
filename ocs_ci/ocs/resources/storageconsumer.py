@@ -635,8 +635,20 @@ def verify_storage_consumer_resources(
         storage_class_names_on_cluster = [
             item["metadata"]["name"] for item in storage_classes_ocp["items"]
         ]
+
+        disable_cephfs = config.COMPONENTS["disable_cephfs"]
+
         for storage_class in storage_classes_on_consumer:
             if storage_class not in storage_class_names_on_cluster:
+                # Workaround for DFBUGS-7417: StorageConsumer lists CephFS StorageClass even when disabled
+                # Skip CephFS StorageClass verification if CephFS is disabled (DFBUGS-7417)
+                if disable_cephfs and "cephfs" in storage_class:
+                    log.warning(
+                        f"Skipping verification of StorageClass {storage_class} "
+                        f"(CephFS is disabled, workaround for DFBUGS-7417)"
+                    )
+                    continue
+
                 raise AssertionError(
                     f"StorageClass {storage_class} is not available on the cluster "
                     f"but listed in storage consumer {consumer_name}."
@@ -673,6 +685,15 @@ def verify_storage_consumer_resources(
         ]
         for volume_snapshot_class in volume_snapshot_classes_on_consumer or []:
             if volume_snapshot_class not in volume_snapshot_class_names_on_cluster:
+                # Workaround for DFBUGS-7417: StorageConsumer lists CephFS even when disabled
+                # Skip CephFS VolumeSnapshotClass verification if CephFS is disabled (DFBUGS-7417)
+                if disable_cephfs and "cephfs" in volume_snapshot_class:
+                    log.warning(
+                        f"Skipping verification of VolumeSnapshotClass {volume_snapshot_class} "
+                        f"(CephFS is disabled, workaround for DFBUGS-7417)"
+                    )
+                    continue
+
                 raise AssertionError(
                     f"VolumeSnapshotClass {volume_snapshot_class} is not available on the cluster "
                     f"but listed in storage consumer {consumer_name}."
@@ -871,6 +892,26 @@ def verify_consumer_configmap(
         )
 
         _handle_converged_client_ceph_names(ceph_data, ceph_data_on_consumer_match)
+    elif internal_consumer and disable_cephfs and not disable_blockpools:
+        """
+        Handle internal consumer with CephFS disabled.
+        Only verify RBD-related configuration.
+        """
+        # Only check RBD configuration
+        ceph_data_on_consumer_match["rbd-rados-ns"] = (
+            ceph_data.get("rbd-rados-ns", "") == "<implicit>"
+        )
+        ceph_data_on_consumer_match["csi-rbd-node-ceph-user"] = (
+            ceph_data.get("csi-rbd-node-ceph-user", "") == "rook-csi-rbd-node"
+        )
+        ceph_data_on_consumer_match["csi-rbd-provisioner-ceph-user"] = (
+            ceph_data.get("csi-rbd-provisioner-ceph-user", "")
+            == "rook-csi-rbd-provisioner"
+        )
+        ceph_data_on_consumer_match["csiop-rbd-client-profile"] = (
+            ceph_data.get("csiop-rbd-client-profile", "")
+            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+        )
     elif (
         not internal_consumer
         and not (disable_blockpools or disable_cephfs)
