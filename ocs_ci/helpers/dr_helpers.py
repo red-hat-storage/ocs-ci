@@ -1783,6 +1783,103 @@ def get_all_drclusters():
     return drclusters
 
 
+def get_dr_topology_clusters():
+    """
+    Return DRCluster names eligible for DR Topology validation.
+
+    The ACM hub (local-cluster) is excluded because it does not have ODF installed.
+
+    Returns:
+        list: Sorted DRCluster names for topology UI checks
+    """
+    return sorted(
+        name
+        for name in get_all_drclusters()
+        if name != constants.ACM_LOCAL_CLUSTER
+    )
+
+
+def get_dr_topology_policy_details():
+    """
+    Return DRPolicy details from the hub for DR Topology validation.
+
+    Returns:
+        dict: policy name, connected cluster names, and scheduling interval
+    """
+    policies = get_all_drpolicy()
+    if not policies:
+        raise AssertionError(
+            "No DRPolicy found on hub; cannot validate DR Topology policy"
+        )
+    policy = policies[0]
+    policy_details = {
+        "name": policy["metadata"]["name"],
+        "connected_clusters": sorted(policy["spec"]["drClusters"]),
+        "scheduling_interval": policy["spec"]["schedulingInterval"],
+    }
+    logger.info(f"DRPolicy details for topology validation: {policy_details}")
+    return policy_details
+
+
+def ordered_unique_cidrs(cidrs):
+    """
+    Preserve order while removing duplicates
+    """
+    seen = set()
+    ordered = []
+    for cidr in cidrs:
+        if not cidr or cidr in seen:
+            continue
+        seen.add(cidr)
+        ordered.append(cidr)
+    return ordered
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
+def get_fencing_cidrs_from_drclusterconfig(cluster_name):
+    """
+    Read fencing CIDRs from DRClusterConfig.status.storageAccessDetails on the
+    current (managed) cluster context (ODF 4.21+ / Ramen).
+
+    Prefers the DRClusterConfig named like the managed cluster, then RBD CSI
+    provisioner entries, with sensible fallbacks.
+
+    Args:
+        cluster_name (str): Managed cluster name (matches DRCluster / DRClusterConfig name on hub)
+
+    Returns:
+        list: CIDR strings for hub DRCluster.spec.cidrs
+
+    Raises:
+        UnexpectedBehaviour: If CIDRs are not yet published or cannot be determined
+    """
+    drc_ocp = ocp.OCP(kind=constants.DRCLUSTERCONFIG)
+    items = (drc_ocp.get(silent=True) or {}).get("items") or []
+    if not items:
+        raise UnexpectedBehaviour(
+            "No DRClusterConfig resources found on managed cluster"
+        )
+    configs = [i for i in items if i.get("metadata", {}).get("name") == cluster_name]
+
+    cidrs = []
+    for item in configs:
+        details = (item.get("status") or {}).get("storageAccessDetails") or []
+        for detail in details:
+            detail_cidrs = detail.get("cidrs") or []
+            cidrs.extend(detail_cidrs)
+
+    cidrs = ordered_unique_cidrs(cidrs)
+    if not cidrs:
+        raise UnexpectedBehaviour(
+            f"DRClusterConfig on cluster {cluster_name} has no status.storageAccessDetails.cidrs yet"
+        )
+    logger.info(
+        f"Collected {len(cidrs)} fencing CIDR(s) from DRClusterConfig for {cluster_name}"
+    )
+
+    return cidrs
+
+
 def get_managed_cluster_node_ips():
     """
     Gets worker node IPs of individual managed clusters for enabling fencing on MDR DRCluster configuration

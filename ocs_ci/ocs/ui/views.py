@@ -1348,6 +1348,79 @@ acm_configuration_4_12 = {
         "a[data-test-id='horizontal-link-Overview']",
         By.CSS_SELECTOR,
     ),
+    "dr-topology-tab": (
+        "//a[@data-test-id='horizontal-link-Topology'] | "
+        "//button[@data-test='horizontal-link-Topology'] | "
+        "//a[normalize-space()='Topology'] | "
+        "//button[normalize-space()='Topology']",
+        By.XPATH,
+    ),
+    "dr-topology-cluster-name": (
+        "//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "dr-topology-cluster-click": (
+        "//*[contains(@class,'topology__node__label')]"
+        "//*[contains(text(), '{}')]/..",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-details-tab": (
+        "//span[normalize-space()='Details']",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-application-details-tab": (
+        "//*[contains(text(), 'Application Details')]",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-cluster-name": (
+        "//dt[normalize-space()='Name']/following-sibling::dd"
+        "//*[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-close": (
+        "//button[@aria-label='Close']",
+        By.XPATH,
+    ),
+    "dr-topology-policy-name": (
+        "//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "dr-topology-policy-click": (
+        "//*[contains(@class,'topology__group__label')]"
+        "//*[contains(text(), '{}')]/..",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-policy-name": (
+        "//dt[normalize-space()='Name']/following-sibling::dd"
+        "//*[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-connected-cluster": (
+        "//dt[normalize-space()='Connected clusters']/following-sibling::dd"
+        "//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-scheduling-interval": (
+        "//dt[normalize-space()='Scheduling interval']/following-sibling::dd"
+        "//*[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "dr-topology-search": (
+        "//input[@placeholder='Search']",
+        By.XPATH,
+    ),
+    "dr-topology-search-reset": (
+        "//button[@aria-label='Reset']",
+        By.XPATH,
+    ),
+    "dr-topology-filter-toggle": (
+        "//button[contains(.,'Cluster name') or contains(.,'Policy')]",
+        By.XPATH,
+    ),
+    "dr-topology-filter-option": (
+        "//li//*[normalize-space()='{}']",
+        By.XPATH,
+    ),
     "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
     "workload-name": ('//*[text()="{}"]', By.XPATH),
     "search-bar": (
