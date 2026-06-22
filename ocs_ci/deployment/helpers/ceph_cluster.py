@@ -569,35 +569,15 @@ def verify_no_wipe_devices_from_other_clusters():
     return True
 
 
-def verify_wipe_unencrypted_devices_from_other_clusters():
+def verify_wipe_devices_from_other_clusters_flag():
     """
-    Verify that the cluster correctly wiped pre-existing bluestore OSDs from
-    another cluster before provisioning new OSDs.
-
-    Performs two checks:
-
-    1. **StorageCluster CR** — asserts that
-       ``spec.managedResources.cephCluster.cleanupPolicy.wipeDevicesFromOtherClusters``
-       is exactly ``true``.
-
-    2. **OSD prepare logs** — checks each ``rook-ceph-osd-prepare`` pod for
-       the following regex patterns, which confirm that foreign bluestore data
-       was detected and zapped:
-
-       - ``completed wiping OSD <id> device "<dev>" belonging to a different
-         ceph cluster`` — foreign bluestore data detected and zapped
-       - ``successfully zapped osd.<id> path "<dev>"`` — low-level wipe
-         succeeded
-       - ``ceph-volume raw dmcrypt prepare successful`` — new OSD prepared
-         (emitted for both encrypted and unencrypted OSDs)
+    Verify that the StorageCluster CR has wipeDevicesFromOtherClusters set
+    to true.
 
     Returns:
-        bool: True if both checks pass, False otherwise.
+        bool: True if the flag is set to true, False otherwise.
 
     """
-    from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
-
-    # Check 1: StorageCluster CR flag
     flag = get_wipe_devices_from_other_clusters_flag()
     if flag is True:
         logger.info("StorageCluster has wipeDevicesFromOtherClusters set to true")
@@ -607,8 +587,32 @@ def verify_wipe_unencrypted_devices_from_other_clusters():
             flag,
         )
         return False
+    return True
 
-    # Check 2: OSD prepare pod logs
+
+def verify_wipe_unencrypted_devices_from_other_clusters():
+    """
+    Verify that the cluster correctly wiped pre-existing bluestore OSDs from
+    another cluster before provisioning new OSDs.
+
+    Checks each ``rook-ceph-osd-prepare`` pod for the following regex
+    patterns, which confirm that foreign bluestore data was detected and
+    zapped:
+
+    - ``completed wiping OSD <id> device "<dev>" belonging to a different
+      ceph cluster`` — foreign bluestore data detected and zapped
+    - ``successfully zapped osd.<id> path "<dev>"`` — low-level wipe
+      succeeded
+    - ``ceph-volume raw dmcrypt prepare successful`` — new OSD prepared
+      (emitted for both encrypted and unencrypted OSDs)
+    - ``ceph-volume raw prepare .+`` — new OSD creation command
+
+    Returns:
+        bool: True if all checks pass, False otherwise.
+
+    """
+    from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
+
     expected_patterns = [
         re.compile(
             r'completed wiping OSD \d+ device ".+" belonging to a different'
@@ -616,6 +620,7 @@ def verify_wipe_unencrypted_devices_from_other_clusters():
         ),
         re.compile(r'successfully zapped osd\.\d+ path ".+"'),
         re.compile(r"ceph-volume raw dmcrypt prepare successful"),
+        re.compile(r"ceph-volume raw prepare .+"),
     ]
 
     osd_prepare_pods = get_osd_prepare_pods()
@@ -641,47 +646,28 @@ def verify_wipe_unencrypted_devices_from_other_clusters():
 def verify_wipe_encrypted_devices_from_other_clusters():
     """
     Verify that the cluster correctly wiped pre-existing encrypted (LUKS)
-    OSDs from another cluster before provisioning new encrypted OSDs.
+    OSDs from another cluster before provisioning new OSDs.
 
     Used when ``simulate_bluestore_label_dmcrypt`` is set — the simulation
     stamps LUKS headers on each disk, and this function confirms Rook
-    detected and wiped them before creating fresh encrypted OSDs.
+    detected and wiped them before creating fresh OSDs.
 
-    Performs two checks:
+    Checks each ``rook-ceph-osd-prepare`` pod for the following regex
+    patterns:
 
-    1. **StorageCluster CR** — asserts that
-       ``spec.managedResources.cephCluster.cleanupPolicy.wipeDevicesFromOtherClusters``
-       is exactly ``true``.
-
-    2. **OSD prepare logs** — checks each ``rook-ceph-osd-prepare`` pod for
-       the following regex patterns:
-
-       - ``cleaning encrypted disk ".+" that is part of a different ceph
-         cluster`` — LUKS header detected as belonging to a foreign cluster
-       - ``successfully zapped device ".+"`` — low-level wipe succeeded
-       - ``completed wiping device ".+" belonging to a different ceph
-         cluster`` — wipe fully complete
-       - ``ceph-volume raw prepare .+ --dmcrypt`` — new encrypted OSD
-         prepared after the wipe
+    - ``cleaning encrypted disk ".+" that is part of a different ceph
+      cluster`` — LUKS header detected as belonging to a foreign cluster
+    - ``successfully zapped device ".+"`` — low-level wipe succeeded
+    - ``completed wiping device ".+" belonging to a different ceph
+      cluster`` — wipe fully complete
+    - ``ceph-volume raw prepare .+`` — new OSD creation command
 
     Returns:
-        bool: True if both checks pass, False otherwise.
+        bool: True if all checks pass, False otherwise.
 
     """
     from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
 
-    # Check 1: StorageCluster CR flag
-    flag = get_wipe_devices_from_other_clusters_flag()
-    if flag is True:
-        logger.info("StorageCluster has wipeDevicesFromOtherClusters set to true")
-    else:
-        logger.error(
-            "StorageCluster wipeDevicesFromOtherClusters is %r, expected true",
-            flag,
-        )
-        return False
-
-    # Check 2: OSD prepare pod logs
     expected_patterns = [
         re.compile(
             r'cleaning encrypted disk ".+" that is part of a different ceph cluster'
@@ -690,7 +676,7 @@ def verify_wipe_encrypted_devices_from_other_clusters():
         re.compile(
             r'completed wiping device ".+" belonging to a different ceph cluster'
         ),
-        re.compile(r"ceph-volume raw prepare .+ --dmcrypt"),
+        re.compile(r"ceph-volume raw prepare .+"),
     ]
 
     osd_prepare_pods = get_osd_prepare_pods()
@@ -741,6 +727,10 @@ def post_deployment_verify_wipe_devices():
         "simulate_bluestore_label_dmcrypt", False
     )
     if wipe_devices_from_other_clusters or odf_forceful_deployment:
+        logger.info("Verify StorageCluster wipeDevicesFromOtherClusters CR flag")
+        assert (
+            verify_wipe_devices_from_other_clusters_flag()
+        ), "StorageCluster wipeDevicesFromOtherClusters flag check failed"
         if simulate_bluestore_label:
             logger.info(
                 "Verify wipe devices from other clusters "
@@ -757,12 +747,6 @@ def post_deployment_verify_wipe_devices():
             assert (
                 verify_wipe_encrypted_devices_from_other_clusters()
             ), "Encrypted wipe verification failed"
-        else:
-            logger.info(
-                "Neither simulate_bluestore_label nor "
-                "simulate_bluestore_label_dmcrypt is set. "
-                "Skipping simulation-specific wipe verification."
-            )
     else:
         logger.info(
             "Verify no wipe of foreign bluestore data occurred "

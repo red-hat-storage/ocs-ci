@@ -2315,8 +2315,14 @@ class Deployment(object):
             from ocs_ci.deployment.helpers.ceph_cluster import (
                 post_deployment_verify_wipe_devices,
             )
+            from ocs_ci.ocs.resources.storage_cluster import (
+                osd_encryption_verification,
+            )
 
             post_deployment_verify_wipe_devices()
+            if config.ENV_DATA.get("encryption_at_rest"):
+                logger.info("Verify OSD encryption at rest")
+                osd_encryption_verification()
 
             if not config.COMPONENTS["disable_cephfs"]:
                 # Check for CephFilesystem creation in ocp
