@@ -241,7 +241,15 @@ def test_nfs_driver_pods_not_deployed_by_default_after_upgrade():
     namespace = config.ENV_DATA["cluster_namespace"]
 
     for selector in nfs_selectors:
-        pods = get_all_pods(namespace=namespace, selector=[selector.split("=")[1]])
+        label_key, sep, label_value = selector.partition("=")
+        assert (
+            sep
+        ), f"Malformed NFS pod selector '{selector}' — expected 'key=value' format"
+        pods = get_all_pods(
+            namespace=namespace,
+            selector=[label_value],
+            selector_label=label_key,
+        )
         assert not pods, (
             f"NFS driver pods found with selector '{selector}' after upgrade "
             "to ODF 4.22. NFS driver pods should not be deployed by default "
