@@ -173,7 +173,10 @@ class TestUserInterfaceValidation(object):
             f"got '{empty_state['heading_text']}'"
         )
         logger.info("Verify description text")
-        assert empty_state["description_text"] is not None and (
+        assert (
+            empty_state["description_text"] is not None
+        ), "Empty state description not found"
+        assert (
             "Start configuring your storage platform" in empty_state["description_text"]
         ), (
             f"Expected description containing 'Start configuring your storage platform', "
