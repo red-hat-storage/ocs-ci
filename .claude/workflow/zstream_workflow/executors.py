@@ -17,12 +17,23 @@ _OCS_CI_JIRA_DIR = _AGENTS_DIR / "ocs_ci_jira"
 _OCS_CI_TEST_MATCH_DIR = _AGENTS_DIR / "ocs_ci_test_match"
 _OCS_CI_RUN_DIR = _AGENTS_DIR / "ocs_ci_run"
 
+_OCS_CI_LIVE_REPRO_DIR = _AGENTS_DIR / "ocs_ci_live_repro"
+
 for _path in (_ZSTREAM_DIR, _WORKFLOW_DIR, _CLAUDE_DIR, _REPO_ROOT, _OCS_CI_JIRA_DIR):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
+from issue_gate import (
+    MANUAL_VERIFICATION_FAILED,
+    MANUAL_VERIFICATION_PASSED,
+    build_test_matching_skip_payload,
+    is_manual_verification_failed,
+    partition_issues_for_downstream,
+    summarize_live_verification,
+)
 from repro_steps_generator import run_repro_steps_stage
 from run_record import (
+    STAGE_LIVE_CLUSTER_VERIFICATION,
     STAGE_OCS_CI_EXECUTION,
     STAGE_REPRO_STEPS,
     STAGE_TEST_MATCHING,
@@ -119,32 +130,131 @@ def run_repro_steps(
     }
 
 
+def run_live_cluster_verification(
+    parameters: dict[str, Any],
+    context: ZstreamRunContext,
+) -> dict[str, Any]:
+    """Stage 3: plan live cluster verification (Phase A dry-run)."""
+    live_repro_ops = load_agent_module(
+        _OCS_CI_LIVE_REPRO_DIR,
+        "operations.py",
+        "ocs_ci_live_repro_operations",
+    )
+    run_record = _run_record(context)
+    issues = parameters.get("issues") or run_record.get_issues()
+    if not issues:
+        raise ValueError("live_cluster_verification requires a non-empty issues list")
+
+    deploy_job_url = parameters.get("deploy_job_url")
+    if not deploy_job_url:
+        raise ValueError("live_cluster_verification requires deploy_job_url")
+
+    per_issue = live_repro_ops.verify_issues(
+        issues,
+        deploy_job_url=deploy_job_url,
+        target_zstream=parameters.get("odf_version")
+        or run_record._data.get("odf_version"),
+        dry_run=bool(parameters.get("dry_run", True)),
+        skip_on_env_mismatch=bool(parameters.get("skip_on_env_mismatch", True)),
+        force=bool(parameters.get("force", False)),
+        oc_command_path=parameters.get("oc_command_path") or "oc",
+        model=parameters.get("claude_model"),
+        max_turns=int(parameters.get("max_turns", 40)),
+        backend=parameters.get("backend") or "auto",
+    )
+
+    for issue_key, data in per_issue.items():
+        payload = dict(data)
+        stage_status = payload.pop("stage_status", "completed")
+        run_record.append_stage(
+            STAGE_LIVE_CLUSTER_VERIFICATION,
+            issue_key,
+            payload,
+            status=stage_status,
+        )
+        issue = run_record.get_issue(issue_key)
+        if issue is None:
+            continue
+        if is_manual_verification_failed(issue):
+            issue["qualification_status"] = MANUAL_VERIFICATION_FAILED
+        elif not payload.get("dry_run") and stage_status == "completed":
+            verdict = payload.get("verdict")
+            if verdict == "fixed" or payload.get("issue_reproduced") == "No":
+                issue["qualification_status"] = MANUAL_VERIFICATION_PASSED
+    run_record.save()
+    run_record.mark_stage_completed(STAGE_LIVE_CLUSTER_VERIFICATION)
+
+    failed_keys = [
+        key
+        for key in per_issue
+        if is_manual_verification_failed(run_record.get_issue(key) or {})
+    ]
+
+    return {
+        "issues": run_record.get_issues(),
+        "issues_file": str(run_record.issues_file),
+        "issue_count": len(per_issue),
+        "deploy_job_url": deploy_job_url,
+        "dry_run": bool(parameters.get("dry_run", True)),
+        "manual_verification_failed_count": len(failed_keys),
+        "manual_verification_failed_issues": failed_keys,
+    }
+
+
 def run_test_matching(
     parameters: dict[str, Any],
     context: ZstreamRunContext,
 ) -> dict[str, Any]:
-    """Stage 3: find matching ocs-ci tests."""
+    """Stage 4: find matching ocs-ci tests (skips issues that failed manual verification)."""
     test_match_ops = load_agent_module(
         _OCS_CI_TEST_MATCH_DIR,
         "operations.py",
         "ocs_ci_test_match_operations",
     )
     run_record = _run_record(context)
-    issues = parameters.get("issues") or run_record.get_issues()
+    issues = run_record.get_issues() or parameters.get("issues") or []
     if not issues:
         raise ValueError("test_matching requires a non-empty issues list")
 
-    per_issue = test_match_ops.match_issues(
-        issues,
-        top_n=int(parameters.get("top_n", 10)),
-        use_claude=bool(parameters.get("use_claude", False)),
-        model=parameters.get("claude_model"),
-    )
-    run_record.append_stage_bulk(STAGE_TEST_MATCHING, per_issue)
+    eligible, blocked = partition_issues_for_downstream(issues)
+
+    for issue in blocked:
+        key = issue.get("key")
+        if not key:
+            continue
+        run_record.append_stage(
+            STAGE_TEST_MATCHING,
+            key,
+            build_test_matching_skip_payload(issue),
+            status="skipped",
+        )
+        blocked_issue = run_record.get_issue(key)
+        if blocked_issue is not None:
+            blocked_issue["qualification_status"] = MANUAL_VERIFICATION_FAILED
+
+    matched_count = 0
+    if eligible:
+        per_issue = test_match_ops.match_issues(
+            eligible,
+            top_n=int(parameters.get("top_n", 10)),
+            use_claude=bool(parameters.get("use_claude", False)),
+            model=parameters.get("claude_model"),
+        )
+        run_record.append_stage_bulk(STAGE_TEST_MATCHING, per_issue)
+        matched_count = len(per_issue)
+
+    if blocked:
+        run_record.save()
+
+    if blocked and not eligible:
+        run_record.mark_stage_completed(STAGE_TEST_MATCHING)
+
     return {
         "issues": run_record.get_issues(),
         "issues_file": str(run_record.issues_file),
-        "issue_count": len(per_issue),
+        "issue_count": matched_count,
+        "skipped_manual_verification_failed": len(blocked),
+        "skipped_issue_keys": [i.get("key") for i in blocked if i.get("key")],
     }
 
 
@@ -163,12 +273,19 @@ def run_ocs_ci_execution(
     if not deploy_job_url:
         raise ValueError("ocs_ci_execution requires deploy_job_url")
 
-    issues = parameters.get("issues") or run_record.get_issues()
+    issues = run_record.get_issues() or parameters.get("issues") or []
+    eligible, blocked = partition_issues_for_downstream(issues)
     test_paths = _extract_test_paths(
-        issues,
+        eligible,
         tests_per_issue=int(parameters.get("tests_per_issue", 1)),
     )
     if not test_paths:
+        blocked_keys = [i.get("key") for i in blocked if i.get("key")]
+        if blocked_keys:
+            raise ValueError(
+                "No matched tests for Jenkins execution: all issues failed manual "
+                f"verification ({', '.join(blocked_keys)})"
+            )
         raise ValueError("No matched tests found for Jenkins execution")
 
     dry_run = bool(parameters.get("dry_run", True))
@@ -188,6 +305,16 @@ def run_ocs_ci_execution(
         "test_paths": test_paths,
         "dry_run": dry_run,
         "trigger_result": result.to_dict(),
+        "excluded_issues": [
+            {
+                "issue_key": issue.get("key"),
+                "qualification_status": MANUAL_VERIFICATION_FAILED,
+                "reason": "manual_verification_failed",
+                "live_verification_summary": summarize_live_verification(issue),
+            }
+            for issue in blocked
+            if issue.get("key")
+        ],
     }
     jenkins_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     run_record._data["jenkins_execution"] = payload
@@ -208,6 +335,7 @@ def run_ocs_ci_execution(
 AGENT_EXECUTORS = {
     "jira_search": run_jira_search,
     "repro_steps": run_repro_steps,
+    "live_repro": run_live_cluster_verification,
     "test_matching": run_test_matching,
     "ocs_ci_execution": run_ocs_ci_execution,
 }

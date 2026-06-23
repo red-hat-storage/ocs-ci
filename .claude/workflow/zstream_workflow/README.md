@@ -7,10 +7,11 @@ Run all commands from the **ocs-ci repository root**.
 ## Pipeline
 
 ```text
-Stage 1: jira_intake      → Fetch ON_QA bugs for target ODF version
-Stage 2: repro_steps      → Generate reproduction & verification steps
-Stage 3: test_matching    → Find ocs-ci tests (ocs_ci_test_match agent)
-Stage 4: ocs_ci_execution → Trigger matched tests on Jenkins (ocs_ci_run agent)
+Stage 1: jira_intake                 → Fetch ON_QA bugs for target ODF version
+Stage 2: repro_steps                 → Generate reproduction & verification steps
+Stage 3: live_cluster_verification   → Live issue repro on cluster (optional, needs deploy_job_url)
+Stage 4: test_matching               → Find ocs-ci tests (skips issues that failed live repro)
+Stage 5: ocs_ci_execution            → Trigger matched tests on Jenkins (ocs_ci_run agent)
 ```
 
 Each stage appends results to a timestamped **run record** under `run_record/`. Stages 2–4 require `--run-id` from stage 1.
@@ -20,10 +21,16 @@ Each stage appends results to a timestamped **run record** under `run_record/`. 
 Uses the generic **workflow_lib** engine (`.claude/workflow/workflow_lib/`) with z-stream executors and run record.
 
 ```bash
-# Full pipeline (Stages 1–3; Stage 4 skipped without deploy_job_url)
+# Full pipeline (Stages 1–4; Stage 5 skipped without deploy_job_url)
 python .claude/workflow/zstream_workflow/pipeline_cli.py run \
   --pipeline zstream_verification \
   --param odf_version=4.22
+
+# With cluster verification + Jenkins test execution
+python .claude/workflow/zstream_workflow/pipeline_cli.py run \
+  --pipeline zstream_verification \
+  --param odf_version=4.22 \
+  --param deploy_job_url=https://jenkins.../job/qe-deploy-ocs-cluster/69391/
 
 # Using a YAML run config
 cp .claude/workflow/zstream_workflow/pipelines/configs/zstream_verification.example.yaml \
@@ -44,8 +51,9 @@ Resume from a specific stage:
 python .claude/workflow/zstream_workflow/pipeline_cli.py run \
   --pipeline zstream_verification \
   --param odf_version=4.22 \
+  --param deploy_job_url=https://jenkins.../69391/ \
   --run-id 20260622_194551 \
-  --from-stage test_matching
+  --from-stage live_cluster_verification
 ```
 
 Stage 3 standalone (via test-match agent):
@@ -121,8 +129,20 @@ Pass pipeline defaults via `--param` or run config YAML:
 | `top_n` | 10 | Max matching tests per issue |
 | `use_claude` | false | Use Claude Agent SDK for semantic search |
 | `claude_model` | — | Model when `use_claude=true` |
-| `deploy_job_url` | — | Jenkins deploy URL for Stage 4 |
-| `dry_run` | true | Stage 4 Jenkins trigger dry-run |
+| `deploy_job_url` | — | Jenkins deploy URL for Stage 3 + Stage 5 |
+| `live_repro_dry_run` | true | Stage 3 dry-run plan; set `false` for live oc reproduction |
+| `live_repro_model` | — | Claude model for live reproduction |
+| `oc_command_path` | oc | Path to `oc` binary for live reproduction |
+| `live_repro_max_turns` | 40 | Max agent turns (sdk backend only) |
+| `live_repro_backend` | auto | `claude-cli` (default when `claude` on PATH) or `sdk` |
+| `skip_on_env_mismatch` | true | Skip issues when cluster env mismatches |
+| `force_live_repro` | false | Run reproduction despite env mismatch |
+
+### Manual verification gating
+
+When `live_repro_dry_run: false` and live repro **fails** for an issue (`not_fixed`, `issue_reproduced: Yes`, `inconclusive`, or stage `failed`), that JIRA is marked `qualification_status: manual_verification_failed` and skipped in stages 4–5.
+
+| `dry_run` | true | Stage 5 Jenkins trigger dry-run |
 
 Example with Claude matching:
 
@@ -204,7 +224,7 @@ Each issue accumulates stage data:
 | `repro_steps_generator.py` | Stage 2: reproduction/verification steps |
 | `topology_mapper.py` | Heuristic fix → topology mapping |
 
-Test matching implementation lives in `.claude/agents/ocs_ci_test_match/`. See that package's README for standalone usage.
+Live issue reproduction: `.claude/agents/ocs_ci_live_repro/`.
 
 ## Test matching
 

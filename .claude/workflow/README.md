@@ -19,6 +19,7 @@ YAML-driven multi-stage pipelines for OCS-CI. This is **not** an agent — it is
       run_record/
   agents/                   # capability agents only
     ocs_ci_jira/
+    ocs_ci_live_repro/
     ocs_ci_test_match/
     ocs_ci_run/
 ```

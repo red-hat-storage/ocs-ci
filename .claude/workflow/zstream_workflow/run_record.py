@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 RUN_RECORD_DIR = Path(__file__).resolve().parent / "run_record"
 STAGE_JIRA_INTAKE = "jira_intake"
 STAGE_REPRO_STEPS = "repro_steps"
+STAGE_LIVE_CLUSTER_VERIFICATION = "live_cluster_verification"
 STAGE_TEST_MATCHING = "test_matching"
 STAGE_OCS_CI_EXECUTION = "ocs_ci_execution"
 
@@ -269,6 +270,15 @@ class RunRecord:
             len(per_issue),
             self.run_id,
         )
+
+    def mark_stage_completed(self, stage_name: str) -> None:
+        """Mark a pipeline stage complete even when all per-issue entries were skipped."""
+        stages_completed = self._data.setdefault("stages_completed", [])
+        if stage_name not in stages_completed:
+            stages_completed.append(stage_name)
+            self._data["updated_at"] = _utc_now()
+            self.save()
+            log.info("Marked stage '%s' completed for run %s", stage_name, self.run_id)
 
     def save(self) -> None:
         """Persist the issues JSON file."""

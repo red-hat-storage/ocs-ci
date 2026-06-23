@@ -7,6 +7,10 @@ agents:
     description: Generate reproduction and verification steps per issue
     record_stage: repro_steps
 
+  live_repro:
+    description: Plan or run live issue reproduction on cluster via ocs_ci_live_repro
+    record_stage: live_cluster_verification
+
   test_matching:
     description: Find ocs-ci pytest tests covering each issue
     record_stage: test_matching

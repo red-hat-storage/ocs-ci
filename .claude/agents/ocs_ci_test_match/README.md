@@ -93,7 +93,7 @@ Tests are ranked by:
 ## Integration
 
 ```text
-zstream Stage 1–2  →  ocs_ci_test_match (Stage 3)  →  ocs_ci_run (Stage 4)
+zstream Stage 1–2  →  ocs_ci_live_repro (Stage 3, optional)  →  ocs_ci_test_match (Stage 4)  →  ocs_ci_run (Stage 5)
 ```
 
 Z-stream Stage 3 calls `operations.match_issues()` and writes results to the run record `test_matching` stage.
