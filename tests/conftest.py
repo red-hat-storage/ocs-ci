@@ -149,6 +149,7 @@ from ocs_ci.ocs.resources.pod import (
     delete_deployment_pods,
     cal_md5sum,
     wait_for_pods_to_be_in_statuses,
+    get_ocs_operator_pod,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -1335,6 +1336,124 @@ def storageclass_factory_fixture(
                         ec_data_pool_name = pool_obj.name
                     else:
                         interface_name = pool_obj.name
+
+                    # Verify cephblockpool and cephblockpoolradosnamespaces are Ready for RDR setup
+                    is_rdr_setup = (
+                        ocsci_config.get("MULTICLUSTER").get("multicluster_mode")
+                        == "regional-dr"
+                    )
+                    if is_rdr_setup and not erasure_coded:
+                        log.info(
+                            f"Verifying CephBlockPool '{pool_obj.name}' and associated CephBlockPoolRadosNamespaces "
+                            "are Ready"
+                        )
+
+                        # Wait for CephBlockPool to be Ready
+                        pool_obj.ocp.wait_for_resource(
+                            condition=constants.STATUS_READY,
+                            resource_name=pool_obj.name,
+                            column="PHASE",
+                            timeout=300,
+                        )
+                        log.info(f"CephBlockPool '{pool_obj.name}' is Ready")
+
+                        # Wait for associated CephBlockPoolRadosNamespaces to be Ready
+                        radosns_ocp = ocp.OCP(
+                            kind=constants.CEPHBLOCKPOOLRADOSNS,
+                            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                        )
+
+                        # Get all radosnamespaces for this pool
+                        radosns_list = radosns_ocp.get(
+                            selector=f"ocs.openshift.io/cephblockpool-name={pool_obj.name}"
+                        )
+
+                        if radosns_list.get("items"):
+                            log.info(
+                                f"Found {len(radosns_list['items'])} CephBlockPoolRadosNamespace(s) "
+                                f"for pool '{pool_obj.name}'"
+                            )
+                            for radosns in radosns_list["items"]:
+                                radosns_name = radosns["metadata"]["name"]
+                                log.info(
+                                    f"Waiting for CephBlockPoolRadosNamespace '{radosns_name}' to be Ready"
+                                )
+
+                                # Special handling for builtin-implicit radosnamespace
+                                if radosns_name.endswith("builtin-implicit"):
+                                    try:
+                                        radosns_ocp.wait_for_resource(
+                                            condition=constants.STATUS_READY,
+                                            resource_name=radosns_name,
+                                            column="PHASE",
+                                            timeout=300,
+                                        )
+                                        log.info(
+                                            f"CephBlockPoolRadosNamespace '{radosns_name}' is Ready"
+                                        )
+                                    except TimeoutExpiredError:
+                                        log.warning(
+                                            f"CephBlockPoolRadosNamespace '{radosns_name}' did not reach Ready state "
+                                            f"within 300 seconds. Deleting ocs-operator pod to trigger reconciliation."
+                                        )
+
+                                        ocs_operator_pod = get_ocs_operator_pod(
+                                            namespace=ocsci_config.ENV_DATA[
+                                                "cluster_namespace"
+                                            ]
+                                        )
+                                        log.info(
+                                            f"Deleting ocs-operator pod: {ocs_operator_pod.name}"
+                                        )
+                                        ocs_operator_pod.delete(wait=True)
+
+                                        # Wait for ocs-operator pod to be recreated and running
+                                        log.info(
+                                            "Waiting for ocs-operator pod to be recreated and reach Running state"
+                                        )
+                                        ocs_operator_pod_ocp = ocp.OCP(
+                                            kind=constants.POD,
+                                            namespace=ocsci_config.ENV_DATA[
+                                                "cluster_namespace"
+                                            ],
+                                        )
+                                        ocs_operator_pod_ocp.wait_for_resource(
+                                            condition=constants.STATUS_RUNNING,
+                                            selector=constants.OCS_OPERATOR_LABEL,
+                                            resource_count=1,
+                                            timeout=180,
+                                        )
+                                        log.info("ocs-operator pod is Running")
+
+                                        # Wait for another 120 seconds for the radosnamespace to be Ready
+                                        log.info(
+                                            f"Waiting additional 540 seconds for CephBlockPoolRadosNamespace "
+                                            f"'{radosns_name}' to be Ready"
+                                        )
+                                        radosns_ocp.wait_for_resource(
+                                            condition=constants.STATUS_READY,
+                                            resource_name=radosns_name,
+                                            column="PHASE",
+                                            timeout=540,
+                                        )
+                                        log.info(
+                                            f"CephBlockPoolRadosNamespace '{radosns_name}' is Ready"
+                                        )
+                                else:
+                                    # For non-builtin-implicit radosnamespaces, use standard wait
+                                    radosns_ocp.wait_for_resource(
+                                        condition=constants.STATUS_READY,
+                                        resource_name=radosns_name,
+                                        column="PHASE",
+                                        timeout=300,
+                                    )
+                                    log.info(
+                                        f"CephBlockPoolRadosNamespace '{radosns_name}' is Ready"
+                                    )
+                        else:
+                            log.info(
+                                f"No CephBlockPoolRadosNamespaces found for pool '{pool_obj.name}' yet"
+                            )
                 else:
                     if pool_name is None:
                         interface_name = helpers.default_ceph_block_pool()
