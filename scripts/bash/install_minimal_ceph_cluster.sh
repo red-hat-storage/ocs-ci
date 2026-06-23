@@ -27,8 +27,11 @@ if cephadm shell -- ceph health &> /dev/null; then
     echo "Ceph cluster is already bootstrapped."
 else
     echo "Ceph cluster is not bootstrapped yet. Proceeding with bootstrap."
-    # Bootstrap the Ceph cluster (skip monitoring stack)
-    cephadm bootstrap --mon-ip ${NODE_IP} --skip-monitoring-stack
+    # --no-cleanup-on-failure: ceph orch host add fails on some nodes due to
+    # an internal auth error that is non-fatal — the MON and bootstrap-osd
+    # key are fully operational despite it.
+    cephadm bootstrap --mon-ip ${NODE_IP} --skip-monitoring-stack \
+        --no-cleanup-on-failure || true
 fi
 
 if cephadm shell -- ceph health | grep -qE 'HEALTH_OK|HEALTH_WARN'; then
