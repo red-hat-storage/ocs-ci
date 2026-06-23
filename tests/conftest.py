@@ -1334,8 +1334,23 @@ def storageclass_factory_fixture(
                         interface_name = get_ec_metadata_pool_name()
                         ec_data_pool_name = pool_obj.name
                     else:
-                        pool_obj.ocp.resource_name = pool_obj.name
-                        pool_obj.ocp.wait_for_phase(phase="Ready", timeout=300)
+                        pool_ocp = ocp.OCP(
+                            kind=constants.CEPHBLOCKPOOL,
+                            namespace=pool_obj.namespace,
+                            resource_name=pool_obj.name,
+                        )
+                        for sample in TimeoutSampler(
+                            600,
+                            10,
+                            pool_ocp.get,
+                        ):
+                            phase = (
+                                sample.get("status", {}).get("phase")
+                                if sample
+                                else None
+                            )
+                            if phase == constants.STATUS_READY:
+                                break
                         interface_name = pool_obj.name
                 else:
                     if pool_name is None:
