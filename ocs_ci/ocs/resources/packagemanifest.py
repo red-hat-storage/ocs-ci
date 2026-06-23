@@ -3,6 +3,7 @@ Package manifest related functionalities
 """
 
 import logging
+import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -17,7 +18,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.install_plan import InstallPlan
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 
 log = logging.getLogger(__name__)
@@ -307,3 +308,93 @@ def get_selector_for_ocs_operator():
         log.info("Internal catalog source not found!")
     # TODO: we might need to limit this to ODF only as FDF might come from different source
     return constants.REDHAT_OPERATOR_SELECTOR
+
+
+def get_packagemanifest_by_catalog_source(package_name, catalog_source):
+    """
+    Get a specific packagemanifest filtered by catalog source.
+
+    In environments with multiple catalog sources, there may be multiple
+    packagemanifests with the same name (e.g., odf-operator from both
+    redhat-operators and isf-data-foundation-catalog). This function retrieves
+    the correct packagemanifest by filtering on the catalogSource field.
+
+    Args:
+        package_name (str): Name of the package manifest to retrieve
+            (e.g., "odf-operator").
+        catalog_source (str): Name of the catalog source to filter by
+            (e.g., "isf-data-foundation-catalog", "redhat-operators").
+
+    Returns:
+        dict: The packagemanifest data as a dictionary.
+
+    Raises:
+        CommandFailed: If the oc command fails or yq filtering fails.
+        ValueError: If no packagemanifest is found matching the criteria.
+
+    Example:
+        >>> pm = get_packagemanifest_by_catalog_source(
+        ...     package_name="odf-operator",
+        ...     catalog_source="isf-data-foundation-catalog"
+        ... )
+        >>> channels = pm.get("status", {}).get("channels", [])
+
+    """
+    kubeconfig = config.RUN.get("kubeconfig")
+    kubeconfig_flag = f"--kubeconfig {kubeconfig} " if kubeconfig else ""
+
+    log.info(
+        f"Retrieving packagemanifest '{package_name}' "
+        f"with catalogSource '{catalog_source}'"
+    )
+
+    # Escape any quotes in the values to prevent command injection
+    safe_package_name = package_name.replace('"', '\\"')
+    safe_catalog_source = catalog_source.replace('"', '\\"')
+
+    # Build yq filter to select by package name and catalog source
+    yq_filter = (
+        f'.items[] | select(.metadata.name == "{safe_package_name}" and '
+        f'.status.catalogSource == "{safe_catalog_source}")'
+    )
+
+    # Pipe oc command directly to yq to reduce memory usage
+    cmd = (
+        f"oc {kubeconfig_flag}get packagemanifest "
+        f"-n {constants.MARKETPLACE_NAMESPACE} -o yaml | "
+        f"yq eval '{yq_filter}' -"
+    )
+
+    try:
+        result = exec_cmd(cmd, shell=True)
+        filtered_output = (
+            result.stdout.decode("utf-8")
+            if isinstance(result.stdout, bytes)
+            else result.stdout
+        )
+        log.debug(f"Filtered output: {filtered_output}")
+    except CommandFailed as e:
+        raise CommandFailed(f"Failed to retrieve and filter packagemanifest: {e}")
+
+    # Check for empty, null, or whitespace-only output
+    if (
+        not filtered_output
+        or not filtered_output.strip()
+        or filtered_output.strip() == "null"
+    ):
+        raise ValueError(
+            f"No packagemanifest found for '{package_name}' with "
+            f"catalogSource '{catalog_source}'"
+        )
+
+    packagemanifest_data = yaml.safe_load(filtered_output)
+
+    if not packagemanifest_data:
+        raise ValueError(f"Failed to parse packagemanifest data for '{package_name}'")
+
+    log.info(
+        f"Retrieved packagemanifest '{package_name}' from catalogSource "
+        f"'{packagemanifest_data.get('status', {}).get('catalogSource', 'unknown')}'"
+    )
+
+    return packagemanifest_data
