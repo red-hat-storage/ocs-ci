@@ -76,6 +76,23 @@ class TestMCGReplicationWithDisruptions(E2ETest):
     4) To verify that the Certain admin/disruptive operations do not impact the replication
     """
 
+    @pytest.fixture()
+    def reduce_replication_delay_for_test(self, add_env_vars_to_noobaa_core):
+        """
+        A function-scoped fixture to reduce the replication delay to one minute.
+        Changes will be automatically reverted after the test completes.
+
+        Args:
+            add_env_vars_to_noobaa_core (function): Function-scoped fixture to add env vars to noobaa-core pod
+        """
+        from ocs_ci.ocs import constants as const
+
+        new_delay_in_milliseconds = 60 * 1000
+        new_env_var_tuples = [
+            (const.BUCKET_REPLICATOR_DELAY_PARAM, new_delay_in_milliseconds),
+        ]
+        add_env_vars_to_noobaa_core(new_env_var_tuples)
+
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
@@ -114,6 +131,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         target_bucketclass,
         test_directory_setup,
         nodes,
+        reduce_replication_delay_for_test,
     ):
         # check uni bucket replication from multi (aws+azure) namespace bucket to s3-compatible namespace bucket
         prefix_site_1 = "site1"

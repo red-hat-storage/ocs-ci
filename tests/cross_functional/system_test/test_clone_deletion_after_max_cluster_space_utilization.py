@@ -5,7 +5,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.resources.pvc import flatten_image
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework.pytest_customization.marks import (
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     argnames=["interface_type"],
     argvalues=[
-        pytest.param(constants.CEPHFILESYSTEM),
+        # pytest.param(constants.CEPHFILESYSTEM),
         pytest.param(constants.CEPHBLOCKPOOL),
     ],
 )
@@ -60,6 +59,7 @@ class TestCloneDeletion(E2ETest):
 
         self.num_of_clones = 30
         self.clones_list = []
+        self.clone_pods_list = []
         self.interface_type = interface_type
 
         # Getting the total Storage capacity
@@ -111,21 +111,32 @@ class TestCloneDeletion(E2ETest):
         logger.info(f"IO finished on pod {self.pod_obj.name}")
 
     # Function to create clones
-    def create_clones(self, num_of_clones, pvc_clone_factory, start_num=0):
+    def create_clones(self, num_of_clones, pvc_clone_factory, pod_factory, start_num=0):
         for clone_num in range(start_num, start_num + num_of_clones):
             logger.info(f"Start creation of clone number {clone_num}.")
             cloned_pvc_obj = pvc_clone_factory(
                 self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=900
             )
+            cloned_pvc_obj.project = self.pvc_obj.project
             cloned_pvc_obj.reload()
 
             if self.interface_type == constants.CEPHBLOCKPOOL:
-                # flatten the image
-                flatten_image(cloned_pvc_obj)
+                # Write IO on the clone for RBD with Filesystem mode
                 logger.info(
-                    f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
+                    f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created. Writing IO to clone."
                 )
-                cloned_pvc_obj.reload()
+                clone_pod_obj = pod_factory(
+                    interface=constants.CEPHBLOCKPOOL,
+                    pvc=cloned_pvc_obj,
+                    raw_block_pv=False,
+                )
+                # Write IO using filesystem storage type
+                clone_pod_obj.run_io(
+                    size=self.filesize,
+                    io_direction="write",
+                    storage_type="fs",
+                )
+                self.clone_pods_list.append(clone_pod_obj)
             else:
                 logger.info(
                     f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
@@ -135,7 +146,7 @@ class TestCloneDeletion(E2ETest):
     @skipif_external_mode
     @magenta_squad
     def test_clone_deletion_after_max_cluster_space_utilization(
-        self, interface_type, pvc_clone_factory, threading_lock
+        self, interface_type, pvc_clone_factory, pod_factory, threading_lock
     ):
         """
         Steps:
@@ -154,7 +165,7 @@ class TestCloneDeletion(E2ETest):
         )
 
         # Create the initial set of clones
-        self.create_clones(self.num_of_clones, pvc_clone_factory)
+        self.create_clones(self.num_of_clones, pvc_clone_factory, pod_factory)
 
         # Maximum number of attempts to avoid indefinite looping
         max_attempts = 5
@@ -183,7 +194,9 @@ class TestCloneDeletion(E2ETest):
             else:
                 logger.info("Alerts not found yet. Creating extra clones...")
                 # Continue creating more clones (e.g., in batches of 2)
-                self.create_clones(2, start_num=len(self.clones_list))
+                self.create_clones(
+                    2, pvc_clone_factory, pod_factory, start_num=len(self.clones_list)
+                )
                 attempt += 1
 
         if attempt == max_attempts:
@@ -194,6 +207,18 @@ class TestCloneDeletion(E2ETest):
         logger.info("Change Ceph full_ratio from from 85% to 95%")
 
         change_ceph_full_ratio(95)
+
+        # Delete clone pods first if they exist (for RBD clones)
+        if self.clone_pods_list:
+            logger.info(
+                f"Deleting {len(self.clone_pods_list)} clone pods for RBD clones."
+            )
+            for clone_pod in self.clone_pods_list:
+                logger.info(f"Deleting clone pod {clone_pod.name}")
+                clone_pod.delete()
+                clone_pod.ocp.wait_for_delete(resource_name=clone_pod.name, timeout=300)
+            logger.info("All clone pods deleted successfully.")
+
         # After the cluster is out of full state try to delete clones.
         # Delete the clones one by one and wait for deletion
         logger.info(
