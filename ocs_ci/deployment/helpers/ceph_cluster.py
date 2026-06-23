@@ -8,6 +8,7 @@ from ocs_ci.deployment.baremetal import (
     disks_available_to_cleanup,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import get_nodes, get_node_internal_ip, Node
 from ocs_ci.framework import config
 from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
@@ -775,7 +776,7 @@ def _detect_ceph_image_tag(node_obj):
             ceph_tag = f"v{m.group(1)}"
             logger.info("Detected Ceph image tag: %s", ceph_tag)
             return ceph_tag
-    except Exception:
+    except CommandFailed:
         logger.warning("Could not detect Ceph version; script will auto-detect the tag")
     return ""
 
@@ -841,7 +842,7 @@ def simulate_ceph_bluestore_dmcrypt_on_node_disk(wnode, disk_name=None, namespac
             args=[disk_name, ceph_tag, "false"],
             timeout=660,
         )
-    except Exception as e:
+    except CommandFailed as e:
         logger.warning("Simulation script failed on %s: %s", wnode.name, e)
 
     logger.info("Script output:\n" + out)
