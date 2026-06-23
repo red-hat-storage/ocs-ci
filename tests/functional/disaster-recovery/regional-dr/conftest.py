@@ -3,7 +3,6 @@ import platform
 import os
 from ocs_ci.utility import templating
 import pytest
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.virtctl import get_virtctl_tool
@@ -124,53 +123,148 @@ def get_virtctl():
 
 
 @pytest.fixture()
-def cnv_custom_storage_class(request, storageclass_factory):
+def cnv_custom_storage_class(request, ceph_pool_factory, storageclass_factory):
     """
-    Uses storage class factory fixture to create a custom RBD storage class and a custom block pool
-    with replica-2 to be used by CNV discovered applications
+    Creates a custom CephBlockPool and RBD StorageClass on both managed
+    clusters for CNV discovered-app DR tests.
 
-    Raises Exception if the custom SC creation fails on any of the managed clusters
+    The flow ensures the CephBlockPoolRadosNamespace reaches Ready before
+    the StorageClass is created so that Ramen assigns a unique
+    groupreplicationID to the custom pool.
+
+    Raises Exception if the custom pool/SC creation fails on any managed cluster.
 
     """
 
     def factory(replica, compression):
         """
         Args:
-            replica (int):  Replica count used in Pool creation
-            compression (str): Type of compression to be used in the Pool, defaults to None
+            replica (int): Replica count for the pool
+            compression (str): Compression type for the pool, or None
 
         """
+        from ocs_ci.ocs import ocp
+        from ocs_ci.ocs.resources.pod import delete_pods, get_all_pods
+        from ocs_ci.utility.utils import TimeoutSampler
 
         pool_name = constants.RDR_CUSTOM_RBD_POOL
         sc_name = constants.RDR_CUSTOM_RBD_STORAGECLASS
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            # Create or verify existing SC in all clusters
             existing_sc_list = get_all_storageclass()
             if sc_name in existing_sc_list:
                 log.info(f"Storage class {sc_name} already exists")
+                continue
+            pool_ocp = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=pool_name,
+            )
+            if pool_ocp.is_exist(resource_name=pool_name):
+                log.info(f"Pool {pool_name} already exists, skipping creation")
             else:
-                try:
-                    sc_obj = storageclass_factory(
-                        sc_name=sc_name,
-                        replica=replica,
-                        compression=compression,
-                        new_rbd_pool=True,
-                        pool_name=pool_name,
-                        mapOptions="krbd:rxbounce",
+                ceph_pool_factory(
+                    interface=constants.CEPHBLOCKPOOL,
+                    replica=replica,
+                    compression=compression,
+                    pool_name=pool_name,
+                )
+                for sample in TimeoutSampler(600, 10, pool_ocp.get):
+                    phase = sample.get("status", {}).get("phase") if sample else None
+                    if phase == constants.STATUS_READY:
+                        log.info(f"CephBlockPool {pool_name} is Ready")
+                        break
+
+        radosns_name = f"{pool_name}-builtin-implicit"
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            existing_sc_list = get_all_storageclass()
+            if sc_name in existing_sc_list:
+                continue
+            namespace = config.ENV_DATA["cluster_namespace"]
+            radosns_ocp = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=namespace,
+                resource_name=radosns_name,
+            )
+            radosns_data = radosns_ocp.get()
+            radosns_phase = (
+                radosns_data.get("status", {}).get("phase") if radosns_data else None
+            )
+            if radosns_phase != constants.STATUS_READY:
+                log.info(
+                    "CephBlockPoolRadosNamespace %s is %s, "
+                    "restarting ocs-operator to reset "
+                    "MirroringController backoff",
+                    radosns_name,
+                    radosns_phase,
+                )
+                ocs_pods = get_all_pods(
+                    namespace=namespace,
+                    selector=["ocs-operator"],
+                    selector_label="name",
+                )
+                delete_pods(ocs_pods)
+                for sample in TimeoutSampler(600, 10, radosns_ocp.get):
+                    radosns_phase = (
+                        sample.get("status", {}).get("phase") if sample else None
                     )
-                    if sc_obj is None or sc_obj.name != sc_name:
-                        log.error(
-                            f"Failed to create SC '{sc_name}' or name mismatch: "
-                            f"Created '{sc_obj.name if sc_obj else 'None'}'"
-                        )
-                    else:
-                        log.info(f"Successfully created custom RBD SC: {sc_name}")
-                        time.sleep(60)
-                except Exception as e:
-                    log.error(f"Error creating SC '{sc_name}': {e}")
-                    raise
+                    log.info(
+                        "CephBlockPoolRadosNamespace %s phase: %s",
+                        radosns_name,
+                        radosns_phase,
+                    )
+                    if radosns_phase == constants.STATUS_READY:
+                        break
+            else:
+                log.info(
+                    "CephBlockPoolRadosNamespace %s is already Ready",
+                    radosns_name,
+                )
+
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            existing_sc_list = get_all_storageclass()
+            if sc_name in existing_sc_list:
+                log.info(f"Storage class {sc_name} already exists")
+                continue
+            try:
+                sc_obj = storageclass_factory(
+                    sc_name=sc_name,
+                    pool_name=pool_name,
+                    mapOptions="krbd:rxbounce",
+                )
+                if sc_obj is None or sc_obj.name != sc_name:
+                    log.error(
+                        f"Failed to create SC '{sc_name}' or name mismatch: "
+                        f"Created '{sc_obj.name if sc_obj else 'None'}'"
+                    )
+                else:
+                    log.info(f"Successfully created custom RBD SC: {sc_name}")
+            except Exception as e:
+                log.error(f"Error creating SC '{sc_name}': {e}")
+                raise
+
+        log.info(
+            "Waiting for DRPolicy peerClasses to include %s",
+            sc_name,
+        )
+        from ocs_ci.helpers.dr_helpers import get_all_drpolicy
+
+        for sample in TimeoutSampler(600, 10, get_all_drpolicy):
+            if not sample:
+                continue
+            drpolicy = sample[0]
+            peer_classes = (
+                drpolicy.get("status", {}).get("async", {}).get("peerClasses", [])
+            )
+            sc_names = [pc.get("storageClassName") for pc in peer_classes]
+            log.info("DRPolicy peerClasses SCs: %s", sc_names)
+            if sc_name in sc_names:
+                log.info("DRPolicy peerClasses now includes %s", sc_name)
+                break
+
         config.reset_ctx()
 
     return factory
