@@ -217,7 +217,7 @@ def noobaa_db_backup_and_recovery_locally(
             condition=constants.STATUS_RUNNING,
             resource_count=len(noobaa_pods),
             selector=constants.NOOBAA_APP_LABEL,
-            timeout=900,
+            timeout=1200,
         )
         logger.info("NooBaa pods are up and running after recovery")
 

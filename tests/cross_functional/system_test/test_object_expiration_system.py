@@ -12,7 +12,7 @@ from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, Expirat
 from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.cluster import ceph_health_check
+from ocs_ci.ocs.cluster import ceph_health_check, CephCluster
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
@@ -384,6 +384,12 @@ class TestObjectExpirationSystemTest:
             timeout=300,
         )
         wait_for_noobaa_pods_running(timeout=1200)
+
+        # Wait for NooBaa to be ready after disruptions
+        logger.info("Waiting for NooBaa to stabilize after disruptions...")
+        ceph_cluster = CephCluster()
+        ceph_cluster.wait_for_noobaa_health_ok()
+        logger.info("NooBaa health check passed after disruptions")
 
         # Perform ceph health check after disruptions
         try:
