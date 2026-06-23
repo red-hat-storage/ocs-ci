@@ -86,19 +86,30 @@ class CephFSStressTestManager:
         # Reuse PrometheusAPI instance to prevent memory leaks from creating new instances
         self.prometheus_api = PrometheusAPI(threading_lock=self.verification_lock)
 
-    def setup_stress_test_environment(self, pvc_size):
+    def setup_stress_test_environment(self, pvc_size, storageclass_factory):
         """
         Creates the foundational resources (PVC and Standby Pod) for the stress test.
 
         Args:
             pvc_size (str): Size of pvc to create
+            storageclass_factory (function): Factory function to create storageclass
 
         Returns:
             tuple: Created PVC and standby pod objs
 
         """
+        sc_name = constants.CEPHFILESYSTEM_SC_SELINUX
+        logger.info(f"Creating SELinux CephFS storageclass: {sc_name}")
+        sc_obj = storageclass_factory(
+            sc_name=sc_name,
+            interface=constants.CEPHFILESYSTEM,
+            kernelMountOptions='context="system_u:object_r:container_file_t:s0"',
+        )
+        self.created_resources.append(sc_obj)
+        logger.info(f"Created SELinux CephFS StorageClass: {sc_name}")
+
         pvc_obj = create_pvc(
-            sc_name=constants.CEPHFILESYSTEM_SC,
+            sc_name=sc_name,
             namespace=self.namespace,
             size=pvc_size,
             access_mode=constants.ACCESS_MODE_RWX,
