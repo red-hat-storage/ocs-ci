@@ -23,6 +23,26 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         self.help_button_loc = self.validation_loc["cephfs_subvolume_help_button"]
         self.popover_body_loc = self.validation_loc["cephfs_subvolume_popover_body"]
         self.col_headers_loc = self.validation_loc["cephfs_subvolume_col_headers"]
+        self.first_row_value_loc = self.validation_loc[
+            "cephfs_subvolume_first_row_value"
+        ]
+        self.first_row_name_button_loc = self.validation_loc[
+            "cephfs_subvolume_first_row_name_button"
+        ]
+        self.name_popover_loc = self.validation_loc["cephfs_subvolume_name_popover"]
+        self.related_pods_header_loc = self.validation_loc[
+            "cephfs_subvolume_related_pods_header"
+        ]
+        self.related_pods_links_loc = self.validation_loc[
+            "cephfs_subvolume_related_pods_links"
+        ]
+        self.view_all_link_loc = self.validation_loc["cephfs_subvolume_view_all_link"]
+        self.row_by_namespace_loc = self.validation_loc[
+            "cephfs_subvolume_row_by_namespace"
+        ]
+        self.value_by_namespace_loc = self.validation_loc[
+            "cephfs_subvolume_value_by_namespace"
+        ]
 
     def navigate_to_cephfs_subvolume_section(self):
         """Scroll the Block and File tab to bring the CephFS subvolume card into view."""
@@ -104,6 +124,23 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         headers = self.get_elements(self.col_headers_loc)
         return [h.text.strip() for h in headers]
 
+    def get_cephfs_subvolume_first_row_value(self, timeout=30):
+        """
+        Return the metric value cell text from the first table row.
+
+        Waits up to `timeout` seconds for the cell to be present after a
+        metric switch (the table re-renders on selection change).
+
+        Args:
+            timeout (int): Maximum seconds to wait for the value cell.
+
+        Returns:
+            str: e.g. '13 IOPS' (Total IOPS), '5 ms' (Total Latency),
+                '100 Mbps' (Total Throughput).
+        """
+        self.wait_for_element_to_be_present(self.first_row_value_loc, timeout=timeout)
+        return self.get_element_text(self.first_row_value_loc).strip()
+
     def get_cephfs_subvolume_row_count(self, timeout=30):
         """
         Return the number of rows currently displayed in the subvolume table.
@@ -121,3 +158,95 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         rows = self.get_elements(self.table_rows_loc)
         logger.info("CephFS subvolume table row count: %d", len(rows))
         return len(rows)
+
+    def click_cephfs_subvolume_first_row_name(self):
+        """
+        Click the 'Show related pods' button in the Name cell of the first row.
+
+        The Name column renders a <button aria-label='Show related pods'> (not
+        an <a> tag). Clicking it opens the 'Related pods' popover.
+        """
+        logger.info("Clicking first-row name button to open Related pods popover")
+        self.do_click(self.first_row_name_button_loc)
+
+    def verify_cephfs_subvolume_related_pods_visible(self, timeout=10):
+        """
+        Verify the 'Related pods' header is present in the name popover.
+
+        Args:
+            timeout (int): Seconds to wait for the header element.
+
+        Returns:
+            bool: True if the <header> containing 'Related pods' is found.
+        """
+        self.wait_for_element_to_be_present(
+            self.related_pods_header_loc, timeout=timeout
+        )
+        return len(self.get_elements(self.related_pods_header_loc)) > 0
+
+    def get_cephfs_subvolume_related_pod_links(self):
+        """
+        Return the text of all pod links listed in the name popover.
+
+        Excludes the 'View all' link; pod links sit inside
+        c-popover__body > ul.c-list > li > span > a.
+
+        Returns:
+            list[str]: Pod link labels, e.g.
+                ['image-registry-55757b755-cfq71', 'image-registry-55757b755-q7g6c'].
+        """
+        links = self.get_elements(self.related_pods_links_loc)
+        return [link.text.strip() for link in links]
+
+    def verify_namespace_in_subvolume_table(self, namespace, timeout=60):
+        """
+        Verify a row with the given namespace is visible in the subvolume table.
+
+        Waits up to `timeout` seconds because a newly provisioned subvolume may
+        need one or two Prometheus scrape intervals (~30 s each) to appear.
+
+        Args:
+            namespace (str): Kubernetes namespace to look for, e.g.
+                'cephfs-subvolume-metrics-test'.
+            timeout (int): Maximum seconds to wait for the row to appear.
+
+        Returns:
+            bool: True if at least one row with that namespace is found.
+        """
+        logger.info(
+            "Waiting for namespace '%s' to appear in subvolume table", namespace
+        )
+        loc = format_locator(self.row_by_namespace_loc, namespace)
+        self.wait_for_element_to_be_present(loc, timeout=timeout)
+        return len(self.get_elements(loc)) > 0
+
+    def get_cephfs_subvolume_value_for_namespace(self, namespace, timeout=60):
+        """
+        Return the metric value cell text for the row matching the given namespace.
+
+        Args:
+            namespace (str): Kubernetes namespace of the target subvolume row.
+            timeout (int): Maximum seconds to wait for the value cell.
+
+        Returns:
+            str: e.g. '13 IOPS', '5 ms', '100 Mbps'.
+        """
+        logger.info(
+            "Reading metric value for namespace '%s' from subvolume table", namespace
+        )
+        loc = format_locator(self.value_by_namespace_loc, namespace)
+        self.wait_for_element_to_be_present(loc, timeout=timeout)
+        return self.get_element_text(loc).strip()
+
+    def verify_cephfs_subvolume_view_all_link_visible(self, timeout=10):
+        """
+        Verify the 'View all' link is present at the bottom of the name popover.
+
+        Args:
+            timeout (int): Seconds to wait for the link element.
+
+        Returns:
+            bool: True if the 'View all' <a> is found within timeout.
+        """
+        self.wait_for_element_to_be_present(self.view_all_link_loc, timeout=timeout)
+        return len(self.get_elements(self.view_all_link_loc)) > 0
