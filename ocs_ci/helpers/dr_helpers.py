@@ -1793,9 +1793,7 @@ def get_dr_topology_clusters():
         list: Sorted DRCluster names for topology UI checks
     """
     return sorted(
-        name
-        for name in get_all_drclusters()
-        if name != constants.ACM_LOCAL_CLUSTER
+        name for name in get_all_drclusters() if name != constants.ACM_LOCAL_CLUSTER
     )
 
 
@@ -1819,6 +1817,39 @@ def get_dr_topology_policy_details():
     }
     logger.info(f"DRPolicy details for topology validation: {policy_details}")
     return policy_details
+
+
+def get_dr_topology_protected_apps(workloads):
+    """
+    Return protected application details for DR Topology Applications sidebar checks.
+
+    Args:
+        workloads (list): Deployed DR workload objects (ApplicationSet and/or discovered)
+
+    Returns:
+        list: dicts with application name, UI DR status, and DRPolicy name
+    """
+    protected_apps = []
+    for workload in workloads:
+        if workload.workload_type == constants.APPLICATION_SET:
+            app_name = workload._get_applicationset_name()
+        elif getattr(workload, "discovered_apps_placement_name", None):
+            app_name = workload.discovered_apps_placement_name
+        else:
+            workload_type = getattr(workload, "workload_type", type(workload).__name__)
+            raise ValueError(
+                f"Unsupported workload type for DR Topology validation: "
+                f"{workload_type}"
+            )
+        protected_apps.append(
+            {
+                "name": app_name,
+                "status": constants.DR_TOPOLOGY_DRPC_HEALTHY_STATUS,
+                "policy": workload.dr_policy_name,
+            }
+        )
+    logger.info(f"Protected applications for topology validation: {protected_apps}")
+    return protected_apps
 
 
 def ordered_unique_cidrs(cidrs):

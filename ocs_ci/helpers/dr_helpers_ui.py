@@ -40,16 +40,16 @@ def get_managed_clusters_not_eligible_for_dr_topology():
         list: Managed cluster names without a corresponding DRCluster
     """
     restore_index = config.cur_index
-    config.switch_acm_ctx()
-    managed_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
-    managed_cluster_names = [
-        cluster["metadata"]["name"] for cluster in managed_clusters
-    ]
-    drcluster_names = set(dr_helpers.get_all_drclusters())
-    config.switch_ctx(restore_index)
-    return sorted(
-        name for name in managed_cluster_names if name not in drcluster_names
-    )
+    try:
+        config.switch_acm_ctx()
+        managed_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+        managed_cluster_names = [
+            cluster["metadata"]["name"] for cluster in managed_clusters
+        ]
+        drcluster_names = set(dr_helpers.get_all_drclusters())
+    finally:
+        config.switch_ctx(restore_index)
+    return sorted(name for name in managed_cluster_names if name not in drcluster_names)
 
 
 def navigate_to_dr_topology_tab(acm_obj, timeout=120):
@@ -114,9 +114,9 @@ def verify_df_cluster_listing_on_topology_view(
     expected_clusters = sorted(
         name for name in expected_clusters if name != constants.ACM_LOCAL_CLUSTER
     )
-    assert expected_clusters, (
-        "No DRClusters found via CLI; cannot verify Data Foundation cluster listing"
-    )
+    assert (
+        expected_clusters
+    ), "No DRClusters found via CLI; cannot verify Data Foundation cluster listing"
 
     missing_clusters = [
         cluster_name
@@ -125,9 +125,9 @@ def verify_df_cluster_listing_on_topology_view(
             acm_obj, cluster_name, timeout=timeout
         )
     ]
-    assert not missing_clusters, (
-        f"Data Foundation clusters missing on Topology UI: {missing_clusters}"
-    )
+    assert (
+        not missing_clusters
+    ), f"Data Foundation clusters missing on Topology UI: {missing_clusters}"
     for cluster_name in expected_clusters:
         log.info(
             f"Data Foundation cluster '{cluster_name}' is displayed on DR Topology tab"
@@ -164,7 +164,7 @@ def open_dr_topology_cluster_sidebar(acm_obj, cluster_name, timeout=60):
     """
     Click a cluster node on the DR Topology view to open its sidebar.
 
-    Click the label parent element, with zoom-out retries and a JS click 
+    Click the label parent element, with zoom-out retries and a JS click
     fallback when the canvas intercepts the click.
 
     Args:
@@ -180,11 +180,13 @@ def open_dr_topology_cluster_sidebar(acm_obj, cluster_name, timeout=60):
 
     for attempt in range(1, 4):
         try:
-            acm_obj.do_click(
-                cluster_click_locator, use_fallback=False, timeout=timeout
-            )
+            acm_obj.do_click(cluster_click_locator, use_fallback=False, timeout=timeout)
             break
-        except (NoSuchElementException, SeleniumTimeoutException):
+        except (NoSuchElementException, SeleniumTimeoutException) as ex:
+            if attempt == 3:
+                raise AssertionError(
+                    f"Cluster '{cluster_name}' was not clickable after 3 attempts"
+                ) from ex
             log.info("Zooming out DR Topology view")
             acm_obj.do_click(topology_loc["zoom_out"])
             acm_obj.page_has_loaded(retries=3, sleep_time=2)
@@ -216,8 +218,7 @@ def verify_dr_topology_cluster_sidebar_open(acm_obj, cluster_name, timeout=60):
         acm_loc["dr-topology-sidebar-close"][::-1], timeout=timeout
     )
     assert sidebar_open, (
-        f"Cluster sidebar did not open for '{cluster_name}' "
-        "(close button not found)"
+        f"Cluster sidebar did not open for '{cluster_name}' " "(close button not found)"
     )
 
     details_tab = acm_obj.wait_until_expected_text_is_found(
@@ -235,9 +236,9 @@ def verify_dr_topology_cluster_sidebar_open(acm_obj, cluster_name, timeout=60):
         expected_text=cluster_name,
         timeout=timeout,
     )
-    assert details_tab and application_details_tab and cluster_visible, (
-        f"Cluster sidebar did not open as expected for '{cluster_name}'"
-    )
+    assert (
+        details_tab and application_details_tab and cluster_visible
+    ), f"Cluster sidebar did not open as expected for '{cluster_name}'"
     acm_obj.take_screenshot()
     log.info(f"Cluster sidebar opened for '{cluster_name}'")
 
@@ -280,11 +281,13 @@ def open_dr_topology_policy_sidebar(acm_obj, policy_name, timeout=60):
 
     for attempt in range(1, 4):
         try:
-            acm_obj.do_click(
-                policy_click_locator, use_fallback=False, timeout=timeout
-            )
+            acm_obj.do_click(policy_click_locator, use_fallback=False, timeout=timeout)
             break
-        except (NoSuchElementException, SeleniumTimeoutException):
+        except (NoSuchElementException, SeleniumTimeoutException) as ex:
+            if attempt == 3:
+                raise AssertionError(
+                    f"Policy '{policy_name}' was not clickable after 3 attempts"
+                ) from ex
             log.info("Zooming out DR Topology view")
             acm_obj.do_click(topology_loc["zoom_out"])
             acm_obj.page_has_loaded(retries=3, sleep_time=2)
@@ -323,9 +326,9 @@ def verify_dr_topology_policy_sidebar_open(
     sidebar_open = acm_obj.check_element_presence(
         acm_loc["dr-topology-sidebar-close"][::-1], timeout=timeout
     )
-    assert sidebar_open, (
-        f"Policy sidebar did not open for '{policy_name}' (close button not found)"
-    )
+    assert (
+        sidebar_open
+    ), f"Policy sidebar did not open for '{policy_name}' (close button not found)"
 
     policy_visible = acm_obj.wait_until_expected_text_is_found(
         format_locator(acm_loc["dr-topology-sidebar-policy-name"], policy_name),
@@ -403,9 +406,7 @@ def search_dr_topology(acm_obj, search_text, timeout=30):
         timeout (int): Timeout for the search input
     """
     acm_loc = locators_for_current_ocp_version()["acm_page"]
-    acm_obj.do_send_keys(
-        acm_loc["dr-topology-search"], search_text, timeout=timeout
-    )
+    acm_obj.do_send_keys(acm_loc["dr-topology-search"], search_text, timeout=timeout)
     acm_obj.page_has_loaded(retries=3, sleep_time=2)
     log.info(f"Searched DR Topology for '{search_text}'")
 
@@ -436,9 +437,7 @@ def is_dr_topology_entity_displayed(acm_obj, entity_name, timeout=30):
     Returns:
         bool: True if the entity name is found on the DR Topology view
     """
-    return is_dr_cluster_displayed_on_topology(
-        acm_obj, entity_name, timeout=timeout
-    )
+    return is_dr_cluster_displayed_on_topology(acm_obj, entity_name, timeout=timeout)
 
 
 def verify_dr_topology_cluster_name_search_filter(
@@ -475,8 +474,7 @@ def verify_dr_topology_cluster_name_search_filter(
         )
     ]
     assert not hidden_clusters, (
-        "Clusters should be hidden by Cluster name search filter: "
-        f"{hidden_clusters}"
+        "Clusters should be hidden by Cluster name search filter: " f"{hidden_clusters}"
     )
     acm_obj.take_screenshot()
     reset_dr_topology_search(acm_obj, timeout=timeout)
@@ -506,54 +504,182 @@ def verify_dr_topology_policy_search_filter(
     missing_clusters = [
         cluster_name
         for cluster_name in connected_clusters
-        if not is_dr_topology_entity_displayed(
-            acm_obj, cluster_name, timeout=timeout
-        )
+        if not is_dr_topology_entity_displayed(acm_obj, cluster_name, timeout=timeout)
     ]
     assert not missing_clusters, (
-        "Connected clusters missing after Policy search filter: "
-        f"{missing_clusters}"
+        "Connected clusters missing after Policy search filter: " f"{missing_clusters}"
     )
     acm_obj.take_screenshot()
     reset_dr_topology_search(acm_obj, timeout=timeout)
     log.info(f"Policy search filter validated for '{policy_name}'")
 
 
-def wait_for_dr_topology_workloads_healthy(
-    workloads, scheduling_interval, pvc_interface=constants.CEPHBLOCKPOOL
+def open_dr_topology_drpc_sidebar(
+    acm_obj,
+    cluster_name,
+    dr_status=constants.DR_TOPOLOGY_DRPC_HEALTHY_STATUS,
+    timeout=60,
 ):
+    """
+    Click the DRPC status label on a cluster node to open the Applications sidebar.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        cluster_name (str): DRCluster name that shows the DRPC status badge
+        dr_status (str): DRPC status text on the topology node (default: healthy)
+        timeout (int): Timeout for the DRPC label to become clickable
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    topology_loc = locators_for_current_ocp_version()["topology"]
+    drpc_click_locator = format_locator(
+        acm_loc["dr-topology-drpc-click"], dr_status, cluster_name
+    )
+
+    for attempt in range(1, 4):
+        try:
+            acm_obj.do_click(drpc_click_locator, use_fallback=False, timeout=timeout)
+            break
+        except (NoSuchElementException, SeleniumTimeoutException) as ex:
+            if attempt == 3:
+                raise AssertionError(
+                    f"DRPC status '{dr_status}' on cluster '{cluster_name}' "
+                    f"was not clickable after 3 attempts"
+                ) from ex
+            log.info("Zooming out DR Topology view")
+            acm_obj.do_click(topology_loc["zoom_out"])
+            acm_obj.page_has_loaded(retries=3, sleep_time=2)
+            log.info(f"Retry DRPC click on DR Topology. attempt {attempt}")
+        except ElementClickInterceptedException:
+            log.info(
+                "Click intercepted on DR Topology DRPC label. "
+                "Falling back to JS dispatchEvent click."
+            )
+            acm_obj.click_with_script(drpc_click_locator)
+            break
+
+    acm_obj.take_screenshot()
+    acm_obj.page_has_loaded(retries=3, sleep_time=2)
+    log.info(
+        f"Clicked DRPC status '{dr_status}' on cluster '{cluster_name}' "
+        "on DR Topology tab"
+    )
+
+
+def verify_dr_topology_applications_sidebar(acm_obj, protected_apps, timeout=60):
+    """
+    Verify the Applications sidebar shows expected table headers and app rows.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        protected_apps (list): Application dicts with name, status, and policy
+        timeout (int): Timeout for sidebar elements
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    sidebar_open = acm_obj.check_element_presence(
+        acm_loc["dr-topology-sidebar-close"][::-1], timeout=timeout
+    )
+    assert sidebar_open, "Applications sidebar did not open (close button not found)"
+
+    header_checks = [
+        acm_obj.wait_until_expected_text_is_found(
+            acm_loc["dr-topology-sidebar-app-table-header-name"],
+            expected_text="Name",
+            timeout=timeout,
+        ),
+        acm_obj.wait_until_expected_text_is_found(
+            acm_loc["dr-topology-sidebar-app-table-header-dr-status"],
+            expected_text="DR Status",
+            timeout=timeout,
+        ),
+        acm_obj.wait_until_expected_text_is_found(
+            acm_loc["dr-topology-sidebar-app-table-header-policy"],
+            expected_text="Policy",
+            timeout=timeout,
+        ),
+    ]
+    assert all(
+        header_checks
+    ), "Applications sidebar table headers are not displayed as expected"
+
+    for app in protected_apps:
+        app_name = app["name"]
+        assert acm_obj.wait_until_expected_text_is_found(
+            format_locator(
+                acm_loc["dr-topology-sidebar-app-row-name"],
+                app_name,
+                app_name,
+            ),
+            expected_text=app_name,
+            timeout=timeout,
+        ), f"Application name '{app_name}' not found in Applications sidebar"
+        assert acm_obj.wait_until_expected_text_is_found(
+            format_locator(
+                acm_loc["dr-topology-sidebar-app-row-status"],
+                app_name,
+                app["status"],
+            ),
+            expected_text=app["status"],
+            timeout=timeout,
+        ), (
+            f"DR Status '{app['status']}' not found for application "
+            f"'{app_name}' in Applications sidebar"
+        )
+        assert acm_obj.wait_until_expected_text_is_found(
+            format_locator(
+                acm_loc["dr-topology-sidebar-app-row-policy"],
+                app_name,
+                app["policy"],
+            ),
+            expected_text=app["policy"],
+            timeout=timeout,
+        ), (
+            f"Policy '{app['policy']}' not found for application "
+            f"'{app_name}' in Applications sidebar"
+        )
+
+    acm_obj.take_screenshot()
+    log.info(
+        "Applications sidebar validated for apps: "
+        f"{[app['name'] for app in protected_apps]}"
+    )
+
+
+def wait_for_dr_topology_workloads_healthy(workloads, scheduling_interval):
     """
     Wait until DR protected workloads are healthy before Topology UI validation.
 
     Args:
         workloads (list): Deployed DR workload objects
         scheduling_interval (int): DRPolicy scheduling interval in minutes
-        pvc_interface (str): PVC interface used by the deployed workloads
     """
     from ocs_ci.ocs.resources.drpc import DRPC
 
-    config.switch_acm_ctx()
-    for workload in workloads:
-        if getattr(workload, "discovered_apps_placement_name", None):
-            drpc_obj = DRPC(
-                namespace=constants.DR_OPS_NAMESPACE,
-                resource_name=workload.discovered_apps_placement_name,
-            )
-        elif workload.workload_type == constants.APPLICATION_SET:
-            drpc_obj = DRPC(
-                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-                resource_name=f"{workload.appset_placement_name}-drpc",
-            )
-        else:
-            drpc_obj = DRPC(namespace=workload.workload_namespace)
-        drpc_obj.wait_for_peer_ready_status()
+    restore_index = config.cur_index
+    try:
+        config.switch_acm_ctx()
+        for workload in workloads:
+            if getattr(workload, "discovered_apps_placement_name", None):
+                drpc_obj = DRPC(
+                    namespace=constants.DR_OPS_NAMESPACE,
+                    resource_name=workload.discovered_apps_placement_name,
+                )
+            elif workload.workload_type == constants.APPLICATION_SET:
+                drpc_obj = DRPC(
+                    namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                    resource_name=f"{workload.appset_placement_name}-drpc",
+                )
+            else:
+                drpc_obj = DRPC(namespace=workload.workload_namespace)
+            drpc_obj.wait_for_peer_ready_status()
 
-    total_pvc_count = sum(
-        getattr(workload, "workload_pvc_count", 1) for workload in workloads
-    )
-    dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
-    time.sleep(2 * scheduling_interval * 60)
-    log.info("DR protected workloads are healthy for Topology UI validation")
+        total_pvc_count = sum(
+            getattr(workload, "workload_pvc_count", 1) for workload in workloads
+        )
+        dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+        time.sleep(2 * scheduling_interval * 60)
+        log.info("DR protected workloads are healthy for Topology UI validation")
+    finally:
+        config.switch_ctx(restore_index)
 
 
 def dr_submariner_validation_from_ui(acm_obj):

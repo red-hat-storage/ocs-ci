@@ -1421,6 +1421,40 @@ acm_configuration_4_12 = {
         "//li//*[normalize-space()='{}']",
         By.XPATH,
     ),
+    "dr-topology-drpc-click": (
+        "//*[contains(@class,'topology__node__label')]"
+        "[.//*[contains(text(),'{}')]]"
+        "[ancestor::*[.//*[contains(text(),'{}')]]]/..",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-table-header-name": (
+        "//th[normalize-space()='Name']",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-table-header-dr-status": (
+        "//th[normalize-space()='DR Status']",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-table-header-policy": (
+        "//th[normalize-space()='Policy']",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-row": (
+        "//tr[.//*[contains(text(), '{}')]]",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-row-name": (
+        "//tr[.//*[contains(text(), '{}')]]//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-row-status": (
+        "//tr[.//*[contains(text(), '{}')]]//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-row-policy": (
+        "//tr[.//*[contains(text(), '{}')]]//*[contains(text(), '{}')]",
+        By.XPATH,
+    ),
     "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
     "workload-name": ('//*[text()="{}"]', By.XPATH),
     "search-bar": (
