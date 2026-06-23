@@ -11,13 +11,14 @@ from ocs_ci.deployment.fusion_data_foundation import (
     run_patch_cmd,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.exceptions import (
     ChannelNotFound,
     ConfigurationError,
     TimeoutExpiredError,
 )
+from ocs_ci.ocs.resources.packagemanifest import get_packagemanifest_by_catalog_source
 from ocs_ci.ocs.upgrade import BaseUpgrade
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, load_config_file
@@ -377,7 +378,12 @@ class FDFUpgrade(BaseUpgrade):
         try:
             logger.info("Operator CSV status:")
             csvs_cmd = f"oc --kubeconfig {self.kubeconfig} get csv -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -o yaml"
-            csvs_output = exec_cmd(csvs_cmd)
+            result = exec_cmd(csvs_cmd)
+            csvs_output = (
+                result.stdout.decode("utf-8")
+                if isinstance(result.stdout, bytes)
+                else result.stdout
+            )
             csvs_data = yaml.safe_load(csvs_output)
             for csv in csvs_data.get("items", []):
                 csv_name = csv["metadata"]["name"]
@@ -393,7 +399,12 @@ class FDFUpgrade(BaseUpgrade):
                 "get installplan -n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
                 "-o yaml"
             )
-            ip_output = exec_cmd(ip_cmd)
+            result = exec_cmd(ip_cmd)
+            ip_output = (
+                result.stdout.decode("utf-8")
+                if isinstance(result.stdout, bytes)
+                else result.stdout
+            )
             ip_data = yaml.safe_load(ip_output)
             for ip in ip_data.get("items", []):
                 ip_name = ip["metadata"]["name"]
@@ -407,6 +418,9 @@ class FDFUpgrade(BaseUpgrade):
         """
         Wait for a specific subscription channel to become available in the packagemanifest.
 
+        This method uses the FDF catalog source to ensure we're checking the correct
+        packagemanifest when multiple catalog sources are present.
+
         Args:
             channel_name (str): The channel name to wait for (e.g., "stable-4.21")
             timeout (int): Maximum time to wait in seconds. Default is 300 (5 minutes).
@@ -415,9 +429,11 @@ class FDFUpgrade(BaseUpgrade):
             bool: True if the channel becomes available, False if timeout is reached
 
         """
+        catalog_source = defaults.FUSION_CATALOG_NAME
+        package_name = defaults.ODF_OPERATOR_NAME
         logger.info(
             f"Waiting up to {timeout}s for channel '{channel_name}' to appear "
-            "in odf-operator packagemanifest"
+            f"in {package_name} packagemanifest from catalog source '{catalog_source}'"
         )
 
         start_time = time.time()
@@ -425,12 +441,9 @@ class FDFUpgrade(BaseUpgrade):
 
         while time.time() - start_time < timeout:
             try:
-                cmd = (
-                    f"oc --kubeconfig {self.kubeconfig} get packagemanifest odf-operator "
-                    f"-n {constants.MARKETPLACE_NAMESPACE} -o yaml"
+                package_manifest = get_packagemanifest_by_catalog_source(
+                    package_name=package_name, catalog_source=catalog_source
                 )
-                package_manifest_output = exec_cmd(cmd)
-                package_manifest = yaml.safe_load(package_manifest_output)
 
                 channels = package_manifest.get("status", {}).get("channels", [])
                 channel_names = [ch["name"] for ch in channels]
