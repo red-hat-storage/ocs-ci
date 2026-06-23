@@ -73,6 +73,7 @@ class TestCephfsStressWithFailures(E2ETest):
         self,
         project_factory,
         nodes,
+        storageclass_factory,
     ):
         """
         CephFS stress test with inducing failures on Ceph components after
@@ -121,7 +122,9 @@ class TestCephfsStressWithFailures(E2ETest):
         nodes_util = platform_nodes.get_nodes_platform()
 
         try:
-            pvc_obj, _ = stress_mgr.setup_stress_test_environment(pvc_size="500Gi")
+            pvc_obj, _ = stress_mgr.setup_stress_test_environment(
+                pvc_size="500Gi", storageclass_factory=storageclass_factory
+            )
 
             stress_mgr.start_background_checks(
                 interval_minutes=CHECKS_RUNNER_INTERVAL_MINUTES
