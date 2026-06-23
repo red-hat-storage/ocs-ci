@@ -1,5 +1,5 @@
 import logging
-import time
+
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility.utils import TimeoutSampler
 
 from ocs_ci.ocs.bucket_utils import (
     get_bucket_status_value,
@@ -16,6 +17,31 @@ from ocs_ci.ocs.bucket_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def wait_for_num_objects(mcg_obj, bucket_name, expected_count, timeout=360):
+    """
+    Poll bucket status until the number of objects reaches the expected count.
+
+    Args:
+        mcg_obj (obj): An object representing the current state of the MCG in the cluster
+        bucket_name (str): Name of the bucket to check
+        expected_count (int): Expected number of objects
+        timeout (int): Maximum time to wait in seconds
+
+    """
+    logger.info(f"Waiting for object count to reach {expected_count}")
+    for num_objects in TimeoutSampler(
+        timeout=timeout,
+        sleep=30,
+        func=get_bucket_status_value,
+        mcg_obj=mcg_obj,
+        bucket_name=bucket_name,
+        key="Num Objects",
+    ):
+        if int(num_objects) == expected_count:
+            logger.info(f"Object count reached {num_objects}")
+            break
 
 
 class QuotaStatus:
@@ -51,6 +77,7 @@ class TestNoobaaMetrics:
             mcg_obj (obj): An object representing the current state of the MCG in the cluster
             awscli_pod_session (pod): A pod running the AWSCLI tools
             bucket_factory: Calling this fixture creates a new bucket(s)
+            test_directory_setup: Fixture that sets up origin and result directories for the test
         """
 
         # 1. Create bucket and check original quota status
@@ -92,15 +119,22 @@ class TestNoobaaMetrics:
             pattern="ObjKey1-",
             mcg_obj=mcg_obj,
         )
-        time.sleep(240)
 
-        space_avail_after_write = get_bucket_status_value(
-            mcg_obj, bucket_name, "Data Space Avail"
-        )
-        space_avail_after_write = float(space_avail_after_write.split(" ")[0])
-        assert (
-            space_avail_after_write < space_avail_after_update
-        ), f"Available space before write = {space_avail_after_update}, after write = {space_avail_after_write}"
+        logger.info("Waiting for space available to decrease after writing 1 object")
+        for space_avail_after_write in TimeoutSampler(
+            timeout=360,
+            sleep=30,
+            func=get_bucket_status_value,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket_name,
+            key="Data Space Avail",
+        ):
+            space_avail_after_write = float(space_avail_after_write.split(" ")[0])
+            if space_avail_after_write < space_avail_after_update:
+                logger.info(
+                    f"Space available decreased: {space_avail_after_update} -> {space_avail_after_write}"
+                )
+                break
 
         # 3. Update bucket with --max-objects quota and verify that it worked as expected
         max_objects = 10
@@ -127,16 +161,8 @@ class TestNoobaaMetrics:
             mcg_obj=mcg_obj,
         )
 
-        time.sleep(180)
+        wait_for_num_objects(mcg_obj, bucket_name, max_objects - 1)
 
-        # Verify that max_objects -1 have been copied,
-        # only 1 object is available and quota status is QuotaStatus.Approaching
-        num_objects_after_write = get_bucket_status_value(
-            mcg_obj, bucket_name, "Num Objects"
-        )
-        assert (
-            int(num_objects_after_write) == max_objects - 1
-        ), f"Number of written objects is {num_objects_after_write}, expected {max_objects -1}"
         num_objects_avail_after_write = get_bucket_status_value(
             mcg_obj, bucket_name, "Num Objects Avail"
         )
@@ -159,14 +185,9 @@ class TestNoobaaMetrics:
             pattern="ObjKey3-",
             mcg_obj=mcg_obj,
         )
-        time.sleep(180)
 
-        num_objects_after_write = get_bucket_status_value(
-            mcg_obj, bucket_name, "Num Objects"
-        )
-        assert (
-            int(num_objects_after_write) == max_objects
-        ), f"Number of written objects is {num_objects_after_write}, expected {max_objects}"
+        wait_for_num_objects(mcg_obj, bucket_name, max_objects)
+
         num_objects_avail_after_write = get_bucket_status_value(
             mcg_obj, bucket_name, "Num Objects Avail"
         )
@@ -213,8 +234,18 @@ class TestNoobaaMetrics:
             pattern="ObjKey5-",
             mcg_obj=mcg_obj,
         )
-        time.sleep(180)
-        quota_status = get_bucket_status_value(mcg_obj, bucket_name, "QuotaStatus")
-        assert (
-            quota_status == QuotaStatus.OPTIMAL
-        ), f"Quota status after update {quota_status}, expected {QuotaStatus.OPTIMAL}"
+
+        logger.info(
+            "Waiting for quota status to return to OPTIMAL after increasing max-objects"
+        )
+        for quota_status in TimeoutSampler(
+            timeout=360,
+            sleep=30,
+            func=get_bucket_status_value,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket_name,
+            key="QuotaStatus",
+        ):
+            if quota_status == QuotaStatus.OPTIMAL:
+                logger.info("Quota status returned to OPTIMAL")
+                break
