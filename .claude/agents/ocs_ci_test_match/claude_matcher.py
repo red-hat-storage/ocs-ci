@@ -18,11 +18,9 @@ from pathlib import Path
 from typing import Any
 
 from coverage_mapper import infer_issue_coverage_areas
-from models import MATCHER_CLAUDE_AGENT, MATCHER_VECTOR_DB_FALLBACK, STAGE_TEST_MATCHING
+from models import MATCHER_CLAUDE_AGENT, MATCHER_VECTOR_DB_FALLBACK
 
 log = logging.getLogger(__name__)
-
-STAGE_TEST_MATCHING_CLAUDE = STAGE_TEST_MATCHING
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -377,7 +375,7 @@ def run_test_matching_claude_stage(
     """
     Stage 3 (Claude): find matching tests for all issues using claude-agent-sdk.
 
-    Optionally seeds Claude with vector DB candidates from test_matcher.py.
+    Optionally seeds Claude with vector DB candidates from matcher.py.
 
     Args:
         issues (list): Issues from run record

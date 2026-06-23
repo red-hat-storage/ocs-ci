@@ -7,7 +7,14 @@ Refreshes each issue from JIRA before analysis when jira_config is provided.
 
 import logging
 import re
+import sys
+from pathlib import Path
 from typing import Any
+
+_ZSTREAM_DIR = Path(__file__).resolve().parent
+_OCS_CI_JIRA_DIR = _ZSTREAM_DIR.parents[2] / "agents" / "ocs_ci_jira"
+if str(_OCS_CI_JIRA_DIR) not in sys.path:
+    sys.path.insert(0, str(_OCS_CI_JIRA_DIR))
 
 from topology_mapper import TOPOLOGY_ENVIRONMENT, Topology, classify_topology
 
@@ -280,7 +287,7 @@ def merge_mcp_issue_details(
     if not mcp_issue:
         return dict(base_issue)
 
-    from agent_helper import parse_jira_issue
+    from parser import parse_jira_issue
 
     if "fields" in mcp_issue:
         parsed = parse_jira_issue(mcp_issue)
@@ -357,9 +364,9 @@ def refresh_issue_from_jira(
 
     """
     log.info("Refreshing %s from JIRA", issue_key)
-    from agent_helper import get_jira_issue_details
+    from operations import get_issue
 
-    return get_jira_issue_details(issue_key, jira_config=jira_config)
+    return get_issue(issue_key, jira_config=jira_config)
 
 
 def run_repro_steps_stage(

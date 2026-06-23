@@ -2,6 +2,5 @@
 
 STAGE_TEST_MATCHING = "test_matching"
 
-MATCHER_VECTOR_DB = "vector_db"
 MATCHER_CLAUDE_AGENT = "claude_agent_sdk"
 MATCHER_VECTOR_DB_FALLBACK = "vector_db_fallback"

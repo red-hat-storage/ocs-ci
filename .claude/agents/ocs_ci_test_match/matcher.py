@@ -15,7 +15,6 @@ from typing import Any
 
 from coverage_mapper import (
     CODE_COVERAGE_AREAS,
-    coverage_area_overlap_score,
     infer_issue_coverage_areas,
     infer_test_coverage_areas,
 )
@@ -23,69 +22,6 @@ from coverage_mapper import (
 log = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-TESTS_DIR = REPO_ROOT / "tests"
-
-TOPOLOGY_TEST_DIRS: dict[str, list[str]] = {
-    "standard_ipi": [
-        "tests/functional/pv",
-        "tests/functional/storageclass",
-        "tests/functional/z_cluster",
-        "tests/functional/object",
-        "tests/functional/monitoring",
-        "tests/functional/upgrade",
-        "tests/functional/pod_and_daemons",
-    ],
-    "regional_dr": [
-        "tests/functional/disaster-recovery/regional-dr",
-        "tests/cross_functional/ui/test_odf_topology.py",
-    ],
-    "metro_dr": [
-        "tests/functional/disaster-recovery/metro-dr",
-        "tests/functional/disaster-recovery/sc_arbiter",
-    ],
-    "provider_client": [
-        "tests/functional/provider_mode",
-        "tests/functional/object/test_obc_deletion_client_provider.py",
-    ],
-    "external_mode": ["tests/functional/external_mode"],
-    "lso_baremetal": ["tests/functional/lso"],
-}
-
-COMPONENT_KEYWORDS: dict[str, list[str]] = {
-    "noobaa": ["noobaa", "mcg", "bucket", "obc", "namespace store", "s3"],
-    "mcg": ["mcg", "noobaa", "bucket", "object bucket"],
-    "rbd": ["rbd", "block", "pvc", "snapshot", "clone", "csi"],
-    "cephfs": ["cephfs", "file", "pvc", "snapshot"],
-    "ocs-operator": ["operator", "upgrade", "deployment", "storagecluster", "ocs"],
-    "csi": ["csi", "pvc", "storageclass", "volume"],
-    "dr": ["failover", "relocate", "ramen", "disaster", "regional", "metro"],
-    "monitoring": ["alert", "prometheus", "monitoring", "metric"],
-    "encryption": ["encrypt", "kms", "vault"],
-}
-
-STOPWORDS = frozenset(
-    {
-        "the",
-        "and",
-        "for",
-        "with",
-        "from",
-        "that",
-        "this",
-        "issue",
-        "test",
-        "verify",
-        "using",
-        "after",
-        "before",
-        "should",
-        "cluster",
-        "openshift",
-        "storage",
-        "odf",
-        "ocs",
-    }
-)
 
 
 @dataclass
@@ -106,11 +42,6 @@ class TestCandidate:
         if self.class_name:
             return f"{self.file_path}::{self.class_name}::{self.test_name}"
         return f"{self.file_path}::{self.test_name}"
-
-
-def _tokenize(text: str) -> set[str]:
-    tokens = re.findall(r"[a-z0-9][a-z0-9_-]{2,}", text.lower())
-    return {t for t in tokens if t not in STOPWORDS and len(t) > 2}
 
 
 def _extract_docstring_after_def(content: str, def_pos: int) -> str:
@@ -152,14 +83,12 @@ def _parse_test_file(path: Path) -> list[TestCandidate]:
     for match in re.finditer(r"^(\s*)def\s+(test_\w+)\s*\(", content, re.MULTILINE):
         indent = len(match.group(1))
         test_name = match.group(2)
-        # Skip nested helper functions inside tests (indented defs)
         if indent > 0:
             continue
 
         def_pos = match.start()
         docstring = _extract_docstring_after_def(content, def_pos)
 
-        # Jira marks on the test (look at 15 lines before def)
         window_start = max(0, def_pos - 800)
         window = content[window_start:def_pos]
         test_jira = re.findall(r"@jira\(\s*[\"']([^\"']+)[\"']\s*\)", window)
@@ -191,166 +120,6 @@ def _parse_test_file(path: Path) -> list[TestCandidate]:
         )
 
     return candidates
-
-
-def build_test_index(
-    tests_dir: Path | None = None, *, max_files: int | None = None
-) -> list[TestCandidate]:
-    """
-    Index all test_*.py files under tests/.
-
-    Args:
-        tests_dir (Path | None): Override tests root (default: repo tests/)
-        max_files (int | None): Optional limit for debugging
-
-    Returns:
-        list[TestCandidate]: Indexed tests
-
-    """
-    root = tests_dir or TESTS_DIR
-    if not root.is_dir():
-        raise FileNotFoundError(f"Tests directory not found: {root}")
-
-    index: list[TestCandidate] = []
-    files = sorted(root.rglob("test_*.py"))
-    if max_files:
-        files = files[:max_files]
-
-    for path in files:
-        index.extend(_parse_test_file(path))
-
-    log.info("Indexed %d tests from %d files under %s", len(index), len(files), root)
-    return index
-
-
-def _issue_search_corpus(issue: dict[str, Any]) -> tuple[str, set[str]]:
-    """Build searchable text and tokens from issue + repro_steps stage."""
-    repro = issue.get("stages", {}).get("repro_steps", {}).get("data", {})
-    parts = [
-        issue.get("key", ""),
-        issue.get("summary", ""),
-        issue.get("description", ""),
-        " ".join(issue.get("components", [])),
-        " ".join(issue.get("labels", [])),
-        repro.get("issue_summary", ""),
-        repro.get("topology", ""),
-        repro.get("topology_details", ""),
-        " ".join(repro.get("reproduction_steps", [])),
-        " ".join(repro.get("verification_steps", [])),
-        repro.get("expected_result", ""),
-    ]
-    env = repro.get("environment_requirements", {})
-    if env:
-        parts.append(str(env.get("topology_type", "")))
-        parts.extend(env.get("prerequisites", []))
-
-    text = " ".join(filter(None, parts)).lower()
-    return text, _tokenize(text)
-
-
-def _preferred_dirs(
-    issue: dict[str, Any], issue_coverage: dict[str, Any] | None = None
-) -> set[str]:
-    """Return test directory prefixes likely relevant for this issue."""
-    dirs: set[str] = set()
-    repro = issue.get("stages", {}).get("repro_steps", {}).get("data", {})
-    topology = repro.get("topology", "")
-    if topology in TOPOLOGY_TEST_DIRS:
-        dirs.update(TOPOLOGY_TEST_DIRS[topology])
-
-    if issue_coverage:
-        dirs.update(issue_coverage.get("preferred_test_dirs", []))
-
-    corpus, _ = _issue_search_corpus(issue)
-    for _component, keywords in COMPONENT_KEYWORDS.items():
-        if any(kw in corpus for kw in keywords):
-            for topo_dirs in TOPOLOGY_TEST_DIRS.values():
-                for d in topo_dirs:
-                    if any(kw in d for kw in keywords):
-                        dirs.add(d)
-
-    for component in issue.get("components", []):
-        comp_lower = component.lower()
-        for key, keywords in COMPONENT_KEYWORDS.items():
-            if key in comp_lower or comp_lower in key:
-                for topo_dirs in TOPOLOGY_TEST_DIRS.values():
-                    for d in topo_dirs:
-                        if any(kw in d for kw in keywords):
-                            dirs.add(d)
-
-    if not dirs:
-        dirs.update(TOPOLOGY_TEST_DIRS["standard_ipi"])
-    return dirs
-
-
-def _score_test(
-    issue_key: str,
-    issue_tokens: set[str],
-    issue_text: str,
-    preferred_dirs: set[str],
-    candidate: TestCandidate,
-    issue_coverage_areas: list[str] | None = None,
-) -> tuple[int, list[str]]:
-    """Score a test candidate against an issue. Returns (score, reasons)."""
-    score = 0
-    reasons: list[str] = []
-
-    if issue_coverage_areas and candidate.coverage_areas:
-        area_score, area_reasons = coverage_area_overlap_score(
-            issue_coverage_areas, candidate.coverage_areas
-        )
-        if area_score:
-            score += area_score
-            reasons.extend(area_reasons)
-
-    if issue_key in candidate.jira_ids:
-        score += 200
-        reasons.append(f"direct @jira({issue_key}) link")
-
-    if issue_key.lower() in candidate.search_text:
-        score += 150
-        reasons.append(f"mentions {issue_key} in test file")
-
-    file_tokens = _tokenize(candidate.search_text)
-    overlap = issue_tokens & file_tokens
-    if overlap:
-        overlap_score = min(len(overlap) * 8, 80)
-        score += overlap_score
-        sample = sorted(overlap)[:6]
-        reasons.append(f"keyword overlap: {sample}")
-
-    for pref in preferred_dirs:
-        if candidate.file_path.startswith(pref):
-            score += 25
-            reasons.append(f"in relevant area: {pref}")
-            break
-
-    path_lower = candidate.file_path.lower()
-    for token in issue_tokens:
-        if len(token) > 4 and token in path_lower:
-            score += 5
-
-    for step_kw in (
-        "audit",
-        "404",
-        "noobaa",
-        "operator",
-        "upgrade",
-        "failover",
-        "snapshot",
-    ):
-        if step_kw in issue_text and step_kw in candidate.search_text:
-            score += 10
-            reasons.append(f"verification keyword: {step_kw}")
-
-    if candidate.docstring and len(candidate.docstring) > 40:
-        doc_tokens = _tokenize(candidate.docstring)
-        doc_overlap = issue_tokens & doc_tokens
-        if doc_overlap:
-            score += min(len(doc_overlap) * 5, 40)
-            reasons.append(f"docstring overlap: {sorted(doc_overlap)[:4]}")
-
-    return score, reasons
 
 
 def _vector_results_to_matches(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -389,7 +158,6 @@ def _vector_results_to_matches(results: list[dict[str, Any]]) -> list[dict[str, 
 
 def find_matching_tests_for_issue(
     issue: dict[str, Any],
-    test_index: list[TestCandidate] | None = None,
     *,
     top_n: int = 10,
     min_score: int = 15,
@@ -399,12 +167,10 @@ def find_matching_tests_for_issue(
     """
     Find ocs-ci tests matching an issue's reproduction/verification plan.
 
-    Queries the vector DB for semantically similar test cases. ``test_index`` is
-    ignored (kept for backward compatibility with older callers).
+    Queries the vector DB for semantically similar test cases.
 
     Args:
         issue (dict): Issue from run record (must include repro_steps stage)
-        test_index (list | None): Deprecated; unused
         top_n (int): Maximum matches to return
         min_score (int): Minimum relevance score on 0-100 scale
         score_threshold (float | None): Cosine similarity threshold (default from min_score)
@@ -414,8 +180,6 @@ def find_matching_tests_for_issue(
         tuple: (ranked matching tests, issue coverage area metadata)
 
     """
-    del test_index  # vector search replaces filesystem scan + heuristic scoring
-
     vector_db_dir = Path(__file__).resolve().parents[2] / "vectorDB"
     if str(vector_db_dir) not in sys.path:
         sys.path.insert(0, str(vector_db_dir))
@@ -469,7 +233,6 @@ def find_matching_tests_for_issue(
 def run_test_matching_stage(
     issues: list[dict[str, Any]],
     *,
-    tests_dir: Path | None = None,
     top_n: int = 10,
 ) -> dict[str, dict[str, Any]]:
     """
@@ -477,14 +240,12 @@ def run_test_matching_stage(
 
     Args:
         issues (list): Issues from run record (repro_steps stage required)
-        tests_dir (Path | None): Optional tests/ path override
         top_n (int): Max matches per issue
 
     Returns:
         dict: issue_key -> stage data for append_stage_bulk
 
     """
-    del tests_dir  # vector DB indexes tests/ at build time; no filesystem scan here
     per_issue: dict[str, dict[str, Any]] = {}
 
     for issue in issues:

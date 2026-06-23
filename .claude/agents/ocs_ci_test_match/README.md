@@ -97,11 +97,3 @@ zstream Stage 1–2  →  ocs_ci_test_match (Stage 3)  →  ocs_ci_run (Stage 4)
 ```
 
 Z-stream Stage 3 calls `operations.match_issues()` and writes results to the run record `test_matching` stage.
-
-## Backward compatibility
-
-Z-stream shims re-export from this package:
-
-- `zstream/test_matcher.py` → `ocs_ci_test_match.matcher`
-- `zstream/claude_test_matcher.py` → `ocs_ci_test_match.claude_matcher`
-- `zstream/coverage_mapper.py` → `ocs_ci_test_match.coverage_mapper`

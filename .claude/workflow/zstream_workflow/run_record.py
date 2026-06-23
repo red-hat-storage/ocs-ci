@@ -20,6 +20,7 @@ RUN_RECORD_DIR = Path(__file__).resolve().parent / "run_record"
 STAGE_JIRA_INTAKE = "jira_intake"
 STAGE_REPRO_STEPS = "repro_steps"
 STAGE_TEST_MATCHING = "test_matching"
+STAGE_OCS_CI_EXECUTION = "ocs_ci_execution"
 
 
 def normalize_odf_version(odf_version: str) -> str:

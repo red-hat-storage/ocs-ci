@@ -6,8 +6,6 @@ MODULE_DIR = Path(__file__).resolve().parent
 AGENTS_DIR = MODULE_DIR.parent
 REPO_ROOT = AGENTS_DIR.parent.parent
 
-DEFAULT_JENKINS_JOB = "qe-deploy-ocs-cluster"
-
 # Parameters safe to override when retriggering test runs
 TEST_RUN_OVERRIDE_KEYS: frozenset[str] = frozenset(
     {

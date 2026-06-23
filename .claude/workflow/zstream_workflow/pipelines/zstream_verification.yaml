@@ -1,0 +1,71 @@
+name: zstream_verification
+version: "1"
+description: >
+  ODF z-stream Lane C verification — JIRA intake, repro steps, test matching,
+  and optional Jenkins execution.
+
+parameters:
+  odf_version:
+    required: true
+    description: ODF z-stream target version (e.g. 4.22 or odf-4.22)
+  deploy_job_url:
+    required: false
+    description: Jenkins deploy build URL for Stage 4 test execution
+  jira_config:
+    required: false
+    description: Path to jira.cfg (optional; uses data/auth.yaml by default)
+
+defaults:
+  skip_if_completed: true
+  top_n: 10
+  use_claude: false
+  refresh_jira: true
+  dry_run: true
+  tests_per_issue: 1
+
+stages:
+  jira_intake:
+    agent: jira_search
+    parameters:
+      project: "Data Foundation Bugs"
+      issue_type: Bug
+      odf_version: $pipeline.parameters.odf_version
+      status: ON_QA
+      jira_config: $pipeline.parameters.jira_config
+    outputs:
+      issues: issues
+
+  repro_steps:
+    agent: repro_steps
+    needs: [jira_intake]
+    parameters:
+      issues: $stages.jira_intake.outputs.issues
+      odf_version: $pipeline.parameters.odf_version
+      jira_config: $pipeline.parameters.jira_config
+      refresh_jira: $pipeline.defaults.refresh_jira
+    outputs:
+      issues: issues
+
+  test_matching:
+    agent: test_matching
+    needs: [repro_steps]
+    parameters:
+      issues: $stages.repro_steps.outputs.issues
+      top_n: $pipeline.defaults.top_n
+      use_claude: $pipeline.defaults.use_claude
+      claude_model: null
+    outputs:
+      issues: issues
+
+  ocs_ci_execution:
+    agent: ocs_ci_execution
+    needs: [test_matching]
+    when: $pipeline.parameters.deploy_job_url
+    parameters:
+      issues: $stages.test_matching.outputs.issues
+      deploy_job_url: $pipeline.parameters.deploy_job_url
+      dry_run: $pipeline.defaults.dry_run
+      tests_per_issue: $pipeline.defaults.tests_per_issue
+      run_teardown: false
+    outputs:
+      jenkins_results: jenkins_results

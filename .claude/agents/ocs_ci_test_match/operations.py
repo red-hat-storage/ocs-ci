@@ -10,7 +10,7 @@ from typing import Any
 
 _AGENT_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _AGENT_DIR.parents[2]
-_ZSTREAM_DIR = _AGENT_DIR.parent / "zstream"
+_ZSTREAM_DIR = _AGENT_DIR.parents[1] / "workflow" / "zstream_workflow"
 
 for _path in (_AGENT_DIR, _REPO_ROOT):
     if str(_path) not in sys.path:
@@ -67,23 +67,14 @@ def load_issue_from_jira(
     *,
     jira_config: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Fetch a single JIRA issue for standalone test matching.
+    """Fetch a single JIRA issue for standalone test matching."""
+    _JIRA_DIR = _AGENT_DIR.parent / "ocs_ci_jira"
+    if str(_JIRA_DIR) not in sys.path:
+        sys.path.insert(0, str(_JIRA_DIR))
 
-    Args:
-        issue_key (str): JIRA key (e.g. DFBUGS-784)
-        jira_config (str | None): Optional path to jira.cfg
+    from operations import get_issue
 
-    Returns:
-        dict: Parsed issue details
-
-    """
-    if str(_ZSTREAM_DIR) not in sys.path:
-        sys.path.insert(0, str(_ZSTREAM_DIR))
-
-    from agent_helper import get_jira_issue_details
-
-    return get_jira_issue_details(issue_key, jira_config=jira_config)
+    return get_issue(issue_key, jira_config=jira_config)
 
 
 def load_issue_from_file(path: Path | str) -> dict[str, Any]:

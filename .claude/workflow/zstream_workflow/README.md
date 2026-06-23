@@ -10,9 +10,50 @@ Run all commands from the **ocs-ci repository root**.
 Stage 1: jira_intake      → Fetch ON_QA bugs for target ODF version
 Stage 2: repro_steps      → Generate reproduction & verification steps
 Stage 3: test_matching    → Find ocs-ci tests (ocs_ci_test_match agent)
+Stage 4: ocs_ci_execution → Trigger matched tests on Jenkins (ocs_ci_run agent)
 ```
 
-Each stage appends results to a timestamped **run record** under `run_record/`. Stages 2 and 3 require `--run-id` from stage 1.
+Each stage appends results to a timestamped **run record** under `run_record/`. Stages 2–4 require `--run-id` from stage 1.
+
+### YAML pipeline orchestrator (recommended)
+
+Uses the generic **workflow_lib** engine (`.claude/workflow/workflow_lib/`) with z-stream executors and run record.
+
+```bash
+# Full pipeline (Stages 1–3; Stage 4 skipped without deploy_job_url)
+python .claude/workflow/zstream_workflow/pipeline_cli.py run \
+  --pipeline zstream_verification \
+  --param odf_version=4.22
+
+# Using a YAML run config
+cp .claude/workflow/zstream_workflow/pipelines/configs/zstream_verification.example.yaml \
+   .claude/workflow/zstream_workflow/pipelines/configs/my-odf-4.22.yaml
+
+python .claude/workflow/zstream_workflow/pipeline_cli.py run \
+  --pipeline zstream_verification \
+  --config .claude/workflow/zstream_workflow/pipelines/configs/my-odf-4.22.yaml
+```
+
+Stage 1 JIRA intake uses **`ocs_ci_jira`** agent (`jira_search`).
+
+Agent registry: `agents/registry.yaml`. Workflow: `pipelines/zstream_verification.yaml`.
+
+Resume from a specific stage:
+
+```bash
+python .claude/workflow/zstream_workflow/pipeline_cli.py run \
+  --pipeline zstream_verification \
+  --param odf_version=4.22 \
+  --run-id 20260622_194551 \
+  --from-stage test_matching
+```
+
+Stage 3 standalone (via test-match agent):
+
+```bash
+python .claude/agents/ocs_ci_test_match/test_match_cli.py match \
+  --run-id 20260622_194551
+```
 
 ## Prerequisites
 
@@ -22,6 +63,7 @@ Use the ocs-ci virtualenv with atlassian-python-api installed (standard ocs-ci d
 
 ```bash
 pip install atlassian-python-api
+pip install -r .claude/workflow/zstream_workflow/requirements-pipeline.txt
 ```
 
 For semantic test matching with Claude Agent SDK (optional):
@@ -53,80 +95,52 @@ jira:
 
 ## Quick start
 
-### Stage 1 — JIRA intake
+Run the full pipeline (Stages 1–3; Stage 4 runs only when `deploy_job_url` is set):
 
 ```bash
-python .claude/agents/zstream/zstream_issue_verification.py \
-  --odf-version 4.22 \
-  --list-jira
+python .claude/workflow/zstream_workflow/pipeline_cli.py run \
+  --pipeline zstream_verification \
+  --param odf_version=4.22
 ```
 
-Print the JQL without querying JIRA:
+Note the **run id** from stderr (e.g. `20260622_194551`).
 
-```bash
-python .claude/agents/zstream/zstream_issue_verification.py \
-  --odf-version 4.22 \
-  --print-jql
-```
-
-JQL template:
+JQL used for Stage 1:
 
 ```text
 project = "Data Foundation Bugs" AND issuetype = Bug
 AND "target version" = odf-4.22 AND status = ON_QA
 ```
 
-Note the **run id** from stderr (e.g. `20260614_232133`).
+### Stage 3 options
 
-### Stage 2 — Reproduction steps
+Pass pipeline defaults via `--param` or run config YAML:
 
-```bash
-python .claude/agents/zstream/zstream_issue_verification.py \
-  --odf-version 4.22 \
-  --run-id 20260614_232133 \
-  --generate-repro-steps
-```
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `top_n` | 10 | Max matching tests per issue |
+| `use_claude` | false | Use Claude Agent SDK for semantic search |
+| `claude_model` | — | Model when `use_claude=true` |
+| `deploy_job_url` | — | Jenkins deploy URL for Stage 4 |
+| `dry_run` | true | Stage 4 Jenkins trigger dry-run |
 
-Use `--no-jira-refresh` to skip re-fetching issues from JIRA and work from the run record only.
-
-### Stage 3 — Test matching
-
-Delegated to the **ocs-ci-test-match** agent (`.claude/agents/ocs_ci_test_match/`).
-
-**Heuristic** (fast, offline — vector DB semantic search):
+Example with Claude matching:
 
 ```bash
-python .claude/agents/zstream/zstream_issue_verification.py \
-  --odf-version 4.22 \
-  --run-id 20260614_232133 \
-  --find-matching-tests
+python .claude/workflow/zstream_workflow/pipeline_cli.py run \
+  --pipeline zstream_verification \
+  --param odf_version=4.22 \
+  --run-id 20260622_194551 \
+  --from-stage test_matching \
+  --param use_claude=true
 ```
-
-**Claude Agent SDK** (semantic search with Read/Glob/Grep over `tests/`):
-
-```bash
-python .claude/agents/zstream/zstream_issue_verification.py \
-  --odf-version 4.22 \
-  --run-id 20260614_232133 \
-  --find-matching-tests \
-  --use-claude-agent
-```
-
-Optional flags:
-
-| Flag | Description |
-|------|-------------|
-| `--top-tests N` | Max matches per issue (default: 10) |
-| `--claude-model MODEL` | Claude model for `--use-claude-agent` |
-| `--jira-config PATH` | Explicit JIRA INI config file |
-| `--output FORMAT` | `keys`, `raw`, `details`, `repro-steps`, `matching-tests` |
 
 ## Run record
 
 Each run creates a directory:
 
 ```text
-.claude/agents/zstream/run_record/<run_id>_odf-<version>/
+.claude/workflow/zstream_workflow/run_record/<run_id>_odf-<version>/
   <run_id>.log
   <run_id>_issues.json
 ```
@@ -180,28 +194,23 @@ Each issue accumulates stage data:
 
 | File | Purpose |
 |------|---------|
-| `zstream_issue_verification.py` | CLI orchestrator |
-| `agent_helper.py` | JIRA JQL, fetch, parse ON_QA bugs |
+| `pipeline_cli.py` | CLI entry point → generic `workflow` engine |
+| `executors.py` | Z-stream workflow stage executors |
+| `workflow_context.py` | Z-stream RunContext + factory |
+| `workflow_paths.py` | Paths to pipelines and agent registry |
+| `pipelines/` | Workflow definitions (`zstream_verification.yaml`) |
+| `agents/registry.yaml` | Agent name → run-record stage mapping |
 | `run_record.py` | Timestamped runs, shared issues JSON |
 | `repro_steps_generator.py` | Stage 2: reproduction/verification steps |
 | `topology_mapper.py` | Heuristic fix → topology mapping |
-| `coverage_mapper.py` | Re-export shim → `ocs_ci_test_match.coverage_mapper` |
-| `test_matcher.py` | Re-export shim → `ocs_ci_test_match.matcher` |
-| `claude_test_matcher.py` | Re-export shim → `ocs_ci_test_match.claude_matcher` |
 
 Test matching implementation lives in `.claude/agents/ocs_ci_test_match/`. See that package's README for standalone usage.
 
 ## Test matching
 
-Tests are ranked by:
+Tests are ranked by semantic similarity via the shared **vector DB** (`.claude/vectorDB/`), using reproduction/verification steps, issue summary, components, and coverage areas.
 
-1. **Code coverage area overlap** — maps JIRA components/keywords to upstream repos (noobaa, ocs-operator, rook, ramen, etc.) and preferred `tests/` directories
-2. Direct `@jira("DFBUGS-xxx")` links in test files
-3. Keyword overlap with reproduction/verification steps
-4. Topology and component directory hints
-5. Docstring similarity
-
-The Claude matcher uses a two-phase flow: tool-based search (prose analysis), then structured JSON formatting. On failure it falls back to the vector DB matcher.
+The Claude matcher uses a two-phase flow: tool-based search over `tests/`, then structured JSON formatting. On failure it falls back to the vector DB matcher.
 
 ## Roadmap
 

@@ -11,7 +11,6 @@ from base64 import b64encode
 from typing import Any
 
 from auth import load_jenkins_auth
-from jenkins.url_parser import parse_jenkins_url
 from models import JobRef
 
 log = logging.getLogger(__name__)
@@ -190,8 +189,3 @@ class RestJenkinsClient:
         url = f"{job_ref.base_url}/{job_ref.api_path}/stop"
         crumb = self.get_crumb(job_ref.base_url)
         self._request(url, method="POST", data={}, crumb=crumb)
-
-
-def job_ref_from_url(url: str) -> JobRef:
-    """Parse URL and return JobRef."""
-    return parse_jenkins_url(url)
