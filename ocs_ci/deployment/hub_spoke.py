@@ -54,7 +54,7 @@ from ocs_ci.ocs.rados_utils import (
     get_ec_pool_names,
 )
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
@@ -7524,7 +7524,11 @@ class SpokeODF(SpokeOCP, ABC):
         self.create_operator_group()
 
         if self.is_external:
-            disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
+            self.exec_oc_cmd(
+                constants.PATCH_SPECIFIC_SOURCES_CMD.format(
+                    disable="true", source_name=constants.OPERATOR_CATALOG_SOURCE_NAME
+                ).removeprefix("oc ")
+            )
 
         logger.info("Creating ODF client catalog source")
         self.create_catalog_source()
