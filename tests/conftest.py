@@ -1339,7 +1339,7 @@ def storageclass_factory_fixture(
 
                     # Verify cephblockpool and cephblockpoolradosnamespaces are Ready for RDR setup
                     is_rdr_setup = (
-                        ocsci_config.get("MULTICLUSTER").get("multicluster_mode")
+                        ocsci_config.MULTICLUSTER.get("multicluster_mode")
                         == "regional-dr"
                     )
                     if is_rdr_setup and not erasure_coded:
