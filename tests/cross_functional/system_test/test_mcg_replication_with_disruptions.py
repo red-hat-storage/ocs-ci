@@ -79,7 +79,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
     @pytest.fixture()
     def reduce_replication_delay_for_test(self, add_env_vars_to_noobaa_core):
         """
-        A function-scoped fixture to reduce the replication delay to two minutes.
+        A function-scoped fixture to reduce the replication delay to one minute.
         Changes will be automatically reverted after the test completes.
 
         Args:
@@ -87,7 +87,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         """
         from ocs_ci.ocs import constants as const
 
-        new_delay_in_milliseconds = 2 * 60 * 1000
+        new_delay_in_milliseconds = 60 * 1000
         new_env_var_tuples = [
             (const.BUCKET_REPLICATOR_DELAY_PARAM, new_delay_in_milliseconds),
         ]
@@ -154,6 +154,10 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             prefix=prefix_site_1,
         )
         logger.info(f"Written objects: {written_random_objects}")
+
+        # Wait for replication cycle to complete
+        logger.info("Waiting 90 seconds for replication to complete...")
+        time.sleep(90)
 
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
