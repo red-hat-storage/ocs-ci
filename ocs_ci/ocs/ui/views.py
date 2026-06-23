@@ -1443,19 +1443,17 @@ acm_configuration_4_12 = {
         By.CSS_SELECTOR,
     ),
     "dr-topology-tab": (
-        "//a[@data-test-id='horizontal-link-Topology'] | "
-        "//button[@data-test='horizontal-link-Topology'] | "
-        "//a[normalize-space()='Topology'] | "
-        "//button[normalize-space()='Topology']",
+        "//a[@data-test-id='horizontal-link-Topology']",
         By.XPATH,
     ),
     "dr-topology-cluster-name": (
-        "//*[contains(text(), '{}')]",
+        "//*[@data-type='cluster-node'][.//*[normalize-space()='{}']]",
         By.XPATH,
     ),
     "dr-topology-cluster-click": (
-        "//*[contains(@class,'topology__node__label')]"
-        "//*[contains(text(), '{}')]/..",
+        "//*[@data-type='cluster-node']"
+        "[.//*[normalize-space()='{}']]"
+        "//*[contains(@class,'pf-topology__node__background')]",
         By.XPATH,
     ),
     "dr-topology-sidebar-details-tab": (
@@ -1476,7 +1474,7 @@ acm_configuration_4_12 = {
         By.XPATH,
     ),
     "dr-topology-policy-name": (
-        "//*[contains(text(), '{}')]",
+        "//*[@data-type='pairing-box'][.//*[normalize-space()='{}']]",
         By.XPATH,
     ),
     "dr-topology-policy-click": (
@@ -1511,8 +1509,46 @@ acm_configuration_4_12 = {
         "//button[contains(.,'Cluster name') or contains(.,'Policy')]",
         By.XPATH,
     ),
+    "dr-topology-filter-selected": (
+        "//button[contains(.,'{}')]",
+        By.XPATH,
+    ),
     "dr-topology-filter-option": (
         "//li//*[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "dr-topology-drpc-click": (
+        "//*[contains(@class,'topology__node__label')]"
+        "[.//*[contains(text(),'{}')]]"
+        "[ancestor::*[.//*[contains(text(),'{}')]]]/..",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-table-header-name": (
+        "//th[normalize-space()='Name']",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-table-header-dr-status": (
+        "//th[normalize-space()='DR Status']",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-table-header-policy": (
+        "//th[normalize-space()='Policy']",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-row": (
+        "//tr[.//*[contains(text(), '{}')]]",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-row-name": (
+        "//tr[.//*[normalize-space()='{}']]/td[1]",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-row-status": (
+        "//tr[.//*[normalize-space()='{}']]/td[2]",
+        By.XPATH,
+    ),
+    "dr-topology-sidebar-app-row-policy": (
+        "//tr[.//*[normalize-space()='{}']]/td[3]",
         By.XPATH,
     ),
     "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
