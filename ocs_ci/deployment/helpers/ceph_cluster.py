@@ -656,7 +656,7 @@ def verify_wipe_encrypted_devices_from_other_clusters():
     Checks each ``rook-ceph-osd-prepare`` pod for the following regex
     patterns:
 
-    - ``cleaning encrypted disk ".+" that is part of a different ceph
+    - ``cleaning encrypted disk .+ that is part of a different ceph
       cluster`` — LUKS header detected as belonging to a foreign cluster
     - ``successfully zapped device ".+"`` — low-level wipe succeeded
     - ``completed wiping device ".+" belonging to a different ceph
@@ -671,7 +671,7 @@ def verify_wipe_encrypted_devices_from_other_clusters():
 
     expected_patterns = [
         re.compile(
-            r'cleaning encrypted disk ".+" that is part of a different ceph cluster'
+            r"cleaning encrypted disk .+ that is part of a different ceph cluster"
         ),
         re.compile(r'successfully zapped device ".+"'),
         re.compile(
