@@ -1,6 +1,6 @@
 # FDF Image Mirroring
 
-Guide for mirroring FDF (Fusion Data Foundation) unreleased images from Mgen to a disconnected mirror registry.
+Guide for mirroring FDF (Fusion Data Foundation) unreleased images to a disconnected mirror registry.
 
 ## Overview
 
@@ -93,7 +93,6 @@ fdf-mirror \
 - `--mirror-registry-password`: Mirror registry password (optional, can be provided via CLI or config file)
 - `--configure-registries`: Configure /etc/containers/registries.conf for internal FDF images
 - `--ocsci-conf` or `--conf`: Path to config file (optional, can be used to provide mirror_registry and credentials). Both arguments are supported and can be used interchangeably or together. Multiple config files can be specified and will be merged.
-- `--report`: Path for JUnit report output (generates JUnit XML format test results)
 
 ### Credential Resolution Order
 
@@ -126,29 +125,6 @@ results = mirror_fdf_catalog_via_oc_mirror(
 - The mirroring process includes automatic retry logic (3 attempts with exponential backoff)
 - Overall command timeout is 5 hours (18000 seconds) for large catalog operations
 - Workspace directory: `oc-mirror-workspace/results-{timestamp}` (automatically uses most recent)
-
-## JUnit Reporting
-
-The tool supports generating JUnit XML format test reports for CI/CD integration:
-
-```bash
-fdf-mirror \
-  --catalog-image <catalog-image-url> \
-  --mirror-registry <mirror-registry-url> \
-  --cluster-path <path-to-cluster-dir> \
-  --report /path/to/report.xml
-```
-
-The report includes:
-- Test suite properties (cluster name, OCP version, catalog image, etc.)
-- Test case results (success/failure status)
-- Execution time and timestamps
-- Error details if mirroring fails
-
-This is particularly useful for:
-- Jenkins/GitLab CI pipeline integration
-- Automated test result tracking
-- Failure analysis and debugging
 
 ## Manual Process
 
@@ -306,7 +282,6 @@ The FDF mirroring functionality is integrated into `ocs_ci/deployment/disconnect
    - Creates timestamped result directories: `oc-mirror-workspace/results-{timestamp}`
    - Automatically selects the most recent results directory
    - Preserves previous runs for debugging
-8. **JUnit Reporting**: Optional test result reporting in JUnit XML format for CI/CD integration
 
 ### Function Signature
 
@@ -380,16 +355,6 @@ For detailed logging, set environment variable:
 export LOG_LEVEL=DEBUG
 ```
 
-### Viewing JUnit Reports
-
-If using the `--report` option, view test results:
-```bash
-# View XML report
-cat /path/to/report.xml
-
-# Or use a JUnit viewer tool
-```
-
 ## Best Practices
 
 ### 1. Credential Management
@@ -423,7 +388,6 @@ cat /path/to/report.xml
 - Available on RHEL 7.6+, RHEL 8+, and all OpenShift nodes
 
 ### 6. CI/CD Integration
-- Use `--report` option for JUnit XML output
 - Set appropriate timeouts in CI pipelines (5+ hours recommended)
 - Use `fdf-mirror` command (installed entrypoint)
 - Check exit codes for success/failure status
