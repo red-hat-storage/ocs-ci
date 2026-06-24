@@ -49,17 +49,22 @@ class TestMonCrashRecoveryScenario:
         Verifies system behavior when a crash occurs in the mon-x deployment.
 
         Steps:
-            1. Select a random mon and courrupt the mon database.
-            2. Start the IO workload in the background.
-            3. Scale down the deployments of ocs-operator,rook-ceph-operator and rook-ceph-mon-a.
-            4. Delete the Deployment of rook-ceph-mon-x and pvc rook-ceph-mon-x
-            5. Scale up the operators to replicas = 1
-            6. Verify 'ceph mon dump' command is working.
-            7. Check for the any crash has generated.
-            8. Archive all ceph crashes using 'ceph crash archive-all' command and wait 20 seconds.
-            9. Verify all mon pods are up and running.
+            1. Calculate total number of mons running in the cluster at start.
+            2. Select a random mon and courrupt the mon database.
+            3. Start the IO workload in the background.
+            4. Scale down the deployments of ocs-operator,rook-ceph-operator and rook-ceph-mon-a.
+            5. Delete the Deployment of rook-ceph-mon-x and pvc rook-ceph-mon-x
+            6. Scale up the operators to replicas = 1
+            7. Verify 'ceph mon dump' command is working.
+            8. Check for the any crash has generated.
+            9. Verify all mon pods are up and running (same count as initial, wait up to 10 minutes).
+            10. Archive all ceph crashes using 'ceph crash archive-all' command and wait 20 seconds.
 
         """
+
+        # Step 1: Calculate initial mon count
+        initial_mon_count = len(get_mon_deployments())
+        log.info(f"Initial mon count in the cluster: {initial_mon_count}")
 
         mon_obj = choice(get_mon_deployments())
         mon_name = mon_obj.name
@@ -120,16 +125,20 @@ class TestMonCrashRecoveryScenario:
         crash = toolbox.exec_ceph_cmd("ceph crash ls-new")
         assert not crash, f"Ceph cluster has generated crash {' '.join(crash[0])}"
 
-        # Step 9: Archive all ceph crashes
-        log.info("Archiving all ceph crashes using 'ceph crash archive-all' command")
+        # Step 9: Verify all mon pods are up and running
+        current_mon_count = len(get_mon_deployments())
+        log.info(f"Current mon deployments count: {current_mon_count}")
+
+        assert (
+            current_mon_count == initial_mon_count
+        ), f"Mon count mismatch: Initial={initial_mon_count}, Current={current_mon_count}"
+
+        assert verify_mon_pod_running(
+            initial_mon_count
+        ), f"Not all {initial_mon_count} mon pods are in running state after 10 minutes"
+        log.info(f"All {initial_mon_count} mon pods are up and running successfully")
+
+        # Step 10: Archive all ceph crashes
         toolbox.exec_ceph_cmd("ceph crash archive-all")
         log.info("Waiting 20 seconds after archiving crashes...")
         sleep(20)
-
-        # Step 10: Verify all mon pods are up and running
-        log.info("Verifying all mon pods are up and running...")
-        mon_count = len(get_mon_deployments())
-        assert verify_mon_pod_running(
-            mon_count
-        ), f"Not all {mon_count} mon pods are in running state"
-        log.info(f"All {mon_count} mon pods are up and running")
