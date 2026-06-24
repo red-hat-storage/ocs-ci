@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 @pytest.fixture(scope="class")
 def save_original_state(request):
     """
-    Save the ODF route names and original cluster object and noobaa configurations and store them
-    in the class members
+    Save the ODF route names and original disableRoutes values from storagecluster
+    and noobaa configurations and store them in the class members
     """
 
     # Save original disableRoutes value from the multiCloudGateway section of storagecluster
@@ -99,8 +99,8 @@ class TestBlockExternalAccess(MCGTest):
     def cleanup(self, request):
         def finalizer():
             """
-            This method restores the original settings of storagecluster and noobaa configurations that
-             may have be changed by the tests
+            This method restores the original disableRoutes settings of storagecluster
+            and noobaa configurations that may have been changed by the tests
             """
             # Restore storagecluster disableRoutes configuration
             storagecluster_obj = ocp.OCP(
@@ -118,16 +118,27 @@ class TestBlockExternalAccess(MCGTest):
                     }
                 ]
             else:
-                sc_patch_params = [
-                    {
-                        "op": "remove",
-                        "path": "/spec/multiCloudGateway/disableRoutes",
-                    }
-                ]
-            storagecluster_obj.patch(
-                params=dumps(sc_patch_params),
-                format_type="json",
-            )
+                current_disable_routes = (
+                    storagecluster_obj.get()
+                    .get("spec", {})
+                    .get("multiCloudGateway", {})
+                    .get("disableRoutes", None)
+                )
+                sc_patch_params = (
+                    [
+                        {
+                            "op": "remove",
+                            "path": "/spec/multiCloudGateway/disableRoutes",
+                        }
+                    ]
+                    if current_disable_routes is not None
+                    else None
+                )
+            if sc_patch_params:
+                storagecluster_obj.patch(
+                    params=dumps(sc_patch_params),
+                    format_type="json",
+                )
 
             # Restore noobaa configuration
             noobaa_obj = ocp.OCP(
@@ -340,9 +351,14 @@ class TestBlockExternalAccess(MCGTest):
                 f"disableRoutes with value {disable_routes} found in multiCloudGateway, trying to delete"
             )
             storagecluster_obj.patch(
-                params=[
-                    {"op": "remove", "path": "/spec/multiCloudGateway/disableRoutes"}
-                ],
+                params=dumps(
+                    [
+                        {
+                            "op": "remove",
+                            "path": "/spec/multiCloudGateway/disableRoutes",
+                        }
+                    ]
+                ),
                 format_type="json",
             )
             sc_dict = storagecluster_obj.get()
