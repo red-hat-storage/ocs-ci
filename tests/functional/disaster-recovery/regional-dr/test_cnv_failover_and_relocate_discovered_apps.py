@@ -62,6 +62,14 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 id="custom_pool_replica2_with_compression",
             ),
             # TODO: ADD Polarion ID for Custom SC test
+            pytest.param(
+                True,
+                3,
+                None,
+                # marks=pytest.mark.polarion_id("OCS-XXXX"),
+                id="custom_pool_replica3_without_compression",
+            ),
+            # TODO: ADD Polarion ID for Custom SC test
         ],
     )
     def test_cnv_failover_and_relocate_discovered_apps(
