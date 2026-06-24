@@ -164,6 +164,7 @@ def cnv_custom_storage_class(
                 ec_data_pool_name = pool_obj.name
             else:
                 interface_name = pool_obj.name
+                ec_data_pool_name = None
         config.reset_ctx()
 
         for cluster in get_non_acm_cluster_config():
