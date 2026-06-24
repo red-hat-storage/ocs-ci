@@ -62,6 +62,13 @@ def _clear_agent_colliding_modules(agent_dir: Path) -> None:
             sys.modules.pop(name, None)
 
 
+def ensure_agent_path(agent_dir: Path) -> None:
+    """Prepend agent directory so sibling modules resolve at runtime."""
+    agent_dir_str = str(agent_dir.resolve())
+    if agent_dir_str not in sys.path:
+        sys.path.insert(0, agent_dir_str)
+
+
 def load_agent_module(
     agent_dir: Path, module_file: str, unique_name: str
 ) -> ModuleType:

@@ -263,6 +263,9 @@ def run_test_matching(
             eligible,
             top_n=int(parameters.get("top_n", 10)),
             use_claude=bool(parameters.get("use_claude", False)),
+            backend=parameters.get("backend")
+            or parameters.get("test_match_backend")
+            or "auto",
             model=parameters.get("claude_model"),
         )
         run_record.append_stage_bulk(STAGE_TEST_MATCHING, per_issue)

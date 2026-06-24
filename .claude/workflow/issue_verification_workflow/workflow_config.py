@@ -24,6 +24,7 @@ _AGENT_DEFAULT_ALIASES: dict[str, dict[str, str]] = {
     "test_match": {
         "top_n": "top_n",
         "use_claude": "use_claude",
+        "backend": "test_match_backend",
         "model": "claude_model",
     },
     "ocs_ci_run": {

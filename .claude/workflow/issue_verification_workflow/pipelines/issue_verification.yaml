@@ -28,6 +28,7 @@ defaults:
   skip_if_completed: true
   top_n: 10
   use_claude: false
+  test_match_backend: auto
   refresh_jira: true
   include_fix_prs: true
   live_repro_dry_run: true
@@ -95,6 +96,7 @@ stages:
       issues: $stages.repro_steps.outputs.issues
       top_n: $pipeline.defaults.top_n
       use_claude: $pipeline.defaults.use_claude
+      backend: $pipeline.defaults.test_match_backend
       claude_model: null
     outputs:
       issues: issues

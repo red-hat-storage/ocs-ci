@@ -14,7 +14,8 @@ from models import (
     JIRA_STATUS_ON_QA,
     WRITE_DRY_RUN_DEFAULT,
 )
-from parser import parse_jira_issue
+from parser import adf_to_text, field_name, parse_jira_issue
+from pr_context import collect_fix_pull_requests
 
 log = logging.getLogger(__name__)
 
@@ -96,8 +97,6 @@ def get_issue_with_comments(
     jira_config: str | None = None,
 ) -> dict[str, Any]:
     """Fetch JIRA issue plus comment thread (for Claude/Rovo-style repro analysis)."""
-    from parser import adf_to_text, field_name, parse_jira_issue
-
     client = get_jira_client(jira_config)
     raw = client.get_issue(issue_key)
     issue = parse_jira_issue(raw)
@@ -140,8 +139,6 @@ def get_issue_with_fix_context(
     if not include_fix_prs:
         issue["fix_pull_requests"] = []
         return issue
-
-    from pr_context import collect_fix_pull_requests
 
     client = get_jira_client(jira_config)
     issue["fix_pull_requests"] = collect_fix_pull_requests(issue_key, issue, client)

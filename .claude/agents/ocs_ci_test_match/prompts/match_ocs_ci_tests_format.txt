@@ -7,5 +7,5 @@ Maximum tests to return: {top_n}
 {analysis}
 
 Return ONLY valid JSON with keys: issue_id, matching_test_count, matching_tests, analysis_notes.
-Each item in matching_tests must include: test_node_id, file_path, test_name, relevance_score, match_reasons, coverage_areas (list of area ids), coverage_summary.
+Each item in matching_tests must include: test_node_id, file_path, test_name, relevance_score, match_reasons, coverage_summary.
 Use real pytest node ids from the analysis. Do not invent test paths.

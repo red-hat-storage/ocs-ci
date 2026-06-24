@@ -13,15 +13,42 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from coverage_mapper import (
-    CODE_COVERAGE_AREAS,
-    infer_issue_coverage_areas,
-    infer_test_coverage_areas,
-)
+from coverage_mapper import CODE_COVERAGE_AREAS, infer_test_coverage_areas
 
 log = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+_AGENT_DIR = Path(__file__).resolve().parent
+
+TestMatchBackend = str  # auto | vector_db | claude-cli | claude-sdk
+
+
+def _ensure_agent_path() -> None:
+    agent_dir = str(_AGENT_DIR)
+    if agent_dir not in sys.path:
+        sys.path.insert(0, agent_dir)
+
+
+def _resolve_test_match_backend(
+    backend: str,
+    *,
+    use_claude_sdk: bool = False,
+) -> str:
+    if backend == "vector_db":
+        return "vector_db"
+    if backend == "claude-cli":
+        return "claude-cli"
+    if backend in ("claude-sdk", "sdk") or use_claude_sdk:
+        return "claude-sdk"
+
+    _ensure_agent_path()
+    from claude_cli_matcher import is_claude_cli_available
+
+    if is_claude_cli_available():
+        return "claude-cli"
+    if use_claude_sdk:
+        return "claude-sdk"
+    return "vector_db"
 
 
 @dataclass
@@ -160,9 +187,10 @@ def find_matching_tests_for_issue(
     issue: dict[str, Any],
     *,
     top_n: int = 10,
-    min_score: int = 15,
+    min_score: int = 35,
     score_threshold: float | None = None,
     qdrant_url: str | None = None,
+    candidate_pool: int | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """
     Find ocs-ci tests matching an issue's reproduction/verification plan.
@@ -201,23 +229,24 @@ def find_matching_tests_for_issue(
 
     from retrieval import find_similar_tests  # noqa: E402
 
-    issue_coverage = infer_issue_coverage_areas(issue)
     threshold = score_threshold if score_threshold is not None else min_score / 100
+    pool_size = candidate_pool or max(top_n * 4, 20)
 
     repro = issue.get("stages", {}).get("repro_steps", {}).get("data", {})
     query_parts = [
         issue.get("key", ""),
         issue.get("summary", ""),
-        issue.get("description", ""),
         repro.get("issue_summary", ""),
         repro.get("expected_result", ""),
+        " ".join(repro.get("verification_steps", [])),
+        " ".join(repro.get("reproduction_steps", [])),
     ]
     query = " ".join(filter(None, query_parts))
 
     try:
         results = find_similar_tests(
             query,
-            top_k=top_n,
+            top_k=pool_size,
             qdrant_url=qdrant_url,
             score_threshold=threshold,
             components=issue.get("components"),
@@ -234,6 +263,16 @@ def find_matching_tests_for_issue(
         results = []
 
     matches = _vector_results_to_matches(results)
+    issue_key = issue.get("key", "")
+    for match in matches:
+        if issue_key and issue_key in (match.get("jira_ids") or []):
+            match["relevance_score"] = min(
+                100, int(match.get("relevance_score", 0)) + 25
+            )
+            match.setdefault("match_reasons", []).append(f"linked @jira({issue_key})")
+    matches.sort(key=lambda item: item.get("relevance_score", 0), reverse=True)
+    matches = [m for m in matches if m.get("relevance_score", 0) >= min_score]
+    matches = matches[:top_n]
 
     if not matches:
         log.warning(
@@ -242,24 +281,22 @@ def find_matching_tests_for_issue(
             issue.get("key", ""),
         )
 
-    return matches, issue_coverage
+    return matches, {}
 
 
 def run_test_matching_stage(
     issues: list[dict[str, Any]],
     *,
     top_n: int = 10,
+    backend: str = "auto",
+    model: str | None = None,
+    min_score: int = 35,
 ) -> dict[str, dict[str, Any]]:
     """
-    Stage 3: find matching ocs-ci tests for all issues in the run record.
+    Find matching ocs-ci tests for all issues (Claude agent by default).
 
-    Args:
-        issues (list): Issues from run record (repro_steps stage required)
-        top_n (int): Max matches per issue
-
-    Returns:
-        dict: issue_key -> stage data for append_stage_bulk
-
+    Claude searches tests/ using reproduction + verification steps from stage 2.
+    Set backend=vector_db only for embedding fallback without Claude.
     """
     per_issue: dict[str, dict[str, Any]] = {}
 
@@ -271,24 +308,67 @@ def run_test_matching_stage(
         repro_stage = issue.get("stages", {}).get("repro_steps")
         if not repro_stage or repro_stage.get("status") != "completed":
             log.warning(
-                "Issue %s missing completed repro_steps stage; matching with intake data only",
+                "Issue %s missing completed repro_steps stage; "
+                "matching with intake data only",
                 key,
             )
 
-        matches, issue_coverage = find_matching_tests_for_issue(issue, top_n=top_n)
+        resolved = _resolve_test_match_backend(backend, use_claude_sdk=False)
+
+        if resolved == "claude-cli":
+            _ensure_agent_path()
+            from claude_cli_matcher import match_tests_with_claude_cli
+
+            try:
+                per_issue[key] = match_tests_with_claude_cli(
+                    issue, top_n=top_n, model=model
+                )
+            except Exception as exc:
+                log.error("Claude CLI test matching failed for %s: %s", key, exc)
+                per_issue[key] = _failed_match_payload(key, issue, str(exc))
+            continue
+
+        if resolved == "claude-sdk":
+            _ensure_agent_path()
+            from claude_matcher import match_tests_with_claude_agent_sync
+
+            try:
+                per_issue[key] = match_tests_with_claude_agent_sync(
+                    issue, top_n=top_n, model=model
+                )
+            except Exception as exc:
+                log.error("Claude SDK test matching failed for %s: %s", key, exc)
+                per_issue[key] = _failed_match_payload(key, issue, str(exc))
+            continue
+
+        matches, _ = find_matching_tests_for_issue(
+            issue, top_n=top_n, min_score=min_score
+        )
         per_issue[key] = {
             "issue_id": key,
             "issue_summary": issue.get("summary", ""),
-            "issue_coverage_areas": issue_coverage,
             "matcher": "vector_db",
             "matching_test_count": len(matches),
             "matching_tests": matches,
             "analysis_notes": (
-                "Tests ranked by semantic similarity via the ocs-ci vector DB "
-                "(reproduction/verification steps, summary, components, coverage areas). "
-                "Review top matches before selecting regression scope."
+                "Vector DB fallback (test_match_backend=vector_db). "
+                "Prefer test_match_backend: auto for Claude agent matching."
             ),
         }
-        log.info("Found %d matching tests for %s", len(matches), key)
+        log.info("Found %d vector DB matches for %s", len(matches), key)
 
     return per_issue
+
+
+def _failed_match_payload(
+    key: str, issue: dict[str, Any], error: str
+) -> dict[str, Any]:
+    return {
+        "issue_id": key,
+        "issue_summary": issue.get("summary", ""),
+        "matcher": "claude_agent",
+        "status": "failed",
+        "error": error,
+        "matching_test_count": 0,
+        "matching_tests": [],
+    }

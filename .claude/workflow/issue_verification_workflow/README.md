@@ -194,8 +194,9 @@ Pass pipeline defaults via `--param` or run config YAML:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `top_n` | 10 | Max matching tests per issue |
-| `use_claude` | false | Use Claude Agent SDK for semantic search |
-| `claude_model` | — | Model when `use_claude=true` |
+| `test_match_backend` | auto | `auto` (Claude CLI refines vector DB candidates), `vector_db`, `claude-cli`, `claude-sdk` |
+| `use_claude` | false | Legacy: forces full Claude Agent SDK search when `true` |
+| `claude_model` | — | Claude model for test matching |
 | `deploy_job_url` | — | Jenkins deploy URL for Stage 3 + Stage 5 |
 | `live_repro_dry_run` | true | Stage 3 dry-run plan; set `false` for live oc reproduction |
 | `live_repro_model` | — | Claude model for live reproduction |
@@ -211,15 +212,24 @@ When `live_repro_dry_run: false` and live repro **fails** for an issue (`not_fix
 
 | `dry_run` | true | Stage 5 Jenkins trigger dry-run |
 
-Example with Claude matching:
+Example re-running test matching with Claude CLI refinement (default `test_match_backend: auto`):
 
 ```bash
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
   --pipeline issue_verification \
   --param odf_version=4.22 \
   --run-id 20260622_194551 \
+  --from-stage test_matching
+```
+
+Full Claude Agent SDK search (reads `tests/` with tools; needs `claude-agent-sdk`):
+
+```bash
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
+  --run-id 20260622_194551 \
   --from-stage test_matching \
-  --param use_claude=true
+  --param test_match_backend=claude-sdk
 ```
 
 ## Run record
@@ -299,9 +309,15 @@ Live issue reproduction: `.claude/agents/ocs_ci_live_repro/`.
 
 ## Test matching
 
-Tests are ranked by semantic similarity via the shared **vector DB** (`.claude/vectorDB/`), using reproduction/verification steps, issue summary, components, and coverage areas.
+Stage 4 is a **Claude agent** (default `test_match_backend: auto`):
 
-The Claude matcher uses a two-phase flow: tool-based search over `tests/`, then structured JSON formatting. On failure it falls back to the vector DB matcher.
+1. Passes **reproduction + verification steps** from stage 2 (plus topology, env, fix PRs).
+2. Claude searches `tests/` with **Read / Glob / Grep** and returns ranked pytest node ids.
+3. No heuristic coverage mapper — matching is driven by verification-step similarity.
+
+Requires `claude login` (Claude Code CLI). Run record field `matcher` is `claude_code_cli` or `claude_agent_sdk`.
+
+Set `test_match_backend: vector_db` only for embedding fallback without Claude.
 
 ## Roadmap
 

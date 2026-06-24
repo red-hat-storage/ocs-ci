@@ -14,11 +14,15 @@ import asyncio
 import json
 import logging
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
-from coverage_mapper import infer_issue_coverage_areas
-from models import MATCHER_CLAUDE_AGENT, MATCHER_VECTOR_DB_FALLBACK
+_AGENT_DIR = Path(__file__).resolve().parent
+if str(_AGENT_DIR) not in sys.path:
+    sys.path.insert(0, str(_AGENT_DIR))
+
+from models import MATCHER_CLAUDE_AGENT
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +75,18 @@ def _load_prompt(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _format_fix_pull_requests(issue: dict[str, Any]) -> str:
+    repro = issue.get("stages", {}).get("repro_steps", {}).get("data", {})
+    prs = repro.get("fix_pull_requests") or issue.get("fix_pull_requests") or []
+    if not prs:
+        return "(none)"
+    lines = []
+    for pr in prs[:5]:
+        title = pr.get("title") or pr.get("url") or "?"
+        lines.append(f"- {title} ({pr.get('url', '')})")
+    return "\n".join(lines)
+
+
 def build_match_tests_prompt(
     issue: dict[str, Any],
     *,
@@ -91,34 +107,9 @@ def build_match_tests_prompt(
     """
     repro = issue.get("stages", {}).get("repro_steps", {}).get("data", {})
     env = repro.get("environment_requirements", {})
-    issue_coverage = infer_issue_coverage_areas(issue)
 
     def _bullet_list(items: list[str]) -> str:
         return "\n".join(f"- {item}" for item in items) if items else "- (none)"
-
-    def _coverage_areas_text() -> str:
-        lines = []
-        for detail in issue_coverage.get("area_details", []):
-            lines.append(
-                f"- **{detail['label']}** (`{detail['area_id']}`): "
-                f"upstream={', '.join(detail['upstream_repos'])}; "
-                f"tests under {', '.join(detail['test_dirs'][:3])}"
-            )
-        if not lines:
-            return "- (none inferred)"
-        return "\n".join(lines)
-
-    candidates_text = "(none — search tests/ from scratch)"
-    if heuristic_candidates:
-        lines = []
-        for cand in heuristic_candidates[:15]:
-            areas = ", ".join(cand.get("coverage_area_labels", [])[:2])
-            area_hint = f"; areas={areas}" if areas else ""
-            lines.append(
-                f"- {cand.get('test_node_id')} (score={cand.get('relevance_score')}): "
-                f"{', '.join(cand.get('match_reasons', [])[:2])}{area_hint}"
-            )
-        candidates_text = "\n".join(lines)
 
     env_text = json.dumps(env, indent=2) if env else "(not specified)"
 
@@ -136,15 +127,8 @@ def build_match_tests_prompt(
         reproduction_steps=_bullet_list(repro.get("reproduction_steps", [])),
         expected_result=repro.get("expected_result", ""),
         verification_steps=_bullet_list(repro.get("verification_steps", [])),
-        heuristic_candidates=candidates_text,
+        fix_pull_requests=_format_fix_pull_requests(issue),
         top_n=top_n,
-        code_coverage_areas=_coverage_areas_text(),
-        upstream_repos=", ".join(issue_coverage.get("upstream_repos", []))
-        or "(unknown)",
-        preferred_test_dirs="\n".join(
-            f"- {d}" for d in issue_coverage.get("preferred_test_dirs", [])
-        )
-        or "- (none)",
     )
     system_prompt = _load_prompt("match_ocs_ci_tests_system.txt")
     return system_prompt, user_prompt
@@ -167,6 +151,67 @@ def _extract_json_from_text(text: str) -> dict[str, Any]:
         else:
             raise json.JSONDecodeError("no JSON object found in response", text, 0)
     return json.loads(text)
+
+
+def _parse_node_id(node_id: str) -> tuple[str, str | None, str]:
+    """Split pytest node id into file_path, class_name, test_name."""
+    parts = node_id.split("::")
+    file_path = parts[0] if parts else node_id
+    if len(parts) == 3:
+        return file_path, parts[1], parts[2]
+    if len(parts) == 2:
+        return file_path, None, parts[1]
+    test_name = Path(file_path).stem
+    return file_path, None, test_name
+
+
+def _normalize_match_payload(
+    parsed: dict[str, Any],
+    issue: dict[str, Any],
+    *,
+    matcher: str,
+    analysis_notes: str = "",
+    verification_report: str | None = None,
+) -> dict[str, Any]:
+    """Normalize Claude JSON into run-record test_matching stage data."""
+    issue_key = issue.get("key", "")
+    repro = issue.get("stages", {}).get("repro_steps", {}).get("data", {})
+    matches_in = parsed.get("matching_tests") or []
+    matches: list[dict[str, Any]] = []
+
+    for item in matches_in:
+        node_id = str(item.get("test_node_id") or "").strip()
+        if not node_id:
+            continue
+        file_path, class_name, test_name = _parse_node_id(node_id)
+        if not (REPO_ROOT / file_path).is_file():
+            log.warning("Skipping non-existent test path from Claude: %s", node_id)
+            continue
+        matches.append(
+            {
+                "test_node_id": node_id,
+                "file_path": item.get("file_path") or file_path,
+                "test_name": item.get("test_name") or test_name,
+                "class_name": item.get("class_name", class_name),
+                "relevance_score": int(item.get("relevance_score", 0)),
+                "match_reasons": list(item.get("match_reasons") or []),
+                "coverage_summary": str(item.get("coverage_summary") or ""),
+                "pytest_command": item.get("pytest_command") or f"pytest {node_id}",
+            }
+        )
+
+    payload: dict[str, Any] = {
+        "issue_id": parsed.get("issue_id") or issue_key,
+        "issue_summary": issue.get("summary", repro.get("issue_summary", "")),
+        "matcher": matcher,
+        "matching_test_count": len(matches),
+        "matching_tests": matches,
+        "analysis_notes": analysis_notes or parsed.get("analysis_notes") or "",
+        "verification_steps_used": repro.get("verification_steps") or [],
+    }
+    if verification_report:
+        payload["matching_report"] = verification_report
+    return payload
 
 
 def _parse_structured_response(messages: list[Any]) -> dict[str, Any] | None:
@@ -277,7 +322,6 @@ async def _format_analysis_as_json(
 async def match_tests_with_claude_agent(
     issue: dict[str, Any],
     *,
-    heuristic_candidates: list[dict[str, Any]] | None = None,
     top_n: int = 10,
     model: str | None = None,
     repo_root: Path | None = None,
@@ -306,10 +350,7 @@ async def match_tests_with_claude_agent(
             "Install with: pip install claude-agent-sdk"
         ) from exc
 
-    system_prompt, user_prompt = build_match_tests_prompt(
-        issue, heuristic_candidates=heuristic_candidates, top_n=top_n
-    )
-    issue_coverage = infer_issue_coverage_areas(issue)
+    system_prompt, user_prompt = build_match_tests_prompt(issue, top_n=top_n)
     cwd = repo_root or REPO_ROOT
 
     options = ClaudeAgentOptions(
@@ -350,11 +391,13 @@ async def match_tests_with_claude_agent(
             raise RuntimeError(f"Invalid JSON from Claude agent: {exc}") from exc
 
     parsed.setdefault("issue_id", issue.get("key", ""))
-    parsed.setdefault("matching_test_count", len(parsed.get("matching_tests", [])))
-    parsed["matcher"] = MATCHER_CLAUDE_AGENT
-    parsed["issue_summary"] = issue.get("summary", "")
-    parsed["issue_coverage_areas"] = issue_coverage
-    return parsed
+    return _normalize_match_payload(
+        parsed,
+        issue,
+        matcher=MATCHER_CLAUDE_AGENT,
+        analysis_notes=str(parsed.get("analysis_notes") or ""),
+        verification_report=analysis,
+    )
 
 
 def match_tests_with_claude_agent_sync(
@@ -370,25 +413,10 @@ def run_test_matching_claude_stage(
     *,
     top_n: int = 10,
     model: str | None = None,
-    use_heuristic_hints: bool = True,
 ) -> dict[str, dict[str, Any]]:
     """
-    Stage 3 (Claude): find matching tests for all issues using claude-agent-sdk.
-
-    Optionally seeds Claude with vector DB candidates from matcher.py.
-
-    Args:
-        issues (list): Issues from run record
-        top_n (int): Max matches per issue
-        model (str | None): Claude model override
-        use_heuristic_hints (bool): Pre-run vector DB matcher for candidate hints
-
-    Returns:
-        dict: issue_key -> stage data
-
+    Find matching tests for all issues using claude-agent-sdk (repo search agent).
     """
-    from matcher import find_matching_tests_for_issue
-
     per_issue: dict[str, dict[str, Any]] = {}
 
     for issue in issues:
@@ -396,53 +424,28 @@ def run_test_matching_claude_stage(
         if not key:
             continue
 
-        hints = None
-        if use_heuristic_hints:
-            hints, _ = find_matching_tests_for_issue(issue, top_n=15)
-
         try:
             stage_data = match_tests_with_claude_agent_sync(
                 issue,
-                heuristic_candidates=hints,
                 top_n=top_n,
                 model=model,
             )
             per_issue[key] = stage_data
             log.info(
-                "Claude agent found %d tests for %s",
+                "Claude SDK found %d tests for %s",
                 stage_data.get("matching_test_count", 0),
                 key,
             )
         except Exception as exc:
-            log.error("Claude test matching failed for %s: %s", key, exc)
-            # Fallback to vector DB matcher so the stage still produces results
-            if use_heuristic_hints:
-                log.info("Falling back to vector DB test matcher for %s", key)
-                matches, issue_coverage = find_matching_tests_for_issue(
-                    issue, top_n=top_n
-                )
-                per_issue[key] = {
-                    "issue_id": key,
-                    "issue_summary": issue.get("summary", ""),
-                    "issue_coverage_areas": issue_coverage,
-                    "matcher": MATCHER_VECTOR_DB_FALLBACK,
-                    "claude_error": str(exc),
-                    "matching_test_count": len(matches),
-                    "matching_tests": matches,
-                    "analysis_notes": (
-                        "Claude agent failed; results from vector DB matcher. "
-                        f"Error: {exc}"
-                    ),
-                }
-            else:
-                per_issue[key] = {
-                    "issue_id": key,
-                    "issue_summary": issue.get("summary", ""),
-                    "matcher": MATCHER_CLAUDE_AGENT,
-                    "status": "failed",
-                    "error": str(exc),
-                    "matching_test_count": 0,
-                    "matching_tests": [],
-                }
+            log.error("Claude SDK test matching failed for %s: %s", key, exc)
+            per_issue[key] = {
+                "issue_id": key,
+                "issue_summary": issue.get("summary", ""),
+                "matcher": MATCHER_CLAUDE_AGENT,
+                "status": "failed",
+                "error": str(exc),
+                "matching_test_count": 0,
+                "matching_tests": [],
+            }
 
     return per_issue

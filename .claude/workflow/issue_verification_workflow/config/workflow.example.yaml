@@ -36,6 +36,7 @@ defaults:
   dry_run: true
   top_n: 10
   use_claude: false
+  test_match_backend: auto
   refresh_jira: true
   include_fix_prs: true
   live_repro_dry_run: true
@@ -76,7 +77,7 @@ agents:
 
   test_match:
     top_n: 10
-    use_claude: false
+    backend: auto
     model: null
 
   ocs_ci_run:
