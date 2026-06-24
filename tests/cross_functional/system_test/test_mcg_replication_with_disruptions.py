@@ -189,6 +189,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             prefix=prefix_site_2,
         )
         logger.info(f"Written objects: {written_random_objects}")
+        time.sleep(90)
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
@@ -222,6 +223,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         )
         logger.info(f"Written objects: {written_random_objects}")
 
+        time.sleep(90)
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
@@ -252,7 +254,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         wait_for_pods_to_be_running(
             pod_names=pod_names, namespace=config.ENV_DATA["cluster_namespace"]
         )
-
+        time.sleep(90)
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
@@ -283,7 +285,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             namespace=config.ENV_DATA["cluster_namespace"], timeout=800
         )
         logger.info("Nodes rebooted successfully!!")
-
+        time.sleep(90)
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
