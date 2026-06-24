@@ -155,12 +155,8 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         )
         logger.info(f"Written objects: {written_random_objects}")
 
-        # Wait for replication cycle to complete
-        logger.info("Waiting 90 seconds for replication to complete...")
-        time.sleep(90)
-
         assert compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
+            mcg_obj_session, source_bucket_name, target_bucket_name, timeout=1200
         )
         logger.info("Uni-directional bucket replication working as expected")
 
@@ -189,9 +185,8 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             prefix=prefix_site_2,
         )
         logger.info(f"Written objects: {written_random_objects}")
-        time.sleep(90)
         assert compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
+            mcg_obj_session, source_bucket_name, target_bucket_name, timeout=1200
         )
         logger.info("Bi directional bucket replication working as expected")
 
@@ -223,9 +218,8 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         )
         logger.info(f"Written objects: {written_random_objects}")
 
-        time.sleep(90)
         assert compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
+            mcg_obj_session, source_bucket_name, target_bucket_name, timeout=1200
         )
         logger.info(
             "All the objects retrieved back to s3-compatible bucket on new write!!"
@@ -254,9 +248,8 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         wait_for_pods_to_be_running(
             pod_names=pod_names, namespace=config.ENV_DATA["cluster_namespace"]
         )
-        time.sleep(90)
         assert compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
+            mcg_obj_session, source_bucket_name, target_bucket_name, timeout=1200
         )
         logger.info("Object sync works after the RGW pod restarted!!")
 
@@ -285,9 +278,8 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             namespace=config.ENV_DATA["cluster_namespace"], timeout=800
         )
         logger.info("Nodes rebooted successfully!!")
-        time.sleep(90)
         assert compare_bucket_object_list(
-            mcg_obj_session, source_bucket_name, target_bucket_name
+            mcg_obj_session, source_bucket_name, target_bucket_name, timeout=1200
         )
         logger.info("Objects sync works even when the cluster is rebooted")
 
