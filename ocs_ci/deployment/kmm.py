@@ -59,6 +59,7 @@ class KMMInstaller(object):
     def create_kmm_operatorgroup(self):
         """
         Creates an OperatorGroup for KMM operator
+        KMM operator requires AllNamespaces install mode, so we don't specify targetNamespaces
 
         """
         logger.info("Creating OperatorGroup for KMM operator")
@@ -69,12 +70,12 @@ class KMMInstaller(object):
                 "name": "kernel-module-management",
                 "namespace": self.namespace,
             },
-            "spec": {"targetNamespaces": [self.namespace]},
+            "spec": {},
         }
         operatorgroup_yaml = OCS(**operatorgroup_data)
         try:
             operatorgroup_yaml.create()
-            logger.info("KMM OperatorGroup created successfully")
+            logger.info("KMM OperatorGroup created successfully (AllNamespaces mode)")
         except exceptions.CommandFailed as ef:
             if "kernel-module-management already exists" in str(ef):
                 logger.info("kernel-module-management OperatorGroup already exists")

@@ -200,7 +200,7 @@ class ImageRegistryConfigurator(object):
             f"oc patch configs.imageregistry.operator.openshift.io {self.registry_config_name} "
             "--type=merge "
             '--patch=\'{"spec":{"managementState":"Managed","storage":{"emptyDir":null,'
-            f'"pvc":{{"claim":"{self.pvc_name}"}}}},"replicas":1,"rolloutStrategy":"Recreate"}}\''
+            f'"pvc":{{"claim":"{self.pvc_name}"}}}}, "replicas":1,"rolloutStrategy":"Recreate"}}\''
         )
 
         try:
