@@ -234,7 +234,7 @@ def cmd_search_issue(args: argparse.Namespace) -> int:
 
     issues_path = (
         REPO_ROOT
-        / ".claude/workflow/zstream_workflow/run_record"
+        / ".claude/workflow/issue_verification_workflow/run_record"
         / f"{args.run_id}_odf-{args.odf_version}"
         / f"{args.run_id}_issues.json"
     )

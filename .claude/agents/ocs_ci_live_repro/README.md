@@ -43,8 +43,8 @@ python .claude/agents/ocs_ci_live_repro/verify_cli.py live \
 Stage `live_cluster_verification` runs when `deploy_job_url` is set:
 
 ```bash
-python .claude/workflow/zstream_workflow/pipeline_cli.py run \
-  --pipeline zstream_verification \
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
   --param odf_version=4.22 \
   --param deploy_job_url=https://jenkins.../69391/ \
   --run-id 20260622_194551 \

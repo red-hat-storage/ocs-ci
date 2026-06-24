@@ -5,11 +5,11 @@ Generic workflow orchestrator CLI.
 Usage (from ocs-ci repo root):
 
   python .claude/workflow/workflow_lib/workflow_cli.py run \\
-    --workflows-dir .claude/workflow/zstream_workflow/pipelines \\
-    --registry .claude/workflow/zstream_workflow/agents/registry.yaml \\
+    --workflows-dir .claude/workflow/issue_verification_workflow/pipelines \\
+    --registry .claude/workflow/issue_verification_workflow/agents/registry.yaml \\
     --executors-module executors \\
-    --context-factory workflow_context:ZstreamContextFactory \\
-    --pipeline zstream_verification \\
+    --context-factory workflow_context:IssueVerificationContextFactory \\
+    --pipeline issue_verification \\
     --param odf_version=4.22
 """
 
@@ -82,7 +82,7 @@ def _load_executors(module_path: str) -> dict[str, Any]:
 def _load_context_factory(factory_path: str) -> Any:
     if ":" not in factory_path:
         raise ValueError(
-            "context factory must be module:Class, e.g. workflow_context:ZstreamContextFactory"
+            "context factory must be module:Class, e.g. workflow_context:IssueVerificationContextFactory"
         )
     module_name, class_name = factory_path.split(":", 1)
     module = importlib.import_module(module_name)

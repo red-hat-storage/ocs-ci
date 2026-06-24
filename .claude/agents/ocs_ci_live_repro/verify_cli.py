@@ -24,9 +24,11 @@ from pathlib import Path
 
 _AGENT_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _AGENT_DIR.parents[2]
-_ZSTREAM_DIR = _AGENT_DIR.parents[1] / "workflow" / "zstream_workflow"
+_ISSUE_VERIFICATION_DIR = (
+    _AGENT_DIR.parents[1] / "workflow" / "issue_verification_workflow"
+)
 
-for _path in (_AGENT_DIR, _REPO_ROOT, _ZSTREAM_DIR):
+for _path in (_AGENT_DIR, _REPO_ROOT, _ISSUE_VERIFICATION_DIR):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 

@@ -12,7 +12,7 @@ YAML-driven multi-stage pipelines for OCS-CI. This is **not** an agent — it is
       runner.py
       loader.py
       ...
-    zstream_workflow/       # z-stream Lane C workflow family
+    issue_verification_workflow/  # issue verification workflow family
       pipeline_cli.py       # recommended entry point
       executors.py
       pipelines/
@@ -24,11 +24,11 @@ YAML-driven multi-stage pipelines for OCS-CI. This is **not** an agent — it is
     ocs_ci_run/
 ```
 
-## Run z-stream verification
+## Run issue verification
 
 ```bash
-python .claude/workflow/zstream_workflow/pipeline_cli.py run \
-  --pipeline zstream_verification \
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
   --param odf_version=4.22
 ```
 
@@ -38,14 +38,14 @@ For other workflow families, wire executors and context factory explicitly:
 
 ```bash
 python .claude/workflow/workflow_lib/workflow_cli.py run \
-  --workflows-dir .claude/workflow/zstream_workflow/pipelines \
-  --registry .claude/workflow/zstream_workflow/agents/registry.yaml \
+  --workflows-dir .claude/workflow/issue_verification_workflow/pipelines \
+  --registry .claude/workflow/issue_verification_workflow/agents/registry.yaml \
   --executors-module executors \
-  --context-factory workflow_context:ZstreamContextFactory \
-  --pipeline zstream_verification \
+  --context-factory workflow_context:IssueVerificationContextFactory \
+  --pipeline issue_verification \
   --param odf_version=4.22
 ```
 
-Add `.claude/workflow` to `PYTHONPATH` for `workflow_lib` imports, and `.claude/workflow/zstream_workflow` when using `--executors-module executors`.
+Add `.claude/workflow` to `PYTHONPATH` for `workflow_lib` imports, and `.claude/workflow/issue_verification_workflow` when using `--executors-module executors`.
 
 Capability agents live under `.claude/agents/` — each has its own `AGENT.md`.

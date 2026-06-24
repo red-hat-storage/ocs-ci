@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_ZSTREAM_DIR = Path(__file__).resolve().parent
-_OCS_CI_JIRA_DIR = _ZSTREAM_DIR.parents[2] / "agents" / "ocs_ci_jira"
+_ISSUE_VERIFICATION_DIR = Path(__file__).resolve().parent
+_OCS_CI_JIRA_DIR = _ISSUE_VERIFICATION_DIR.parents[2] / "agents" / "ocs_ci_jira"
 if str(_OCS_CI_JIRA_DIR) not in sys.path:
     sys.path.insert(0, str(_OCS_CI_JIRA_DIR))
 

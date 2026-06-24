@@ -1,4 +1,4 @@
-# Z-Stream Lane C Issue Verification Agent
+# Issue Verification Workflow
 
 Automates ODF z-stream qualification intake for bugs in **ON_QA** status: JIRA fetch → reproduction/verification steps → ocs-ci test matching (via `ocs_ci_test_match` agent).
 
@@ -18,38 +18,38 @@ Each stage appends results to a timestamped **run record** under `run_record/`. 
 
 ### YAML pipeline orchestrator (recommended)
 
-Uses the generic **workflow_lib** engine (`.claude/workflow/workflow_lib/`) with z-stream executors and run record.
+Uses the generic **workflow_lib** engine (`.claude/workflow/workflow_lib/`) with issue verification executors and run record.
 
 ```bash
 # Full pipeline (Stages 1–4; Stage 5 skipped without deploy_job_url)
-python .claude/workflow/zstream_workflow/pipeline_cli.py run \
-  --pipeline zstream_verification \
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
   --param odf_version=4.22
 
 # With cluster verification + Jenkins test execution
-python .claude/workflow/zstream_workflow/pipeline_cli.py run \
-  --pipeline zstream_verification \
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
   --param odf_version=4.22 \
   --param deploy_job_url=https://jenkins.../job/qe-deploy-ocs-cluster/69391/
 
 # Using a YAML run config
-cp .claude/workflow/zstream_workflow/pipelines/configs/zstream_verification.example.yaml \
-   .claude/workflow/zstream_workflow/pipelines/configs/my-odf-4.22.yaml
+cp .claude/workflow/issue_verification_workflow/pipelines/configs/issue_verification.example.yaml \
+   .claude/workflow/issue_verification_workflow/pipelines/configs/my-odf-4.22.yaml
 
-python .claude/workflow/zstream_workflow/pipeline_cli.py run \
-  --pipeline zstream_verification \
-  --config .claude/workflow/zstream_workflow/pipelines/configs/my-odf-4.22.yaml
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
+  --config .claude/workflow/issue_verification_workflow/pipelines/configs/my-odf-4.22.yaml
 ```
 
 Stage 1 JIRA intake uses **`ocs_ci_jira`** agent (`jira_search`).
 
-Agent registry: `agents/registry.yaml`. Workflow: `pipelines/zstream_verification.yaml`.
+Agent registry: `agents/registry.yaml`. Workflow: `pipelines/issue_verification.yaml`.
 
 Resume from a specific stage:
 
 ```bash
-python .claude/workflow/zstream_workflow/pipeline_cli.py run \
-  --pipeline zstream_verification \
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
   --param odf_version=4.22 \
   --param deploy_job_url=https://jenkins.../69391/ \
   --run-id 20260622_194551 \
@@ -71,7 +71,7 @@ Use the ocs-ci virtualenv with atlassian-python-api installed (standard ocs-ci d
 
 ```bash
 pip install atlassian-python-api
-pip install -r .claude/workflow/zstream_workflow/requirements-pipeline.txt
+pip install -r .claude/workflow/issue_verification_workflow/requirements-pipeline.txt
 ```
 
 For semantic test matching with Claude Agent SDK (optional):
@@ -106,8 +106,8 @@ jira:
 Run the full pipeline (Stages 1–3; Stage 4 runs only when `deploy_job_url` is set):
 
 ```bash
-python .claude/workflow/zstream_workflow/pipeline_cli.py run \
-  --pipeline zstream_verification \
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
   --param odf_version=4.22
 ```
 
@@ -147,8 +147,8 @@ When `live_repro_dry_run: false` and live repro **fails** for an issue (`not_fix
 Example with Claude matching:
 
 ```bash
-python .claude/workflow/zstream_workflow/pipeline_cli.py run \
-  --pipeline zstream_verification \
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
   --param odf_version=4.22 \
   --run-id 20260622_194551 \
   --from-stage test_matching \
@@ -160,7 +160,7 @@ python .claude/workflow/zstream_workflow/pipeline_cli.py run \
 Each run creates a directory:
 
 ```text
-.claude/workflow/zstream_workflow/run_record/<run_id>_odf-<version>/
+.claude/workflow/issue_verification_workflow/run_record/<run_id>_odf-<version>/
   <run_id>.log
   <run_id>_issues.json
 ```
@@ -215,10 +215,10 @@ Each issue accumulates stage data:
 | File | Purpose |
 |------|---------|
 | `pipeline_cli.py` | CLI entry point → generic `workflow` engine |
-| `executors.py` | Z-stream workflow stage executors |
-| `workflow_context.py` | Z-stream RunContext + factory |
+| `executors.py` | Issue verification workflow stage executors |
+| `workflow_context.py` | Issue verification RunContext + factory |
 | `workflow_paths.py` | Paths to pipelines and agent registry |
-| `pipelines/` | Workflow definitions (`zstream_verification.yaml`) |
+| `pipelines/` | Workflow definitions (`issue_verification.yaml`) |
 | `agents/registry.yaml` | Agent name → run-record stage mapping |
 | `run_record.py` | Timestamped runs, shared issues JSON |
 | `repro_steps_generator.py` | Stage 2: reproduction/verification steps |

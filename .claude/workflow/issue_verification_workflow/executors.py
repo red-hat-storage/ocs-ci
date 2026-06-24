@@ -1,4 +1,4 @@
-"""Z-stream workflow stage executors."""
+"""Issue verification workflow stage executors."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_ZSTREAM_DIR = Path(__file__).resolve().parent
-_WORKFLOW_DIR = _ZSTREAM_DIR.parent
+_ISSUE_VERIFICATION_DIR = Path(__file__).resolve().parent
+_WORKFLOW_DIR = _ISSUE_VERIFICATION_DIR.parent
 _CLAUDE_DIR = _WORKFLOW_DIR.parent
 _REPO_ROOT = _CLAUDE_DIR.parent
 _AGENTS_DIR = _CLAUDE_DIR / "agents"
@@ -19,7 +19,13 @@ _OCS_CI_RUN_DIR = _AGENTS_DIR / "ocs_ci_run"
 
 _OCS_CI_LIVE_REPRO_DIR = _AGENTS_DIR / "ocs_ci_live_repro"
 
-for _path in (_ZSTREAM_DIR, _WORKFLOW_DIR, _CLAUDE_DIR, _REPO_ROOT, _OCS_CI_JIRA_DIR):
+for _path in (
+    _ISSUE_VERIFICATION_DIR,
+    _WORKFLOW_DIR,
+    _CLAUDE_DIR,
+    _REPO_ROOT,
+    _OCS_CI_JIRA_DIR,
+):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
@@ -39,14 +45,16 @@ from run_record import (
     STAGE_TEST_MATCHING,
 )
 from workflow_lib.import_helpers import load_agent_module
-from workflow_context import ZstreamRunContext
+from workflow_context import IssueVerificationRunContext
 
 log = logging.getLogger(__name__)
 
 
 def _run_record(context: Any) -> Any:
-    if not isinstance(context, ZstreamRunContext):
-        raise TypeError("Z-stream executors require ZstreamRunContext")
+    if not isinstance(context, IssueVerificationRunContext):
+        raise TypeError(
+            "Issue verification executors require IssueVerificationRunContext"
+        )
     return context.run_record
 
 
@@ -75,7 +83,7 @@ def _extract_test_paths(
 
 def run_jira_search(
     parameters: dict[str, Any],
-    context: ZstreamRunContext,
+    context: IssueVerificationRunContext,
 ) -> dict[str, Any]:
     """Stage 1: fetch JIRA issues via ocs_ci_jira and initialize run record."""
     from operations import search_by_params
@@ -104,7 +112,7 @@ def run_jira_search(
 
 def run_repro_steps(
     parameters: dict[str, Any],
-    context: ZstreamRunContext,
+    context: IssueVerificationRunContext,
 ) -> dict[str, Any]:
     """Stage 2: generate reproduction and verification steps."""
     run_record = _run_record(context)
@@ -132,7 +140,7 @@ def run_repro_steps(
 
 def run_live_cluster_verification(
     parameters: dict[str, Any],
-    context: ZstreamRunContext,
+    context: IssueVerificationRunContext,
 ) -> dict[str, Any]:
     """Stage 3: plan live cluster verification (Phase A dry-run)."""
     live_repro_ops = load_agent_module(
@@ -203,7 +211,7 @@ def run_live_cluster_verification(
 
 def run_test_matching(
     parameters: dict[str, Any],
-    context: ZstreamRunContext,
+    context: IssueVerificationRunContext,
 ) -> dict[str, Any]:
     """Stage 4: find matching ocs-ci tests (skips issues that failed manual verification)."""
     test_match_ops = load_agent_module(
@@ -260,7 +268,7 @@ def run_test_matching(
 
 def run_ocs_ci_execution(
     parameters: dict[str, Any],
-    context: ZstreamRunContext,
+    context: IssueVerificationRunContext,
 ) -> dict[str, Any]:
     """Stage 4: trigger Jenkins test runs."""
     job_trigger = load_agent_module(

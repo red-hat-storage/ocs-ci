@@ -1,4 +1,4 @@
-name: zstream_verification
+name: issue_verification
 version: "1"
 description: >
   ODF z-stream Lane C verification — JIRA intake, repro steps, live cluster

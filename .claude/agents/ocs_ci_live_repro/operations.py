@@ -9,7 +9,9 @@ from typing import Any
 
 _AGENT_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _AGENT_DIR.parents[2]
-_ZSTREAM_DIR = _AGENT_DIR.parents[1] / "workflow" / "zstream_workflow"
+_ISSUE_VERIFICATION_DIR = (
+    _AGENT_DIR.parents[1] / "workflow" / "issue_verification_workflow"
+)
 
 for _path in (_AGENT_DIR, _REPO_ROOT):
     if str(_path) not in sys.path:
@@ -37,8 +39,8 @@ def load_issues_from_run_record(
     issue_key: str | None = None,
 ) -> list[dict[str, Any]]:
     """Load issues from a z-stream run record."""
-    if str(_ZSTREAM_DIR) not in sys.path:
-        sys.path.insert(0, str(_ZSTREAM_DIR))
+    if str(_ISSUE_VERIFICATION_DIR) not in sys.path:
+        sys.path.insert(0, str(_ISSUE_VERIFICATION_DIR))
 
     from run_record import RunRecord
 

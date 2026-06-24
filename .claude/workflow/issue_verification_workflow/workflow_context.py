@@ -1,4 +1,4 @@
-"""Z-stream RunContext wrapping RunRecord."""
+"""Issue verification RunContext wrapping RunRecord."""
 
 from __future__ import annotations
 
@@ -6,15 +6,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_ZSTREAM_DIR = Path(__file__).resolve().parent
-if str(_ZSTREAM_DIR) not in sys.path:
-    sys.path.insert(0, str(_ZSTREAM_DIR))
+_ISSUE_VERIFICATION_DIR = Path(__file__).resolve().parent
+if str(_ISSUE_VERIFICATION_DIR) not in sys.path:
+    sys.path.insert(0, str(_ISSUE_VERIFICATION_DIR))
 
 from run_record import RunRecord, normalize_odf_version
 
 
-class ZstreamRunContext:
-    """RunContext implementation for z-stream issue verification workflows."""
+class IssueVerificationRunContext:
+    """RunContext implementation for issue verification workflows."""
 
     create_run_stage = "jira_intake"
 
@@ -51,23 +51,23 @@ class ZstreamRunContext:
         }
 
 
-class ZstreamContextFactory:
-    """Create and load z-stream run contexts."""
+class IssueVerificationContextFactory:
+    """Create and load issue verification run contexts."""
 
     create_run_stage = "jira_intake"
 
-    def load(self, run_id: str) -> ZstreamRunContext:
-        return ZstreamRunContext(RunRecord.load(run_id))
+    def load(self, run_id: str) -> IssueVerificationRunContext:
+        return IssueVerificationRunContext(RunRecord.load(run_id))
 
-    def create(self, parameters: dict[str, Any]) -> ZstreamRunContext:
+    def create(self, parameters: dict[str, Any]) -> IssueVerificationRunContext:
         odf_version = parameters.get("odf_version")
         if not odf_version:
             raise ValueError("odf_version is required to create a new run record")
-        return ZstreamRunContext(RunRecord.create(odf_version))
+        return IssueVerificationRunContext(RunRecord.create(odf_version))
 
 
-def seed_zstream_stage_outputs(
-    context: ZstreamRunContext,
+def seed_issue_verification_stage_outputs(
+    context: IssueVerificationRunContext,
     pipeline: dict[str, Any],
     stage_outputs: dict[str, dict[str, Any]],
     get_record_stage: Any,
@@ -93,4 +93,6 @@ def seed_zstream_stage_outputs(
                 )
 
 
-ZstreamContextFactory.seed_stage_outputs = staticmethod(seed_zstream_stage_outputs)
+IssueVerificationContextFactory.seed_stage_outputs = staticmethod(
+    seed_issue_verification_stage_outputs
+)

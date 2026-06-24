@@ -1,6 +1,6 @@
-# Z-stream workflow run outputs (logs, issue JSON per run)
-workflow/zstream_workflow/run_record/*
-!workflow/zstream_workflow/run_record/.gitkeep
+# Issue verification workflow run outputs (logs, issue JSON per run)
+workflow/issue_verification_workflow/run_record/*
+!workflow/issue_verification_workflow/run_record/.gitkeep
 
 # Shared vector DB local storage (Qdrant data, manifest)
 vectorDB/data/*

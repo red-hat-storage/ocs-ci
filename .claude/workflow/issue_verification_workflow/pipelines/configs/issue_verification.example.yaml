@@ -1,10 +1,10 @@
 # Copy to e.g. pipelines/configs/my-odf-4.22-run.yaml and customize.
 # Local run configs are gitignored — see pipelines/configs/.gitignore
 
-pipeline: zstream_verification
+pipeline: issue_verification
 description: ODF 4.22 z-stream Lane C qualification run
 
-# Pipeline parameters (see pipelines/zstream_verification.yaml)
+# Pipeline parameters (see pipelines/issue_verification.yaml)
 parameters:
   odf_version: "4.22"
   deploy_job_url: https://jenkins-csb-odf-qe-ocs4.dno.corp.redhat.com/job/qe-deploy-ocs-cluster/123/
