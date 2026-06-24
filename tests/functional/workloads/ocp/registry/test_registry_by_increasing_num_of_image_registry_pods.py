@@ -96,7 +96,7 @@ class TestRegistryByIncreasingNumPods(E2ETest):
         validate_registry_pod_status()
         logger.info("All registry pods are in Running state after scale down")
 
-        logger.test_step("Verify no inode filling alert is triggered (BZ 2128263)")
+        # Coverage for Bz 2128263
         logger.info(
             f"Checking for alert: {constants.ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP}"
         )
