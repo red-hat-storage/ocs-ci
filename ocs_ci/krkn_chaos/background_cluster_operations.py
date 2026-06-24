@@ -27,6 +27,7 @@ from contextlib import suppress
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node as node_helpers, ocp
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import pvc as pvc_helpers
@@ -132,6 +133,8 @@ class BackgroundClusterOperations:
 
         # Feature availability tracking
         self._csi_addons_available = True  # Assume available until proven otherwise
+        self._cephx_rotator = None
+        self._last_cephx_rotation_time = 0.0
 
         # Available operations
         self.available_operations = {
@@ -144,6 +147,7 @@ class BackgroundClusterOperations:
             "reclaim_space": self._reclaim_space_operation,
             "volume_replication": self._volume_replication_operation,
             "longevity_operations": self._longevity_operations,
+            "cephx_keyrotation": self._cephx_keyrotation_operation,
         }
 
         # Filter enabled operations
@@ -156,11 +160,87 @@ class BackgroundClusterOperations:
         else:
             self.enabled_operations = self.available_operations
 
+        self._apply_cephx_keyrotation_config()
+
         log.info(
             f"Initialized BackgroundClusterOperations with "
             f"{len(self.enabled_operations)} operation types: "
             f"{list(self.enabled_operations.keys())}"
         )
+
+    def _get_background_ops_config(self) -> Dict[str, Any]:
+        """Return background_cluster_operations from krkn or resiliency config."""
+        env_data = config.ENV_DATA
+        if env_data.get("krkn_config"):
+            return env_data.get("krkn_config", {}).get(
+                "background_cluster_operations", {}
+            )
+        if env_data.get("resiliency_config"):
+            return env_data.get("resiliency_config", {}).get(
+                "background_cluster_operations", {}
+            )
+        return {}
+
+    def _apply_cephx_keyrotation_config(self):
+        """Enable or disable cephx_keyrotation based on config flags."""
+        bg_ops_config = self._get_background_ops_config()
+        cephx_enabled = bg_ops_config.get("enable_cephx_keyrotation", False)
+        operation = self.available_operations["cephx_keyrotation"]
+
+        if cephx_enabled:
+            if "cephx_keyrotation" not in self.enabled_operations:
+                self.enabled_operations["cephx_keyrotation"] = operation
+        else:
+            self.enabled_operations.pop("cephx_keyrotation", None)
+
+    def _is_cephx_keyrotation_enabled(self) -> bool:
+        return self._get_background_ops_config().get("enable_cephx_keyrotation", False)
+
+    def _get_cephx_keys(self) -> List[str]:
+        default_keys = ["rook_daemon"]
+        cephx_keys = self._get_background_ops_config().get("cephx_keys", default_keys)
+        if isinstance(cephx_keys, dict):
+            cephx_keys = cephx_keys.get("components", default_keys)
+        return list(cephx_keys or default_keys)
+
+    def _resolve_cephx_key_config(self, key: str) -> str:
+        from ocs_ci.helpers.cephx_keyrotation_helper import CephXKeyRotation
+
+        if key == "daemon":
+            log.debug(
+                "cephx_keys entry 'daemon' is deprecated; use 'rook_daemon' instead"
+            )
+        return CephXKeyRotation.resolve_cephx_key_config(key)
+
+    def _get_cephx_keyrotation_interval(self) -> int:
+        return int(
+            self._get_background_ops_config().get("cephx_keyrotation_interval", 180)
+        )
+
+    def _get_cephx_rotation_timeout(self) -> int:
+        bg_ops_config = self._get_background_ops_config()
+        cephx_keys = bg_ops_config.get("cephx_keys", {})
+        if isinstance(cephx_keys, dict):
+            return int(cephx_keys.get("rotation_timeout", 1200))
+        return int(bg_ops_config.get("cephx_rotation_timeout", 1200))
+
+    def _get_cephx_keep_prior_key_count_max(self) -> int:
+        cephx_keys = self._get_background_ops_config().get("cephx_keys", {})
+        if isinstance(cephx_keys, dict):
+            return int(cephx_keys.get("keep_prior_key_count_max", 1))
+        return 1
+
+    def _is_cephx_keyrotation_supported(self) -> bool:
+        if config.DEPLOYMENT.get("external_mode"):
+            return False
+        try:
+            from ocs_ci.utility import version
+
+            return (
+                version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
+            )
+        except Exception:
+            return False
 
     def start(self):
         """Start background cluster operations."""
@@ -1080,6 +1160,96 @@ class BackgroundClusterOperations:
             log.error(f"Longevity operations failed: {e}", exc_info=True)
             # Don't raise - allow other background operations to continue
             return
+
+    # ==========================================================================
+    # CephX Key Rotation Operations
+    # ==========================================================================
+
+    def _cephx_keyrotation_operation(self):
+        """
+        Rotate configured CephX key types while workloads and chaos run.
+
+        Picks one component from ``cephx_keys`` per invocation. Use
+        ``rook_daemon`` for MON/MGR/OSD/MDS rotation (legacy alias: ``daemon``).
+        """
+        log.info("Executing CephX key rotation background operation")
+
+        if not self._namespace_exists():
+            return
+
+        if not self._is_cephx_keyrotation_enabled():
+            log.debug("CephX key rotation disabled in config, skipping")
+            return
+
+        if not self._is_cephx_keyrotation_supported():
+            log.info("CephX key rotation not supported on this cluster, skipping")
+            return
+
+        interval = self._get_cephx_keyrotation_interval()
+        elapsed = time.time() - self._last_cephx_rotation_time
+        if self._last_cephx_rotation_time and elapsed < interval:
+            log.info(
+                f"Skipping CephX key rotation; {elapsed:.0f}s elapsed, "
+                f"interval is {interval}s"
+            )
+            return
+
+        from ocs_ci.helpers.cephx_keyrotation_helper import CephXKeyRotation
+        from ocs_ci.utility.utils import ceph_health_check
+
+        cephx_keys = self._get_cephx_keys()
+        valid_keys = CephXKeyRotation.CEPHX_KEY_CONFIG_NAMES
+        cephx_keys = [key for key in cephx_keys if key in valid_keys]
+        if not cephx_keys:
+            log.warning(
+                "No valid cephx_keys configured "
+                f"(expected one of: {', '.join(sorted(valid_keys))})"
+            )
+            return
+
+        config_key = random.choice(cephx_keys)
+        component = self._resolve_cephx_key_config(config_key)
+        timeout = self._get_cephx_rotation_timeout()
+
+        if self._cephx_rotator is None:
+            self._cephx_rotator = CephXKeyRotation(namespace=self.namespace)
+        rotator = self._cephx_rotator
+
+        ceph_health_check(namespace=self.namespace)
+        self._last_cephx_rotation_time = time.time()
+
+        rotate_kwargs = {}
+        if component == rotator.COMPONENT_DAEMON:
+            target = rotator.rotate_rook_daemon_keys()
+            log.info(
+                f"Triggered CephX key rotation for Rook daemons "
+                f"(mon/mgr/osd/mds, target generation={target}, timeout={timeout}s)"
+            )
+            rotator.wait_for_rook_daemon_rotation(target, timeout=timeout)
+            rotator.assert_rook_daemon_generations(target)
+            rotator.log_generation_status("post-rotation Rook daemons")
+        else:
+            if component == rotator.COMPONENT_CSI:
+                rotate_kwargs["keep_prior_key_count_max"] = (
+                    self._get_cephx_keep_prior_key_count_max()
+                )
+            target = rotator.rotate_component_keys(component, **rotate_kwargs)
+            log.info(
+                f"Triggered CephX key rotation for {component} "
+                f"(target generation={target}, timeout={timeout}s)"
+            )
+            rotator.wait_for_rotation(component, target, timeout=timeout)
+
+        ceph_health_check(namespace=self.namespace)
+        # TODO(cephx-keyrotation): Remove this call when rook-ceph-tools reloads
+        # rotated CephX keys without requiring a pod restart.
+        log.warning(
+            "TEMPORARY WORKAROUND (remove when cephx toolbox key-reload is fixed): "
+            "restarting rook-ceph-tools after CephX key rotation for %s",
+            config_key,
+        )
+        rotator.restart_ceph_tools_pod_after_keyrotation()
+        log.info(f"CephX key rotation background operation completed for {config_key}")
 
     # ==========================================================================
     # Helper Methods
