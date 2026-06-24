@@ -3538,8 +3538,10 @@ class IBMCloudIPI(object):
     def restart_nodes(self, nodes, wait=True):
         self.ibmcloud_ipi.restart_nodes(nodes=nodes, wait=wait)
 
-    def restart_nodes_by_stop_and_start(self, nodes, force=True):
-        self.ibmcloud_ipi.restart_nodes_by_stop_and_start(nodes=nodes, force=force)
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
+        self.ibmcloud_ipi.restart_nodes_by_stop_and_start(
+            nodes=nodes, wait=wait, force=force
+        )
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
         self.ibmcloud_ipi.detach_volume(volume=volume, node=node)
