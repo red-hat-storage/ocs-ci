@@ -85,17 +85,28 @@ def run_jira_search(
     parameters: dict[str, Any],
     context: IssueVerificationRunContext,
 ) -> dict[str, Any]:
-    """Stage 1: fetch JIRA issues via ocs_ci_jira and initialize run record."""
-    from operations import search_by_params
-
+    """Stage 1: fetch JIRA issues (explicit list or ON_QA search)."""
     if not parameters.get("odf_version"):
         raise ValueError("jira_search requires odf_version")
 
     run_record = _run_record(context)
-    details, jql = search_by_params(
-        parameters,
-        jira_config=parameters.get("jira_config"),
-    )
+    jira_config = parameters.get("jira_config")
+    issue_keys = parameters.get("issues")
+
+    if issue_keys:
+        from operations import get_issues_by_keys
+
+        details, jql = get_issues_by_keys(issue_keys, jira_config=jira_config)
+        intake_mode = "explicit_issues"
+    else:
+        from operations import search_by_params
+
+        details, jql = search_by_params(
+            parameters,
+            jira_config=jira_config,
+        )
+        intake_mode = "jql_search"
+
     run_record.init_jira_intake(
         details,
         jql=jql,
@@ -107,6 +118,7 @@ def run_jira_search(
         "issues_file": str(run_record.issues_file),
         "issue_count": len(issues),
         "jql": jql,
+        "intake_mode": intake_mode,
     }
 
 

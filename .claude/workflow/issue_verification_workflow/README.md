@@ -7,7 +7,7 @@ Run all commands from the **ocs-ci repository root**.
 ## Pipeline
 
 ```text
-Stage 1: jira_intake                 → Fetch ON_QA bugs for target ODF version
+Stage 1: jira_intake                 → Fetch bugs (ON_QA search or explicit issue list)
 Stage 2: repro_steps                 → Generate reproduction & verification steps
 Stage 3: live_cluster_verification   → Live issue repro on cluster (optional, needs deploy_job_url)
 Stage 4: test_matching               → Find ocs-ci tests (skips issues that failed live repro)
@@ -38,11 +38,34 @@ Keep **secrets** in `data/auth.yaml` (`jira:` and `jenkins:` sections). The work
 
 | Section | Purpose |
 |---------|---------|
-| `parameters` | `odf_version`, `deploy_job_url` — passed to all workflow stages |
+| `parameters` | `odf_version`, `deploy_job_url`, `issues` — passed to all workflow stages |
 | `defaults` | Pipeline defaults (`dry_run`, `top_n`, `live_repro_dry_run`, …) |
 | `agents.*` | Per-agent settings for workflow stages and standalone CLIs |
 | `auth` | Optional paths to credential files (not secrets themselves) |
 | `run` | `run_id`, `from_stage`, `until_stage` for resume/slice runs |
+
+#### Explicit issue list (skip JIRA search)
+
+When `parameters.issues` (or `agents.jira_intake.issues`) is set, stage 1 fetches only those JIRA keys and skips the ON_QA JQL search:
+
+```yaml
+parameters:
+  odf_version: "4.22"
+  issues:
+    - DFBUGS-784
+    - DFBUGS-1234
+```
+
+CLI alternative (comma-separated):
+
+```bash
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
+  --param odf_version=4.22 \
+  --param issues=DFBUGS-784,DFBUGS-1234
+```
+
+Omit `issues` to use the default ON_QA search for the target ODF version.
 
 ### YAML pipeline orchestrator
 

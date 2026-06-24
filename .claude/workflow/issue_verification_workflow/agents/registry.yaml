@@ -1,6 +1,6 @@
 agents:
   jira_search:
-    description: Fetch JIRA issues via ocs_ci_jira (search_by_params)
+    description: Fetch JIRA issues by explicit keys or ON_QA JQL search
     record_stage: jira_intake
 
   repro_steps:

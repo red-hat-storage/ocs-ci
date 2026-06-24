@@ -64,6 +64,20 @@ def _merge_agent_defaults(
     return merged
 
 
+def _merge_issue_parameters(
+    parameters: dict[str, Any],
+    agents: dict[str, Any],
+) -> dict[str, Any]:
+    """Promote agents.jira_intake.issues into parameters when not set at top level."""
+    merged = dict(parameters)
+    if merged.get("issues"):
+        return merged
+    jira_intake = agents.get("jira_intake") or {}
+    if isinstance(jira_intake, dict) and jira_intake.get("issues"):
+        merged["issues"] = jira_intake["issues"]
+    return merged
+
+
 def load_workflow_config(path: Path | str | None = None) -> dict[str, Any]:
     """
     Load shared workflow config.
@@ -87,6 +101,7 @@ def load_workflow_config(path: Path | str | None = None) -> dict[str, Any]:
     parameters = dict(data.get("parameters") or {})
     defaults = dict(data.get("defaults") or {})
     agents = dict(data.get("agents") or {})
+    parameters = _merge_issue_parameters(parameters, agents)
     defaults = _merge_agent_defaults(defaults, agents)
 
     return {

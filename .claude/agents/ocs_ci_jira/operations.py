@@ -23,6 +23,7 @@ __all__ = [
     "build_jql",
     "build_on_qa_jql",
     "get_issue",
+    "get_issues_by_keys",
     "parse_jira_issue",
     "search",
     "search_and_parse",
@@ -85,6 +86,39 @@ def get_issue(
     client = get_jira_client(jira_config)
     raw = client.get_issue(issue_key)
     return parse_jira_issue(raw)
+
+
+def get_issues_by_keys(
+    issue_keys: list[str] | str,
+    *,
+    jira_config: str | None = None,
+) -> tuple[list[dict[str, Any]], str]:
+    """
+    Fetch and parse explicit JIRA issue keys (skips JQL search).
+
+    Args:
+        issue_keys: One key or a list of keys (e.g. DFBUGS-784)
+        jira_config: Optional jira.cfg path
+
+    Returns:
+        tuple: (parsed issues, synthetic JQL for run record)
+
+    """
+    if isinstance(issue_keys, str):
+        if "," in issue_keys:
+            keys = [part.strip() for part in issue_keys.split(",") if part.strip()]
+        else:
+            keys = [issue_keys.strip()] if issue_keys.strip() else []
+    else:
+        keys = [str(key).strip() for key in issue_keys if str(key).strip()]
+
+    if not keys:
+        raise ValueError("issues list is empty")
+
+    parsed = [get_issue(key, jira_config=jira_config) for key in keys]
+    jql = f"key in ({', '.join(keys)})"
+    log.info("Fetched %d explicit JIRA issues", len(parsed))
+    return parsed, jql
 
 
 def search_by_params(

@@ -18,6 +18,11 @@ parameters:
     required: false
     default: false
     description: Run live repro even when environment mismatches issue
+  issues:
+    required: false
+    description: >
+      Explicit JIRA keys to process (e.g. DFBUGS-784). When set, stage 1
+      fetches only these issues and skips ON_QA JQL search.
 
 defaults:
   skip_if_completed: true
@@ -42,6 +47,7 @@ stages:
       odf_version: $pipeline.parameters.odf_version
       status: ON_QA
       jira_config: $pipeline.parameters.jira_config
+      issues: $pipeline.parameters.issues
     outputs:
       issues: issues
 

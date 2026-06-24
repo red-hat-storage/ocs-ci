@@ -26,6 +26,10 @@ parameters:
   # Example:
   # deploy_job_url: https://jenkins-csb-odf-qe-ocs4.dno.corp.redhat.com/job/qe-deploy-ocs-cluster/123/
   force_live_repro: false
+  # Optional: explicit issue list (skips ON_QA JQL search in stage 1)
+  # issues:
+  #   - DFBUGS-784
+  #   - DFBUGS-1234
 
 # Workflow defaults (override issue_verification.yaml defaults)
 defaults:
@@ -47,6 +51,9 @@ agents:
     project: "Data Foundation Bugs"
     issue_type: Bug
     status: ON_QA
+    # Alternative location for explicit issues (parameters.issues takes precedence):
+    # issues:
+    #   - DFBUGS-784
 
   repro_steps:
     refresh_jira: true
