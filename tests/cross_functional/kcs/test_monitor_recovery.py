@@ -724,10 +724,15 @@ class MonitorRecovery(object):
                 logger.debug("Waiting 30s before checking OSD pods")
                 time.sleep(30)
                 osd_pods = get_osd_pods()
-                for osd in osd_pods:
-                    logger.debug(f"Waiting for OSD pod: {osd.name}")
-                    wait_for_resource_state(
-                        resource=osd, state=constants.STATUS_RUNNING, timeout=600
+                logger.info(
+                    f"Verifying {len(osd_pods)} OSD pods with sandbox error recovery"
+                )
+                failed_osd_pods = verify_pods_running(
+                    osd_pods, pod_type="OSD", timeout=600
+                )
+                if failed_osd_pods:
+                    raise AssertionError(
+                        f"OSD deployment {dep_name} recovery failed: {failed_osd_pods}"
                     )
                 logger.info(
                     f"OSD deployment {dep_name}: all {len(osd_pods)} pods are running"
@@ -736,10 +741,15 @@ class MonitorRecovery(object):
                 logger.debug("Waiting 30s before checking MGR pods")
                 time.sleep(30)
                 mgr_pods = get_mgr_pods(namespace=config.ENV_DATA["cluster_namespace"])
-                for mgr_pod in mgr_pods:
-                    logger.debug(f"Waiting for MGR pod: {mgr_pod.name}")
-                    wait_for_resource_state(
-                        resource=mgr_pod, state=constants.STATUS_RUNNING, timeout=600
+                logger.info(
+                    f"Verifying {len(mgr_pods)} MGR pods with sandbox error recovery"
+                )
+                failed_mgr_pods = verify_pods_running(
+                    mgr_pods, pod_type="MGR", timeout=600
+                )
+                if failed_mgr_pods:
+                    raise AssertionError(
+                        f"MGR deployment {dep_name} recovery failed: {failed_mgr_pods}"
                     )
                 logger.info(
                     f"MGR deployment {dep_name}: all {len(mgr_pods)} pods are running"
@@ -748,10 +758,15 @@ class MonitorRecovery(object):
                 logger.debug("Waiting 30s before checking MDS pods")
                 time.sleep(30)
                 mds_pods = get_mds_pods()
-                for mds_pod in mds_pods:
-                    logger.debug(f"Waiting for MDS pod: {mds_pod.name}")
-                    wait_for_resource_state(
-                        resource=mds_pod, state=constants.STATUS_RUNNING, timeout=600
+                logger.info(
+                    f"Verifying {len(mds_pods)} MDS pods with sandbox error recovery"
+                )
+                failed_mds_pods = verify_pods_running(
+                    mds_pods, pod_type="MDS", timeout=600
+                )
+                if failed_mds_pods:
+                    raise AssertionError(
+                        f"MDS deployment {dep_name} recovery failed: {failed_mds_pods}"
                     )
                 logger.info(
                     f"MDS deployment {dep_name}: all {len(mds_pods)} pods are running"
