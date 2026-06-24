@@ -1,15 +1,16 @@
 import logging
 import platform
 import os
+
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import get_ocs_operator_pod
 from ocs_ci.utility import templating
 import pytest
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants
 from ocs_ci.deployment import acm
-from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import (
     exec_cmd,
@@ -26,6 +27,7 @@ from ocs_ci.ocs.exceptions import (
     CephHealthNotRecoveredException,
     CephHealthRecoveredException,
     UnexpectedDeploymentConfiguration,
+    TimeoutExpiredError,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.dr_helpers import (
@@ -124,7 +126,9 @@ def get_virtctl():
 
 
 @pytest.fixture()
-def cnv_custom_storage_class(request, storageclass_factory):
+def cnv_custom_storage_class(
+    request, secret_factory, ceph_pool_factory, teardown_factory
+):
     """
     Uses storage class factory fixture to create a custom RBD storage class and a custom block pool
     with replica-2 to be used by CNV discovered applications
@@ -133,7 +137,7 @@ def cnv_custom_storage_class(request, storageclass_factory):
 
     """
 
-    def factory(replica, compression):
+    def factory(replica, compression, erasure_coded=False):
         """
         Args:
             replica (int):  Replica count used in Pool creation
@@ -143,34 +147,130 @@ def cnv_custom_storage_class(request, storageclass_factory):
 
         pool_name = constants.RDR_CUSTOM_RBD_POOL
         sc_name = constants.RDR_CUSTOM_RBD_STORAGECLASS
+        for cluster in get_non_acm_cluster_config():
+            secret = secret_factory(interface=constants.CEPHBLOCKPOOL)
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            pool_obj = ceph_pool_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                replica=replica,
+                compression=compression,
+                pool_name=pool_name,
+                erasure_coded=erasure_coded,
+            )
+            if erasure_coded:
+                from ocs_ci.ocs.cluster import get_ec_metadata_pool_name
+
+                interface_name = get_ec_metadata_pool_name()
+                ec_data_pool_name = pool_obj.name
+            else:
+                interface_name = pool_obj.name
+        config.reset_ctx()
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            # Create or verify existing SC in all clusters
-            existing_sc_list = get_all_storageclass()
-            if sc_name in existing_sc_list:
-                log.info(f"Storage class {sc_name} already exists")
-            else:
-                try:
-                    sc_obj = storageclass_factory(
-                        sc_name=sc_name,
-                        replica=replica,
-                        compression=compression,
-                        new_rbd_pool=True,
-                        pool_name=pool_name,
-                        mapOptions="krbd:rxbounce",
+            # Wait for CephBlockPool to be Ready
+            pool_obj = OCP(
+                kind=constants.CEPHBLOCKPOOL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            pool_obj.wait_for_resource(
+                condition=constants.STATUS_READY,
+                resource_name=pool_name,
+                column="PHASE",
+                timeout=240,
+            )
+            log.info(f"CephBlockPool '{pool_name}' is Ready")
+            # Wait for the associated CephBlockPoolRadosNamespaces to be Ready
+            radosns_ocp = OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+
+            # Get all radosnamespaces for this pool
+            radosns_list = radosns_ocp.get(
+                selector=f"ocs.openshift.io/cephblockpool-name={pool_name}"
+            )
+            if radosns_list.get("items"):
+                log.info(
+                    f"Found {len(radosns_list['items'])} CephBlockPoolRadosNamespace(s) "
+                    f"for pool '{pool_name}'"
+                )
+                for radosns in radosns_list["items"]:
+                    radosns_name = radosns["metadata"]["name"]
+                    log.info(
+                        f"Waiting for CephBlockPoolRadosNamespace '{radosns_name}' to be Ready"
                     )
-                    if sc_obj is None or sc_obj.name != sc_name:
-                        log.error(
-                            f"Failed to create SC '{sc_name}' or name mismatch: "
-                            f"Created '{sc_obj.name if sc_obj else 'None'}'"
+                    try:
+                        radosns_ocp.wait_for_resource(
+                            condition=constants.STATUS_READY,
+                            resource_name=radosns_name,
+                            column="PHASE",
+                            timeout=180,
                         )
-                    else:
-                        log.info(f"Successfully created custom RBD SC: {sc_name}")
-                        time.sleep(60)
-                except Exception as e:
-                    log.error(f"Error creating SC '{sc_name}': {e}")
-                    raise
+                        log.info(
+                            f"CephBlockPoolRadosNamespace '{radosns_name}' is Ready"
+                        )
+                    except TimeoutExpiredError:
+                        log.warning(
+                            f"CephBlockPoolRadosNamespace '{radosns_name}' did not reach Ready state "
+                            f"within 180 seconds. Deleting ocs-operator pod to trigger reconciliation. "
+                            f"Workaround for the bug DFBUGS-7981"
+                        )
+
+                        ocs_operator_pod = get_ocs_operator_pod(
+                            namespace=config.ENV_DATA["cluster_namespace"]
+                        )
+                        log.info(f"Deleting ocs-operator pod: {ocs_operator_pod.name}")
+                        ocs_operator_pod.delete(wait=True)
+
+                        # Wait for ocs-operator pod to be recreated and running
+                        log.info(
+                            "Waiting for ocs-operator pod to be recreated and reach Running state"
+                        )
+                        ocs_operator_pod_ocp = OCP(
+                            kind=constants.POD,
+                            namespace=config.ENV_DATA["cluster_namespace"],
+                        )
+                        ocs_operator_pod_ocp.wait_for_resource(
+                            condition=constants.STATUS_RUNNING,
+                            selector=constants.OCS_OPERATOR_LABEL,
+                            resource_count=1,
+                            timeout=180,
+                        )
+                        log.info("ocs-operator pod is Running")
+
+                        # Wait for another 540 seconds for the radosnamespace to be Ready.
+                        log.info(
+                            f"Waiting additional 540 seconds for CephBlockPoolRadosNamespace "
+                            f"'{radosns_name}' to be Ready"
+                        )
+                        radosns_ocp.wait_for_resource(
+                            condition=constants.STATUS_READY,
+                            resource_name=radosns_name,
+                            column="PHASE",
+                            timeout=540,
+                        )
+                        log.info(
+                            f"CephBlockPoolRadosNamespace '{radosns_name}' is Ready"
+                        )
+            else:
+                log.info(f"No CephBlockPoolRadosNamespaces found for pool '{pool_name}")
+
+        config.reset_ctx()
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            sc_obj = helpers.create_storage_class(
+                interface_type=constants.CEPHBLOCKPOOL,
+                interface_name=interface_name,
+                secret_name=secret.name,
+                sc_name=sc_name,
+                reclaim_policy=constants.RECLAIM_POLICY_DELETE,
+                mapOptions="krbd:rxbounce",
+                data_pool_name=ec_data_pool_name,
+            )
+            teardown_factory(sc_obj)
+            sc_obj.secret = secret
+            sc_obj.interface_name = interface_name
         config.reset_ctx()
 
     return factory
