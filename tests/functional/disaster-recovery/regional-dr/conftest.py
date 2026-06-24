@@ -123,7 +123,9 @@ def get_virtctl():
 
 
 @pytest.fixture()
-def cnv_custom_storage_class(request, ceph_pool_factory, storageclass_factory):
+def cnv_custom_storage_class(
+    request, secret_factory, ceph_pool_factory, storageclass_factory
+):
     """
     Creates a custom CephBlockPool and RBD StorageClass on both managed
     clusters for CNV discovered-app DR tests.
@@ -269,39 +271,19 @@ def cnv_custom_storage_class(request, ceph_pool_factory, storageclass_factory):
 
     def teardown():
         """
-        Clean up custom pool and SC on all managed clusters.
-
-        Order: delete SC first, then RadosNamespace, then pool.
-        The pool cannot be deleted while it has images or dependents,
-        so we wait with a longer timeout.
+        Delete the custom CephBlockPool and its RadosNamespace
+        on all managed clusters after test execution.
 
         """
         from ocs_ci.ocs import ocp
-        from ocs_ci.ocs.resources.storage_cluster import (
-            delete_storageclass_and_deregister,
-        )
 
         pool_name = constants.RDR_CUSTOM_RBD_POOL
-        sc_name = constants.RDR_CUSTOM_RBD_STORAGECLASS
         radosns_name = f"{pool_name}-builtin-implicit"
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             namespace = config.ENV_DATA["cluster_namespace"]
             cluster_name = config.ENV_DATA.get("cluster_name")
-
-            try:
-                sc_ocp = ocp.OCP(kind=constants.STORAGECLASS)
-                if sc_ocp.is_exist(resource_name=sc_name):
-                    log.info("Deleting SC %s on %s", sc_name, cluster_name)
-                    delete_storageclass_and_deregister(sc_name=sc_name, sc_ocp=sc_ocp)
-            except Exception as e:
-                log.warning(
-                    "Failed to delete SC %s on %s: %s",
-                    sc_name,
-                    cluster_name,
-                    e,
-                )
 
             try:
                 radosns_ocp = ocp.OCP(
