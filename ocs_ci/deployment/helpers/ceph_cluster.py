@@ -301,7 +301,7 @@ def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace=None):
     namespace = namespace or constants.DEFAULT_NAMESPACE
 
     if not disk_name:
-        disk_name = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+        disk_name = detect_simulation_disk_on_node(wnode, namespace)
 
     if not disk_name:
         logger.error("Disk detection failed. Aborting BlueStore simulation.")
@@ -435,7 +435,7 @@ def simulate_full_ceph_bluestore_process_on_wnodes(
     # Step 2: Detect disks once so the same device is used for simulation and cleanup
     disk_map = {}
     for wnode in wnodes:
-        disk = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+        disk = detect_simulation_disk_on_node(wnode, namespace)
         if not disk:
             logger.error(f"Disk detection failed on node {wnode.name}. Aborting.")
             return False
@@ -804,7 +804,7 @@ def simulate_ceph_bluestore_dmcrypt_on_node_disk(wnode, disk_name=None, namespac
     namespace = namespace or constants.DEFAULT_NAMESPACE
 
     if not disk_name:
-        disk_name = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+        disk_name = detect_simulation_disk_on_node(wnode, namespace)
 
     if not disk_name:
         logger.error("Disk detection failed. Aborting encrypted BlueStore simulation.")
@@ -946,7 +946,7 @@ def simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
     # Step 2: Detect disks once so the same device is used for simulation and cleanup
     disk_map = {}
     for wnode in wnodes:
-        disk = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+        disk = detect_simulation_disk_on_node(wnode, namespace)
         if not disk:
             logger.error(f"Disk detection failed on node {wnode.name}. Aborting.")
             return False
