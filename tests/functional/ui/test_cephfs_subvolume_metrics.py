@@ -43,9 +43,9 @@ class TestCephFSSubvolumeMetricsSectionReachable(ManageTest):
     Testcase: Metrics presence and correctness - Subvolume metrics section reachable
     """
 
-    @polarion_id("OCS-8010")
     @tier1
     @ui
+    @polarion_id("OCS-8010")
     def test_cephfs_subvolume_metrics_section_reachable(self, setup_ui_class):
         """
         Navigate to Storage Cluster > Block and File, scroll to the CephFS
@@ -139,6 +139,7 @@ class TestCephFSSubvolumeMetricsLoadWithActiveWorkload(ManageTest):
 
     @tier2
     @ui
+    @polarion_id("OCS-8023")
     def test_cephfs_subvolume_metrics_load_with_active_workload(
         self, setup_ui_class, teardown_project_factory
     ):
@@ -234,6 +235,7 @@ class TestCephFSSubvolumeMetricUnitsAndLabels(ManageTest):
 
     @tier2
     @ui
+    @polarion_id("OCS-8025")
     def test_cephfs_subvolume_metric_units_and_labels(self, setup_ui_class):
         """
         Switch through all three metric options and confirm column headers
