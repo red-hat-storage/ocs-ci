@@ -4,11 +4,12 @@ Test RGW STS (Security Token Service) functionality in OCS-CI
 
 import json
 import logging
+import time
 import uuid
 
 import boto3
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ParamValidationError
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -23,6 +24,7 @@ from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +60,7 @@ class TestRGWSTS:
                     - access_key: AWS access key
                     - secret_key: AWS secret key
         """
-        cephobjectstore_name = OCP(
-            kind=constants.CEPHOBJECTSTORE,
-            resource_name="ocs-storagecluster-cephobjectstore",
-            namespace=config.ENV_DATA["cluster_namespace"],
-        ).get()["metadata"]["name"]
+        cephobjectstore_name = constants.CEPHOBJECTSTORE_NAME
         toolbox = get_ceph_tools_pod()
 
         # Generate unique IDs to avoid conflicts
@@ -138,13 +136,8 @@ class TestRGWSTS:
 
         endpoint, _, _ = rgw_obj.get_credentials()
 
-        iam_client = boto3.client(
-            "iam",
-            endpoint_url=endpoint,
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            region_name=rgw_obj.region,
-            verify=False,
+        iam_client = self.make_boto3_client(
+            "iam", endpoint, rgw_obj.region, access_key, secret_key
         )
 
         return iam_client, {
@@ -152,6 +145,8 @@ class TestRGWSTS:
             "user_id": user_id,
             "access_key": access_key,
             "secret_key": secret_key,
+            "endpoint": endpoint,
+            "region": rgw_obj.region,
         }
 
     def trust_policy_creation(self):
@@ -185,6 +180,21 @@ class TestRGWSTS:
             "Statement": [{"Effect": "Allow", "Action": ["s3:*"], "Resource": "*"}],
         }
         return policy
+
+    def make_boto3_client(
+        self, service, endpoint, region, access_key, secret_key, session_token=None
+    ):
+        """Create a boto3 client with common RGW connection parameters."""
+        kwargs = dict(
+            endpoint_url=endpoint,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=region,
+            verify=False,
+        )
+        if session_token is not None:
+            kwargs["aws_session_token"] = session_token
+        return boto3.client(service, **kwargs)
 
     def put_object(self, s3_client, bucket_name, object_key, data):
         """
@@ -226,7 +236,6 @@ class TestRGWSTS:
     @post_upgrade
     def test_rgw_sts_configuration(
         self,
-        rgw_obj,
         rgw_iam_client_creation,
     ):
         """
@@ -246,13 +255,15 @@ class TestRGWSTS:
 
         # Unpack the fixture return values
         iam_client, rgw_account_and_user = rgw_iam_client_creation
+        endpoint = rgw_account_and_user["endpoint"]
+        region = rgw_account_and_user["region"]
 
+        cephobjectstore_name = constants.CEPHOBJECTSTORE_NAME
         cephobjectstore_obj = OCP(
             kind=constants.CEPHOBJECTSTORE,
-            resource_name="ocs-storagecluster-cephobjectstore",
+            resource_name=cephobjectstore_name,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        cephobjectstore_name = cephobjectstore_obj.get()["metadata"]["name"]
 
         # Step 1: Check EnableSTS parameter in StorageCluster
         logger.info("Step 1: Checking EnableSTS parameter in StorageCluster")
@@ -365,17 +376,9 @@ class TestRGWSTS:
 
             logger.info(f"IAM user access key created: {iam_user_access_key[:10]}...")
 
-            # Get endpoint from rgw_obj
-            endpoint, _, _ = rgw_obj.get_credentials()
-
             # Create S3 client with IAM user credentials
-            iam_user_s3_client = boto3.client(
-                "s3",
-                endpoint_url=endpoint,
-                aws_access_key_id=iam_user_access_key,
-                aws_secret_access_key=iam_user_secret_key,
-                region_name=rgw_obj.region,
-                verify=False,
+            iam_user_s3_client = self.make_boto3_client(
+                "s3", endpoint, region, iam_user_access_key, iam_user_secret_key
             )
 
             # Create bucket
@@ -446,13 +449,8 @@ class TestRGWSTS:
             logger.info(f"Assuming role: {role_arn}")
 
             # Create STS client with IAM user credentials
-            iam_user_sts_client = boto3.client(
-                "sts",
-                endpoint_url=endpoint,
-                aws_access_key_id=iam_user_access_key,
-                aws_secret_access_key=iam_user_secret_key,
-                region_name=rgw_obj.region,
-                verify=False,
+            iam_user_sts_client = self.make_boto3_client(
+                "sts", endpoint, region, iam_user_access_key, iam_user_secret_key
             )
 
             assume_role_response = iam_user_sts_client.assume_role(
@@ -482,14 +480,13 @@ class TestRGWSTS:
 
         try:
             # Create S3 client with assumed role credentials
-            assumed_s3_client = boto3.client(
+            assumed_s3_client = self.make_boto3_client(
                 "s3",
-                endpoint_url=endpoint,
-                aws_access_key_id=assumed_access_key,
-                aws_secret_access_key=assumed_secret_key,
-                aws_session_token=assumed_session_token,
-                region_name=rgw_obj.region,
-                verify=False,
+                endpoint,
+                region,
+                assumed_access_key,
+                assumed_secret_key,
+                assumed_session_token,
             )
 
             # List buckets using assumed role
@@ -524,3 +521,360 @@ class TestRGWSTS:
             raise
 
         logger.info("RGW STS test completed successfully!")
+
+    @tier2
+    def test_rgw_sts_assumerole_scenarios(
+        self,
+        rgw_iam_client_creation,
+    ):
+        """
+        Test RGW STS AssumeRole with correct, incorrect, and missing RoleARN
+
+        Steps:
+            1. Create IAM role with trust policy and attach permission policy
+            2. Fetch credentials using correct AssumeRole name - expect success
+            3. Fetch credentials using incorrect AssumeRole name - expect failure
+            4. Fetch credentials without passing RoleARN - expect failure
+        """
+        iam_client, rgw_account_and_user = rgw_iam_client_creation
+        endpoint = rgw_account_and_user["endpoint"]
+
+        # Step 1: Create IAM user, role, and attach permission policy
+        logger.info("Step 1: Creating IAM user, role, and attaching permission policy")
+        iam_user_name = create_unique_resource_name("sts-iam", "user")
+        iam_client.create_user(UserName=iam_user_name)
+        logger.info(f"IAM user {iam_user_name} created successfully")
+
+        access_key_response = iam_client.create_access_key(UserName=iam_user_name)
+        iam_user_access_key = access_key_response["AccessKey"]["AccessKeyId"]
+        iam_user_secret_key = access_key_response["AccessKey"]["SecretAccessKey"]
+
+        region = rgw_account_and_user["region"]
+
+        # Create STS client with IAM user credentials
+        sts_client = self.make_boto3_client(
+            "sts", endpoint, region, iam_user_access_key, iam_user_secret_key
+        )
+
+        # Create IAM role
+        role_name = create_unique_resource_name("sts-test", "role")
+        trust_policy = self.trust_policy_creation()
+        iam_client.create_role(
+            RoleName=role_name,
+            AssumeRolePolicyDocument=json.dumps(trust_policy),
+        )
+        logger.info(f"IAM role {role_name} created successfully")
+
+        # Attach permission policy to role
+        policy_name = create_unique_resource_name("sts-s3", "policy")
+        iam_client.put_role_policy(
+            RoleName=role_name,
+            PolicyName=policy_name,
+            PolicyDocument=json.dumps(self.role_permission_policy()),
+        )
+        logger.info(f"Permission policy {policy_name} attached to role {role_name}")
+
+        account_id = rgw_account_and_user["account_id"]
+        session_name = create_unique_resource_name("sts", "session")
+
+        # Step 2: Fetch credentials using correct AssumeRole name - expect success
+        logger.info("Step 2: Fetching credentials using correct AssumeRole name")
+        correct_role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
+        logger.info(f"Assuming role with correct ARN: {correct_role_arn}")
+
+        assume_role_response = sts_client.assume_role(
+            RoleArn=correct_role_arn,
+            RoleSessionName=session_name,
+        )
+        credentials = assume_role_response["Credentials"]
+        assert credentials["AccessKeyId"], "AccessKeyId should not be empty"
+        assert credentials["SecretAccessKey"], "SecretAccessKey should not be empty"
+        assert credentials["SessionToken"], "SessionToken should not be empty"
+        logger.info(
+            "Step 2: Credentials fetched successfully with correct AssumeRole name"
+        )
+
+        # Step 3: Fetch credentials using incorrect AssumeRole name - expect failure
+        logger.info("Step 3: Fetching credentials using incorrect AssumeRole name")
+        incorrect_role_arn = f"arn:aws:iam::{account_id}:role/non-existent-role"
+        logger.info(f"Assuming role with incorrect ARN: {incorrect_role_arn}")
+
+        try:
+            sts_client.assume_role(
+                RoleArn=incorrect_role_arn,
+                RoleSessionName=session_name,
+            )
+            assert False, "Expected ClientError for incorrect role ARN but got success"
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            logger.info(
+                f"Step 3: Got expected error for incorrect role ARN - Error code: {error_code}"
+            )
+            assert (
+                error_code == "NoSuchEntity"
+            ), f"Unexpected error code for incorrect role ARN: {error_code}"
+
+        # Step 4: Fetch credentials without passing RoleARN - expect failure
+        logger.info("Step 4: Fetching credentials without passing RoleARN")
+
+        try:
+            sts_client.assume_role(RoleSessionName=session_name)
+            assert False, "Expected error when RoleARN is missing but got success"
+        except ParamValidationError as e:
+            logger.info(
+                f"Step 4: Got expected error when RoleARN is missing - {type(e).__name__}: {e}"
+            )
+
+        logger.info("RGW STS AssumeRole scenarios test completed successfully!")
+
+    @tier2
+    def test_rgw_sts_token_validation(
+        self,
+        rgw_iam_client_creation,
+    ):
+        """
+        Test RGW STS token validation with valid and invalid credentials
+
+        Steps:
+            1. Create IAM user, STS client, IAM role with trust and permission policies
+            2. Create S3 bucket using IAM user credentials
+            3. Fetch credentials using correct AssumeRole name
+            4. Get bucket content using credentials from step 3 - expect success
+            5. Get bucket content using invalid Access Key - expect InvalidAccessKeyId
+            6. AssumeRole with DurationSeconds=0 - expect ParamValidationError
+            7. AssumeRole with negative DurationSeconds - expect ParamValidationError
+            8. Get bucket content using invalid Secret Key - expect SignatureDoesNotMatch
+            9. Get bucket content using invalid Session Token - expect InvalidArgument
+            10. Wait for STS token to expire (DurationSeconds=900, waits ~910s)
+            11. Get bucket content again after token expiration - expect ExpiredToken
+        """
+        iam_client, rgw_account_and_user = rgw_iam_client_creation
+        endpoint = rgw_account_and_user["endpoint"]
+        region = rgw_account_and_user["region"]
+        account_id = rgw_account_and_user["account_id"]
+
+        # Step 1: Create IAM user, STS client, role, and attach permission policy
+        logger.info(
+            "Step 1: Creating IAM user, STS client, role, and attaching permission policy"
+        )
+        iam_user_name = create_unique_resource_name("sts-iam", "user")
+        iam_client.create_user(UserName=iam_user_name)
+        logger.info(f"IAM user {iam_user_name} created successfully")
+
+        iam_client.attach_user_policy(
+            UserName=iam_user_name,
+            PolicyArn="arn:aws:iam::aws:policy/AmazonS3FullAccess",
+        )
+        logger.info(f"S3FullAccess policy attached to IAM user {iam_user_name}")
+
+        access_key_response = iam_client.create_access_key(UserName=iam_user_name)
+        iam_user_access_key = access_key_response["AccessKey"]["AccessKeyId"]
+        iam_user_secret_key = access_key_response["AccessKey"]["SecretAccessKey"]
+
+        iam_user_s3_client = self.make_boto3_client(
+            "s3", endpoint, region, iam_user_access_key, iam_user_secret_key
+        )
+
+        sts_client = self.make_boto3_client(
+            "sts", endpoint, region, iam_user_access_key, iam_user_secret_key
+        )
+
+        role_name = create_unique_resource_name("sts-test", "role")
+        iam_client.create_role(
+            RoleName=role_name,
+            AssumeRolePolicyDocument=json.dumps(self.trust_policy_creation()),
+        )
+        logger.info(f"IAM role {role_name} created successfully")
+
+        policy_name = create_unique_resource_name("sts-s3", "policy")
+        iam_client.put_role_policy(
+            RoleName=role_name,
+            PolicyName=policy_name,
+            PolicyDocument=json.dumps(self.role_permission_policy()),
+        )
+        logger.info(f"Permission policy {policy_name} attached to role {role_name}")
+
+        # Step 2: Create S3 bucket and upload test object
+        logger.info("Step 2: Creating S3 bucket and uploading test object")
+        bucket_name = create_unique_resource_name("sts-test", "bucket")
+        iam_user_s3_client.create_bucket(Bucket=bucket_name)
+        logger.info(f"Bucket {bucket_name} created successfully")
+        test_object_key = "sts-validation-object.txt"
+        test_object_data = b"Test data for STS credential validation"
+        self.put_object(
+            iam_user_s3_client, bucket_name, test_object_key, test_object_data
+        )
+        logger.info(f"Test object {test_object_key} uploaded successfully")
+
+        # Step 3: Fetch credentials using correct AssumeRole name
+        # DurationSeconds=900 is the minimum allowed by botocore and RGW
+        logger.info("Step 3: Fetching credentials using correct AssumeRole name")
+        role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
+        session_name = create_unique_resource_name("sts", "session")
+        token_duration = 900
+
+        assume_role_response = sts_client.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName=session_name,
+            DurationSeconds=token_duration,
+        )
+        credentials = assume_role_response["Credentials"]
+        assumed_access_key = credentials["AccessKeyId"]
+        assumed_secret_key = credentials["SecretAccessKey"]
+        assumed_session_token = credentials["SessionToken"]
+        logger.info(
+            f"Credentials fetched successfully, token expires in {token_duration}s"
+        )
+
+        # Step 4: Put and get object using valid assumed role credentials - expect success
+        logger.info(
+            "Step 4: Performing put and get operations using valid assumed role credentials"
+        )
+        assumed_s3_client = self.make_boto3_client(
+            "s3",
+            endpoint,
+            region,
+            assumed_access_key,
+            assumed_secret_key,
+            assumed_session_token,
+        )
+        assumed_object_key = "sts-assumed-role-object.txt"
+        assumed_object_data = b"Test data written using assumed role credentials"
+        self.put_object(
+            assumed_s3_client, bucket_name, assumed_object_key, assumed_object_data
+        )
+        get_response = assumed_s3_client.get_object(
+            Bucket=bucket_name, Key=assumed_object_key
+        )
+        retrieved_data = get_response["Body"].read()
+        assert (
+            retrieved_data == assumed_object_data
+        ), "Object content mismatch when reading with assumed role credentials"
+        logger.info(
+            "Step 4: Put and get operations succeeded with valid assumed role credentials"
+        )
+
+        # Step 5: Get bucket content using invalid Access Key - expect failure
+        logger.info("Step 5: Listing bucket content using invalid Access Key")
+        invalid_access_key_client = self.make_boto3_client(
+            "s3",
+            endpoint,
+            region,
+            "INVALIDACCESSKEY00000",
+            assumed_secret_key,
+            assumed_session_token,
+        )
+        try:
+            invalid_access_key_client.list_objects_v2(Bucket=bucket_name)
+            assert False, "Expected error with invalid Access Key but got success"
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            logger.info(
+                f"Step 5: Got expected error with invalid Access Key - Error code: {error_code}"
+            )
+            assert (
+                error_code == "InvalidAccessKeyId"
+            ), f"Unexpected error code for invalid access key: {error_code}"
+
+        # Step 6: AssumeRole with DurationSeconds=0 - expect failure
+        logger.info("Step 6: AssumeRole with DurationSeconds=0")
+        try:
+            sts_client.assume_role(
+                RoleArn=role_arn,
+                RoleSessionName=session_name,
+                DurationSeconds=0,
+            )
+            assert False, "Expected error with DurationSeconds=0 but got success"
+        except ParamValidationError as e:
+            logger.info(
+                f"Step 6: Got expected error with DurationSeconds=0 - {type(e).__name__}: {e}"
+            )
+
+        # Step 7: AssumeRole with negative DurationSeconds - expect failure
+        logger.info("Step 7: AssumeRole with negative DurationSeconds")
+        try:
+            sts_client.assume_role(
+                RoleArn=role_arn,
+                RoleSessionName=session_name,
+                DurationSeconds=-1,
+            )
+            assert False, "Expected error with negative DurationSeconds but got success"
+        except ParamValidationError as e:
+            logger.info(
+                f"Step 7: Got expected error with negative DurationSeconds - {type(e).__name__}: {e}"
+            )
+
+        # Step 8: Get bucket content using invalid Secret Key - expect failure
+        logger.info("Step 8: Listing bucket content using invalid Secret Key")
+        invalid_secret_key_client = self.make_boto3_client(
+            "s3",
+            endpoint,
+            region,
+            assumed_access_key,
+            "invalidsecretkey0000000000000000000000000",  # pragma: allowlist secret
+            assumed_session_token,
+        )
+        try:
+            invalid_secret_key_client.list_objects_v2(Bucket=bucket_name)
+            assert False, "Expected error with invalid Secret Key but got success"
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            logger.info(
+                f"Step 8: Got expected error with invalid Secret Key - Error code: {error_code}"
+            )
+            assert (
+                error_code == "SignatureDoesNotMatch"
+            ), f"Unexpected error code for invalid secret key: {error_code}"
+
+        # Step 9: Get bucket content using invalid Session Token - expect failure
+        logger.info("Step 9: Listing bucket content using invalid Session Token")
+        invalid_token_client = self.make_boto3_client(
+            "s3",
+            endpoint,
+            region,
+            assumed_access_key,
+            assumed_secret_key,
+            "InvalidSessionToken00000000000000",
+        )
+        try:
+            invalid_token_client.list_objects_v2(Bucket=bucket_name)
+            assert False, "Expected error with invalid Session Token but got success"
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            logger.info(
+                f"Step 9: Got expected error with invalid Session Token - Error code: {error_code}"
+            )
+            assert (
+                error_code == "InvalidArgument"
+            ), f"Unexpected error code for invalid session token: {error_code}"
+
+        # Step 10: Wait for STS token to expire
+        logger.info(f"Step 10: Waiting {token_duration + 10}s for STS token to expire")
+        time.sleep(token_duration + 10)
+        logger.info("Step 10: Token expiration wait complete")
+
+        # Step 11: Get bucket content after token expiration - expect failure
+        # Use TimeoutSampler to retry for up to 120s to handle infra timing jitter
+        logger.info("Step 11: Listing bucket content after token expiration")
+
+        def _is_token_expired():
+            try:
+                assumed_s3_client.list_objects_v2(Bucket=bucket_name)
+                return False
+            except ClientError as e:
+                error_code = e.response["Error"]["Code"]
+                if error_code == "ExpiredToken":
+                    logger.info(
+                        f"Step 11: Got expected error after token expiration - "
+                        f"Error code: {error_code}"
+                    )
+                    return True
+                raise
+
+        for token_expired in TimeoutSampler(
+            timeout=120, sleep=10, func=_is_token_expired
+        ):
+            if token_expired:
+                break
+
+        logger.info("RGW STS token validation test completed successfully!")
