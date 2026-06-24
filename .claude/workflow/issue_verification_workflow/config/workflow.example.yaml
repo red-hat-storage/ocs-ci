@@ -37,6 +37,7 @@ defaults:
   top_n: 10
   use_claude: false
   refresh_jira: true
+  include_fix_prs: true
   live_repro_dry_run: true
   skip_on_env_mismatch: true
   oc_command_path: oc
@@ -44,6 +45,9 @@ defaults:
   live_repro_max_turns: 40
   live_repro_backend: auto
   tests_per_issue: 1
+  repro_steps_backend: auto
+  repro_claude_model: null
+  repro_claude_max_turns: 20
 
 # Per-agent settings (workflow + standalone agent CLIs)
 agents:
@@ -57,6 +61,10 @@ agents:
 
   repro_steps:
     refresh_jira: true
+    include_fix_prs: true
+    backend: auto
+    model: null
+    max_turns: 20
 
   live_repro:
     dry_run: true

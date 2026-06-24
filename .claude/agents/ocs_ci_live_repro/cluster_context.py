@@ -9,9 +9,7 @@ from typing import Any
 
 _AGENT_DIR = Path(__file__).resolve().parent
 _OCS_CI_RUN_DIR = _AGENT_DIR.parent / "ocs_ci_run"
-
-if str(_OCS_CI_RUN_DIR) not in sys.path:
-    sys.path.insert(0, str(_OCS_CI_RUN_DIR))
+_WORKFLOW_DIR = _AGENT_DIR.parents[1] / "workflow"
 
 log = logging.getLogger(__name__)
 
@@ -27,15 +25,24 @@ def resolve_cluster_profile(
 
     Phase A (dry_run) fetches Jenkins build metadata only — no kubeconfig download.
     """
-    from job_resolver import resolve_job
-
     if not deploy_job_url:
         raise ValueError("deploy_job_url is required to resolve cluster profile")
+
+    if str(_WORKFLOW_DIR) not in sys.path:
+        sys.path.insert(0, str(_WORKFLOW_DIR))
+
+    from workflow_lib.import_helpers import load_agent_module
+
+    job_resolver = load_agent_module(
+        _OCS_CI_RUN_DIR,
+        "job_resolver.py",
+        "ocs_ci_run_job_resolver",
+    )
 
     fetch_kubeconfig = (
         not dry_run if download_kubeconfig is None else download_kubeconfig
     )
-    profile = resolve_job(
+    profile = job_resolver.resolve_job(
         deploy_job_url,
         download_kubeconfig=fetch_kubeconfig,
     )

@@ -8,7 +8,7 @@ Run all commands from the **ocs-ci repository root**.
 
 ```text
 Stage 1: jira_intake                 → Fetch bugs (ON_QA search or explicit issue list)
-Stage 2: repro_steps                 → Generate reproduction & verification steps
+Stage 2: repro_steps                 → Claude + JIRA context (Rovo-equivalent repro/verification steps)
 Stage 3: live_cluster_verification   → Live issue repro on cluster (optional, needs deploy_job_url)
 Stage 4: test_matching               → Find ocs-ci tests (skips issues that failed live repro)
 Stage 5: ocs_ci_execution            → Trigger matched tests on Jenkins (ocs_ci_run agent)
@@ -122,7 +122,12 @@ Use the ocs-ci virtualenv with atlassian-python-api installed (standard ocs-ci d
 ```bash
 pip install atlassian-python-api
 pip install -r .claude/workflow/issue_verification_workflow/requirements-pipeline.txt
+pip install -r .claude/workflow/issue_verification_workflow/requirements-repro-agent.txt
 ```
+
+Stage 2 **requires Claude** (`claude login` via Claude Code CLI, or `claude-agent-sdk`).
+There is no public Atlassian Rovo API; Claude analyzes JIRA description + comments
+and **linked fix pull requests** to produce Rovo-quality reproduction/verification steps.
 
 For semantic test matching with Claude Agent SDK (optional):
 
@@ -150,6 +155,18 @@ jira:
 ```
 
 **Note:** Existing ocs-ci code (`utils.py`, `rados_utils.py`) calls `JiraHelper()` without extended sources and keeps the legacy path: `AUTH.jira` → `/etc/jira.cfg` only.
+
+### Fix pull requests (stage 2)
+
+When `include_fix_prs: true` (default), stage 2 discovers GitHub PRs linked to each JIRA issue:
+
+1. JIRA **remote issue links** (GitHub development panel / manual links)
+2. GitHub PR URLs in the issue **description** and **comments**
+
+PR title, body, and changed files are fetched via `gh pr view` or the GitHub API when
+`gh` / `GITHUB_TOKEN` / `GH_TOKEN` is available (optional — URLs alone still help Claude).
+
+Disable with `agents.repro_steps.include_fix_prs: false` or `defaults.include_fix_prs: false`.
 
 ## Quick start
 
@@ -272,7 +289,10 @@ Each issue accumulates stage data:
 | `pipelines/` | Workflow definitions (`issue_verification.yaml`) |
 | `agents/registry.yaml` | Agent name → run-record stage mapping |
 | `run_record.py` | Timestamped runs, shared issues JSON |
-| `repro_steps_generator.py` | Stage 2: reproduction/verification steps |
+| `repro_steps_generator.py` | Stage 2 orchestration (JIRA refresh + fix PRs + Claude) |
+| `claude_repro_generator.py` | Mandatory Claude repro/verification step generation |
+| `ocs_ci_jira/pr_context.py` | JIRA remote links + GitHub PR enrichment |
+| `prompts/repro_steps_*.txt` | Claude prompts (Rovo-equivalent analysis) |
 | `topology_mapper.py` | Heuristic fix → topology mapping |
 
 Live issue reproduction: `.claude/agents/ocs_ci_live_repro/`.

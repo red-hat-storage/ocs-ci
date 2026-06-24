@@ -33,6 +33,10 @@ _AGENT_DEFAULT_ALIASES: dict[str, dict[str, str]] = {
     },
     "repro_steps": {
         "refresh_jira": "refresh_jira",
+        "include_fix_prs": "include_fix_prs",
+        "backend": "repro_steps_backend",
+        "model": "repro_claude_model",
+        "max_turns": "repro_claude_max_turns",
     },
 }
 

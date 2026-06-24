@@ -181,8 +181,23 @@ def find_matching_tests_for_issue(
 
     """
     vector_db_dir = Path(__file__).resolve().parents[2] / "vectorDB"
-    if str(vector_db_dir) not in sys.path:
-        sys.path.insert(0, str(vector_db_dir))
+    vector_db_dir_str = str(vector_db_dir)
+
+    config_mod = sys.modules.get("config")
+    config_file = getattr(config_mod, "__file__", "") or ""
+    if config_mod is not None and not config_file.startswith(vector_db_dir_str):
+        sys.modules.pop("config", None)
+        for shadowed in ("retrieval", "code_parser", "embedder", "qdrant_store"):
+            mod = sys.modules.get(shadowed)
+            mod_file = getattr(mod, "__file__", "") or ""
+            if mod_file.startswith(vector_db_dir_str):
+                sys.modules.pop(shadowed, None)
+
+    if vector_db_dir_str not in sys.path:
+        sys.path.insert(0, vector_db_dir_str)
+    elif sys.path[0] != vector_db_dir_str:
+        sys.path.remove(vector_db_dir_str)
+        sys.path.insert(0, vector_db_dir_str)
 
     from retrieval import find_similar_tests  # noqa: E402
 

@@ -13,6 +13,7 @@ You interact with JIRA for OCS-CI qualification and triage workflows.
 2. **search** — JQL search with parsed issue details
 3. **search_by_params** — structured search (project, status, odf_version)
 4. **add_comment** — post comment (dry-run by default)
+5. **fix PR context** — discover GitHub PRs from remote links + issue text (`get_issue_with_fix_context`)
 
 ## Tools
 

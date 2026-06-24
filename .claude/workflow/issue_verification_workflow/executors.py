@@ -24,7 +24,6 @@ for _path in (
     _WORKFLOW_DIR,
     _CLAUDE_DIR,
     _REPO_ROOT,
-    _OCS_CI_JIRA_DIR,
 ):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
@@ -93,15 +92,17 @@ def run_jira_search(
     jira_config = parameters.get("jira_config")
     issue_keys = parameters.get("issues")
 
-    if issue_keys:
-        from operations import get_issues_by_keys
+    jira_ops = load_agent_module(
+        _OCS_CI_JIRA_DIR,
+        "operations.py",
+        "ocs_ci_jira_operations",
+    )
 
-        details, jql = get_issues_by_keys(issue_keys, jira_config=jira_config)
+    if issue_keys:
+        details, jql = jira_ops.get_issues_by_keys(issue_keys, jira_config=jira_config)
         intake_mode = "explicit_issues"
     else:
-        from operations import search_by_params
-
-        details, jql = search_by_params(
+        details, jql = jira_ops.search_by_params(
             parameters,
             jira_config=jira_config,
         )
@@ -141,6 +142,10 @@ def run_repro_steps(
         odf_version,
         jira_config=parameters.get("jira_config"),
         refresh_jira=bool(parameters.get("refresh_jira", True)),
+        include_fix_prs=bool(parameters.get("include_fix_prs", True)),
+        claude_model=parameters.get("claude_model"),
+        backend=parameters.get("backend") or "auto",
+        max_turns=int(parameters.get("max_turns", 20)),
     )
     run_record.append_stage_bulk(STAGE_REPRO_STEPS, per_issue)
     return {

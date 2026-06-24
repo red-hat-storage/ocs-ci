@@ -23,6 +23,8 @@ __all__ = [
     "build_jql",
     "build_on_qa_jql",
     "get_issue",
+    "get_issue_with_comments",
+    "get_issue_with_fix_context",
     "get_issues_by_keys",
     "parse_jira_issue",
     "search",
@@ -86,6 +88,64 @@ def get_issue(
     client = get_jira_client(jira_config)
     raw = client.get_issue(issue_key)
     return parse_jira_issue(raw)
+
+
+def get_issue_with_comments(
+    issue_key: str,
+    *,
+    jira_config: str | None = None,
+) -> dict[str, Any]:
+    """Fetch JIRA issue plus comment thread (for Claude/Rovo-style repro analysis)."""
+    from parser import adf_to_text, field_name, parse_jira_issue
+
+    client = get_jira_client(jira_config)
+    raw = client.get_issue(issue_key)
+    issue = parse_jira_issue(raw)
+
+    comments: list[dict[str, Any]] = []
+    try:
+        raw_data = client.jira.issue_get_comments(issue_key)
+        for comment in raw_data.get("comments", []):
+            body = comment.get("body", "")
+            if isinstance(body, dict):
+                body = adf_to_text(body)
+            comments.append(
+                {
+                    "author": field_name(comment.get("author")),
+                    "created": comment.get("created", "") or "",
+                    "body": str(body).strip(),
+                }
+            )
+    except Exception as exc:
+        log.warning("Could not fetch comments for %s: %s", issue_key, exc)
+
+    issue["comments"] = comments
+    return issue
+
+
+def get_issue_with_fix_context(
+    issue_key: str,
+    *,
+    jira_config: str | None = None,
+    include_fix_prs: bool = True,
+) -> dict[str, Any]:
+    """
+    Fetch JIRA issue with comments and linked fix pull requests.
+
+    Fix PRs are discovered from JIRA remote links plus GitHub URLs in
+    description/comments. PR title/body/files are enriched via ``gh`` or
+    GitHub API when credentials are available.
+    """
+    issue = get_issue_with_comments(issue_key, jira_config=jira_config)
+    if not include_fix_prs:
+        issue["fix_pull_requests"] = []
+        return issue
+
+    from pr_context import collect_fix_pull_requests
+
+    client = get_jira_client(jira_config)
+    issue["fix_pull_requests"] = collect_fix_pull_requests(issue_key, issue, client)
+    return issue
 
 
 def get_issues_by_keys(

@@ -17,11 +17,13 @@ for _path in (_AGENT_DIR, _REPO_ROOT):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-from cluster_context import resolve_cluster_profile
-from claude_verifier import live_verify_issue
+# Import live_repro siblings before cluster_context (cluster_context adds ocs_ci_run
+# to sys.path and would shadow this package's ``models`` module).
 from compatibility import assess_compatibility
 from dry_run_verifier import dry_run_verify_issue
+from claude_verifier import live_verify_issue
 from models import STAGE_LIVE_CLUSTER_VERIFICATION
+from cluster_context import resolve_cluster_profile
 
 log = logging.getLogger(__name__)
 

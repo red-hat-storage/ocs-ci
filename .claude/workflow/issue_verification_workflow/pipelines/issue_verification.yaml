@@ -29,6 +29,7 @@ defaults:
   top_n: 10
   use_claude: false
   refresh_jira: true
+  include_fix_prs: true
   live_repro_dry_run: true
   skip_on_env_mismatch: true
   oc_command_path: oc
@@ -37,6 +38,9 @@ defaults:
   live_repro_backend: auto
   dry_run: true
   tests_per_issue: 1
+  repro_steps_backend: auto
+  repro_claude_model: null
+  repro_claude_max_turns: 20
 
 stages:
   jira_intake:
@@ -59,6 +63,10 @@ stages:
       odf_version: $pipeline.parameters.odf_version
       jira_config: $pipeline.parameters.jira_config
       refresh_jira: $pipeline.defaults.refresh_jira
+      include_fix_prs: $pipeline.defaults.include_fix_prs
+      claude_model: $pipeline.defaults.repro_claude_model
+      backend: $pipeline.defaults.repro_steps_backend
+      max_turns: $pipeline.defaults.repro_claude_max_turns
     outputs:
       issues: issues
 
