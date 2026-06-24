@@ -355,6 +355,7 @@ def generate_repro_steps_for_issue(
         "analysis_notes": analysis_notes,
         "generator": claude_result.get("generator"),
         "rovo_equivalent": True,
+        "claude_session_id": claude_result.get("claude_session_id"),
         "jira_comment_count": len(enriched.get("comments") or []),
         "fix_pr_count": len(enriched.get("fix_pull_requests") or []),
         "fix_pull_requests": [

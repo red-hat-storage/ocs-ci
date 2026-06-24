@@ -54,20 +54,39 @@ def parse_build_description(description: str) -> dict[str, Any]:
     }
 
 
+def _cluster_conf_indicates_external_mode(cluster_conf: str, yaml_config: str) -> bool:
+    """True only for ODF external-mode CLUSTER_CONF paths, not vault/noobaa external."""
+    combined = f"{cluster_conf} {yaml_config}".lower()
+    if "external_rhcs" in combined or "external_rhcs_cluster" in combined:
+        return True
+    if re.search(r"conf/deployment/[\w./_-]+_external\.ya?ml", combined):
+        return True
+    if re.search(r"[\w./_-]+_external(?:_vault|_rhcs)?\.ya?ml", combined):
+        if "noobaa_external" not in combined and "vault" not in combined:
+            return True
+    return False
+
+
 def infer_topology_hints(parameters: dict[str, Any]) -> dict[str, Any]:
     """Infer topology signals from Jenkins job parameters."""
-    cluster_conf = str(parameters.get("CLUSTER_CONF") or "").lower()
-    yaml_config = str(parameters.get("YAML_TEXT_CONFIG") or "").lower()
-    combined = f"{cluster_conf} {yaml_config}"
+    cluster_conf = str(parameters.get("CLUSTER_CONF") or "")
+    yaml_config = str(parameters.get("YAML_TEXT_CONFIG") or "")
+    combined = f"{cluster_conf} {yaml_config}".lower()
 
     hints: dict[str, Any] = {
         "deploy_edr": _as_bool(parameters.get("DEPLOY_EDR")),
         "mcg_only": _as_bool(parameters.get("MCG_ONLY")),
         "upgrade": _as_bool(parameters.get("UPGRADE")),
-        "external_mode": "external" in combined,
+        "external_mode": _cluster_conf_indicates_external_mode(
+            cluster_conf, yaml_config
+        ),
         "regional_dr": "regional" in combined or "disaster-recovery" in combined,
         "lso": "lso" in combined or "local_storage" in combined,
-        "provider_client": "provider" in combined and "client" in combined,
+        "provider_client": (
+            "cluster_type: 'provider'" in combined
+            or "cluster_type: 'consumer'" in combined
+            or ("provider" in combined and "consumer" in combined)
+        ),
     }
     return hints
 

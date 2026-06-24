@@ -11,7 +11,7 @@ Runs live JIRA issue reproduction on an ODF cluster for z-stream qualification: 
 - Completed z-stream `repro_steps` stage in run record
 - Jenkins deploy build URL (`deploy_job_url`)
 - Jenkins auth in `data/auth.yaml` (same as `ocs_ci_run`)
-- **Live mode**: [Claude Code](https://code.claude.com/) installed and authenticated (`claude login`). No `ANTHROPIC_API_KEY` required when using the default `claude-cli` backend.
+- **Live mode**: [Claude Code](https://code.claude.com/) installed and authenticated (`claude login`, Vertex, or Bedrock via Claude Code settings). No `ANTHROPIC_API_KEY` required for the default `claude-cli` backend.
 - Optional SDK fallback: `pip install -r .claude/agents/ocs_ci_live_repro/requirements-agent.txt`
 
 ## CLI

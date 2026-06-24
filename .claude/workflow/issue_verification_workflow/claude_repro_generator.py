@@ -16,9 +16,16 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Literal
+
+_WORKFLOW_DIR = Path(__file__).resolve().parents[1]
+if str(_WORKFLOW_DIR) not in sys.path:
+    sys.path.insert(0, str(_WORKFLOW_DIR))
+
+from workflow_lib.claude_session import extend_claude_cli_cmd, resolve_issue_session
 
 log = logging.getLogger(__name__)
 
@@ -224,6 +231,8 @@ def _run_claude_cli_prompt(
     model: str | None = None,
     cwd: Path,
     timeout: int = 600,
+    session_id: str | None = None,
+    resume_session: bool = False,
 ) -> dict[str, Any]:
     claude_bin = _resolve_claude_bin()
     cmd = [
@@ -239,8 +248,15 @@ def _run_claude_cli_prompt(
     ]
     if model:
         cmd.extend(["--model", model])
+    if session_id:
+        extend_claude_cli_cmd(cmd, session_id, resume=resume_session)
 
-    log.info("Running claude -p for repro steps (cwd=%s)", cwd)
+    log.info(
+        "Running claude -p for repro steps (cwd=%s, session=%s, resume=%s)",
+        cwd,
+        session_id,
+        resume_session,
+    )
     proc = subprocess.run(
         cmd,
         capture_output=True,
@@ -334,12 +350,16 @@ def generate_repro_steps_with_claude(
     work_dir = (work_root or _DEFAULT_WORK_ROOT) / issue_key / str(int(time.time()))
     work_dir.mkdir(parents=True, exist_ok=True)
 
+    session_id, resume_session = resolve_issue_session(issue)
+
     if resolved == "claude-cli":
         payload = _run_claude_cli_prompt(
             system_prompt,
             user_prompt,
             model=model,
             cwd=_REPO_ROOT,
+            session_id=session_id,
+            resume_session=resume_session,
         )
         generator = GENERATOR_CLAUDE_CLI
     else:
@@ -353,6 +373,8 @@ def generate_repro_steps_with_claude(
 
     payload["generator"] = generator
     payload["rovo_equivalent"] = True
+    if resolved == "claude-cli":
+        payload["claude_session_id"] = session_id
     log.info(
         "Claude generated %d repro + %d verification steps for %s (%s)",
         len(payload["reproduction_steps"]),

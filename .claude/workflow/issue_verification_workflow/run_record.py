@@ -10,9 +10,16 @@ Later stages load the same run via --run-id and append stage results per issue.
 
 import json
 import logging
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_WORKFLOW_DIR = Path(__file__).resolve().parents[1]
+if str(_WORKFLOW_DIR) not in sys.path:
+    sys.path.insert(0, str(_WORKFLOW_DIR))
+
+from workflow_lib.claude_session import promote_session_from_stage_data
 
 log = logging.getLogger(__name__)
 
@@ -220,6 +227,7 @@ class RunRecord:
             "completed_at": _utc_now(),
             "data": stage_data,
         }
+        promote_session_from_stage_data(issue, stage_data)
         self._data["updated_at"] = _utc_now()
 
         if status == "completed" and stage_name not in self._data.setdefault(
@@ -258,6 +266,7 @@ class RunRecord:
                 "completed_at": now,
                 "data": stage_data,
             }
+            promote_session_from_stage_data(issue, stage_data)
 
         self._data["updated_at"] = now
         stages_completed = self._data.setdefault("stages_completed", [])

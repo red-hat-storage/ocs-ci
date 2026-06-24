@@ -17,8 +17,13 @@ from pathlib import Path
 from typing import Any
 
 _AGENT_DIR = Path(__file__).resolve().parent
+_WORKFLOW_DIR = Path(__file__).resolve().parents[2] / "workflow"
 if str(_AGENT_DIR) not in sys.path:
     sys.path.insert(0, str(_AGENT_DIR))
+if str(_WORKFLOW_DIR) not in sys.path:
+    sys.path.insert(0, str(_WORKFLOW_DIR))
+
+from workflow_lib.claude_session import extend_claude_cli_cmd, resolve_issue_session
 
 from claude_matcher import (
     MATCH_TESTS_OUTPUT_SCHEMA,
@@ -89,6 +94,8 @@ def _run_claude_cli(
     allowed_tools: tuple[str, ...] | None = None,
     model: str | None = None,
     timeout: int = DEFAULT_SEARCH_TIMEOUT_S,
+    session_id: str | None = None,
+    resume_session: bool = False,
 ) -> dict[str, Any]:
     claude_bin = _resolve_claude_bin()
     cmd = [
@@ -107,12 +114,16 @@ def _run_claude_cli(
     if allowed_tools:
         for tool in allowed_tools:
             cmd.extend(["--allowedTools", tool])
+    if session_id:
+        extend_claude_cli_cmd(cmd, session_id, resume=resume_session)
 
     log.info(
-        "Running claude -p test match (cwd=%s, tools=%s, timeout=%ss)",
+        "Running claude -p test match (cwd=%s, tools=%s, timeout=%ss, session=%s, resume=%s)",
         cwd,
         list(allowed_tools or []),
         timeout,
+        session_id,
+        resume_session,
     )
     proc = subprocess.run(
         cmd,
@@ -142,6 +153,7 @@ def _format_analysis_as_json_cli(
     top_n: int,
     cwd: Path,
     model: str | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     if not analysis.strip():
         raise RuntimeError("No analysis text to format as JSON")
@@ -163,6 +175,8 @@ def _format_analysis_as_json_cli(
         allowed_tools=None,
         model=model,
         timeout=DEFAULT_FORMAT_TIMEOUT_S,
+        session_id=session_id,
+        resume_session=bool(session_id),
     )
     return _extract_json_from_text(response.get("result", ""))
 
@@ -180,6 +194,7 @@ def match_tests_with_claude_cli(
     """
     issue_key = issue.get("key", "unknown")
     system_prompt, user_prompt = build_match_tests_prompt(issue, top_n=top_n)
+    session_id, resume_session = resolve_issue_session(issue)
 
     log.info("Claude CLI test match phase 1 (search) for %s", issue_key)
     phase1 = _run_claude_cli(
@@ -188,6 +203,8 @@ def match_tests_with_claude_cli(
         cwd=REPO_ROOT,
         allowed_tools=_SEARCH_TOOLS,
         model=model,
+        session_id=session_id,
+        resume_session=resume_session,
     )
     analysis = (phase1.get("result") or "").strip()
     if not analysis:
@@ -203,6 +220,7 @@ def match_tests_with_claude_cli(
             top_n=top_n,
             cwd=REPO_ROOT,
             model=model,
+            session_id=session_id,
         )
     except (json.JSONDecodeError, RuntimeError) as exc:
         log.warning(
@@ -210,7 +228,7 @@ def match_tests_with_claude_cli(
         )
         parsed = _extract_json_from_text(analysis)
 
-    return _normalize_match_payload(
+    result = _normalize_match_payload(
         parsed,
         issue,
         matcher=MATCHER_CLAUDE_CLI,
@@ -218,3 +236,5 @@ def match_tests_with_claude_cli(
         or "Claude CLI matched tests from verification steps via repo search.",
         verification_report=analysis,
     )
+    result["claude_session_id"] = session_id
+    return result

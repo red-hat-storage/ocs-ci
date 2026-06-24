@@ -12,9 +12,16 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
+
+_WORKFLOW_DIR = Path(__file__).resolve().parents[2] / "workflow"
+if str(_WORKFLOW_DIR) not in sys.path:
+    sys.path.insert(0, str(_WORKFLOW_DIR))
+
+from workflow_lib.claude_session import extend_claude_cli_cmd, resolve_issue_session
 
 from claude_verifier import (
     VERIFY_OUTPUT_SCHEMA,
@@ -84,6 +91,8 @@ def _run_claude_cli(
     model: str | None = None,
     permission_mode: str = "bypassPermissions",
     timeout: int = DEFAULT_PHASE1_TIMEOUT_S,
+    session_id: str | None = None,
+    resume_session: bool = False,
 ) -> dict[str, Any]:
     claude_bin = _resolve_claude_bin()
     cmd = [
@@ -102,13 +111,17 @@ def _run_claude_cli(
     if allowed_tools:
         for tool in allowed_tools:
             cmd.extend(["--allowedTools", tool])
+    if session_id:
+        extend_claude_cli_cmd(cmd, session_id, resume=resume_session)
 
     start = time.time()
     log.info(
-        "Running claude -p (cwd=%s, tools=%s, timeout=%ss)",
+        "Running claude -p (cwd=%s, tools=%s, timeout=%ss, session=%s, resume=%s)",
         cwd,
         allowed_tools or [],
         timeout,
+        session_id,
+        resume_session,
     )
     try:
         proc = subprocess.run(
@@ -159,6 +172,7 @@ def _format_analysis_as_json_cli(
     *,
     cwd: Path,
     model: str | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     if not analysis:
         raise RuntimeError("No analysis text to format as JSON")
@@ -179,6 +193,8 @@ def _format_analysis_as_json_cli(
         allowed_tools=None,
         model=model,
         timeout=DEFAULT_PHASE2_TIMEOUT_S,
+        session_id=session_id,
+        resume_session=bool(session_id),
     )
     result_text = response.get("result", "")
     parsed = _extract_json_from_text(result_text)
@@ -216,6 +232,8 @@ def verify_issue_with_claude_cli(
         output_log_path=output_log_path,
     )
 
+    session_id, resume_session = resolve_issue_session(issue)
+
     log.info(
         "Claude CLI cluster verify phase 1 (live) for %s (kubeconfig=%s)",
         issue_key,
@@ -229,6 +247,8 @@ def verify_issue_with_claude_cli(
         model=model,
         permission_mode=permission_mode,
         timeout=timeout,
+        session_id=session_id,
+        resume_session=resume_session,
     )
     analysis = (phase1.get("result") or "").strip()
     if not analysis:
@@ -239,7 +259,7 @@ def verify_issue_with_claude_cli(
     log.info("Claude CLI cluster verify phase 2 (JSON format) for %s", issue_key)
     try:
         parsed = _format_analysis_as_json_cli(
-            analysis, issue_key, cwd=verify_dir, model=model
+            analysis, issue_key, cwd=verify_dir, model=model, session_id=session_id
         )
     except (json.JSONDecodeError, RuntimeError) as exc:
         log.warning(
@@ -263,4 +283,5 @@ def verify_issue_with_claude_cli(
     parsed["claude_cli_turns"] = phase1.get("_num_turns")
     parsed["claude_cli_duration_s"] = phase1.get("_duration_s")
     parsed["claude_cli_cost_usd"] = phase1.get("total_cost_usd")
+    parsed["claude_session_id"] = session_id
     return parsed

@@ -1,20 +1,20 @@
 # Issue Verification Workflow
 
-Automates ODF z-stream qualification intake for bugs in **ON_QA** status: JIRA fetch → reproduction/verification steps → ocs-ci test matching (via `ocs_ci_test_match` agent).
+Automates ODF z-stream qualification intake for bugs in **ON_QA** status: JIRA fetch → reproduction/verification steps → optional live cluster repro → ocs-ci test matching → optional Jenkins execution.
 
 Run all commands from the **ocs-ci repository root**.
 
 ## Pipeline
 
 ```text
-Stage 1: jira_intake                 → Fetch bugs (ON_QA search or explicit issue list)
-Stage 2: repro_steps                 → Claude + JIRA context (Rovo-equivalent repro/verification steps)
-Stage 3: live_cluster_verification   → Live issue repro on cluster (optional, needs deploy_job_url)
-Stage 4: test_matching               → Find ocs-ci tests (skips issues that failed live repro)
-Stage 5: ocs_ci_execution            → Trigger matched tests on Jenkins (ocs_ci_run agent)
+Stage 1: jira_intake                 → Fetch bugs (ON_QA JQL or explicit issue list)
+Stage 2: repro_steps                 → Claude + JIRA context (repro/verification steps)
+Stage 3: live_cluster_verification   → Live issue repro on cluster (optional; needs deploy_job_url)
+Stage 4: test_matching               → Claude agent finds ocs-ci tests (skips failed live repro)
+Stage 5: ocs_ci_execution            → Trigger matched tests on Jenkins (needs deploy_job_url)
 ```
 
-Each stage appends results to a timestamped **run record** under `run_record/`. Stages 2–4 require `--run-id` from stage 1.
+Each stage appends results to a timestamped **run record** under `run_record/`. Stages 2–5 require `--run-id` from stage 1.
 
 ### Shared workflow config (recommended)
 
@@ -25,11 +25,9 @@ cp .claude/workflow/issue_verification_workflow/config/workflow.example.yaml \
    .claude/workflow/issue_verification_workflow/config/workflow.yaml
 # Edit odf_version, deploy_job_url, agent settings
 
-# Pipeline auto-loads config/workflow.yaml when present
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
   --pipeline issue_verification
 
-# Agents read the same file
 python .claude/agents/ocs_ci_test_match/test_match_cli.py match --run-id 20260622_194551
 python .claude/agents/ocs_ci_live_repro/verify_cli.py plan --run-id 20260622_194551
 ```
@@ -46,8 +44,6 @@ Keep **secrets** in `data/auth.yaml` (`jira:` and `jenkins:` sections). The work
 
 #### Explicit issue list (skip JIRA search)
 
-When `parameters.issues` (or `agents.jira_intake.issues`) is set, stage 1 fetches only those JIRA keys and skips the ON_QA JQL search:
-
 ```yaml
 parameters:
   odf_version: "4.22"
@@ -56,7 +52,7 @@ parameters:
     - DFBUGS-1234
 ```
 
-CLI alternative (comma-separated):
+CLI alternative:
 
 ```bash
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
@@ -72,28 +68,23 @@ Omit `issues` to use the default ON_QA search for the target ODF version.
 Uses the generic **workflow_lib** engine (`.claude/workflow/workflow_lib/`) with issue verification executors and run record.
 
 ```bash
-# Full pipeline (Stages 1–4; Stage 5 skipped without deploy_job_url)
+# Stages 1–4 (stage 5 skipped without deploy_job_url)
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
   --pipeline issue_verification \
   --param odf_version=4.22
 
-# With cluster verification + Jenkins test execution
+# Full pipeline with cluster verification + Jenkins test execution
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
   --pipeline issue_verification \
   --param odf_version=4.22 \
   --param deploy_job_url=https://jenkins.../job/qe-deploy-ocs-cluster/69391/
 
-# Explicit config path (overrides auto-detected workflow.yaml)
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
   --pipeline issue_verification \
-  --config .claude/workflow/issue_verification_workflow/config/workflow.yaml
+  --config ~/path/to/workflow.yaml
 ```
 
-Legacy per-run configs under `pipelines/configs/` still work via `--config`.
-
-Stage 1 JIRA intake uses **`ocs_ci_jira`** agent (`jira_search`).
-
-Agent registry: `agents/registry.yaml`. Workflow: `pipelines/issue_verification.yaml`.
+Stage 1 uses **`ocs_ci_jira`** agent (`jira_search`). Agent registry: `agents/registry.yaml`. Workflow: `pipelines/issue_verification.yaml`.
 
 Resume from a specific stage:
 
@@ -101,23 +92,23 @@ Resume from a specific stage:
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
   --pipeline issue_verification \
   --param odf_version=4.22 \
+  --run-id 20260622_194551 \
+  --from-stage test_matching
+```
+
+Re-run live repro only:
+
+```bash
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification \
   --param deploy_job_url=https://jenkins.../69391/ \
   --run-id 20260622_194551 \
   --from-stage live_cluster_verification
 ```
 
-Stage 3 standalone (via test-match agent):
-
-```bash
-python .claude/agents/ocs_ci_test_match/test_match_cli.py match \
-  --run-id 20260622_194551
-```
-
 ## Prerequisites
 
 ### Python dependencies
-
-Use the ocs-ci virtualenv with atlassian-python-api installed (standard ocs-ci deps):
 
 ```bash
 pip install atlassian-python-api
@@ -125,24 +116,44 @@ pip install -r .claude/workflow/issue_verification_workflow/requirements-pipelin
 pip install -r .claude/workflow/issue_verification_workflow/requirements-repro-agent.txt
 ```
 
-Stage 2 **requires Claude** (`claude login` via Claude Code CLI, or `claude-agent-sdk`).
-There is no public Atlassian Rovo API; Claude analyzes JIRA description + comments
-and **linked fix pull requests** to produce Rovo-quality reproduction/verification steps.
-
-For semantic test matching with Claude Agent SDK (optional):
+Optional SDK fallback (when Claude Code CLI is unavailable):
 
 ```bash
 pip install -r .claude/agents/ocs_ci_test_match/requirements-agent.txt
+pip install -r .claude/agents/ocs_ci_live_repro/requirements-agent.txt
 ```
+
+### Claude (required for stages 2–4)
+
+Stages 2 (`repro_steps`), 3 (`live_cluster_verification`), and 4 (`test_matching`) use **Claude Code CLI** (`claude -p`) by default.
+
+Install [Claude Code](https://code.claude.com/) and authenticate:
+
+| Provider | Setup |
+|----------|--------|
+| Anthropic | `claude login` |
+| Google Vertex | Claude Code settings → Vertex (third-party provider) |
+| AWS Bedrock | Claude Code settings → Bedrock |
+
+```bash
+claude --version
+claude auth status   # expect loggedIn: true
+```
+
+No `ANTHROPIC_API_KEY` is needed when using Claude Code CLI (including Vertex). Set `test_match_backend: claude-sdk` or `repro_steps_backend: sdk` only if you prefer the Agent SDK.
+
+**Claude sessions:** one session per JIRA issue across stages 2–4 (`claude_session_id` on the run record). Re-running a single stage resumes that issue's session when the id is already stored.
+
+There is no public Atlassian Rovo API; Claude analyzes JIRA description + comments and **linked fix pull requests** to produce reproduction/verification steps.
 
 ### JIRA credentials
 
-The agent uses `JiraHelper` with **extended auth** (`allow_extended_sources=True`). Resolution order:
+Resolution order for `JiraHelper` (`allow_extended_sources=True`):
 
 1. `config.AUTH.jira` (pytest/ocsci config)
-2. `--jira-config` path (INI file with `url`, `username`/`email`, `password`/`token`)
+2. `--jira-config` path
 3. `/etc/jira.cfg`
-4. `data/auth.yaml` (`jira:` or `AUTH.jira:` section)
+4. `data/auth.yaml` (`jira:` section)
 5. `JIRA_URL`, `JIRA_USERNAME`/`JIRA_EMAIL`, `JIRA_TOKEN`/`JIRA_PASSWORD` env vars
 
 Example `data/auth.yaml`:
@@ -154,23 +165,13 @@ jira:
   token: <api-token>
 ```
 
-**Note:** Existing ocs-ci code (`utils.py`, `rados_utils.py`) calls `JiraHelper()` without extended sources and keeps the legacy path: `AUTH.jira` → `/etc/jira.cfg` only.
-
 ### Fix pull requests (stage 2)
 
-When `include_fix_prs: true` (default), stage 2 discovers GitHub PRs linked to each JIRA issue:
+When `include_fix_prs: true` (default), stage 2 discovers GitHub PRs from JIRA remote links and description/comments. PR metadata is fetched via `gh pr view` or GitHub API when available.
 
-1. JIRA **remote issue links** (GitHub development panel / manual links)
-2. GitHub PR URLs in the issue **description** and **comments**
-
-PR title, body, and changed files are fetched via `gh pr view` or the GitHub API when
-`gh` / `GITHUB_TOKEN` / `GH_TOKEN` is available (optional — URLs alone still help Claude).
-
-Disable with `agents.repro_steps.include_fix_prs: false` or `defaults.include_fix_prs: false`.
+Disable with `agents.repro_steps.include_fix_prs: false`.
 
 ## Quick start
-
-Run the full pipeline (Stages 1–3; Stage 4 runs only when `deploy_job_url` is set):
 
 ```bash
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
@@ -180,49 +181,47 @@ python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
 
 Note the **run id** from stderr (e.g. `20260622_194551`).
 
-JQL used for Stage 1:
+Stage 1 JQL (when `issues` is not set):
 
 ```text
 project = "Data Foundation Bugs" AND issuetype = Bug
 AND "target version" = odf-4.22 AND status = ON_QA
 ```
 
-### Stage 3 options
+### Pipeline parameters
 
-Pass pipeline defaults via `--param` or run config YAML:
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `top_n` | 10 | Max matching tests per issue |
-| `test_match_backend` | auto | `auto` (Claude CLI when available), `claude-cli`, `claude-sdk` |
-| `use_claude` | false | Legacy: forces full Claude Agent SDK search when `true` |
-| `claude_model` | — | Claude model for test matching |
-| `deploy_job_url` | — | Jenkins deploy URL for Stage 3 + Stage 5 |
-| `live_repro_dry_run` | true | Stage 3 dry-run plan; set `false` for live oc reproduction |
-| `live_repro_model` | — | Claude model for live reproduction |
-| `oc_command_path` | oc | Path to `oc` binary for live reproduction |
-| `live_repro_max_turns` | 40 | Max agent turns (sdk backend only) |
-| `live_repro_backend` | auto | `claude-cli` (default when `claude` on PATH) or `sdk` |
-| `skip_on_env_mismatch` | true | Skip issues when cluster env mismatches |
-| `force_live_repro` | false | Run reproduction despite env mismatch |
+| Parameter | Default | Stages | Description |
+|-----------|---------|--------|-------------|
+| `odf_version` | — | 1–5 | Target ODF z-stream version |
+| `deploy_job_url` | — | 3, 5 | Jenkins deploy URL; enables live repro + test execution |
+| `issues` | — | 1 | Explicit JIRA keys (skips ON_QA search) |
+| `top_n` | 10 | 4 | Max matching tests per issue |
+| `test_match_backend` | auto | 4 | `auto`, `claude-cli`, or `claude-sdk` |
+| `repro_steps_backend` | auto | 2 | `auto`, `claude-cli`, or `sdk` |
+| `live_repro_backend` | auto | 3 | `auto`, `claude-cli`, or `sdk` |
+| `live_repro_dry_run` | true | 3 | Plan only; set `false` for live `oc` reproduction |
+| `live_repro_model` | — | 3 | Claude model override (e.g. Vertex model id) |
+| `repro_claude_model` | — | 2 | Claude model for repro steps |
+| `skip_on_env_mismatch` | true | 3 | Skip when cluster env mismatches issue |
+| `force_live_repro` | false | 3 | Run repro despite env mismatch |
+| `dry_run` | true | 5 | Jenkins trigger dry-run |
+| `tests_per_issue` | 1 | 5 | Tests to trigger per issue |
+| `use_claude` | false | 4 | Legacy: forces `claude-sdk` when `true` |
 
 ### Manual verification gating
 
-When `live_repro_dry_run: false` and live repro **fails** for an issue (`not_fixed`, `issue_reproduced: Yes`, `inconclusive`, or stage `failed`), that JIRA is marked `qualification_status: manual_verification_failed` and skipped in stages 4–5.
+When `live_repro_dry_run: false` and live repro **fails** (`not_fixed`, `issue_reproduced: Yes`, `inconclusive`, or stage `failed`), the issue gets `qualification_status: manual_verification_failed` and is **skipped** in stages 4–5.
 
-| `dry_run` | true | Stage 5 Jenkins trigger dry-run |
-
-Example re-running test matching (default `test_match_backend: auto`):
+Re-run test matching:
 
 ```bash
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
   --pipeline issue_verification \
-  --param odf_version=4.22 \
   --run-id 20260622_194551 \
   --from-stage test_matching
 ```
 
-Full Claude Agent SDK search (reads `tests/` with tools; needs `claude-agent-sdk`):
+Force Claude Agent SDK for test matching:
 
 ```bash
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
@@ -234,23 +233,20 @@ python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
 
 ## Run record
 
-Each run creates a directory:
-
 ```text
 .claude/workflow/issue_verification_workflow/run_record/<run_id>_odf-<version>/
   <run_id>.log
   <run_id>_issues.json
 ```
 
-Run outputs are gitignored (see `.claude/.gitignore`); only `run_record/.gitkeep` is tracked.
+Run outputs are gitignored; only `run_record/.gitkeep` is tracked.
 
 ### Issues JSON structure
-
-Each issue accumulates stage data:
 
 ```json
 {
   "key": "DFBUGS-784",
+  "claude_session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "summary": "...",
   "components": ["noobaa"],
   "stages": {
@@ -261,18 +257,28 @@ Each issue accumulates stage data:
         "topology": "standard_ipi",
         "reproduction_steps": ["..."],
         "verification_steps": ["..."],
-        "expected_result": "..."
+        "expected_result": "...",
+        "generator": "claude_code_cli"
+      }
+    },
+    "live_cluster_verification": {
+      "status": "completed",
+      "data": {
+        "verdict": "dry_run",
+        "matcher": "dry_run",
+        "dry_run": true
       }
     },
     "test_matching": {
       "status": "completed",
       "data": {
         "matcher": "claude_code_cli",
+        "matching_test_count": 3,
         "matching_tests": [
           {
             "test_node_id": "tests/.../test_foo.py::test_bar",
             "relevance_score": 85,
-            "match_reasons": ["covers MON quorum loss during chaos", "..."],
+            "match_reasons": ["covers verification step: ..."],
             "pytest_command": "pytest tests/.../test_foo.py::test_bar"
           }
         ]
@@ -284,37 +290,36 @@ Each issue accumulates stage data:
 
 ## Module layout
 
-| File | Purpose |
-|------|---------|
-| `pipeline_cli.py` | CLI entry point → generic `workflow` engine |
-| `executors.py` | Issue verification workflow stage executors |
-| `workflow_context.py` | Issue verification RunContext + factory |
-| `workflow_config.py` | Shared config loader for pipeline + agent CLIs |
-| `config/workflow.example.yaml` | Template for `config/workflow.yaml` (gitignored) |
-| `pipelines/` | Workflow definitions (`issue_verification.yaml`) |
-| `agents/registry.yaml` | Agent name → run-record stage mapping |
-| `run_record.py` | Timestamped runs, shared issues JSON |
-| `repro_steps_generator.py` | Stage 2 orchestration (JIRA refresh + fix PRs + Claude) |
-| `claude_repro_generator.py` | Mandatory Claude repro/verification step generation |
-| `ocs_ci_jira/pr_context.py` | JIRA remote links + GitHub PR enrichment |
-| `prompts/repro_steps_*.txt` | Claude prompts (Rovo-equivalent analysis) |
-| `topology_mapper.py` | Heuristic fix → topology mapping |
+| File / package | Purpose |
+|----------------|---------|
+| `pipeline_cli.py` | CLI entry point → workflow engine |
+| `executors.py` | Stage executors |
+| `workflow_context.py` | RunContext + factory |
+| `workflow_config.py` | Shared config loader |
+| `config/workflow.example.yaml` | Template for `workflow.yaml` |
+| `pipelines/issue_verification.yaml` | Pipeline definition |
+| `run_record.py` | Timestamped runs, issues JSON |
+| `repro_steps_generator.py` | Stage 2 orchestration |
+| `claude_repro_generator.py` | Claude repro/verification generation |
+| `.claude/agents/ocs_ci_jira/` | JIRA intake (`pr_context.py` for fix PRs) |
+| `.claude/agents/ocs_ci_live_repro/` | Live cluster verification (stage 3) |
+| `.claude/agents/ocs_ci_test_match/` | Test matching (stage 4) |
+| `.claude/agents/ocs_ci_run/` | Jenkins test execution (stage 5) |
 
-Live issue reproduction: `.claude/agents/ocs_ci_live_repro/`.
+## Test matching (stage 4)
 
-## Test matching
+Claude agent — default `test_match_backend: auto`:
 
-Stage 4 is a **Claude agent** (default `test_match_backend: auto`):
+1. Reads **reproduction + verification steps** from stage 2 (plus topology, fix PRs).
+2. Searches `tests/` with **Read / Glob / Grep / Bash**.
+3. Returns ranked pytest node ids and `pytest_command` values.
 
-1. Passes **reproduction + verification steps** from stage 2 (plus topology, env, fix PRs).
-2. Claude searches `tests/` with **Read / Glob / Grep** and returns ranked pytest node ids.
-3. No heuristic coverage mapper — matching is driven by verification-step similarity.
+No vector DB or coverage mapper. `test_match_backend: vector_db` is no longer supported.
 
-Requires `claude login` (Claude Code CLI). Run record field `matcher` is `claude_code_cli` or `claude_agent_sdk`.
+See `.claude/agents/ocs_ci_test_match/README.md` for CLI and API details.
 
 ## Roadmap
 
 - `z_stream` pytest marker for selected regression scope
-- Live cluster verification (Phase A)
-- Pytest generation and PR workflow (Phase B)
-- Jenkins integration
+- JIRA comment with live repro verdict (Phase C)
+- Pytest generation and PR workflow
