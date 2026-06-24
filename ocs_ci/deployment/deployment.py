@@ -31,14 +31,18 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
 )
 from ocs_ci.ocs.managedservice import get_provider_service_type
-from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
+from ocs_ci.ocs.resources.storage_cluster import (
+    verify_storage_cluster_extended,
+)
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
     set_ceph_config,
     is_storage_system_needed,
 )
 from ocs_ci.deployment.acm import Submariner
-from ocs_ci.deployment.ingress_node_firewall import restrict_ssh_access_to_nodes
+from ocs_ci.deployment.ingress_node_firewall import (
+    restrict_ssh_access_to_nodes,
+)
 from ocs_ci.deployment.helpers.lso_helpers import (
     setup_local_storage,
     cleanup_nodes_for_lso_install,
@@ -164,7 +168,10 @@ from ocs_ci.utility import (
     pgsql,
     version,
 )
-from ocs_ci.utility.aws import update_config_from_s3, create_and_attach_sts_role
+from ocs_ci.utility.aws import (
+    update_config_from_s3,
+    create_and_attach_sts_role,
+)
 from ocs_ci.utility.multicluster import create_mce_catsrc
 from ocs_ci.utility.operators import NMStateOperator, OADPOperator
 from ocs_ci.utility.retry import retry
@@ -384,14 +391,16 @@ class Deployment(object):
                 mode="w+", prefix="gitops_subscription_manifest", delete=False
             )
             templating.dump_data_to_temp_yaml(
-                gitops_subscription_yaml_data, gitops_subscription_manifest.name
+                gitops_subscription_yaml_data,
+                gitops_subscription_manifest.name,
             )
             run_cmd(f"oc apply -f {gitops_subscription_manifest.name}")
         else:
             run_cmd(f"oc apply -f {constants.GITOPS_SUBSCRIPTION_YAML}")
 
         self.wait_for_subscription(
-            constants.GITOPS_OPERATOR_NAME, namespace=constants.GITOPS_NAMESPACE
+            constants.GITOPS_OPERATOR_NAME,
+            namespace=constants.GITOPS_NAMESPACE,
         )
         logger.info("Sleeping for 120 seconds after subscribing to GitOps Operator")
         time.sleep(120)
@@ -559,7 +568,8 @@ class Deployment(object):
                                 "ocs_registry_image", None
                             )
                             ocs_install_verification(
-                                timeout=2000, ocs_registry_image=ocs_registry_image
+                                timeout=2000,
+                                ocs_registry_image=ocs_registry_image,
                             )
                     config.reset_ctx()
                 if config.REPORTING["collect_logs_on_success_run"]:
@@ -702,10 +712,13 @@ class Deployment(object):
                                 "source"
                             ] = oadp_catsrc_name
                         oadp_subscription_manifest = tempfile.NamedTemporaryFile(
-                            mode="w+", prefix="oadp_subscription_manifest", delete=False
+                            mode="w+",
+                            prefix="oadp_subscription_manifest",
+                            delete=False,
                         )
                         templating.dump_data_to_temp_yaml(
-                            oadp_subscription_yaml_data, oadp_subscription_manifest.name
+                            oadp_subscription_yaml_data,
+                            oadp_subscription_manifest.name,
                         )
                         run_cmd(f"oc apply -f {oadp_subscription_manifest.name}")
                         self.wait_for_subscription(
@@ -956,7 +969,9 @@ class Deployment(object):
             setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
 
         if config.DEPLOYMENT.get("enable_nested_virtualization"):
-            from ocs_ci.deployment.hub_spoke import enable_nested_virtualization
+            from ocs_ci.deployment.hub_spoke import (
+                enable_nested_virtualization,
+            )
 
             enable_nested_virtualization()
         if (
@@ -1260,8 +1275,14 @@ class Deployment(object):
             azure_sub_data = [
                 {"name": "CLIENTID", "value": mi_client_id},
                 {"name": "TENANTID", "value": azure_auth_data["tenant_id"]},
-                {"name": "SUBSCRIPTIONID", "value": azure_auth_data["subscription_id"]},
-                {"name": "RESOURCEGROUP", "value": config.ENV_DATA["cluster_name"]},
+                {
+                    "name": "SUBSCRIPTIONID",
+                    "value": azure_auth_data["subscription_id"],
+                },
+                {
+                    "name": "RESOURCEGROUP",
+                    "value": config.ENV_DATA["cluster_name"],
+                },
             ]
             if "env" not in subscription_yaml_data["spec"]["config"]:
                 subscription_yaml_data["spec"]["config"]["env"] = azure_sub_data
@@ -1300,7 +1321,11 @@ class Deployment(object):
 
         ocp.OCP(kind=constants.SUBSCRIPTION_COREOS, namespace=namespace)
         for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind=constants.SUBSCRIPTION_COREOS, namespace=namespace
+            300,
+            10,
+            ocp.OCP,
+            kind=constants.SUBSCRIPTION_COREOS,
+            namespace=namespace,
         ):
             subscriptions = sample.get().get("items", [])
             for subscription in subscriptions:
@@ -1446,6 +1471,21 @@ class Deployment(object):
                     add_new_disks=add_new_disks_for_lso,
                 )
 
+        simulate_bluestore_label_dmcrypt = config.ENV_DATA.get(
+            "simulate_bluestore_label_dmcrypt", False
+        )
+        if local_storage and simulate_bluestore_label_dmcrypt:
+            from ocs_ci.deployment.helpers.ceph_cluster import (
+                simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes,
+            )
+
+            logger.test_step(
+                "Simulate encrypted Ceph BlueStore (dm-crypt) on worker nodes"
+            )
+            assert simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
+                add_disks=False, clear_signatures=False
+            ), ("Encrypted BlueStore (dm-crypt) simulation failed on " "worker nodes")
+
         log_step("Creating namespace and operator group")
         # patch OLM YAML with the namespace
         olm_ns_op_group_data = list(templating.load_yaml(constants.OLM_YAML, True))
@@ -1497,12 +1537,17 @@ class Deployment(object):
             worker_nodes = get_worker_nodes()
             node_obj = ocp.OCP(kind="node")
             platform = config.ENV_DATA.get("platform").lower()
-            if platform not in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
+            if platform not in [
+                constants.BAREMETAL_PLATFORM,
+                constants.HCI_BAREMETAL,
+            ]:
                 for node in worker_nodes:
                     for interface in interfaces:
                         ip_link_cmd = f"ip link set promisc on {interface}"
                         node_obj.exec_oc_debug_cmd(
-                            node=node, cmd_list=[ip_link_cmd], namespace="default"
+                            node=node,
+                            cmd_list=[ip_link_cmd],
+                            namespace="default",
                         )
 
             if create_public_net:
@@ -1906,7 +1951,9 @@ class Deployment(object):
 
         # Wait for noobaa-core StatefulSet to exist
         sts_obj = ocp.OCP(
-            kind="StatefulSet", namespace=self.namespace, resource_name="noobaa-core"
+            kind="StatefulSet",
+            namespace=self.namespace,
+            resource_name="noobaa-core",
         )
 
         # Wait for StatefulSet for noobaa-core exists before patching
@@ -2147,7 +2194,10 @@ class Deployment(object):
 
     @retry(exception_to_check=AssertionError, tries=12, delay=30, backoff=1)
     def objectstore_user_check(self):
-        if self.platform in [constants.BAREMETAL_PLATFORM, constants.VSPHERE_PLATFORM]:
+        if self.platform in [
+            constants.BAREMETAL_PLATFORM,
+            constants.VSPHERE_PLATFORM,
+        ]:
             logger.info("Checking cephobjectstore user exist for bug: DFBUGS-2929")
             cephobjectstoreuser = ocp.OCP(
                 kind="cephobjectstoreuser",
@@ -2261,7 +2311,9 @@ class Deployment(object):
             # check for odf-console
             if ocs_version >= version.VERSION_4_9:
                 assert pod.wait_for_resource(
-                    condition="Running", selector="app=odf-console", timeout=600
+                    condition="Running",
+                    selector="app=odf-console",
+                    timeout=600,
                 )
 
             # Creating toolbox pod
@@ -2274,36 +2326,17 @@ class Deployment(object):
                 timeout=600,
             )
 
-            wipe_devices_from_other_clusters = config.ENV_DATA.get(
-                "wipe_devices_from_other_clusters", False
+            from ocs_ci.deployment.helpers.ceph_cluster import (
+                post_deployment_verify_wipe_devices,
             )
-            odf_forceful_deployment = config.DEPLOYMENT.get(
-                "odf_forceful_deployment", False
+            from ocs_ci.ocs.resources.storage_cluster import (
+                osd_encryption_verification,
             )
-            if wipe_devices_from_other_clusters or odf_forceful_deployment:
-                from ocs_ci.deployment.helpers.ceph_cluster import (
-                    verify_wipe_devices_from_other_clusters,
-                )
 
-                logger.info(
-                    "Verify wipe devices from other clusters "
-                    "(StorageCluster CR flag and OSD prepare logs)"
-                )
-                assert (
-                    verify_wipe_devices_from_other_clusters()
-                ), "Wipe devices from other clusters verification failed"
-            else:
-                from ocs_ci.deployment.helpers.ceph_cluster import (
-                    verify_no_wipe_devices_from_other_clusters,
-                )
-
-                logger.info(
-                    "Verify no wipe of foreign bluestore data occurred "
-                    "(StorageCluster CR flag and OSD prepare logs)"
-                )
-                assert (
-                    verify_no_wipe_devices_from_other_clusters()
-                ), "No-wipe verification failed"
+            post_deployment_verify_wipe_devices()
+            if config.ENV_DATA.get("encryption_at_rest"):
+                logger.info("Verify OSD encryption at rest")
+                osd_encryption_verification()
 
             if not config.COMPONENTS["disable_cephfs"]:
                 # Check for CephFilesystem creation in ocp
@@ -2927,7 +2960,11 @@ class Deployment(object):
         )
         acm_hub_subscription_yaml_data["spec"]["channel"] = channel
         retry(
-            (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
+            (
+                ResourceNameNotSpecifiedException,
+                ChannelNotFound,
+                CommandFailed,
+            ),
             tries=10,
             delay=2,
         )(package_manifest.get_current_csv)(channel, constants.ACM_HUB_OPERATOR_NAME)
@@ -2970,10 +3007,13 @@ class Deployment(object):
         ] = f"{constants.ACM_CATSRC_IMAGE}:{acm_image_tag}"
 
         acm_konflux_catsrc_yaml_data_manifest = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="acm_konflux_catsrc_yaml_data_manifest", delete=False
+            mode="w+",
+            prefix="acm_konflux_catsrc_yaml_data_manifest",
+            delete=False,
         )
         templating.dump_data_to_temp_yaml(
-            acm_konflux_catsrc_yaml_data, acm_konflux_catsrc_yaml_data_manifest.name
+            acm_konflux_catsrc_yaml_data,
+            acm_konflux_catsrc_yaml_data_manifest.name,
         )
         run_cmd(f"oc create -f {acm_konflux_catsrc_yaml_data_manifest.name}")
 
@@ -3012,7 +3052,11 @@ class Deployment(object):
         )
         acm_hub_subscription_yaml_data["spec"]["channel"] = channel
         retry(
-            (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
+            (
+                ResourceNameNotSpecifiedException,
+                ChannelNotFound,
+                CommandFailed,
+            ),
             tries=10,
             delay=2,
         )(package_manifest.get_current_csv)(channel, constants.ACM_HUB_OPERATOR_NAME)
@@ -3047,7 +3091,8 @@ class Deployment(object):
 
         # check if MCH is already installed
         if OCP(
-            kind=constants.ACM_MULTICLUSTER_HUB, namespace=constants.ACM_HUB_NAMESPACE
+            kind=constants.ACM_MULTICLUSTER_HUB,
+            namespace=constants.ACM_HUB_NAMESPACE,
         ).check_resource_existence(
             should_exist=True,
             resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
@@ -3073,7 +3118,8 @@ class Deployment(object):
             bool: True if MultiCluster Hub is running, False otherwise
         """
         ocp_obj = OCP(
-            kind=constants.ACM_MULTICLUSTER_HUB, namespace=constants.ACM_HUB_NAMESPACE
+            kind=constants.ACM_MULTICLUSTER_HUB,
+            namespace=constants.ACM_HUB_NAMESPACE,
         )
         try:
             mch_running = ocp_obj.wait_for_resource(
@@ -3169,7 +3215,8 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
     if not image_tag and config.REPORTING.get("us_ds") == "DS":
         image_tag = get_latest_ds_olm_tag(
-            upgrade, latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest")
+            upgrade,
+            latest_tag=config.DEPLOYMENT.get("default_latest_tag", "latest"),
         )
     if rosa_hcp:
         catalog_source_data = templating.load_yaml(
@@ -3539,7 +3586,11 @@ class MultiClusterDROperatorsDeploy(object):
             )
 
         retry(
-            (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
+            (
+                ResourceNameNotSpecifiedException,
+                ChannelNotFound,
+                CommandFailed,
+            ),
             tries=27,
             delay=20,
         )(package_manifest.get_current_csv)(
@@ -3562,7 +3613,8 @@ class MultiClusterDROperatorsDeploy(object):
             mode="w+", prefix="odf_multicluster_orchestrator", delete=False
         )
         templating.dump_data_to_temp_yaml(
-            odf_multicluster_orchestrator_data, odf_multicluster_orchestrator.name
+            odf_multicluster_orchestrator_data,
+            odf_multicluster_orchestrator.name,
         )
         run_cmd(f"oc create -f {odf_multicluster_orchestrator.name}")
         orchestrator_controller = ocp.OCP(
@@ -3719,7 +3771,12 @@ class MultiClusterDROperatorsDeploy(object):
         }
         logger.debug("Merge back the ramen_section with config_map_data")
         config_map_data["data"].update(ramen_section)
-        for key in ["annotations", "creationTimestamp", "resourceVersion", "uid"]:
+        for key in [
+            "annotations",
+            "creationTimestamp",
+            "resourceVersion",
+            "uid",
+        ]:
             if config_map_data["metadata"].get(key):
                 config_map_data["metadata"].pop(key)
 
@@ -3746,7 +3803,8 @@ class MultiClusterDROperatorsDeploy(object):
             resource_name=constants.ACM_ODR_HUB_OPERATOR_RESOURCE
         )
         current_csv = package_manifest.get_current_csv(
-            channel=self.channel, csv_pattern=constants.ACM_ODR_HUB_OPERATOR_RESOURCE
+            channel=self.channel,
+            csv_pattern=constants.ACM_ODR_HUB_OPERATOR_RESOURCE,
         )
         logger.info("Sleeping for 90 seconds after subscribing ")
         time.sleep(90)
@@ -3794,7 +3852,8 @@ class MultiClusterDROperatorsDeploy(object):
         managed_clusters = get_non_acm_cluster_config()
         for cluster in managed_clusters:
             cluster_name = cluster.ENV_DATA.get(
-                "cluster_name", f"index-{cluster.MULTICLUSTER['multicluster_index']}"
+                "cluster_name",
+                f"index-{cluster.MULTICLUSTER['multicluster_index']}",
             )
             logger.info(
                 f"[custom_ramen_image] Patching CSV on "
@@ -3998,7 +4057,11 @@ class MultiClusterDROperatorsDeploy(object):
         return bucket_name
 
     @retry(
-        (TimeoutExpiredError, ACMClusterConfigurationException, WrongVersionExpression),
+        (
+            TimeoutExpiredError,
+            ACMClusterConfigurationException,
+            WrongVersionExpression,
+        ),
         tries=20,
         delay=10,
     )
@@ -4417,7 +4480,10 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                     f"already exists"
                 )
                 orchestrator_controller.wait_for_resource(
-                    condition="1", column="AVAILABLE", resource_count=1, timeout=300
+                    condition="1",
+                    column="AVAILABLE",
+                    resource_count=1,
+                    timeout=300,
                 )
                 continue
             if config.ENV_DATA.get("setup_fdf_catsrc_for_hub"):
