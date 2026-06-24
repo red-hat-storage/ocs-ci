@@ -267,6 +267,89 @@ def cnv_custom_storage_class(request, ceph_pool_factory, storageclass_factory):
 
         config.reset_ctx()
 
+    def teardown():
+        """
+        Clean up custom pool and SC on all managed clusters.
+
+        Order: delete SC first, then RadosNamespace, then pool.
+        The pool cannot be deleted while it has images or dependents,
+        so we wait with a longer timeout.
+
+        """
+        from ocs_ci.ocs import ocp
+        from ocs_ci.ocs.resources.storage_cluster import (
+            delete_storageclass_and_deregister,
+        )
+
+        pool_name = constants.RDR_CUSTOM_RBD_POOL
+        sc_name = constants.RDR_CUSTOM_RBD_STORAGECLASS
+        radosns_name = f"{pool_name}-builtin-implicit"
+
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            namespace = config.ENV_DATA["cluster_namespace"]
+            cluster_name = config.ENV_DATA.get("cluster_name")
+
+            try:
+                sc_ocp = ocp.OCP(kind=constants.STORAGECLASS)
+                if sc_ocp.is_exist(resource_name=sc_name):
+                    log.info("Deleting SC %s on %s", sc_name, cluster_name)
+                    delete_storageclass_and_deregister(sc_name=sc_name, sc_ocp=sc_ocp)
+            except Exception as e:
+                log.warning(
+                    "Failed to delete SC %s on %s: %s",
+                    sc_name,
+                    cluster_name,
+                    e,
+                )
+
+            try:
+                radosns_ocp = ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS,
+                    namespace=namespace,
+                    resource_name=radosns_name,
+                )
+                if radosns_ocp.is_exist(resource_name=radosns_name):
+                    log.info(
+                        "Deleting RadosNamespace %s on %s",
+                        radosns_name,
+                        cluster_name,
+                    )
+                    radosns_ocp.delete(resource_name=radosns_name)
+                    radosns_ocp.wait_for_delete(radosns_name, timeout=300)
+            except Exception as e:
+                log.warning(
+                    "Failed to delete RadosNamespace %s on %s: %s",
+                    radosns_name,
+                    cluster_name,
+                    e,
+                )
+
+            try:
+                pool_ocp = ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOL,
+                    namespace=namespace,
+                    resource_name=pool_name,
+                )
+                if pool_ocp.is_exist(resource_name=pool_name):
+                    log.info(
+                        "Deleting pool %s on %s",
+                        pool_name,
+                        cluster_name,
+                    )
+                    pool_ocp.delete(resource_name=pool_name)
+                    pool_ocp.wait_for_delete(pool_name, timeout=300)
+            except Exception as e:
+                log.warning(
+                    "Failed to delete pool %s on %s: %s",
+                    pool_name,
+                    cluster_name,
+                    e,
+                )
+
+        config.reset_ctx()
+
+    request.addfinalizer(teardown)
     return factory
 
 
