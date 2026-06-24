@@ -7523,6 +7523,13 @@ class SpokeODF(SpokeOCP, ABC):
         logger.info("Creating ODF client operator group")
         self.create_operator_group()
 
+        if self.is_external:
+            self.exec_oc_cmd(
+                constants.PATCH_SPECIFIC_SOURCES_CMD.format(
+                    disable="true", source_name=constants.OPERATOR_CATALOG_SOURCE_NAME
+                ).removeprefix("oc ")
+            )
+
         logger.info("Creating ODF client catalog source")
         self.create_catalog_source()
 
