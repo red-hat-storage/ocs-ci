@@ -1,6 +1,6 @@
 import os
-import logging
 import re
+import logging
 from pathlib import Path
 
 from ocs_ci.deployment.baremetal import (
@@ -8,6 +8,7 @@ from ocs_ci.deployment.baremetal import (
     disks_available_to_cleanup,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import get_nodes, get_node_internal_ip, Node
 from ocs_ci.framework import config
 from ocs_ci.deployment.helpers.lso_helpers import add_disk_for_vsphere_platform
@@ -300,7 +301,7 @@ def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace=None):
     namespace = namespace or constants.DEFAULT_NAMESPACE
 
     if not disk_name:
-        disk_name = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+        disk_name = detect_simulation_disk_on_node(wnode, namespace)
 
     if not disk_name:
         logger.error("Disk detection failed. Aborting BlueStore simulation.")
@@ -434,7 +435,7 @@ def simulate_full_ceph_bluestore_process_on_wnodes(
     # Step 2: Detect disks once so the same device is used for simulation and cleanup
     disk_map = {}
     for wnode in wnodes:
-        disk = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
+        disk = detect_simulation_disk_on_node(wnode, namespace)
         if not disk:
             logger.error(f"Disk detection failed on node {wnode.name}. Aborting.")
             return False
@@ -569,35 +570,15 @@ def verify_no_wipe_devices_from_other_clusters():
     return True
 
 
-def verify_wipe_devices_from_other_clusters():
+def verify_wipe_devices_from_other_clusters_flag():
     """
-    Verify that the cluster correctly wiped pre-existing bluestore OSDs from
-    another cluster before provisioning new OSDs.
-
-    Performs two checks:
-
-    1. **StorageCluster CR** — asserts that
-       ``spec.managedResources.cephCluster.cleanupPolicy.wipeDevicesFromOtherClusters``
-       is exactly ``true``.
-
-    2. **OSD prepare logs** — checks each ``rook-ceph-osd-prepare`` pod for
-       the following regex patterns, which confirm that foreign bluestore data
-       was detected and zapped:
-
-       - ``completed wiping OSD <id> device "<dev>" belonging to a different
-         ceph cluster`` — foreign bluestore data detected and zapped
-       - ``successfully zapped osd.<id> path "<dev>"`` — low-level wipe
-         succeeded
-       - ``ceph-volume raw dmcrypt prepare successful`` — new OSD prepared
-         (emitted for both encrypted and unencrypted OSDs)
+    Verify that the StorageCluster CR has wipeDevicesFromOtherClusters set
+    to true.
 
     Returns:
-        bool: True if both checks pass, False otherwise.
+        bool: True if the flag is set to true, False otherwise.
 
     """
-    from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
-
-    # Check 1: StorageCluster CR flag
     flag = get_wipe_devices_from_other_clusters_flag()
     if flag is True:
         logger.info("StorageCluster has wipeDevicesFromOtherClusters set to true")
@@ -607,8 +588,32 @@ def verify_wipe_devices_from_other_clusters():
             flag,
         )
         return False
+    return True
 
-    # Check 2: OSD prepare pod logs
+
+def verify_wipe_unencrypted_devices_from_other_clusters():
+    """
+    Verify that the cluster correctly wiped pre-existing bluestore OSDs from
+    another cluster before provisioning new OSDs.
+
+    Checks each ``rook-ceph-osd-prepare`` pod for the following regex
+    patterns, which confirm that foreign bluestore data was detected and
+    zapped:
+
+    - ``completed wiping OSD <id> device "<dev>" belonging to a different
+      ceph cluster`` — foreign bluestore data detected and zapped
+    - ``successfully zapped osd.<id> path "<dev>"`` — low-level wipe
+      succeeded
+    - ``ceph-volume raw dmcrypt prepare successful`` — new OSD prepared
+      (emitted for both encrypted and unencrypted OSDs)
+    - ``ceph-volume .+ raw prepare`` — new OSD creation command
+
+    Returns:
+        bool: True if all checks pass, False otherwise.
+
+    """
+    from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
+
     expected_patterns = [
         re.compile(
             r'completed wiping OSD \d+ device ".+" belonging to a different'
@@ -616,6 +621,7 @@ def verify_wipe_devices_from_other_clusters():
         ),
         re.compile(r'successfully zapped osd\.\d+ path ".+"'),
         re.compile(r"ceph-volume raw dmcrypt prepare successful"),
+        re.compile(r"ceph-volume .+ raw prepare"),
     ]
 
     osd_prepare_pods = get_osd_prepare_pods()
@@ -635,4 +641,361 @@ def verify_wipe_devices_from_other_clusters():
                 )
                 return False
 
+    return True
+
+
+def verify_wipe_encrypted_devices_from_other_clusters():
+    """
+    Verify that the cluster correctly wiped pre-existing encrypted (LUKS)
+    OSDs from another cluster before provisioning new OSDs.
+
+    Used when ``simulate_bluestore_label_dmcrypt`` is set — the simulation
+    stamps LUKS headers on each disk, and this function confirms Rook
+    detected and wiped them before creating fresh OSDs.
+
+    Checks each ``rook-ceph-osd-prepare`` pod for the following regex
+    patterns:
+
+    - ``cleaning encrypted disk .+ that is part of a different ceph
+      cluster`` — LUKS header detected as belonging to a foreign cluster
+    - ``successfully zapped device ".+"`` — low-level wipe succeeded
+    - ``completed wiping device ".+" belonging to a different ceph
+      cluster`` — wipe fully complete
+    - ``ceph-volume .+ raw prepare`` — new OSD creation command
+
+    Returns:
+        bool: True if all checks pass, False otherwise.
+
+    """
+    from ocs_ci.ocs.resources.pod import get_osd_prepare_pods, get_pod_logs
+
+    expected_patterns = [
+        re.compile(
+            r"cleaning encrypted disk .+ that is part of a different ceph cluster"
+        ),
+        re.compile(r'successfully zapped device ".+"'),
+        re.compile(
+            r'completed wiping device ".+" belonging to a different ceph cluster'
+        ),
+        re.compile(r"ceph-volume .+ raw prepare"),
+    ]
+
+    osd_prepare_pods = get_osd_prepare_pods()
+    if not osd_prepare_pods:
+        logger.error("No rook-ceph-osd-prepare pods found")
+        return False
+
+    for pod in osd_prepare_pods:
+        logs = get_pod_logs(pod.name)
+        logger.info(
+            "Verifying encrypted bluestore wipe log entries in pod %s", pod.name
+        )
+        for pattern in expected_patterns:
+            if not pattern.search(logs):
+                logger.error(
+                    "Expected log pattern not found in pod %r: %r",
+                    pod.name,
+                    pattern.pattern,
+                )
+                return False
+
+    return True
+
+
+def post_deployment_verify_wipe_devices():
+    """
+    Post-deployment wipe verification dispatcher.
+
+    Reads ``wipe_devices_from_other_clusters`` and
+    ``odf_forceful_deployment`` from config to decide which verification
+    path to take:
+
+    * If either flag is set, verifies the correct wipe scenario occurred
+      (unencrypted or dm-crypt, depending on ``simulate_bluestore_label``
+      / ``simulate_bluestore_label_dmcrypt``).
+    * Otherwise, asserts that no wipe of foreign bluestore data took place.
+
+    Raises:
+        AssertionError: When the no-wipe check fails.
+
+    """
+    wipe_devices_from_other_clusters = config.ENV_DATA.get(
+        "wipe_devices_from_other_clusters", False
+    )
+    odf_forceful_deployment = config.DEPLOYMENT.get("odf_forceful_deployment", False)
+    simulate_bluestore_label = config.ENV_DATA.get("simulate_bluestore_label", False)
+    simulate_bluestore_label_dmcrypt = config.ENV_DATA.get(
+        "simulate_bluestore_label_dmcrypt", False
+    )
+    if wipe_devices_from_other_clusters or odf_forceful_deployment:
+        logger.info("Verify StorageCluster wipeDevicesFromOtherClusters CR flag")
+        assert (
+            verify_wipe_devices_from_other_clusters_flag()
+        ), "StorageCluster wipeDevicesFromOtherClusters flag check failed"
+        if simulate_bluestore_label:
+            logger.info(
+                "Verify wipe devices from other clusters "
+                "(StorageCluster CR flag and OSD prepare logs)"
+            )
+            assert (
+                verify_wipe_unencrypted_devices_from_other_clusters()
+            ), "Unencrypted wipe verification failed"
+        elif simulate_bluestore_label_dmcrypt:
+            logger.info(
+                "Verify wipe of encrypted (LUKS) devices from other "
+                "clusters (StorageCluster CR flag and OSD prepare logs)"
+            )
+            assert (
+                verify_wipe_encrypted_devices_from_other_clusters()
+            ), "Encrypted wipe verification failed"
+    else:
+        logger.info(
+            "Verify no wipe of foreign bluestore data occurred "
+            "(StorageCluster CR flag and OSD prepare logs)"
+        )
+        assert (
+            verify_no_wipe_devices_from_other_clusters()
+        ), "No-wipe verification failed"
+
+
+def _detect_ceph_image_tag(node_obj):
+    """
+    Detect the Ceph container image tag from a node using cephadm.
+
+    Args:
+        node_obj (Node): Node object to run the command on.
+
+    Returns:
+        str: Ceph image tag (e.g. "v18.2.0"), or empty string if undetectable.
+
+    """
+    try:
+        tag_out = node_obj.run_cmd("cephadm version", timeout=60)
+        m = re.search(r"cephadm version\s+(\S+)", tag_out or "")
+        if m:
+            ceph_tag = f"v{m.group(1)}"
+            logger.info("Detected Ceph image tag: %s", ceph_tag)
+            return ceph_tag
+    except CommandFailed:
+        logger.warning("Could not detect Ceph version; script will auto-detect the tag")
+    return ""
+
+
+def simulate_ceph_bluestore_dmcrypt_on_node_disk(wnode, disk_name=None, namespace=None):
+    """
+    Simulates an encrypted Ceph BlueStore OSD (dm-crypt/LUKS) on a disk of a
+    given worker node.
+
+    Uploads the simulate_bluestore_label_dmcrypt.sh script to the node and
+    executes it, creating a LUKS container with BlueStore metadata inside and
+    LUKS header metadata matching a real Rook encrypted OSD layout.
+
+    Args:
+        wnode (ocs_ci.ocs.resources.ocs.OCS): The worker node object where the
+            simulation should be performed.
+        disk_name (str, optional): The disk device name to simulate on.
+            If not provided, auto-detects the last /dev/sd* or nvme disk.
+        namespace (str): Namespace for the debug pod.
+
+    Returns:
+        bool: True if the simulation succeeded, False otherwise.
+
+    """
+    namespace = namespace or constants.DEFAULT_NAMESPACE
+
+    if not disk_name:
+        disk_name = detect_simulation_disk_on_node(wnode, namespace)
+
+    if not disk_name:
+        logger.error("Disk detection failed. Aborting encrypted BlueStore simulation.")
+        return False
+
+    node_obj = Node(wnode.name, namespace, use_root=True)
+
+    script_name = "simulate_bluestore_label_dmcrypt.sh"
+    top_dir = Path(constants.TOP_DIR)
+    script_src_path = os.path.join(top_dir, "scripts", "bash", script_name)
+    script_dest_path = f"/tmp/{script_name}"
+
+    logger.info(
+        f"Uploading encrypted BlueStore simulation script to "
+        f"worker node {wnode.name}"
+    )
+    node_obj.upload_script(
+        script_src_path=script_src_path,
+        script_dest_path=script_dest_path,
+        timeout=300,
+    )
+
+    ceph_tag = _detect_ceph_image_tag(node_obj)
+
+    # Pass VERIFY_DISK_EMPTY=false: Stage 3 wipes the disk anyway, and a
+    # prior failed attempt may have left partial LUKS data at LBA0.
+    logger.info(
+        f"Running encrypted BlueStore simulation script on {wnode.name}. "
+        f"ceph-volume prepare can take 5-10 min..."
+    )
+    out = ""
+    try:
+        out = node_obj.run_script(
+            script_dest_path,
+            args=[disk_name, ceph_tag, "false"],
+            timeout=660,
+        )
+    except CommandFailed as e:
+        logger.warning("Simulation script failed on %s: %s", wnode.name, e)
+
+    logger.info("Script output:\n" + out)
+    result = "Encrypted BlueStore simulation complete" in out
+    if result:
+        logger.info(
+            f"Encrypted BlueStore simulation succeeded on worker node {wnode.name}"
+        )
+    else:
+        logger.warning(
+            f"Encrypted BlueStore simulation failed on worker node {wnode.name}"
+        )
+    return result
+
+
+def simulate_ceph_bluestore_dmcrypt_on_wnodes(wnodes, namespace=None, disk_map=None):
+    """
+    Simulates encrypted Ceph BlueStore OSDs (dm-crypt/LUKS) on worker nodes.
+
+    Args:
+        wnodes (list): List of worker node objects where the simulation
+            should be performed.
+        namespace (str): Namespace for the debug pod.
+        disk_map (dict): Map of node name to pre-detected disk name. When
+            provided, skips per-node disk detection.
+
+    Returns:
+        bool: True if the simulation succeeded on all nodes, False otherwise.
+
+    """
+    for wnode in wnodes:
+        logger.info(f"Simulating encrypted Ceph BlueStore on worker node: {wnode.name}")
+        disk_name = (disk_map or {}).get(wnode.name)
+        result = simulate_ceph_bluestore_dmcrypt_on_node_disk(
+            wnode, disk_name=disk_name, namespace=namespace
+        )
+        if not result:
+            logger.warning(
+                f"Failed to simulate encrypted Ceph BlueStore on "
+                f"worker node: {wnode.name}"
+            )
+            return False
+
+    logger.info("Encrypted Ceph BlueStore simulation succeeded on all worker nodes.")
+    return True
+
+
+def simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
+    wnodes=None,
+    namespace=None,
+    add_disks=True,
+    remove_ceph_cluster=True,
+    clear_signatures=True,
+):
+    """
+    Simulates the full encrypted Ceph BlueStore (dm-crypt/LUKS) process on
+    the specified worker nodes.
+
+    Steps performed on each worker node:
+    1. Adds disks to the nodes if specified.
+    2. Installs a minimal Ceph cluster and configuration.
+    3. Simulates an encrypted BlueStore OSD on the node's disk.
+    4. Removes the minimal Ceph cluster if specified.
+    5. Clears BlueStore signatures from disks if specified.
+
+    Args:
+        wnodes (list): List of worker node objects. Defaults to all worker nodes.
+        namespace (str): Namespace for the debug pod.
+        add_disks (bool): Whether to add disks to the nodes before simulation.
+        remove_ceph_cluster (bool): Whether to remove the minimal Ceph cluster
+            after simulation.
+        clear_signatures (bool): Whether to clear BlueStore signatures from
+            disks after simulation.
+
+    Returns:
+        bool: True if all steps succeeded on all nodes, False otherwise.
+
+    """
+    namespace = namespace or constants.DEFAULT_NAMESPACE
+    wnodes = wnodes or get_nodes()
+    wnode_names = [wnode.name for wnode in wnodes]
+    logger.info(
+        "Starting full encrypted Ceph BlueStore simulation process on "
+        f"worker nodes: {wnode_names}"
+    )
+
+    # Step 1: Optionally add disks to worker nodes
+    platform = config.ENV_DATA["platform"].lower()
+    if add_disks and platform == constants.VSPHERE_PLATFORM:
+        logger.info("Adding disks to worker nodes before simulation.")
+        disks_already_added = all(
+            disks_available_to_cleanup(wnode, namespace) for wnode in wnodes
+        )
+        if disks_already_added:
+            logger.info(
+                "Disks are already added to all worker nodes. Skipping addition."
+            )
+        else:
+            add_disk_for_vsphere_platform()
+
+    # Step 2: Detect disks once so the same device is used for simulation and cleanup
+    disk_map = {}
+    for wnode in wnodes:
+        disk = detect_simulation_disk_on_node(wnode, namespace)
+        if not disk:
+            logger.error(f"Disk detection failed on node {wnode.name}. Aborting.")
+            return False
+        disk_map[wnode.name] = disk
+
+    # Step 3: Install minimal Ceph cluster and configuration
+    host_node = wnodes[0]
+    result = install_minimal_ceph_cluster_and_conf_on_wnodes(
+        wnodes, host_node, namespace
+    )
+    if not result:
+        logger.warning("Failed to install minimal Ceph cluster and configuration.")
+        return False
+
+    # Steps 4-6: simulation + cleanup (cleanup always runs when flags are set)
+    simulation_result = False
+    cleanup_ok = True
+    try:
+        # Step 4: Simulate encrypted BlueStore OSDs on all worker nodes
+        simulation_result = simulate_ceph_bluestore_dmcrypt_on_wnodes(
+            wnodes, namespace, disk_map
+        )
+        if not simulation_result:
+            logger.warning(
+                "Failed to simulate encrypted Ceph BlueStore on worker nodes."
+            )
+    finally:
+        # Step 5: Optionally remove the minimal Ceph cluster
+        if remove_ceph_cluster:
+            logger.info("Removing minimal Ceph cluster from host node.")
+            if not remove_minimal_ceph_cluster(host_node, namespace):
+                logger.warning("Failed to remove minimal Ceph cluster from host node.")
+                cleanup_ok = False
+
+        # Step 6: Optionally clear BlueStore signatures from disks
+        if clear_signatures:
+            logger.info("Clearing Ceph BlueStore signatures from worker node disks.")
+            if not clear_ceph_bluestore_signature_on_wnodes(
+                wnodes, disk_names=disk_map, namespace=namespace
+            ):
+                logger.warning(
+                    "Failed to clear Ceph BlueStore signatures from worker nodes."
+                )
+                cleanup_ok = False
+
+    if not simulation_result or not cleanup_ok:
+        return False
+
+    logger.info(
+        "Full encrypted Ceph BlueStore simulation process completed successfully."
+    )
     return True

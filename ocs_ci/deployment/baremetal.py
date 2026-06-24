@@ -1561,68 +1561,45 @@ def clean_disk(
         logger.info(out)
 
 
-def detect_simulation_disk_on_node(wnode, namespace=None, timeout=300):
+def detect_simulation_disk_on_node(wnode, namespace=None):
     """
-    Detects the last available /dev/sd*, /dev/nvme*n0* disk on a given worker node.
+    Detects an available /dev/sd* or /dev/nvme* disk on a given worker node.
+
+    Uses ``disks_available_to_cleanup`` to identify non-OS disks regardless
+    of platform. This avoids the alphabetical-ordering pitfall where the extra
+    disk sorts before the OS disk (e.g. compute-0: sda=extra, sdb=OS would
+    cause a naive ``tail -1`` to pick the OS disk).
 
     Args:
         wnode (ocs_ci.ocs.resources.ocs.OCS): The worker node object.
         namespace (str): Namespace for the debug pod.
-        timeout (int): Timeout for the command execution.
 
     Returns:
-        str or None: The detected disk path (e.g., "/dev/sdb", "/dev/nvme*n0*") or None if not found.
+        str or None: The detected disk path (e.g., "/dev/sdb") or None if
+            not found.
 
     """
     namespace = namespace or constants.DEFAULT_NAMESPACE
 
     logger.info(
-        f"Attempting to auto-detect a suitable /dev/sd*, /dev/nvme*n0* "
+        f"Attempting to auto-detect a suitable /dev/sd*, /dev/nvme* "
         f"disk on worker node: {wnode.name}."
     )
-    # Determine disk naming pattern based on platform type
-    platform = config.ENV_DATA["platform"].lower()
-    if platform in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
-        disk_names_available = disks_available_to_cleanup(wnode, namespace=namespace)
-        candidate_disks = [
-            disk_name
-            for disk_name in disk_names_available
-            if disk_name.startswith(("nvme", "sd"))
-        ]
-        if not candidate_disks:
-            raise ValueError(
-                f"Didn't find any sd*/nvme* disks available on node {wnode.name}"
-            )
-        disk_name_pattern = "|".join(
-            f"^{re.escape(disk_name)}$" for disk_name in candidate_disks
-        )
-    else:
-        # SATA/SCSI disks typically used in virtualized environments
-        disk_name_pattern = "^sd[a-z]$"
 
-    # Construct command to find the last matching disk device
-    cmd = [
-        f'lsblk -dn -o NAME | grep -E "{disk_name_pattern}" | sed "s#^#/dev/#" | tail -1'
+    disk_names_available = disks_available_to_cleanup(wnode, namespace=namespace)
+    candidate_disks = [
+        disk_name
+        for disk_name in disk_names_available
+        if disk_name.startswith(("nvme", "sd"))
     ]
-    ocp_obj = ocp.OCP()
 
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=wnode.name,
-        cmd_list=cmd,
-        namespace=namespace,
-        use_root=True,
-        timeout=timeout,
-    )
-
-    logger.info(f"Disk detection command output: {out}")
-    disk_name = out.strip()
-
-    if not disk_name:
+    if not candidate_disks:
         logger.warning(
             f"No suitable disk found for BlueStore simulation on worker node: {wnode.name}."
         )
         return None
 
+    disk_name = f"/dev/{candidate_disks[-1]}"
     logger.info(f"Detected disk for simulation: {disk_name}")
     return disk_name
 
