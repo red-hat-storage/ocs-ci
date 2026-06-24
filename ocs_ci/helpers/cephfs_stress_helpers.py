@@ -1494,6 +1494,9 @@ def create_cephfs_subvolume_workloads(
         list[tuple]: One ``(project_obj, pvc_obj, pod_obj)`` tuple per
             workload, in creation order.
     """
+    if count < 1:
+        raise ValueError(f"count must be >= 1, got {count}")
+
     workloads = []
     for i in range(count):
         project_name = f"{project_name_prefix}-{i}"

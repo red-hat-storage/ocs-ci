@@ -2612,33 +2612,32 @@ validation_4_22 = {
         "//table/tbody/tr[1]//button[@aria-label='Show related pods']",
         By.XPATH,
     ),
-    # "Related pods" popover: role=dialog without aria-label='Help'
-    # (the help popover carries aria-label='Help'; the name popover uses
-    # aria-labelledby instead, so the absence of aria-label distinguishes it).
+    # "Related pods" popover: anchored by role=dialog + header text.
+    # The help popover carries aria-label='Help'; this one uses aria-labelledby.
     "cephfs_subvolume_name_popover": (
-        "//div[contains(@class,'c-popover') and @role='dialog'"
-        " and not(@aria-label='Help')]",
+        "//div[@role='dialog'" " and .//header[normalize-space(.)='Related pods']]",
         By.XPATH,
     ),
-    # <header class="pf-v6-c-popover__header"> inside the name popover;
-    # its text content is "Related pods".
+    # <header> inside the name popover; text content is "Related pods".
     "cephfs_subvolume_related_pods_header": (
-        "//div[contains(@class,'c-popover') and @role='dialog'"
-        " and not(@aria-label='Help')]"
-        "//header[contains(@class,'c-popover__header')]",
+        "//div[@role='dialog'"
+        " and .//header[normalize-space(.)='Related pods']]"
+        "//header[normalize-space(.)='Related pods']",
         By.XPATH,
     ),
-    # Pod <a> links inside pf-v6-c-popover__body > ul.c-list > li > span > a.
-    # Excludes the "View all" link which lives outside the <ul>.
+    # Pod <a> links inside the popover body ul > li > span > a.
+    # Scoped to the specific popover; excludes the "View all" link.
     "cephfs_subvolume_related_pods_links": (
-        "//div[contains(@class,'c-popover__body')]"
-        "//a[not(normalize-space(text())='View all')]",
+        "//div[@role='dialog'"
+        " and .//header[normalize-space(.)='Related pods']]"
+        "//a[normalize-space(.) and not(normalize-space(.)='View all')]",
         By.XPATH,
     ),
     # "View all" <a> inside <div class="pf-v6-u-mt-sm"> at the popover bottom.
     "cephfs_subvolume_view_all_link": (
-        "//div[contains(@class,'c-popover__body')]"
-        "//a[normalize-space(text())='View all']",
+        "//div[@role='dialog'"
+        " and .//header[normalize-space(.)='Related pods']]"
+        "//a[normalize-space(.)='View all']",
         By.XPATH,
     ),
     # Table row whose Namespace cell matches the given namespace (format arg).

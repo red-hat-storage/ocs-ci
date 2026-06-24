@@ -2,6 +2,7 @@ import logging
 
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
 
         Returns:
             str: e.g. '13 IOPS' (Total IOPS), '5 ms' (Total Latency),
-                '100 Mbps' (Total Throughput).
+                '100 MBps' (Total Throughput; UI may auto-scale Bps/KBps/MBps/GBps).
         """
         self.wait_for_element_to_be_present(self.first_row_value_loc, timeout=timeout)
         return self.get_element_text(self.first_row_value_loc).strip()
@@ -220,6 +221,55 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         self.wait_for_element_to_be_present(loc, timeout=timeout)
         return len(self.get_elements(loc)) > 0
 
+    def _all_namespaces_visible(self, namespaces):
+        """
+        Return True if every namespace in `namespaces` has at least one row
+        in the subvolume table, False otherwise.
+
+        Args:
+            namespaces (list[str]): Kubernetes namespaces to check.
+
+        Returns:
+            bool: True if all namespace rows are present.
+        """
+        return all(
+            bool(self.get_elements(format_locator(self.row_by_namespace_loc, ns)))
+            for ns in namespaces
+        )
+
+    def wait_for_namespaces_in_subvolume_table(self, namespaces, timeout=360, sleep=20):
+        """
+        Wait until every namespace in `namespaces` appears as a row in the
+        subvolume table.
+
+        Polls every `sleep` seconds for up to `timeout` seconds using
+        :class:`~ocs_ci.utility.utils.TimeoutSampler`.
+
+        Args:
+            namespaces (list[str]): Kubernetes namespaces to wait for.
+            timeout (int): Maximum seconds to wait (default 360).
+            sleep (int): Seconds between polls (default 20).
+
+        Raises:
+            TimeoutExpiredError: If any namespace is not visible within timeout.
+        """
+        logger.info(
+            "Waiting up to %ds for namespaces %s to appear in subvolume table",
+            timeout,
+            namespaces,
+        )
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=self._all_namespaces_visible,
+            namespaces=namespaces,
+        ):
+            if sample:
+                logger.info(
+                    "All %d namespaces visible in subvolume table", len(namespaces)
+                )
+                return
+
     def get_cephfs_subvolume_value_for_namespace(self, namespace, timeout=60):
         """
         Return the metric value cell text for the row matching the given namespace.
@@ -229,7 +279,7 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
             timeout (int): Maximum seconds to wait for the value cell.
 
         Returns:
-            str: e.g. '13 IOPS', '5 ms', '100 Mbps'.
+            str: e.g. '13 IOPS', '5 ms', '100 MBps' (auto-scaled Bps family).
         """
         logger.info(
             "Reading metric value for namespace '%s' from subvolume table", namespace
