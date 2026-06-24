@@ -18,14 +18,13 @@ for _path in (_AGENT_DIR, _REPO_ROOT):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-from matcher import find_matching_tests_for_issue, run_test_matching_stage
+from matcher import run_test_matching_stage
 from models import STAGE_TEST_MATCHING
 
 log = logging.getLogger(__name__)
 
 __all__ = [
     "STAGE_TEST_MATCHING",
-    "find_matching_tests_for_issue",
     "load_issues_from_run_record",
     "load_issue_from_jira",
     "match_issue",
@@ -124,7 +123,7 @@ def match_issue(
     return {
         "issue_id": key,
         "issue_summary": issue.get("summary", ""),
-        "matcher": "vector_db",
+        "matcher": "claude_agent",
         "matching_test_count": 0,
         "matching_tests": [],
         "analysis_notes": "No matching tests found.",
@@ -146,7 +145,7 @@ def match_issues(
         issues (list[dict]): Issue dicts from run record or JIRA
         top_n (int): Max matches per issue
         use_claude (bool): Legacy flag — forces claude-sdk backend when True
-        backend (str): auto | vector_db | claude-cli | claude-sdk
+        backend (str): auto | claude-cli | claude-sdk
         model (str | None): Claude model override
 
     Returns:

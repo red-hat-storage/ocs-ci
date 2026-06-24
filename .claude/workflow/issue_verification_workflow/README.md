@@ -194,7 +194,7 @@ Pass pipeline defaults via `--param` or run config YAML:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `top_n` | 10 | Max matching tests per issue |
-| `test_match_backend` | auto | `auto` (Claude CLI refines vector DB candidates), `vector_db`, `claude-cli`, `claude-sdk` |
+| `test_match_backend` | auto | `auto` (Claude CLI when available), `claude-cli`, `claude-sdk` |
 | `use_claude` | false | Legacy: forces full Claude Agent SDK search when `true` |
 | `claude_model` | — | Claude model for test matching |
 | `deploy_job_url` | — | Jenkins deploy URL for Stage 3 + Stage 5 |
@@ -212,7 +212,7 @@ When `live_repro_dry_run: false` and live repro **fails** for an issue (`not_fix
 
 | `dry_run` | true | Stage 5 Jenkins trigger dry-run |
 
-Example re-running test matching with Claude CLI refinement (default `test_match_backend: auto`):
+Example re-running test matching (default `test_match_backend: auto`):
 
 ```bash
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
@@ -267,17 +267,12 @@ Each issue accumulates stage data:
     "test_matching": {
       "status": "completed",
       "data": {
-        "issue_coverage_areas": {
-          "coverage_areas": ["noobaa-mcg", "ocs-operator"],
-          "upstream_repos": ["noobaa-core", "ocs-operator"],
-          "preferred_test_dirs": ["tests/functional/object/mcg", "..."]
-        },
+        "matcher": "claude_code_cli",
         "matching_tests": [
           {
             "test_node_id": "tests/.../test_foo.py::test_bar",
-            "coverage_areas": ["noobaa-mcg"],
-            "relevance_score": 214,
-            "match_reasons": ["code coverage area: NooBaa / MCG (S3)", "..."],
+            "relevance_score": 85,
+            "match_reasons": ["covers MON quorum loss during chaos", "..."],
             "pytest_command": "pytest tests/.../test_foo.py::test_bar"
           }
         ]
@@ -316,8 +311,6 @@ Stage 4 is a **Claude agent** (default `test_match_backend: auto`):
 3. No heuristic coverage mapper — matching is driven by verification-step similarity.
 
 Requires `claude login` (Claude Code CLI). Run record field `matcher` is `claude_code_cli` or `claude_agent_sdk`.
-
-Set `test_match_backend: vector_db` only for embedding fallback without Claude.
 
 ## Roadmap
 
