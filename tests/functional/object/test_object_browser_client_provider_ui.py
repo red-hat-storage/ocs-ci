@@ -22,6 +22,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     polarion_id,
     ui,
+    jira,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
@@ -503,6 +504,7 @@ class TestObjectBrowserClientProviderUI(ManageTest):
         logger.info("Test completed successfully - Object browser isolation verified")
 
     @polarion_id("OCS-7994")
+    @jira("DFBUGS-7973")
     def test_object_browser_upload_download_folder(self, project_factory):
         """
         Test upload and download folder with objects via object browser.
