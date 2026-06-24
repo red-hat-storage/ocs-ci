@@ -76,11 +76,12 @@ class MustGather(object):
             files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_EXTERNAL"]
         else:
             files = GATHER_COMMANDS_VERSION[ocs_version][self.type_log]
+        self.get_all_paths()
         for file in files:
             self.files_not_exist.append(file)
-            for dir_name, subdir_list, files_list in os.walk(self.root):
-                if file in files_list:
-                    self.files_path[file] = os.path.join(dir_name, file)
+            for full_path in self.full_paths:
+                if os.path.basename(full_path) == file:
+                    self.files_path[file] = full_path
                     self.files_not_exist.remove(file)
                     break
 
@@ -111,6 +112,8 @@ class MustGather(object):
         # https://bugzilla.redhat.com/show_bug.cgi?id=2049204
         # self.verify_ceph_file_content()
         for file, file_path in self.files_path.items():
+            if not os.path.isabs(file_path):
+                continue
             if not Path(file_path).is_file():
                 self.files_not_exist.append(file)
             elif re.search(r"\.yaml$", file):
@@ -162,6 +165,7 @@ class MustGather(object):
             if pattern is False:
                 pod_names.append(pod.name)
 
+        pod_path = None
         for dir_name, subdir_list, files_list in os.walk(self.root):
             if re.search("openshift-storage/pods$", dir_name):
                 pod_path = dir_name
@@ -169,10 +173,21 @@ class MustGather(object):
 
         pod_files = []
         logger.info("Get pod names on openshift-storage/pods directory")
-        for pod_file in os.listdir(pod_path):
-            pattern = self.check_pod_name_pattern(pod_file)
-            if pattern is False:
-                pod_files.append(pod_file)
+        if pod_path:
+            for pod_file in os.listdir(pod_path):
+                pattern = self.check_pod_name_pattern(pod_file)
+                if pattern is False:
+                    pod_files.append(pod_file)
+        else:
+            pods_pattern = re.compile(r"openshift-storage/pods/([^/]+)")
+            seen = set()
+            for full_path in self.full_paths:
+                match = pods_pattern.search(full_path)
+                if match and match.group(1) not in seen:
+                    seen.add(match.group(1))
+                    pattern = self.check_pod_name_pattern(match.group(1))
+                    if pattern is False:
+                        pod_files.append(match.group(1))
 
         diff = list(set(pod_files) - set(pod_names)) + list(
             set(pod_names) - set(pod_files)
@@ -236,15 +251,19 @@ class MustGather(object):
         if self.type_log == "OTHERS" and ocs_version >= version.VERSION_4_6:
             flag = False
             logger.info("Verify noobaa_diagnostics folder exist")
-            for path, subdirs, files in os.walk(self.root):
-                for file in files:
-                    if re.search(r"noobaa_diagnostics_.*.tar.gz", file):
-                        flag = True
-                        logger.info(f"Extract noobaa_diagnostics dir {file}")
-                        path_noobaa_diag = os.path.join(path, file)
-                        files_noobaa_diag = tarfile.open(path_noobaa_diag)
-                        files_noobaa_diag.extractall(path)
-                        break
+            self.get_all_paths()
+            for full_path in self.full_paths:
+                if re.search(
+                    r"noobaa_diagnostics_.*.tar.gz", os.path.basename(full_path)
+                ):
+                    flag = True
+                    if os.path.isabs(full_path):
+                        logger.info(f"Extract noobaa_diagnostics: {full_path}")
+                        with tarfile.open(full_path) as f:
+                            f.extractall(os.path.dirname(full_path))
+                    else:
+                        logger.info(f"Found noobaa_diagnostics in tarball: {full_path}")
+                    break
             if not flag:
                 logger.error("noobaa_diagnostics.tar.gz does not exist")
                 self.files_not_exist.append("noobaa_diagnostics.tar.gz")
