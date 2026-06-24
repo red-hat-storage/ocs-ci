@@ -1,5 +1,6 @@
 import logging
 import types
+
 import pytest
 
 from ocs_ci.framework.testlib import MCGTest, tier1, tier3
@@ -283,50 +284,44 @@ class TestNSFSObjectIntegrity(MCGTest):
     def test_nsfs_list_buckets(
         self,
         nsfs_bucket_factory,
+        bucket_factory,
     ):
         """
-        Test NSFS bucket listing:
+        Test NSFS bucket listing with ownership-scoped ListBuckets:
 
-        1. Create two NSFS accounts - one with NSFS_ONLY=True and one with NSFS_ONLY=False
-        2. Create two NSFS buckets - one from each account
-        3. Verify that the NSFS_ONLY=True account can only see the NSFS buckets
-        4. Verify that the NSFS_ONLY=False account can also see first.bucket
+        1. Create two NSFS accounts with one bucket each
+        2. Create a second bucket from each account
+        3. Verify that each account can only list its own buckets
         """
-        # 1. Create two NSFS accounts - one with NSFS_ONLY=True and one with NSFS_ONLY=False
-        # 2. Create two NSFS buckets - one from each account
-        nsfs_obj_1 = NSFS(
-            method="CLI",
-            pvc_size=20,
-            nsfs_only=True,
-        )
-        nsfs_obj_2 = NSFS(
-            method="CLI",
-            pvc_size=20,
-            nsfs_only=False,
-        )
+        # 1. Create two NSFS accounts with one bucket each
+        nsfs_obj_1 = NSFS(method="CLI", pvc_size=20)
+        nsfs_obj_2 = NSFS(method="CLI", pvc_size=20)
         nsfs_bucket_factory(nsfs_obj_1)
         nsfs_bucket_factory(nsfs_obj_2)
 
-        nsfs_buckets = {nsfs_obj_1.bucket_name, nsfs_obj_2.bucket_name}
-        non_nsfs_bucket = "first.bucket"
+        # 2. Create a second bucket from each account
+        acc_1_buckets = {
+            nsfs_obj_1.bucket_name,
+            retry(CommandFailed, tries=4, delay=10)(bucket_factory)(
+                s3resource=nsfs_obj_1.s3_resource
+            )[0].name,
+        }
+        acc_2_buckets = {
+            nsfs_obj_2.bucket_name,
+            retry(CommandFailed, tries=4, delay=10)(bucket_factory)(
+                s3resource=nsfs_obj_2.s3_resource
+            )[0].name,
+        }
 
-        # 3. Verify that the NSFS_ONLY=True account can only see the NSFS buckets
-        nsfs_only_acc_list = set(
-            s3_list_buckets(
-                s3_obj=nsfs_obj_1,
-            )
+        # 3. Verify that each account can only list its own buckets
+        acc_1_listed = set(s3_list_buckets(s3_obj=nsfs_obj_1))
+        assert acc_1_buckets == acc_1_listed, (
+            f"Account 1 bucket list mismatch. "
+            f"Expected: {acc_1_buckets}, Listed: {acc_1_listed}"
         )
-        assert (
-            nsfs_buckets.issubset(nsfs_only_acc_list)
-            and non_nsfs_bucket not in nsfs_only_acc_list
-        ), "NSFS_ONLY=True account can see non-NSFS buckets"
 
-        # 4. Verify that the NSFS_ONLY=False account can also see first.bucket
-        nsfs_only_acc_list = set(
-            s3_list_buckets(
-                s3_obj=nsfs_obj_2,
-            )
+        acc_2_listed = set(s3_list_buckets(s3_obj=nsfs_obj_2))
+        assert acc_2_buckets == acc_2_listed, (
+            f"Account 2 bucket list mismatch. "
+            f"Expected: {acc_2_buckets}, Listed: {acc_2_listed}"
         )
-        assert nsfs_buckets.union({non_nsfs_bucket}).issubset(
-            nsfs_only_acc_list
-        ), "NSFS_ONLY=False account can't see some of expected buckets"
