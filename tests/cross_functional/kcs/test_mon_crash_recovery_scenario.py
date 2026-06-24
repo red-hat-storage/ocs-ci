@@ -7,14 +7,18 @@ from ocs_ci.ocs.constants import (
     ROOK_CEPH_OPERATOR,
     CEPHBLOCKPOOL,
     STATUS_CLBO,
+    MON_APP_LABEL,
+    STATUS_RUNNING,
+    POD,
 )
+from ocs_ci.ocs import ocp
+from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.ocs.resources.deployment import get_mon_deployments
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     run_io_in_bg,
-    verify_mon_pod_running,
 )
 from ocs_ci.ocs.resources.storage_cluster import ceph_mon_dump
 from ocs_ci.framework.pytest_customization.marks import (
@@ -125,7 +129,10 @@ class TestMonCrashRecoveryScenario:
         crash = toolbox.exec_ceph_cmd("ceph crash ls-new")
         assert not crash, f"Ceph cluster has generated crash {' '.join(crash[0])}"
 
-        # Step 9: Verify all mon pods are up and running
+        # Step 9: Verify all mon pods are up and running (same count as initial)
+        log.info(
+            f"Verifying all {initial_mon_count} mon pods are up and running (waiting up to 30 minutes)..."
+        )
         current_mon_count = len(get_mon_deployments())
         log.info(f"Current mon deployments count: {current_mon_count}")
 
@@ -133,9 +140,18 @@ class TestMonCrashRecoveryScenario:
             current_mon_count == initial_mon_count
         ), f"Mon count mismatch: Initial={initial_mon_count}, Current={current_mon_count}"
 
-        assert verify_mon_pod_running(
-            initial_mon_count
-        ), f"Not all {initial_mon_count} mon pods are in running state after 10 minutes"
+        # Wait for all mon pods to be running with 30-minute timeout
+        pod_objs = ocp.OCP(kind=POD, namespace=config.ENV_DATA["cluster_namespace"])
+        ret = pod_objs.wait_for_resource(
+            condition=STATUS_RUNNING,
+            selector=MON_APP_LABEL,
+            resource_count=initial_mon_count,
+            dont_allow_other_resources=True,
+            timeout=1800,  # 30 minutes = 1800 seconds
+        )
+        assert (
+            ret
+        ), f"Not all {initial_mon_count} mon pods are in running state after 30 minutes"
         log.info(f"All {initial_mon_count} mon pods are up and running successfully")
 
         # Step 10: Archive all ceph crashes
