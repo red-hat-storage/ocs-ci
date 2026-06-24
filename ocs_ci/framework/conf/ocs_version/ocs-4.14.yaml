@@ -4,9 +4,8 @@ DEPLOYMENT:
   default_latest_tag: 'latest-stable-4.14'
   ocs_csv_channel: "stable-4.14"
   default_ocp_version: '4.14'
-  konflux_build: true
 ENV_DATA:
   ocs_version: '4.14'
 REPORTING:
-  default_ocs_must_gather_latest_tag: 'latest-4.14'
-  default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  default_ocs_must_gather_latest_tag: 'v4.14'
+  default_ocs_must_gather_image: "quay.io/rhceph-dev/odf4-odf-must-gather-rhel9"
