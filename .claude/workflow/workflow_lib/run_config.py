@@ -8,7 +8,16 @@ from typing import Any
 from workflow_lib.loader import load_yaml
 
 _RESERVED_TOP_LEVEL_KEYS = frozenset(
-    {"pipeline", "parameters", "defaults", "run", "description", "name"}
+    {
+        "pipeline",
+        "parameters",
+        "defaults",
+        "run",
+        "description",
+        "name",
+        "auth",
+        "agents",
+    }
 )
 
 

@@ -16,7 +16,35 @@ Stage 5: ocs_ci_execution            → Trigger matched tests on Jenkins (ocs_c
 
 Each stage appends results to a timestamped **run record** under `run_record/`. Stages 2–4 require `--run-id` from stage 1.
 
-### YAML pipeline orchestrator (recommended)
+### Shared workflow config (recommended)
+
+One YAML file drives the pipeline and standalone agent CLIs:
+
+```bash
+cp .claude/workflow/issue_verification_workflow/config/workflow.example.yaml \
+   .claude/workflow/issue_verification_workflow/config/workflow.yaml
+# Edit odf_version, deploy_job_url, agent settings
+
+# Pipeline auto-loads config/workflow.yaml when present
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --pipeline issue_verification
+
+# Agents read the same file
+python .claude/agents/ocs_ci_test_match/test_match_cli.py match --run-id 20260622_194551
+python .claude/agents/ocs_ci_live_repro/verify_cli.py plan --run-id 20260622_194551
+```
+
+Keep **secrets** in `data/auth.yaml` (`jira:` and `jenkins:` sections). The workflow config only references paths and run parameters.
+
+| Section | Purpose |
+|---------|---------|
+| `parameters` | `odf_version`, `deploy_job_url` — passed to all workflow stages |
+| `defaults` | Pipeline defaults (`dry_run`, `top_n`, `live_repro_dry_run`, …) |
+| `agents.*` | Per-agent settings for workflow stages and standalone CLIs |
+| `auth` | Optional paths to credential files (not secrets themselves) |
+| `run` | `run_id`, `from_stage`, `until_stage` for resume/slice runs |
+
+### YAML pipeline orchestrator
 
 Uses the generic **workflow_lib** engine (`.claude/workflow/workflow_lib/`) with issue verification executors and run record.
 
@@ -32,14 +60,13 @@ python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
   --param odf_version=4.22 \
   --param deploy_job_url=https://jenkins.../job/qe-deploy-ocs-cluster/69391/
 
-# Using a YAML run config
-cp .claude/workflow/issue_verification_workflow/pipelines/configs/issue_verification.example.yaml \
-   .claude/workflow/issue_verification_workflow/pipelines/configs/my-odf-4.22.yaml
-
+# Explicit config path (overrides auto-detected workflow.yaml)
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
   --pipeline issue_verification \
-  --config .claude/workflow/issue_verification_workflow/pipelines/configs/my-odf-4.22.yaml
+  --config .claude/workflow/issue_verification_workflow/config/workflow.yaml
 ```
+
+Legacy per-run configs under `pipelines/configs/` still work via `--config`.
 
 Stage 1 JIRA intake uses **`ocs_ci_jira`** agent (`jira_search`).
 
@@ -217,7 +244,8 @@ Each issue accumulates stage data:
 | `pipeline_cli.py` | CLI entry point → generic `workflow` engine |
 | `executors.py` | Issue verification workflow stage executors |
 | `workflow_context.py` | Issue verification RunContext + factory |
-| `workflow_paths.py` | Paths to pipelines and agent registry |
+| `workflow_config.py` | Shared config loader for pipeline + agent CLIs |
+| `config/workflow.example.yaml` | Template for `config/workflow.yaml` (gitignored) |
 | `pipelines/` | Workflow definitions (`issue_verification.yaml`) |
 | `agents/registry.yaml` | Agent name → run-record stage mapping |
 | `run_record.py` | Timestamped runs, shared issues JSON |

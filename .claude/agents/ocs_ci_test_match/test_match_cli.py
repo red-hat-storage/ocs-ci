@@ -48,6 +48,11 @@ from operations import (
     match_issues,
 )
 
+if str(_ISSUE_VERIFICATION_DIR) not in sys.path:
+    sys.path.insert(0, str(_ISSUE_VERIFICATION_DIR))
+
+from workflow_config import apply_config_to_namespace
+
 log = logging.getLogger("ocs_ci_test_match")
 
 
@@ -100,6 +105,16 @@ def _maybe_update_run_record(
 
 
 def cmd_match(args: argparse.Namespace) -> int:
+    apply_config_to_namespace(
+        args,
+        agent="test_match",
+        config_path=args.workflow_config,
+        mappings={
+            "top_tests": "agents.top_n",
+            "claude_model": "agents.model",
+            "jira_config": "auth.jira_config",
+        },
+    )
     issues = _resolve_issues(args)
 
     missing_repro = [
@@ -146,6 +161,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     match = sub.add_parser("match", help="Find matching ocs-ci tests")
+    match.add_argument(
+        "--workflow-config",
+        default=None,
+        metavar="PATH",
+        help="Shared workflow config (default: config/workflow.yaml)",
+    )
     match.add_argument(
         "--run-id",
         default=None,

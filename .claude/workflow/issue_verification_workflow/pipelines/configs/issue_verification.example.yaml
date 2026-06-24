@@ -1,16 +1,15 @@
-# Copy to e.g. pipelines/configs/my-odf-4.22-run.yaml and customize.
-# Local run configs are gitignored — see pipelines/configs/.gitignore
+# Legacy per-run config — prefer config/workflow.example.yaml (shared workflow config)
+#
+# Copy to my-run.yaml in this directory, or use:
+#   cp ../config/workflow.example.yaml ../config/workflow.yaml
 
 pipeline: issue_verification
 description: ODF 4.22 z-stream Lane C qualification run
 
-# Pipeline parameters (see pipelines/issue_verification.yaml)
 parameters:
   odf_version: "4.22"
   deploy_job_url: https://jenkins-csb-odf-qe-ocs4.dno.corp.redhat.com/job/qe-deploy-ocs-cluster/123/
-  # jira_config: /path/to/jira.cfg
 
-# Override pipeline defaults (optional)
 defaults:
   dry_run: true
   top_n: 10
@@ -25,9 +24,5 @@ defaults:
   tests_per_issue: 1
   force_live_repro: false
 
-# Run control (optional; CLI flags override when set)
 run:
-  # run_id: 20260622_194551
-  # from_stage: ocs_ci_execution
-  # until_stage: test_matching
   force: false

@@ -33,6 +33,7 @@ for _path in (_AGENT_DIR, _REPO_ROOT, _ISSUE_VERIFICATION_DIR):
         sys.path.insert(0, str(_path))
 
 from operations import load_issues_from_run_record, verify_issues
+from workflow_config import apply_config_to_namespace
 
 log = logging.getLogger("ocs_ci_live_repro")
 
@@ -46,6 +47,21 @@ def _configure_logging(verbose: bool) -> None:
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
+    apply_config_to_namespace(
+        args,
+        agent="live_repro",
+        config_path=args.workflow_config,
+        mappings={
+            "oc_command": "agents.oc_command_path",
+            "model": "agents.model",
+            "max_turns": "agents.max_turns",
+            "backend": "agents.backend",
+        },
+    )
+    if not args.deploy_job_url:
+        raise SystemExit(
+            "--deploy-job-url is required (or set parameters.deploy_job_url in workflow config)"
+        )
     issues = load_issues_from_run_record(args.run_id, issue_key=args.issue)
     results = verify_issues(
         issues,
@@ -82,8 +98,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 
 def _add_verify_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workflow-config", default=None, metavar="PATH")
     parser.add_argument("--run-id", required=True)
-    parser.add_argument("--deploy-job-url", required=True)
+    parser.add_argument("--deploy-job-url", default=None)
     parser.add_argument("--issue", default=None, help="Single JIRA key")
     parser.add_argument("--odf-version", default=None, help="Target z-stream version")
     parser.add_argument(
