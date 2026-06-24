@@ -93,9 +93,7 @@ class TestJenkinsNodeReboot(E2ETest):
         nodes_reboot = jenkins.get_node_name_where_jenkins_pod_not_hosted(
             node_type=node_type, num_of_nodes=1
         )
-        logger.info(
-            f"Nodes to reboot: {[n.name for n in nodes_reboot] if nodes_reboot else 'None'}"
-        )
+        logger.info(f"Nodes to reboot: {nodes_reboot if nodes_reboot else 'None'}")
 
         logger.test_step(f"Start {num_of_builds} builds per project")
         jenkins.number_builds_per_project = num_of_builds
@@ -105,7 +103,7 @@ class TestJenkinsNodeReboot(E2ETest):
         if len(nodes_reboot) > 0:
             logger.test_step(f"Reboot {node_type} node during build execution")
             logger.info(
-                f"Rebooting {len(nodes_reboot)} node(s): {[n.name for n in nodes_reboot]}"
+                f"Rebooting {len(nodes_reboot)} node(s): {nodes_reboot if nodes_reboot else 'None'}"
             )
             nodes.restart_nodes(get_node_objs(nodes_reboot))
             logger.info("Node reboot completed")

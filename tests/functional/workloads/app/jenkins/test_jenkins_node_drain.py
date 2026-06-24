@@ -85,9 +85,7 @@ class TestJenkinsNodeDrain(E2ETest):
         nodes_drain = jenkins.get_node_name_where_jenkins_pod_not_hosted(
             node_type=node_type, num_of_nodes=1
         )
-        logger.info(
-            f"Nodes to drain: {[n.name for n in nodes_drain] if nodes_drain else 'None'}"
-        )
+        logger.info(f"Nodes to drain: {nodes_drain if nodes_drain else 'None'}")
 
         logger.test_step(f"Start {num_of_builds} builds per project")
         jenkins.number_builds_per_project = num_of_builds
@@ -96,15 +94,11 @@ class TestJenkinsNodeDrain(E2ETest):
 
         if len(nodes_drain) > 0:
             logger.test_step(f"Drain {node_type} node during build execution")
-            logger.info(
-                f"Draining {len(nodes_drain)} node(s): {[n.name for n in nodes_drain]}"
-            )
+            logger.info(f"Draining {len(nodes_drain)} node(s): {nodes_drain}")
             drain_nodes(nodes_drain)
             logger.info("Node drain completed")
 
-            logger.info(
-                f"Making node(s) schedulable again: {[n.name for n in nodes_drain]}"
-            )
+            logger.info(f"Making node(s) schedulable again: {nodes_drain}")
             schedule_nodes(nodes_drain)
             logger.info("Node(s) marked schedulable")
         else:
