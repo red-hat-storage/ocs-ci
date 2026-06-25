@@ -423,6 +423,27 @@ class S3VectorTab(BucketsTab):
             logger.warning("Could not find index list items")
             return []
 
+    def navigate_to_bucket_policy_tab(self):
+        """
+        Navigate to the Bucket Policy sub-tab on the current vector bucket
+        detail page and return a ready-to-use BucketsTabPermissions instance.
+
+        Must be called after navigate_to_vector_bucket() so the browser is
+        already on the bucket detail page.
+
+        Returns:
+            BucketsTabPermissions: Page object for bucket policy operations.
+        """
+        from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
+            BucketsTabPermissions,
+        )
+
+        logger.info("Navigating to Bucket Policy tab")
+        self.do_click(self.bucket_tab["permissions_tab"], enable_screenshot=True)
+        self.do_click(self.bucket_tab["bucket_policy_tab"], enable_screenshot=True)
+        self.page_has_loaded(sleep_time=self.PAGE_LOAD_WAIT)
+        return BucketsTabPermissions()
+
     def delete_index(self, index_name: str):
         """
         Delete a single vector index by name via the row kebab menu.
