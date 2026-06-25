@@ -11,6 +11,7 @@ from types import ModuleType
 # Flat module names reused across .claude/agents/* packages
 _COLLIDING_MODULE_NAMES = frozenset(
     {
+        "auth",
         "models",
         "operations",
         "config",
