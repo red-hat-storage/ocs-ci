@@ -313,6 +313,12 @@ class CephCluster(object):
         expected_mon_count = self.mon_count
         expected_mds_count = self.mds_count
 
+        # If the monCount is updated to five, then change expected_mon_count value to five
+        cephcluster_data = self.CEPHCLUSTER.get()
+        monCount_val = cephcluster_data["items"][0]["spec"]["mon"]["count"]
+        if monCount_val == 5:
+            expected_mon_count = 5
+
         if config.ENV_DATA[
             "platform"
         ] in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA["cluster_type"] in [
@@ -1428,11 +1434,17 @@ def validate_pdb_creation():
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
 
-    if odf_running_version >= version.VERSION_4_19:
+    if odf_running_version >= version.VERSION_4_19 and not config.COMPONENTS.get(
+        "disable_noobaa", False
+    ):
         pdb_count += 1
         pdb_required.append(constants.NOOBAA_DB_PG_PDB)
     else:
         logger.info(f"Required PDB count is {pdb_count}")
+
+    if config.COMPONENTS.get("disable_cephfs", False):
+        pdb_required.remove(constants.MDS_PDB)
+        pdb_count -= 1
 
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(

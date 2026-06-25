@@ -8,6 +8,7 @@ import logging
 import os
 import yaml
 import re
+import json
 
 from ocs_ci.framework import config
 from ocs_ci.utility.templating import load_yaml
@@ -21,7 +22,6 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -499,3 +499,71 @@ def get_pod_ips(pod_selector, namespace):
 
     logger.info(f"Found {len(pod_ips)} pod IPs for selector: {pod_selector}")
     return pod_ips
+
+
+def get_pod_multus_ips(pod_selector, namespace):
+    """
+    Get multus network IPs for pods matching the selector in a given namespace.
+    Only returns IPs from multus secondary networks (not the primary network).
+
+    Args:
+        pod_selector (str): Label selector to filter pods (e.g., "app=rook-ceph-osd")
+        namespace (str): Namespace to search for pods
+
+    Returns:
+        dict: Dictionary mapping pod names to list of their multus network IP addresses
+    """
+    logger.info(
+        f"Getting multus network IPs for selector: {pod_selector} in namespace: {namespace}"
+    )
+    pod_ocp = OCP(kind=constants.POD, namespace=namespace)
+    pods = pod_ocp.get(selector=pod_selector)
+
+    if not pods or "items" not in pods:
+        logger.warning(f"No pods found with selector: {pod_selector}")
+        return {}
+    pod_multus_ips = {}
+    for pod in pods["items"]:
+        pod_name = pod["metadata"]["name"]
+
+        pod_phase = pod.get("status", {}).get("phase")
+        deletion_timestamp = pod.get("metadata", {}).get("deletionTimestamp")
+
+        if pod_phase != "Running" or deletion_timestamp:
+            logger.debug(
+                f"Skipping pod {pod_name} - phase: {pod_phase}, "
+                f"terminating: {bool(deletion_timestamp)}"
+            )
+            continue
+        multus_ips = []
+        annotations = pod.get("metadata", {}).get("annotations", {})
+        network_status = annotations.get("k8s.v1.cni.cncf.io/network-status")
+
+        if network_status:
+            try:
+                network_data = json.loads(network_status)
+                for network in network_data:
+                    if not network.get("default", False):
+                        network_ips = network.get("ips", [])
+                        network_name = network.get("name", "unknown")
+                        for ip in network_ips:
+                            multus_ips.append(ip)
+                            logger.debug(
+                                f"Pod {pod_name}: Found multus IP {ip} from network {network_name}"
+                            )
+                if multus_ips:
+                    pod_multus_ips[pod_name] = multus_ips
+                    logger.info(f"Pod: {pod_name}, Multus IPs: {multus_ips}")
+                else:
+                    logger.debug(f"No multus network IPs found for pod: {pod_name}")
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(
+                    f"Failed to parse network-status annotation for pod {pod_name}: {e}"
+                )
+        else:
+            logger.debug(f"No network-status annotation found for pod: {pod_name}")
+
+    logger.info(
+        f"Found {len(pod_multus_ips)} pods with multus IPs for selector: {pod_selector}"
+    )
+    return pod_multus_ips

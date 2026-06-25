@@ -563,6 +563,14 @@ DEFAULT_MCG_BUCKET_NOTIFS_PVC = "noobaa-bucket-notifications-pvc"
 CUSTOM_MCG_LABEL = "custom=mcg-label"
 NOOBAA_RESOURCE_NAME = "noobaa"
 NOOBAA_DB_PVC_NAME = "noobaa-db-pg-cluster-1"
+NOOBAA_INITIALIZING_REASON = "NoobaaInitializing"
+NOOBAA_HEALTH_CHECK_DELAY = 30
+CEPH_CONDITION_REASONS = (
+    "CephClusterNotReady",
+    "CephClusterHealthNotOK",
+    "CephClusterCreating",
+    "CephClusterUpdating",
+)
 MIN_PV_BACKINGSTORE_SIZE_IN_GB = 17
 JENKINS_BUILD = "jax-rs-build"
 JENKINS_BUILD_COMPLETE = "Complete"
@@ -634,6 +642,13 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 DEFAULT_VOLUMEGROUPSNAPSHOTCLASS = "ocs-storagecluster-cephfs-groupsnapclass"
+
+# CephFS subvolume metrics UI (RHSTOR-7679)
+CEPHFS_SUBVOLUME_METRICS_CARD_TITLE = "Current top 10 subvolumes on all clusters"
+CEPHFS_SUBVOLUME_POPOVER_TEXT = (
+    "Use subvolumes to find pods with poor performing workloads"
+)
+CEPHFS_SUBVOLUME_DEFAULT_METRIC = "Total IOPS"
 
 # hyperconverged defaults
 HYPERCONVERGED_NAMESPACE = "kubevirt-hyperconverged"
@@ -1599,6 +1614,7 @@ ALERT_CLUSTEROBJECTSTORESTATE = "ClusterObjectStoreState"
 ALERT_KMSSERVERCONNECTIONALERT = "KMSServerConnectionAlert"
 ALERT_KUBEHPAREPLICASMISMATCH = "KubeHpaReplicasMismatch"
 ALERT_KUBEPERSISTENTVOLUMEINODESFILLINGUP = "KubePersistentVolumeInodesFillingUp"
+ALERT_CEPHMONLOWCOUNT = "CephMonLowNumber"
 ALERT_CEPHOSDSLOWOPS = "CephOSDSlowOps"
 ALERT_STORAGECLIENTHEARTBEATMISSED = "StorageClientHeartbeatMissed"
 ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION = (
@@ -1817,6 +1833,7 @@ RHV_PLATFORM = "rhv"
 ROSA_PLATFORM = "rosa"
 FUSIONAAS_PLATFORM = "fusion_aas"
 ROSA_HCP_PLATFORM = "rosa_hcp"
+IBM_HCI_PLATFORM = "ibm_hci"
 ROSA_PLATFORMS = [ROSA_PLATFORM, ROSA_HCP_PLATFORM]
 ROSA_HCP_DS_NAMESPACE = "kube-system"
 ROSA_HCP_DS_LABEL = "app=roks-icsp"
@@ -1885,7 +1902,12 @@ DEPLOYMENT_TYPES = [IPI_DEPL_TYPE, UPI_DEPL_TYPE, MANAGED_DEPL_TYPE, LOCAL_DEPL_
 
 DEFAULT_AWS_REGION = "us-east-2"
 
-HCI_PROVIDER_CLIENT_PLATFORMS = [HCI_BAREMETAL, HCI_VSPHERE]
+
+HCI_PROVIDER_CLIENT_PLATFORMS = [
+    HCI_BAREMETAL,
+    HCI_VSPHERE,
+    IBM_HCI_PLATFORM,
+]
 
 IBM_REGIONS = ["us-east", "us-south", "us"]
 IBM_CLOUD_SUBNETS = {
@@ -3193,6 +3215,7 @@ OCS_COMPONENTS_MAP = {
     "noobaa": "multiCloudGateway",
     "blockpools": "cephBlockPools",
     "cephnonresilentpools": "cephNonResilientPools",
+    "cephobjectstoreusers": "cephObjectStoreUsers",
 }
 
 DEFAULT_PAXOS_SERVICE_TRIM_MIN = 250
@@ -3734,6 +3757,7 @@ FDF_ODFCLUSTER_CR = os.path.join(FDF_TEMPLATE_DIR, "odfcluster.yaml")
 FDF_CATSRC_CR = os.path.join(FDF_TEMPLATE_DIR, "isf_datafoundation_catsrc.yaml")
 FDF_CATSRC_IMAGE_PATH = "icr.io/cpopen/isf-data-foundation-catalog"
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
+FUSION_NAMESPACE = "ibm-spectrum-fusion-ns"
 ISF_CATALOG_SOURCE_NAME = "isf-catalog"
 ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"
 ISF_OPERATOR_IDMS_YAML = "image-digest-mirror-set.yaml.j2"
@@ -3834,6 +3858,8 @@ VDBENCH_WORKLOAD_COMPLETION_TIMEOUT = 3600
 VDBENCH_SCALING_TIMEOUT = 180
 # StorageAutoScaler Values
 PROMETHEUS_RECONCILE_TIMEOUT = 660
+# Seconds to wait after IO before querying Prometheus (scrape + rule eval)
+PROMETHEUS_SCRAPE_WAIT = 180
 
 # ODF recovery profiles
 LOW_RECOVERY_OPS = "low_recovery_ops"
@@ -3939,3 +3965,6 @@ CEPH_MON_LEGACY_PORT = 6789  # Ceph Monitor (legacy protocol)
 CEPH_EXPORTER_PORT = 9283  # Ceph Exporter (metrics)
 CEPH_OSD_PORT_MIN = 6800  # Ceph OSD port range start
 CEPH_OSD_PORT_MAX = 7300  # Ceph OSD port range end
+
+# IBM HCI
+IBM_HCI_RACK_DIR = os.path.join(DATA_DIR, "rack_details")

@@ -39,9 +39,13 @@ RUN:
   load_status: None
   skip_reason_test_found: {}
   skipped_tests_ceph_health: 0
+  skipped_tests_noobaa_health: 0
   number_of_tests: None
   skipped_on_ceph_health_ratio: 0
   skipped_on_ceph_health_threshold: 0
+  noobaa_not_ready_at_setup: {}
+  noobaa_health_failure_source: {}
+  sc_ceph_health_mismatch: {}
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
@@ -151,9 +155,9 @@ REPORTING:
   # but we still enable option to overwirte it if needed. Otherwise if
   # specified, the ARM architecture is not supported.
   ocp_must_gather_image: ""
-  default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  default_ocs_must_gather_image: "quay.io/rhceph-dev/odf4-odf-must-gather-rhel9"
   odf_live_must_gather_image: "registry.redhat.io/odf4/odf-must-gather-rhel9"
-  default_ocs_must_gather_latest_tag: "latest-4.22"
+  default_ocs_must_gather_latest_tag: "v4.22"
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False
   rp_client_log_level: "ERROR"

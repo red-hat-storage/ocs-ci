@@ -8,18 +8,21 @@ import logging
 import random
 
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
+from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
 
-def create_s3vectors_client(mcg_obj, obc_obj):
+def create_s3vectors_client(mcg_obj, obc_obj, nsr_name=None):
     """
     Create an S3 Vectors client using OBC credentials
 
     Args:
         mcg_obj (obj): MCG object containing vectors endpoint and region
         obc_obj (obj): OBC object containing access credentials
+        nsr_name (str): Optional NooBaa namespace resource name for x-noobaa-nsr header
 
     Returns:
         boto3.client: S3 Vectors client configured with OBC credentials
@@ -30,7 +33,7 @@ def create_s3vectors_client(mcg_obj, obc_obj):
 
     retry_cfg = Config(retries={"max_attempts": 10, "mode": "standard"})
 
-    return boto3.client(
+    client = boto3.client(
         "s3vectors",
         region_name=mcg_obj.region,
         verify=retrieve_verification_mode(),
@@ -39,6 +42,26 @@ def create_s3vectors_client(mcg_obj, obc_obj):
         aws_secret_access_key=obc_obj.access_key,
         config=retry_cfg,
     )
+
+    # Add custom NooBaa header if NSR name is provided
+    if nsr_name:
+
+        def add_nsr_header(params, **kwargs):
+            params["headers"]["x-noobaa-nsr"] = nsr_name
+
+        client = boto3.client(
+            "s3vectors",
+            region_name=mcg_obj.region,
+            verify=retrieve_verification_mode(),
+            endpoint_url=mcg_obj.vectors_endpoint,
+            aws_access_key_id=mcg_obj.access_key_id,
+            aws_secret_access_key=mcg_obj.access_key,
+            config=retry_cfg,
+        )
+
+        client.meta.events.register("before-call", add_nsr_header)
+
+    return client
 
 
 def generate_test_vectors_with_metadata(
@@ -169,7 +192,19 @@ def create_index(
         "distanceMetric": distance_metric,
     }
     params.update(kwargs)
-    return s3vectors_client.create_index(**params)
+    try:
+        return s3vectors_client.create_index(**params)
+    except ClientError as e:
+        # botocore retries CreateIndex on InternalFailure; if the first call
+        # succeeded but the response was lost, subsequent retries get
+        # VECTOR_INDEX_ALREADY_OWNED_BY_YOU — the index exists and we own it,
+        # which is the desired state.
+        if "VECTOR_INDEX_ALREADY_OWNED_BY_YOU" in str(e):
+            logger.warning(
+                "Index '%s' already owned; treating create as idempotent", index_name
+            )
+            return {"ResponseMetadata": {"HTTPStatusCode": 200}}
+        raise
 
 
 def delete_index(s3vectors_client, **kwargs):
@@ -431,4 +466,41 @@ def delete_vector_bucket_policy(s3vectors_client, vector_bucket_name):
     """
     return s3vectors_client.delete_vector_bucket_policy(
         vectorBucketName=vector_bucket_name
+    )
+
+
+def gen_vector_bucket_policy(
+    user_list,
+    actions_list,
+    resources_list,
+    effect=None,
+    sid="statement",
+):
+    """
+    Generate a vector bucket policy dict for the S3 Vectors API.
+
+    Thin wrapper around gen_bucket_policy that applies the s3vectors: action
+    prefix and arn:aws:s3vectors::: resource format.
+
+    Args:
+        user_list (list or str): Principal ARNs, e.g. ["*"] or "arn:aws:iam::id:root"
+        actions_list (list): Action names without the "s3vectors:" prefix,
+                             e.g. ["ListVectors"] or ["DeleteVectors", "GetVectors"]
+        resources_list (list): Resource suffixes or full ARNs. Bare strings are
+                               prefixed with "arn:aws:s3vectors:::"; strings already
+                               starting with "arn:" are used as-is.
+        effect (str): "Allow" or "Deny". Default: "Allow"
+        sid (str): Statement ID. Default: "statement"
+
+    Returns:
+        dict: Vector bucket policy dict with a single statement, ready for json.dumps()
+    """
+    return gen_bucket_policy(
+        user_list=user_list,
+        actions_list=actions_list,
+        resources_list=resources_list,
+        effect=effect,
+        sid=sid,
+        action_prefix="s3vectors",
+        resource_arn_service="s3vectors",
     )
