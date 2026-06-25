@@ -6620,9 +6620,10 @@ def get_reclaimspacecronjob_for_pvc(pvc_obj, timeout=120):
     """
     cronjob_annotation_key = "reclaimspace.csiaddons.openshift.io/cronjob"
     default_name = f"{pvc_obj.name}-reclaimspace"
+    sleep = min(5, timeout)
 
     try:
-        for _ in TimeoutSampler(timeout=timeout, sleep=5, func=lambda: None):
+        for _ in TimeoutSampler(timeout=timeout, sleep=sleep, func=lambda: None):
             pvc_obj.reload()
             annotations = pvc_obj.data.get("metadata", {}).get("annotations") or {}
             cron_job_name = annotations.get(cronjob_annotation_key) or default_name
@@ -6637,7 +6638,9 @@ def get_reclaimspacecronjob_for_pvc(pvc_obj, timeout=120):
                     f"Found ReclaimSpaceCronJob '{cron_job_name}' for PVC '{pvc_obj.name}'"
                 )
                 return cron_obj
-            except Exception as ex:
+            except CommandFailed as ex:
+                if "Not Found" not in str(ex) and "NotFound" not in str(ex):
+                    raise
                 logger.debug(
                     f"ReclaimSpaceCronJob '{cron_job_name}' not yet available for PVC "
                     f"'{pvc_obj.name}': {ex}"

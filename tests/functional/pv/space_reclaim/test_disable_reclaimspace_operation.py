@@ -68,7 +68,11 @@ class TestDisableReclaimSpaceOperation:
         """
         rbd_image_name = pvc_obj.get_rbd_image_name
         image_info = get_rbd_image_info(constants.DEFAULT_CEPHBLOCKPOOL, rbd_image_name)
-        image_size = image_info.get("used_size_gib")
+        image_size = image_info.get("used_size_gib") if image_info else None
+        if image_size is None:
+            raise UnexpectedBehaviour(
+                f"RBD image info not yet available for {rbd_image_name}"
+            )
         if math.isclose(image_size, expected_size, abs_tol=tolerance):
             log.info(
                 f"RBD Image {rbd_image_name} is size of {image_size}GiB "
