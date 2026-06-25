@@ -973,30 +973,44 @@ acm_configuration_4_11 = {
 
 acm_configuration_4_12 = {
     "click-local-cluster": ("//a[text()='local-cluster']", By.XPATH),
-    # works for OCP 4.12 to 4.15
     "all-clusters_dropdown": (
+        # ACM (OCP 4.12-4.16)
         "//a[normalize-space()='All Clusters'] | "
         "//span[(@class='pf-c-menu-toggle__text' or @class='pf-v5-c-menu-toggle__text') "
-        "and normalize-space()='All Clusters']/..",
+        "and normalize-space()='All Clusters']/.. | "
+        # MCE Fleet Management (OCP 4.17+)
+        "//span[contains(@class, 'c-menu-toggle__text')]"
+        "//h2[normalize-space()='Fleet Management']/../..",
         By.XPATH,
     ),
-    # works for OCP 4.12 to 4.15
     "all-clusters_dropdown_item": (
+        # ACM (OCP 4.12-4.16)
         "//span[(@class='pf-c-menu__item-text' or @class='pf-v5-c-menu__item-text') "
-        "and text()='All Clusters']/..",
+        "and text()='All Clusters']/.. | "
+        # MCE Fleet Management (OCP 4.17+)
+        "//h2[@data-test-id='perspective-switcher-menu-option' "
+        "and normalize-space()='Fleet Management']",
         By.XPATH,
     ),
-    # works for OCP 4.12 to 4.15
     "local-cluster_dropdown": (
+        # ACM (OCP 4.12-4.16)
         "//h2[text()='local-cluster'] | "
         "//span[(@class='pf-c-menu-toggle__text' or @class='pf-v5-c-menu-toggle__text') "
-        "and text()='local-cluster']/..",
+        "and text()='local-cluster']/.. | "
+        # MCE Core platform (OCP 4.17+)
+        "//span[contains(@class, 'c-menu-toggle__text')]"
+        "//h2[normalize-space()='Core platform']/../.. | "
+        # Fallback: OCP console Overview page loaded
+        "//h1[normalize-space()='Overview']",
         By.XPATH,
     ),
-    # works for OCP 4.12 to 4.15
     "local-cluster_dropdown_item": (
+        # ACM (OCP 4.12-4.16)
         "//span[(@class='pf-c-menu__item-text' or @class='pf-v5-c-menu__item-text') "
-        "and text()='local-cluster']/..",
+        "and text()='local-cluster']/.. | "
+        # MCE Core platform (OCP 4.17+)
+        "//h2[@data-test-id='perspective-switcher-menu-option' "
+        "and normalize-space()='Core platform']",
         By.XPATH,
     ),
     "cluster_status_check": ('//button[normalize-space()="{}"]', By.XPATH),
