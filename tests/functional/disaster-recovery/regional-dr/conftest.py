@@ -147,8 +147,8 @@ def cnv_custom_storage_class(
 
         pool_name = constants.RDR_CUSTOM_RBD_POOL
         sc_name = constants.RDR_CUSTOM_RBD_STORAGECLASS
+        resource_info = {}
         for cluster in get_non_acm_cluster_config():
-            secret = secret_factory(interface=constants.CEPHBLOCKPOOL)
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             pool_obj = ceph_pool_factory(
                 interface=constants.CEPHBLOCKPOOL,
@@ -165,6 +165,12 @@ def cnv_custom_storage_class(
             else:
                 interface_name = pool_obj.name
                 ec_data_pool_name = None
+            resource_info[config.current_cluster_name()] = {
+                "interface_name": interface_name
+            }
+            resource_info[config.current_cluster_name()].update(
+                {"ec_data_pool_name": ec_data_pool_name}
+            )
         config.reset_ctx()
 
         for cluster in get_non_acm_cluster_config():
@@ -259,19 +265,26 @@ def cnv_custom_storage_class(
 
         config.reset_ctx()
         for cluster in get_non_acm_cluster_config():
+            secret = secret_factory(interface=constants.CEPHBLOCKPOOL)
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             sc_obj = helpers.create_storage_class(
                 interface_type=constants.CEPHBLOCKPOOL,
-                interface_name=interface_name,
+                interface_name=resource_info.get(config.current_cluster_name(), {}).get(
+                    "interface_name"
+                ),
                 secret_name=secret.name,
                 sc_name=sc_name,
                 reclaim_policy=constants.RECLAIM_POLICY_DELETE,
                 mapOptions="krbd:rxbounce",
-                data_pool_name=ec_data_pool_name,
+                data_pool_name=resource_info.get(config.current_cluster_name(), {}).get(
+                    "ec_data_pool_name"
+                ),
             )
             teardown_factory(sc_obj)
             sc_obj.secret = secret
-            sc_obj.interface_name = interface_name
+            sc_obj.interface_name = resource_info.get(
+                config.current_cluster_name(), {}
+            ).get("interface_name")
         config.reset_ctx()
 
     return factory
