@@ -29,6 +29,7 @@ STAGE_REPRO_STEPS = "repro_steps"
 STAGE_LIVE_CLUSTER_VERIFICATION = "live_cluster_verification"
 STAGE_TEST_MATCHING = "test_matching"
 STAGE_OCS_CI_EXECUTION = "ocs_ci_execution"
+STAGE_REPORTING = "reporting"
 
 
 def normalize_odf_version(odf_version: str) -> str:

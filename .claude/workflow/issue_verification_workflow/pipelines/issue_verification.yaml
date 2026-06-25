@@ -42,6 +42,10 @@ defaults:
   repro_steps_backend: auto
   repro_claude_model: null
   repro_claude_max_turns: 20
+  reporting_dry_run: true
+  reporting_template: issue_verification.md.j2
+  reporting_channels:
+    - type: file
 
 stages:
   jira_intake:
@@ -113,3 +117,17 @@ stages:
       run_teardown: false
     outputs:
       jenkins_results: jenkins_results
+
+  reporting:
+    agent: reporting
+    needs: [test_matching, live_cluster_verification, ocs_ci_execution]
+    parameters:
+      odf_version: $pipeline.parameters.odf_version
+      deploy_job_url: $pipeline.parameters.deploy_job_url
+      template: $pipeline.defaults.reporting_template
+      dry_run: $pipeline.defaults.reporting_dry_run
+      channels: $pipeline.defaults.reporting_channels
+      auth_file: null
+    outputs:
+      reporting: reporting
+      report_file: report_file

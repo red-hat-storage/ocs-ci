@@ -39,6 +39,11 @@ _AGENT_DEFAULT_ALIASES: dict[str, dict[str, str]] = {
         "model": "repro_claude_model",
         "max_turns": "repro_claude_max_turns",
     },
+    "reporting": {
+        "dry_run": "reporting_dry_run",
+        "template": "reporting_template",
+        "channels": "reporting_channels",
+    },
 }
 
 

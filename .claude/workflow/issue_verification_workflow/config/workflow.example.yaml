@@ -18,6 +18,7 @@ description: ODF issue verification run
 auth:
   auth_file: data/auth.yaml
   jira_config: null
+  # reporting.slack / reporting.email — see ocs_ci_reporting/README.md
 
 # Pipeline parameters (passed to workflow stages)
 parameters:
@@ -49,6 +50,10 @@ defaults:
   repro_steps_backend: auto
   repro_claude_model: null
   repro_claude_max_turns: 20
+  reporting_dry_run: true
+  reporting_template: issue_verification.md.j2
+  reporting_channels:
+    - type: file
 
 # Per-agent settings (workflow + standalone agent CLIs)
 agents:
@@ -84,6 +89,17 @@ agents:
     dry_run: true
     tests_per_issue: 1
     run_teardown: false
+
+  reporting:
+    template: issue_verification.md.j2
+    format: markdown
+    dry_run: true
+    channels:
+      - type: file
+      # - type: slack
+      # - type: email
+      #   to: [team@example.com]
+    # auth_file: data/auth.yaml
 
 # Run control (CLI flags override when set)
 run:

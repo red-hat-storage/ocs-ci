@@ -26,6 +26,8 @@ YAML-driven multi-stage pipelines for OCS-CI. This is **not** an agent — it is
 
 ## Run issue verification
 
+See [issue_verification_workflow/ARCHITECTURE.md](issue_verification_workflow/ARCHITECTURE.md) for pipeline design, agents, and Claude integration.
+
 ```bash
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
   --pipeline issue_verification \

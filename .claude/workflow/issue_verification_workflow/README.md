@@ -1,6 +1,8 @@
 # Issue Verification Workflow
 
-Automates ODF z-stream qualification intake for bugs in **ON_QA** status: JIRA fetch → reproduction/verification steps → optional live cluster repro → ocs-ci test matching → optional Jenkins execution.
+Automates ODF z-stream qualification intake for bugs in **ON_QA** status: JIRA fetch → reproduction/verification steps → optional live cluster repro → ocs-ci test matching → optional Jenkins execution → comprehensive report.
+
+**Architecture:** see [ARCHITECTURE.md](ARCHITECTURE.md) for pipeline design, agents, workflow engine, and Claude SDK patterns.
 
 Run all commands from the **ocs-ci repository root**.
 
@@ -12,9 +14,10 @@ Stage 2: repro_steps                 → Claude + JIRA context (repro/verificati
 Stage 3: live_cluster_verification   → Live issue repro on cluster (optional; needs deploy_job_url)
 Stage 4: test_matching               → Claude agent finds ocs-ci tests (skips failed live repro)
 Stage 5: ocs_ci_execution            → Trigger matched tests on Jenkins (needs deploy_job_url)
+Stage 6: reporting                   → Comprehensive report (file / Slack / email)
 ```
 
-Each stage appends results to a timestamped **run record** under `run_record/`. Stages 2–5 require `--run-id` from stage 1.
+Each stage appends results to a timestamped **run record** under `run_record/`. Stages 2–6 require `--run-id` from stage 1.
 
 ### Shared workflow config (recommended)
 
@@ -305,6 +308,27 @@ Run outputs are gitignored; only `run_record/.gitkeep` is tracked.
 | `.claude/agents/ocs_ci_live_repro/` | Live cluster verification (stage 3) |
 | `.claude/agents/ocs_ci_test_match/` | Test matching (stage 4) |
 | `.claude/agents/ocs_ci_run/` | Jenkins test execution (stage 5) |
+| `.claude/agents/ocs_ci_reporting/` | Run report generation and delivery (stage 6) |
+| `report_context.py` | Build Jinja context from run record for reporting |
+
+## Reporting (stage 6)
+
+After all issues are processed, the **ocs_ci_reporting** agent renders a report from the run record and delivers to configured channels (file, Slack, email).
+
+**Run details:** ODF version, run ID, issue count, stages completed, deploy job, Jenkins status.
+
+**Per-issue table:** Issue ID: Title | Repro steps | Repro status | Live repro | Test match | Qualification | Observation
+
+```bash
+# Re-run reporting only
+python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
+  --run-id 20260620_091223 --from-stage reporting --force
+
+# Standalone CLI
+python .claude/agents/ocs_ci_reporting/report_cli.py send --run-id 20260620_091223
+```
+
+Configure `reporting_dry_run`, `reporting_channels`, and `agents.reporting` in `workflow.yaml`. Slack/email credentials go in `data/auth.yaml` under `reporting:` — see `.claude/agents/ocs_ci_reporting/README.md`.
 
 ## Test matching (stage 4)
 

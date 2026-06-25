@@ -15,6 +15,7 @@ _REPO_ROOT = _CLAUDE_DIR.parent
 _AGENTS_DIR = _CLAUDE_DIR / "agents"
 _OCS_CI_JIRA_DIR = _AGENTS_DIR / "ocs_ci_jira"
 _OCS_CI_TEST_MATCH_DIR = _AGENTS_DIR / "ocs_ci_test_match"
+_OCS_CI_REPORTING_DIR = _AGENTS_DIR / "ocs_ci_reporting"
 _OCS_CI_RUN_DIR = _AGENTS_DIR / "ocs_ci_run"
 
 _OCS_CI_LIVE_REPRO_DIR = _AGENTS_DIR / "ocs_ci_live_repro"
@@ -41,6 +42,7 @@ from run_record import (
     STAGE_LIVE_CLUSTER_VERIFICATION,
     STAGE_OCS_CI_EXECUTION,
     STAGE_REPRO_STEPS,
+    STAGE_REPORTING,
     STAGE_TEST_MATCHING,
 )
 from workflow_lib.import_helpers import load_agent_module
@@ -360,10 +362,84 @@ def run_ocs_ci_execution(
     }
 
 
+def run_reporting(
+    parameters: dict[str, Any],
+    context: IssueVerificationRunContext,
+) -> dict[str, Any]:
+    """Stage 6: build and deliver comprehensive run report."""
+    reporting_ops = load_agent_module(
+        _OCS_CI_REPORTING_DIR,
+        "operations.py",
+        "ocs_ci_reporting_operations",
+    )
+    run_record = _run_record(context)
+    from report_context import build_issue_verification_report_context
+
+    report_context = build_issue_verification_report_context(
+        run_record._data,
+        parameters=parameters,
+    )
+
+    template = parameters.get("template") or "issue_verification.md.j2"
+    report_format = parameters.get("format") or "markdown"
+    subject = parameters.get("subject")
+    channels = parameters.get("channels") or [{"type": "file"}]
+    dry_run = bool(parameters.get("dry_run", True))
+    auth_file = parameters.get("auth_file")
+
+    delivery = reporting_ops.build_and_deliver(
+        report_context,
+        template=template,
+        channels=channels,
+        report_format=report_format,
+        subject=subject,
+        output_dir=str(run_record.run_dir),
+        dry_run=dry_run,
+        auth_path=auth_file,
+    )
+
+    report_file = None
+    for channel in delivery.channels:
+        if channel.artifact_path:
+            report_file = channel.artifact_path
+            break
+
+    stage_data = {
+        "template": template,
+        "format": report_format,
+        "subject": delivery.report.subject,
+        "dry_run": dry_run,
+        "channels": [
+            {
+                "type": c.channel_type,
+                "status": c.status,
+                "detail": c.detail,
+                "artifact_path": c.artifact_path,
+            }
+            for c in delivery.channels
+        ],
+        "report_file": report_file,
+        "succeeded": delivery.succeeded,
+    }
+
+    run_record._data["reporting"] = stage_data
+    if STAGE_REPORTING not in run_record._data.setdefault("stages_completed", []):
+        run_record._data["stages_completed"].append(STAGE_REPORTING)
+    run_record.save()
+
+    return {
+        "reporting": stage_data,
+        "report_file": report_file,
+        "issues_file": str(run_record.issues_file),
+        "succeeded": delivery.succeeded,
+    }
+
+
 AGENT_EXECUTORS = {
     "jira_search": run_jira_search,
     "repro_steps": run_repro_steps,
     "live_repro": run_live_cluster_verification,
     "test_matching": run_test_matching,
     "ocs_ci_execution": run_ocs_ci_execution,
+    "reporting": run_reporting,
 }

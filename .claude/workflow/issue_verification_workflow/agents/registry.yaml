@@ -18,3 +18,7 @@ agents:
   ocs_ci_execution:
     description: Trigger matched tests on Jenkins via ocs-ci-run agent
     record_stage: ocs_ci_execution
+
+  reporting:
+    description: Build and deliver comprehensive run report via ocs_ci_reporting
+    record_stage: reporting
