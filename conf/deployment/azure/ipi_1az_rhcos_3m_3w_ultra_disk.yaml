@@ -24,7 +24,7 @@ ENV_DATA:
   worker_replicas: 3
   master_replicas: 3
   master_instance_type: 'Standard_D8s_v3'
-  worker_instance_type: 'Standard_E16bs_v5'
+  worker_instance_type: 'Standard_D16s_v5'
 REPORTING:
   polarion:
     deployment_id: 'OCS-ULTRA'
