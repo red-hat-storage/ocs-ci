@@ -11,7 +11,7 @@ from ocs_ci.helpers.helpers import (
     check_osd_log_exist_on_rook_ceph_operator_pod,
 )
 from ocs_ci.helpers.odf_cli import ODFCLIRetriever, ODFCliRunner
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -29,6 +29,8 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.8")
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2581")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestRookCephOperatorLogType(ManageTest):
     """
     Test Process:

@@ -748,3 +748,7 @@ vault_kms_deployment_required = pytest.mark.skipif(
 )
 
 ui = compose(skipif_ibm_cloud_managed, pytest.mark.ui)
+# z-stream marker
+zstream_4_18_1 = pytest.mark.zstream_4_18_1
+# z-stream marker
+zstream_4_18_1_ocs_operator = pytest.mark.zstream_4_18_1_ocs_operator

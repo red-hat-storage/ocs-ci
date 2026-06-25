@@ -4,7 +4,7 @@ import random
 import time
 
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
@@ -72,6 +72,8 @@ def check_drain_and_unschedule_node(ocp_node):
 @brown_squad
 @ignore_leftovers
 @provider_client_platform_required
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestNodesMaintenanceProviderMode(ManageTest):
     """
     Test nodes maintenance scenarios when using a Provider mode
