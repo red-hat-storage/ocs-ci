@@ -878,3 +878,5 @@ zstream_4_20_14_disaster_recovery = pytest.mark.zstream_4_20_14_disaster_recover
 zstream_4_20_14_mcg = pytest.mark.zstream_4_20_14_mcg
 # z-stream marker
 zstream_4_20_14_upgrade = pytest.mark.zstream_4_20_14_upgrade
+# z-stream marker
+zstream_4_20_14_odf_dr_multicluster_orchestrator = pytest.mark.zstream_4_20_14_odf_dr_multicluster_orchestrator
