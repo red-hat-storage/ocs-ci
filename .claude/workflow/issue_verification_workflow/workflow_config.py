@@ -43,6 +43,9 @@ _AGENT_DEFAULT_ALIASES: dict[str, dict[str, str]] = {
         "dry_run": "reporting_dry_run",
         "template": "reporting_template",
         "channels": "reporting_channels",
+        "issue_summary_enabled": "issue_summary_enabled",
+        "issue_summary_use_claude": "issue_summary_use_claude",
+        "issue_summary_model": "issue_summary_model",
     },
 }
 

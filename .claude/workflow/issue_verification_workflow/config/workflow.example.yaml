@@ -54,6 +54,9 @@ defaults:
   reporting_template: issue_verification.md.j2
   reporting_channels:
     - type: file
+  issue_summary_enabled: true
+  issue_summary_use_claude: true
+  issue_summary_model: null
 
 # Per-agent settings (workflow + standalone agent CLIs)
 agents:
@@ -96,6 +99,9 @@ agents:
     dry_run: true
     channels:
       - type: file
+    issue_summary_enabled: true
+    issue_summary_use_claude: true
+    issue_summary_model: null
       # - type: slack
       # - type: email
       #   to: [team@example.com]

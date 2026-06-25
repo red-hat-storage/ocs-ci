@@ -398,6 +398,14 @@ def run_reporting(
         auth_path=auth_file,
     )
 
+    from issue_summary import write_issue_summaries
+
+    summary_result = write_issue_summaries(
+        run_record._data,
+        run_record.run_dir,
+        parameters=parameters,
+    )
+
     report_file = None
     for channel in delivery.channels:
         if channel.artifact_path:
@@ -420,6 +428,7 @@ def run_reporting(
         ],
         "report_file": report_file,
         "succeeded": delivery.succeeded,
+        "issue_summaries": summary_result,
     }
 
     run_record._data["reporting"] = stage_data
@@ -430,6 +439,7 @@ def run_reporting(
     return {
         "reporting": stage_data,
         "report_file": report_file,
+        "issue_summaries": summary_result,
         "issues_file": str(run_record.issues_file),
         "succeeded": delivery.succeeded,
     }

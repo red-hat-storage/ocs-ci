@@ -46,6 +46,9 @@ defaults:
   reporting_template: issue_verification.md.j2
   reporting_channels:
     - type: file
+  issue_summary_enabled: true
+  issue_summary_use_claude: true
+  issue_summary_model: null
 
 stages:
   jira_intake:
@@ -128,6 +131,10 @@ stages:
       dry_run: $pipeline.defaults.reporting_dry_run
       channels: $pipeline.defaults.reporting_channels
       auth_file: null
+      issue_summary_enabled: $pipeline.defaults.issue_summary_enabled
+      issue_summary_use_claude: $pipeline.defaults.issue_summary_use_claude
+      issue_summary_model: $pipeline.defaults.issue_summary_model
+      tests_per_issue: $pipeline.defaults.tests_per_issue
     outputs:
       reporting: reporting
       report_file: report_file

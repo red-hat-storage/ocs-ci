@@ -319,6 +319,8 @@ After all issues are processed, the **ocs_ci_reporting** agent renders a report 
 
 **Per-issue table:** Issue ID: Title | Repro steps | Repro status | Live repro | Test match | Qualification | Observation
 
+**Per-issue AI summaries:** `run_record/<run_id>/summaries/<ISSUE_KEY>_summary.txt` — Claude-generated (or template fallback) with repro steps, live repro status, matched tests, and Jenkins execution details.
+
 ```bash
 # Re-run reporting only
 python .claude/workflow/issue_verification_workflow/pipeline_cli.py run \
