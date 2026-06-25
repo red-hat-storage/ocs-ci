@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 from random import choice
 from time import sleep
 
@@ -156,7 +157,25 @@ class TestMonCrashRecoveryScenario:
         ), f"Not all {initial_mon_count} mon pods are in running state after 30 minutes"
         log.info(f"All {initial_mon_count} mon pods are up and running successfully")
 
-        # Step 10: Archive all ceph crashes
-        toolbox.exec_ceph_cmd("ceph crash archive-all")
-        log.info("Waiting 20 seconds after archiving crashes...")
-        sleep(20)
+        # Step 10: Check for crashes for 5 minutes and archive them
+        log.info("Checking for crashes for 5 minutes and archiving if found...")
+        timeout = 300  # 5 minutes
+        start_time = time.time()
+        crash_found = False
+
+        while time.time() - start_time < timeout:
+            crash = toolbox.exec_ceph_cmd("ceph crash ls-new")
+            if crash:
+                crash_found = True
+                log.info(f"Found crash(es): {crash}. Archiving...")
+                toolbox.exec_ceph_cmd("ceph crash archive-all")
+                log.info("Crashes archived. Waiting 20 seconds before next check...")
+                sleep(20)
+            else:
+                log.info("No new crashes found.")
+                break
+
+        if crash_found:
+            log.info("Completed crash archiving process")
+        else:
+            log.info("No crashes found during 5-minute monitoring period")
