@@ -562,6 +562,7 @@ class Deployment(object):
                                 get_provider_service_type() != "NodePort"
                                 and cluster.ENV_DATA.get("cluster_type", "").lower()
                                 != constants.HCI_CLIENT
+                                and not config.DEPLOYMENT.get("host_network")
                             ):
                                 create_multiclusterservice_dr()
                             ocs_registry_image = config.DEPLOYMENT.get(
