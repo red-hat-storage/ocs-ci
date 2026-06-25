@@ -197,8 +197,9 @@ class GCPIPI(GCPBase):
                     pull_secret_path,
                     credentials_requests_dir,
                 )
+            infra_id = get_infra_id_from_openshift_install_state(cluster_path)
             cco.delete_gcp_sts_resources(
-                self.cluster_name,
+                infra_id,
                 gcp_project,
                 credentials_requests_dir,
             )

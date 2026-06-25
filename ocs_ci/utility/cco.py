@@ -276,8 +276,7 @@ def delete_gcp_sts_resources(name, gcp_project, credentials_requests_dir):
     logger.info("Deleting GCP STS resources")
     cmd = (
         f"ccoctl gcp delete --name={name} --project={gcp_project} "
-        f"--credentials-requests-dir={credentials_requests_dir} "
-        f"--force-delete-custom-roles"
+        f"--credentials-requests-dir={credentials_requests_dir}"
     )
     exec_cmd(cmd)
 
