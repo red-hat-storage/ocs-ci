@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     rdr,
     turquoise_squad,
     rdr_ui_failover_config_required,
+    zstream_4_16_13,
 )
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 @turquoise_squad
 @rdr_ui_failover_config_required
 @skipif_ocs_version("<4.16")
+@zstream_4_16_13
 class TestRDRMonitoringDashboardUI:
     """
     Test class for RDR monitoring dashboard validation

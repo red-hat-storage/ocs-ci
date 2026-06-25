@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    zstream_4_16_13,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 @bugzilla("1970123")
 @pytest.mark.polarion_id("OCS-3963")
 @skipif_ocs_version("<4.10")
+@zstream_4_16_13
 class TestNoobaaStorageAccount:
 
     """
