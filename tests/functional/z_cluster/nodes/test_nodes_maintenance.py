@@ -27,7 +27,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_16_16
 from ocs_ci.framework.testlib import (
     tier1,
     tier2,
@@ -89,6 +89,7 @@ def teardown(request):
 
 @brown_squad
 @ignore_leftovers
+@zstream_4_16_16
 class TestNodesMaintenance(ManageTest):
     """
     Test basic flows of maintenance (unschedule and drain) and
