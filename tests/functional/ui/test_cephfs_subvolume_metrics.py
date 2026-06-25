@@ -5,6 +5,7 @@ Requires ODF 4.22+ (Ceph 9.0) for subvolume-level MDS metrics.
 """
 
 import logging
+import re
 
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -229,8 +230,13 @@ class TestCephFSSubvolumeMetricsLoadWithActiveWorkload(ManageTest):
                         f"'{namespace}' missing Bps unit suffix"
                     )
                 else:
-                    numeric = value.replace(",", "").split()[0]
-                    assert float(numeric) > 0, (
+                    # Strip commas and take the first whitespace-delimited
+                    # token, then extract the leading number via regex so
+                    # values like "1.5KBps" (no space before unit) don't
+                    # cause float() to raise ValueError.
+                    token = value.replace(",", "").split()[0]
+                    numeric = re.match(r"^\d+(?:\.\d+)?", token)
+                    assert numeric and float(numeric.group(0)) > 0, (
                         f"Metric '{metric}' is zero for namespace "
                         f"'{namespace}': '{value}'"
                     )

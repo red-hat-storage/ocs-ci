@@ -74,17 +74,25 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         logger.info("Reading active metric from CephFS subvolume dropdown")
         return self.get_element_text(self.metric_toggle_loc).strip()
 
-    def switch_cephfs_subvolume_metric(self, metric_label):
+    def switch_cephfs_subvolume_metric(self, metric_label, timeout=15):
         """
-        Select a metric from the CephFS subvolume dropdown.
+        Select a metric from the CephFS subvolume dropdown and wait until
+        the toggle reflects the new selection before returning.
+
+        Waiting for the toggle text to update ensures the table has begun
+        re-rendering with the new metric data before callers read cell values.
 
         Args:
             metric_label (str): One of 'Total IOPS', 'Total Latency',
                 'Total Throughput'.
+            timeout (int): Maximum seconds to wait for the toggle to update.
         """
         logger.info("Switching CephFS subvolume metric to: %s", metric_label)
         self.do_click(self.metric_toggle_loc)
         self.do_click(format_locator(self.metric_option_loc, metric_label))
+        self.wait_until_expected_text_is_found(
+            self.metric_toggle_loc, metric_label, timeout=timeout
+        )
 
     def click_cephfs_subvolume_help_button(self):
         """Click the help (?) button next to the CephFS subvolume card title."""
