@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
     tier1,
     jira,
+    zstream_4_18_1,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.ocs import constants
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 @turquoise_squad
 @jira("DFBUGS-1273")
 @stretchcluster_required
+@zstream_4_18_1
 class TestAddCapacityStretchCluster:
     """
     Add capacity to the Stretch cluster with arbiter configuration
