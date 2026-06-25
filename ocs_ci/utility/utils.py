@@ -7080,6 +7080,27 @@ def clean_up_pods_for_provider(node_type, max_retries=45, retry_delay_seconds=30
                         f"Eviction error found '{pod_name_to_delete}' in namespace '{ns_to_delete_from}'"
                         f"(related {node.name} being stuck)."
                     )
+                    # Ceph OSD, MON, MDS and MGR pods are protected by PodDisruptionBudgets.
+                    # Force-deleting them bypasses PDB protection and can cause data
+                    # inconsistency or stalled Ceph recovery. The MCO drain controller
+                    # retries automatically once PDB headroom opens up.
+                    pdb_protected_prefixes = (
+                        "rook-ceph-osd-",
+                        "rook-ceph-mon-",
+                        "rook-ceph-mds-",
+                        "rook-ceph-mgr-",
+                    )
+                    if any(
+                        pod_name_to_delete.startswith(prefix)
+                        for prefix in pdb_protected_prefixes
+                    ):
+                        log.warning(
+                            f"Skipping force-delete of '{pod_name_to_delete}': "
+                            f"Ceph daemon pods are protected by PodDisruptionBudget. "
+                            f"The MCO drain controller will retry automatically once "
+                            f"Ceph recovers."
+                        )
+                        continue
                     try:
                         # Prefer using the ocs_ci resource object for deletion
                         pod_to_delete_obj = OCP(
