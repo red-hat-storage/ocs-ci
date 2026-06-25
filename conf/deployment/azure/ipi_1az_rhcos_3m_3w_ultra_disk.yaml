@@ -14,9 +14,9 @@ ENV_DATA:
   region: 'centralus'
   azure_base_domain_resource_group_name: 'odfqe'
   azure_performance_plus: true
-  azure_performance_plus_disk_type: 'UltraSSD_LRS'
+  azure_performance_plus_disk_type: 'Premium_LRS'
   # Enable Ultra SSD capability on worker nodes (required for Ultra Disk)
-  azure_ultra_ssd_enabled: true
+  # azure_ultra_ssd_enabled: true
   worker_availability_zones:
     - '1'
   master_availability_zones:
@@ -24,7 +24,7 @@ ENV_DATA:
   worker_replicas: 3
   master_replicas: 3
   master_instance_type: 'Standard_D8s_v3'
-  worker_instance_type: 'Standard_L8s_v2'
+  worker_instance_type: 'Standard_E16bs_v5'
 REPORTING:
   polarion:
     deployment_id: 'OCS-ULTRA'
