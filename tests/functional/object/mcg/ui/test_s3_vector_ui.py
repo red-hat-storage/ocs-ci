@@ -431,3 +431,221 @@ class TestS3VectorUI(MCGTest):
             f"Vector bucket '{bucket_name}' and {NUM_INDICES_PER_BUCKET} "
             f"indices validated via S3 API"
         )
+
+    @tier2
+    def test_s3_vector_delete_index_and_bucket_ui(
+        self,
+        request,
+        setup_ui_class_factory,
+        vector_prereqs,
+        mcg_obj,
+    ):
+        """
+        Delete vector indices and a vector bucket via the ODF console UI.
+
+        Pre-req (via OBC flow + S3 API):
+            - 1 vector bucket created via UI (Create via OBC).
+            - 3 indices created in the bucket via S3 API.
+
+        Steps:
+            1.  Navigate to Storage -> Object Storage -> Buckets -> S3 Vector tab.
+            2.  Create a vector bucket via the "Create via OBC" option.
+            3.  Wait for the OBC controller to populate the NooBaa bucket name.
+            4.  Create 3 vector indices in the bucket via S3 API.
+            5.  Navigate to the bucket detail page in the S3 Vector tab.
+            6.  Select 1 index from the list and delete it via the row kebab menu.
+            7.  Type the index name in the confirmation pop-up and confirm.
+            8.  Verify via S3 API that exactly 2 indices remain.
+            9.  Navigate back, delete each remaining index via its kebab menu.
+            10. Verify via S3 API that 0 indices remain.
+            11. Navigate to the S3 Vector tab and delete the vector bucket via kebab.
+            12. Type the bucket name in the confirmation pop-up and confirm.
+            13. Verify via S3 API that the vector bucket no longer exists.
+        """
+        NUM_PREREQ_INDICES = 3
+        VECTOR_DIMENSION = 3
+
+        _, bucketclass_obj = vector_prereqs
+        bucketclass_name = bucketclass_obj.name
+        storageclass = f"{config.ENV_DATA['cluster_namespace']}.noobaa.io"
+
+        created_buckets = []
+
+        def teardown():
+            cleanup_vector_buckets(created_buckets, mcg_obj)
+
+        request.addfinalizer(teardown)
+
+        setup_ui_class_factory()
+        buckets_tab = BucketsTab()
+
+        # Steps 1-2: Navigate to S3 Vector tab and create bucket via OBC.
+        # Pre-register before creation so teardown catches partial failures.
+        bucket_name = create_unique_resource_name(
+            resource_description="vector-del",
+            resource_type="obc",
+        )
+        created_buckets.append(bucket_name)
+        vector_ui = buckets_tab.nav_s3_vector_tab()
+        vector_ui.create_vector_bucket_via_obc(
+            bucket_name=bucket_name,
+            storageclass=storageclass,
+            bucketclass_name=bucketclass_name,
+        )
+
+        # Step 3: Wait for OBC controller to populate the NooBaa bucket name.
+        noobaa_bucket_name = None
+        for noobaa_bucket_name in TimeoutSampler(
+            timeout=60,
+            sleep=3,
+            func=lambda bn=bucket_name: OBC(bn).bucket_name,
+        ):
+            if noobaa_bucket_name:
+                break
+        logger.info(f"NooBaa bucket name: '{noobaa_bucket_name}'")
+
+        obc_obj = OBC(bucket_name)
+        s3vectors_client = vector_utils.create_s3vectors_client(mcg_obj, obc_obj)
+
+        # Step 4: Create 3 indices via S3 API.
+        created_index_names = []
+        distance_metrics = ("cosine", "euclidean", "cosine")
+        for i in range(NUM_PREREQ_INDICES):
+            index_name = f"idx-del-{_random_suffix()}-{i}"
+            created_index_names.append(index_name)
+            vector_utils.create_index(
+                s3vectors_client,
+                index_name=index_name,
+                data_type="float32",
+                dimension=VECTOR_DIMENSION,
+                distance_metric=distance_metrics[i],
+                vectorBucketName=noobaa_bucket_name,
+            )
+            logger.info(f"Pre-req: created index '{index_name}'")
+
+        # Step 5: Navigate to the bucket detail page and wait for all 3 indices
+        # to appear in the UI before attempting deletion — API-created indices can
+        # lag behind the UI renderer.
+        # The S3 Vector tab displays the NooBaa internal bucket name.
+        vector_ui = buckets_tab.nav_s3_vector_tab()
+        vector_ui.navigate_to_vector_bucket(noobaa_bucket_name)
+        expected_indices = set(created_index_names)
+        for ui_indices in TimeoutSampler(
+            timeout=60,
+            sleep=3,
+            func=vector_ui.get_index_names_from_bucket,
+        ):
+            if expected_indices.issubset(set(ui_indices)):
+                break
+
+        # Steps 6-7: Delete the first index via the row kebab menu.
+        index_to_delete = created_index_names[0]
+        logger.info("Steps 6-7: Deleting index '%s' via UI", index_to_delete)
+        vector_ui.delete_index(index_to_delete)
+
+        # Step 8 (UI): Wait until deleted index row is absent from the UI table.
+        logger.info("Step 8 (UI): Verifying '%s' row is gone from UI", index_to_delete)
+        for ui_indices in TimeoutSampler(
+            timeout=30,
+            sleep=3,
+            func=vector_ui.get_index_names_from_bucket,
+        ):
+            if index_to_delete not in ui_indices:
+                break
+
+        # Step 8 (API): Poll S3 API until exactly 2 indices remain — UI-driven deletes
+        # propagate to the backend asynchronously, so a bare assertion can race.
+        remaining_indices = created_index_names[1:]
+        logger.info("Step 8: Verifying 2 indices remain via S3 API")
+        for api_indices in TimeoutSampler(
+            timeout=60,
+            sleep=3,
+            func=lambda: [
+                idx["indexName"]
+                for idx in vector_utils.list_indexes(
+                    s3vectors_client, vectorBucketName=noobaa_bucket_name
+                ).get("indexes", [])
+            ],
+        ):
+            if set(api_indices) == set(remaining_indices):
+                break
+        logger.info(
+            f"Confirmed: {len(remaining_indices)} indices remain after single delete"
+        )
+
+        # Step 9: Navigate back and wait for remaining indices to render in the
+        # UI before deleting — same rendering lag applies after re-navigation.
+        # The S3 Vector UI has no bulk-delete; indices are deleted one by one.
+        logger.info("Step 9: Navigating back and deleting remaining indices one by one")
+        vector_ui = buckets_tab.nav_s3_vector_tab()
+        vector_ui.navigate_to_vector_bucket(noobaa_bucket_name)
+        for ui_indices in TimeoutSampler(
+            timeout=60,
+            sleep=3,
+            func=vector_ui.get_index_names_from_bucket,
+        ):
+            if set(remaining_indices).issubset(set(ui_indices)):
+                break
+        vector_ui.delete_all_indices(remaining_indices)
+
+        # Step 10 (UI): Wait until all deleted index rows are absent from the UI table.
+        logger.info("Step 10 (UI): Verifying all index rows are gone from UI")
+        for ui_indices in TimeoutSampler(
+            timeout=60,
+            sleep=3,
+            func=vector_ui.get_index_names_from_bucket,
+        ):
+            if not any(idx in ui_indices for idx in remaining_indices):
+                break
+
+        # Step 10 (API): Poll S3 API until 0 indices remain — same propagation lag as step 8.
+        logger.info("Step 10: Verifying 0 indices remain via S3 API")
+        for api_indices in TimeoutSampler(
+            timeout=60,
+            sleep=3,
+            func=lambda: [
+                idx["indexName"]
+                for idx in vector_utils.list_indexes(
+                    s3vectors_client, vectorBucketName=noobaa_bucket_name
+                ).get("indexes", [])
+            ],
+        ):
+            if not api_indices:
+                break
+        logger.info("Confirmed: 0 indices remain after individual deletion")
+
+        # Steps 11-12: Navigate to S3 Vector tab and delete the bucket via kebab.
+        logger.info(
+            f"Steps 11-12: Deleting vector bucket '{noobaa_bucket_name}' via UI"
+        )
+        vector_ui = buckets_tab.nav_s3_vector_tab()
+        vector_ui.delete_vector_bucket_from_list(noobaa_bucket_name)
+
+        # Step 13 (UI): Wait until the bucket row is absent from the S3 Vector tab list.
+        logger.info(
+            "Step 13 (UI): Verifying '%s' row is gone from S3 Vector tab",
+            noobaa_bucket_name,
+        )
+        for ui_buckets in TimeoutSampler(
+            timeout=30,
+            sleep=3,
+            func=vector_ui.get_vector_bucket_names_from_tab,
+        ):
+            if noobaa_bucket_name not in ui_buckets:
+                break
+
+        # Step 13 (API): Poll S3 API until the bucket is gone — UI delete is async.
+        logger.info("Step 13: Verifying vector bucket is deleted via S3 API")
+        for existing_names in TimeoutSampler(
+            timeout=60,
+            sleep=3,
+            func=lambda: [
+                b["vectorBucketName"]
+                for b in vector_utils.list_vector_buckets(s3vectors_client).get(
+                    "vectorBuckets", []
+                )
+            ],
+        ):
+            if noobaa_bucket_name not in existing_names:
+                break
+        logger.info(f"Confirmed: vector bucket '{noobaa_bucket_name}' is deleted")
