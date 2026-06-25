@@ -264,3 +264,133 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         _wait_for_replication_alert(
             threading_lock, source_bucket.name, timeout=600, sleep=10, cleared=True
         )
+
+    @tier2
+    @pytest.mark.parametrize(
+        "store_type",
+        [
+            pytest.param(
+                "namespacestore", id="namespacestore", marks=polarion_id("OCS-8000")
+            ),
+            pytest.param(
+                "backingstore", id="backingstore", marks=polarion_id("OCS-7999")
+            ),
+        ],
+    )
+    def test_noobaa_replication_target_unreachable_underlying_bucket_deleted(
+        self,
+        store_type,
+        bucket_factory,
+        mcg_obj,
+        awscli_pod_session,
+        test_directory_setup,
+        threading_lock,
+    ):
+        """
+        1. Create a target OBC backed by a self-ref MCG store (an
+           S3-compatible store backed by an MCG's own bucket on the
+           same cluster)
+        2. Create a source OBC with a replication policy targeting it
+        3. Write test objects and verify replication works
+        4. Delete the underlying MCG bucket of the target's store
+        5. Upload new objects to trigger failing replication
+        6. Wait for the NooBaaReplicationTargetUnreachable alert to fire
+        7. Recreate the underlying MCG bucket
+        8. Write test objects and verify replication works again
+        9. Wait for the alert to clear
+        """
+
+        # 1. Create a target OBC backed by a self-ref MCG store
+        if store_type == "namespacestore":
+            bucketclass_dict = {
+                "interface": "CLI",
+                "namespace_policy_dict": {
+                    "type": "Single",
+                    "namespacestore_dict": {"self-ref-mcg": [(1, None)]},
+                },
+            }
+        else:
+            bucketclass_dict = {
+                "interface": "CLI",
+                "backingstore_dict": {"self-ref-mcg": [(1, None)]},
+            }
+        target_bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
+        bc_obj = target_bucket.bucketclass
+        if store_type == "namespacestore":
+            underlying_bucket_name = bc_obj.namespacestores[0].uls_name
+        else:
+            underlying_bucket_name = bc_obj.backingstores[0].uls_name
+        logger.info(
+            f"Target OBC created: {target_bucket.name}, "
+            f"underlying MCG bucket: {underlying_bucket_name}"
+        )
+
+        # 2. Create a source OBC with a replication policy
+        replication_policy = ("repl-alert-rule", target_bucket.name, None)
+        source_bucket = bucket_factory(1, "OC", replication_policy=replication_policy)[
+            0
+        ]
+        logger.info(
+            f"Replication configured: {source_bucket.name} -> {target_bucket.name}"
+        )
+
+        # 3. Write test objects and verify replication works
+        pre_disrupt_dir = f"{test_directory_setup.origin_dir}/pre"
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_bucket.name,
+            pre_disrupt_dir,
+            amount=3,
+            pattern="pre-disrupt-",
+            mcg_obj=mcg_obj,
+        )
+        assert compare_bucket_object_list(
+            mcg_obj, source_bucket.name, target_bucket.name, timeout=600
+        ), "Replication did not work before underlying bucket deletion"
+        logger.info("Initial replication verified successfully")
+
+        # 4. Delete the underlying MCG bucket of the target's store
+        mcg_obj.s3_resource.Bucket(underlying_bucket_name).objects.all().delete()
+        mcg_obj.s3_resource.Bucket(underlying_bucket_name).delete()
+        logger.info(f"Underlying MCG bucket deleted: {underlying_bucket_name}")
+
+        # 5. Upload new objects to trigger failing replication
+        post_disrupt_dir = f"{test_directory_setup.origin_dir}/post_disrupt"
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_bucket.name,
+            post_disrupt_dir,
+            amount=3,
+            pattern="post-disrupt-",
+            mcg_obj=mcg_obj,
+        )
+
+        # 6. Wait for the NooBaaReplicationTargetUnreachable alert to fire
+        _wait_for_replication_alert(
+            threading_lock, source_bucket.name, timeout=600, sleep=10
+        )
+
+        # 7. Recreate the underlying MCG bucket (reuses the same name
+        # that cloud_uls_factory tracks, so its finalizer handles cleanup)
+        mcg_obj.s3_resource.create_bucket(Bucket=underlying_bucket_name)
+        logger.info(f"Underlying MCG bucket recreated: {underlying_bucket_name}")
+
+        # 8. Write test objects and verify replication works again
+        post_recovery_dir = f"{test_directory_setup.origin_dir}/post_recovery"
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_bucket.name,
+            post_recovery_dir,
+            amount=3,
+            pattern="post-recovery-",
+            mcg_obj=mcg_obj,
+        )
+        assert compare_bucket_object_list(
+            mcg_obj, source_bucket.name, target_bucket.name, timeout=600
+        ), "Replication did not work after underlying bucket recreation"
+        logger.info("Post-recovery replication verified successfully")
+
+        # 9. Wait for the alert to clear
+        _wait_for_replication_alert(
+            threading_lock, source_bucket.name, timeout=600, sleep=10, cleared=True
+        )

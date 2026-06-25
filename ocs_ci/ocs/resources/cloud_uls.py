@@ -35,6 +35,7 @@ def cloud_uls_factory(
         "azure-sts": set(),
         "ibmcos": set(),
         "rgw": set(),
+        "self-ref-mcg": set(),
     }
     try:
         ulsMap = {
@@ -67,6 +68,11 @@ def cloud_uls_factory(
     except AttributeError:
         log.warning("Cluster is not deployed in Azure STS mode")
 
+    try:
+        ulsMap["self-ref-mcg"] = cld_mgr.self_ref_mcg_client
+    except AttributeError:
+        log.info("Self-ref MCG is not available on this cluster")
+
     def _create_uls(uls_dict):
         """
         Creates and deletes all underlying storage that were created as part of the test
@@ -92,6 +98,7 @@ def cloud_uls_factory(
             "azure-sts": set(),
             "ibmcos": set(),
             "rgw": set(),
+            "self-ref-mcg": set(),
         }
 
         with cluster_context():
