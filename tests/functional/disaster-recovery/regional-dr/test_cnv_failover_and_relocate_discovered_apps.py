@@ -29,12 +29,13 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     """
 
     @pytest.mark.parametrize(
-        argnames=["custom_sc", "replica", "compression"],
+        argnames=["custom_sc", "replica", "compression", "erasure_coding"],
         argvalues=[
             pytest.param(
                 False,
                 3,
                 None,
+                False,
                 marks=pytest.mark.polarion_id("OCS-6266"),
                 id="default_pool_replica3_without_compression",
             ),
@@ -42,6 +43,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 True,
                 2,
                 None,
+                False,
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
                 id="custom_pool_replica2_without_compression",
             ),
@@ -50,6 +52,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 True,
                 3,
                 "aggressive",
+                False,
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
                 id="custom_pool_replica3_with_compression",
             ),
@@ -58,6 +61,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 True,
                 2,
                 "aggressive",
+                False,
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
                 id="custom_pool_replica2_with_compression",
             ),
@@ -66,8 +70,18 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 True,
                 3,
                 None,
+                False,
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
                 id="custom_pool_replica3_without_compression",
+            ),
+            # TODO: ADD Polarion ID for Custom SC test
+            pytest.param(
+                True,
+                3,
+                None,
+                True,
+                # marks=pytest.mark.polarion_id("OCS-XXXX"),
+                id="custom_pool_erasure_coding_without_compression",
             ),
             # TODO: ADD Polarion ID for Custom SC test
         ],
@@ -77,6 +91,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         custom_sc,
         replica,
         compression,
+        erasure_coding,
         cnv_custom_storage_class,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
@@ -99,7 +114,9 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
 
         if custom_sc:
             logger.info("Calling fixture to create Custom Pool/SC..")
-            cnv_custom_storage_class(replica=replica, compression=compression)
+            cnv_custom_storage_class(
+                replica=replica, compression=compression, erasure_coded=erasure_coding
+            )
 
         cnv_workloads = discovered_apps_dr_workload_cnv(pvc_vm=1, custom_sc=custom_sc)
 
