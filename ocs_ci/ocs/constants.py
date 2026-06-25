@@ -563,6 +563,14 @@ DEFAULT_MCG_BUCKET_NOTIFS_PVC = "noobaa-bucket-notifications-pvc"
 CUSTOM_MCG_LABEL = "custom=mcg-label"
 NOOBAA_RESOURCE_NAME = "noobaa"
 NOOBAA_DB_PVC_NAME = "noobaa-db-pg-cluster-1"
+NOOBAA_INITIALIZING_REASON = "NoobaaInitializing"
+NOOBAA_HEALTH_CHECK_DELAY = 30
+CEPH_CONDITION_REASONS = (
+    "CephClusterNotReady",
+    "CephClusterHealthNotOK",
+    "CephClusterCreating",
+    "CephClusterUpdating",
+)
 MIN_PV_BACKINGSTORE_SIZE_IN_GB = 17
 JENKINS_BUILD = "jax-rs-build"
 JENKINS_BUILD_COMPLETE = "Complete"
