@@ -2465,10 +2465,10 @@ def wait_for_noobaa_db_ready(timeout=300, sleep=10, stability_count=3):
     restart_grace_timeout = 60
     logger.info(f"Waiting up to {restart_grace_timeout}s for a DB pod restart to begin")
     try:
-        for not_ready in TimeoutSampler(
+        for pods_ready in TimeoutSampler(
             restart_grace_timeout, sleep, _all_db_pods_ready
         ):
-            if not not_ready:
+            if not pods_ready:
                 logger.info("Detected DB pod restart, proceeding to stability checks")
                 break
     except TimeoutExpiredError:
