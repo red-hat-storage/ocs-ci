@@ -1052,6 +1052,63 @@ def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
     )
 
 
+def oc_create_self_ref_mcg_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new self-ref MCG backingstore using oc create command.
+    Self-ref MCG is an S3-compatible store backed by an MCG's own
+    bucket on the same cluster.
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): unused, kept for interface compatibility
+
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    bs_data["spec"] = {
+        "type": "s3-compatible",
+        "s3Compatible": {
+            "targetBucket": uls_name,
+            "endpoint": cld_mgr.self_ref_mcg_client.s3_internal_endpoint,
+            "signatureVersion": "v4",
+            "secret": {
+                "name": cld_mgr.self_ref_mcg_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
+        },
+    }
+    create_resource(**bs_data)
+
+
+def cli_create_self_ref_mcg_backingstore(
+    mcg_obj, cld_mgr, backingstore_name, uls_name, region
+):
+    """
+    Create a new self-ref MCG backingstore using the NooBaa CLI.
+    Self-ref MCG is an S3-compatible store backed by an MCG's own
+    bucket on the same cluster.
+
+    Args:
+        mcg_obj (MCG): MCG object for executing CLI commands
+        cld_mgr (CloudManager): holds self-ref MCG client credentials
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): unused, kept for interface compatibility
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create s3-compatible {backingstore_name} "
+        f"--endpoint {cld_mgr.self_ref_mcg_client.s3_internal_endpoint} "
+        f"--access-key {cld_mgr.self_ref_mcg_client.access_key} "
+        f"--secret-key {cld_mgr.self_ref_mcg_client.secret_key} "
+        f"--target-bucket {uls_name}",
+        use_yes=True,
+    )
+
+
 def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     """
     Create a new backingstore with pv underlying storage using oc create command
@@ -3649,6 +3706,76 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
         raise Exception(
             f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
         )
+
+
+def get_bucket_mode(mcg_obj, bucket_name):
+    """
+    Get the current mode of a bucket from NooBaa.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+
+    Returns:
+        str: The bucket mode (e.g. "OPTIMAL", "EXCEEDING_QUOTA")
+    """
+    bucket_info = mcg_obj.get_bucket_info(bucket_name)
+    if bucket_info:
+        logger.debug(f"Bucket info for {bucket_name}: {bucket_info}")
+        return bucket_info.get("mode", "UNKNOWN")
+    logger.warning(f"Bucket {bucket_name} not found in NooBaa system")
+    return "UNKNOWN"
+
+
+def wait_for_bucket_mode(mcg_obj, bucket_name, expected_mode, timeout=600, sleep=15):
+    """
+    Poll NooBaa until the bucket enters the expected mode or timeout.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        expected_mode (str): Expected bucket mode (e.g. "EXCEEDING_QUOTA")
+            or "!OPTIMAL" to wait for any non-OPTIMAL mode
+            (UNKNOWN is excluded to avoid false positives on lookup failures)
+        timeout (int): Timeout in seconds (default: 600)
+        sleep (int): Poll interval in seconds (default: 15)
+
+    Returns:
+        str: The actual bucket mode once matched
+
+    Raises:
+        AssertionError: If the bucket does not reach the expected mode
+            within the timeout
+    """
+    check_not_optimal = expected_mode == "!OPTIMAL"
+    last_mode = "UNKNOWN"
+
+    try:
+        for mode in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_bucket_mode,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket_name,
+        ):
+            last_mode = mode
+            if check_not_optimal and mode not in ("OPTIMAL", "UNKNOWN"):
+                logger.info(f"Bucket {bucket_name} entered non-OPTIMAL mode: {mode}")
+                return mode
+            elif not check_not_optimal and mode == expected_mode:
+                logger.info(f"Bucket {bucket_name} entered expected mode: {mode}")
+                return mode
+    except TimeoutExpiredError:
+        if check_not_optimal:
+            assert False, (
+                f"Bucket {bucket_name} is still OPTIMAL after "
+                f"{timeout}s (last mode: {last_mode})"
+            )
+        else:
+            assert False, (
+                f"Expected bucket mode {expected_mode} for {bucket_name}, "
+                f"got {last_mode} after {timeout}s"
+            )
 
 
 def get_bucket_status_value(mcg_obj, bucket_name, key):

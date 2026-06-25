@@ -563,6 +563,14 @@ DEFAULT_MCG_BUCKET_NOTIFS_PVC = "noobaa-bucket-notifications-pvc"
 CUSTOM_MCG_LABEL = "custom=mcg-label"
 NOOBAA_RESOURCE_NAME = "noobaa"
 NOOBAA_DB_PVC_NAME = "noobaa-db-pg-cluster-1"
+NOOBAA_INITIALIZING_REASON = "NoobaaInitializing"
+NOOBAA_HEALTH_CHECK_DELAY = 30
+CEPH_CONDITION_REASONS = (
+    "CephClusterNotReady",
+    "CephClusterHealthNotOK",
+    "CephClusterCreating",
+    "CephClusterUpdating",
+)
 MIN_PV_BACKINGSTORE_SIZE_IN_GB = 17
 JENKINS_BUILD = "jax-rs-build"
 JENKINS_BUILD_COMPLETE = "Complete"
@@ -1817,6 +1825,7 @@ IBM_POWER_PLATFORM = "powervs"
 IBM_CLOUD_BAREMETAL_PLATFORM = "ibm_cloud_baremetal"
 BAREMETALPSI_PLATFORM = "baremetalpsi"
 RGW_PLATFORM = "rgw"
+SELF_REF_MCG_PLATFORM = "self-ref-mcg"
 IBMCLOUD_PLATFORM = "ibm_cloud"
 IBM_COS_PLATFORM = "ibmcos"
 IBM_PLATFORM = "ibm"
@@ -2950,6 +2959,7 @@ CLOUD_MNGR_PLATFORMS = [
     "IBMCOS",
     "AWS_STS",
     "AZURE_STS",
+    "SELF_REF_MCG",
 ]
 
 # Vault related configurations
@@ -3207,6 +3217,7 @@ OCS_COMPONENTS_MAP = {
     "noobaa": "multiCloudGateway",
     "blockpools": "cephBlockPools",
     "cephnonresilentpools": "cephNonResilientPools",
+    "cephobjectstoreusers": "cephObjectStoreUsers",
 }
 
 DEFAULT_PAXOS_SERVICE_TRIM_MIN = 250

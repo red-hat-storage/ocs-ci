@@ -422,3 +422,70 @@ class S3VectorTab(BucketsTab):
         except (NoSuchElementException, TimeoutException):
             logger.warning("Could not find index list items")
             return []
+
+    def delete_index(self, index_name: str):
+        """
+        Delete a single vector index by name via the row kebab menu.
+
+        Clicks the kebab button on the index row, selects "Delete index",
+        types the index name into the confirmation input, and confirms.
+
+        Args:
+            index_name (str): Name of the index to delete.
+        """
+        logger.info(f"Deleting vector index via UI: {index_name}")
+        self.do_click(
+            format_locator(self.s3_vector_loc["row_kebab_by_name"], index_name),
+            enable_screenshot=True,
+        )
+        self.do_click(self.s3_vector_loc["delete_index_option"], enable_screenshot=True)
+        self.do_send_keys(self.s3_vector_loc["delete_index_name_input"], index_name)
+        self.do_click(
+            self.s3_vector_loc["delete_index_confirm_button"], enable_screenshot=True
+        )
+        self.page_has_loaded(sleep_time=self.PAGE_LOAD_WAIT)
+        logger.info(f"Deleted vector index: {index_name}")
+
+    def delete_all_indices(self, index_names):
+        """
+        Delete every index in *index_names* one by one via the row kebab menu.
+
+        The S3 Vector UI has no bulk-select or bulk-delete — each index must be
+        deleted individually. The caller is expected to pass the full list of
+        index names that are currently present in the bucket.
+
+        Args:
+            index_names (list[str]): Names of the indices to delete.
+        """
+        logger.info(f"Deleting {len(index_names)} indices individually: {index_names}")
+        for idx_name in index_names:
+            self.delete_index(idx_name)
+
+    def delete_vector_bucket_from_list(self, bucket_name: str):
+        """
+        Delete a vector bucket from the S3 Vector tab bucket list via the row
+        kebab menu.
+
+        Clicks the kebab button on the bucket row, selects "Delete bucket",
+        types the bucket name into the confirmation input, and confirms.
+
+        Args:
+            bucket_name (str): Name of the vector bucket to delete.
+        """
+        logger.info(f"Deleting vector bucket via UI: {bucket_name}")
+        self.do_click(
+            format_locator(self.s3_vector_loc["row_kebab_by_name"], bucket_name),
+            enable_screenshot=True,
+        )
+        self.do_click(
+            self.s3_vector_loc["delete_vector_bucket_option"], enable_screenshot=True
+        )
+        self.do_send_keys(
+            self.s3_vector_loc["delete_vector_bucket_name_input"], bucket_name
+        )
+        self.do_click(
+            self.s3_vector_loc["delete_vector_bucket_confirm_button"],
+            enable_screenshot=True,
+        )
+        self.page_has_loaded(sleep_time=self.PAGE_LOAD_WAIT)
+        logger.info(f"Deleted vector bucket: {bucket_name}")

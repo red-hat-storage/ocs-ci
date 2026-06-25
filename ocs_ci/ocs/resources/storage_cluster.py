@@ -9,6 +9,7 @@ import re
 import tempfile
 import json
 import time
+from typing import Optional
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -555,9 +556,11 @@ def ocs_install_verification(
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and (disable_noobaa or managed_service or client_cluster):
+        if ("noobaa" in label or label is constants.NOOBAA_CNPG_POD_LABEL) and (
+            disable_noobaa or managed_service or client_cluster
+        ):
             continue
-        if "mds" in label and disable_cephfs:
+        if ("mds" in label or "cephfs" in label) and disable_cephfs:
             continue
         if label == constants.MANAGED_CONTROLLER_LABEL:
             if fusion_aas_provider:
@@ -671,7 +674,12 @@ def ocs_install_verification(
                 f"{namespace}.rbd.csi.ceph.com",
             }.issubset(csi_drivers)
         else:
-            assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
+            csi_provisioners = set(defaults.CSI_PROVISIONERS)
+            if disable_cephfs:
+                csi_provisioners.discard(defaults.CEPHFS_PROVISIONER)
+            if disable_blockpools:
+                csi_provisioners.discard(defaults.RBD_PROVISIONER)
+            assert csi_provisioners.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
@@ -1074,24 +1082,36 @@ def ocs_install_verification(
         else constants.ROOK_CEPH_OPERATOR
     )
     if odf_running_version >= version.VERSION_4_19 or hci_cluster:
-        provisioner_deployment_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
-        }
+        provisioner_deployment_and_owner_names = {}
+        nodeplugin_daemonset_and_owner_names = {}
+        if not disable_cephfs:
+            provisioner_deployment_and_owner_names[
+                f"{constants.CEPHFS_PROVISIONER}-ctrlplugin"
+            ] = constants.CEPHFS_PROVISIONER
+            nodeplugin_daemonset_and_owner_names[
+                f"{constants.CEPHFS_PROVISIONER}-nodeplugin"
+            ] = constants.CEPHFS_PROVISIONER
+        if not disable_blockpools:
+            provisioner_deployment_and_owner_names[
+                f"{constants.RBD_PROVISIONER}-ctrlplugin"
+            ] = constants.RBD_PROVISIONER
+            nodeplugin_daemonset_and_owner_names[
+                f"{constants.RBD_PROVISIONER}-nodeplugin"
+            ] = constants.RBD_PROVISIONER
         csi_owner_kind = constants.DRIVER
     else:
-        provisioner_deployment_and_owner_names = {
-            "csi-cephfsplugin-provisioner": csi_owner_name,
-            "csi-rbdplugin-provisioner": csi_owner_name,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            "csi-cephfsplugin": csi_owner_name,
-            "csi-rbdplugin": csi_owner_name,
-        }
+        provisioner_deployment_and_owner_names = {}
+        nodeplugin_daemonset_and_owner_names = {}
+        if not disable_cephfs:
+            provisioner_deployment_and_owner_names["csi-cephfsplugin-provisioner"] = (
+                csi_owner_name
+            )
+            nodeplugin_daemonset_and_owner_names["csi-cephfsplugin"] = csi_owner_name
+        if not disable_blockpools:
+            provisioner_deployment_and_owner_names["csi-rbdplugin-provisioner"] = (
+                csi_owner_name
+            )
+            nodeplugin_daemonset_and_owner_names["csi-rbdplugin"] = csi_owner_name
         csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
 
     deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
@@ -1142,7 +1162,11 @@ def ocs_install_verification(
         ), "Host network is not set to False for cephObjectStores when spec.hostNetwork is True"
     log.info("Verified the providerAPIServerServiceType setting in StorageCluster")
     log.info("Verifying the csi driver ownership")
-    csi_driver_list = [constants.RBD_PROVISIONER, constants.CEPHFS_PROVISIONER]
+    csi_driver_list = []
+    if not disable_blockpools:
+        csi_driver_list.append(constants.RBD_PROVISIONER)
+    if not disable_cephfs:
+        csi_driver_list.append(constants.CEPHFS_PROVISIONER)
     if odf_running_version >= version.VERSION_4_19 or hci_cluster:
         csi_driver_obj = OCP(kind=constants.DRIVER, namespace=namespace)
         for driver in csi_driver_list:
@@ -1303,6 +1327,55 @@ def verify_storage_system():
         )
 
 
+def get_noobaa_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the NooBaa CR via a single lightweight API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where NooBaa is deployed.
+
+    Returns:
+        Optional[str]: NooBaa phase string (e.g. "Ready", "Configuring"),
+            or None if the CR cannot be retrieved.
+
+    """
+    try:
+        noobaa = OCP(kind="noobaa", namespace=namespace).get(
+            resource_name=constants.NOOBAA_RESOURCE_NAME
+        )
+        return noobaa.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning("Failed to get NooBaa CR (%s) — skipping NooBaa health check", ex)
+        return None
+
+
+def get_storage_cluster_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the StorageCluster CR via a single lightweight
+    API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where the StorageCluster is
+            deployed.
+
+    Returns:
+        Optional[str]: StorageCluster phase string (e.g. "Ready",
+            "Progressing"), or None if the CR cannot be retrieved.
+
+    """
+    try:
+        sc_name = config.ENV_DATA["storage_cluster_name"]
+        sc = OCP(kind=constants.STORAGECLUSTER, namespace=namespace).get(
+            resource_name=sc_name
+        )
+        return sc.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning(
+            "Failed to get StorageCluster CR (%s) — skipping SC phase check", ex
+        )
+        return None
+
+
 def verify_storage_cluster():
     """
     Verify storage cluster status
@@ -1325,7 +1398,51 @@ def verify_storage_cluster():
             timeout = 1800
         else:
             timeout = 600
-        storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+
+        try:
+            storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+        except ResourceWrongStatusException:
+            noobaa_issue = config.RUN.get("noobaa_not_ready_at_setup")
+            if not noobaa_issue:
+                raise
+
+            fresh_sc = storage_cluster.get()
+            conditions = fresh_sc.get("status", {}).get("conditions", [])
+
+            noobaa_is_cause = any(
+                c.get("reason") == constants.NOOBAA_INITIALIZING_REASON
+                and c.get("type") == "Progressing"
+                for c in conditions
+            )
+            ceph_has_issues = any(
+                c.get("reason") in constants.CEPH_CONDITION_REASONS for c in conditions
+            )
+
+            if not noobaa_is_cause or ceph_has_issues:
+                raise
+
+            namespace = config.ENV_DATA["cluster_namespace"]
+            current_nb_phase = get_noobaa_phase(namespace)
+
+            if current_nb_phase == constants.STATUS_READY:
+                config.RUN.pop("noobaa_not_ready_at_setup", None)
+                raise
+
+            if current_nb_phase != noobaa_issue.get("phase"):
+                log.warning(
+                    "NooBaa phase changed from '%s' to '%s'"
+                    " — running full verification",
+                    noobaa_issue["phase"],
+                    current_nb_phase,
+                )
+                raise
+
+            log.warning(
+                "StorageCluster not Ready due to NooBaa (phase: %s),"
+                " which was already unhealthy at test setup."
+                " Waiving SC phase check — version check still runs.",
+                current_nb_phase,
+            )
 
     # verify storage cluster version
     if not config.ENV_DATA.get("disable_storage_cluster_version_check"):
