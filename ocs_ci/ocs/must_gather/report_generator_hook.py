@@ -9,8 +9,39 @@ from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
+# JUnit testcase property consumed by Data Router / Report Portal (property_filter: ".*")
+MUST_GATHER_ANALYSIS_URL_PROPERTY = "must-gather-analysis-url"
 
-def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None:
+# Magna HTTP base for NFS paths when logs_url is not configured (see ocs4-jenkins)
+MAGNA_BASE_URL = "http://magna002.ceph.redhat.com"
+
+
+def local_path_to_logs_url(local_path: str, cluster_config) -> str | None:
+    """
+    Convert a local log file path to a remote logs URL (Magna) when possible.
+
+    Prefers ``cluster_config.RUN['logs_url']`` (set by Jenkins). Falls back to
+    replacing the ``/mnt`` NFS prefix with :data:`MAGNA_BASE_URL`.
+    """
+    local_path = os.path.abspath(local_path)
+    if not os.path.isfile(local_path):
+        return None
+
+    logs_url = cluster_config.RUN.get("logs_url")
+    log_dir = os.path.abspath(os.path.expanduser(cluster_config.RUN["log_dir"]))
+    if logs_url:
+        if local_path == log_dir or local_path.startswith(log_dir + os.sep):
+            rel = os.path.relpath(local_path, log_dir).replace(os.sep, "/")
+            base = logs_url if logs_url.endswith("/") else f"{logs_url}/"
+            return f"{base}{rel}"
+
+    if local_path.startswith("/mnt"):
+        return local_path.replace("/mnt", MAGNA_BASE_URL, 1)
+
+    return None
+
+
+def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> str | None:
     """
     Run the ``must_gather_report_generator`` package after must-gather is complete
     (``python -m must_gather_report_generator``, same as the ``must-gather-report``
@@ -19,17 +50,20 @@ def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None
 
     Requires the ocs-ci environment where ``must_gather_report_generator`` is
     installed (editable or otherwise).
+
+    Returns:
+        str | None: Absolute path to the generated text report, or None on failure.
     """
     if not config.REPORTING.get("generate_must_gather_report", False):
-        return
+        return None
 
     if importlib.util.find_spec("must_gather_report_generator") is None:
-        return
+        return None
 
     mg_dir_path = os.path.abspath(mg_dir_path)
     tarball_path = f"{mg_dir_path}.tar.gz"
     if not (os.path.isdir(mg_dir_path) or os.path.isfile(tarball_path)):
-        return
+        return None
 
     # Use tarball path if directory doesn't exist (happens when tarball_mg_logs + delete_packed_mg_logs are enabled)
     path_to_analyze = mg_dir_path if os.path.isdir(mg_dir_path) else tarball_path
@@ -58,12 +92,18 @@ def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None
             capture_output=True,
             text=True,
         )
+        if not os.path.isfile(text_out):
+            logger.error(
+                "Must-gather text report missing after generation: %s", text_out
+            )
+            return None
         logger.info(
             "Must-gather report generated for %s (text=%s xml=%s)",
             path_to_analyze,
             text_out,
             xml_out,
         )
+        return text_out
     except subprocess.TimeoutExpired:
         logger.error(
             "Must-gather report generation timed out after 300s for %s",
@@ -86,20 +126,26 @@ def run_report_generator(mg_dir_path: str, report_dir: str, prefix: str) -> None
             e,
             exc_info=True,
         )
+    return None
 
 
 def trigger_reports_after_collect_ocs_logs(
     dir_name: str,
     status_failure: bool,
     cluster_configs,
-) -> None:
+) -> list[str]:
     """
     Trigger report generation for the OCS must-gather directory per cluster.
     Should be called only AFTER collect_ocs_logs() returns.
+
+    Returns:
+        list[str]: Remote (Magna) URLs for generated text reports, one per cluster
+            when conversion succeeds.
     """
     if not config.REPORTING.get("generate_must_gather_report", False):
-        return
+        return []
 
+    report_urls = []
     for cluster in cluster_configs:
         if status_failure:
             base = os.path.join(
@@ -117,4 +163,18 @@ def trigger_reports_after_collect_ocs_logs(
 
         mg_dir = os.path.join(base, "ocs_must_gather")
         report_dir = os.path.join(base, "must_gather_report")
-        run_report_generator(mg_dir, report_dir, prefix=dir_name)
+        text_out = run_report_generator(mg_dir, report_dir, prefix=dir_name)
+        if not text_out:
+            continue
+
+        report_url = local_path_to_logs_url(text_out, cluster)
+        if report_url:
+            report_urls.append(report_url)
+            logger.info("Must-gather analysis report URL: %s", report_url)
+        else:
+            logger.info(
+                "Must-gather analysis report saved locally (no remote URL): %s",
+                text_out,
+            )
+
+    return report_urls
