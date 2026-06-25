@@ -265,8 +265,8 @@ def cnv_custom_storage_class(
 
         config.reset_ctx()
         for cluster in get_non_acm_cluster_config():
-            secret = secret_factory(interface=constants.CEPHBLOCKPOOL)
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            secret = secret_factory(interface=constants.CEPHBLOCKPOOL)
             sc_obj = helpers.create_storage_class(
                 interface_type=constants.CEPHBLOCKPOOL,
                 interface_name=resource_info.get(config.current_cluster_name(), {}).get(
