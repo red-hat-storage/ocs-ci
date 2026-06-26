@@ -1,4 +1,5 @@
 import logging
+import random
 from time import sleep
 
 import pytest
@@ -9,7 +10,12 @@ from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs, get_nodes_having_label
+from ocs_ci.ocs.node import (
+    wait_for_nodes_status,
+    get_node_objs,
+    get_nodes,
+    get_nodes_having_label,
+)
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.retry import retry
 
@@ -30,25 +36,25 @@ class Test2AZFailoverAndRelocateZoneFailure:
         argvalues=[
             pytest.param(
                 constants.CEPHBLOCKPOOL,
-                "data-1",
+                "osd_zone",
                 marks=[tier1, acceptance],
-                id="rbd-zone-data-a",
+                id="rbd-zone-osd",
             ),
             pytest.param(
                 constants.CEPHBLOCKPOOL,
-                "arbiter",
+                constants.ARBITER_ZONE_LABEL[0],
                 marks=[tier1],
                 id="rbd-zone-arbiter",
             ),
             pytest.param(
                 constants.CEPHFILESYSTEM,
-                "data-1",
+                "osd_zone",
                 marks=[tier1, acceptance],
-                id="cephfs-zone-data-a",
+                id="cephfs-zone-osd",
             ),
             pytest.param(
                 constants.CEPHFILESYSTEM,
-                "arbiter",
+                constants.ARBITER_ZONE_LABEL[0],
                 marks=[tier1],
                 id="cephfs-zone-arbiter",
             ),
@@ -86,36 +92,83 @@ class Test2AZFailoverAndRelocateZoneFailure:
         failover_batch = []
         relocate_batch = []
 
+        # Resolve power_off_zone to the real topology.kubernetes.io/zone label
+        # on this cluster (equivalent to: oc get nodes --show-labels | grep zone).
+        # There are always 3 zones total: 1 arbiter + 2 data zones.
+        arbiter_zone = config.DEPLOYMENT.get(
+            "arbiter_zone", constants.ARBITER_ZONE_LABEL[0]
+        )
+        logger.debug(f"Configured arbiter_zone='{arbiter_zone}'")
+
+        worker_nodes = get_nodes()
+        all_zone_labels = {
+            node.data["metadata"]["labels"][constants.ZONE_LABEL]
+            for node in worker_nodes
+            if constants.ZONE_LABEL in node.data["metadata"]["labels"]
+        }
+        logger.debug(
+            f"Found {len(worker_nodes)} worker nodes across "
+            f"{len(all_zone_labels)} zone(s): {sorted(all_zone_labels)}"
+        )
+
+        if power_off_zone == constants.ARBITER_ZONE_LABEL[0]:
+            # Use the real arbiter zone name as read from the node labels
+            power_off_zone = arbiter_zone
+            logger.debug(
+                f"Zone type='arbiter' resolved to arbiter_zone='{power_off_zone}'"
+            )
+        else:
+            # "osd_zone" — exclude arbiter, pick randomly from the 2 remaining data zones
+            data_zones = list(all_zone_labels - {arbiter_zone})
+            logger.debug(
+                f"Zone type='osd_zone': available data zones "
+                f"(arbiter='{arbiter_zone}' excluded): {sorted(data_zones)}"
+            )
+            logger.assertion(
+                f"Data zones available on cluster: expected>0, actual={len(data_zones)}"
+            )
+            assert data_zones, "No data zones found on cluster nodes"
+            power_off_zone = random.choice(data_zones)
+            logger.debug(
+                f"Randomly selected power_off_zone='{power_off_zone}' "
+                f"from data zones {sorted(data_zones)}"
+            )
+
         logger.info(
-            f"Starting test with pvc_interface={pvc_interface}, "
-            f"power_off_zone={power_off_zone}, "
-            f"primary_cluster_down={primary_cluster_down}"
+            f"Resolved power_off_zone='{power_off_zone}', "
+            f"pvc_interface={pvc_interface}"
         )
 
         # ========================================
-        # Step 1: Deploy 2 GitOps/Subscription Apps
+        # Step 1: Deploy GitOps/ApplicationSet App
         # ========================================
-        logger.info("Deploying 1 GitOps/ApplicationSet apps")
+        logger.test_step("Deploy GitOps/ApplicationSet workload")
         gitops_workloads = all_dr_workloads["dr_workload"](
             num_of_subscription=0, num_of_appset=1, skip_mirroring_validation=True
         )
-        logger.info(f"Deployed {len(gitops_workloads)} GitOps/ApplicationSet workloads")
+        logger.info(
+            f"Deployed {len(gitops_workloads)} GitOps/ApplicationSet workload(s): "
+            f"{[w.workload_namespace for w in gitops_workloads]}"
+        )
 
         # ========================================
-        # Step 2: Deploy 2 Discovered Apps
+        # Step 2: Deploy Discovered App
         # ========================================
-        logger.info("Deploying 1 Discovered apps")
+        logger.test_step("Deploy Discovered workload")
         discovered_workloads = all_dr_workloads["discovered_apps"](
             kubeobject=1, recipe=0, pvc_interface=pvc_interface, multi_ns=False
         )
-        logger.info(f"Deployed {len(discovered_workloads)} Discovered apps")
+        logger.info(
+            f"Deployed {len(discovered_workloads)} Discovered workload(s): "
+            f"{[w.workload_namespace for w in discovered_workloads]}"
+        )
 
         # ========================================
-        # Step 3: Deploy 2 CNV Apps (only for RBD)
+        # Step 3: Deploy CNV Apps (RBD only)
         # ========================================
         cnv_workloads = []
         if pvc_interface == constants.CEPHBLOCKPOOL:
-            logger.info("Deploying 2 CNV apps (RBD only)")
+            logger.test_step("Deploy CNV workload (RBD only)")
             cnv_workloads = all_dr_workloads["discovered_apps_cnv"](
                 pvc_vm=1,
                 custom_sc=False,
@@ -123,18 +176,30 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 shared_drpc_protection=False,
                 vm_type=constants.VM_VOLUME_PVC,
             )
-            logger.info(f"Deployed {len(cnv_workloads)} CNV workloads")
+            logger.info(
+                f"Deployed {len(cnv_workloads)} CNV workload(s): "
+                f"{[w.workload_namespace for w in cnv_workloads]}"
+            )
         else:
-            logger.info("Skipping CNV apps deployment (only supported for RBD)")
+            logger.info(
+                f"Skipping CNV workload deployment: pvc_interface={pvc_interface}, "
+                f"CNV requires CEPHBLOCKPOOL"
+            )
 
         # Combine all workloads for iteration
         all_workloads = gitops_workloads + discovered_workloads + cnv_workloads
-        logger.info(f"Total workloads deployed: {len(all_workloads)}")
+        logger.info(
+            f"Total workloads: {len(all_workloads)} "
+            f"(GitOps={len(gitops_workloads)}, "
+            f"Discovered={len(discovered_workloads)}, "
+            f"CNV={len(cnv_workloads)})"
+        )
 
         # ========================================
-        # Step 4: Validate mirroring status for all deployed workloads
+        # Step 4: Validate mirroring status (RBD only)
         # ========================================
         if pvc_interface == constants.CEPHBLOCKPOOL:
+            logger.test_step("Validate RBD mirroring status for all deployed workloads")
             # Flatten the list if any workload is itself a list
             flattened_workloads = []
             for wl in all_workloads:
@@ -144,19 +209,23 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     flattened_workloads.append(wl)
             total_pvc_count = sum([wl.workload_pvc_count for wl in flattened_workloads])
             logger.info(
-                f"Validating mirroring status for {total_pvc_count} PVCs across {len(flattened_workloads)} workloads"
+                f"Waiting for mirroring status OK: "
+                f"{total_pvc_count} PVC(s) across {len(flattened_workloads)} workload(s) "
+                f"(timeout=900s)"
             )
             dr_helpers.wait_for_mirroring_status_ok(
                 replaying_images=total_pvc_count, timeout=900
             )
-            logger.info("Mirroring status validation successful for all workloads")
+            logger.info(f"Mirroring status OK for all {total_pvc_count} PVC(s)")
             # Use flattened list for the rest of the test
             all_workloads = flattened_workloads
+        else:
+            logger.info(f"Skipping mirroring validation: pvc_interface={pvc_interface}")
 
         # ========================================
-        # Step 5: Prepare workload metadata for batch operations
+        # Step 5: Collect workload metadata
         # ========================================
-        logger.info("Preparing workload metadata for batch failover and relocate")
+        logger.test_step(f"Collect DR metadata for {len(all_workloads)} workload(s)")
         workload_metadata = []
         completed_failovers = []
         completed_relocates = []
@@ -202,6 +271,12 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 resource_name=resource_name,
             )
 
+            logger.debug(
+                f"Workload {idx}/{len(all_workloads)}: type={workload_type}, "
+                f"namespace={workload_namespace}, resource_name={resource_name}, "
+                f"primary={primary_cluster_name}, secondary={secondary_cluster_name}"
+            )
+
             # Get scheduling interval
             scheduling_interval = dr_helpers.get_scheduling_interval(
                 workload_namespace,
@@ -238,38 +313,44 @@ class Test2AZFailoverAndRelocateZoneFailure:
                 }
             )
 
-            logger.info(
-                f"Workload {idx}/{len(all_workloads)} ({workload_type}): "
-                f"namespace={workload_namespace}, resource_name={resource_name}, "
-                f"drpc_name={drpc_name}, Primary={primary_cluster_name}, "
-                f"Secondary={secondary_cluster_name}"
+            logger.debug(
+                f"Workload {idx}/{len(all_workloads)}: drpc_name={drpc_name}, "
+                f"scheduling_interval={scheduling_interval}min"
             )
+
+        logger.info(f"Metadata collected for {len(workload_metadata)} workload(s)")
 
         # Get max scheduling interval for wait time
         max_scheduling_interval = max(
             wl["scheduling_interval"] for wl in workload_metadata
         )
         wait_time = 2 * max_scheduling_interval
-        logger.info(f"Waiting {wait_time} minutes for IOs to complete")
+        logger.info(
+            f"Waiting {wait_time} min (2x max scheduling interval of "
+            f"{max_scheduling_interval} min) for IOs to settle before failover"
+        )
         sleep(wait_time * 60)
+        logger.info("IO settle wait complete")
 
         # ========================================
         # Step 6: Sequential Failover to Secondary Cluster
         # ========================================
-        logger.info(
-            f"Starting sequential failover for {len(all_workloads)} workloads (one by one)"
+        logger.test_step(
+            f"Failover {len(all_workloads)} workload(s) to secondary cluster "
+            f"with zone failure on '{power_off_zone}'"
         )
 
-        # Stop primary cluster nodes if needed (only once for all workloads)
+        # Stop primary cluster nodes in the target zone (once for all workloads)
         if primary_cluster_down and workload_metadata:
             first_workload = workload_metadata[0]
             config.switch_to_cluster_by_name(first_workload["primary_cluster_name"])
             logger.info(
-                f"Stopping nodes in zone '{power_off_zone}' on primary cluster: "
-                f"{first_workload['primary_cluster_name']}"
+                f"Simulating zone failure: stopping nodes in zone '{power_off_zone}' "
+                f"on primary cluster '{first_workload['primary_cluster_name']}'"
             )
 
             zone_label = f"{constants.ZONE_LABEL}={power_off_zone}"
+            logger.info(f"Looking up nodes with label: {zone_label}")
             zone_nodes_info = get_nodes_having_label(zone_label)
             zone_nodes = [
                 node_obj
@@ -280,34 +361,41 @@ class Test2AZFailoverAndRelocateZoneFailure:
 
             if not zone_nodes:
                 logger.warning(
-                    f"No nodes found in zone '{power_off_zone}'. "
-                    f"Falling back to stopping all primary cluster nodes."
+                    f"No nodes found with label '{zone_label}'. "
+                    f"Falling back to stopping all {len(first_workload['primary_cluster_nodes'])} "
+                    f"primary cluster nodes."
                 )
                 zone_nodes = first_workload["primary_cluster_nodes"]
             else:
                 logger.info(
-                    f"Found {len(zone_nodes)} nodes in zone '{power_off_zone}': "
+                    f"Found {len(zone_nodes)} node(s) in zone '{power_off_zone}': "
                     f"{[node.name for node in zone_nodes]}"
                 )
 
+            logger.info(
+                f"Stopping {len(zone_nodes)} node(s): "
+                f"{[node.name for node in zone_nodes]}"
+            )
             nodes_multicluster[first_workload["primary_cluster_index"]].stop_nodes(
                 zone_nodes
             )
-            logger.info(f"Nodes in zone '{power_off_zone}' stopped")
             logger.info(
-                "Waiting 10 minutes for OpenShift cluster to detect node failure"
+                f"Node(s) in zone '{power_off_zone}' stopped successfully. "
+                f"Waiting 10 min for OpenShift to detect the node failure ..."
             )
             sleep(600)  # 10 minutes = 600 seconds
+            logger.info("Node failure detection wait complete")
 
         # Perform failover for workloads one by one
         try:
             failover_batch = []
             for wl_meta in workload_metadata:
                 logger.info(
-                    f"Starting failover for workload {wl_meta['idx']}/{len(all_workloads)} "
-                    f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
-                    f"resource_name={wl_meta['resource_name']} drpc_name={wl_meta['drpc_name']} "
-                    f"to {wl_meta['secondary_cluster_name']}"
+                    f"Failover [{wl_meta['idx']}/{len(all_workloads)}] "
+                    f"type={wl_meta['workload_type']}, "
+                    f"drpc_name={wl_meta['drpc_name']}, "
+                    f"namespace={wl_meta['workload_namespace']}, "
+                    f"target={wl_meta['secondary_cluster_name']}"
                 )
 
                 # Initiate failover for this workload
@@ -338,18 +426,13 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     }
                 )
                 logger.info(
-                    f"Failover initiated for workload {wl_meta['idx']}/{len(all_workloads)}. "
-                    f"Waiting for completion..."
+                    f"Waiting for resources on secondary cluster "
+                    f"'{wl_meta['secondary_cluster_name']}': "
+                    f"pvc_count={wl_meta['workload'].workload_pvc_count}, "
+                    f"pod_count={wl_meta['workload'].workload_pod_count}, "
+                    f"timeout=1200s"
                 )
 
-                # Wait for this workload's failover to complete before moving to next
-                logger.info(
-                    f"Verifying failover completion for workload "
-                    f"{wl_meta['idx']}/{len(all_workloads)} "
-                    f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
-                    f"resource_name={wl_meta['resource_name']} "
-                    f"drpc_name={wl_meta['drpc_name']}"
-                )
                 config.switch_to_cluster_by_name(wl_meta["secondary_cluster_name"])
                 dr_helpers.wait_for_all_resources_creation(
                     wl_meta["workload"].workload_pvc_count,
@@ -372,28 +455,28 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     }
                 )
                 logger.info(
-                    f"Workload {wl_meta['idx']}/{len(all_workloads)} successfully failed over to "
-                    f"{wl_meta['secondary_cluster_name']} "
-                    f"(drpc_name={wl_meta['drpc_name']}, "
-                    f"namespace={wl_meta['workload_namespace']}, "
-                    f"resource_name={wl_meta['resource_name']})"
+                    f"Failover complete [{wl_meta['idx']}/{len(all_workloads)}]: "
+                    f"drpc_name={wl_meta['drpc_name']}, "
+                    f"cluster={wl_meta['secondary_cluster_name']}, "
+                    f"namespace={wl_meta['workload_namespace']}"
                 )
         except Exception as ex:
-            logger.error(
-                f"Failover phase failed. Requested failover batch: {failover_batch}. "
-                f"Completed failovers before failure: {completed_failovers}"
+            logger.exception(
+                f"Failover phase failed at workload "
+                f"{len(completed_failovers)+1}/{len(all_workloads)}: "
+                f"completed={completed_failovers}, batch={failover_batch}"
             )
             raise type(ex)(
                 f"{str(ex)} | Failover phase context: requested_failover_batch="
                 f"{failover_batch}, completed_failovers={completed_failovers}"
             ) from ex
 
-        # Restart primary cluster zone nodes if they were stopped
+        # Restart primary cluster zone nodes
         if primary_cluster_down and workload_metadata:
             first_workload = workload_metadata[0]
             logger.info(
-                f"Starting nodes in zone '{power_off_zone}' on primary cluster: "
-                f"{first_workload['primary_cluster_name']}"
+                f"Restoring zone '{power_off_zone}': starting stopped node(s) "
+                f"on primary cluster '{first_workload['primary_cluster_name']}'"
             )
 
             config.switch_to_cluster_by_name(first_workload["primary_cluster_name"])
@@ -413,18 +496,38 @@ class Test2AZFailoverAndRelocateZoneFailure:
             ]
 
             if not zone_nodes:
+                logger.warning(
+                    f"No nodes found with label '{zone_label}' during restart; "
+                    f"falling back to all primary cluster nodes"
+                )
                 zone_nodes = first_workload["primary_cluster_nodes"]
+            else:
+                logger.info(
+                    f"Starting {len(zone_nodes)} node(s) in zone '{power_off_zone}': "
+                    f"{[node.name for node in zone_nodes]}"
+                )
 
             nodes_multicluster[first_workload["primary_cluster_index"]].start_nodes(
                 zone_nodes
             )
+            logger.info(
+                f"Start signal sent for {len(zone_nodes)} node(s). "
+                f"Waiting for nodes to reach Ready state (timeout=900s) ..."
+            )
             config.switch_to_cluster_by_name(first_workload["primary_cluster_name"])
             wait_for_nodes_status([node.name for node in zone_nodes], timeout=900)
+            logger.info(
+                f"All node(s) in zone '{power_off_zone}' are Ready. "
+                f"Waiting for pods to be running (timeout=720s) ..."
+            )
             assert wait_for_pods_to_be_running(
                 timeout=720
             ), "Not all the pods reached running state"
 
-            logger.info(f"Nodes in zone '{power_off_zone}' restarted and healthy")
+            logger.info(
+                f"Zone '{power_off_zone}' fully restored: "
+                f"{len(zone_nodes)} node(s) Ready, all pods running"
+            )
 
             # Cleanup discovered apps after failover and node restart
             discovered_workloads_after_failover = [
@@ -432,15 +535,14 @@ class Test2AZFailoverAndRelocateZoneFailure:
             ]
             if discovered_workloads_after_failover:
                 logger.info(
-                    "Starting explicit cleanup for discovered workloads after failover "
-                    f"and node restart. Workloads to cleanup: "
+                    f"Cleaning up {len(discovered_workloads_after_failover)} discovered "
+                    f"workload(s) after failover and zone restore: "
                     f"{[wl['drpc_name'] for wl in discovered_workloads_after_failover]}"
                 )
                 for wl_meta in discovered_workloads_after_failover:
-                    logger.info(
-                        f"Cleaning up discovered workload with drpc_name={wl_meta['drpc_name']}, "
+                    logger.debug(
+                        f"Discovered-app cleanup: drpc_name={wl_meta['drpc_name']}, "
                         f"namespace={wl_meta['workload_namespace']}, "
-                        f"resource_name={wl_meta['resource_name']}, "
                         f"old_primary={wl_meta['primary_cluster_name']}"
                     )
                     dr_helpers.do_discovered_apps_cleanup(
@@ -454,22 +556,28 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # ========================================
         # Step 7: Sequential Relocate back to Primary Cluster
         # ========================================
-        logger.info(
-            f"Starting sequential relocate for {len(all_workloads)} workloads (one by one)"
+        logger.test_step(
+            f"Relocate {len(all_workloads)} workload(s) back to primary cluster"
         )
 
-        # Wait before relocate
+        # Wait one scheduling interval before relocate
+        logger.info(
+            f"Waiting {max_scheduling_interval} min (1x scheduling interval) "
+            f"before starting relocate"
+        )
         sleep(max_scheduling_interval * 60)
+        logger.info("Pre-relocate wait complete")
 
         # Perform relocate for workloads one by one
         try:
             relocate_batch = []
             for wl_meta in workload_metadata:
                 logger.info(
-                    f"Starting relocate for workload {wl_meta['idx']}/{len(all_workloads)} "
-                    f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
-                    f"resource_name={wl_meta['resource_name']} drpc_name={wl_meta['drpc_name']} "
-                    f"back to {wl_meta['primary_cluster_name']}"
+                    f"Relocate [{wl_meta['idx']}/{len(all_workloads)}] "
+                    f"type={wl_meta['workload_type']}, "
+                    f"drpc_name={wl_meta['drpc_name']}, "
+                    f"namespace={wl_meta['workload_namespace']}, "
+                    f"target={wl_meta['primary_cluster_name']}"
                 )
 
                 # Initiate relocate for this workload
@@ -500,17 +608,12 @@ class Test2AZFailoverAndRelocateZoneFailure:
                         "target_cluster": wl_meta["primary_cluster_name"],
                     }
                 )
-                logger.info(
-                    f"Relocate initiated for workload {wl_meta['idx']}/{len(all_workloads)}. "
-                    f"Waiting for completion..."
-                )
-
                 # For discovered apps, perform cleanup before verifying resources
                 if wl_meta["is_discovered_app"]:
-                    logger.info(
-                        f"Cleaning up discovered workload with drpc_name={wl_meta['drpc_name']}, "
+                    logger.debug(
+                        f"Discovered-app cleanup before resource verification: "
+                        f"drpc_name={wl_meta['drpc_name']}, "
                         f"namespace={wl_meta['workload_namespace']}, "
-                        f"resource_name={wl_meta['resource_name']}, "
                         f"old_primary={wl_meta['secondary_cluster_name']}"
                     )
                     dr_helpers.do_discovered_apps_cleanup(
@@ -521,13 +624,12 @@ class Test2AZFailoverAndRelocateZoneFailure:
                         vrg_name=wl_meta["workload"].discovered_apps_placement_name,
                     )
 
-                # Wait for this workload's relocate to complete before moving to next
                 logger.info(
-                    f"Verifying relocate completion for workload "
-                    f"{wl_meta['idx']}/{len(all_workloads)} "
-                    f"({wl_meta['workload_type']}) namespace={wl_meta['workload_namespace']} "
-                    f"resource_name={wl_meta['resource_name']} "
-                    f"drpc_name={wl_meta['drpc_name']}"
+                    f"Waiting for resources on primary cluster "
+                    f"'{wl_meta['primary_cluster_name']}': "
+                    f"pvc_count={wl_meta['workload'].workload_pvc_count}, "
+                    f"pod_count={wl_meta['workload'].workload_pod_count}, "
+                    f"timeout=1200s"
                 )
                 config.switch_to_cluster_by_name(wl_meta["primary_cluster_name"])
                 dr_helpers.wait_for_all_resources_creation(
@@ -551,18 +653,19 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     }
                 )
                 logger.info(
-                    f"Workload {wl_meta['idx']}/{len(all_workloads)} successfully relocated back to "
-                    f"{wl_meta['primary_cluster_name']} "
-                    f"(drpc_name={wl_meta['drpc_name']}, "
-                    f"namespace={wl_meta['workload_namespace']}, "
-                    f"resource_name={wl_meta['resource_name']})"
+                    f"Relocate complete [{wl_meta['idx']}/{len(all_workloads)}]: "
+                    f"drpc_name={wl_meta['drpc_name']}, "
+                    f"cluster={wl_meta['primary_cluster_name']}, "
+                    f"namespace={wl_meta['workload_namespace']}"
                 )
 
         except Exception as ex:
-            logger.error(
-                f"Relocate phase failed. Requested relocate batch: {relocate_batch}. "
-                f"Completed failovers before failure: {completed_failovers}. "
-                f"Completed relocates before failure: {completed_relocates}"
+            logger.exception(
+                f"Relocate phase failed at workload "
+                f"{len(completed_relocates)+1}/{len(all_workloads)}: "
+                f"completed_relocates={completed_relocates}, "
+                f"completed_failovers={completed_failovers}, "
+                f"batch={relocate_batch}"
             )
             raise type(ex)(
                 f"{str(ex)} | Relocate phase context: requested_relocate_batch="
@@ -571,5 +674,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
             ) from ex
 
         logger.info(
-            f"Successfully completed failover and relocate for all {len(all_workloads)} workloads"
+            f"Failover and relocate complete for all {len(all_workloads)} workload(s): "
+            f"pvc_interface={pvc_interface}, power_off_zone='{power_off_zone}', "
+            f"failovers={len(completed_failovers)}, relocates={len(completed_relocates)}"
         )
