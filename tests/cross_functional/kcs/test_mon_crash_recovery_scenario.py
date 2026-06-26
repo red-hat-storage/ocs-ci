@@ -172,8 +172,10 @@ class TestMonCrashRecoveryScenario:
                 log.info("Crashes archived. Waiting 20 seconds before next check...")
                 sleep(20)
             else:
-                log.info("No new crashes found.")
-                break
+                log.info(
+                    "No new crashes found. Waiting 30 seconds before next check..."
+                )
+                sleep(30)
 
         if crash_found:
             log.info("Completed crash archiving process")
