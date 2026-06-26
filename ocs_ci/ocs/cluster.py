@@ -2439,6 +2439,45 @@ def is_ec_pool_supported():
     return True
 
 
+def get_erasure_coded_rbd_sc_params(param_configs):
+    """
+    Build pytest.param entries for erasure-coded RBD storage class test cases.
+
+    Returns an empty list when EC pools are not supported on the cluster,
+    so non-EC clusters run only the replicated-pool parametrizations without
+    skipped EC variants.
+
+    Args:
+        param_configs (list): Each dict must include ``replica`` and
+            ``polarion_id``. Optional keys: ``compression`` (default ``"none"``),
+            ``extra_marks`` (list of additional pytest marks).
+
+    Returns:
+        list: pytest.param objects for erasure_coded=True cases
+    """
+    import pytest
+
+    from ocs_ci.framework.pytest_customization.marks import ec_allowed
+
+    if not is_ec_pool_supported():
+        return []
+
+    params = []
+    for cfg in param_configs:
+        marks = [ec_allowed, pytest.mark.polarion_id(cfg["polarion_id"])]
+        if cfg.get("extra_marks"):
+            marks.extend(cfg["extra_marks"])
+        params.append(
+            pytest.param(
+                cfg["replica"],
+                cfg.get("compression", "none"),
+                True,
+                marks=marks,
+            )
+        )
+    return params
+
+
 def get_ec_metadata_pool_name():
     """
     Return the name of the replicated metadata pool for EC RBD StorageClasses

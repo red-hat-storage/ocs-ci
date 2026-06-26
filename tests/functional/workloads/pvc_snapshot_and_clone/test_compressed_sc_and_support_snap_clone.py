@@ -1,8 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad, ec_allowed
-from ocs_ci.ocs.cluster import is_ec_pool_supported
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -13,6 +12,7 @@ from ocs_ci.framework.testlib import (
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
 )
+from ocs_ci.ocs.cluster import get_erasure_coded_rbd_sc_params
 from ocs_ci.ocs.benchmark_operator import BMO_NAME
 from ocs_ci.ocs.constants import (
     VOLUME_MODE_FILESYSTEM,
@@ -22,6 +22,19 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
+
+_COMPRESSED_SC_SNAP_CLONE_PARAMS = [
+    pytest.param(*[3, "aggressive", False], marks=pytest.mark.polarion_id("OCS-2536")),
+    pytest.param(*[2, "aggressive", False], marks=pytest.mark.polarion_id("OCS-2305")),
+] + get_erasure_coded_rbd_sc_params(
+    [
+        {
+            "replica": 3,
+            "polarion_id": "OCS-7963",
+            "extra_marks": [tier2],
+        }
+    ]
+)
 
 
 @magenta_squad
@@ -114,26 +127,7 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
     @skipif_ocp_version("<4.6")
     @pytest.mark.parametrize(
         argnames=["replica", "compression", "erasure_coded"],
-        argvalues=[
-            pytest.param(
-                *[3, "aggressive", False], marks=pytest.mark.polarion_id("OCS-2536")
-            ),
-            pytest.param(
-                *[2, "aggressive", False], marks=pytest.mark.polarion_id("OCS-2305")
-            ),
-            pytest.param(
-                *[3, "none", True],
-                marks=[
-                    ec_allowed,
-                    tier2,
-                    pytest.mark.polarion_id("OCS-7963"),
-                    pytest.mark.skipif(
-                        not is_ec_pool_supported(),
-                        reason="Erasure coded pools are not supported on this cluster",
-                    ),
-                ],
-            ),
-        ],
+        argvalues=_COMPRESSED_SC_SNAP_CLONE_PARAMS,
     )
     def test_compressed_sc_and_support_snap_clone(
         self,

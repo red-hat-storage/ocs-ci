@@ -3,7 +3,7 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import magenta_squad, ec_allowed
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
@@ -14,13 +14,37 @@ from ocs_ci.framework.testlib import (
     skipif_proxy_cluster,
 )
 from ocs_ci.ocs.cluster import (
+    get_erasure_coded_rbd_sc_params,
     get_percent_used_capacity,
-    is_ec_pool_supported,
 )
 from ocs_ci.ocs import flowtest
 
 
 log = logging.getLogger(__name__)
+
+_RBD_SC_E2E_PARAMS = [
+    pytest.param(
+        *[3, "aggressive", False],
+        marks=pytest.mark.polarion_id("OCS-2347"),
+    ),
+    pytest.param(
+        *[2, "aggressive", False],
+        marks=pytest.mark.polarion_id("OCS-2345"),
+    ),
+    pytest.param(
+        *[3, "none", False],
+        marks=pytest.mark.polarion_id("OCS-2346"),
+    ),
+    pytest.param(
+        *[2, "none", False],
+        marks=pytest.mark.polarion_id("OCS-2344"),
+    ),
+] + get_erasure_coded_rbd_sc_params(
+    [
+        {"replica": 3, "polarion_id": "OCS-7959"},
+        {"replica": 2, "polarion_id": "OCS-7960"},
+    ]
+)
 
 
 @magenta_squad
@@ -33,46 +57,7 @@ log = logging.getLogger(__name__)
 class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
     @pytest.mark.parametrize(
         argnames=["replica", "compression", "erasure_coded"],
-        argvalues=[
-            pytest.param(
-                *[3, "aggressive", False],
-                marks=pytest.mark.polarion_id("OCS-2347"),
-            ),
-            pytest.param(
-                *[2, "aggressive", False],
-                marks=pytest.mark.polarion_id("OCS-2345"),
-            ),
-            pytest.param(
-                *[3, "none", False],
-                marks=pytest.mark.polarion_id("OCS-2346"),
-            ),
-            pytest.param(
-                *[2, "none", False],
-                marks=pytest.mark.polarion_id("OCS-2344"),
-            ),
-            pytest.param(
-                *[3, "none", True],
-                marks=[
-                    ec_allowed,
-                    pytest.mark.polarion_id("OCS-7959"),
-                    pytest.mark.skipif(
-                        not is_ec_pool_supported(),
-                        reason="Erasure coded pools are not supported on this cluster",
-                    ),
-                ],
-            ),
-            pytest.param(
-                *[2, "none", True],
-                marks=[
-                    ec_allowed,
-                    pytest.mark.polarion_id("OCS-7960"),
-                    pytest.mark.skipif(
-                        not is_ec_pool_supported(),
-                        reason="Erasure coded pools are not supported on this cluster",
-                    ),
-                ],
-            ),
-        ],
+        argvalues=_RBD_SC_E2E_PARAMS,
     )
     def test_new_sc_new_rbd_pool_e2e_wl(
         self,
