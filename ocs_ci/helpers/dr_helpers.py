@@ -3462,6 +3462,7 @@ def validate_application_odf_cli(
     odf_cli_runner = ODFCliRunner()
     cmd_args = (
         f"dr {action} application "
+        f"--config {constants.ODF_CLI_DR_CONFIG_PATH} "
         f"--name {drpc_name} "
         f"--namespace {namespace} "
         f"-o {output_dir}"
@@ -3526,7 +3527,7 @@ def validate_cluster_odf_cli():
     logger.info(f"ODF DR validate clusters output will be stored in: {output_dir}")
 
     odf_cli_runner = ODFCliRunner()
-    cmd_args = f"dr validate clusters -o {output_dir}"
+    cmd_args = f"dr validate clusters --config {constants.ODF_CLI_DR_CONFIG_PATH} -o {output_dir}"
     logger.info("Running ODF DR validate clusters")
     result = odf_cli_runner.run_command(cmd_args)
     stdout = result.stdout.decode()
