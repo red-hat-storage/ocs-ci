@@ -3505,6 +3505,56 @@ def validate_application_odf_cli(
     return stdout
 
 
+def update_odf_cli_dr_config_kubeconfigs():
+    """
+    Update the kubeconfig paths in the ODF CLI DR config file at runtime.
+
+    Reads the odf_cli_dr.yaml config, resolves the actual kubeconfig paths
+    for hub, c1, and c2 clusters from the framework's multicluster config,
+    and writes them back. This follows the same pattern used by
+    ocs_ci/utility/proxy.py for runtime kubeconfig modifications.
+
+    The mapping is:
+        - hub: first ACM cluster
+        - c1, c2: first and second non-ACM (managed) clusters
+        - passive-hub: recovery cluster (if configured)
+
+    """
+    from ocs_ci.ocs.utils import get_all_acm_indexes, get_non_acm_cluster_config
+
+    config_path = constants.ODF_CLI_DR_CONFIG_PATH
+    with open(config_path, "r") as f:
+        cli_config = yaml.safe_load(f)
+
+    acm_indexes = get_all_acm_indexes()
+    if acm_indexes:
+        hub_kubeconfig = config.get_cluster_kubeconfig_by_index(acm_indexes[0])
+        cli_config["clusters"]["hub"]["kubeconfig"] = hub_kubeconfig
+        logger.info(f"Updated odf_cli_dr.yaml hub kubeconfig: {hub_kubeconfig}")
+
+    managed_clusters = get_non_acm_cluster_config()
+    cluster_keys = ["c1", "c2"]
+    for i, key in enumerate(cluster_keys):
+        if i < len(managed_clusters):
+            idx = managed_clusters[i].MULTICLUSTER["multicluster_index"]
+            kubeconfig = config.get_cluster_kubeconfig_by_index(idx)
+            cli_config["clusters"][key]["kubeconfig"] = kubeconfig
+            logger.info(f"Updated odf_cli_dr.yaml {key} kubeconfig: {kubeconfig}")
+
+    for cluster in config.clusters:
+        if cluster.MULTICLUSTER.get("recovery_cluster"):
+            idx = cluster.MULTICLUSTER["multicluster_index"]
+            kubeconfig = config.get_cluster_kubeconfig_by_index(idx)
+            cli_config["clusters"]["passive-hub"]["kubeconfig"] = kubeconfig
+            logger.info(f"Updated odf_cli_dr.yaml passive-hub kubeconfig: {kubeconfig}")
+            break
+
+    with open(config_path, "w") as f:
+        yaml.dump(cli_config, f, default_flow_style=False)
+
+    logger.info(f"ODF CLI DR config updated at: {config_path}")
+
+
 def validate_cluster_odf_cli():
     """
     Validate DR cluster configuration using the ODF CLI tool.
