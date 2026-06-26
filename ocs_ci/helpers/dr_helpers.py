@@ -706,6 +706,61 @@ def check_mirroring_status_for_custom_pool(
     return True
 
 
+def verify_custom_pool_image_isolation(pool_name):
+    """
+    Verify that RBD images in a custom pool are isolated from the
+    default pool on both managed clusters.
+
+    Checks on each managed cluster that:
+    - The custom pool contains at least one RBD image
+    - No images are shared between the custom pool and the default pool
+
+    Args:
+        pool_name (str): Name of the custom CephBlockPool to verify
+
+    Returns:
+        bool: True if isolation checks pass on both clusters
+
+    Raises:
+        AssertionError: If no images found in custom pool or if
+            images overlap between pools
+
+    """
+    from ocs_ci.ocs.resources.pod import list_ceph_images
+
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        cluster_name = config.ENV_DATA.get("cluster_name")
+
+        custom_images = list_ceph_images(pool_name=pool_name)
+        default_images = list_ceph_images(pool_name=constants.DEFAULT_CEPHBLOCKPOOL)
+        logger.info(
+            f"Cluster {cluster_name}: custom pool {pool_name}"
+            f" images={custom_images},"
+            f" default pool images={default_images}"
+        )
+        assert custom_images, (
+            f"No RBD images found in custom pool {pool_name}" f" on {cluster_name}"
+        )
+        overlap = set(custom_images) & set(default_images)
+        assert not overlap, (
+            f"Pool isolation violated on {cluster_name}:"
+            f" images {overlap} found in both"
+            f" {pool_name} and {constants.DEFAULT_CEPHBLOCKPOOL}"
+        )
+        logger.info(
+            f"Pool isolation verified on {cluster_name}:"
+            f" {len(custom_images)} images in {pool_name},"
+            f" no overlap with default pool"
+        )
+
+    config.switch_ctx(restore_index)
+    return True
+
+
 def is_cg_enabled():
     """
     Check if Consistency Group feature is enabled via environment variable

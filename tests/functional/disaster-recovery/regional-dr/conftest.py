@@ -1,9 +1,9 @@
 import logging
 import platform
 import os
+import tempfile
 from ocs_ci.utility import templating
 import pytest
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.virtctl import get_virtctl_tool
@@ -124,55 +124,317 @@ def get_virtctl():
 
 
 @pytest.fixture()
-def cnv_custom_storage_class(request, storageclass_factory):
+def cnv_custom_storage_class(
+    request, secret_factory, ceph_pool_factory, storageclass_factory
+):
     """
-    Uses storage class factory fixture to create a custom RBD storage class and a custom block pool
-    with replica-2 to be used by CNV discovered applications
+    Creates a custom CephBlockPool and StorageClass on both managed
+    clusters, and a DRPolicy on the ACM hub for CNV discovered-app
+    DR tests with custom pools.
 
-    Raises Exception if the custom SC creation fails on any of the managed clusters
+    In an RDR setup, when a custom CephBlockPool is created the auto-generated
+    CephBlockPoolRadosNamespace gets stuck at Progressing because the
+    MirroringController cannot enable mirroring until the peer cluster's pool
+    exists. This fixture handles the ordering to ensure all resources are ready
+    before DR protection.
+
+    Setup flow:
+        1. Create CephBlockPool on each managed cluster and wait for Ready
+        2. Wait for CephBlockPoolRadosNamespace to reach Ready on each cluster.
+           If stuck at Progressing, restart the ocs-operator pod to reset
+           the MirroringController's exponential backoff
+        3. Create StorageClass on each managed cluster (only after RadosNamespace
+           is Ready so Ramen sees a fully mirrored pool)
+        4. Create a new DRPolicy on the ACM hub by cloning the existing policy's
+           spec with a new name
+        5. Wait for the new DRPolicy to reach Validated status
+        6. Wait for the new DRPolicy's peerClasses to include the custom SC
+
+    Teardown flow:
+        1. Delete the custom DRPolicy from ACM hub
+        2. Delete CephBlockPoolRadosNamespace on each managed cluster
+        3. Delete CephBlockPool on each managed cluster
+
+    Args:
+        request: pytest request object
+        secret_factory: Fixture for creating secrets (ensures correct
+            teardown ordering: SC -> pool -> secret)
+        ceph_pool_factory: Fixture for creating CephBlockPool resources
+        storageclass_factory: Fixture for creating StorageClass resources
+
+    Returns:
+        factory: A callable that accepts replica and compression parameters,
+            creates all resources, and returns the new DRPolicy name
 
     """
 
     def factory(replica, compression):
         """
+        Create custom pool, SC, and DRPolicy on both managed clusters.
+
         Args:
-            replica (int):  Replica count used in Pool creation
-            compression (str): Type of compression to be used in the Pool, defaults to None
+            replica (int): Replica count for the CephBlockPool
+            compression (str): Compression type for the pool, or None
+
+        Returns:
+            str: Name of the newly created DRPolicy
 
         """
+        from ocs_ci.ocs import ocp
+        from ocs_ci.ocs.resources.pod import delete_pods, get_all_pods
+        from ocs_ci.utility.utils import TimeoutSampler
 
         pool_name = constants.RDR_CUSTOM_RBD_POOL
         sc_name = constants.RDR_CUSTOM_RBD_STORAGECLASS
 
+        log.test_step(f"Create CephBlockPool {pool_name} on both managed clusters")
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            # Create or verify existing SC in all clusters
+            cluster_name = config.ENV_DATA.get("cluster_name")
             existing_sc_list = get_all_storageclass()
             if sc_name in existing_sc_list:
-                log.info(f"Storage class {sc_name} already exists")
+                log.info(f"Storage class {sc_name} already exists on {cluster_name}")
+                continue
+            pool_ocp = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=pool_name,
+            )
+            if pool_ocp.is_exist(resource_name=pool_name):
+                log.info(
+                    f"Pool {pool_name} already exists on {cluster_name},"
+                    f" skipping creation"
+                )
             else:
-                try:
-                    sc_obj = storageclass_factory(
-                        sc_name=sc_name,
-                        replica=replica,
-                        compression=compression,
-                        new_rbd_pool=True,
-                        pool_name=pool_name,
-                        mapOptions="krbd:rxbounce",
-                    )
-                    if sc_obj is None or sc_obj.name != sc_name:
-                        log.error(
-                            f"Failed to create SC '{sc_name}' or name mismatch: "
-                            f"Created '{sc_obj.name if sc_obj else 'None'}'"
+                log.info(
+                    f"Creating CephBlockPool {pool_name} on {cluster_name}"
+                    f" with replica={replica}, compression={compression}"
+                )
+                ceph_pool_factory(
+                    interface=constants.CEPHBLOCKPOOL,
+                    replica=replica,
+                    compression=compression,
+                    pool_name=pool_name,
+                )
+                for sample in TimeoutSampler(600, 10, pool_ocp.get):
+                    phase = sample.get("status", {}).get("phase") if sample else None
+                    if phase == constants.STATUS_READY:
+                        log.info(
+                            f"CephBlockPool {pool_name} is Ready" f" on {cluster_name}"
                         )
-                    else:
-                        log.info(f"Successfully created custom RBD SC: {sc_name}")
-                        time.sleep(60)
-                except Exception as e:
-                    log.error(f"Error creating SC '{sc_name}': {e}")
-                    raise
+                        break
+
+        log.test_step(
+            "Wait for CephBlockPoolRadosNamespace to reach Ready" " on both clusters"
+        )
+        radosns_name = f"{pool_name}-builtin-implicit"
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            cluster_name = config.ENV_DATA.get("cluster_name")
+            existing_sc_list = get_all_storageclass()
+            if sc_name in existing_sc_list:
+                continue
+            namespace = config.ENV_DATA["cluster_namespace"]
+            radosns_ocp = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=namespace,
+                resource_name=radosns_name,
+            )
+            radosns_data = radosns_ocp.get()
+            radosns_phase = (
+                radosns_data.get("status", {}).get("phase") if radosns_data else None
+            )
+            if radosns_phase != constants.STATUS_READY:
+                log.info(
+                    f"CephBlockPoolRadosNamespace {radosns_name} is"
+                    f" {radosns_phase} on {cluster_name}, restarting"
+                    f" ocs-operator to reset MirroringController backoff"
+                )
+                ocs_pods = get_all_pods(
+                    namespace=namespace,
+                    selector=["ocs-operator"],
+                    selector_label="name",
+                )
+                delete_pods(ocs_pods)
+                for sample in TimeoutSampler(600, 10, radosns_ocp.get):
+                    radosns_phase = (
+                        sample.get("status", {}).get("phase") if sample else None
+                    )
+                    log.info(
+                        f"CephBlockPoolRadosNamespace {radosns_name}"
+                        f" phase: {radosns_phase} on {cluster_name}"
+                    )
+                    if radosns_phase == constants.STATUS_READY:
+                        break
+            else:
+                log.info(
+                    f"CephBlockPoolRadosNamespace {radosns_name}"
+                    f" is already Ready on {cluster_name}"
+                )
+
+        log.test_step(f"Create StorageClass {sc_name} on both managed clusters")
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            cluster_name = config.ENV_DATA.get("cluster_name")
+            existing_sc_list = get_all_storageclass()
+            if sc_name in existing_sc_list:
+                log.info(f"Storage class {sc_name} already exists on {cluster_name}")
+                continue
+            try:
+                sc_obj = storageclass_factory(
+                    sc_name=sc_name,
+                    pool_name=pool_name,
+                    mapOptions="krbd:rxbounce",
+                )
+                if sc_obj is None or sc_obj.name != sc_name:
+                    log.error(
+                        f"Failed to create SC '{sc_name}' or name mismatch: "
+                        f"Created '{sc_obj.name if sc_obj else 'None'}'"
+                    )
+                else:
+                    log.info(
+                        f"Successfully created custom RBD SC:"
+                        f" {sc_name} on {cluster_name}"
+                    )
+            except Exception as e:
+                log.error(f"Error creating SC '{sc_name}' on {cluster_name}: {e}")
+                raise
+
+        from ocs_ci.helpers.dr_helpers import get_all_drpolicy
+
+        dr_policy_name = constants.RDR_CUSTOM_RBD_DR_POLICY
+
+        log.test_step(f"Create new DRPolicy {dr_policy_name} on ACM hub")
+        existing_drpolicy = get_all_drpolicy()[0]
+        dr_policy_data = {
+            "apiVersion": existing_drpolicy["apiVersion"],
+            "kind": existing_drpolicy["kind"],
+            "metadata": {
+                "name": dr_policy_name,
+                "labels": existing_drpolicy["metadata"].get("labels", {}),
+            },
+            "spec": existing_drpolicy["spec"],
+        }
+        dr_policy_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="dr_policy_custom_", delete=False
+        )
+        templating.dump_data_to_temp_yaml(dr_policy_data, dr_policy_yaml.name)
+        config.switch_acm_ctx()
+        exec_cmd(f"oc create -f {dr_policy_yaml.name}")
+
+        log.test_step(f"Wait for DRPolicy {dr_policy_name} to reach Validated status")
+        drpolicy_ocp = ocp.OCP(kind=constants.DRPOLICY)
+        for sample in TimeoutSampler(600, 10, drpolicy_ocp.get, dr_policy_name):
+            reason = (
+                sample.get("status", {}).get("conditions", [{}])[-1].get("reason", "")
+            )
+            log.info(f"DRPolicy {dr_policy_name} reason: {reason}")
+            if reason in constants.DRPOLICY_SUCCESS_REASONS:
+                break
+
+        log.test_step(
+            f"Wait for DRPolicy {dr_policy_name} peerClasses" f" to include {sc_name}"
+        )
+        for sample in TimeoutSampler(600, 10, drpolicy_ocp.get, dr_policy_name):
+            peer_classes = (
+                sample.get("status", {}).get("async", {}).get("peerClasses", [])
+            )
+            sc_names_in_policy = [pc.get("storageClassName") for pc in peer_classes]
+            log.info(
+                f"DRPolicy {dr_policy_name}" f" peerClasses SCs: {sc_names_in_policy}"
+            )
+            if sc_name in sc_names_in_policy:
+                log.info(
+                    f"DRPolicy {dr_policy_name}" f" peerClasses now includes {sc_name}"
+                )
+                break
+
+        config.reset_ctx()
+        return dr_policy_name
+
+    def teardown():
+        """
+        Clean up custom DR resources after test execution.
+
+        Deletes in order: DRPolicy (hub) -> RadosNamespace (both clusters)
+        -> CephBlockPool (both clusters). Each step is wrapped in
+        try/except so a failure on one resource doesn't block cleanup
+        of the remaining resources.
+
+        """
+        from ocs_ci.ocs import ocp
+
+        log.test_step("Teardown: Delete custom DRPolicy from ACM hub")
+        dr_policy_name = constants.RDR_CUSTOM_RBD_DR_POLICY
+        try:
+            config.switch_acm_ctx()
+            drpolicy_ocp = ocp.OCP(kind=constants.DRPOLICY)
+            if drpolicy_ocp.is_exist(resource_name=dr_policy_name):
+                log.info(f"Deleting DRPolicy {dr_policy_name}")
+                drpolicy_ocp.delete(resource_name=dr_policy_name)
+                drpolicy_ocp.wait_for_delete(dr_policy_name, timeout=300)
+            else:
+                log.info(f"DRPolicy {dr_policy_name} not found, skipping")
+        except Exception as e:
+            log.warning(f"Failed to delete DRPolicy {dr_policy_name}: {e}")
+
+        log.test_step(
+            "Teardown: Delete custom pool and RadosNamespace"
+            " on both managed clusters"
+        )
+        pool_name = constants.RDR_CUSTOM_RBD_POOL
+        radosns_name = f"{pool_name}-builtin-implicit"
+
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            namespace = config.ENV_DATA["cluster_namespace"]
+            cluster_name = config.ENV_DATA.get("cluster_name")
+
+            try:
+                radosns_ocp = ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS,
+                    namespace=namespace,
+                    resource_name=radosns_name,
+                )
+                if radosns_ocp.is_exist(resource_name=radosns_name):
+                    log.info(
+                        f"Deleting RadosNamespace {radosns_name}" f" on {cluster_name}"
+                    )
+                    radosns_ocp.delete(resource_name=radosns_name)
+                    radosns_ocp.wait_for_delete(radosns_name, timeout=300)
+                else:
+                    log.info(
+                        f"RadosNamespace {radosns_name} not found"
+                        f" on {cluster_name}, skipping"
+                    )
+            except Exception as e:
+                log.warning(
+                    f"Failed to delete RadosNamespace {radosns_name}"
+                    f" on {cluster_name}: {e}"
+                )
+
+            try:
+                pool_ocp = ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOL,
+                    namespace=namespace,
+                    resource_name=pool_name,
+                )
+                if pool_ocp.is_exist(resource_name=pool_name):
+                    log.info(f"Deleting pool {pool_name} on {cluster_name}")
+                    pool_ocp.delete(resource_name=pool_name)
+                    pool_ocp.wait_for_delete(pool_name, timeout=300)
+                else:
+                    log.info(
+                        f"Pool {pool_name} not found" f" on {cluster_name}, skipping"
+                    )
+            except Exception as e:
+                log.warning(
+                    f"Failed to delete pool {pool_name}" f" on {cluster_name}: {e}"
+                )
+
         config.reset_ctx()
 
+    request.addfinalizer(teardown)
     return factory
 
 
