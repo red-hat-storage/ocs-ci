@@ -131,9 +131,6 @@ class TestMonCrashRecoveryScenario:
         assert not crash, f"Ceph cluster has generated crash {' '.join(crash[0])}"
 
         # Step 9: Verify all mon pods are up and running (same count as initial)
-        log.info(
-            f"Verifying all {initial_mon_count} mon pods are up and running (waiting up to 30 minutes)..."
-        )
         current_mon_count = len(get_mon_deployments())
         log.info(f"Current mon deployments count: {current_mon_count}")
 
@@ -143,23 +140,23 @@ class TestMonCrashRecoveryScenario:
                 f"Waiting for all mons to come up..."
             )
 
-        # Wait for all mon pods to be running with 30-minute timeout
+        # Wait for all mon pods to be running with 10-minute timeout
         pod_objs = ocp.OCP(kind=POD, namespace=config.ENV_DATA["cluster_namespace"])
         ret = pod_objs.wait_for_resource(
             condition=STATUS_RUNNING,
             selector=MON_APP_LABEL,
             resource_count=initial_mon_count,
             dont_allow_other_resources=True,
-            timeout=1800,  # 30 minutes = 1800 seconds
+            timeout=600,
         )
         assert (
             ret
-        ), f"Not all {initial_mon_count} mon pods are in running state after 30 minutes"
+        ), f"Not all {initial_mon_count} mon pods are in running state after 10 minutes"
         log.info(f"All {initial_mon_count} mon pods are up and running successfully")
 
-        # Step 10: Check for crashes for 5 minutes and archive them
-        log.info("Checking for crashes for 5 minutes and archiving if found...")
-        timeout = 300  # 5 minutes
+        # Step 10: Check for crashes for 10 minutes and archive them
+        log.info("Checking for crashes for 10 minutes and archiving if found...")
+        timeout = 600
         start_time = time.time()
         crash_found = False
 
@@ -169,13 +166,12 @@ class TestMonCrashRecoveryScenario:
                 crash_found = True
                 log.info(f"Found crash(es): {crash}. Archiving...")
                 toolbox.exec_ceph_cmd("ceph crash archive-all")
-                log.info("Crashes archived. Waiting 20 seconds before next check...")
                 sleep(20)
             else:
                 log.info(
-                    "No new crashes found. Waiting 30 seconds before next check..."
+                    "No new crashes found. Waiting 60 seconds before next check..."
                 )
-                sleep(30)
+                sleep(60)
 
         if crash_found:
             log.info("Completed crash archiving process")
