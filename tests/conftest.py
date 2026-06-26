@@ -1148,6 +1148,9 @@ def ceph_pool_factory_fixture(
 
         for instance in instances:
             try:
+                if not instance.ocp.is_exist(resource_name=instance.name):
+                    log.info(f"Pool {instance.name} already deleted, skipping")
+                    continue
                 instance.delete(wait=False)
 
                 try:
