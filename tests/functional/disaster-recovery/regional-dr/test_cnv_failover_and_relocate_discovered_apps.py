@@ -89,15 +89,22 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
 
+        custom_dr_policy_name = None
         if custom_sc:
             logger.test_step(
                 "Create custom pool and StorageClass with "
                 f"replica={replica}, compression={compression}"
             )
-            cnv_custom_storage_class(replica=replica, compression=compression)
+            custom_dr_policy_name = cnv_custom_storage_class(
+                replica=replica, compression=compression
+            )
 
         logger.test_step("Deploy CNV discovered app workloads")
-        cnv_workloads = discovered_apps_dr_workload_cnv(pvc_vm=1, custom_sc=custom_sc)
+        cnv_workloads = discovered_apps_dr_workload_cnv(
+            pvc_vm=1,
+            custom_sc=custom_sc,
+            dr_policy_name=custom_dr_policy_name,
+        )
 
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
