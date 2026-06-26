@@ -508,9 +508,7 @@ class TestHealthOverview(ManageTest):
                 "Waiting for 120 sec to update health score after alert is triggered"
             )
             time.sleep(120)
-            self.wait_for_health_score_change(
-                len(alerts) * expected_drop, baseline_score
-            )
+            self.wait_for_health_score_change(expected_drop, baseline_score)
 
             logger.info("Deleting alert rule to resolve alert")
             self.rule.delete()
@@ -527,10 +525,9 @@ class TestHealthOverview(ManageTest):
             self.wait_for_health_score_recovery(baseline_score)
         else:
             logger.info("Alert already present no need to trigger again")
+            infra_health_overview = df_overview.nav_health_view_checks()
             infra_health_overview.unsilence_alert_by_name(alert_name)
-            self.wait_for_health_score_change(
-                ALERT_MAP[alert_name] * expected_drop, baseline_score
-            )
+            self.wait_for_health_score_change(expected_drop, baseline_score)
 
     @tier2
     @polarion_id("OCS-7731")
