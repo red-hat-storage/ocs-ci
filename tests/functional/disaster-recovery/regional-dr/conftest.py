@@ -36,6 +36,7 @@ from ocs_ci.helpers.dr_helpers import (
     check_rbd_mirror_running,
     wait_for_mirroring_status_ok,
     check_mirroring_status_ok,
+    update_odf_cli_dr_config_kubeconfigs,
     validate_cluster_odf_cli,
 )
 
@@ -57,6 +58,13 @@ def pytest_collection_modifyitems(items):
                     f"Test {item} is removed from the collected items. Test runs only on RDR clusters"
                 )
                 items.remove(item)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def update_odf_cli_dr_kubeconfigs():
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+    update_odf_cli_dr_config_kubeconfigs()
 
 
 @pytest.fixture(autouse=True, scope="session")
