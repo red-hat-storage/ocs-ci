@@ -204,7 +204,7 @@ ocp_to_acm_unreleased_mapping = {
     "4.19": False,
     "4.20": False,
     "4.21": False,
-    "4.22": True,
+    "4.22": False,
     "4.23": True,
 }
 
