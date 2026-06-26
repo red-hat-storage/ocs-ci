@@ -1,6 +1,7 @@
 import logging
 import platform
 import os
+import tempfile
 from ocs_ci.utility import templating
 import pytest
 
@@ -248,34 +249,84 @@ def cnv_custom_storage_class(
                 log.error(f"Error creating SC '{sc_name}': {e}")
                 raise
 
-        log.info(
-            "Waiting for DRPolicy peerClasses to include %s",
-            sc_name,
-        )
         from ocs_ci.helpers.dr_helpers import get_all_drpolicy
 
-        for sample in TimeoutSampler(600, 10, get_all_drpolicy):
-            if not sample:
-                continue
-            drpolicy = sample[0]
-            peer_classes = (
-                drpolicy.get("status", {}).get("async", {}).get("peerClasses", [])
+        dr_policy_name = constants.RDR_CUSTOM_RBD_DR_POLICY
+        log.info("Creating new DRPolicy %s for custom pool", dr_policy_name)
+        existing_drpolicy = get_all_drpolicy()[0]
+        dr_policy_data = {
+            "apiVersion": existing_drpolicy["apiVersion"],
+            "kind": existing_drpolicy["kind"],
+            "metadata": {
+                "name": dr_policy_name,
+                "labels": existing_drpolicy["metadata"].get("labels", {}),
+            },
+            "spec": existing_drpolicy["spec"],
+        }
+        dr_policy_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="dr_policy_custom_", delete=False
+        )
+        templating.dump_data_to_temp_yaml(dr_policy_data, dr_policy_yaml.name)
+        config.switch_acm_ctx()
+        exec_cmd(f"oc create -f {dr_policy_yaml.name}")
+
+        drpolicy_ocp = ocp.OCP(kind=constants.DRPOLICY)
+        for sample in TimeoutSampler(600, 10, drpolicy_ocp.get, dr_policy_name):
+            reason = (
+                sample.get("status", {}).get("conditions", [{}])[-1].get("reason", "")
             )
-            sc_names = [pc.get("storageClassName") for pc in peer_classes]
-            log.info("DRPolicy peerClasses SCs: %s", sc_names)
-            if sc_name in sc_names:
-                log.info("DRPolicy peerClasses now includes %s", sc_name)
+            log.info("DRPolicy %s reason: %s", dr_policy_name, reason)
+            if reason in constants.DRPOLICY_SUCCESS_REASONS:
+                break
+
+        log.info(
+            "Waiting for DRPolicy %s peerClasses to include %s",
+            dr_policy_name,
+            sc_name,
+        )
+        for sample in TimeoutSampler(600, 10, drpolicy_ocp.get, dr_policy_name):
+            peer_classes = (
+                sample.get("status", {}).get("async", {}).get("peerClasses", [])
+            )
+            sc_names_in_policy = [pc.get("storageClassName") for pc in peer_classes]
+            log.info(
+                "DRPolicy %s peerClasses SCs: %s",
+                dr_policy_name,
+                sc_names_in_policy,
+            )
+            if sc_name in sc_names_in_policy:
+                log.info(
+                    "DRPolicy %s peerClasses now includes %s",
+                    dr_policy_name,
+                    sc_name,
+                )
                 break
 
         config.reset_ctx()
+        return dr_policy_name
 
     def teardown():
         """
-        Delete the custom CephBlockPool and its RadosNamespace
+        Delete the custom DRPolicy, CephBlockPool, and RadosNamespace
         on all managed clusters after test execution.
 
         """
         from ocs_ci.ocs import ocp
+
+        dr_policy_name = constants.RDR_CUSTOM_RBD_DR_POLICY
+        try:
+            config.switch_acm_ctx()
+            drpolicy_ocp = ocp.OCP(kind=constants.DRPOLICY)
+            if drpolicy_ocp.is_exist(resource_name=dr_policy_name):
+                log.info("Deleting DRPolicy %s", dr_policy_name)
+                drpolicy_ocp.delete(resource_name=dr_policy_name)
+                drpolicy_ocp.wait_for_delete(dr_policy_name, timeout=300)
+        except Exception as e:
+            log.warning(
+                "Failed to delete DRPolicy %s: %s",
+                dr_policy_name,
+                e,
+            )
 
         pool_name = constants.RDR_CUSTOM_RBD_POOL
         radosns_name = f"{pool_name}-builtin-implicit"
