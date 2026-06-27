@@ -212,10 +212,10 @@ class Test2AZFailoverAndRelocateZoneFailure:
             logger.info(
                 f"Waiting for mirroring status OK: "
                 f"{total_pvc_count} PVC(s) across {len(flattened_workloads)} workload(s) "
-                f"(timeout=900s)"
+                f"(timeout=600s)"
             )
             dr_helpers.wait_for_mirroring_status_ok(
-                replaying_images=total_pvc_count, timeout=900
+                replaying_images=total_pvc_count, timeout=600
             )
             logger.info(f"Mirroring status OK for all {total_pvc_count} PVC(s)")
             # Use flattened list for the rest of the test
@@ -513,10 +513,10 @@ class Test2AZFailoverAndRelocateZoneFailure:
             )
             logger.info(
                 f"Start signal sent for {len(zone_nodes)} node(s). "
-                f"Waiting for nodes to reach Ready state (timeout=900s) ..."
+                f"Waiting for nodes to reach Ready state (timeout=600s) ..."
             )
             config.switch_to_cluster_by_name(first_workload["primary_cluster_name"])
-            wait_for_nodes_status([node.name for node in zone_nodes], timeout=900)
+            wait_for_nodes_status([node.name for node in zone_nodes], timeout=600)
             logger.info(
                 f"All node(s) in zone '{power_off_zone}' are Ready. "
                 f"Waiting for pods to be running (timeout=720s) ..."
