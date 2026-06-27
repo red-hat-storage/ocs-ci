@@ -95,44 +95,45 @@ class Test2AZFailoverAndRelocateZoneFailure:
         # Resolve power_off_zone to the real topology.kubernetes.io/zone label
         # on this cluster (equivalent to: oc get nodes --show-labels | grep zone).
         # There are always 3 zones total: 1 arbiter + 2 data zones.
-        arbiter_zone = config.DEPLOYMENT.get(
-            "arbiter_zone", constants.ARBITER_ZONE_LABEL[0]
-        )
-        logger.debug(f"Configured arbiter_zone='{arbiter_zone}'")
+        with config.RunWithPrimaryConfigContext():
+            arbiter_zone = config.DEPLOYMENT.get(
+                "arbiter_zone", constants.ARBITER_ZONE_LABEL[0]
+            )
+            logger.debug(f"Configured arbiter_zone='{arbiter_zone}'")
 
-        worker_nodes = get_nodes()
-        all_zone_labels = {
-            node.data["metadata"]["labels"][constants.ZONE_LABEL]
-            for node in worker_nodes
-            if constants.ZONE_LABEL in node.data["metadata"]["labels"]
-        }
-        logger.debug(
-            f"Found {len(worker_nodes)} worker nodes across "
-            f"{len(all_zone_labels)} zone(s): {sorted(all_zone_labels)}"
-        )
+            worker_nodes = get_nodes()
+            all_zone_labels = {
+                node.data["metadata"]["labels"][constants.ZONE_LABEL]
+                for node in worker_nodes
+                if constants.ZONE_LABEL in node.data["metadata"]["labels"]
+            }
+            logger.debug(
+                f"Found {len(worker_nodes)} worker nodes across "
+                f"{len(all_zone_labels)} zone(s): {sorted(all_zone_labels)}"
+            )
 
-        if power_off_zone == constants.ARBITER_ZONE_LABEL[0]:
-            # Use the real arbiter zone name as read from the node labels
-            power_off_zone = arbiter_zone
-            logger.debug(
-                f"Zone type='arbiter' resolved to arbiter_zone='{power_off_zone}'"
-            )
-        else:
-            # "osd_zone" — exclude arbiter, pick randomly from the 2 remaining data zones
-            data_zones = list(all_zone_labels - {arbiter_zone})
-            logger.debug(
-                f"Zone type='osd_zone': available data zones "
-                f"(arbiter='{arbiter_zone}' excluded): {sorted(data_zones)}"
-            )
-            logger.assertion(
-                f"Data zones available on cluster: expected>0, actual={len(data_zones)}"
-            )
-            assert data_zones, "No data zones found on cluster nodes"
-            power_off_zone = random.choice(data_zones)
-            logger.debug(
-                f"Randomly selected power_off_zone='{power_off_zone}' "
-                f"from data zones {sorted(data_zones)}"
-            )
+            if power_off_zone == constants.ARBITER_ZONE_LABEL[0]:
+                # Use the real arbiter zone name as read from the node labels
+                power_off_zone = arbiter_zone
+                logger.debug(
+                    f"Zone type='arbiter' resolved to arbiter_zone='{power_off_zone}'"
+                )
+            else:
+                # "osd_zone" — exclude arbiter, pick randomly from the 2 remaining data zones
+                data_zones = list(all_zone_labels - {arbiter_zone})
+                logger.debug(
+                    f"Zone type='osd_zone': available data zones "
+                    f"(arbiter='{arbiter_zone}' excluded): {sorted(data_zones)}"
+                )
+                logger.assertion(
+                    f"Data zones available on cluster: expected>0, actual={len(data_zones)}"
+                )
+                assert data_zones, "No data zones found on cluster nodes"
+                power_off_zone = random.choice(data_zones)
+                logger.debug(
+                    f"Randomly selected power_off_zone='{power_off_zone}' "
+                    f"from data zones {sorted(data_zones)}"
+                )
 
         logger.info(
             f"Resolved power_off_zone='{power_off_zone}', "
