@@ -754,6 +754,23 @@ def verify_consumer_configmap(
     disable_blockpools = config.COMPONENTS["disable_blockpools"]
     disable_cephfs = config.COMPONENTS["disable_cephfs"]
 
+    # Get the actual CSI ClientProfile name from the cluster.
+    # The ClientProfile name is a stable CSI identity (e.g. "openshift-storage") that
+    # may differ from cluster_namespace (e.g. "odf-storage" in ROSA HCP odf deployments).
+    client_profile_items = (
+        ocp.OCP(
+            kind=constants.CLIENT_PROFILE,
+            namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+        )
+        .get()
+        .get("items", [])
+    )
+    csi_client_profile_name = (
+        client_profile_items[0]["metadata"]["name"]
+        if client_profile_items
+        else config.cluster_ctx.ENV_DATA["cluster_namespace"]
+    )
+
     def convergence_ver(version):
         return get_semantic_version(
             version, only_major_minor=True
@@ -860,11 +877,10 @@ def verify_consumer_configmap(
         )
         ceph_data_on_consumer_match_arg["csiop-cephfs-client-profile"] = (
             ceph_data_arg.get("csiop-cephfs-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+            == csi_client_profile_name
         )
         ceph_data_on_consumer_match_arg["csiop-rbd-client-profile"] = (
-            ceph_data_arg.get("csiop-rbd-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+            ceph_data_arg.get("csiop-rbd-client-profile", "") == csi_client_profile_name
         )
 
     if internal_consumer and not (disable_blockpools or disable_cephfs):
@@ -909,8 +925,7 @@ def verify_consumer_configmap(
             == "rook-csi-rbd-provisioner"
         )
         ceph_data_on_consumer_match["csiop-rbd-client-profile"] = (
-            ceph_data.get("csiop-rbd-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+            ceph_data.get("csiop-rbd-client-profile", "") == csi_client_profile_name
         )
     elif (
         not internal_consumer
