@@ -2851,7 +2851,7 @@ def create_service_exporter(annotate=True):
 
         if not (
             cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
-            and get_provider_service_type() == "NodePort"
+            or get_provider_service_type() == "NodePort"
             or is_hostnetwork_enabled()
         ):
             logger.info("Checking if multiClusterService exists")
