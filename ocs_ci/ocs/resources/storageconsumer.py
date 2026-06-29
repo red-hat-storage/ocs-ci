@@ -715,6 +715,24 @@ def verify_storage_consumer_resources(
     ceph_data_on_consumer_match = {}
     disable_blockpools = config.COMPONENTS["disable_blockpools"]
     disable_cephfs = config.COMPONENTS["disable_cephfs"]
+
+    # Get the actual CSI ClientProfile name from the cluster.
+    # The ClientProfile name is a stable CSI identity (e.g. "openshift-storage") that
+    # may differ from cluster_namespace (e.g. "odf-storage" in ROSA HCP odf deployments).
+    client_profile_items = (
+        ocp.OCP(
+            kind=constants.CLIENT_PROFILE,
+            namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+        )
+        .get()
+        .get("items", [])
+    )
+    csi_client_profile_name = (
+        client_profile_items[0]["metadata"]["name"]
+        if client_profile_items
+        else config.cluster_ctx.ENV_DATA["cluster_namespace"]
+    )
+
     if internal_consumer and not (disable_blockpools or disable_cephfs):
         """
         check by example:
@@ -757,12 +775,10 @@ def verify_storage_consumer_resources(
             == f"rbd-provisioner-{storage_consumer_uid}"
         )
         ceph_data_on_consumer_match["csiop-cephfs-client-profile"] = (
-            ceph_data.get("csiop-cephfs-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+            ceph_data.get("csiop-cephfs-client-profile", "") == csi_client_profile_name
         )
         ceph_data_on_consumer_match["csiop-rbd-client-profile"] = (
-            ceph_data.get("csiop-rbd-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+            ceph_data.get("csiop-rbd-client-profile", "") == csi_client_profile_name
         )
     else:
         """
