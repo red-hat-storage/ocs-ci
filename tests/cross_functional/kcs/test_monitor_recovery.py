@@ -39,6 +39,7 @@ from ocs_ci.ocs.resources.pod import (
     get_plugin_pods,
     get_ceph_tools_pod,
     wait_for_storage_pods,
+    wait_for_noobaa_pods_running,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
@@ -1465,53 +1466,140 @@ def handle_multi_attach_error(pod_obj, timeout=300):
 
 def recover_mcg():
     """
-    Recovery procedure for noobaa by re-spinning the pods after mon recovery.
-    Handles multi-attach errors by deleting stale VolumeAttachment resources.
+    Recovery procedure for NooBaa by re-spinning the pods after mon recovery
+    Simplified to use existing ocs-ci functions with expected pod count verification
 
     Raises:
-        AssertionError: If any NooBaa or RGW pods fail to reach running state
-
+        ResourceWrongStatusException: If any NooBaa or RGW pods fail to reach running state
     """
-    logger.info("Starting MCG recovery by re-spinning noobaa pods")
-    noobaa_pods = get_noobaa_pods()
-    logger.info(f"Found {len(noobaa_pods)} noobaa pods to respawn")
+    logger.info("Starting MCG recovery by re-spinning NooBaa pods")
 
-    for noobaa_pod in noobaa_pods:
-        logger.info(f"Force deleting noobaa pod: {noobaa_pod.name}")
-        noobaa_pod.delete(force=True)
-
-    logger.info("Waiting 120s for noobaa pods to respawn")
-    time.sleep(120)
-
-    respawned_noobaa_pods = get_noobaa_pods()
-    logger.info(f"Found {len(respawned_noobaa_pods)} noobaa pods to verify")
-
-    failed_noobaa_pods = verify_pods_running(
-        respawned_noobaa_pods, pod_type="noobaa", timeout=600
+    noobaa_pods_before = get_noobaa_pods()
+    expected_pod_count = len(noobaa_pods_before)
+    expected_pod_names = {pod.name for pod in noobaa_pods_before}
+    logger.info(
+        f"Found {expected_pod_count} NooBaa pods to respawn: {sorted(expected_pod_names)}"
     )
 
-    if failed_noobaa_pods:
-        raise AssertionError(f"NooBaa pod recovery failed: {failed_noobaa_pods}")
+    for idx, noobaa_pod in enumerate(noobaa_pods_before):
+        logger.info(
+            f"Force deleting NooBaa pod {idx+1}/{expected_pod_count}: {noobaa_pod.name}"
+        )
+        noobaa_pod.delete(force=True)
+
+        if idx < expected_pod_count - 1:
+            wait_time = 60
+            logger.info(f"Waiting {wait_time}s before deleting next NooBaa pod")
+            time.sleep(wait_time)
+
+    logger.info("Waiting 120s for NooBaa pods to fully respawn")
+    time.sleep(120)
+
+    max_count_retries = 5
+    retry_wait_time = 30
+
+    for retry_attempt in range(max_count_retries):
+        current_noobaa_pods = get_noobaa_pods()
+        current_pod_count = len(current_noobaa_pods)
+        current_pod_names = {pod.name for pod in current_noobaa_pods}
+
+        logger.info(
+            f"Pod count check attempt {retry_attempt + 1}/{max_count_retries}: "
+            f"Found {current_pod_count}/{expected_pod_count} NooBaa pods"
+        )
+
+        if current_pod_count >= expected_pod_count:
+            logger.info(
+                f"All {expected_pod_count} expected NooBaa pods found: {sorted(current_pod_names)}"
+            )
+            break
+
+        missing_pods = expected_pod_names - current_pod_names
+        logger.warning(
+            f"Missing {len(missing_pods)} NooBaa pods: {sorted(missing_pods)}. "
+            f"Waiting {retry_wait_time}s..."
+        )
+
+        if retry_attempt < max_count_retries - 1:
+            time.sleep(retry_wait_time)
+        else:
+            error_msg = (
+                f"NooBaa recovery failed: Expected {expected_pod_count} pods "
+                f"but only found {current_pod_count} after {max_count_retries} attempts. "
+                f"Missing pods: {sorted(missing_pods)}"
+            )
+            logger.error(error_msg)
+            raise ResourceWrongStatusException(error_msg)
+
+    try:
+        wait_for_noobaa_pods_running(timeout=600, sleep=10)
+        logger.info(
+            "All NooBaa pods verified running via wait_for_noobaa_pods_running()"
+        )
+    except Exception as e:
+        logger.warning(
+            f"wait_for_noobaa_pods_running() did not complete successfully: {e}. "
+            "Will attempt individual pod recovery."
+        )
+
+        current_noobaa_pods = get_noobaa_pods()
+        logger.info(f"Verifying {len(current_noobaa_pods)} NooBaa pods individually")
+
+        failed_noobaa_pods = verify_pods_running(
+            current_noobaa_pods, pod_type="NooBaa", timeout=600, parallel=False
+        )
+
+        if failed_noobaa_pods:
+            error_msg = (
+                f"NooBaa recovery failed: {len(failed_noobaa_pods)} pods did not reach "
+                f"running state after recovery attempts: {failed_noobaa_pods}"
+            )
+            logger.error(error_msg)
+            raise ResourceWrongStatusException(error_msg)
+
+    logger.info("NooBaa pods recovery completed successfully")
 
     if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
         logger.info("On-prem platform detected: recovering RGW pods")
-        rgw_pods = get_rgw_pods()
-        logger.info(f"Found {len(rgw_pods)} RGW pods to respawn")
 
-        for rgw_pod in rgw_pods:
-            logger.info(f"Force deleting RGW pod: {rgw_pod.name}")
-            rgw_pod.delete(force=True)
+        rgw_pods_before = get_rgw_pods()
+        if not rgw_pods_before:
+            logger.debug("No RGW pods found, skipping RGW recovery")
+        else:
+            logger.info(f"Found {len(rgw_pods_before)} RGW pods to respawn")
 
-        logger.info("Waiting 120s for RGW pods to respawn")
-        time.sleep(120)
+            for idx, rgw_pod in enumerate(rgw_pods_before):
+                logger.info(
+                    f"Force deleting RGW pod {idx+1}/{len(rgw_pods_before)}: {rgw_pod.name}"
+                )
+                rgw_pod.delete(force=True)
 
-        respawned_rgw_pods = get_rgw_pods()
-        failed_rgw_pods = verify_pods_running(
-            respawned_rgw_pods, pod_type="RGW", timeout=600
-        )
+                if idx < len(rgw_pods_before) - 1:
+                    wait_time = 60
+                    logger.info(f"Waiting {wait_time}s before deleting next RGW pod")
+                    time.sleep(wait_time)
 
-        if failed_rgw_pods:
-            raise AssertionError(f"RGW pod recovery failed: {failed_rgw_pods}")
+            logger.info("Waiting 120s for RGW pods to fully respawn")
+            time.sleep(120)
+
+            respawned_rgw_pods = get_rgw_pods()
+            logger.info(f"Verifying {len(respawned_rgw_pods)} RGW pods")
+
+            failed_rgw_pods = verify_pods_running(
+                respawned_rgw_pods, pod_type="RGW", timeout=600
+            )
+
+            if failed_rgw_pods:
+                error_msg = (
+                    f"RGW recovery failed: {len(failed_rgw_pods)} pods did not reach "
+                    f"running state: {failed_rgw_pods}"
+                )
+                logger.error(error_msg)
+                raise ResourceWrongStatusException(error_msg)
+
+            logger.info(
+                f"RGW pods recovery completed - all {len(respawned_rgw_pods)} pods running"
+            )
     else:
         logger.debug(
             f"Skipping RGW recovery on non-on-prem platform: {config.ENV_DATA['platform']}"
