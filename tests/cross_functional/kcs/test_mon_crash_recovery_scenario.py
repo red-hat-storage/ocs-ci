@@ -1,16 +1,26 @@
 import logging
 import pytest
+import time
 from random import choice
+from time import sleep
 
 from ocs_ci.ocs.constants import (
     ROOK_CEPH_OPERATOR,
     CEPHBLOCKPOOL,
     STATUS_CLBO,
+    MON_APP_LABEL,
+    STATUS_RUNNING,
+    POD,
 )
+from ocs_ci.ocs import ocp
+from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.ocs.resources.deployment import get_mon_deployments
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, run_io_in_bg
+from ocs_ci.ocs.resources.pod import (
+    get_ceph_tools_pod,
+    run_io_in_bg,
+)
 from ocs_ci.ocs.resources.storage_cluster import ceph_mon_dump
 from ocs_ci.framework.pytest_customization.marks import (
     tier3,
@@ -26,9 +36,6 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @tier3
-@pytest.mark.skip(
-    reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/8531"
-)
 @pytest.mark.polarion_id("OCS-4942")
 @skipif_external_mode
 class TestMonCrashRecoveryScenario:
@@ -47,15 +54,22 @@ class TestMonCrashRecoveryScenario:
         Verifies system behavior when a crash occurs in the mon-x deployment.
 
         Steps:
-            1. Select a random mon and courrupt the mon database.
-            2. Start the IO workload in the background.
-            3. Scale down the deployments of ocs-operator,rook-ceph-operator and rook-ceph-mon-a.
-            4. Delete the Deployment of rook-ceph-mon-x and pvc rook-ceph-mon-x
-            5. Scale up the operators to replicas = 1
-            6. Verify 'ceph mon dump' command is working.
-            7. Check for the any crash has generated.
+            1. Calculate total number of mons running in the cluster at start.
+            2. Select a random mon and courrupt the mon database.
+            3. Start the IO workload in the background.
+            4. Scale down the deployments of ocs-operator,rook-ceph-operator and rook-ceph-mon-a.
+            5. Delete the Deployment of rook-ceph-mon-x and pvc rook-ceph-mon-x
+            6. Scale up the operators to replicas = 1
+            7. Verify 'ceph mon dump' command is working.
+            8. Check for the any crash has generated.
+            9. Verify all mon pods are up and running (same count as initial, wait up to 10 minutes).
+            10. Archive all ceph crashes using 'ceph crash archive-all' command and wait 20 seconds.
 
         """
+
+        # Step 1: Calculate initial mon count
+        initial_mon_count = len(get_mon_deployments())
+        log.info(f"Initial mon count in the cluster: {initial_mon_count}")
 
         mon_obj = choice(get_mon_deployments())
         mon_name = mon_obj.name
@@ -115,3 +129,51 @@ class TestMonCrashRecoveryScenario:
         toolbox = get_ceph_tools_pod()
         crash = toolbox.exec_ceph_cmd("ceph crash ls-new")
         assert not crash, f"Ceph cluster has generated crash {' '.join(crash[0])}"
+
+        # Step 9: Verify all mon pods are up and running (same count as initial)
+        current_mon_count = len(get_mon_deployments())
+        log.info(f"Current mon deployments count: {current_mon_count}")
+
+        if current_mon_count != initial_mon_count:
+            log.warning(
+                f"Mon count mismatch: Initial={initial_mon_count}, Current={current_mon_count}. "
+                f"Waiting for all mons to come up..."
+            )
+
+        # Wait for all mon pods to be running with 10-minute timeout
+        pod_objs = ocp.OCP(kind=POD, namespace=config.ENV_DATA["cluster_namespace"])
+        ret = pod_objs.wait_for_resource(
+            condition=STATUS_RUNNING,
+            selector=MON_APP_LABEL,
+            resource_count=initial_mon_count,
+            dont_allow_other_resources=True,
+            timeout=600,
+        )
+        assert (
+            ret
+        ), f"Not all {initial_mon_count} mon pods are in running state after 10 minutes"
+        log.info(f"All {initial_mon_count} mon pods are up and running successfully")
+
+        # Step 10: Check for crashes for 10 minutes and archive them
+        log.info("Checking for crashes for 10 minutes and archiving if found...")
+        timeout = 600
+        start_time = time.time()
+        crash_found = False
+
+        while time.time() - start_time < timeout:
+            crash = toolbox.exec_ceph_cmd("ceph crash ls-new")
+            if crash:
+                crash_found = True
+                log.info(f"Found crash(es): {crash}. Archiving...")
+                toolbox.exec_ceph_cmd("ceph crash archive-all")
+                sleep(20)
+            else:
+                log.info(
+                    "No new crashes found. Waiting 60 seconds before next check..."
+                )
+                sleep(60)
+
+        if crash_found:
+            log.info("Completed crash archiving process")
+        else:
+            log.info("No crashes found during 10-minute monitoring period")
