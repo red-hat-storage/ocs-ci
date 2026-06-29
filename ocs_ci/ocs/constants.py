@@ -3773,8 +3773,11 @@ MACHINE_POOL_ACTIONS = [CREATE, EDIT, DELETE]
 # MDR multicluster roles
 MDR_ROLES = ["ActiveACM", "PassiveACM", "PrimaryODF", "SecondaryODF"]
 RDR_ROLES = ["ActiveACM", "PrimaryODF", "SecondaryODF"]
+# RDR Provider mode roles: ACM + two Provider (ODF) clusters + HostedClient clusters per provider
+RDR_PROVIDER_ROLES = ["ActiveACM", "PrimaryODF", "SecondaryODF", "HostedClient"]
 ACM_RANK = 1
 MANAGED_CLUSTER_RANK = 2
+HOSTED_CLIENT_RANK = 3
 
 ENCRYPTION_DASHBOARD_CONTEXT_MAP = {
     "Cluster-wide encryption": "cluster_wide_encryption",
