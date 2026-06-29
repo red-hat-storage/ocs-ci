@@ -22,42 +22,36 @@ def main(argv=None):
     # Retrieve provided args from CLI
     args = argv or sys.argv[1:]
 
-    try:
-        # Initialize FDF mirror with all configuration
-        initializer = FDFMirrorInitializer("fdf-mirror")
+    # Initialize FDF mirror with all configuration
+    initializer = FDFMirrorInitializer("fdf-mirror")
 
-        initializer.init_config(args)
+    initializer.init_config(args)
 
-        # Setup logging
-        initializer.init_logging()
+    # Setup logging
+    initializer.init_logging()
 
-        # Set cluster connection
-        initializer.set_cluster_connection()
+    # Set cluster connection
+    initializer.set_cluster_connection()
 
-        # Get configuration from initializer
-        catalog_image = initializer.get_catalog_image()
-        mirror_registry = initializer.get_mirror_registry()
-        configure_registries = initializer.get_configure_registries()
+    # Get configuration from initializer
+    catalog_image = initializer.get_catalog_image()
+    mirror_registry = initializer.get_mirror_registry()
+    configure_registries = initializer.get_configure_registries()
 
-        logger.info(f"Starting FDF catalog mirroring for: {catalog_image}")
-        logger.info(f"Target mirror registry: {mirror_registry}")
+    logger.info(f"Starting FDF catalog mirroring for: {catalog_image}")
+    logger.info(f"Target mirror registry: {mirror_registry}")
 
-        # Mirror the FDF catalog
-        mirrored_image = mirror_fdf_catalog_via_oc_mirror(
-            catalog_image=catalog_image,
-            mirror_registry=mirror_registry,
-            configure_registries=configure_registries,
-        )
+    # Mirror the FDF catalog
+    mirrored_image = mirror_fdf_catalog_via_oc_mirror(
+        catalog_image=catalog_image,
+        mirror_registry=mirror_registry,
+        configure_registries=configure_registries,
+    )
 
-        logger.info(f"FDF catalog successfully mirrored to: {mirrored_image}")
-        logger.info("Mirroring completed successfully!")
+    if not mirrored_image:
+        logger.error("Mirroring failed")
+        sys.exit(1)
 
-        return 0
-
-    except Exception as e:
-        logger.exception(f"FDF catalog mirroring failed: {e}")
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    logger.info(f"FDF catalog successfully mirrored to: {mirrored_image}")
+    logger.info("Mirroring completed successfully!")
+    sys.exit(0)
