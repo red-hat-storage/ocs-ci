@@ -176,4 +176,4 @@ class TestMonCrashRecoveryScenario:
         if crash_found:
             log.info("Completed crash archiving process")
         else:
-            log.info("No crashes found during 5-minute monitoring period")
+            log.info("No crashes found during 10-minute monitoring period")
