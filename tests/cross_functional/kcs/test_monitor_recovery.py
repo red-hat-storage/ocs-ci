@@ -66,7 +66,7 @@ RWOP_ERROR_PATTERNS = [
 
 ALL_POD_ERROR_PATTERNS = SANDBOX_ERROR_PATTERNS + RWOP_ERROR_PATTERNS
 
-_node_restart_tracker = {}  # {node_name: timestamp}
+_node_restart_tracker = {}
 NODE_RESTART_COOLDOWN = 300
 
 
@@ -301,13 +301,16 @@ class TestMonitorRecovery(E2ETest):
         logger.test_step("Remove global ID reclaim warnings")
         remove_global_id_reclaim()
         logger.test_step("Verify data integrity after recovery")
-        for pod_obj in self.dc_pods:
+
+        logger.info("Checking current state of application pods before verification")
+        current_dc_pods = get_spun_dc_pods(self.dc_pods)
+        for pod_obj in current_dc_pods:
             logger.debug(f"Force deleting pod: {pod_obj.name}")
             pod_obj.delete(force=True)
 
         new_md5_sum = []
         logger.info("Waiting for pods to respawn and calculating checksums")
-        for pod_obj in get_spun_dc_pods(self.dc_pods):
+        for pod_obj in get_spun_dc_pods(current_dc_pods):
             pod_obj.ocp.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 resource_name=pod_obj.name,
@@ -1467,7 +1470,6 @@ def handle_multi_attach_error(pod_obj, timeout=300):
 def recover_mcg():
     """
     Recovery procedure for NooBaa by re-spinning the pods after mon recovery
-    Simplified to use existing ocs-ci functions with expected pod count verification
 
     Raises:
         ResourceWrongStatusException: If any NooBaa or RGW pods fail to reach running state
@@ -1476,9 +1478,32 @@ def recover_mcg():
 
     noobaa_pods_before = get_noobaa_pods()
     expected_pod_count = len(noobaa_pods_before)
-    expected_pod_names = {pod.name for pod in noobaa_pods_before}
+
+    NOOBAA_POD_PREFIXES = [
+        "noobaa-db-pg-cluster-1",
+        "noobaa-db-pg-cluster-2",
+        "cnpg-controller-manager",
+        "noobaa-core",
+        "noobaa-endpoint",
+        "noobaa-operator",
+    ]
+
+    def get_pod_type_prefix(pod_name):
+        """Extract pod type prefix from pod name using known prefixes"""
+        for prefix in NOOBAA_POD_PREFIXES:
+            if pod_name.startswith(prefix):
+                return prefix
+        logger.warning(f"Unknown NooBaa pod type: {pod_name}")
+        parts = pod_name.rsplit("-", 2)
+        return parts[0] if len(parts) > 1 else pod_name
+
+    expected_pod_types = {}
+    for pod_obj in noobaa_pods_before:
+        prefix = get_pod_type_prefix(pod_obj.name)
+        expected_pod_types[prefix] = expected_pod_types.get(prefix, 0) + 1
+
     logger.info(
-        f"Found {expected_pod_count} NooBaa pods to respawn: {sorted(expected_pod_names)}"
+        f"Found {expected_pod_count} NooBaa pods to respawn by type: {expected_pod_types}"
     )
 
     for idx, noobaa_pod in enumerate(noobaa_pods_before):
@@ -1501,24 +1526,39 @@ def recover_mcg():
     for retry_attempt in range(max_count_retries):
         current_noobaa_pods = get_noobaa_pods()
         current_pod_count = len(current_noobaa_pods)
-        current_pod_names = {pod.name for pod in current_noobaa_pods}
+
+        current_pod_types = {}
+        for pod_obj in current_noobaa_pods:
+            prefix = get_pod_type_prefix(pod_obj.name)
+            current_pod_types[prefix] = current_pod_types.get(prefix, 0) + 1
 
         logger.info(
             f"Pod count check attempt {retry_attempt + 1}/{max_count_retries}: "
-            f"Found {current_pod_count}/{expected_pod_count} NooBaa pods"
+            f"Found {current_pod_count}/{expected_pod_count} NooBaa pods by type: {current_pod_types}"
         )
 
-        if current_pod_count >= expected_pod_count:
+        missing_types = []
+        for pod_type, expected_count in expected_pod_types.items():
+            current_count = current_pod_types.get(pod_type, 0)
+            if current_count < expected_count:
+                missing_types.append(f"{pod_type} ({current_count}/{expected_count})")
+
+        if not missing_types and current_pod_count >= expected_pod_count:
             logger.info(
-                f"All {expected_pod_count} expected NooBaa pods found: {sorted(current_pod_names)}"
+                f"All {expected_pod_count} expected NooBaa pods found with correct types"
             )
             break
 
-        missing_pods = expected_pod_names - current_pod_names
-        logger.warning(
-            f"Missing {len(missing_pods)} NooBaa pods: {sorted(missing_pods)}. "
-            f"Waiting {retry_wait_time}s..."
-        )
+        if missing_types:
+            logger.warning(
+                f"Missing or incomplete pod types: {missing_types}. "
+                f"Waiting {retry_wait_time}s..."
+            )
+        else:
+            logger.warning(
+                f"Pod count mismatch: {current_pod_count}/{expected_pod_count}. "
+                f"Waiting {retry_wait_time}s..."
+            )
 
         if retry_attempt < max_count_retries - 1:
             time.sleep(retry_wait_time)
@@ -1526,7 +1566,7 @@ def recover_mcg():
             error_msg = (
                 f"NooBaa recovery failed: Expected {expected_pod_count} pods "
                 f"but only found {current_pod_count} after {max_count_retries} attempts. "
-                f"Missing pods: {sorted(missing_pods)}"
+                f"Expected types: {expected_pod_types}, Current types: {current_pod_types}"
             )
             logger.error(error_msg)
             raise ResourceWrongStatusException(error_msg)
@@ -1696,13 +1736,25 @@ def replace_mds_deployments():
 
         logger.info(f"Successfully backed up {len(mds_deployment_names)} deployments")
 
-        logger.info(f"Replacing {len(mds_deployment_names)} MDS deployments")
-        for deployment in mds_deployment_names:
+        logger.info(
+            f"Replacing {len(mds_deployment_names)} MDS deployments sequentially"
+        )
+        for idx, deployment in enumerate(mds_deployment_names):
             deployment_yaml = join(backup_dir, deployment + ".yaml")
-            logger.debug(f"Replacing deployment: {deployment}")
+            logger.info(
+                f"Replacing MDS deployment {idx + 1}/{len(mds_deployment_names)}: {deployment}"
+            )
             exec_cmd(
                 f"oc replace --force -f {deployment_yaml} -n {defaults.ROOK_CLUSTER_NAMESPACE}"
             )
+
+            if idx < len(mds_deployment_names) - 1:
+                wait_time = 120
+                logger.info(
+                    f"Waiting {wait_time}s for {deployment} to complete "
+                    f"before replacing next deployment"
+                )
+                time.sleep(wait_time)
 
         logger.info(
             f"Successfully replaced {len(mds_deployment_names)} MDS deployments"
