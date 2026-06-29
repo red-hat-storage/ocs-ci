@@ -12,7 +12,7 @@ from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import flowtest
 from ocs_ci.helpers.sanity_helpers import Sanity
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -44,7 +44,7 @@ class TestCouchBasePodRespin(E2ETest):
         ],
     )
     def test_run_couchbase_respin_pod(self, cb_setup, pod_name):
-        log.info(f"Respin Ceph pod {pod_name}")
+        logger.info(f"Respin Ceph pod {pod_name}")
 
         if pod_name == "couchbase":
             self.cb.respin_couchbase_app_pod()
