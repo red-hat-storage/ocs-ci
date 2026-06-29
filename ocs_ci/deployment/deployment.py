@@ -1735,6 +1735,9 @@ class Deployment(object):
                 key_secret = config.AUTH["ibmcloud"]["ibm_cos_secret_access_key"]
                 cos_secret_data["data"]["IBM_COS_ACCESS_KEY_ID"] = key_id
                 cos_secret_data["data"]["IBM_COS_SECRET_ACCESS_KEY"] = key_secret
+                cos_secret_data["metadata"]["namespace"] = config.ENV_DATA[
+                    "cluster_namespace"
+                ]
                 cos_secret_data_yaml = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="cos_secret", delete=False
                 )
