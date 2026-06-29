@@ -1,0 +1,27 @@
+---
+# Pipeline 2: Baremetal UI deployment with LSO, FDF, EC 4+2, 6 OSD nodes, Provider mode
+# Covers: Req #2 (UI + LSO + FDF), Req #6 (4+2 EC no extra node), Req #9 (Provider + multiple storage clients)
+# Masters are schedulable and labeled as storage nodes (3m + 3w = 6 OSD nodes for 4+2 EC)
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  ui_deployment: true
+  host_network: true
+  ec_default_pools: true
+  ec_data_chunks: 4
+  ec_coding_chunks: 2
+  ec_failure_domain: host
+  fdf_cluster: true
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  mon_type: 'hostpath'
+  osd_type: 'nvme'
+  mark_masters_schedulable: true
+  odf_provider_mode_deployment: true
+  cluster_type: 'provider'
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-8028'

@@ -1,0 +1,29 @@
+---
+# Pipeline 1: vSphere UI deployment with LSO, ODF, EC 2+2, 6 OSD nodes (4+2 redundancy)
+# Covers: Req #1 (UI + LSO + ODF), Req #5 (2+2 EC with +2 redundancy nodes)
+# Masters are schedulable and labeled as storage nodes (3m + 3w = 6 OSD nodes)
+# Master specs match worker specs since they run storage workloads
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  type: 'VMDK'
+  provision_type: 'thick'
+  ui_deployment: true
+  ec_default_pools: true
+  ec_data_chunks: 2
+  ec_coding_chunks: 2
+  ec_failure_domain: host
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '16'
+  master_num_cpus: '16'
+  master_memory: '65536'
+  compute_memory: '65536'
+  fio_storageutilization_min_mbps: 10.0
+  mark_masters_schedulable: true
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-8028'
