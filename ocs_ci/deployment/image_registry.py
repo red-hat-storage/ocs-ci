@@ -258,7 +258,7 @@ class ImageRegistryConfigurator(object):
         ocp = OCP(kind="pod", namespace=self.namespace)
 
         ocp.wait_for_resource(
-            condition="Ready",
+            condition="Running",
             selector=constants.OPENSHIFT_IMAGE_SELECTOR,
             timeout=timeout,
             sleep=15,
