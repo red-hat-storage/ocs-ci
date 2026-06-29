@@ -3841,17 +3841,17 @@ class MultiClusterDROperatorsDeploy(object):
             )
             return False
 
-        verify_cmd = f"cd {ramenctl_dir} && ./ramenctl --version"
+        # Verify binary by running help command (ramenctl doesn't support --version)
+        verify_cmd = f"cd {ramenctl_dir} && ./ramenctl help"
         logger.info(f"[ramenctl-e2e] Verifying binary with command: {verify_cmd}")
         try:
-            version_output = run_cmd(verify_cmd, shell=True)
+            help_output = run_cmd(verify_cmd, shell=True)
             logger.info(
-                f"[ramenctl-e2e] ramenctl binary ready at {binary_path}: "
-                f"{version_output.strip()}"
+                f"[ramenctl-e2e] ramenctl binary ready at {binary_path}"
             )
         except CommandFailed as e:
             logger.warning(
-                f"[ramenctl-e2e] Failed to get version, but binary exists: {e}"
+                f"[ramenctl-e2e] Failed to verify binary, but it exists: {e}"
             )
             return False
 
