@@ -16,7 +16,14 @@ from ocs_ci.ocs.utils import (
     get_active_acm_index,
     get_all_acm_indexes,
 )
-from ocs_ci.ocs.constants import MDR_ROLES, RDR_ROLES, ACM_RANK, MANAGED_CLUSTER_RANK
+from ocs_ci.ocs.constants import (
+    MDR_ROLES,
+    RDR_ROLES,
+    RDR_PROVIDER_ROLES,
+    ACM_RANK,
+    MANAGED_CLUSTER_RANK,
+    HOSTED_CLIENT_RANK,
+)
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd,
@@ -112,6 +119,7 @@ class MultiClusterUpgradeParametrize(object):
             "PassiveACM": ACM_RANK,
             "PrimaryODF": MANAGED_CLUSTER_RANK,
             "SecondaryODF": MANAGED_CLUSTER_RANK,
+            "HostedClient": HOSTED_CLIENT_RANK,
         }
 
     def get_zone_info(self):
@@ -303,9 +311,254 @@ class RDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
         return neworder
 
 
+class RDRProviderClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
+    """
+    Upgrade parametrization for the RDR Provider multicluster scenario.
+
+    Topology
+    --------
+    - 1 Active ACM cluster (hub); optional Passive ACM cluster
+    - 2 managed Provider clusters (PrimaryODF, SecondaryODF) running ODF in
+      provider mode
+    - N hosted client clusters (cluster_type == "hci_client") attached to each
+      provider.  Clients on the same provider share that provider's zone so
+      they are bucketed together in the ordering.
+
+    Role ranks
+    ----------
+    ActiveACM / PassiveACM  -> ACM_RANK  (1)
+    PrimaryODF / SecondaryODF -> MANAGED_CLUSTER_RANK  (2)
+    HostedClient              -> HOSTED_CLIENT_RANK    (3)
+
+    Each hosted client cluster gets its own param tuple keyed as
+    ``HostedClient-<config_index>``.  The config_index acts as the tie-breaker
+    so that every client receives a unique ordering slot within its zone bucket.
+
+    Upgrade sequence
+    ----------------
+    Phase                         Scale   Clusters
+    ─────────────────────────────────────────────────────────────────────────
+    1. OCP upgrade                  1     ACM → PrimaryODF → SecondaryODF
+    2. MCE upgrade                  2     PrimaryODF → SecondaryODF
+    3. OCP-on-kubevirt upgrade      3     clients of Provider1, then Provider2
+    4. OCS upgrade                  4     PrimaryODF → SecondaryODF
+    5. MCO upgrade                  5     ACM
+    6. DR Hub upgrade               6     ACM
+    7. ACM upgrade                  7     ACM
+    ─────────────────────────────────────────────────────────────────────────
+
+    The exponential scaling (10 ** scale) ensures phase boundaries never
+    overlap regardless of zone-rank or role-rank values.
+    """
+
+    # Maps each phase-order constant -> scale exponent.
+    # Higher scale == later in the overall test run.
+    UPGRADE_TEST_ORDER = {
+        constants.ORDER_OCP_UPGRADE: 1,
+        constants.ORDER_MCE_UPGRADE: 2,
+        constants.ORDER_OCP_ON_KUBEVIRT_UPGRADE: 3,
+        constants.ORDER_OCS_UPGRADE: 4,
+        constants.ORDER_MCO_UPGRADE: 5,
+        constants.ORDER_DR_HUB_UPGRADE: 6,
+        constants.ORDER_ACM_UPGRADE: 7,
+    }
+
+    def __init__(self):
+        self.dr_type = "rdr-provider"
+        super().__init__()
+        # Start from the static role list; dynamic entries are appended below
+        self.all_roles = list(RDR_PROVIDER_ROLES)
+
+        # Optional secondary ACM
+        if get_passive_acm_index():
+            self.all_roles.append("PassiveACM")
+
+        # One "HostedClient" entry per hci_client cluster.  They all share the
+        # same role string; the embedded config_index in the param tuple
+        # provides the unique ordering within the zone.
+        self._hosted_client_indexes = self._get_hosted_client_indexes()
+        for _ in self._hosted_client_indexes:
+            self.all_roles.append("HostedClient")
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _get_hosted_client_indexes(self):
+        """Return sorted config indexes for every hci_client cluster."""
+        return [
+            i
+            for i, cluster in enumerate(ocsci_config.clusters)
+            if cluster.ENV_DATA.get("cluster_type") == "hci_client"
+        ]
+
+    def _get_provider_index_for_client(self, client_index):
+        """
+        Return the config index of the provider cluster that hosts the client
+        at *client_index*.  Resolves via ``provider_cluster_name`` in the
+        client's ENV_DATA; falls back to the first provider cluster found.
+        """
+        client_cluster = ocsci_config.clusters[client_index]
+        provider_name = client_cluster.ENV_DATA.get("provider_cluster_name")
+        if provider_name:
+            for i, cluster in enumerate(ocsci_config.clusters):
+                if cluster.ENV_DATA.get("cluster_name") == provider_name:
+                    return i
+        provider_indexes = ocsci_config.get_provider_cluster_indexes()
+        return provider_indexes[0] if provider_indexes else None
+
+    # ------------------------------------------------------------------
+    # Overrides
+    # ------------------------------------------------------------------
+
+    def generate_config_index_map(self):
+        """
+        Build roles_to_config_index_map for the RDR-Provider topology.
+
+        Static roles (ActiveACM, PassiveACM, PrimaryODF, SecondaryODF) are
+        resolved here.  hci_client clusters are intentionally omitted because
+        multiple clusters share the same ``HostedClient`` role string; they are
+        handled individually in generate_zone_role_map and
+        generate_role_to_param_tuple_map.
+        """
+        active_acm_index = get_active_acm_index()
+        primary_index = get_primary_cluster_index()
+        passive_acm_index = get_passive_acm_index()
+        provider_indexes = ocsci_config.get_provider_cluster_indexes()
+
+        for cluster in ocsci_config.clusters:
+            cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+            if cluster_index == active_acm_index:
+                self.roles_to_config_index_map["ActiveACM"] = cluster_index
+            elif passive_acm_index and cluster_index == passive_acm_index:
+                self.roles_to_config_index_map["PassiveACM"] = cluster_index
+            elif cluster_index == primary_index:
+                self.roles_to_config_index_map["PrimaryODF"] = cluster_index
+            elif cluster_index in provider_indexes:
+                # Second provider cluster that is not the primary
+                self.roles_to_config_index_map["SecondaryODF"] = cluster_index
+            # hci_client clusters are handled separately
+
+    def generate_zone_role_map(self):
+        """
+        Build zone_role_map for static roles, then record the zone for each
+        hosted client.
+
+        Clients inherit their provider's zone so that all clients of the same
+        provider form a single zone bucket.  This ensures the ordering is:
+            Provider1 clients (zone A) ... Provider2 clients (zone B) ...
+        """
+        # Populate static roles (ACM + providers) first
+        super().generate_zone_role_map()
+
+        # Map each hosted client index -> its provider's zone
+        self._client_zone_map = {}
+        for client_index in self._hosted_client_indexes:
+            provider_index = self._get_provider_index_for_client(client_index)
+            if provider_index is not None:
+                zone = ocsci_config.clusters[provider_index].ENV_DATA.get("zone")
+            else:
+                zone = ocsci_config.clusters[client_index].ENV_DATA.get("zone")
+            self._client_zone_map[client_index] = zone
+
+    def generate_role_to_param_tuple_map(self):
+        """
+        Build (zone_rank, role_rank, config_index) tuples for every role.
+
+        Static roles (ACM + providers) each get one tuple keyed by role name.
+        Every hosted client gets its own tuple keyed as
+        ``HostedClient-<config_index>`` so that multiple clients within the
+        same zone are still ordered by ascending config_index.
+        """
+        # Static roles
+        for role in self.roles_to_config_index_map:
+            self.roles_to_param_tuples[role] = (
+                self.zone_ranks[self.zone_role_map[role]],
+                self.role_ranks[role],
+                self.roles_to_config_index_map[role],
+            )
+
+        # One tuple per hosted client, keyed as HostedClient-<config_index>
+        for client_index in self._hosted_client_indexes:
+            zone = self._client_zone_map.get(client_index)
+            if zone and zone in self.zone_ranks:
+                zrank = self.zone_ranks[zone]
+            else:
+                # Fallback: place beyond all defined zones
+                zrank = self.zone_base_rank * (len(self.zones) + 1)
+            self.roles_to_param_tuples[f"HostedClient-{client_index}"] = (
+                zrank,
+                self.role_ranks["HostedClient"],
+                client_index,
+            )
+
+    def config_init(self):
+        super().config_init()
+        # Extend index_to_role to cover hosted clients
+        for client_index in self._hosted_client_indexes:
+            self.index_to_role[client_index] = f"HostedClient-{client_index}"
+
+    def get_pytest_params_tuple(self, role):
+        """
+        Extend base behaviour with two rdr-provider-specific compound roles:
+
+        ``rdr-provider-all-clients``
+            Returns param tuples for every hosted client cluster, ordered by
+            zone (provider affinity) then by config_index within the zone.
+
+        ``rdr-provider-all-providers``
+            Returns param tuples for PrimaryODF and SecondaryODF only.
+        """
+        if role == f"{self.dr_type}-all-clients":
+            return [
+                self.roles_to_param_tuples[f"HostedClient-{i}"]
+                for i in self._hosted_client_indexes
+            ]
+        if role == f"{self.dr_type}-all-providers":
+            return [
+                self.roles_to_param_tuples[r]
+                for r in ("PrimaryODF", "SecondaryODF")
+                if r in self.roles_to_param_tuples
+            ]
+        return super().get_pytest_params_tuple(role)
+
+    def reeval_upgrade_order(self, phase_order, zrank, role_rank):
+        """
+        Compute a unique, globally-ordered test-order number that honours the
+        RDR-Provider upgrade sequence.
+
+        The base value ``phase_order + zrank + role_rank`` is multiplied by
+        ``10 ** scale`` where *scale* comes from UPGRADE_TEST_ORDER.  Because
+        the scale grows by at least 1 per phase, no two phases can ever produce
+        overlapping order numbers regardless of how many clusters exist.
+
+        Concrete example (zone_base_rank=100, 2 zones a=100/b=200):
+
+        Phase                      scale  cluster          base  final order
+        ─────────────────────────────────────────────────────────────────────
+        OCP upgrade (30)             1    ACM  (z=100,r=1)  131  1_310
+                                          PriODF(z=100,r=2) 132  1_320
+                                          SecODF(z=200,r=2) 232  2_320
+        MCE upgrade (46)             2    PriODF(z=100,r=2) 148  14_800
+                                          SecODF(z=200,r=2) 248  24_800
+        OCP-kubevirt (48)            3    Client1(z=100,r=3,i=3) 151 151_000
+                                          Client2(z=200,r=3,i=4) 252 252_000
+        OCS upgrade (60)             4    PriODF(z=100,r=2) 162  1_620_000
+        MCO upgrade (42)             5    ACM  (z=100,r=1)  143  14_300_000
+        DR Hub upgrade (44)          6    ACM  (z=100,r=1)  145  145_000_000
+        ACM upgrade (46)             7    ACM  (z=100,r=1)  147  1_470_000_000
+        ─────────────────────────────────────────────────────────────────────
+        """
+        neworder = phase_order + zrank + role_rank
+        scaling = self.UPGRADE_TEST_ORDER.get(phase_order, 10)
+        neworder = neworder * (10**scaling)
+        return neworder
+
+
 multicluster_upgrade_parametrizer = {
     "metro-dr": MDRClusterUpgradeParametrize,
     "regional-dr": RDRClusterUpgradeParametrize,
+    "rdr-provider": RDRProviderClusterUpgradeParametrize,
 }
 
 
