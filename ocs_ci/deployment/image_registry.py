@@ -5,7 +5,7 @@ with PVC storage backend.
 
 import logging
 import tempfile
-import time
+import json
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -167,25 +167,13 @@ class ImageRegistryConfigurator(object):
         logger.info(f"Waiting for PVC {self.pvc_name} to be Bound")
         ocp = OCP(kind="pvc", namespace=self.namespace, resource_name=self.pvc_name)
 
-        try:
-            ocp.wait_for_resource(
-                condition="Bound",
-                resource_name=self.pvc_name,
-                timeout=timeout,
-                sleep=10,
-            )
-            logger.info(f"PVC {self.pvc_name} is now Bound")
-        except Exception:
-            # Alternative wait method using TimeoutSampler
-            for sample in TimeoutSampler(timeout, 10, ocp.get):
-                status = sample.get("status", {}).get("phase")
-                if status == "Bound":
-                    logger.info(f"PVC {self.pvc_name} is now Bound")
-                    return
-                logger.debug(f"PVC status: {status}, waiting for Bound state")
-            raise exceptions.TimeoutExpiredError(
-                f"PVC {self.pvc_name} did not reach Bound state within {timeout} seconds"
-            )
+        ocp.wait_for_resource(
+            condition="Bound",
+            resource_name=self.pvc_name,
+            timeout=timeout,
+            sleep=10,
+        )
+        logger.info(f"PVC {self.pvc_name} is now Bound")
 
     def patch_image_registry_to_use_pvc(self):
         """
@@ -196,11 +184,20 @@ class ImageRegistryConfigurator(object):
         """
         logger.info("Patching image registry configuration to use PVC storage")
 
+        patch = {
+            "spec": {
+                "managementState": "Managed",
+                "storage": {
+                    "emptyDir": None,
+                    "pvc": {"claim": self.pvc_name},
+                },
+                "replicas": 1,
+                "rolloutStrategy": "Recreate",
+            }
+        }
         patch_cmd = (
             f"oc patch configs.imageregistry.operator.openshift.io {self.registry_config_name} "
-            "--type=merge "
-            '--patch=\'{"spec":{"managementState":"Managed","storage":{"emptyDir":null,'
-            f'"pvc":{{"claim":"{self.pvc_name}"}}}}, "replicas":1,"rolloutStrategy":"Recreate"}}\''
+            f"--type=merge --patch='{json.dumps(patch)}'"
         )
 
         try:
@@ -260,18 +257,13 @@ class ImageRegistryConfigurator(object):
         logger.info("Waiting for image registry pods to be ready")
         ocp = OCP(kind="pod", namespace=self.namespace)
 
-        try:
-            ocp.wait_for_resource(
-                condition="Ready",
-                selector=constants.OPENSHIFT_IMAGE_SELECTOR,
-                timeout=timeout,
-                sleep=15,
-            )
-            logger.info("Image registry pods are ready")
-        except Exception as e:
-            logger.warning(f"Error waiting for registry pods: {e}")
-            # Give it some more time
-            time.sleep(30)
+        ocp.wait_for_resource(
+            condition="Ready",
+            selector=constants.OPENSHIFT_IMAGE_SELECTOR,
+            timeout=timeout,
+            sleep=15,
+        )
+        logger.info("Image registry pods are ready")
 
     def configure_image_registry_with_pvc(
         self, storage_class=None, size=None, force=False

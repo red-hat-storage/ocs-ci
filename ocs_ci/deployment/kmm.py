@@ -16,6 +16,7 @@ from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,14 @@ class KMMInstaller(object):
         # Get the default channel for KMM operator
         kmm_channel = config.DEPLOYMENT.get("kmm_channel", "stable")
 
+        catalog_source = constants.OPERATOR_CATALOG_SOURCE_NAME
+        if config.DEPLOYMENT.get("disconnected"):
+            catalog_source = PackageManifest(
+                resource_name=self.operator_name,
+            ).get()[
+                "metadata"
+            ]["labels"]["catalog"]
+
         subscription_data = {
             "apiVersion": "operators.coreos.com/v1alpha1",
             "kind": "Subscription",
@@ -102,7 +111,7 @@ class KMMInstaller(object):
                 "channel": kmm_channel,
                 "installPlanApproval": "Automatic",
                 "name": self.operator_name,
-                "source": constants.OPERATOR_CATALOG_SOURCE_NAME,
+                "source": catalog_source,
                 "sourceNamespace": constants.MARKETPLACE_NAMESPACE,
             },
         }
