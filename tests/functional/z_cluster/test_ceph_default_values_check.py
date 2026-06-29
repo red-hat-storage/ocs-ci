@@ -331,7 +331,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         Testcase to check number of pgs per pool
 
         """
-        # Create a RWO PVC
+        log.test_step("Create CephFS PVC with RWO access")
         project = project_factory()
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
@@ -341,7 +341,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             size=200,
         )
 
-        # Create a pod using the PVC
+        log.test_step("Create pod and run IO workload")
         pod_obj = pod_factory(
             interface=constants.CEPHFILESYSTEM,
             pvc=pvc_obj,
@@ -353,9 +353,17 @@ class TestCephDefaultValuesCheck(ManageTest):
             io_direction="write",
             runtime=10,
         )
+        log.test_step("Validate PG counts differ from default after autoscaling")
         expected_pgs = {
             "ocs-storagecluster-cephblockpool": 1,
             "ocs-storagecluster-cephfilesystem-data0": 1,
             "ocs-storagecluster-cephfilesystem-metadata0": 1,
         }
-        assert not validate_num_of_pgs(expected_pgs)
+        result = validate_num_of_pgs(expected_pgs)
+        log.assertion(
+            f"PG autoscaler validation: pools_checked={list(expected_pgs.keys())}, "
+            f"all_match_default={result}, expected_autoscaled=True"
+        )
+        assert (
+            not result
+        ), "PG counts still match defaults — autoscaler may not have adjusted PGs"
