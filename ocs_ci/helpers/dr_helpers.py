@@ -2890,7 +2890,7 @@ def create_service_exporter(annotate=True):
                 )
             if (
                 not get_storage_cluster()
-                .get()["metadata"]
+                .get()[0]["metadata"]
                 .get("annotations", {})
                 .get("ocs.openshift.io/api-server-exported-address")
             ):
