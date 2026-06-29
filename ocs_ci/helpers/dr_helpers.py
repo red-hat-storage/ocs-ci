@@ -2858,8 +2858,12 @@ def create_service_exporter(annotate=True):
             create_multiclusterservice_dr()
         else:
             logger.info("Skipping multiClusterService creation for multiclient cluster")
+
+        if cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT:
+            continue
+
         logger.info("Creating Service exporter")
-        run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+        exec_cmd(f"oc apply -f {constants.DR_SERVICE_EXPORTER}")
 
         if annotate:
             cluster_type = cluster.ENV_DATA.get("cluster_type", "").lower()
