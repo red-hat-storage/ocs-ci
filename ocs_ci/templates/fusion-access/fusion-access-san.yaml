@@ -1,0 +1,8 @@
+apiVersion: access.spectrum.ibm.com/v1alpha1
+kind: FusionAccessSAN
+metadata:
+  name: fusionaccesssan
+  namespace: ibm-fusion-access
+spec:
+  license:
+    accept: true
