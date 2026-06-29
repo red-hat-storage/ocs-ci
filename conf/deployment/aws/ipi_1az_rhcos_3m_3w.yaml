@@ -11,7 +11,7 @@ ENV_DATA:
     - 'us-east-2c'
   worker_replicas: 3
   master_replicas: 3
-  worker_instance_type: 'm5.4xlarge'
+  worker_instance_type: 'm6i.4xlarge'
 REPORTING:
   polarion:
     deployment_id: 'OCS-1454'
