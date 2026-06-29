@@ -114,31 +114,7 @@ class TestMonitorRecovery(E2ETest):
             logger.info("Waiting 30s for pods to terminate")
             time.sleep(30)
 
-            logger.info("Cleaning up stale volume attachments")
-            try:
-                va_ocp = OCP(kind="VolumeAttachment", namespace="")
-                attachments = va_ocp.get()
-                if attachments and "items" in attachments:
-                    deleted_count = 0
-                    for attachment in attachments["items"]:
-                        if not attachment.get("status", {}).get("attached", False):
-                            va_name = attachment["metadata"]["name"]
-                            logger.debug(
-                                f"Deleting unattached VolumeAttachment: {va_name}"
-                            )
-                            try:
-                                va_ocp.delete(resource_name=va_name)
-                                deleted_count += 1
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to delete VolumeAttachment {va_name}: {e}"
-                                )
-                    if deleted_count > 0:
-                        logger.info(f"Deleted {deleted_count} stale volume attachments")
-                    else:
-                        logger.debug("No stale volume attachments found")
-            except Exception:
-                logger.exception("Error during volume attachment cleanup")
+            cleanup_stale_volume_attachments()
 
         request.addfinalizer(finalizer)
 
@@ -1388,6 +1364,40 @@ def verify_pods_running(
     return failed_pods
 
 
+def cleanup_stale_volume_attachments():
+    """
+    Clean up all unattached VolumeAttachment resources.
+
+    Returns:
+        int: Number of VolumeAttachments deleted
+    """
+    logger.info("Cleaning up stale volume attachments")
+    deleted_count = 0
+    try:
+        va_ocp = OCP(kind="VolumeAttachment", namespace="")
+        attachments = va_ocp.get()
+        if attachments and "items" in attachments:
+            for attachment in attachments["items"]:
+                if not attachment.get("status", {}).get("attached", False):
+                    va_name = attachment["metadata"]["name"]
+                    logger.debug(f"Deleting unattached VolumeAttachment: {va_name}")
+                    try:
+                        va_ocp.delete(resource_name=va_name)
+                        deleted_count += 1
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to delete VolumeAttachment {va_name}: {e}"
+                        )
+            if deleted_count > 0:
+                logger.info(f"Deleted {deleted_count} stale volume attachments")
+            else:
+                logger.debug("No stale volume attachments found")
+    except Exception:
+        logger.exception("Failed to cleanup stale volume attachments")
+
+    return deleted_count
+
+
 def handle_multi_attach_error(pod_obj, timeout=300):
     """
     Handle multi-attach volume errors by deleting stale VolumeAttachment resources.
@@ -1417,31 +1427,10 @@ def handle_multi_attach_error(pod_obj, timeout=300):
                 pvc_id = pvc_match.group(1)
                 logger.info(f"Identified PVC with multi-attach error: {pvc_id}")
 
-                va_ocp = OCP(kind="VolumeAttachment", namespace="")
-                try:
-                    attachments = va_ocp.get()
-                    if attachments and "items" in attachments:
-                        for attachment in attachments["items"]:
-                            if (
-                                attachment.get("spec", {})
-                                .get("source", {})
-                                .get("persistentVolumeName")
-                                == pvc_id
-                            ):
-                                va_name = attachment["metadata"]["name"]
-                                logger.info(
-                                    f"Deleting stale VolumeAttachment: {va_name}"
-                                )
-                                va_ocp.delete(resource_name=va_name)
-                                logger.info(
-                                    "Waiting 10s for VolumeAttachment cleanup to propagate"
-                                )
-                                time.sleep(10)
-                                break
-                except Exception:
-                    logger.exception(
-                        f"Failed to handle VolumeAttachment for PVC {pvc_id}"
-                    )
+                deleted_count = cleanup_stale_volume_attachments()
+                if deleted_count > 0:
+                    logger.info("Waiting 10s for VolumeAttachment cleanup to propagate")
+                    time.sleep(10)
             else:
                 logger.warning(
                     "Multi-attach error detected but could not extract PVC ID from pod description"
