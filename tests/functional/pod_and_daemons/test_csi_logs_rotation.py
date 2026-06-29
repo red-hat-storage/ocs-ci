@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     skipif_ocs_version,
 )
+from ocs_ci.framework.testlib import ignore_leftovers
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -26,6 +27,7 @@ SLEEP_BETWEEN_TRIES = 300  # seconds
 @post_upgrade
 @skipif_ocs_version("<4.17")
 @tier2
+@ignore_leftovers
 class TestPodsCsiLogRotation(BaseTest):
     def check_for_successful_log_rotation(
         self, pod_obj, gz_logs_num, current_log_file_size, logs_dir, log_file_name
