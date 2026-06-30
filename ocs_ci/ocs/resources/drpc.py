@@ -103,17 +103,42 @@ class DRPC(OCP):
                 return False
         return progression_status
 
-    def wait_for_progression_status(self, status):
+    def wait_for_progression_status(
+        self, status, timeout=300, sleep=10, success_if_deleted=False
+    ):
+        """
+        Wait until DRPC progression reaches the expected status.
+
+        Args:
+            status (str): Expected progression value (e.g.
+                constants.STATUS_DELETING, constants.STATUS_COMPLETED)
+            timeout (int): Time in seconds to wait (default: 300)
+            sleep (int): Time in seconds between attempts (default: 10)
+            success_if_deleted (bool): When True, treat a missing DRPC as
+                success. Use for teardown waits where the resource may be
+                removed before the target progression is observed
+                (default: False).
+
+        Raises:
+            AssertionError: If the expected progression is not reached within
+                the timeout
+
+        """
         logger.info(f"Waiting for Progression status to be {status}")
-        sample = TimeoutSampler(
-            timeout=300,
-            sleep=10,
-            func=self.get_progression_status,
-            status_to_check=status,
+
+        def progression_reached():
+            if success_if_deleted and not self.is_exist(
+                resource_name=self.resource_name
+            ):
+                logger.info(f"{constants.DRPC} {self.resource_name} is already deleted")
+                return True
+            return self.get_progression_status(status_to_check=status)
+
+        sample = TimeoutSampler(timeout=timeout, sleep=sleep, func=progression_reached)
+        assert sample.wait_for_func_status(result=True), (
+            f"Progression status did not reach {status} within {timeout}s "
+            f"for {constants.DRPC} {self.resource_name}"
         )
-        assert sample.wait_for_func_status(
-            result=True
-        ), f"Progression status is not expected current status {self.get_progression_status()} expected status {status}"
 
     def get_last_group_sync_time(self):
         """
