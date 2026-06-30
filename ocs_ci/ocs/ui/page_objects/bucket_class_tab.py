@@ -130,14 +130,11 @@ class BucketClassTab(ObjectStorage, CreateResourceForm):
             bool: True if the status of default bucket class is 'Ready', False otherwise.
         """
         logger.info("Verifying the status of default bucket class is 'Ready'")
-        backingstore_status = self.get_element_text(
-            self.validation_loc["backingstore-status"]
+        is_ready = self.wait_until_expected_text_is_found(
+            self.validation_loc["backingstore-status"], "Ready", timeout=30
         )
-        is_ready = backingstore_status == "Ready"
         if not is_ready:
-            logger.warning(
-                f"Status of default bucket class is {backingstore_status}, not 'Ready'"
-            )
+            logger.warning("Status of default bucket class is not 'Ready'")
         return is_ready
 
     def nav_bucket_class_breadcrumb(self):

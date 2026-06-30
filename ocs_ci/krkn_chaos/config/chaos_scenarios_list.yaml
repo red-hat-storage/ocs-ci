@@ -89,11 +89,6 @@ chaos_scenarios:
   #         jinja_template: scenarios/openshift/ibmcloud_node_scenarios.yml
   #         description: "Simulates node failures on IBM Cloud clusters"
 
-  # - time_scenarios:
-  #     - time-scenarios-example:
-  #         jinja_template: scenarios/openshift/time_scenarios_example.yml
-  #         description: "Manipulates system time to test time drift effects"
-
   # - cluster_shut_down_scenarios:
   #     - cluster-shut-down-scenario:
   #         jinja_template: scenarios/openshift/cluster_shut_down_scenario.yml
@@ -122,11 +117,6 @@ chaos_scenarios:
           jinja_template: scenarios/openshift/network_chaos.yml.j2
           description: "General network chaos simulation at cluster level"
 
-  # - service_hijacking_scenarios:
-  #     - service-hijacking:
-  #         jinja_template: scenarios/kube/service_hijacking.yaml
-  #         description: "Intercepts service traffic to simulate hijacking"
-
   # - syn_flood_scenarios:
   #     - syn-flood:
   #         jinja_template: scenarios/kube/syn_flood.yaml
@@ -139,8 +129,3 @@ chaos_scenarios:
   #     - node-network-filter:
   #         jinja_template: scenarios/kube/node-network-filter.yml
   #         description: "Applies network filters at node level using eBPF"
-
-  # - kubevirt_vm_outage:
-  #     - kubevirt-vm-outage:
-  #         jinja_template: scenarios/kubevirt/kubevirt-vm-outage.yaml
-  #         description: "Simulates unavailability of KubeVirt-based VMs"

@@ -40,7 +40,9 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 logger = logging.getLogger(__name__)
 
 
-def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
+def craft_s3_command(
+    cmd, mcg_obj=None, api=False, signed_request_creds=None, max_attempts=8
+):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran
@@ -50,6 +52,9 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         cmd: The AWSCLI command to run
         api: True if the call is for s3api, false if s3
         signed_request_creds: a dictionary containing AWS S3 creds for a signed request
+        max_attempts: The maximum number of AWSCLI retry attempts
+                     max_attempts=8 means a maximum of one minute
+                     additional waiting time in case of failure
 
     Returns:
         str: The crafted command, ready to be executed on the pod
@@ -60,7 +65,8 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     no_ssl = (
         "--no-verify-ssl"
         if (
-            (signed_request_creds and signed_request_creds.get("ssl")) is False
+            (signed_request_creds and signed_request_creds.get("ssl") is False)
+            or (mcg_obj and getattr(mcg_obj, "ssl", None) is False)
             or (
                 config.multicluster
                 and not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
@@ -77,6 +83,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
             f'sh -c "AWS_CA_BUNDLE={constants.AWSCLI_CA_BUNDLE_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"AWS_MAX_ATTEMPTS={max_attempts} "
             f"{region}"
             f"aws s3{api} "
             f"--endpoint={mcg_obj.s3_internal_endpoint} "
@@ -91,6 +98,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         base_command = (
             f'sh -c "AWS_ACCESS_KEY_ID={signed_request_creds.get("access_key_id")} '
             f'AWS_SECRET_ACCESS_KEY={signed_request_creds.get("access_key")} '
+            f"AWS_MAX_ATTEMPTS={max_attempts} "
             f'region={signed_request_creds.get("region")} '
             f"aws s3{api} "
             f'--endpoint={signed_request_creds.get("endpoint")} '
@@ -785,6 +793,58 @@ def cli_create_aws_sts_backingstore(
     )
 
 
+def cli_create_azure_sts_backingstore(
+    mcg_obj, cld_mgr, backingstore_name, uls_name, region
+):
+    """
+    Create a new backingstore of type azure-sts-blob using managed identity credentials
+
+    Args:
+        mcg_obj (MCG): Used for execution for the NooBaa CLI command
+        cld_mgr (CloudManager): holds Azure STS credentials for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create azure-sts-blob {backingstore_name} "
+        f"--target-blob-container {uls_name} "
+        f"--tenant-id {cld_mgr.azure_sts_client.tenant_id} "
+        f"--client-id {cld_mgr.azure_sts_client.client_id} "
+        f"--account-name {cld_mgr.azure_sts_client.account_name}",
+        use_yes=True,
+    )
+
+
+def oc_create_azure_sts_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore with Azure STS (managed identity) using oc create command
+
+    Args:
+        cld_mgr (CloudManager): holds Azure STS credentials for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    bs_data["spec"] = {
+        "type": constants.BACKINGSTORE_TYPE_AZURE,
+        "azureBlob": {
+            "targetBlobContainer": uls_name,
+            "clientId": cld_mgr.azure_sts_client.client_id,
+            "secret": {
+                "name": cld_mgr.azure_sts_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
+        },
+    }
+    create_resource(**bs_data)
+
+
 def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with GCP underlying storage using oc create command
@@ -987,6 +1047,63 @@ def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
         f"--endpoint {cld_mgr.rgw_client.s3_internal_endpoint} "
         f"--access-key {cld_mgr.rgw_client.access_key} "
         f"--secret-key {cld_mgr.rgw_client.secret_key} "
+        f"--target-bucket {uls_name}",
+        use_yes=True,
+    )
+
+
+def oc_create_self_ref_mcg_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new self-ref MCG backingstore using oc create command.
+    Self-ref MCG is an S3-compatible store backed by an MCG's own
+    bucket on the same cluster.
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): unused, kept for interface compatibility
+
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    bs_data["spec"] = {
+        "type": "s3-compatible",
+        "s3Compatible": {
+            "targetBucket": uls_name,
+            "endpoint": cld_mgr.self_ref_mcg_client.s3_internal_endpoint,
+            "signatureVersion": "v4",
+            "secret": {
+                "name": cld_mgr.self_ref_mcg_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
+        },
+    }
+    create_resource(**bs_data)
+
+
+def cli_create_self_ref_mcg_backingstore(
+    mcg_obj, cld_mgr, backingstore_name, uls_name, region
+):
+    """
+    Create a new self-ref MCG backingstore using the NooBaa CLI.
+    Self-ref MCG is an S3-compatible store backed by an MCG's own
+    bucket on the same cluster.
+
+    Args:
+        mcg_obj (MCG): MCG object for executing CLI commands
+        cld_mgr (CloudManager): holds self-ref MCG client credentials
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): unused, kept for interface compatibility
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create s3-compatible {backingstore_name} "
+        f"--endpoint {cld_mgr.self_ref_mcg_client.s3_internal_endpoint} "
+        f"--access-key {cld_mgr.self_ref_mcg_client.access_key} "
+        f"--secret-key {cld_mgr.self_ref_mcg_client.secret_key} "
         f"--target-bucket {uls_name}",
         use_yes=True,
     )
@@ -1629,17 +1746,35 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
 
 
 def retrieve_verification_mode():
+    if config.DEPLOYMENT.get("disable_s3_ssl_verify"):
+        logger.info(
+            "S3 boto3 TLS verification disabled (DEPLOYMENT.disable_s3_ssl_verify)"
+        )
+        return False
+    base_domain = config.ENV_DATA.get("base_domain") or ""
     if (
-        (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and config.ENV_DATA["deployment_type"] == "managed"
+        not config.DEPLOYMENT.get("force_s3_ssl_verify")
+        and config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and "qe.rh-ocs.com" in base_domain
+    ):
+        # Router CA (DEFAULT_INGRESS_CRT_LOCAL_PATH) and public CAs often do not
+        # validate the NooBaa S3 HTTPS endpoint chain on IBM Cloud QE (self-signed
+        # intermediates, or routes not signed by router-ca). Boto3 then fails with
+        # SSL: CERTIFICATE_VERIFY_FAILED. AWS CLI in-cluster uses SERVICE_CA mounts;
+        # the Jenkins runner only has local PEMs, so we skip verify on this domain.
+        logger.info(
+            "S3 boto3 TLS verification disabled for IBM Cloud QE base_domain "
+            "(non-matching S3 certificate chain). "
+            "Set DEPLOYMENT.force_s3_ssl_verify: true to enforce verification."
         )
-        or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM
-        or (
-            config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
-            and config.DEPLOYMENT["custom_ssl_cert_provider"]
-            == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT
-        )
+        return False
+    # IBM Cloud managed: do not use verify=True here. Many QE clusters present
+    # S3 endpoints with a self-signed chain; MCG.__init__ already writes the
+    # cluster router CA to DEFAULT_INGRESS_CRT_LOCAL_PATH for boto3.
+    if config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM or (
+        config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
+        and config.DEPLOYMENT["custom_ssl_cert_provider"]
+        == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT
     ):
         verify = True
     elif (
@@ -3558,10 +3693,11 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
     """
     query = f"{metric_name} {{bucket_name='{bucket_name}'}}"
     api = PrometheusAPI(threading_lock=threading_lock)
-    resp = api.get("query", payload={"query": query})
+    logger.info(f"Prometheus query: {query}")
+    resp = api.get("query", payload={"query": query}, timeout=1200)
 
     if resp.ok:
-        logger.debug(query)
+        logger.info(f"Prometheus response: {resp.text}")
         metrics_output = json.loads(resp.text)
         got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
         logger.info(f"Metrics {metric_name} : {got_metrics_value}")
@@ -3570,6 +3706,76 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
         raise Exception(
             f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
         )
+
+
+def get_bucket_mode(mcg_obj, bucket_name):
+    """
+    Get the current mode of a bucket from NooBaa.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+
+    Returns:
+        str: The bucket mode (e.g. "OPTIMAL", "EXCEEDING_QUOTA")
+    """
+    bucket_info = mcg_obj.get_bucket_info(bucket_name)
+    if bucket_info:
+        logger.debug(f"Bucket info for {bucket_name}: {bucket_info}")
+        return bucket_info.get("mode", "UNKNOWN")
+    logger.warning(f"Bucket {bucket_name} not found in NooBaa system")
+    return "UNKNOWN"
+
+
+def wait_for_bucket_mode(mcg_obj, bucket_name, expected_mode, timeout=600, sleep=15):
+    """
+    Poll NooBaa until the bucket enters the expected mode or timeout.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        expected_mode (str): Expected bucket mode (e.g. "EXCEEDING_QUOTA")
+            or "!OPTIMAL" to wait for any non-OPTIMAL mode
+            (UNKNOWN is excluded to avoid false positives on lookup failures)
+        timeout (int): Timeout in seconds (default: 600)
+        sleep (int): Poll interval in seconds (default: 15)
+
+    Returns:
+        str: The actual bucket mode once matched
+
+    Raises:
+        AssertionError: If the bucket does not reach the expected mode
+            within the timeout
+    """
+    check_not_optimal = expected_mode == "!OPTIMAL"
+    last_mode = "UNKNOWN"
+
+    try:
+        for mode in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_bucket_mode,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket_name,
+        ):
+            last_mode = mode
+            if check_not_optimal and mode not in ("OPTIMAL", "UNKNOWN"):
+                logger.info(f"Bucket {bucket_name} entered non-OPTIMAL mode: {mode}")
+                return mode
+            elif not check_not_optimal and mode == expected_mode:
+                logger.info(f"Bucket {bucket_name} entered expected mode: {mode}")
+                return mode
+    except TimeoutExpiredError:
+        if check_not_optimal:
+            assert False, (
+                f"Bucket {bucket_name} is still OPTIMAL after "
+                f"{timeout}s (last mode: {last_mode})"
+            )
+        else:
+            assert False, (
+                f"Expected bucket mode {expected_mode} for {bucket_name}, "
+                f"got {last_mode} after {timeout}s"
+            )
 
 
 def get_bucket_status_value(mcg_obj, bucket_name, key):

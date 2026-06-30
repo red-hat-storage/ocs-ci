@@ -33,6 +33,12 @@ repos:
         language: system
         types: [python]
         files: \.py$
+      - id: validate-deprecated-usage
+        name: Validate No New Deprecated Usage
+        entry: bash scripts/python/checks/validate_deprecated_usage.sh precommit
+        language: system
+        pass_filenames: false
+        types: [python]
   - repo: https://github.com/ibm/detect-secrets
     rev: 0.13.1+ibm.64.dss
     hooks:

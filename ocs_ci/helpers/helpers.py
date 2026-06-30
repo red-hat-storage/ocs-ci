@@ -619,6 +619,106 @@ def default_ceph_block_pool():
     return cbp_name if cbp_name else constants.DEFAULT_BLOCKPOOL
 
 
+def get_data_pool_name(interface_type=constants.CEPHBLOCKPOOL, sc_obj=None):
+    """
+    Return the name of the pool where actual block data is written.
+
+    On standard (replicated) deployments the StorageClass has a single
+    ``pool`` parameter that serves both as the RBD metadata pool and the
+    data pool, so this function returns the same value as
+    ``default_ceph_block_pool()``.
+
+    On Erasure-Coded deployments the StorageClass exposes two parameters:
+      * ``pool``     – the replicated metadata pool (stores RBD image headers)
+      * ``dataPool`` – the EC pool where all actual object data is written
+
+    For size-tracking purposes (``fetch_used_size``) we must monitor
+    ``dataPool`` on EC clusters; monitoring the metadata pool would always
+    show negligible growth regardless of how much data is written.
+
+    Args:
+        interface_type (str): Interface type constant (default CEPHBLOCKPOOL).
+        sc_obj: Optional StorageClass OCP object. When provided, it is used
+            directly instead of resolving the default StorageClass for
+            ``interface_type``. Useful for callers that already have a
+            specific SC object (e.g. a custom pool created by a test).
+
+    Returns:
+        str: Name of the pool that receives the actual written data.
+    """
+    if sc_obj is None:
+        sc_obj = default_storage_class(interface_type)
+    params = sc_obj.get().get("parameters", {})
+    data_pool = params.get("dataPool")
+    if data_pool:
+        logger.info(
+            f"EC deployment detected: using dataPool '{data_pool}' for data size tracking"
+        )
+        return data_pool
+    pool = params.get("pool") or constants.DEFAULT_BLOCKPOOL
+    logger.info(f"Replicated deployment: using pool '{pool}' for data size tracking")
+    return pool
+
+
+def get_pool_size_factor(pool_name):
+    """
+    Return the raw-storage multiplier for a given Ceph pool.
+
+    When data is written to a pool, the pool's raw ``size_bytes`` (as
+    reported by ``rados df``) grows by ``logical_bytes * factor``.
+
+    * **Replicated pool** – factor equals the replica count (``size``).
+      E.g. size=3 → factor=3.
+
+    * **Erasure-Coded pool** – factor equals ``(k + m) / k`` where *k* is
+      ``spec.erasureCoded.dataChunks`` and *m* is
+      ``spec.erasureCoded.codingChunks`` from the ``CephBlockPool`` CR.
+      E.g. k=2, m=1 → factor=1.5.
+
+    The factor is derived from the ``CephBlockPool`` CR without running any
+    Ceph commands, so no toolbox pod is required.
+
+    Args:
+        pool_name (str): Name of the CephBlockPool resource.
+
+    Returns:
+        float: Raw-storage multiplier for expected-size calculations.
+    """
+    pool_ocp = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=pool_name,
+    )
+    pool_cr = pool_ocp.get()
+    ec_spec = pool_cr.get("spec", {}).get("erasureCoded", {})
+    k = ec_spec.get("dataChunks", 0)
+    m = ec_spec.get("codingChunks", 0)
+
+    if k > 0:
+        factor = (k + m) / k
+        logger.info(
+            f"Pool '{pool_name}' is EC (k={k}, m={m}): "
+            f"raw-storage factor = (k+m)/k = {factor}"
+        )
+        return factor
+
+    # Replicated pool – read size from CR spec first, fall back to ceph cmd
+    rep_size = pool_cr.get("spec", {}).get("replicated", {}).get("size", 0)
+    if rep_size:
+        logger.info(
+            f"Pool '{pool_name}' is replicated (size={rep_size}): "
+            f"raw-storage factor = {rep_size}"
+        )
+        return float(rep_size)
+
+    # Last resort: query via toolbox
+    ct_pod = pod.get_ceph_tools_pod()
+    size_info = ct_pod.exec_ceph_cmd(ceph_cmd=f"ceph osd pool get {pool_name} size")
+    factor = float(size_info["size"])
+    logger.info(f"Pool '{pool_name}' replicated size from ceph = {factor}")
+    return factor
+
+
 def create_ceph_block_pool(
     pool_name=None,
     replica=3,
@@ -628,6 +728,9 @@ def create_ceph_block_pool(
     namespace=None,
     device_class=None,
     yaml_file=None,
+    erasure_coded=False,
+    data_chunks=None,
+    coding_chunks=None,
 ):
     """
     Create a Ceph block pool with optional parameters.
@@ -641,20 +744,34 @@ def create_ceph_block_pool(
         namespace (str): The pool namespace (optional).
         device_class (str): The device class name (optional).
         yaml_file (str): The name of the YAML file for the Ceph block pool (optional).
+        erasure_coded (bool): True to create an erasure coded pool instead of replicated.
+        data_chunks (int): Number of data chunks for the EC profile (optional).
+            When None and erasure_coded=True, resolved automatically via get_ec_profile().
+            Pass explicit int to override auto-selection.
+        coding_chunks (int): Number of coding chunks for the EC profile (optional).
+            When None and erasure_coded=True, resolved automatically via get_ec_profile().
 
     Returns:
         OCS: The OCS instance for the Ceph block pool.
 
     """
-    # Load the YAML template
     if yaml_file:
         cbp_data = templating.load_yaml(yaml_file)
+    elif erasure_coded:
+        from ocs_ci.ocs.cluster import get_ec_profile
+
+        resolved_data_chunks, resolved_coding_chunks = (
+            (data_chunks, coding_chunks)
+            if data_chunks is not None and coding_chunks is not None
+            else get_ec_profile()
+        )
+        cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_EC_YAML)
+        cbp_data["spec"]["erasureCoded"]["dataChunks"] = resolved_data_chunks
+        cbp_data["spec"]["erasureCoded"]["codingChunks"] = resolved_coding_chunks
     elif device_class:
-        # Use the appropriate yaml for the device class CephBlockPool
         cbp_data = templating.load_yaml(constants.DEVICECLASS_CEPHBLOCKPOOL_YAML)
         cbp_data["spec"]["deviceClass"] = device_class
     else:
-        # Use the appropriate yaml for the CephBlockPool
         cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
 
     cbp_data["metadata"]["name"] = (
@@ -664,12 +781,18 @@ def create_ceph_block_pool(
         namespace or config.ENV_DATA["cluster_namespace"]
     )
 
-    cbp_data["spec"]["replicated"]["size"] = replica
-    cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
+    if not erasure_coded:
+        cbp_data["spec"]["replicated"]["size"] = replica
+        cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
 
     if compression:
         cbp_data["spec"]["compressionMode"] = compression
-        cbp_data["spec"]["parameters"]["compression_mode"] = compression
+        cbp_data["spec"].setdefault("parameters", {})["compression_mode"] = compression
+
+    if erasure_coded:
+        from ocs_ci.ocs.cluster import ensure_ec_metadata_pool_exists
+
+        ensure_ec_metadata_pool_exists()
 
     cbp_obj = create_resource(**cbp_data)
     cbp_obj.reload()
@@ -863,6 +986,7 @@ def create_storage_class(
     annotations=None,
     mapOptions=None,
     mounter=None,
+    data_pool_name=None,
 ):
     """
     Create a storage class
@@ -889,6 +1013,8 @@ def create_storage_class(
         annotations(dict): dict of annotations to be added to the storageclass.
         mapOptions (str): mapOtions match the configuration of ocs-storagecluster-ceph-rbd-virtualization storage class
         mounter (str): mounter to match the configuration of ocs-storagecluster-ceph-rbd-virtualization storage class
+        data_pool_name (str): EC data pool name; sets dataPool in StorageClass parameters (optional).
+            Required when creating an EC-backed StorageClass where interface_name is the metadata pool.
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -925,6 +1051,8 @@ def create_storage_class(
             provisioner if provisioner else defaults.CEPHFS_PROVISIONER
         )
     sc_data["parameters"]["pool"] = interface_name
+    if data_pool_name:
+        sc_data["parameters"]["dataPool"] = data_pool_name
 
     sc_data["metadata"]["name"] = (
         sc_name
@@ -1293,7 +1421,7 @@ def get_all_storageclass_names():
 
 
 def delete_storageclasses(sc_objs):
-    """ "
+    """
     Function for Deleting storageclasses
 
     Args:
@@ -1302,10 +1430,11 @@ def delete_storageclasses(sc_objs):
     Returns:
         bool: True if deletion is successful
     """
+    from ocs_ci.ocs.resources.storage_cluster import delete_storageclass_and_deregister
 
     for sc in sc_objs:
         logger.info("Deleting StorageClass with name %s", sc.name)
-        sc.delete()
+        delete_storageclass_and_deregister(sc_name=sc.name, sc_ocp=sc.ocp)
     return True
 
 
@@ -2381,41 +2510,6 @@ def remove_scc_policy(sa_name, namespace):
         logger.info(out)
 
 
-def craft_s3_command(cmd, mcg_obj=None, api=False, max_attempts=8):
-    """
-    Crafts the AWS CLI S3 command including the
-    login credentials and command to be ran
-
-    Args:
-        mcg_obj: An MCG object containing the MCG S3 connection credentials
-        cmd: The AWSCLI command to run
-        api: True if the call is for s3api, false if s3
-        max_attempts: The maximum number of AWSCLI retry attempts
-                     max_attempts=8 means a maximum of one minute
-                     additional waiting time in case of failure
-
-    Returns:
-        str: The crafted command, ready to be executed on the pod
-
-    """
-    api = "api" if api else ""
-    if mcg_obj:
-        base_command = (
-            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
-            f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
-            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-            f"AWS_MAX_ATTEMPTS={max_attempts} "
-            f"AWS_DEFAULT_REGION={mcg_obj.region} "
-            f"aws s3{api} "
-            f"--endpoint={mcg_obj.s3_internal_endpoint} "
-        )
-        string_wrapper = '"'
-    else:
-        base_command = f"aws s3{api} --no-sign-request "
-        string_wrapper = ""
-    return f"{base_command}{cmd}{string_wrapper}"
-
-
 def get_current_test_name():
     """
     A function to return the current test name in a parsed manner
@@ -3344,7 +3438,8 @@ def get_pv_size(storageclass=None):
     ocp_obj = ocp.OCP(kind=constants.PV)
     pv_objs = ocp_obj.get()["items"]
     for pv_obj in pv_objs:
-        if pv_obj["spec"]["storageClassName"] == storageclass:
+        pv_sc = pv_obj.get("spec", {}).get("storageClassName")
+        if pv_sc and pv_sc == storageclass:
             return_list.append(pv_obj["spec"]["capacity"]["storage"])
     return return_list
 
@@ -3808,7 +3903,7 @@ def run_cmd_verify_cli_output(
 
 
 def check_rbd_image_used_size(
-    pvc_objs, usage_to_compare, rbd_pool=constants.DEFAULT_BLOCKPOOL, expect_match=True
+    pvc_objs, usage_to_compare, rbd_pool=None, expect_match=True
 ):
     """
     Check if RBD image used size of the PVCs are matching with the given value
@@ -3816,7 +3911,11 @@ def check_rbd_image_used_size(
     Args:
         pvc_objs (list): List of PVC objects
         usage_to_compare (str): Value of image used size to be compared with actual value. eg: "5GiB"
-        rbd_pool (str): Name of the pool
+        rbd_pool (str): Name of the RBD metadata pool (``parameters.pool`` from the
+            StorageClass). On EC clusters this is the replicated metadata pool
+            (e.g. ``replicated-metadata-pool``), **not** the EC data pool.
+            When ``None`` the value is resolved automatically from the default
+            RBD StorageClass via ``default_ceph_block_pool()``.
         expect_match (bool): True to verify the used size is equal to 'usage_to_compare' value.
             False to verify the used size is not equal to 'usage_to_compare' value.
 
@@ -3824,6 +3923,8 @@ def check_rbd_image_used_size(
         bool: True if the verification is success for all the PVCs, False otherwise
 
     """
+    if rbd_pool is None:
+        rbd_pool = default_ceph_block_pool()
     ct_pod = pod.get_ceph_tools_pod()
     no_match_list = []
     for pvc_obj in pvc_objs:
@@ -4091,10 +4192,10 @@ def get_event_line_datetime(event_line):
     """
     event_line_dt = None
     regex = r"\d{4}-\d{2}-\d{2}"
-    if re.search(regex + "T", event_line):
+    if re.match(regex + "T", event_line):
         dt_string = event_line[:23].replace("T", " ")
         event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
-    elif re.search(regex, event_line):
+    elif re.match(regex, event_line):
         dt_string = event_line[:26]
         event_line_dt = datetime.datetime.strptime(dt_string, "%Y-%m-%d %H:%M:%S.%f")
 
@@ -4597,7 +4698,7 @@ def get_cephfs_subvolumegroup():
             kind=constants.CONFIGMAP,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        ceph_csi_configmap = configmap_obj.get(resource_name="ceph-csi-configs")
+        ceph_csi_configmap = configmap_obj.get(resource_name="ceph-csi-config")
         json_config = ceph_csi_configmap.get("data").get("config.json")
         json_config_list = json.loads(json_config)
         for dict_item in json_config_list:
@@ -4976,7 +5077,7 @@ def verify_storagecluster_nodetopology():
     ocs_node_names = []
     for node_obj in ocs_node_objs:
         ocs_node_names.append(node_obj.name)
-    return ocs_node_names.sort() == nodes_storage_cluster.sort()
+    return sorted(ocs_node_names) == sorted(nodes_storage_cluster)
 
 
 def get_noobaa_metrics_token_from_secret():
@@ -5141,6 +5242,28 @@ def verify_log_exist_in_pods_logs(
     return False
 
 
+@retry(CommandFailed, tries=3, delay=10, backoff=2)
+def _extract_cli_image(pull_secret_path, image, remote_path, local_cli_dir):
+    """
+    Extract CLI binary from container image with retry for transient network errors.
+
+    Args:
+        pull_secret_path (str): Path to pull secret file
+        image (str): Container image URL
+        remote_path (str): Path inside container to extract
+        local_cli_dir (str): Local directory to extract to
+
+    Raises:
+        CommandFailed: If extraction fails after retries
+
+    """
+    exec_cmd(
+        f"oc image extract --registry-config {pull_secret_path} "
+        f"{image} --confirm "
+        f"--path {remote_path}:{local_cli_dir}"
+    )
+
+
 def retrieve_cli_binary(cli_type="mcg"):
     """
     Download the MCG-CLI/ODF-CLI binary and store it locally.
@@ -5214,10 +5337,8 @@ def retrieve_cli_binary(cli_type="mcg"):
             image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
     pull_secret_path = download_pull_secret()
-    exec_cmd(
-        f"oc image extract --registry-config {pull_secret_path} "
-        f"{image} --confirm "
-        f"--path {get_architecture_path(cli_type)}:{local_cli_dir}"
+    _extract_cli_image(
+        pull_secret_path, image, get_architecture_path(cli_type), local_cli_dir
     )
     os.rename(
         os.path.join(local_cli_dir, remote_cli_basename),
@@ -5392,18 +5513,27 @@ def add_route_public_nad():
     """
     Add route section to network_attachment_definitions object
 
+    Adds route to shim network for host-to-pod communication in VLAN mode.
+    The shim network is configured via 'multus_public_net_shim_network' ENV_DATA
+    parameter (default: 192.168.252.0/24). This route enables communication between
+    baremetal hosts and pods attached to the public Multus network.
     """
+
     nad_obj = get_network_attachment_definitions(
         nad_name=config.ENV_DATA.get("multus_public_net_name"),
         namespace=config.ENV_DATA.get("multus_public_net_namespace"),
     )
     nad_config_str = nad_obj.data["spec"]["config"]
     nad_config_dict = json.loads(nad_config_str)
-    nad_config_dict["ipam"]["routes"] = [
-        {"dst": config.ENV_DATA["multus_destination_route"]}
-    ]
+
+    shim_network = config.ENV_DATA.get(
+        "multus_public_net_shim_network", "192.168.252.0/24"
+    )
+    nad_config_dict["ipam"]["routes"] = [{"dst": shim_network}]
+    logger.info(f"VLAN mode: Adding route to shim network: {shim_network}")
+
     nad_config_dict_string = json.dumps(nad_config_dict)
-    logger.info("Creating Multus public network")
+
     if config.DEPLOYMENT.get("ipv6"):
         constants.MULTUS_PUBLIC_NET_YAML = constants.MULTUS_PUBLIC_NET_IPV6_YAML
     public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
@@ -5485,16 +5615,53 @@ def delete_csi_holder_pods():
         schedule_nodes([worker_node_name])
 
 
+def ip_from_subnet_offset(subnet: str, offset: int) -> str:
+    """
+    Return an IP address from a subnet offset from the network address.
+
+    The function takes a subnet in CIDR notation and returns the IP address
+    obtained by adding the given offset to the subnet's network address.
+
+    Args:
+        subnet (str): Subnet in CIDR notation (e.g. "192.168.252.0/24").
+        offset (int): Number of IP addresses to add to the network address.
+
+    Returns:
+        str: The resulting IP address as a string.
+
+    Raises:
+        ValueError: If the subnet is invalid or the resulting IP is outside
+            of the subnet range.
+
+    Example:
+        ip_from_subnet_offset("192.168.252.0/24", 5)
+        '192.168.252.5'
+        ip_from_subnet_offset("192.168.252.16/28", 5)
+        '192.168.252.21'
+    """
+    network = ipaddress.ip_network(subnet)
+
+    ip = network.network_address + offset
+    if ip not in network:
+        raise ValueError(f"Offset {offset} is outside of subnet {subnet}")
+
+    return str(ip)
+
+
 def configure_node_network_configuration_policy_on_all_worker_nodes():
     """
     Configure NodeNetworkConfigurationPolicy CR on each worker node in cluster
 
+    Supports both traditional shim-based approach and VLAN-based approach.
+    Use multus_use_vlan config parameter to enable VLAN mode.
     """
 
     # This function require changes for compact mode
     logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
     worker_node_names = node.get_worker_nodes()
     ip_version = "ipv4"
+    use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
+
     if (
         config.DEPLOYMENT.get("ipv6")
         and config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM
@@ -5503,37 +5670,228 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
             constants.NODE_NETWORK_CONFIGURATION_POLICY_IPV6
         )
         ip_version = "ipv6"
+
     interface_num = 0
     for worker_node_name in worker_node_names:
-        node_network_configuration_policy = templating.load_yaml(
-            constants.NODE_NETWORK_CONFIGURATION_POLICY
-        )
+        # Determine which template to use based on VLAN mode
+        if use_vlan:
+            # VLAN-based approach: check if we need single or dual VLAN
+            create_public_net = config.ENV_DATA.get("multus_create_public_net", False)
+            create_cluster_net = config.ENV_DATA.get("multus_create_cluster_net", False)
+
+            if create_public_net and create_cluster_net:
+                # Dual VLAN template
+                logger.info(f"Using dual VLAN template for {worker_node_name}")
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY_VLAN_DUAL
+                )
+            elif create_public_net or create_cluster_net:
+                # Single VLAN template
+                logger.info(f"Using single VLAN template for {worker_node_name}")
+                node_network_configuration_policy = templating.load_yaml(
+                    constants.NODE_NETWORK_CONFIGURATION_POLICY_VLAN
+                )
+            else:
+                logger.warning("VLAN mode enabled but no networks configured to create")
+                continue
+        else:
+            # Traditional shim-based approach
+            node_network_configuration_policy = templating.load_yaml(
+                constants.NODE_NETWORK_CONFIGURATION_POLICY
+            )
 
         if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
-            worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
-                worker_node_name
-            ]
+            # Set node selector
             node_network_configuration_policy["spec"]["nodeSelector"][
                 "kubernetes.io/hostname"
             ] = worker_node_name
-            node_network_configuration_policy["metadata"]["name"] = (
-                worker_network_configuration["node_network_configuration_policy_name"]
-            )
-            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                "ipv4"
-            ]["address"][0]["ip"] = worker_network_configuration[
-                "node_network_configuration_policy_ip"
-            ]
-            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                "ipv4"
-            ]["address"][0]["prefix-length"] = worker_network_configuration[
-                "node_network_configuration_policy_prefix_length"
-            ]
-            node_network_configuration_policy["spec"]["desiredState"]["routes"][
-                "config"
-            ][0]["destination"] = worker_network_configuration[
-                "node_network_configuration_policy_destination_route"
-            ]
+
+            if use_vlan:
+                # VLAN-based configuration for BAREMETAL
+                logger.info(
+                    f"Configuring VLAN interfaces for baremetal node {worker_node_name}"
+                )
+                create_public_net = config.ENV_DATA.get(
+                    "multus_create_public_net", False
+                )
+                create_cluster_net = config.ENV_DATA.get(
+                    "multus_create_cluster_net", False
+                )
+
+                if create_public_net and create_cluster_net:
+                    # Configure dual VLAN
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-networks-vlan-{worker_node_name}"
+
+                    # Public VLAN configuration (interface 0 - NO IP)
+                    public_vlan_id = config.ENV_DATA.get(
+                        "multus_public_net_vlan_id", 201
+                    )
+                    public_base_interface = config.ENV_DATA.get(
+                        "multus_public_net_interface", "enp1s0f1"
+                    )
+                    vlan_interface_name = f"{public_base_interface}.{public_vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = public_base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = public_vlan_id
+
+                    # Public Shim configuration (interface 1 - HAS IP)
+                    shim_name = config.ENV_DATA.get(
+                        "multus_public_net_shim_name", "odf-pub-shim"
+                    )
+                    shim_ip_cidr = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    shim_ip = ip_from_subnet_offset(shim_ip_cidr, 5 + interface_num)
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = shim_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["mac-vlan"]["base-iface"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["ipv4"]["address"][0]["ip"] = shim_ip
+
+                    # Cluster VLAN configuration (interface 2 - NO IP)
+                    cluster_vlan_id = config.ENV_DATA.get(
+                        "multus_cluster_net_vlan_id", 202
+                    )
+                    cluster_base_interface = config.ENV_DATA.get(
+                        "multus_cluster_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["name"] = f"{cluster_base_interface}.{cluster_vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["vlan"]["base-iface"] = cluster_base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][2]["vlan"]["id"] = cluster_vlan_id
+
+                    # Routes configuration (route to pod network via shim)
+                    pod_network = config.ENV_DATA.get(
+                        "multus_public_net_ip_range", "192.168.20.0/24"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["destination"] = pod_network
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["next-hop-interface"] = shim_name
+
+                elif create_public_net:
+                    # Configure single VLAN for public network
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-public-net-vlan-{worker_node_name}"
+
+                    # Public VLAN configuration (interface 0 - NO IP)
+                    vlan_id = config.ENV_DATA.get("multus_public_net_vlan_id", 201)
+                    base_interface = config.ENV_DATA.get(
+                        "multus_public_net_interface", "enp1s0f1"
+                    )
+                    vlan_interface_name = f"{base_interface}.{vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = vlan_id
+
+                    # Public Shim configuration (interface 1 - HAS IP)
+                    shim_name = config.ENV_DATA.get(
+                        "multus_public_net_shim_name", "odf-pub-shim"
+                    )
+                    shim_ip_cidr = config.ENV_DATA.get(
+                        "multus_public_net_shim_network", "192.168.252.0/24"
+                    )
+                    shim_ip = ip_from_subnet_offset(shim_ip_cidr, 5 + interface_num)
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["name"] = shim_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["mac-vlan"]["base-iface"] = vlan_interface_name
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][1]["ipv4"]["address"][0]["ip"] = shim_ip
+
+                    # Routes configuration (route to pod network via shim)
+                    pod_network = config.ENV_DATA.get(
+                        "multus_public_net_ip_range", "192.168.20.0/24"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["destination"] = pod_network
+                    node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                        "config"
+                    ][0]["next-hop-interface"] = shim_name
+
+                elif create_cluster_net:
+                    # Configure single VLAN for cluster network
+                    # Note: Cluster network does NOT need shim interface per Red Hat docs
+                    # (cluster network is pod-to-pod only, no host connectivity needed)
+                    node_network_configuration_policy["metadata"][
+                        "name"
+                    ] = f"ceph-cluster-net-vlan-{worker_node_name}"
+
+                    vlan_id = config.ENV_DATA.get("multus_cluster_net_vlan_id", 202)
+                    base_interface = config.ENV_DATA.get(
+                        "multus_cluster_net_interface", "enp1s0f1"
+                    )
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["name"] = f"{base_interface}.{vlan_id}"
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["base-iface"] = base_interface
+                    node_network_configuration_policy["spec"]["desiredState"][
+                        "interfaces"
+                    ][0]["vlan"]["id"] = vlan_id
+
+                    # No shim interface or routes needed for cluster network
+
+                # Increment interface_num for next node (for shim IP allocation)
+                if create_public_net:
+                    interface_num += 1
+
+            else:
+                # Traditional shim-based configuration for BAREMETAL without VLANs
+                worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
+                    worker_node_name
+                ]
+                node_network_configuration_policy["metadata"]["name"] = (
+                    worker_network_configuration[
+                        "node_network_configuration_policy_name"
+                    ]
+                )
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["ip"] = worker_network_configuration[
+                    "node_network_configuration_policy_ip"
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
+                    0
+                ]["ipv4"]["address"][0]["prefix-length"] = worker_network_configuration[
+                    "node_network_configuration_policy_prefix_length"
+                ]
+                node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                    "config"
+                ][0]["destination"] = worker_network_configuration[
+                    "node_network_configuration_policy_destination_route"
+                ]
         elif config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
 
             node_network_configuration_policy["spec"]["nodeSelector"][
@@ -5777,7 +6135,10 @@ def get_rbd_image_info(rbd_pool, rbd_image_name):
     Get RBD image information. (e.g provisioned size, used size, image ,   )
 
     Args:
-        rbd_pool(str) : pool name
+        rbd_pool(str) : RBD **metadata** pool name (i.e. ``parameters.pool``
+            from the StorageClass, **not** ``parameters.dataPool``). On EC
+            clusters this is the replicated metadata pool
+            (e.g. ``replicated-metadata-pool``).
         rbd_image_name(str) : name of rbd image
 
     Returns:
@@ -6421,79 +6782,26 @@ def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
 
 def set_schedule_precedence(precedence):
     """
-    Create or update the 'csi-addons-config' ConfigMap with the given
-    schedule-precedence ('storageclass' or 'pvc') and restart the CSI Addons
-    controller manager so the change is picked up.
+    Set the schedule-precedence key in the 'csi-addons-config' ConfigMap
+    and restart the CSI Addons controller manager.
 
-    Handles both cases: ConfigMap exists / does not exist.
-    Uses valid JSON for merge patch to avoid decoding errors.
+    Delegates to the generic update_csi_addons_config() helper.
+
+    Args:
+        precedence (str): Must be 'storageclass' or 'pvc'.
+
+    Raises:
+        ValueError: If precedence is not 'storageclass' or 'pvc'.
+
     """
-    import yaml
+    from ocs_ci.ocs.resources.csi_addons import update_csi_addons_config
 
     if precedence not in ("storageclass", "pvc"):
         raise ValueError(
             f"Invalid precedence value: {precedence}. Must be 'storageclass' or 'pvc'."
         )
 
-    configmap_name = getattr(
-        constants, "CSI_ADDONS_CONFIGMAP_NAME", "csi-addons-config"
-    )
-    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
-
-    cm_ocp = OCP(kind=constants.CONFIGMAP, namespace=namespace)
-
-    # Manifest used when CM does not exist
-    cm_manifest = {
-        "apiVersion": "v1",
-        "kind": "ConfigMap",
-        "metadata": {"name": configmap_name, "namespace": namespace},
-        "data": {"schedule-precedence": precedence},
-    }
-
-    if cm_ocp.is_exist(configmap_name):
-        # UPDATE PATH: use valid JSON for merge patch (K8s expects JSON here)
-        patch_payload = json.dumps({"data": {"schedule-precedence": precedence}})
-        logger.info(
-            "Patching ConfigMap '%s' in ns '%s' to schedule-precedence=%s",
-            configmap_name,
-            namespace,
-            precedence,
-        )
-        # NOTE: wrap JSON in single quotes so shlex keeps it as one arg
-        cm_ocp.exec_oc_cmd(
-            f"patch configmap {configmap_name} -p '{patch_payload}' --type=merge",
-            out_yaml_format=False,
-        )
-    else:
-        # CREATE PATH: write manifest to temp file and apply
-        logger.info(
-            "Creating ConfigMap '%s' in ns '%s' with schedule-precedence=%s",
-            configmap_name,
-            namespace,
-            precedence,
-        )
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".yaml") as fp:
-            yaml.safe_dump(cm_manifest, fp, sort_keys=False)
-            tmp_path = fp.name
-        try:
-            cm_ocp.exec_oc_cmd(f"apply -f {tmp_path}", out_yaml_format=False)
-        finally:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
-
-    logger.info(
-        "ConfigMap '%s' set to schedule-precedence=%s", configmap_name, precedence
-    )
-
-    # Restart CSI Addons controller manager pods so the new value is read
-    logger.info("Restarting CSI Addons controller manager pods...")
-    pod.restart_pods_having_label(
-        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
-        namespace=namespace,
-    )
-    logger.info("CSI Addons controller manager pods restarted.")
+    update_csi_addons_config("schedule-precedence", precedence)
 
 
 def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj):
@@ -6683,12 +6991,31 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
     for storageconsumer_dict in storageconsumer_obj.get()["items"]:
         if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
             storageconsumer = storageconsumer_dict["metadata"]["name"]
+            # TODO: Use configmap with name storageconsumer_dict["status"]["resourceNameMappingConfigMap"]["name"] to
+            #  identify the radosnamespace and then use it to find the cephblockpoolradosnamespace CR. This is not
+            #  applicable for internal storageconsumer because the configmap will not have the exact name of
+            #  radosnamespace
             break
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        cephblockpool_rns_names = [
+            cephbprns_data["metadata"]["name"]
+            for cephbprns_data in ocp.OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            ).get()["items"]
+        ]
+    if storageconsumer == constants.INTERNAL_STORAGE_CONSUMER_NAME:
+        cephbpradosns = list(
+            filter(lambda x: "-builtin-implicit" in x, cephblockpool_rns_names)
+        )[0]
+    else:
+        cephbpradosns = list(
+            filter(lambda x: f"-{storageconsumer}" in x, cephblockpool_rns_names)
+        )[0]
     logger.info(
         f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
     )
-
-    cephbpradosns = ""
 
     # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clusters have it,
     # but StorageRequest is not reconciled. StorageConsumer exists in storage hub cluster and in consumer clusters
@@ -6708,9 +7035,6 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
                         break
             if cephbpradosns:
                 break
-    else:
-        storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
-        cephbpradosns = storage_consumer.get_rbd_rados_ns()
     return cephbpradosns
 
 
@@ -6774,9 +7098,35 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
                 break
     else:
         storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
-        cephbfssubvolumegroup = storage_consumer.get_cephfs_subvolumegroup()
-
+        cephbfssubvolumegroup = storage_consumer.get("data").get(
+            "cephfs-subvolumegroup"
+        )
     return cephbfssubvolumegroup
+
+
+def find_radosnamespace(storageclient_uid=None):
+    """
+    Find the radosnamespace related to a storageclient if present
+
+    Args:
+        storageclient_id(string): The uid of the storageclient for which the lradosnamespace has to be identified
+
+    Returns:
+        str: The name of the radosnamespace, if present
+
+    """
+    cephblockpoolradosnamespace = find_cephblockpoolradosnamespace(
+        storageclient_uid=storageclient_uid
+    )
+    if "-builtin-implicit" not in cephblockpoolradosnamespace:
+        with config.RunWithProviderConfigContextIfAvailable():
+            cbp_rns = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=cephblockpoolradosnamespace,
+            )
+            radosnamespace = cbp_rns.get()["spec"]["name"]
+        return radosnamespace
 
 
 def remove_port_from_url(url):
@@ -7061,12 +7411,8 @@ def get_schedule_precedance_value_from_csi_addons_configmap(
     """
     Return the schedule precedence from the 'csi-addons-config' ConfigMap.
 
-    If the ConfigMap (or key) doesn't exist, return the default ('storageclass').
-
-    The ConfigMap has the following structure:
-    - name: csi-addons-config
-    - namespace: openshift-storage (or cluster_namespace)
-    - data.schedule-precedence: 'storageclass' or 'pvc'
+    Delegates to the generic get_csi_addons_config_value() helper,
+    then validates the returned value is 'storageclass' or 'pvc'.
 
     Args:
         default (str): Default value to return if ConfigMap doesn't exist.
@@ -7074,46 +7420,22 @@ def get_schedule_precedance_value_from_csi_addons_configmap(
 
     Returns:
         str: The schedule precedence value ('storageclass' or 'pvc').
+
     """
-    cm_name = getattr(constants, "CSI_ADDONS_CONFIGMAP_NAME", "csi-addons-config")
-    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+    from ocs_ci.ocs.resources.csi_addons import get_csi_addons_config_value
 
-    cm_ocp = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+    value = get_csi_addons_config_value("schedule-precedence", default=default)
+    value = value.strip().lower()
 
-    try:
-        if not cm_ocp.is_exist(cm_name):
-            logger.info(
-                "ConfigMap '%s' not found in namespace '%s'; using default '%s'.",
-                cm_name,
-                namespace,
-                default,
-            )
-            return default
+    if value in ("storageclass", "pvc"):
+        return value
 
-        cm = cm_ocp.get(resource_name=cm_name)
-        value = cm.get("data", {}).get("schedule-precedence", "").strip().lower()
-
-        if value in ("storageclass", "pvc"):
-            logger.info("Schedule precedence from ConfigMap: %s", value)
-            return value
-
-        logger.warning(
-            "ConfigMap '%s' has missing/invalid 'schedule-precedence' (got '%s'); using default '%s'.",
-            cm_name,
-            value,
-            default,
-        )
-        return default
-
-    except CommandFailed as e:
-        logger.warning(
-            "Failed to read ConfigMap '%s' in ns '%s' (%s); using default '%s'.",
-            cm_name,
-            namespace,
-            e,
-            default,
-        )
-        return default
+    logger.warning(
+        "Invalid 'schedule-precedence' value '%s'; using default '%s'.",
+        value,
+        default,
+    )
+    return default
 
 
 def verify_socket_on_node(node_name, host_path, socket_name):

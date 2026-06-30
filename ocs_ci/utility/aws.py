@@ -184,6 +184,111 @@ class AWS(object):
             )
         return self._sts_client
 
+    def create_iam_user(self, username):
+        """
+        Create a new IAM user.
+
+        Args:
+            username (str): IAM username to create
+
+        Returns:
+            dict: The CreateUser response
+
+        """
+        response = self.iam_client.create_user(UserName=username)
+        logger.info(f"Created IAM user {username}")
+        return response
+
+    def delete_iam_user(self, username):
+        """
+        Delete an IAM user after removing its inline policies and access keys.
+
+        Args:
+            username (str): IAM username to delete
+
+        """
+        for policy_name in self.iam_client.list_user_policies(UserName=username).get(
+            "PolicyNames", []
+        ):
+            self.iam_client.delete_user_policy(
+                UserName=username, PolicyName=policy_name
+            )
+            logger.info(f"Deleted inline policy {policy_name} from user {username}")
+
+        for key in self.iam_client.list_access_keys(UserName=username).get(
+            "AccessKeyMetadata", []
+        ):
+            self.iam_client.delete_access_key(
+                UserName=username, AccessKeyId=key["AccessKeyId"]
+            )
+            logger.info(f"Deleted access key {key['AccessKeyId']} from user {username}")
+
+        self.iam_client.delete_user(UserName=username)
+        logger.info(f"Deleted IAM user {username}")
+
+    def put_user_policy(self, username, policy_name, policy_document):
+        """
+        Create or update an inline policy on an IAM user.
+
+        Args:
+            username (str): IAM username
+            policy_name (str): Name for the inline policy
+            policy_document (str): JSON policy document
+
+        """
+        self.iam_client.put_user_policy(
+            UserName=username,
+            PolicyName=policy_name,
+            PolicyDocument=policy_document,
+        )
+        logger.info(f"Put inline policy {policy_name} on user {username}")
+
+    def create_access_key(self, username):
+        """
+        Create a new IAM access key for the given user.
+
+        Args:
+            username (str): IAM username
+
+        Returns:
+            dict: The CreateAccessKey response containing AccessKey details
+
+        """
+        response = self.iam_client.create_access_key(UserName=username)
+        logger.info(
+            f"Created IAM access key {response['AccessKey']['AccessKeyId']} "
+            f"for user {username}"
+        )
+        return response
+
+    def update_access_key_status(self, username, access_key_id, active):
+        """
+        Activate or deactivate an IAM access key.
+
+        Args:
+            username (str): IAM username
+            access_key_id (str): The access key ID to update
+            active (bool): True to activate, False to deactivate
+
+        """
+        status = "Active" if active else "Inactive"
+        self.iam_client.update_access_key(
+            UserName=username, AccessKeyId=access_key_id, Status=status
+        )
+        logger.info(f"Set IAM access key {access_key_id} to {status}")
+
+    def delete_access_key(self, username, access_key_id):
+        """
+        Delete an IAM access key.
+
+        Args:
+            username (str): IAM username
+            access_key_id (str): The access key ID to delete
+
+        """
+        self.iam_client.delete_access_key(UserName=username, AccessKeyId=access_key_id)
+        logger.info(f"Deleted IAM access key {access_key_id}")
+
     @property
     def cloudfront_client(self):
         """
@@ -2240,7 +2345,13 @@ class AWS(object):
             )
             logger.info(f"Deleted OIDC provider: {oidc_provider_arn}")
         except Exception as e:
-            logger.error(f"Error deleting OIDC provider: {e}")
+            if "NoSuchEntity" in str(e):
+                logger.warning(
+                    f"OIDC provider {oidc_provider_arn} not found — "
+                    "likely already deleted by rosa delete oidc-config"
+                )
+            else:
+                logger.error(f"Error deleting OIDC provider: {e}")
 
     def cleanup_oidc_providers_by_prefix(self, url_prefix):
         """
@@ -2927,9 +3038,16 @@ def create_and_attach_sts_role():
     return role_data
 
 
-def delete_sts_iam_roles():
+def delete_sts_iam_roles(oidc_endpoint_url=None):
     """
     Delete IAM roles for the cluster.
+
+    Args:
+        oidc_endpoint_url (str): Optional OIDC endpoint URL (serviceAccountIssuer)
+            pre-fetched while the cluster API was still reachable. When provided,
+            the cluster API is not contacted. When None, the function attempts to
+            retrieve the URL from the live cluster; if the cluster is already
+            unreachable the OIDC provider deletion is skipped with a warning.
     """
     logger.info("Deleting STS IAM Roles")
     cluster_path = config.ENV_DATA["cluster_path"]
@@ -2955,11 +3073,22 @@ def delete_sts_iam_roles():
                 role_name, instance_profile["InstanceProfileName"]
             )
         aws.delete_iam_role(role_name)
-    auth_cluster = exec_cmd("oc get authentication cluster -o json")
-    auth_cluster_dict = json.loads(auth_cluster.stdout)
-    oidc_provider_name = auth_cluster_dict["spec"]["serviceAccountIssuer"].replace(
-        "https://", ""
-    )
+
+    if oidc_endpoint_url is None:
+        auth_cluster = exec_cmd(
+            "oc get authentication cluster -o json", ignore_error=True
+        )
+        if auth_cluster.returncode != 0:
+            logger.warning(
+                "Could not retrieve authentication cluster info — cluster API is "
+                "unreachable and no oidc_endpoint_url was pre-fetched. "
+                "Skipping OIDC provider deletion."
+            )
+            return
+        auth_cluster_dict = json.loads(auth_cluster.stdout)
+        oidc_endpoint_url = auth_cluster_dict["spec"]["serviceAccountIssuer"]
+
+    oidc_provider_name = oidc_endpoint_url.replace("https://", "")
     aws.delete_oidc_provider(provider_name=oidc_provider_name)
 
 

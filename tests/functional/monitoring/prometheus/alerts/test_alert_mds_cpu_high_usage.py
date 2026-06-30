@@ -5,8 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import (
     blue_squad,
     skipif_ocs_version,
-    aws_platform_required,
-    baremetal_deployment_required,
+    skipif_vsphere_platform,
+    skipif_disconnected_cluster,
 )
 from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.helpers import helpers
@@ -90,8 +90,8 @@ def active_mds_alert_values(threading_lock):
 @tier2
 @blue_squad
 @skipif_ocs_version("<4.15")
-@aws_platform_required
-@baremetal_deployment_required
+@skipif_vsphere_platform
+@skipif_disconnected_cluster
 class TestMdsCpuAlerts(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):

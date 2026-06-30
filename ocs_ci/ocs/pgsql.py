@@ -36,7 +36,7 @@ from ocs_ci.helpers.helpers import (
     validate_pv_delete,
 )
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.ocs.ocp import switch_to_project
+from ocs_ci.ocs.ocp import switch_to_project, OCP
 
 log = logging.getLogger(__name__)
 
@@ -536,6 +536,18 @@ class Postgresql(BenchmarkOperator):
             self.pgsql_cmap.delete()
             self.pgsql_service._is_deleted = False
             self.pgsql_service.delete()
+
+            # Delete pgbench benchmark CRs first to stop benchmark operator from recreating pods
+            log.info("Deleting pgbench benchmark CRs")
+            ocp_obj = OCP(kind="benchmark", namespace=BMO_NAME)
+            benchmarks = ocp_obj.get(selector="type=pgbench")
+            if benchmarks and benchmarks.get("items"):
+                for benchmark in benchmarks["items"]:
+                    benchmark_name = benchmark["metadata"]["name"]
+                    log.info(f"Deleting benchmark CR: {benchmark_name}")
+                    ocp_obj.delete(resource_name=benchmark_name)
+                    ocp_obj.wait_for_delete(resource_name=benchmark_name, timeout=120)
+
             pods_obj = self.get_pgbench_pods()
             pvcs_obj = self.get_postgres_pvc()
             for pod in pods_obj:

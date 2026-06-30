@@ -24,6 +24,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     ClusterNotInSTSModeException,
 )
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
@@ -31,6 +32,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     load_auth_config,
     get_role_arn_from_sub,
+    get_azure_sts_creds_from_sub,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,8 +60,10 @@ class CloudManager(ABC):
             "GCP": GoogleClient,
             "AZURE": AzureClient,
             "AZURE_WITH_LOGS": AzureWithLogsClient,
+            "AZURE_STS": AzureSTSClient,
             "IBMCOS": IbmCosClient,
             "RGW": RgwClient,
+            "SELF_REF_MCG": SelfRefMcgClient,
         }
         try:
             logger.info(
@@ -118,6 +122,25 @@ class CloudManager(ABC):
             )
         except ClusterNotInSTSModeException:
             setattr(self, "aws_sts_client", None)
+
+        # set the client for Azure STS enabled cluster
+        try:
+            setattr(
+                self,
+                "azure_sts_client",
+                cloud_map["AZURE_STS"](full_auth_dict=cred_dict),
+            )
+        except ClusterNotInSTSModeException:
+            setattr(self, "azure_sts_client", None)
+
+        try:
+            setattr(
+                self,
+                "self_ref_mcg_client",
+                cloud_map["SELF_REF_MCG"](),
+            )
+        except Exception:
+            setattr(self, "self_ref_mcg_client", None)
 
 
 class CloudClient(ABC):
@@ -439,6 +462,52 @@ class RgwClient(S3Client):
         super().__init__(rgw_creds_dict, verify, endpoint, *args, **kwargs)
 
 
+class SelfRefMcgClient(S3Client):
+    """
+    S3 client for the self-ref MCG platform - an S3-compatible store
+    backed by an MCG's own bucket on the same cluster.
+    Fetches credentials directly from the NooBaa CR and admin secret.
+    """
+
+    @config.run_with_provider_context_if_available
+    def __init__(self, auth_dict=None, verify=True, *args, **kwargs):
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        # Endpoints from the NooBaa CR status
+        get_noobaa = OCP(kind="noobaa", namespace=namespace).get()
+        noobaa_s3 = get_noobaa["items"][0]["status"]["services"]["serviceS3"]
+        external_endpoint = noobaa_s3["externalDNS"][0]
+        # Internal endpoint is used in backingstore/namespacestore specs
+        internal_endpoint = noobaa_s3["internalDNS"][0]
+
+        # Admin credentials from the NooBaa admin secret
+        creds_secret_name = get_noobaa["items"][0]["status"]["accounts"]["admin"][
+            "secretRef"
+        ]["name"]
+        secret_data = OCP(kind="secret", namespace=namespace).get(creds_secret_name)[
+            "data"
+        ]
+        access_key_id = base64.b64decode(secret_data["AWS_ACCESS_KEY_ID"]).decode()
+        secret_access_key = base64.b64decode(
+            secret_data["AWS_SECRET_ACCESS_KEY"]
+        ).decode()
+
+        # HTTP on port 80 for the boto3 client (used by cloud_uls_factory)
+        http_endpoint = external_endpoint.replace("https://", "http://").replace(
+            ":443", ":80"
+        )
+
+        mcg_creds_dict = {
+            "SECRET_PREFIX": "MCG",
+            "DATA_PREFIX": "AWS",
+            "ENDPOINT": http_endpoint,
+            "S3_INTERNAL_ENDPOINT": internal_endpoint,
+            "MCG_ACCESS_KEY_ID": access_key_id,
+            "MCG_SECRET_ACCESS_KEY": secret_access_key,
+        }
+        super().__init__(mcg_creds_dict, verify, http_endpoint, *args, **kwargs)
+
+
 class IbmCosClient(S3Client):
     """
     Implementation of a S3 Client using the S3 API for IBM COS buckets
@@ -756,3 +825,53 @@ class AwsSTSClient(S3Client):
             *args,
             **kwargs,
         )
+
+
+class AzureSTSClient(AzureClient):
+    """
+    Implementation of an Azure Client for STS (managed identity) clusters.
+
+    Reuses AzureClient's blob_service_client for ULS operations but creates
+    a different k8s secret with managed identity fields instead of AccountKey.
+
+    """
+
+    @config.run_with_provider_context_if_available
+    def __init__(self, full_auth_dict, *args, **kwargs):
+        sts_creds = get_azure_sts_creds_from_sub()
+        azure_auth_dict = full_auth_dict.get("AZURE")
+        if not azure_auth_dict:
+            logger.error("Cluster is in Azure STS mode, but no AZURE credentials found")
+            raise ClusterNotInSTSModeException
+
+        self.client_id = sts_creds["client_id"]
+        self.tenant_id = sts_creds["tenant_id"]
+        self.subscription_id = sts_creds["subscription_id"]
+        self.resource_group = sts_creds.get("resource_group", "")
+
+        super().__init__(auth_dict=azure_auth_dict, *args, **kwargs)
+
+    def create_azure_secret(self):
+        """
+        Create a Kubernetes secret for Azure STS backingstores/namespacestores.
+
+        Contains AccountName, azure_tenant_id, and azure_client_id
+        for managed identity authentication (no AccountKey).
+
+        """
+        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+        bs_secret_data["metadata"]["name"] = create_unique_resource_name(
+            "cldmgr-azure-sts", "secret"
+        )
+        bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+        bs_secret_data["data"]["AccountName"] = base64.urlsafe_b64encode(
+            self.account_name.encode("UTF-8")
+        ).decode("ascii")
+        bs_secret_data["data"]["azure_tenant_id"] = base64.urlsafe_b64encode(
+            self.tenant_id.encode("UTF-8")
+        ).decode("ascii")
+        bs_secret_data["data"]["azure_client_id"] = base64.urlsafe_b64encode(
+            self.client_id.encode("UTF-8")
+        ).decode("ascii")
+
+        return create_resource(**bs_secret_data)

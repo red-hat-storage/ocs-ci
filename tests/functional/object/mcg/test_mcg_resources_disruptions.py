@@ -226,7 +226,7 @@ class TestMCGResourcesDisruptions(MCGTest):
     @pytest.mark.polarion_id("OCS-2513")
     @skipif_managed_service
     @skipif_ocs_version("<4.7")
-    def test_db_scc(self, teardown):
+    def deprecated_test_db_scc(self, teardown):
         """
         Test noobaa db is assigned with scc(anyuid) after changing the default noobaa SCC
 

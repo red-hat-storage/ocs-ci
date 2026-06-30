@@ -1,4 +1,3 @@
-import datetime
 import logging
 
 import boto3
@@ -171,6 +170,8 @@ def gen_bucket_policy(
     principal_property=None,
     action_property=None,
     resource_property=None,
+    action_prefix="s3",
+    resource_arn_service="s3",
 ):
     """
     Function prepares bucket policy parameters in syntax and format provided by AWS bucket policy
@@ -184,16 +185,21 @@ def gen_bucket_policy(
         principal_property (str): Element to specify the principal to allow/deny access to a resource.
         action_property (str): Element describes the specific action(s) that will be allowed or denied.
         resource_property (str):  Element specifies the object(s) that the statement covers
+        action_prefix (str): Service prefix for actions (default: "s3"). Use "s3vectors" for
+            vector bucket policies.
+        resource_arn_service (str): Service name in ARN (default: "s3"). Use "s3vectors" for
+            vector bucket policies. Resources that already start with "arn:" are used as-is.
 
     Returns:
         dict: Bucket policy in json format
     """
     principals = user_list
-    actions = list(map(lambda action: "s3:%s" % action, actions_list))
-    resources = list(
-        map(lambda bucket_name: "arn:aws:s3:::%s" % bucket_name, resources_list)
-    )
-    ver = datetime.date.today().strftime("%Y-%m-%d")
+    actions = [f"{action_prefix}:{action}" for action in actions_list]
+    resources = [
+        r if r.startswith("arn:") else f"arn:aws:{resource_arn_service}:::{r}"
+        for r in resources_list
+    ]
+    ver = "2012-10-17"
 
     principal = principal_property if principal_property else "Principal"
     effect = effect if effect else "Allow"

@@ -31,6 +31,31 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
 
+    def nav_s3_vector_tab(self):
+        """
+        Navigate to the S3 Vector tab within the Object Storage Buckets page.
+
+        Follows the Fluent Interface / POM pattern: the parent returns the child
+        page object so callers can chain directly into S3 Vector operations.
+
+        Returns:
+            S3VectorTab: page object for the S3 Vector tab.
+        """
+        logger.info("Navigating to Object Storage Buckets page")
+        self.navigate_buckets_page()
+        self.page_has_loaded(sleep_time=2)
+
+        logger.info("Clicking S3 Vector tab")
+        self.do_click(
+            self.s3_vector_loc["s3_vector_tab_button"], enable_screenshot=True
+        )
+        self.page_has_loaded(sleep_time=2)
+        logger.info("Successfully navigated to S3 Vector tab")
+
+        from ocs_ci.ocs.ui.page_objects.s3_vector_tab import S3VectorTab
+
+        return S3VectorTab()
+
     def create_bucket_ui(self, method: str, return_name: bool = False):
         """
         Creates a bucket via UI using specified method.
@@ -485,7 +510,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
                 try:
                     dialog = self.driver.find_element(
-                        By.CSS_SELECTOR, ".pf-v5-c-modal-box"
+                        By.CSS_SELECTOR, "[data-ouia-component-type*='ModalContent']"
                     )
                     dialog.click()
                     time.sleep(0.5)

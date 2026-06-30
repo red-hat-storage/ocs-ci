@@ -106,6 +106,7 @@ rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
 chaos = pytest.mark.chaos
+ec_allowed = pytest.mark.ec_allowed
 
 tier_marks = [
     tier1,
@@ -277,6 +278,16 @@ stretchcluster_required = compose(
     stretchcluster_required_skipif, pytest.mark.stretchcluster_required
 )
 
+skipif_less_than_five_workers = pytest.mark.skipif(
+    config.ENV_DATA["worker_replicas"] < 5,
+    reason="This test cannot run on setup having less than five worker nodes",
+)
+
+skipif_ec_pools_disabled = pytest.mark.skipif(
+    config.DEPLOYMENT.get("ec_default_pools") is not True,
+    reason="Test runs only on EC pools",
+)
+
 sts_deployment_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("sts_enabled") is False,
     reason="Test runs only on the AWS STS enabled cluster deployments",
@@ -411,6 +422,10 @@ ms_provider_and_consumer_required = pytest.mark.skipif(
     ),
     reason="Test runs ONLY on Managed service with provider and consumer clusters",
 )
+fdf_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("fdf_cluster"),
+    reason="Test runs ONLY on FDF cluster",
+)
 
 
 # when run_on_all_clients marker is used, there needs to be added cluster_index
@@ -534,6 +549,18 @@ azure_performance_plus_required = pytest.mark.skipif(
 rosa_hcp_required = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() != ROSA_HCP_PLATFORM,
     reason="Test runs ONLY on ROSA HCP cluster",
+)
+
+hcp_required = pytest.mark.skipif(
+    not (
+        config.ENV_DATA.get("deployment_type") == "managed_cp"
+        or config.hci_client_exist()
+        or any(
+            c.get("hosted_cluster_platform") == "aws"
+            for c in config.ENV_DATA.get("clusters", {}).values()
+        )
+    ),
+    reason="Test runs only on HCP clusters (ROSA HCP or AWS HCP)",
 )
 
 external_mode_required = pytest.mark.skipif(

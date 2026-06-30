@@ -37,6 +37,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     CephHealthException,
     ActiveMdsValueNotMatch,
+    TemporaryPodsDuringDeployment,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
@@ -311,6 +312,12 @@ class CephCluster(object):
 
         expected_mon_count = self.mon_count
         expected_mds_count = self.mds_count
+
+        # If the monCount is updated to five, then change expected_mon_count value to five
+        cephcluster_data = self.CEPHCLUSTER.get()
+        monCount_val = cephcluster_data["items"][0]["spec"]["mon"]["count"]
+        if monCount_val == 5:
+            expected_mon_count = 5
 
         if config.ENV_DATA[
             "platform"
@@ -1171,6 +1178,7 @@ def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label=None):
 
     Raises:
          AssertionError: If no PVC found for one of the pod
+         TemporaryPodsDuringDeployment: If pod is not found (may have been deleted/replaced)
 
     """
     logger.info(f"Validating if each pod from: {pods} has PVC from {pvc_names}.")
@@ -1185,20 +1193,33 @@ def validate_ocs_pods_on_pvc(pods, pvc_names, pvc_label=None):
                 continue
             assert found_pvc, f"No PVC found for pod: {pod_name}!"
         else:
-            pod_obj = ocp.OCP(
-                kind="Pod",
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=pod_name,
-            )
-            pod_data = pod_obj.get()
-            pod_labels = pod_data["metadata"].get("labels", {})
-            pvc_name = pod_labels[pvc_label]
-            assert (
-                pvc_name in pvc_names
-            ), f"No PVC {pvc_name} found for pod: {pod_name} in PVCs: {pvc_names}!"
+            try:
+                pod_obj = ocp.OCP(
+                    kind="Pod",
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    resource_name=pod_name,
+                )
+                pod_data = pod_obj.get()
+                pod_labels = pod_data["metadata"].get("labels", {})
+                pvc_name = pod_labels[pvc_label]
+                assert (
+                    pvc_name in pvc_names
+                ), f"No PVC {pvc_name} found for pod: {pod_name} in PVCs: {pvc_names}!"
+                logger.info(f"PVC {pvc_name} found for pod {pod_name}")
+            except CommandFailed as e:
+                if "NotFound" in str(e):
+                    logger.warning(
+                        f"Pod {pod_name} not found - may have been replaced during "
+                        "deployment. Triggering retry to refresh both PVC and pod lists."
+                    )
+                    raise TemporaryPodsDuringDeployment(
+                        f"Pod {pod_name} disappeared - likely being replaced"
+                    )
+                else:
+                    raise
 
 
-@retry(CommandFailed, tries=3, delay=10, backoff=1)
+@retry(CommandFailed, tries=3, delay=30, backoff=1)
 def validate_claim_name_match_pvc(pvc_names, validated_pods=None):
     """
     Validate if OCS pods have mathching PVC and Claim name
@@ -1246,29 +1267,35 @@ def _collect_bound_ocs_pvcs(namespace, timeout=300, sleep=10):
 
     # pvc name for the disks created with LSO and ODF is dynamic and depends on the
     # storage cluster name, so we need to get it here
-    storage_device_set_name = ""
+    storage_device_set_names = []
     if lso_deployed:
         storage_cluster_obj = OCP(
             kind=constants.STORAGECLUSTER,
             namespace=namespace,
             resource_name=config.ENV_DATA["storage_cluster_name"],
         )
-        storage_device_set_name = (
-            storage_cluster_obj.get()
+        storage_device_set_names = [
+            ds.get("name", "")
+            for ds in storage_cluster_obj.get()
             .get("spec", {})
-            .get("storageDeviceSets", [])[0]
-            .get("name", "")
-        )
+            .get("storageDeviceSets", [])
+        ]
 
     def _get_matching_bound_pvcs():
         ocs_pvc_obj = get_all_pvc_objs(namespace=namespace)
-        matching_pvcs = [
-            pvc_obj
-            for pvc_obj in ocs_pvc_obj
-            if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME)
-            or pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME)
-            or pvc_obj.name.startswith(storage_device_set_name)
-        ]
+        matching_pvcs = []
+        for pvc_obj in ocs_pvc_obj:
+            if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+                matching_pvcs.append(pvc_obj)
+            elif pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME):
+                matching_pvcs.append(pvc_obj)
+            elif pvc_obj.name.startswith(constants.NB_DB_CNPG_CLUSTER_NAME):
+                matching_pvcs.append(pvc_obj)
+            else:
+                for name in storage_device_set_names:
+                    if pvc_obj.name.startswith(name):
+                        matching_pvcs.append(pvc_obj)
+                        break
         not_bound = [
             pvc_obj.name
             for pvc_obj in matching_pvcs
@@ -1289,6 +1316,7 @@ def _collect_bound_ocs_pvcs(namespace, timeout=300, sleep=10):
     return None
 
 
+@retry((TemporaryPodsDuringDeployment, AssertionError), tries=3, delay=60, backoff=1)
 def validate_cluster_on_pvc():
     """
     Validate creation of PVCs for MON and OSD pods.
@@ -1296,6 +1324,7 @@ def validate_cluster_on_pvc():
 
     Raises:
          AssertionError: If PVC is not mounted on one or more OCS pods or some of the PVCs are not bound
+         TemporaryPodsDuringDeployment: If canary or temporary pods detected (triggers retry)
 
     """
     # Get the PVCs for selected label (MON/OSD)
@@ -1309,12 +1338,25 @@ def validate_cluster_on_pvc():
     if pvc_names is None:
         pvc_names = []
 
-    mon_pods = get_pod_name_by_pattern("rook-ceph-mon", ns)
     if not config.DEPLOYMENT.get("local_storage"):
         logger.info("Validating all mon pods have PVC")
         mon_pvc_label = constants.ROOK_CEPH_MON_PVC_LABEL
         if Version.coerce(config.ENV_DATA["ocs_version"]) < Version.coerce("4.6"):
             mon_pvc_label = None
+
+        mon_pods = get_pod_name_by_pattern("rook-ceph-mon", ns)
+
+        # Check for canary pods - these are temporary during mon replacement
+        # Raise exception to trigger retry with fresh PVC and pod lists
+        canary_pods = [pod for pod in mon_pods if "canary" in pod]
+        if canary_pods:
+            logger.warning(
+                f"Detected canary pods {canary_pods} - mon replacement in progress. "
+                "Will retry validation to allow deployment to stabilize."
+            )
+            raise TemporaryPodsDuringDeployment(f"Canary pods detected: {canary_pods}")
+
+        logger.info(f"Validating mon pods: {mon_pods}")
         validate_ocs_pods_on_pvc(
             mon_pods,
             pvc_names,
@@ -1326,9 +1368,7 @@ def validate_cluster_on_pvc():
             "deployment we don't have mon pods backed by PVC"
         )
     logger.info("Validating all osd pods have PVC")
-    osd_deviceset_pods = get_pod_name_by_pattern(
-        "rook-ceph-osd-prepare-ocs-deviceset", ns
-    )
+    osd_deviceset_pods = get_pod_name_by_pattern("rook-ceph-osd-prepare", ns)
     validate_ocs_pods_on_pvc(
         osd_deviceset_pods,
         pvc_names,
@@ -1394,11 +1434,17 @@ def validate_pdb_creation():
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
 
-    if odf_running_version >= version.VERSION_4_19:
+    if odf_running_version >= version.VERSION_4_19 and not config.COMPONENTS.get(
+        "disable_noobaa", False
+    ):
         pdb_count += 1
         pdb_required.append(constants.NOOBAA_DB_PG_PDB)
     else:
         logger.info(f"Required PDB count is {pdb_count}")
+
+    if config.COMPONENTS.get("disable_cephfs", False):
+        pdb_required.remove(constants.MDS_PDB)
+        pdb_count -= 1
 
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
@@ -2164,6 +2210,27 @@ def check_osds_in_hosts_are_up(osd_tree):
     return True
 
 
+@retry(
+    CommandFailed,
+    tries=5,
+    delay=15,
+    backoff=1,
+    text_in_exception="use of closed network connection",
+)
+def exec_ceph_osd_tree_with_retry():
+    """
+    Execute ceph osd tree command with retry logic for transient network errors.
+
+    This wrapper handles cases where kubelet API connections are interrupted
+    during operations like transit encryption upgrades or node replacements.
+
+    Returns:
+        dict: The output of ceph osd tree command
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    return ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+
+
 def check_ceph_osd_tree():
     """
     Checks whether an OSD tree is created/modified correctly.
@@ -2178,8 +2245,7 @@ def check_ceph_osd_tree():
     number_of_osds = len(osd_pods)
     # 'ceph osd tree' should show the new osds under right nodes/hosts
     #  Verification is different for 3 AZ and 1 AZ configs
-    ct_pod = pod.get_ceph_tools_pod()
-    tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+    tree_output = exec_ceph_osd_tree_with_retry()
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
         if is_flexible_scaling_enabled():
             return check_osd_tree_1az_vmware_flex(tree_output, number_of_osds)
@@ -2208,8 +2274,7 @@ def check_ceph_osd_tree_after_node_replacement():
         and all the OSD's are up. Else False
 
     """
-    ct_pod = pod.get_ceph_tools_pod()
-    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
+    osd_tree = exec_ceph_osd_tree_with_retry()
     if not check_ceph_osd_tree():
         logger.warning("Incorrect ceph osd tree formation found")
         return False
@@ -2336,6 +2401,148 @@ def is_lso_cluster():
 
     """
     return config.DEPLOYMENT.get("local_storage", False)
+
+
+def is_ec_pool_supported():
+    """
+    Check if erasure coded RBD pools are supported on this cluster.
+
+    All conditions must be met:
+    - Platform is vSphere or baremetal
+    - Cluster uses local storage (LSO / no-provisioner / localblock)
+    - Failure domain is 'host'
+    - At least 3 OSDs are running
+
+    Returns:
+        bool: True if EC pools are supported, False otherwise
+    """
+    from ocs_ci.helpers.helpers import get_failure_domin
+    from ocs_ci.ocs.resources import pod
+
+    cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
+    if cluster_type == "provider":
+        return False
+
+    platform = config.ENV_DATA["platform"].lower()
+    if platform not in constants.ON_PREM_PLATFORMS:
+        return False
+    if not is_lso_cluster():
+        return False
+    try:
+        if get_failure_domin() != "host":
+            return False
+        if len(pod.get_osd_pods()) < 3:
+            return False
+    except Exception:
+        logger.debug("is_ec_pool_supported: cluster not ready, returning False")
+        return False
+    return True
+
+
+def get_ec_metadata_pool_name():
+    """
+    Return the name of the replicated metadata pool for EC RBD StorageClasses
+    as configured in the StorageCluster spec.
+
+    Returns:
+        str: pool name, or empty string if not configured
+    """
+    sc_obj = storage_cluster.get_storage_cluster()
+    sc_data = sc_obj.get()["items"][0]
+    return (
+        sc_data.get("spec", {})
+        .get("managedResources", {})
+        .get("cephBlockPools", {})
+        .get("erasureCodedMetadataPool", "")
+    )
+
+
+def ensure_ec_metadata_pool_exists(
+    metadata_pool_name="replicated-metadata-pool", timeout=300
+):
+    """
+    Ensure the replicated metadata pool for EC RBD exists and is Ready.
+
+    If the StorageCluster does not yet have erasureCodedMetadataPool set,
+    patches it and waits for the pool to be created and reach Ready phase.
+
+    If the StorageCluster already has the field set but the pool does NOT exist
+    or is NOT Ready, this is a critical failure — raises an exception.
+
+    Args:
+        metadata_pool_name (str): Name of the metadata pool
+        timeout (int): Seconds to wait for pool to become Ready after patch
+
+    Raises:
+        AssertionError: If pool is expected to exist but is not Ready (critical failure path)
+        TimeoutExpiredError: If pool does not become Ready within timeout after patching
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    configured_name = get_ec_metadata_pool_name()
+    pool_ocp = OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+
+    def pool_is_ready():
+        try:
+            pool = pool_ocp.get(resource_name=metadata_pool_name)
+            return pool.get("status", {}).get("phase") == "Ready"
+        except Exception:
+            return False
+
+    if configured_name:
+        assert pool_is_ready(), (
+            f"StorageCluster has erasureCodedMetadataPool='{configured_name}' "
+            f"but CephBlockPool '{metadata_pool_name}' is not Ready. "
+            "This is a critical failure — inspect the cluster."
+        )
+        return
+
+    logger.info(
+        f"Patching StorageCluster to add erasureCodedMetadataPool: {metadata_pool_name}"
+    )
+    sc_obj = storage_cluster.get_storage_cluster()
+    sc_data = sc_obj.get()["items"][0]
+    sc_name = sc_data["metadata"]["name"]
+    patch = {
+        "spec": {
+            "managedResources": {
+                "cephBlockPools": {"erasureCodedMetadataPool": metadata_pool_name}
+            }
+        }
+    }
+    sc_obj.patch(
+        resource_name=sc_name,
+        params=patch,
+        format_type="merge",
+    )
+
+    logger.info(f"Waiting up to {timeout}s for {metadata_pool_name} to become Ready")
+    for sample in TimeoutSampler(timeout=timeout, sleep=10, func=pool_is_ready):
+        if sample:
+            logger.info(f"Pool {metadata_pool_name} is Ready")
+            return
+
+
+def get_ec_profile():
+    """
+    Return the EC profile (data_chunks, coding_chunks) appropriate for this cluster.
+
+    Selection:
+    - 6+ storage nodes → k=2, m=2
+    - 3-5 storage nodes → k=2, m=1
+
+    Returns:
+        tuple[int, int]: (data_chunks, coding_chunks)
+    """
+    from ocs_ci.ocs.node import get_osd_running_nodes
+
+    osd_node_count = len(get_osd_running_nodes())
+    if osd_node_count >= 6:
+        return 2, 2
+    return 2, 1
 
 
 def is_flexible_scaling_enabled():

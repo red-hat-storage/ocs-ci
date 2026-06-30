@@ -1,6 +1,5 @@
 ---
 DEPLOYMENT:
-  openshift_install_timeout: 4800
   allow_lower_instance_requirements: false
   kms_deployment: true
 ENV_DATA:
@@ -22,4 +21,3 @@ ENV_DATA:
 REPORTING:
   polarion:
     deployment_id: 'OCS-5798'
-

@@ -13,12 +13,16 @@ from ocs_ci.framework import config
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import grey_squad
+from ocs_ci.framework.pytest_customization.marks import grey_squad, ec_allowed
 from ocs_ci.framework.testlib import performance, performance_c, skipif_ocs_version
 from ocs_ci.ocs.perfresult import PerfResult
 from ocs_ci.helpers.helpers import get_full_test_logs_path
 from ocs_ci.ocs.perftests import PASTest
-from ocs_ci.ocs.cluster import CephCluster, calculate_compression_ratio
+from ocs_ci.ocs.cluster import (
+    CephCluster,
+    calculate_compression_ratio,
+    is_ec_pool_supported,
+)
 from ocs_ci.helpers.performance_lib import run_command
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs import benchmark_operator
@@ -481,19 +485,41 @@ class TestFIOBenchmark(PASTest):
 
     @skipif_ocs_version("<4.6")
     @pytest.mark.parametrize(
-        argnames=["io_pattern", "bs", "cmp_ratio"],
+        argnames=["io_pattern", "bs", "cmp_ratio", "erasure_coded"],
         argvalues=[
-            pytest.param(*["random", "1024KiB", 60]),
-            pytest.param(*["random", "64KiB", 60]),
-            pytest.param(*["random", "16KiB", 60]),
-            pytest.param(*["sequential", "1024KiB", 60]),
-            pytest.param(*["sequential", "64KiB", 60]),
-            pytest.param(*["sequential", "16KiB", 60]),
+            pytest.param(*["random", "1024KiB", 60, False]),
+            pytest.param(*["random", "64KiB", 60, False]),
+            pytest.param(*["random", "16KiB", 60, False]),
+            pytest.param(*["sequential", "1024KiB", 60, False]),
+            pytest.param(*["sequential", "64KiB", 60, False]),
+            pytest.param(*["sequential", "16KiB", 60, False]),
+            pytest.param(
+                *["random", "64KiB", 60, True],
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7964"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            pytest.param(
+                *["sequential", "64KiB", 60, True],
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7965"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
         ],
     )
     @pytest.mark.polarion_id("OCS-2617")
     def test_fio_compressed_workload(
-        self, storageclass_factory, io_pattern, bs, cmp_ratio
+        self, storageclass_factory, io_pattern, bs, cmp_ratio, erasure_coded
     ):
         """
         This is a basic fio perf test which run on compression enabled volume
@@ -529,12 +555,13 @@ class TestFIOBenchmark(PASTest):
         # Saving the Original elastic-search IP and PORT - if defined in yaml
         self.es_info_backup(self.es)
 
-        log.info("Creating compressed pool & SC")
+        log.info("Creating pool & SC")
         sc_obj = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             new_rbd_pool=True,
             replica=3,
-            compression="aggressive",
+            compression="none" if erasure_coded else "aggressive",
+            erasure_coded=erasure_coded,
         )
 
         sc = sc_obj.name

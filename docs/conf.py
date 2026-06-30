@@ -49,7 +49,11 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_rtd_theme",
     "myst_parser",
+    "sphinxcontrib.mermaid",
 ]
+
+# MyST parser configuration
+myst_fence_as_directive = ["mermaid"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -86,6 +90,10 @@ html_static_path = ["_static"]
 # https://github.com/readthedocs/readthedocs.org/issues/2569
 master_doc = "index"
 source_suffix = [".rst", ".md"]
+
+# MyST parser configuration
+# Enable heading anchors for internal links (e.g., [text](#heading))
+myst_heading_anchors = 3  # Generate anchors for h1, h2, h3 headings
 
 
 # Based on this issue: https://github.com/readthedocs/readthedocs.org/issues/1139

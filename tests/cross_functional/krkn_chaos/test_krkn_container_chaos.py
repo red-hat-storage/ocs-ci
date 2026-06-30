@@ -116,7 +116,6 @@ class TestKrKnContainerChaosScenarios:
                 kill_signal=kill_signal,
                 count=1,
                 expected_recovery_time=120,
-                container_name="",  # Leave blank to target all containers
             )
 
             # Log scenario details using helper function
@@ -164,6 +163,7 @@ class TestKrKnContainerChaosScenarios:
                 e,
                 f"unified-components-{kill_signal.lower()}",
                 f"multi-component container chaos ({kill_signal})",
+                health_helper=health_helper,
             )
             raise
         except Exception as e:
@@ -356,7 +356,10 @@ class TestKrKnContainerChaosScenarios:
 
         except CommandFailed as e:
             validator.handle_krkn_command_failure(
-                e, f"{stress_level}_pod_kill", "random pod kill chaos"
+                e,
+                f"{stress_level}_pod_kill",
+                "random pod kill chaos",
+                health_helper=health_helper,
             )
             raise
         except Exception as e:

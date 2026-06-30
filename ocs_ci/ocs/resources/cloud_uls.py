@@ -32,8 +32,10 @@ def cloud_uls_factory(
         "gcp": set(),
         "azure": set(),
         "azure-with-logs": set(),
+        "azure-sts": set(),
         "ibmcos": set(),
         "rgw": set(),
+        "self-ref-mcg": set(),
     }
     try:
         ulsMap = {
@@ -42,6 +44,7 @@ def cloud_uls_factory(
             "gcp": cld_mgr.gcp_client,
             "azure": cld_mgr.azure_client,
             "azure-with-logs": cld_mgr.azure_with_logs_client,
+            "azure-sts": cld_mgr.azure_sts_client,
             "ibmcos": cld_mgr.ibmcos_client,
         }
     except AttributeError as e:
@@ -59,6 +62,16 @@ def cloud_uls_factory(
         ulsMap["aws-sts"] = cld_mgr.aws_sts_client
     except AttributeError:
         log.warning("Cluster is not deployed STS mode")
+
+    try:
+        ulsMap["azure-sts"] = cld_mgr.azure_sts_client
+    except AttributeError:
+        log.warning("Cluster is not deployed in Azure STS mode")
+
+    try:
+        ulsMap["self-ref-mcg"] = cld_mgr.self_ref_mcg_client
+    except AttributeError:
+        log.info("Self-ref MCG is not available on this cluster")
 
     def _create_uls(uls_dict):
         """
@@ -82,8 +95,10 @@ def cloud_uls_factory(
             "gcp": set(),
             "azure": set(),
             "azure-with-logs": set(),
+            "azure-sts": set(),
             "ibmcos": set(),
             "rgw": set(),
+            "self-ref-mcg": set(),
         }
 
         with cluster_context():

@@ -1,13 +1,10 @@
 import logging
 
-from ocs_ci.deployment.qe_app_registry import QeAppRegistry
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, exceptions
-from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.operators import IngressNodeFirewallOperator
 
 
 logger = logging.getLogger(__name__)
@@ -80,149 +77,38 @@ def deploy_ingress_node_firewall(rules):
         rules (dict): dictionary of IngressNodeFirewall Rules (content of `spec.ingress`)
 
     """
-    inf = IngressNodeFirewallInstaller()
+    # Create and deploy the Ingress Node Firewall Operator
+    inf_operator = IngressNodeFirewallOperator(create_catalog=True)
+    inf_operator.deploy()
 
-    # check if Ingress Node Firewall Operator is available
-    if not inf.check_existing_packagemanifests():
-        # Ingress Node Firewall Operator is not available, we have to create QE App Registry Catalog Source
-        # and related Image content source policy
-        qe_app_registry = QeAppRegistry()
-        qe_app_registry.icsp()
-        qe_app_registry.catalog_source()
-        inf.source = constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME
-    # create openshift-ingress-node-firewall namespace
-    inf.create_namespace()
-
-    # create operator group
-    inf.create_operatorgroup()
-
-    # subscribe to the Ingress Node Firewall Operator
-    inf.create_subscription()
-
-    # verify installation
-    inf.verify_csv_status()
-
-    # create config
-    inf.create_config()
-
-    # add firewall rules
-    inf.create_rules(rules=rules)
+    # Create firewall configuration and rules
+    create_config()
+    create_rules(rules=rules)
 
 
-class IngressNodeFirewallInstaller(object):
+def create_config():
     """
-    IngressNodeFirewall Installer class for Ingress Node Firewall deployment
+    Creates configuration for IngressNodeFirewall
 
     """
+    logger.info("Creating IngressNodeFirewallConfig")
+    config_yaml_file = templating.load_yaml(constants.INF_CONFIG_YAML)
+    config_yaml = OCS(**config_yaml_file)
+    config_yaml.create()
+    logger.info("IngressNodeFirewallConfig created successfully")
 
-    def __init__(self):
-        self.namespace = constants.INGRESS_NODE_FIREWALL_NAMESPACE
-        self.source = constants.OPERATOR_CATALOG_SOURCE_NAME
 
-    def check_existing_packagemanifests(self):
-        """
-        Check if Ingress Node Firewall Operator is available or not.
+def create_rules(rules):
+    """
+    Create IngressNodeFirewall Rules
 
-        Returns:
-            bool: True if Ingress Node Operator is available, False otherwise
-        """
-        try:
-            pm = PackageManifest(constants.INGRESS_NODE_FIREWALL_OPERATOR_NAME)
-            pm.get(silent=True)
-            return True
-        except (exceptions.CommandFailed, exceptions.ResourceNotFoundError):
-            return False
+    Args:
+        rules (dict): dictionary of IngressNodeFirewall Rules (content of `spec.ingress`)
 
-    def create_namespace(self):
-        """
-        Creates the namespace for IngressNodeFirewall resources
-
-        Raises:
-            CommandFailed: If the 'oc create' command fails.
-
-        """
-        try:
-            logger.info(
-                f"Creating namespace {self.namespace} for IngressNodeFirewall resources"
-            )
-            namespace_yaml_file = templating.load_yaml(constants.INF_NAMESPACE_YAML)
-            namespace_yaml = OCS(**namespace_yaml_file)
-            namespace_yaml.create()
-            logger.info(
-                f"IngressNodeFirewall namespace {self.namespace} was created successfully"
-            )
-        except exceptions.CommandFailed as err:
-            if (
-                f'project.project.openshift.io "{self.namespace}" already exists'
-                in str(err)
-            ):
-                logger.info(f"Namespace {self.namespace} already exists")
-            else:
-                raise err
-
-    def create_operatorgroup(self):
-        """
-        Creates an OperatorGroup for IngressNodeFirewall
-
-        """
-        logger.info("Creating OperatorGroup for IngressNodeFirewall")
-        operatorgroup_yaml_file = templating.load_yaml(constants.INF_OPERATORGROUP_YAML)
-        operatorgroup_yaml = OCS(**operatorgroup_yaml_file)
-        operatorgroup_yaml.create()
-        logger.info("IngressNodeFirewall OperatorGroup created successfully")
-
-    def create_subscription(self):
-        """
-        Creates subscription for IngressNodeFirewall operator
-
-        """
-        logger.info("Creating Subscription for IngressNodeFirewall")
-        subscription_yaml_file = templating.load_yaml(constants.INF_SUBSCRIPTION_YAML)
-        subscription_yaml_file["spec"]["source"] = self.source
-        subscription_yaml = OCS(**subscription_yaml_file)
-        subscription_yaml.create()
-        logger.info("IngressNodeFirewall Subscription created successfully")
-
-    def verify_csv_status(self):
-        """
-        Verify the CSV status for the IngressNodeFirewall Operator deployment equals Succeeded
-
-        """
-        for csv in TimeoutSampler(
-            timeout=900,
-            sleep=15,
-            func=get_csvs_start_with_prefix,
-            csv_prefix=constants.INGRESS_NODE_FIREWALL_CSV_NAME,
-            namespace=self.namespace,
-        ):
-            if csv:
-                break
-        csv_name = csv[0]["metadata"]["name"]
-        csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
-        csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
-
-    def create_config(self):
-        """
-        Creates configuration for IngressNodeFirewall
-
-        """
-        logger.info("Creating IngressNodeFirewallConfig")
-        config_yaml_file = templating.load_yaml(constants.INF_CONFIG_YAML)
-        config_yaml = OCS(**config_yaml_file)
-        config_yaml.create()
-        logger.info("IngressNodeFirewallConfig created successfully")
-
-    def create_rules(self, rules):
-        """
-        Create IngressNodeFirewall Rules
-
-        Args:
-            rules (dict): dictionary of IngressNodeFirewall Rules (content of `spec.ingress`)
-
-        """
-        logger.info("Creating IngressNodeFirewall Rules")
-        rules_yaml_file = templating.load_yaml(constants.INF_RULES_YAML)
-        rules_yaml_file["spec"]["ingress"] = rules
-        rules_yaml = OCS(**rules_yaml_file)
-        rules_yaml.create()
-        logger.info("IngressNodeFirewall Rules created successfully")
+    """
+    logger.info("Creating IngressNodeFirewall Rules")
+    rules_yaml_file = templating.load_yaml(constants.INF_RULES_YAML)
+    rules_yaml_file["spec"]["ingress"] = rules
+    rules_yaml = OCS(**rules_yaml_file)
+    rules_yaml.create()
+    logger.info("IngressNodeFirewall Rules created successfully")

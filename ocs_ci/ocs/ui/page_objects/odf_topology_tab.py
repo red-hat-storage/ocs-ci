@@ -4,9 +4,12 @@ import time
 from abc import ABC
 
 import pandas as pd
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    NoSuchElementException,
+    TimeoutException,
+)
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.errorhandler import ErrorHandler
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -18,7 +21,9 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.node import get_node_names
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.ui.base_ui import BaseUI, logger
+from pathlib import Path
+
+from ocs_ci.ocs.ui.base_ui import BaseUI, logger, _crop_screenshot
 from ocs_ci.ocs.ui.odf_topology import TopologyUiStr, OdfTopologyHelper
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationDefaultTab,
@@ -26,6 +31,24 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
 )
 from ocs_ci.ocs.ui.workload_ui import WorkloadUi
 from ocs_ci.utility.retry import retry
+
+SIDEBAR_SCROLL_JS = """
+var sidebar = document.querySelector('.odf-topology__sidebar');
+if (sidebar) {
+    sidebar.scrollTop = sidebar.clientHeight;
+    return true;
+}
+return false;
+"""
+
+SIDEBAR_SCROLL_RESET_JS = """
+var sidebar = document.querySelector('.odf-topology__sidebar');
+if (sidebar) {
+    sidebar.scrollTop = 0;
+    return true;
+}
+return false;
+"""
 
 
 class TopologySidebar(BaseUI):
@@ -35,6 +58,65 @@ class TopologySidebar(BaseUI):
 
     def __init__(self):
         BaseUI.__init__(self)
+
+    def take_screenshot_for_llm(self, name_suffix="", region=None):
+        """
+        Takes two screenshots to capture the full ODF topology sidebar content.
+
+        Overrides BaseUI.take_screenshot_for_llm to handle the scrollable sidebar
+        panel in ODF topology. The sidebar (div.odf-topology__sidebar) has a fixed
+        height and overflows — a single viewport screenshot cuts off lower fields
+        like addresses, annotations, and creation timestamp.
+
+        This method temporarily resizes the window to the resolution set in
+        ``UI_SELENIUM.llm_screenshot_resolution``, takes one screenshot at the
+        current scroll position, scrolls the sidebar halfway down and takes a
+        second screenshot, then restores the original window size.
+
+        Args:
+            name_suffix (str): Optional suffix for the screenshot filename.
+            region (str): Optional region to crop (``"right_side"`` or
+                ``"left_side"``).  Passed to :func:`_crop_screenshot`.
+
+        Returns:
+            list: List of absolute paths to the saved screenshot files
+                (typically two: top and bottom of the sidebar).
+        """
+
+        original_size = self.driver.get_window_size()
+        llm_res = config.UI_SELENIUM.get("llm_screenshot_resolution", "1920,1400")
+        llm_w, llm_h = (int(v) for v in llm_res.split(","))
+        self.driver.set_window_size(llm_w, llm_h)
+        time.sleep(0.5)
+
+        try:
+            top_suffix = f"{name_suffix}_top_llm" if name_suffix else "top_llm"
+            self.take_screenshot(name_suffix=top_suffix)
+            screenshots = sorted(Path(self.screenshots_folder).glob("*.png"))
+            screenshot_top = str(screenshots[-1])
+            if region:
+                _crop_screenshot(screenshot_top, region)
+
+            scrolled = self.driver.execute_script(SIDEBAR_SCROLL_JS)
+            if scrolled:
+                logger.info("Scrolled sidebar panel to bottom for second screenshot")
+                time.sleep(0.5)
+                bottom_suffix = (
+                    f"{name_suffix}_bottom_llm" if name_suffix else "bottom_llm"
+                )
+                self.take_screenshot(name_suffix=bottom_suffix)
+                screenshots = sorted(Path(self.screenshots_folder).glob("*.png"))
+                screenshot_bottom = str(screenshots[-1])
+                if region:
+                    _crop_screenshot(screenshot_bottom, region)
+                self.driver.execute_script(SIDEBAR_SCROLL_RESET_JS)
+                return [screenshot_top, screenshot_bottom]
+
+            logger.info("No scrollable sidebar found, using single screenshot")
+            return [screenshot_top]
+        finally:
+            self.driver.set_window_size(original_size["width"], original_size["height"])
+            time.sleep(0.3)
 
     def is_alert_tab_present(self) -> bool:
         """
@@ -65,13 +147,20 @@ class TopologySidebar(BaseUI):
 
             for i in range(1, 4):
                 try:
-                    self.do_click(loc)
+                    self.do_click(loc, use_fallback=False)
                     break
-                except NoSuchElementException:
+                except (NoSuchElementException, TimeoutException):
                     logger.info("zooming out topology view")
                     self.do_click(self.topology_loc["zoom_out"])
                     self.page_has_loaded(module_loc=self.topology_loc["topology_graph"])
                     logger.info(f"try read topology again. attempt number {i} ")
+                except ElementClickInterceptedException:
+                    logger.info(
+                        "Click intercepted by page container (PF6 layout). "
+                        "Falling back to JS dispatchEvent click for topology node."
+                    )
+                    self.click_with_script(loc)
+                    break
             logger.info(f"Entity {entity_name} sidebar is opened")
 
     def close_sidebar(self, soft=False):
@@ -218,6 +307,15 @@ class TopologySidebar(BaseUI):
         """
         self.do_click(self.topology_loc["observe_sidebar_tab"], enable_screenshot=True)
         logger.info("Observe tab is open")
+
+    def open_osd_information_tab(self):
+        """
+        Opens the OSD Information tab in the sidebar.
+        """
+        self.do_click(
+            self.topology_loc["osd_information_sidebar_tab"], enable_screenshot=True
+        )
+        logger.info("OSD Information tab is open")
 
     def get_number_of_alerts(self):
         """
@@ -410,12 +508,16 @@ class AbstractTopologyView(ABC, TopologySidebar):
             entities = self.get_elements(self.topology_loc["node_label"])
             entity_names = []
             for entity in entities:
-                text = entity.text
-                if not len(text):
+                text = entity.text or entity.get_attribute("textContent") or ""
+                if not len(text.strip()):
                     raise NoSuchElementException("Cannot read element text")
                 # with ODF 4.18 we sometimes see no D, N prefix in the name of entity. This is not confirmed visually
                 # so we make exception for this case, checking "\n" within text
-                name = text.split("\n")[1] if "\n" in text else text
+                # In OCP 4.22+ the type prefix (N/D) is no longer separated by \n
+                if "\n" in text:
+                    name = text.split("\n")[1]
+                else:
+                    name = text[1:] if text and text[0] in ("N", "D") else text
                 entity_names.append(name)
                 time.sleep(0.1)
             self.topology_df["entity_name"] = entity_names
@@ -973,7 +1075,15 @@ class OdfTopologyNodesView(TopologyTab):
             raise IncorrectUiOptionRequested(
                 f"Pass one of required options to use method '{self.nav_into_node.__name__}'"
             )
-        self.do_click(loc, 60, True)
+        self.do_click(self.topology_loc["fill_to_screen"])
+        try:
+            self.do_click(loc, 60, True)
+        except ElementClickInterceptedException:
+            logger.info(
+                "Click intercepted by page container (PF6 layout). "
+                "Falling back to JS dispatchEvent click for topology node arrow."
+            )
+            self.click_with_script(loc)
         self.page_has_loaded(5, 5, self.topology_loc["topology_graph"])
         return OdfTopologyDeploymentsView()
 
@@ -1171,7 +1281,7 @@ class OdfTopologyDeploymentsView(TopologyTab):
         )
         return details_dict
 
-    @retry(ErrorHandler)
+    @retry(TimeoutException)
     def filter_node_by_toggle_from_deployments_level(self, node_name):
         """
         Filters the node by toggle from the deployments level in the topology view.

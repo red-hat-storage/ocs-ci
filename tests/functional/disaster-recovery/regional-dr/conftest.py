@@ -1,15 +1,37 @@
 import logging
+import platform
+import os
+from ocs_ci.utility import templating
 import pytest
 import time
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants
 from ocs_ci.deployment import acm
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility.utils import run_cmd
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    run_cmd,
+)
+from ocs_ci.helpers.dr_helpers import (
+    apply_itms_to_managed_clusters,
+    generate_rdr_mirror_images,
+)
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceNotFoundError,
+    CephHealthException,
+    CephHealthNotRecoveredException,
+    CephHealthRecoveredException,
+    UnexpectedDeploymentConfiguration,
+)
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.dr_helpers import (
+    check_rbd_mirror_running,
+    check_mirroring_status_ok,
+)
 
 log = logging.getLogger(__name__)
 
@@ -31,10 +53,12 @@ def pytest_collection_modifyitems(items):
                 items.remove(item)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True, scope="session")
 def check_subctl_cli():
-    # Check whether subctl cli is present
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+    if platform.system() == "Darwin":
+        log.warning("subctl binary is not available for macOS, skipping download")
         return
     try:
         run_cmd("./bin/subctl")
@@ -42,6 +66,61 @@ def check_subctl_cli():
         log.debug("subctl binary not found, downloading now...")
         submariner = acm.Submariner()
         submariner.download_binary()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def rdr_health_check():
+    """
+    Verify cluster health on both managed clusters before each RDR test.
+    Checks Ceph health, rbd-mirror daemon status, and mirroring health.
+
+    """
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+
+    if config.RUN["cli_params"].get("dev_mode"):
+        log.info("Skipping RDR health checks for development mode")
+        return
+
+    restore_index = config.cur_index
+    try:
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            if not config.RUN.get("cephcluster"):
+                continue
+            cluster_name = config.ENV_DATA.get("cluster_name")
+            log.info(f"Running RDR health check on managed cluster: {cluster_name}")
+            try:
+                helpers.ceph_health_check_with_toolbox_recovery(
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    tries=5,
+                    delay=10,
+                )
+                log.info(f"Ceph health check passed on {cluster_name}")
+            except (CephHealthException, CephHealthNotRecoveredException) as e:
+                log.error(f"Ceph health check failed on {cluster_name}: {e}")
+                pytest.skip(f"Ceph health check failed on {cluster_name}")
+            except CephHealthRecoveredException:
+                log.warning(
+                    f"Ceph health was not OK but recovered on {cluster_name}. "
+                    "Proceeding with test execution."
+                )
+            try:
+                check_rbd_mirror_running()
+            except UnexpectedDeploymentConfiguration as e:
+                log.error(f"rbd-mirror daemon check failed on {cluster_name}: {e}")
+                pytest.skip(f"rbd-mirror daemon check failed on {cluster_name}")
+            if not check_mirroring_status_ok():
+                log.error(f"Mirroring health is not OK on {cluster_name}")
+                pytest.skip(f"Mirroring health is not OK on {cluster_name}")
+    finally:
+        config.switch_ctx(restore_index)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def get_virtctl():
+    with config.RunWithProviderConfigContextIfAvailable():
+        get_virtctl_tool()
 
 
 @pytest.fixture()
@@ -146,7 +225,11 @@ def scale_deployments(request):
         },
     ]
 
+    cluster_name = []
+
     def _scale(status="down"):
+        if status == "down":
+            cluster_name.append(config.current_cluster_name())
         replica_count = 0 if status == "down" else 1
         for dep in deployments_to_scale:
             try:
@@ -162,7 +245,65 @@ def scale_deployments(request):
 
     def teardown():
         log.info("Finalizer: scaling up deployments")
+        if cluster_name:
+            log.info(f"Switching to cluster '{cluster_name[0]}' before scaling up")
+            config.switch_to_cluster_by_name(cluster_name[0])
         _scale("up")
 
     request.addfinalizer(teardown)
     return _scale
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mirror_rdr_images():
+    """
+    Mirror RDR images to disconnected registry and apply ITMS to managed clusters.
+    """
+    if not config.DEPLOYMENT.get("disconnected"):
+        return
+
+    imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG_V2)
+
+    # Get RDR images and add to additionalImages
+    rdr_images = generate_rdr_mirror_images()
+    if not rdr_images:
+        log.warning("No RDR images found to mirror. Exiting function.")
+        return
+
+    imageset_config_data["mirror"]["additionalImages"] = rdr_images
+    log.info(f"Added {len(rdr_images)} RDR images to mirror configuration")
+
+    # Mirror required images
+    log.info(
+        f"Mirror required images to mirror registry {config.DEPLOYMENT['mirror_registry']}"
+    )
+    imageset_config_file = os.path.join(
+        config.ENV_DATA["cluster_path"],
+        f"imageset-config-{config.RUN['run_id']}.yaml",
+    )
+    templating.dump_data_to_temp_yaml(imageset_config_data, imageset_config_file)
+
+    cmd = (
+        f"oc mirror --config {imageset_config_file} "
+        f"docker://{config.DEPLOYMENT['mirror_registry']} "
+        "--workspace file://oc-mirror-workspace/results-files --v2"
+    )
+
+    try:
+        exec_cmd(cmd, timeout=18000)
+    except CommandFailed as e:
+        # if itms is configured, the oc mirror command might fail (return non 0 rc),
+        # but we want to continue to try to mirror the images manually with applied the itms rules
+        log.warning(f"oc mirror command failed: {e}")
+        # Continue to apply ITMS rules and mirror images manually
+
+    # Look for itms file in the workspace
+    itms_file_path = "oc-mirror-workspace/results-files/working-dir/cluster-resources/itms-oc-mirror.yaml"
+
+    if os.path.exists(itms_file_path):
+        log.info(f"Found ITMS file at {itms_file_path}")
+        apply_itms_to_managed_clusters(itms_file_path)
+    else:
+        error_msg = f"ITMS file not found at expected location: {itms_file_path}"
+        log.error(error_msg)
+        raise ResourceNotFoundError(error_msg)

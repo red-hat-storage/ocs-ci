@@ -171,7 +171,6 @@ class Operator:
         with open(catalog_data_yaml.name, "w") as fd:
             fd.write(yaml.dump(catalog_data))
         run_cmd(f"oc apply -f {catalog_data_yaml.name}")
-        wait_for_machineconfigpool_status("all", force_delete_pods=False)
 
     def create_unreleased_catalog(self):
         """
@@ -181,10 +180,30 @@ class Operator:
             raise ValueError(
                 "Child class must define attribute `unreleased_catalog_image`"
             )
-        self.create_idms_for_unreleased_catalog()
+        cluster_name = config.ENV_DATA.get("cluster_name")
+        # Import here to avoid circular import
+        from ocs_ci.deployment.helpers.hypershift_base import (
+            HyperShiftBase,
+            is_hosted_cluster,
+        )
+
+        is_hosted = is_hosted_cluster(cluster_name)
+        if is_hosted:
+            with config.RunWithProviderConfigContextIfAvailable():
+                idms_data = self.get_idms_data()
+                hypershift_base = HyperShiftBase()
+
+                # Apply IDMS mirrors to the hosted cluster's imageContentSources
+                hypershift_base.apply_idms_to_hosted_cluster(
+                    name=cluster_name, idms_json_dict=idms_data, replace=False
+                )
+        else:
+            self.create_idms_for_unreleased_catalog()
         self._create_catalog(
             self.unreleased_catalog_full_image, self.unreleased_catalog_name
         )
+        if not is_hosted:
+            wait_for_machineconfigpool_status("all", force_delete_pods=False)
 
     def create_disconnected_catalog(self):
         # in case of disconnected environment, we have to mirror all the
@@ -201,6 +220,11 @@ class Operator:
             idms=idms,
         )
         self._create_catalog(mirrored_index_image, self.unreleased_catalog_name)
+        # Import here to avoid circular import
+        from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
+
+        if not is_hosted_cluster(config.ENV_DATA.get("cluster_name")):
+            wait_for_machineconfigpool_status("all", force_delete_pods=False)
 
     @retry(CommandFailed, tries=5, delay=30, backoff=1)
     def is_available(self):
@@ -275,10 +299,53 @@ class Operator:
         """
         pass
 
+    def operatorgroup_exists(self):
+        """
+        Check if an OperatorGroup already exists in the namespace.
+
+        This is important for platforms like Fusion Data Foundation where
+        the platform controller (e.g., OdfManager) may create and manage
+        the OperatorGroup automatically.
+
+        Returns:
+            bool: True if at least one OperatorGroup exists, False otherwise
+
+        Raises:
+            CommandFailed: If checking for existing OperatorGroups fails
+        """
+        ocp = OCP(kind="operatorgroup", namespace=self.namespace)
+        try:
+            count = len(ocp.get().get("items", []))
+            if count > 0:
+                logger.info(
+                    "Found %s existing OperatorGroup(s) in namespace %s",
+                    count,
+                    self.namespace,
+                )
+            return count > 0
+        except CommandFailed as e:
+            logger.warning(
+                "Failed to check for existing OperatorGroup in %s: %s",
+                self.namespace,
+                e,
+            )
+            raise
+
     def create_operatorgroup(self):
         """
-        Create an OperatorGroup for the operator
+        Create an OperatorGroup for the operator.
+
+        If an OperatorGroup already exists in the namespace, skip creation
+        to avoid OLM errors (TooManyOperatorGroups). This handles cases where
+        platform operators (e.g., Fusion OdfManager) create OperatorGroups.
         """
+        if self.operatorgroup_exists():
+            logger.info(
+                "OperatorGroup already exists in namespace %s, skipping creation",
+                self.namespace,
+            )
+            return
+
         operatorgroup_data = templating.load_yaml(
             os.path.join(OPERATORS_TEMPLATES_DIR, "operatorgroup.yaml")
         )
@@ -597,3 +664,132 @@ class MetalLBOperator(Operator):
             selector=constants.MANAGED_CONTROLLER_LABEL,
             timeout=600,
         ), "MetalLB operator did not reach running phase"
+
+
+class OADPOperator(Operator):
+    def __init__(self, create_catalog: bool = False):
+        self.name = constants.OADP_OPERATOR_NAME
+        ocp_version = get_semantic_ocp_version_from_config()
+        if not config.ENV_DATA.get("use_custom_unreleased_catalog_image_tag_oadp"):
+            self.unreleased_catalog_image_tag: str = (
+                f"oadp-{config.ENV_DATA.get('oadp_version')}__v{ocp_version}__oadp-rhel9-operator"
+            )
+        else:
+            self.unreleased_catalog_image_tag = config.ENV_DATA.get(
+                "use_custom_unreleased_catalog_image_tag_oadp"
+            )
+        self.unreleased_images = [
+            "registry.redhat.io/oadp/oadp-cli-binaries-rhel9",
+            "registry.redhat.io/oadp/oadp-hypershift-velero-plugin-rhel9",
+            "registry.redhat.io/oadp/oadp-kubevirt-datamover-controller-rhel9",
+            "registry.redhat.io/oadp/oadp-kubevirt-datamover-plugin-rhel9",
+            "registry.redhat.io/oadp/oadp-kubevirt-velero-plugin-rhel9",
+            "registry.redhat.io/oadp/oadp-mustgather-rhel9",
+            "registry.redhat.io/oadp/oadp-non-admin-rhel9",
+            "registry.redhat.io/oadp/oadp-operator-bundle",
+            "registry.redhat.io/oadp/oadp-rhel9-operator",
+            "registry.redhat.io/oadp/oadp-velero-plugin-for-aws-rhel9",
+            "registry.redhat.io/oadp/oadp-velero-plugin-for-gcp-rhel9",
+            "registry.redhat.io/oadp/oadp-velero-plugin-for-legacy-aws-rhel9",
+            "registry.redhat.io/oadp/oadp-velero-plugin-for-microsoft-azure-rhel9",
+            "registry.redhat.io/oadp/oadp-velero-plugin-rhel9",
+            "registry.redhat.io/oadp/oadp-velero-rhel9",
+            "registry.redhat.io/oadp/oadp-vm-file-restore-rhel9",
+            "registry.redhat.io/oadp/oadp-vmdp-binaries-rhel9",
+            "registry.redhat.io/oadp/oadp-vmfr-access-filebrowser-rhel9",
+            "registry.redhat.io/oadp/oadp-vmfr-access-rhel9",
+            "registry.redhat.io/oadp/oadp-vmfr-access-sshd-rhel9",
+        ]
+        self.disconnected_required_packages = [
+            "redhat-oadp-operator",
+        ]
+        self.namespace = constants.OADP_NAMESPACE
+        super().__init__(create_catalog)
+
+    def _customize_operatorgroup(self, operatorgroup_data: dict):
+        """
+        Hook for OADP to customize OperatorGroup YAML
+
+        Args:
+            operatorgroup_data (dict): the OperatorGroup YAML data
+        """
+        operatorgroup_data["metadata"]["annotations"] = {
+            "olm.providedAPIs": "Backup.v1.velero.io",
+        }
+        operatorgroup_data["metadata"]["name"] = self.name
+        operatorgroup_data["metadata"]["namespace"] = self.namespace
+        operatorgroup_data["spec"]["targetNamespaces"] = [self.namespace]
+
+    def _deployment_verification(self):
+        """
+        Verify the deployment of the OADP operator
+        """
+        oadp_operator = OCP(kind=constants.POD, namespace=self.namespace)
+        assert oadp_operator.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.MANAGED_CONTROLLER_LABEL,
+            timeout=600,
+        ), "OADP operator did not reach running phase"
+
+
+class IngressNodeFirewallOperator(Operator):
+    def __init__(self, create_catalog: bool = False):
+        self.name = constants.INGRESS_NODE_FIREWALL_OPERATOR_NAME
+        ocp_version = get_semantic_ocp_version_from_config()
+        self.unreleased_catalog_image_tag: str = (
+            f"ocp__{ocp_version}__ingress-node-firewall-rhel9-operator"
+        )
+        self.unreleased_images = [
+            "registry.redhat.io/openshift4/ingress-node-firewall-operator-bundle",
+            "registry.redhat.io/openshift4/ingress-node-firewall-rhel9-operator",
+            "registry.redhat.io/openshift4/ingress-node-firewall-rhel9",
+            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
+        ]
+        self.disconnected_required_packages = [
+            "ingress-node-firewall",
+        ]
+        self.namespace = constants.INGRESS_NODE_FIREWALL_NAMESPACE
+        super().__init__(create_catalog)
+
+    def _customize_operatorgroup(self, operatorgroup_data: dict):
+        """
+        Hook for Ingress Node Firewall to customize OperatorGroup YAML
+
+        Args:
+            operatorgroup_data (dict): the OperatorGroup YAML data
+        """
+        operatorgroup_data["spec"]["targetNamespaces"] = []
+
+    def verify_csv_status(self):
+        """
+        Verify the CSV status for the IngressNodeFirewall Operator deployment equals Succeeded
+        """
+        for csv in TimeoutSampler(
+            timeout=900,
+            sleep=15,
+            func=get_csvs_start_with_prefix,
+            csv_prefix=constants.INGRESS_NODE_FIREWALL_CSV_NAME,
+            namespace=self.namespace,
+        ):
+            if csv:
+                break
+        csv_name = csv[0]["metadata"]["name"]
+        csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
+        csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
+
+    def _customize_post_deployment_steps(self):
+        """
+        Customize post deployment steps for IngressNodeFirewallOperator
+        """
+        self.verify_csv_status()
+
+    def _deployment_verification(self):
+        """
+        Verify the deployment of the Ingress Node Firewall operator
+        """
+        inf_operator = OCP(kind=constants.POD, namespace=self.namespace)
+        assert inf_operator.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.MANAGED_CONTROLLER_LABEL,
+            timeout=600,
+        ), "Ingress Node Operator operator did not reach running phase"

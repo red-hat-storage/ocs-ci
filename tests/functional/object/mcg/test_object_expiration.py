@@ -56,9 +56,12 @@ class TestObjectExpiration(MCGTest):
         Reduce the interval in which the lifecycle background worker is running
 
         """
-        new_interval_in_miliseconds = 60 * 1000
+        new_interval_in_miliseconds = 2 * 60 * 1000
         add_env_vars_to_noobaa_core_class(
-            [(constants.LIFECYCLE_INTERVAL_PARAM, new_interval_in_miliseconds)]
+            [
+                (constants.LIFECYCLE_INTERVAL_PARAM, new_interval_in_miliseconds),
+                (constants.LIFECYCLE_SCHED_MINUTES, new_interval_in_miliseconds),
+            ]
         )
 
     @tier1

@@ -200,8 +200,14 @@ class TestKrKnNetworkChaosScenarios:
             log.info(f"Network chaos test completed for {ceph_component_label}")
         except CommandFailed as e:
             validator = ValidationHelper()
+            health_helper = CephHealthHelper(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
             validator.handle_krkn_command_failure(
-                e, ceph_component_label, "network chaos"
+                e,
+                ceph_component_label,
+                "network chaos",
+                health_helper=health_helper,
             )
 
         # Validate workloads and cleanup
@@ -443,8 +449,14 @@ class TestKrKnNetworkChaosScenarios:
             log.info(f"Network chaos test completed for {ceph_component_label}")
         except CommandFailed as e:
             validator = ValidationHelper()
+            health_helper = CephHealthHelper(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
             validator.handle_krkn_command_failure(
-                e, ceph_component_label, "network chaos"
+                e,
+                ceph_component_label,
+                "network chaos",
+                health_helper=health_helper,
             )
 
         # Validate workloads and cleanup
@@ -926,8 +938,14 @@ class TestKrKnNetworkChaosScenarios:
             )
         except CommandFailed as e:
             validator = ValidationHelper()
+            health_helper = CephHealthHelper(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
             validator.handle_krkn_command_failure(
-                e, ceph_component_label, "network chaos"
+                e,
+                ceph_component_label,
+                "network chaos",
+                health_helper=health_helper,
             )
 
         # Validate workloads and cleanup

@@ -1023,10 +1023,13 @@ def run_must_gather(
 
     if config.REPORTING.get("tarball_mg_logs"):
         tarball_path = f"{log_dir_path}.tar.gz"
+        log.info(f"Packing must-gather logs to {tarball_path}")
         try:
             with tarfile.open(tarball_path, "w:gz") as tar:
                 tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+            log.info(f"Must-gather tarball created: {tarball_path}")
             if config.REPORTING.get("delete_packed_mg_logs"):
+                log.info(f"Deleting packed must-gather directory: {log_dir_path}")
                 shutil.rmtree(log_dir_path)
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
@@ -1380,33 +1383,42 @@ def _collect_ocs_logs(
             if not cluster_config.ENV_DATA.get(
                 "import_clusters_to_acm", False
             ) or cluster_config.ENV_DATA.get("submariner_source", ""):
+                subctl_available = True
                 with subctl_lock:
                     try:
                         run_cmd("subctl")
                     except (CommandFailed, FileNotFoundError):
-                        log.debug("subctl binary not found, downloading now...")
-                        # Importing here to avoid circular import error
-                        from ocs_ci.deployment.acm import Submariner
+                        if not cluster_config.ENV_DATA.get("subctl_version"):
+                            log.warning(
+                                "subctl binary not found and subctl_version not configured, "
+                                "skipping submariner log collection"
+                            )
+                            subctl_available = False
+                        else:
+                            log.debug("subctl binary not found, downloading now...")
+                            # Importing here to avoid circular import error
+                            from ocs_ci.deployment.acm import Submariner
 
-                        submariner = Submariner()
-                        submariner.download_binary()
+                            submariner = Submariner()
+                            submariner.download_binary()
 
-                submariner_log_path = os.path.join(
-                    log_dir_path,
-                    "submariner",
-                )
-                run_cmd(f"mkdir -p {submariner_log_path}")
-                cwd = os.getcwd()
-                run_cmd(f"chmod -R 777 {submariner_log_path}")
-                os.chdir(submariner_log_path)
-                submariner_log_collect = (
-                    f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
-                )
-                log.info("Collecting submariner logs")
-                out = run_cmd(submariner_log_collect, timeout=1200)
-                run_cmd(f"chmod -R 777 {submariner_log_path}")
-                os.chdir(cwd)
-                log.info(out)
+                if subctl_available:
+                    submariner_log_path = os.path.join(
+                        log_dir_path,
+                        "submariner",
+                    )
+                    run_cmd(f"mkdir -p {submariner_log_path}")
+                    cwd = os.getcwd()
+                    run_cmd(f"chmod -R 777 {submariner_log_path}")
+                    os.chdir(submariner_log_path)
+                    submariner_log_collect = (
+                        f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
+                    )
+                    log.info("Collecting submariner logs")
+                    out = run_cmd(submariner_log_collect, timeout=1200)
+                    run_cmd(f"chmod -R 777 {submariner_log_path}")
+                    os.chdir(cwd)
+                    log.info(out)
 
 
 def collect_ocs_logs(
@@ -1730,6 +1742,34 @@ def get_non_acm_cluster_config():
             non_acm_list.append(ocsci_config.clusters[i])
 
     return non_acm_list
+
+
+def get_non_acm_cluster_and_non_provider_cluster_config():
+    """
+    Get a list of non-acm and non_provider cluster's config objects
+    Returns:
+        list: of cluster config objects
+    """
+    non_acm_list = []
+    for i in range(len(ocsci_config.clusters)):
+        if i in get_non_acm_cluster_and_non_provider_cluster_index():
+            non_acm_list.append(ocsci_config.clusters[i])
+
+    return non_acm_list
+
+
+def get_non_acm_cluster_and_non_provider_cluster_index():
+    """
+    Get config index of all non-acm and non_provider clusters
+    Returns:
+        list: Cluster indices of all non-acm and non-provider clusters
+    """
+    all_indices = list(range(len(ocsci_config.clusters)))
+    exclude_indices = config.get_provider_cluster_indexes() + get_all_acm_indexes()
+    required_indices = [
+        index_val for index_val in all_indices if index_val not in exclude_indices
+    ]
+    return required_indices
 
 
 def get_non_acm_and_non_recovery_cluster_config():
@@ -2056,9 +2096,11 @@ def collect_pod_container_rpm_package(dir_name):
         tarball_path = f"{package_log_dir_path}.tar.gz"
         try:
             with tarfile.open(tarball_path, "w:gz") as tar:
-                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+                tar.add(
+                    package_log_dir_path, arcname=os.path.basename(package_log_dir_path)
+                )
             if config.REPORTING.get("delete_packed_mg_logs"):
-                shutil.rmtree(log_dir_path)
+                shutil.rmtree(package_log_dir_path)
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
 
@@ -2211,3 +2253,46 @@ def get_expected_nb_db_psql_version():
         raise UnexpectedBehaviour(
             f"Failed to extract the NooBaa DB version from the NooBaa CR: {e}"
         )
+
+
+def enable_literal_block_style():
+    class LiteralString(str):
+        pass
+
+    def represent_literal(dumper, data):
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+
+    yaml.add_representer(LiteralString, represent_literal)
+    yaml.SafeDumper.add_representer(LiteralString, represent_literal)
+
+    return LiteralString
+
+
+def is_hostnetwork_enabled():
+    """
+    Check if host networking is enabled in the storage cluster
+
+    Returns:
+        bool: True if host networking is enabled, False otherwise
+
+    """
+    storagecluster_obj = OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+    try:
+        resp = storagecluster_obj.get()
+        if resp is None:
+            resp = {}
+    except Exception as e:
+        log.debug(f"Failed to get StorageCluster: {e}")
+        resp = {}
+
+    spec = resp.get("spec", {})
+    host_network = spec.get("hostNetwork", False)
+    if host_network:
+        log.info("Cluster has HostNetworking enabled")
+    else:
+        log.info("Cluster has HostNetworking disabled")
+    return host_network

@@ -146,13 +146,24 @@ def extract_image_content_sources(idms_json_dict):
     Extract imageContentSources list (for HostedCluster spec) from ImageDigestMirrorSet JSON.
 
     Args:
-        idms_json_dict (dict): Output of 'oc get imagedigestmirrorsets -o json' parsed as dict
+        idms_json_dict (dict): Either:
+            - Output of 'oc get imagedigestmirrorsets -o json' parsed as dict (with "items" list)
+            - A single ImageDigestMirrorSet resource dict (without "items" wrapper)
 
     Returns:
         list[dict]: imageContentSources entries (possibly empty)
     """
-    if not idms_json_dict or not idms_json_dict.get("items"):
+    if not idms_json_dict:
         return []
+
+    # Check if this is a single IDMS resource or a list with "items"
+    if idms_json_dict.get("kind") == "ImageDigestMirrorSet":
+        # Single IDMS resource - wrap it in the expected format
+        idms_json_dict = {"apiVersion": "v1", "kind": "List", "items": [idms_json_dict]}
+    elif not idms_json_dict.get("items"):
+        # No items and not a single IDMS resource
+        return []
+
     idms_obj = parse_image_digest_mirror_set(idms_json_dict)
     image_content_sources = []
     for item in idms_obj.items:

@@ -232,7 +232,7 @@ def wait_for_mon_healthcheck_timeout_in_logs(
 
     rook_operator_pod = rook_operator_pods[0]
     # Note: Using double quotes " as seen in rook-ceph logs
-    pattern = rf'.*mon "{re.escape(mon_id)}" not found in quorum, waiting for timeout.*'
+    pattern = rf'(?i)mon\s+"{re.escape(mon_id)}".*(not found in|lost|loose)\s+quorum.*waiting for timeout'
 
     return wait_for_matching_pattern_in_pod_logs(
         rook_operator_pod.name,

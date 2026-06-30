@@ -1,0 +1,8 @@
+# EC 2+1 deployment - experimental, not officially supported
+# Minimum 3 nodes with host failure domain
+# Storage overhead: 1.5x, tolerates 1 host failure
+DEPLOYMENT:
+  ec_default_pools: true
+  ec_data_chunks: 2
+  ec_coding_chunks: 1
+  ec_failure_domain: host

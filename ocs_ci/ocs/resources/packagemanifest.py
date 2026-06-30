@@ -199,6 +199,12 @@ class PackageManifest(OCP):
 
         for _channel in channels:
             if _channel["name"] == channel:
+                if (
+                    config.DEPLOYMENT.get("fdf_cluster")
+                    and "rhodf" in _channel["currentCSV"]
+                ):
+                    return _channel["currentCSV"].rsplit("-", 1)[0]
+
                 return _channel["currentCSV"]
         channel_names = [_channel["name"] for _channel in channels]
         raise ChannelNotFound(
@@ -227,7 +233,7 @@ class PackageManifest(OCP):
             ]
             if not not_approved_install_plans:
                 raise NoInstallPlanForApproveFoundException(
-                    "No insall plan for approve found!"
+                    "No install plan for approve found!"
                 )
         sorted_install_plans = sorted(
             install_plans,
@@ -282,8 +288,7 @@ def get_selector_for_ocs_operator():
     This is the helper function which returns selector for package manifest.
     It's needed because of conflict with live content and multiple package
     manifests with the ocs-operator name. In case we are using internal builds
-    we label catalog source or operator source and using the same selector for
-    package manifest.
+    we label catalog source and using the same selector for package manifest.
 
     Returns:
         str: Selector for package manifest if we are on internal
@@ -300,15 +305,5 @@ def get_selector_for_ocs_operator():
             return constants.OPERATOR_INTERNAL_SELECTOR
     except CommandFailed:
         log.info("Internal catalog source not found!")
-    operator_source = OCP(
-        kind="OperatorSource",
-        resource_name=constants.OPERATOR_SOURCE_NAME,
-        namespace=constants.MARKETPLACE_NAMESPACE,
-    )
-    try:
-        operator_source.get()
-        return constants.OPERATOR_INTERNAL_SELECTOR
-    except CommandFailed:
-        log.info("Catalog source not found!")
     # TODO: we might need to limit this to ODF only as FDF might come from different source
     return constants.REDHAT_OPERATOR_SELECTOR

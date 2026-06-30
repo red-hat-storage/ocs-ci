@@ -8,6 +8,8 @@ import logging
 import re
 import tempfile
 import json
+import time
+from typing import Optional
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -70,6 +72,7 @@ from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import (
     get_ocs_version_from_csv,
     get_semantic_version,
+    get_semantic_running_odf_version,
     VERSION_4_11,
     get_semantic_ocp_running_version,
 )
@@ -154,6 +157,165 @@ def verify_osd_tree_schema(ct_pod, deviceset_pvcs):
     )
 
 
+def remove_storageclass_from_storageconsumer(
+    sc_name, consumer_name=constants.INTERNAL_STORAGE_CONSUMER_NAME
+):
+    """
+    Remove a StorageClass entry from StorageConsumer.spec.storageClasses[].
+
+    This prevents the ocs-client-operator from recreating the SC on its
+    next reconcile cycle via the gRPC GetDesiredClientState() call.
+    Must be called BEFORE deleting the StorageClass.
+
+    Args:
+        sc_name (str): Name of the StorageClass to deregister.
+        consumer_name (str): Name of the StorageConsumer CR; default
+            ``ocs_ci.ocs.constants.INTERNAL_STORAGE_CONSUMER_NAME`` (``"internal"``).
+    """
+    consumer_ocp = OCP(
+        kind="StorageConsumer",
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    if not consumer_ocp.is_exist(resource_name=consumer_name):
+        log.debug(
+            f"StorageConsumer {consumer_name} not found; "
+            f"skipping deregistration of {sc_name}"
+        )
+        return
+
+    consumer = consumer_ocp.get(resource_name=consumer_name)
+    current_classes = consumer.get("spec", {}).get("storageClasses", [])
+    updated_classes = [sc for sc in current_classes if sc.get("name") != sc_name]
+
+    if len(updated_classes) == len(current_classes):
+        log.debug(
+            f"StorageClass {sc_name} not found in "
+            f"StorageConsumer {consumer_name}.spec.storageClasses; nothing to remove"
+        )
+        return
+
+    patch_body = json.dumps({"spec": {"storageClasses": updated_classes}})
+    consumer_ocp.patch(
+        resource_name=consumer_name,
+        params=patch_body,
+        format_type="merge",
+    )
+    log.info(
+        f"Removed {sc_name} from StorageConsumer "
+        f"{consumer_name}.spec.storageClasses"
+    )
+
+
+def _storageclass_ocs_external_label_patch():
+    """Merge-patch body for ``storageclass.ocs.openshift.io/is-external``."""
+    return {
+        "metadata": {
+            "labels": {
+                constants.OCS_EXTERNAL_STORAGECLASS_LABEL: (
+                    constants.OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE
+                ),
+            }
+        }
+    }
+
+
+def patch_storageclass_ocs_external_label(resource_name):
+    """
+    Merge-patch ``storageclass.ocs.openshift.io/is-external: "true"`` on a
+    StorageClass if it exists.
+
+    Used before deleting StorageClasses so the provider-side gRPC server
+    excludes the SC from the GetDesiredClientState() response. Applies to
+    all deployment types since ODF 4.22 uses the provider/consumer model
+    even for internal deployments.
+    """
+    sc_ocp = OCP(kind=constants.STORAGECLASS)
+    if not sc_ocp.is_exist(resource_name=resource_name):
+        log.warning(
+            f"StorageClass {resource_name} not found; skipping pre-delete external OCS label patch"
+        )
+        return
+    log.info(
+        f"Patching StorageClass {resource_name} before delete: "
+        f"{constants.OCS_EXTERNAL_STORAGECLASS_LABEL}="
+        f"{constants.OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE}"
+    )
+    try:
+        sc_ocp.patch(
+            resource_name=resource_name,
+            params=json.dumps(_storageclass_ocs_external_label_patch()),
+            format_type="merge",
+        )
+    except CommandFailed as ex:
+        if "NotFound" in str(ex):
+            log.warning(
+                f"StorageClass {resource_name} disappeared before patch; skipping"
+            )
+        else:
+            raise
+
+
+def _delete_storageclass_ignore_not_found(sc_ocp, sc_name):
+    """
+    Cluster-scoped delete; succeeds if the StorageClass is already gone (TOCTOU-safe).
+    """
+    sc_ocp.exec_oc_cmd(
+        f"delete {constants.STORAGECLASS} {sc_name} --ignore-not-found",
+        timeout=600,
+    )
+
+
+def delete_storageclass_and_deregister(sc_name, sc_ocp=None, timeout=180):
+    """
+    Fully clean up a test-created StorageClass:
+        1. Deregister from StorageConsumer (prevents reconciler recreation)
+        2. Label with is-external (prevents gRPC serving)
+        3. Delete the SC
+        4. Verify it stays deleted (not recreated by operator)
+
+    Args:
+        sc_name (str): Name of the StorageClass.
+        sc_ocp (:obj:`~ocs_ci.ocs.ocp.OCP`, optional): OCP instance for StorageClass. Created if None.
+        timeout (int): Seconds to wait for deletion confirmation.
+
+    Raises:
+        TimeoutExpiredError: If the SC keeps getting recreated.
+    """
+    if sc_ocp is None:
+        sc_ocp = OCP(kind=constants.STORAGECLASS)
+
+    remove_storageclass_from_storageconsumer(sc_name)
+    patch_storageclass_ocs_external_label(sc_name)
+
+    if sc_ocp.is_exist(resource_name=sc_name):
+        log.info(f"Deleting StorageClass {sc_name}")
+        _delete_storageclass_ignore_not_found(sc_ocp, sc_name)
+
+    def _wait_storageclass_stays_deleted():
+        if not sc_ocp.is_exist(resource_name=sc_name):
+            return True
+        log.warning(
+            f"StorageClass {sc_name} was recreated; re-deregistering and deleting"
+        )
+        remove_storageclass_from_storageconsumer(sc_name)
+        patch_storageclass_ocs_external_label(sc_name)
+        log.info(f"Deleting StorageClass {sc_name}")
+        _delete_storageclass_ignore_not_found(sc_ocp, sc_name)
+        return False
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=15,
+        func=_wait_storageclass_stays_deleted,
+    )
+    sampler.timeout_exc_args = [
+        timeout,
+        f"StorageClass {sc_name} keeps getting recreated after {timeout}s",
+    ]
+    sampler.wait_for_func_value(True)
+    log.info(f"StorageClass {sc_name} confirmed deleted")
+
+
 def ocs_install_verification(
     timeout=600,
     skip_osd_distribution_check=False,
@@ -234,16 +396,9 @@ def ocs_install_verification(
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")
     exporter_pod_count = len(get_nodes_where_ocs_pods_running())
-    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-    storage_cluster = StorageCluster(
-        resource_name=storage_cluster_name,
-        namespace=namespace,
-    )
     pod = OCP(kind=constants.POD, namespace=namespace)
     if not external:
-        osd_count = int(
-            storage_cluster.data["spec"]["storageDeviceSets"][0]["count"]
-        ) * int(storage_cluster.data["spec"]["storageDeviceSets"][0]["replica"])
+        osd_count = get_osd_count()
     rgw_count = None
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
         if not disable_rgw:
@@ -274,15 +429,23 @@ def ocs_install_verification(
 
     # From 4.21, new resource blackbox-exporter added as part of feature odf
     # health overview
+    # Skip blackbox check after upgrade due to DFBUGS-7007
     odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
     if (
         not external
         and not config.DEPLOYMENT.get("mcg_only_deployment", False)
         and (odf_running_version >= version.VERSION_4_21)
+        and not post_upgrade_verification
     ):
+        odf_semantic_version = get_semantic_running_odf_version()
+        blackbox_label = (
+            constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
+            if odf_semantic_version >= get_semantic_version("4.21.7-1")
+            else constants.BLACKBOX_POD_LABEL
+        )
         resources_dict.update(
             {
-                constants.BLACKBOX_POD_LABEL: 1,
+                blackbox_label: 1,
             }
         )
     # From 4.19.0-69, we have noobaa-db-pg-cluster-1 and noobaa-db-pg-cluster-2 pods
@@ -393,9 +556,11 @@ def ocs_install_verification(
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and (disable_noobaa or managed_service or client_cluster):
+        if ("noobaa" in label or label is constants.NOOBAA_CNPG_POD_LABEL) and (
+            disable_noobaa or managed_service or client_cluster
+        ):
             continue
-        if "mds" in label and disable_cephfs:
+        if ("mds" in label or "cephfs" in label) and disable_cephfs:
             continue
         if label == constants.MANAGED_CONTROLLER_LABEL:
             if fusion_aas_provider:
@@ -491,7 +656,7 @@ def ocs_install_verification(
             log.info("Verifying OSDs are distributed evenly across worker nodes")
             ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
             osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)["items"]
-            deviceset_count = get_deviceset_count()
+            deviceset_count = get_total_deviceset_count()
             node_names = [osd["spec"]["nodeName"] for osd in osds]
             for node in node_names:
                 assert (
@@ -509,7 +674,12 @@ def ocs_install_verification(
                 f"{namespace}.rbd.csi.ceph.com",
             }.issubset(csi_drivers)
         else:
-            assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
+            csi_provisioners = set(defaults.CSI_PROVISIONERS)
+            if disable_cephfs:
+                csi_provisioners.discard(defaults.CEPHFS_PROVISIONER)
+            if disable_blockpools:
+                csi_provisioners.discard(defaults.RBD_PROVISIONER)
+            assert csi_provisioners.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
@@ -883,8 +1053,18 @@ def ocs_install_verification(
             or config.UPGRADE.get("upgrade_ocs_registry_image")
         ):
             device_class = get_device_class()
-            verify_storage_device_class(device_class)
-            verify_device_class_in_osd_tree(ct_pod, device_class)
+            check_multiple_deviceclasses = config.DEPLOYMENT.get(
+                "deploy_multiple_device_classes", False
+            )
+            verify_storage_device_class(
+                device_class,
+                check_multiple_deviceclasses=check_multiple_deviceclasses,
+            )
+            verify_device_class_in_osd_tree(
+                ct_pod,
+                device_class,
+                check_multiple_deviceclasses=check_multiple_deviceclasses,
+            )
 
     # RDR with globalnet submariner
     if (
@@ -902,24 +1082,36 @@ def ocs_install_verification(
         else constants.ROOK_CEPH_OPERATOR
     )
     if odf_running_version >= version.VERSION_4_19 or hci_cluster:
-        provisioner_deployment_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
-        }
+        provisioner_deployment_and_owner_names = {}
+        nodeplugin_daemonset_and_owner_names = {}
+        if not disable_cephfs:
+            provisioner_deployment_and_owner_names[
+                f"{constants.CEPHFS_PROVISIONER}-ctrlplugin"
+            ] = constants.CEPHFS_PROVISIONER
+            nodeplugin_daemonset_and_owner_names[
+                f"{constants.CEPHFS_PROVISIONER}-nodeplugin"
+            ] = constants.CEPHFS_PROVISIONER
+        if not disable_blockpools:
+            provisioner_deployment_and_owner_names[
+                f"{constants.RBD_PROVISIONER}-ctrlplugin"
+            ] = constants.RBD_PROVISIONER
+            nodeplugin_daemonset_and_owner_names[
+                f"{constants.RBD_PROVISIONER}-nodeplugin"
+            ] = constants.RBD_PROVISIONER
         csi_owner_kind = constants.DRIVER
     else:
-        provisioner_deployment_and_owner_names = {
-            "csi-cephfsplugin-provisioner": csi_owner_name,
-            "csi-rbdplugin-provisioner": csi_owner_name,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            "csi-cephfsplugin": csi_owner_name,
-            "csi-rbdplugin": csi_owner_name,
-        }
+        provisioner_deployment_and_owner_names = {}
+        nodeplugin_daemonset_and_owner_names = {}
+        if not disable_cephfs:
+            provisioner_deployment_and_owner_names["csi-cephfsplugin-provisioner"] = (
+                csi_owner_name
+            )
+            nodeplugin_daemonset_and_owner_names["csi-cephfsplugin"] = csi_owner_name
+        if not disable_blockpools:
+            provisioner_deployment_and_owner_names["csi-rbdplugin-provisioner"] = (
+                csi_owner_name
+            )
+            nodeplugin_daemonset_and_owner_names["csi-rbdplugin"] = csi_owner_name
         csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
 
     deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
@@ -970,7 +1162,11 @@ def ocs_install_verification(
         ), "Host network is not set to False for cephObjectStores when spec.hostNetwork is True"
     log.info("Verified the providerAPIServerServiceType setting in StorageCluster")
     log.info("Verifying the csi driver ownership")
-    csi_driver_list = [constants.RBD_PROVISIONER, constants.CEPHFS_PROVISIONER]
+    csi_driver_list = []
+    if not disable_blockpools:
+        csi_driver_list.append(constants.RBD_PROVISIONER)
+    if not disable_cephfs:
+        csi_driver_list.append(constants.CEPHFS_PROVISIONER)
     if odf_running_version >= version.VERSION_4_19 or hci_cluster:
         csi_driver_obj = OCP(kind=constants.DRIVER, namespace=namespace)
         for driver in csi_driver_list:
@@ -1131,6 +1327,55 @@ def verify_storage_system():
         )
 
 
+def get_noobaa_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the NooBaa CR via a single lightweight API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where NooBaa is deployed.
+
+    Returns:
+        Optional[str]: NooBaa phase string (e.g. "Ready", "Configuring"),
+            or None if the CR cannot be retrieved.
+
+    """
+    try:
+        noobaa = OCP(kind="noobaa", namespace=namespace).get(
+            resource_name=constants.NOOBAA_RESOURCE_NAME
+        )
+        return noobaa.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning("Failed to get NooBaa CR (%s) — skipping NooBaa health check", ex)
+        return None
+
+
+def get_storage_cluster_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the StorageCluster CR via a single lightweight
+    API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where the StorageCluster is
+            deployed.
+
+    Returns:
+        Optional[str]: StorageCluster phase string (e.g. "Ready",
+            "Progressing"), or None if the CR cannot be retrieved.
+
+    """
+    try:
+        sc_name = config.ENV_DATA["storage_cluster_name"]
+        sc = OCP(kind=constants.STORAGECLUSTER, namespace=namespace).get(
+            resource_name=sc_name
+        )
+        return sc.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning(
+            "Failed to get StorageCluster CR (%s) — skipping SC phase check", ex
+        )
+        return None
+
+
 def verify_storage_cluster():
     """
     Verify storage cluster status
@@ -1153,7 +1398,51 @@ def verify_storage_cluster():
             timeout = 1800
         else:
             timeout = 600
-        storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+
+        try:
+            storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+        except ResourceWrongStatusException:
+            noobaa_issue = config.RUN.get("noobaa_not_ready_at_setup")
+            if not noobaa_issue:
+                raise
+
+            fresh_sc = storage_cluster.get()
+            conditions = fresh_sc.get("status", {}).get("conditions", [])
+
+            noobaa_is_cause = any(
+                c.get("reason") == constants.NOOBAA_INITIALIZING_REASON
+                and c.get("type") == "Progressing"
+                for c in conditions
+            )
+            ceph_has_issues = any(
+                c.get("reason") in constants.CEPH_CONDITION_REASONS for c in conditions
+            )
+
+            if not noobaa_is_cause or ceph_has_issues:
+                raise
+
+            namespace = config.ENV_DATA["cluster_namespace"]
+            current_nb_phase = get_noobaa_phase(namespace)
+
+            if current_nb_phase == constants.STATUS_READY:
+                config.RUN.pop("noobaa_not_ready_at_setup", None)
+                raise
+
+            if current_nb_phase != noobaa_issue.get("phase"):
+                log.warning(
+                    "NooBaa phase changed from '%s' to '%s'"
+                    " — running full verification",
+                    noobaa_issue["phase"],
+                    current_nb_phase,
+                )
+                raise
+
+            log.warning(
+                "StorageCluster not Ready due to NooBaa (phase: %s),"
+                " which was already unhealthy at test setup."
+                " Waiving SC phase check — version check still runs.",
+                current_nb_phase,
+            )
 
     # verify storage cluster version
     if not config.ENV_DATA.get("disable_storage_cluster_version_check"):
@@ -1975,8 +2264,9 @@ def get_osd_count():
     sc_data = sc.get().get("items")[0]
     if sc_data["spec"].get("externalStorage", {}).get("enable"):
         return 0
-    return int(sc_data["spec"]["storageDeviceSets"][0]["count"]) * int(
-        sc.get().get("items")[0]["spec"]["storageDeviceSets"][0]["replica"]
+    return sum(
+        int(ds["count"]) * int(ds["replica"])
+        for ds in sc_data["spec"]["storageDeviceSets"]
     )
 
 
@@ -1993,15 +2283,31 @@ def get_osd_size():
 
 def get_deviceset_count():
     """
-    Get storageDeviceSets count  from storagecluster
+    Get the first storageDeviceSet count from storagecluster
 
     Returns:
-        int: storageDeviceSets count
+        int: The count of the first storageDeviceSet
 
     """
     sc = get_storage_cluster()
     return int(
         sc.get().get("items")[0].get("spec").get("storageDeviceSets")[0].get("count")
+    )
+
+
+def get_total_deviceset_count():
+    """
+    Get the total storageDeviceSets count from storagecluster,
+    summed across all storageDeviceSets.
+
+    Returns:
+        int: Total count across all storageDeviceSets
+
+    """
+    sc = get_storage_cluster()
+    return sum(
+        int(ds.get("count", 0))
+        for ds in sc.get()["items"][0]["spec"]["storageDeviceSets"]
     )
 
 
@@ -3586,3 +3892,71 @@ def get_deviceset_name_per_count():
     """
     device_sets = get_all_device_sets()
     return {d.get("name"): d["count"] for d in device_sets}
+
+
+def get_storage_client():
+    """
+    Get the StorageClient OCP object for the configured storage client.
+
+    Returns:
+        ocs_ci.ocs.ocp.OCP: StorageClient OCP object with resource_name set
+            to the storage client name from config.
+    """
+    return ocp.OCP(
+        kind=constants.STORAGECLIENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=(
+            config.cluster_ctx.ENV_DATA.get("storage_client_name")
+            or config.ENV_DATA.get("storage_client_name")
+            or constants.STORAGE_CLIENT_NAME
+        ),
+    )
+
+
+def trigger_storage_cluster_reconciliation(storage_cluster_name=None, namespace=None):
+    """
+    Trigger StorageCluster operator reconciliation by adding a timestamp annotation.
+    This forces the operator to reconcile the StorageCluster resource.
+
+    Args:
+        storage_cluster_name (str): Name of the StorageCluster resource.
+            If None, uses the default from config.
+        namespace (str): Namespace of the StorageCluster resource.
+            If None, uses the default from config.
+
+    Returns:
+        bool: True if annotation was successfully applied
+
+    """
+    if storage_cluster_name is None:
+        storage_cluster_name = config.ENV_DATA.get(
+            "storage_cluster_name", constants.DEFAULT_CLUSTERNAME
+        )
+    if namespace is None:
+        namespace = config.ENV_DATA.get(
+            "cluster_namespace", constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+    log.info(
+        f"Triggering reconciliation for StorageCluster '{storage_cluster_name}' "
+        f"in namespace '{namespace}'"
+    )
+    sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+    timestamp = str(time.time_ns())
+    annotation_cmd = (
+        f"annotate storagecluster {storage_cluster_name} "
+        f"-n {namespace} "
+        f'reconcile-trigger="{timestamp}" --overwrite'
+    )
+    try:
+        sc_obj.exec_oc_cmd(annotation_cmd)
+        log.info(
+            f"Successfully triggered reconciliation for StorageCluster "
+            f"'{storage_cluster_name}' with timestamp {timestamp}"
+        )
+        return True
+    except CommandFailed as e:
+        log.error(
+            f"Failed to trigger reconciliation for StorageCluster "
+            f"'{storage_cluster_name}': {e}"
+        )
+        raise
