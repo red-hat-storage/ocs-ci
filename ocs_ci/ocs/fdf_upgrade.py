@@ -300,11 +300,13 @@ class FDFUpgrade(BaseUpgrade):
         logger.info(f"Expected upgrade version: {expected_version}")
 
         last_state = {}
+        last_logged_status = None
 
         try:
 
-            @retry(AssertionError, tries=timeout // 30, delay=30, backoff=1)
+            @retry(AssertionError, tries=timeout // 60, delay=60, backoff=1)
             def _wait_for_upgrade_completion():
+                nonlocal last_logged_status
                 instance = FusionServiceInstance(
                     resource_name=constants.FDF_SERVICE_NAME,
                     namespace=constants.FDF_NAMESPACE,
@@ -332,10 +334,19 @@ class FDFUpgrade(BaseUpgrade):
                         f"Health: {health}, Version: {current_version}"
                     )
 
+                # Only log detailed status if health is not Healthy/Unknown AND it has changed
                 if health not in ["Healthy", "Unknown"]:
-                    logger.warning(f"FusionServiceInstance health status: {health}")
-                    logger.info("Status details:")
-                    logger.info(yaml.dump(instance_status, default_flow_style=False))
+                    # Convert status to string for comparison
+                    status_str = yaml.dump(instance_status, default_flow_style=False)
+                    if status_str != last_logged_status:
+                        logger.warning(f"FusionServiceInstance health status: {health}")
+                        logger.info("Status details:")
+                        logger.info(status_str)
+                        last_logged_status = status_str
+                    else:
+                        logger.debug(
+                            f"FusionServiceInstance health status unchanged: {health}"
+                        )
 
                 assert not upgrade_in_progress, "Upgrade still in progress"
                 assert (
