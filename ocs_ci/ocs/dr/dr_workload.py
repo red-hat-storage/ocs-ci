@@ -658,12 +658,12 @@ class BusyBox(DRWorkload):
                     self.managed_clusterset_binding_file,
                 )
             if not config.ENV_DATA.get("deploy_via_cli"):
-                run_cmd(
-                    f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
+                run_cmd(  # IgnoreDeprecation
+                    f"oc delete --wait=false -k {self.workload_subscription_dir}/{self.workload_name}"
                 )
             else:
-                run_cmd(
-                    f"oc delete -f {self.deploy_subscription_workload_yaml_file.name}"
+                run_cmd(  # IgnoreDeprecation
+                    f"oc delete --wait=false -f {self.deploy_subscription_workload_yaml_file.name}"
                 )
 
             for cluster in get_non_acm_cluster_config():
@@ -671,6 +671,7 @@ class BusyBox(DRWorkload):
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
                     workload_cleanup=True,
+                    timeout=1800,
                 )
 
             log.info("Verify backend images or subvolumes are deleted")
@@ -1002,13 +1003,15 @@ class BusyBox_AppSet(DRWorkload):
         )
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-            run_cmd(cmd=f"oc delete -f {self.appset_yaml_file}", timeout=900)
-
+            run_cmd(  # IgnoreDeprecation
+                f"oc delete --wait=false -f {self.appset_yaml_file}"
+            )
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
                     workload_cleanup=True,
+                    timeout=1800,
                 )
 
             log.info("Verify backend images or subvolumes are deleted")
