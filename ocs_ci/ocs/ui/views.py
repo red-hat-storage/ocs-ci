@@ -95,7 +95,7 @@ deployment = {
         By.CSS_SELECTOR,
     ),
     "openshift_operators_namespace": ("openshift-operators", By.LINK_TEXT),
-    "search_operators": ('input[placeholder="Filter by keyword..."]', By.CSS_SELECTOR),
+    "search_operators": ("//input[@data-test='name-filter-input']", By.XPATH),
     "operators_tab": ("//button[text()='Operators']", By.XPATH),
     "operatorhub_tab": ("OperatorHub", By.LINK_TEXT),
     "installed_operators_tab": ("Installed Operators", By.LINK_TEXT),
@@ -426,11 +426,11 @@ deployment_4_22 = {
         By.XPATH,
     ),
     "operator_display_name": (
-        "//h1[contains(@class, 'co-clusterserviceversion-details__name')]",
+        "//h1[@data-ouia-component-id='PageHeader-title']",
         By.XPATH,
     ),
     "operator_provider": (
-        "//span[contains(text(), 'Provided by')]/following-sibling::span",
+        "//dt[normalize-space(.)='Provider']/following-sibling::dd[1]",
         By.XPATH,
     ),
     "operator_description": (
