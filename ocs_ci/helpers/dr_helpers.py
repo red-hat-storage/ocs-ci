@@ -96,7 +96,8 @@ def get_current_primary_cluster_name(
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         discovered_apps (bool): If true then deployed workload is discovered_apps
-        resource_name (str): DRPC NAME Only Used for discovered apps
+        resource_name (str): DRPC resource name; required for discovered apps,
+            optional for AppSet (used to disambiguate when multiple DRPCs exist)
 
     Returns:
         str: Current primary cluster name
@@ -111,7 +112,11 @@ def get_current_primary_cluster_name(
         namespace = constants.DR_OPS_NAMESPACE
         drpc_data = DRPC(namespace=namespace, resource_name=resource_name).get()
     else:
-        drpc_data = DRPC(namespace=namespace).get()
+        drpc_data = (
+            DRPC(namespace=namespace, resource_name=resource_name).get()
+            if resource_name
+            else DRPC(namespace=namespace).get()
+        )
     if drpc_data.get("spec").get("action") == constants.ACTION_FAILOVER:
         cluster_name = drpc_data["spec"]["failoverCluster"]
     else:
@@ -133,8 +138,8 @@ def get_current_secondary_cluster_name(
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         discovered_apps (bool): If true then deployed workload is discovered_apps
-        resource_name (str): DRPC NAME Only Used for discovered apps
-
+        resource_name (str): DRPC resource name; required for discovered apps,
+            optional for AppSet (used to disambiguate when multiple DRPCs exist)
 
     Returns:
         str: Current secondary cluster name
@@ -154,8 +159,16 @@ def get_current_secondary_cluster_name(
             namespace=namespace, resource_name=resource_name
         ).drpolicy_obj.get()
     else:
-        primary_cluster_name = get_current_primary_cluster_name(namespace)
-        drpolicy_data = DRPC(namespace=namespace).drpolicy_obj.get()
+        primary_cluster_name = get_current_primary_cluster_name(
+            namespace,
+            workload_type=workload_type,
+            resource_name=resource_name,
+        )
+        drpolicy_data = (
+            DRPC(namespace=namespace, resource_name=resource_name).drpolicy_obj.get()
+            if resource_name
+            else DRPC(namespace=namespace).drpolicy_obj.get()
+        )
     config.switch_ctx(restore_index)
     for cluster_name in drpolicy_data["spec"]["drClusters"]:
         if not cluster_name == primary_cluster_name:
