@@ -129,18 +129,24 @@ class TestRDRBugVerification:
         )
         workload = rdr_workload[0]
 
+        drpc_resource_name = f"{workload.appset_placement_name}-drpc"
         drpc_obj = DRPC(
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-            resource_name=f"{workload.appset_placement_name}-drpc",
+            resource_name=drpc_resource_name,
         )
-
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             workload.workload_namespace,
             workload.workload_type,
+            resource_name=drpc_resource_name,
         )
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             workload.workload_namespace,
             workload.workload_type,
+            resource_name=drpc_resource_name,
+        )
+        logger.info(
+            f"DRPC: {drpc_resource_name} | primary: {primary_cluster_name}"
+            f" | secondary: {secondary_cluster_name}"
         )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
@@ -149,19 +155,17 @@ class TestRDRBugVerification:
         )
         wait_time = 2 * scheduling_interval  # minutes
 
-        # --- Step 1: Wait for initial sync ---
-        logger.info(
-            f"Waiting {wait_time} minutes for initial sync before adding annotations"
+        logger.test_step(
+            f"Wait {wait_time} minutes for initial sync before adding annotations"
         )
         sleep(wait_time * 60)
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
-        # --- Step 2: Add custom annotations to all PVCs on the primary cluster ---
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        logger.info(
-            f"Adding test annotations to PVCs in {workload.workload_namespace} "
-            f"on primary cluster {primary_cluster_name}"
+        logger.test_step(
+            f"Add custom annotations to all PVCs on primary cluster "
+            f"{primary_cluster_name}"
         )
+        config.switch_to_cluster_by_name(primary_cluster_name)
         ocp_pvc = ocp.OCP(kind=constants.PVC, namespace=workload.workload_namespace)
         pvc_objs = get_all_pvc_objs(namespace=workload.workload_namespace)
         assert pvc_objs, (
@@ -175,20 +179,18 @@ class TestRDRBugVerification:
             for key, value in self._DFBUGS_5285_ANNOTATIONS.items():
                 ocp_pvc.annotate(annotation=f"{key}={value}", resource_name=pvc_name)
         logger.info(
-            f"Added annotations {list(self._DFBUGS_5285_ANNOTATIONS.keys())} "
-            f"to PVCs: {pvc_names}"
+            f"Added annotations {list(self._DFBUGS_5285_ANNOTATIONS.keys())}"
+            f" to PVCs: {pvc_names}"
         )
 
-        # --- Step 3: Wait for sync to replicate updated PVC annotations ---
-        logger.info(
-            f"Waiting {wait_time} minutes for sync to capture annotated PVC metadata"
+        logger.test_step(
+            f"Wait {wait_time} minutes for sync to replicate annotated PVC metadata"
         )
         sleep(wait_time * 60)
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
-        # --- Step 4: Failover to secondary cluster ---
-        logger.info(
-            f"Initiating failover to secondary cluster: {secondary_cluster_name}"
+        logger.test_step(
+            f"Initiate failover to secondary cluster: {secondary_cluster_name}"
         )
         dr_helpers.failover(
             failover_cluster=secondary_cluster_name,
@@ -204,9 +206,8 @@ class TestRDRBugVerification:
             workload.workload_namespace,
         )
 
-        # --- Step 5: Verify PVC annotations on secondary cluster after failover ---
-        logger.info(
-            f"Verifying PVC annotations on secondary cluster "
+        logger.test_step(
+            f"Verify PVC annotations on secondary cluster "
             f"{secondary_cluster_name} after failover"
         )
         self._verify_annotations(
@@ -218,9 +219,8 @@ class TestRDRBugVerification:
             operation="failover",
         )
 
-        # --- Step 6: Relocate back to primary cluster ---
-        logger.info(
-            f"Initiating relocate back to primary cluster: {primary_cluster_name}"
+        logger.test_step(
+            f"Initiate relocate back to primary cluster: {primary_cluster_name}"
         )
         dr_helpers.relocate(
             preferred_cluster=primary_cluster_name,
@@ -236,9 +236,8 @@ class TestRDRBugVerification:
             workload.workload_namespace,
         )
 
-        # --- Step 7: Verify PVC annotations on primary cluster after relocate ---
-        logger.info(
-            f"Verifying PVC annotations on primary cluster "
+        logger.test_step(
+            f"Verify PVC annotations on primary cluster "
             f"{primary_cluster_name} after relocate"
         )
         self._verify_annotations(
@@ -250,14 +249,12 @@ class TestRDRBugVerification:
             operation="relocate",
         )
 
-        # --- Step 8: Verify annotations in VRG on secondary cluster ---
+        logger.test_step(
+            f"Verify VRG spec.volSync.rdSpec[*].protectedPVC.annotations "
+            f"on secondary cluster {secondary_cluster_name} after relocate"
+        )
         config.switch_to_cluster_by_name(secondary_cluster_name)
         vrg_name = f"{workload.appset_placement_name}-drpc"
-        logger.info(
-            f"Verifying VRG '{vrg_name}' spec.volSync.rdSpec[*].protectedPVC"
-            f".annotations on secondary cluster {secondary_cluster_name} "
-            f"after relocate"
-        )
         self._verify_annotations(
             resource_type=constants.VOLUME_REPLICATION_GROUP,
             namespace=workload.workload_namespace,
@@ -613,7 +610,7 @@ class TestRDRBugVerification:
         if resource_type == constants.PVC:
             pvc_objs = get_all_pvc_objs(namespace=namespace)
             logger.info(
-                f"PVCs on {cluster_name} {context}: " f"{[p.name for p in pvc_objs]}"
+                f"PVCs on {cluster_name} {context}: {[p.name for p in pvc_objs]}"
             )
             annotations_by_pvc = {
                 pvc.name: pvc.get().get("metadata", {}).get("annotations", {})
@@ -657,6 +654,11 @@ class TestRDRBugVerification:
                         f"{key}={value!r} (found: {actual.get(key)!r})"
                     )
 
+        logger.assertion(
+            f"{resource_label} on cluster '{cluster_name}' {context}:"
+            f" expected={list(expected_annotations.keys())},"
+            f" missing={missing or 'none'}"
+        )
         assert not missing, (
             f"{resource_label} missing on cluster {cluster_name!r} {context}:\n"
             + "\n".join(
@@ -664,7 +666,7 @@ class TestRDRBugVerification:
             )
         )
         logger.info(
-            f"All expected {resource_label} verified on " f"{cluster_name} {context}"
+            f"All expected {resource_label} verified on {cluster_name} {context}"
         )
 
     def _get_rook_managed_field_time(self, secret_data):
