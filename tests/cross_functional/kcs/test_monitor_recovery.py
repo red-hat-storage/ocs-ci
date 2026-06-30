@@ -953,7 +953,16 @@ class MonitorRecovery(object):
         mds_pods = get_mds_pods(namespace=config.ENV_DATA["cluster_namespace"])
         for mds in mds_pods:
             logger.debug(f"Waiting for MDS pod: {mds.name}")
-            wait_for_resource_state(resource=mds, state=constants.STATUS_RUNNING)
+            try:
+                wait_for_resource_state(resource=mds, state=constants.STATUS_RUNNING)
+            except (CommandFailed, ResourceWrongStatusException):
+                if not _pod_exists(mds):
+                    logger.info(
+                        f"MDS pod {mds.name} no longer exists (replaced by deployment "
+                        "rollout) - skipping"
+                    )
+                    continue
+                raise
         logger.info(f"All {len(mds_pods)} MDS pods are running")
 
     @retry(CommandFailed, tries=10, delay=10, backoff=1)
@@ -1100,6 +1109,25 @@ def is_pod_running(pod_obj):
         return False
 
 
+def _pod_exists(pod_obj):
+    """
+    Check whether a pod still exists on the cluster.
+
+    Args:
+        pod_obj: Pod object to check
+
+    Returns:
+        bool: True if the pod exists (regardless of phase), False if NotFound
+    """
+    try:
+        pod_obj.get()
+        return True
+    except CommandFailed as e:
+        if "NotFound" in str(e):
+            return False
+        raise
+
+
 def perform_node_restart(node_name, nodes_platform, node_objs):
     """
     Perform node restart operation using platform's restart_nodes_by_stop_and_start
@@ -1166,13 +1194,24 @@ def check_and_recover_sandbox_errors(
             logger.debug(f"Pod {pod_name} is already running, no recovery needed")
             return True
 
-        node_name = pod_obj.get().get("spec", {}).get("nodeName")
+        try:
+            pod_data = pod_obj.get()
+        except CommandFailed as e:
+            if "NotFound" in str(e):
+                logger.info(
+                    f"Pod {pod_name} no longer exists (replaced by a new pod after restart) - "
+                    "treating as success"
+                )
+                return True
+            raise
+
+        node_name = pod_data.get("spec", {}).get("nodeName")
 
         if not node_name:
             logger.debug(f"Pod {pod_name} not scheduled to a node yet")
             return handle_multi_attach_error(pod_obj, timeout)
 
-        phase = pod_obj.get().get("status", {}).get("phase")
+        phase = pod_data.get("status", {}).get("phase")
         logger.info(f"Pod {pod_name} is in phase '{phase}', checking for errors...")
 
         ocp_pod = OCP(kind=constants.POD, namespace=namespace)
@@ -1248,7 +1287,16 @@ def check_and_recover_sandbox_errors(
         check_interval = 120
 
         while time.time() - start_time < timeout:
-            pod_obj.reload()
+            try:
+                pod_obj.reload()
+            except CommandFailed as e:
+                if "NotFound" in str(e):
+                    logger.info(
+                        f"Pod {pod_name} no longer exists during monitoring (replaced by a new "
+                        "pod after node restart) - treating as success"
+                    )
+                    return True
+                raise
             phase = pod_obj.get().get("status", {}).get("phase")
 
             if phase == constants.STATUS_RUNNING:
@@ -1861,21 +1909,28 @@ def ceph_fs_recovery():
 
     logger.info("Verifying MDS pods reach running state after CephFS recovery")
     all_mds_pods = get_mds_pods()
-    mds_pods = [
-        pod
-        for pod in all_mds_pods
-        if not pod.get().get("metadata", {}).get("deletionTimestamp")
-    ]
+    mds_pods = []
+    for p in all_mds_pods:
+        try:
+            pod_data = p.get()
+        except CommandFailed as e:
+            if "NotFound" in str(e):
+                logger.debug(f"MDS pod {p.name} already gone, skipping filter check")
+                continue
+            raise
+        if not pod_data.get("metadata", {}).get("deletionTimestamp"):
+            mds_pods.append(p)
     logger.info(
         f"Found {len(mds_pods)} active MDS pods to verify "
-        f"(filtered out {len(all_mds_pods) - len(mds_pods)} terminating pods)"
+        f"(filtered out {len(all_mds_pods) - len(mds_pods)} terminating/gone pods)"
     )
 
     failed_mds_pods = verify_pods_running(mds_pods, pod_type="MDS", timeout=600)
 
     if failed_mds_pods:
-        logger.warning(
-            f"{len(failed_mds_pods)} MDS pods did not reach running state: {failed_mds_pods}"
+        raise AssertionError(
+            f"CephFS recovery failed: {len(failed_mds_pods)} MDS pods did not reach "
+            f"running state: {failed_mds_pods}"
         )
 
 
