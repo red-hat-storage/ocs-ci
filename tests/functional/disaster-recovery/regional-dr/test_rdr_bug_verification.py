@@ -154,11 +154,14 @@ class TestRDRBugVerification:
             workload.workload_type,
         )
         wait_time = 2 * scheduling_interval  # minutes
+        pre_annotation_wait = (
+            scheduling_interval  # 1x interval is enough for initial sync
+        )
 
         logger.test_step(
-            f"Wait {wait_time} minutes for initial sync before adding annotations"
+            f"Wait {pre_annotation_wait} minutes for initial sync before adding annotations"
         )
-        sleep(wait_time * 60)
+        sleep(pre_annotation_wait * 60)
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
         logger.test_step(
