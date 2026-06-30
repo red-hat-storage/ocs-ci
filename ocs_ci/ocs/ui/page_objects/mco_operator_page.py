@@ -128,62 +128,14 @@ class MCOOperatorPage(AcmPageNavigator):
             element = self.wait_for_element_to_be_visible(
                 self.dep_loc["operator_installed_status"], timeout=30
             )
-            assert element.is_displayed(), "Operator does not show 'Installed' status"
-            logger.info("Operator is in 'Installed' state")
+            status_text = element.text.strip()
+            assert status_text in (
+                "Installed",
+                "Succeeded",
+            ), f"Unexpected operator status: '{status_text}'"
+            logger.info("Operator status: %s", status_text)
             self.take_screenshot()
         except TimeoutException:
             logger.error("Operator 'Installed' status indicator not found")
             self.take_screenshot()
             raise AssertionError("Operator does not show 'Installed' status")
-
-    def get_capability_levels(self):
-        """
-        Check which capability levels are present on the operator
-        details page.
-
-        Returns:
-            dict: A dict with capability names as keys and booleans
-                indicating presence as values.
-        """
-        capabilities = {}
-        loc = self.dep_loc["operator_capability_basic_install"]
-        if self.check_element_presence((loc[1], loc[0]), timeout=10):
-            logger.info("Basic Install capability found")
-            capabilities["Basic Install"] = True
-
-        loc = self.dep_loc["operator_capability_seamless_upgrades"]
-        if self.check_element_presence((loc[1], loc[0]), timeout=10):
-            logger.info("Seamless Upgrades capability found")
-            capabilities["Seamless Upgrades"] = True
-
-        self.take_screenshot()
-        return capabilities
-
-    def get_channel_and_version(self):
-        """
-        Get the channel and installed version from the operator
-        details page.
-
-        Returns:
-            tuple: (channel, version) strings, either may be None
-                if not found.
-        """
-        channel = None
-        ver = None
-        try:
-            channel_element = self.wait_for_element_to_be_visible(
-                self.dep_loc["operator_channel"], timeout=30
-            )
-            channel = channel_element.text
-            logger.info(f"Channel: {channel}")
-
-            version_element = self.wait_for_element_to_be_visible(
-                self.dep_loc["operator_installed_version"], timeout=30
-            )
-            ver = version_element.text
-            logger.info(f"Installed Version: {ver}")
-            self.take_screenshot()
-        except TimeoutException:
-            logger.warning("Channel or version information not found")
-            self.take_screenshot()
-        return channel, ver
