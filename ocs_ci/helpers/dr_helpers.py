@@ -3038,9 +3038,26 @@ def create_ingress_cert_dr(
             namespace=constants.OPENSHIFT_CONFIG_MANAGED_NAMESPACE,
         )
 
-        ssl_data.append(
-            default_ingress_cert.get()["data"]["ca-bundle.crt"].strip() + "\n"
+        # When ConfigMap user-ca-bundle exists in openshift-config namespace
+        user_ca_bundle_cm = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=cert_name,
+            namespace=namespace,
         )
+        if user_ca_bundle_cm.is_exist(resource_name=cert_name):
+            existing_certs = (
+                user_ca_bundle_cm.get().get("data").get("ca-bundle.crt", "").strip()
+            )
+        else:
+            existing_certs = ""
+        if existing_certs:
+            ssl_data.append(existing_certs + "\n")
+
+        default_ingress_cert_data = default_ingress_cert.get()["data"][
+            "ca-bundle.crt"
+        ].strip()
+        if not (default_ingress_cert_data in existing_certs):
+            ssl_data.append(default_ingress_cert_data + "\n")
         ingress_data["data"]["ca-bundle.crt"] = LiteralString("".join(ssl_data))
         ingress_data["metadata"]["name"] = cert_name
         ingress_data["metadata"]["namespace"] = namespace
@@ -3072,6 +3089,11 @@ def create_ingress_cert_dr(
                         f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{cert_name}"}}}}}}\''
                     )
                     run_cmd(cmd=cmd)
+        elif is_hosted:
+            with config.RunWithProviderConfigContextIfAvailable():
+                patch = f'{{"spec":{{"configuration":{{"proxy":{{"trustedCA":{{"name":"{cert_name}"}}}}}}}}}}'
+                cmd = f"oc patch -n clusters {constants.HOSTED_CLUSTERS}/{cluster_name} --type=merge --patch='{patch}'"
+                exec_cmd(cmd)
 
     for cluster in config.clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
