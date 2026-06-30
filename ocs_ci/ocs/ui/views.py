@@ -442,27 +442,7 @@ deployment_4_22 = {
         By.XPATH,
     ),
     "operator_installed_status": (
-        "//span[contains(@class, 'co-icon-and-text')][contains(text(), 'Installed')]",
-        By.XPATH,
-    ),
-    "operator_capability_basic_install": (
-        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
-        "//dt[text()='Capability Level']/following-sibling::dd"
-        "//span[contains(text(), 'Basic Install')]",
-        By.XPATH,
-    ),
-    "operator_capability_seamless_upgrades": (
-        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
-        "//dt[text()='Capability Level']/following-sibling::dd"
-        "//span[contains(text(), 'Seamless Upgrades')]",
-        By.XPATH,
-    ),
-    "operator_channel": (
-        "//dt[text()='Channel']/following-sibling::dd",
-        By.XPATH,
-    ),
-    "operator_installed_version": (
-        "//dt[text()='Installed Version']/following-sibling::dd",
+        "//span[@data-test='status-text']",
         By.XPATH,
     ),
     "ec_scheme_table_rows": (
