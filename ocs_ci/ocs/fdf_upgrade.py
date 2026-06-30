@@ -21,7 +21,11 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.resources.packagemanifest import get_packagemanifest_by_catalog_source
 from ocs_ci.ocs.upgrade import BaseUpgrade
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, load_config_file
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    load_config_file,
+    wait_for_machineconfigpool_status,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -178,6 +182,7 @@ class FDFUpgrade(BaseUpgrade):
         if not self.upgrade_in_current_source:
             self.fdf_deployment.create_image_tag_mirror_set()
             self.fdf_deployment.create_image_digest_mirror_set(upgrade=True)
+            wait_for_machineconfigpool_status(node_type="all")
             self.fdf_deployment.patch_fusion_service_definition(upgrade=True)
         ceph_cluster = CephCluster()
         self.pre_upgrade_csv_data = self.get_csv_name_pre_upgrade()
