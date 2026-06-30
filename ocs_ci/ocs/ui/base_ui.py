@@ -864,7 +864,7 @@ class BaseUI:
                 ignored_exceptions=ignored_exceptions,
                 poll_frequency=1,
             )
-            wait.until(ec.presence_of_element_located((locator[1], locator[0])))
+            wait.until(ec.presence_of_element_located(locator))
             return True
         except (NoSuchElementException, StaleElementReferenceException):
             logger.error("Expected element not found on UI")

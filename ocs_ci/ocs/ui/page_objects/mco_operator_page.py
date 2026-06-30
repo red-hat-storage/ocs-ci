@@ -49,7 +49,7 @@ class MCOOperatorPage(AcmPageNavigator):
         """
         logger.info(f"Searching for operator: {operator_name}")
         search_box = self.wait_for_element_to_be_visible(
-            self.dep_loc["search_operators"], timeout=30
+            self.dep_loc["mco_search_operators"], timeout=30
         )
         search_box.clear()
         search_box.send_keys(operator_name)
@@ -73,9 +73,8 @@ class MCOOperatorPage(AcmPageNavigator):
                 "not found in Installed Operators"
             )
             self.take_screenshot()
-            if self.check_element_presence(
-                self.dep_loc["mco_operator_row_old_name"], timeout=10
-            ):
+            loc = self.dep_loc["mco_operator_row_old_name"]
+            if self.check_element_presence((loc[1], loc[0]), timeout=10):
                 raise AssertionError(
                     "Operator still displays old name "
                     "'ODF Multicluster Orchestrator' "
@@ -147,17 +146,13 @@ class MCOOperatorPage(AcmPageNavigator):
                 indicating presence as values.
         """
         capabilities = {}
-        if self.check_element_presence(
-            self.dep_loc["operator_capability_basic_install"],
-            timeout=10,
-        ):
+        loc = self.dep_loc["operator_capability_basic_install"]
+        if self.check_element_presence((loc[1], loc[0]), timeout=10):
             logger.info("Basic Install capability found")
             capabilities["Basic Install"] = True
 
-        if self.check_element_presence(
-            self.dep_loc["operator_capability_seamless_upgrades"],
-            timeout=10,
-        ):
+        loc = self.dep_loc["operator_capability_seamless_upgrades"]
+        if self.check_element_presence((loc[1], loc[0]), timeout=10):
             logger.info("Seamless Upgrades capability found")
             capabilities["Seamless Upgrades"] = True
 
