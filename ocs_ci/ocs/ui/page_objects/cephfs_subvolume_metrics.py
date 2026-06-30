@@ -147,8 +147,10 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
             str: e.g. '13 IOPS' (Total IOPS), '5 ms' (Total Latency),
                 '100 MBps' (Total Throughput; UI may auto-scale Bps/KBps/MBps/GBps).
         """
-        self.wait_for_element_to_be_present(self.first_row_value_loc, timeout=timeout)
-        return self.get_element_text(self.first_row_value_loc).strip()
+        metric = self.get_cephfs_subvolume_metric_toggle_text()
+        loc = format_locator(self.first_row_value_loc, metric)
+        self.wait_for_element_to_be_present(loc, timeout=timeout)
+        return self.get_element_text(loc).strip()
 
     def get_cephfs_subvolume_row_count(self, timeout=30):
         """
@@ -292,7 +294,8 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         logger.info(
             "Reading metric value for namespace '%s' from subvolume table", namespace
         )
-        loc = format_locator(self.value_by_namespace_loc, namespace)
+        metric = self.get_cephfs_subvolume_metric_toggle_text()
+        loc = format_locator(self.value_by_namespace_loc, namespace, metric)
         self.wait_for_element_to_be_present(loc, timeout=timeout)
         return self.get_element_text(loc).strip()
 

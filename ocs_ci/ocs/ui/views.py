@@ -2598,10 +2598,11 @@ validation_4_22 = {
         "//table/thead/tr/th",
         By.XPATH,
     ),
+    # {0} = active metric label, e.g. 'Total IOPS'
     "cephfs_subvolume_first_row_value": (
         f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
         "/following::div[contains(@class,'odf-loading-box')]"
-        "//table/tbody/tr[1]/td[3]",
+        "//table/tbody/tr[1]/td[@data-label='{0}']",
         By.XPATH,
     ),
     # Name cell uses <button aria-label="Show related pods">, not an <a> tag.
@@ -2649,12 +2650,13 @@ validation_4_22 = {
         "[.//td[@data-label='Namespace']//a[normalize-space(text())='{0}']]",
         By.XPATH,
     ),
-    # Metric value cell (td[3]) in the row for the given namespace (format arg).
+    # {0} = namespace, {1} = active metric label, e.g. 'Total IOPS'
     "cephfs_subvolume_value_by_namespace": (
         f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
         "/following::div[contains(@class,'odf-loading-box')]"
         "//table/tbody/tr"
-        "[.//td[@data-label='Namespace']//a[normalize-space(text())='{0}']]/td[3]",
+        "[.//td[@data-label='Namespace']//a[normalize-space(text())='{0}']]"
+        "/td[@data-label='{1}']",
         By.XPATH,
     ),
 }
