@@ -6,6 +6,8 @@ import logging
 import tempfile
 import json
 import re
+import time
+
 from packaging.version import parse as parse_version
 
 from ocs_ci.helpers import helpers
@@ -24,6 +26,7 @@ from ocs_ci.utility.utils import (
     get_acm_mce_build_tag,
 )
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.utility.utils import get_running_ocp_version
 from ocs_ci.ocs.exceptions import (
@@ -351,6 +354,11 @@ class MCEInstaller(object):
                 raise MultiClusterEngineNotDeployedException(
                     f"crd {constants.MULTICLUSTER_ENGINE_CRD} is unavailable"
                 )
+            logger.info(
+                "mce deployment in progress, waiting 10 sec for csv to be Succeeded and CRDs ready state"
+            )
+            time.sleep(10)
+            self.wait_csv_upgraded()
 
         # check whether mce instance is created, if it is installed but mce don't pass validation we can not heal it in
         # script here, hence no sense for full validation of mce
@@ -643,10 +651,9 @@ class MCEInstaller(object):
             namespace=self.mce_namespace,
         )
         csv_name = csv_ocp_obj.get(resource_name="")["items"][0]["metadata"]["name"]
-        csv_obj = ocp.OCP(
-            kind=constants.CLUSTER_SERVICE_VERSION,
-            namespace=self.mce_namespace,
+        csv_obj = CSV(
             resource_name=csv_name,
+            namespace=self.mce_namespace,
         )
         csv_obj.wait_for_phase("Succeeded", timeout=900)
 
