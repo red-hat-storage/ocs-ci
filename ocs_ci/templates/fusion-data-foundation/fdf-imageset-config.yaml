@@ -1,0 +1,5 @@
+kind: ImageSetConfiguration
+apiVersion: mirror.openshift.io/v1alpha2
+mirror:
+  operators:
+    - catalog: cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20
