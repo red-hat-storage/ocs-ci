@@ -396,9 +396,10 @@ class TestRDRBugVerification:
         logger.info(f"Mon {mon_id} has left the quorum")
 
         # --- Step 6: Wait for rook to bring up a replacement mon ---
-        # Rook typically takes ~10 minutes to spin up a replacement mon after
-        # detecting the mon is unreachable; allow 15 minutes to be safe.
-        wait_for_mons_in_quorum(expected_mon_count=initial_mon_count, timeout=900)
+        # Rook waits ~900s internally before declaring a mon failed and starting
+        # the replacement. Allow an additional 300s for the new mon to schedule,
+        # join quorum, and update the peer token secret.
+        wait_for_mons_in_quorum(expected_mon_count=initial_mon_count, timeout=1200)
         logger.info("Rook brought up a replacement mon, quorum restored")
 
         # --- Step 7: Wait for rook to update the secret after the new mon joins ---
