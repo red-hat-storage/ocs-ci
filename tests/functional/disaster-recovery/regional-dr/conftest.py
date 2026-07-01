@@ -15,10 +15,12 @@ from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import (
     exec_cmd,
     run_cmd,
+    TimeoutSampler,
 )
 from ocs_ci.helpers.dr_helpers import (
     apply_itms_to_managed_clusters,
     generate_rdr_mirror_images,
+    get_all_drpolicy,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -286,6 +288,36 @@ def cnv_custom_storage_class(
                 config.current_cluster_name(), {}
             ).get("interface_name")
         config.reset_ctx()
+
+        log.info(
+            f"Waiting up to 600s for storageclass '{sc_name}' to appear in all DRPolicy peerClasses"
+        )
+        try:
+            for drpolicies in TimeoutSampler(
+                timeout=600,
+                sleep=10,
+                func=get_all_drpolicy,
+            ):
+                all_updated = all(
+                    any(
+                        peerclass.get("storageClassName") == sc_name
+                        for peerclass in (
+                            drpolicy_data.get("status", {})
+                            .get("async", {})
+                            .get("peerClasses", [])
+                        )
+                    )
+                    for drpolicy_data in drpolicies
+                )
+                if all_updated:
+                    log.info(
+                        f"Storageclass '{sc_name}' is present in all DRPolicy peerClasses"
+                    )
+                    break
+        except TimeoutExpiredError:
+            raise TimeoutExpiredError(
+                f"Storageclass '{sc_name}' was not found in all DRPolicy peerClasses within 600 seconds"
+            )
 
     return factory
 
