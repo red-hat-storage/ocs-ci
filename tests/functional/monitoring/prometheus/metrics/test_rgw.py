@@ -9,7 +9,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad, zstream_4_20_14
 from ocs_ci.framework.testlib import (
     skipif_managed_service,
     runs_on_provider,
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-2385")
 @skipif_managed_service
 @runs_on_provider
+@zstream_4_20_14
 def test_ceph_rgw_metrics_after_metrics_exporter_respin(
     rgw_deployments, threading_lock
 ):
