@@ -1,0 +1,24 @@
+---
+# Deploys an LSO-backed ODF cluster via CLI on BareMetal UPI (NVMe, 3m/3w).
+# After LSO installs and provisions PVs from clean disks, the LSO operator is
+# scaled down and LUKS headers are written to the backing disks
+# (simulate_bluestore_label_dmcrypt). LSO stays down while the StorageCluster
+# is deployed with wipeDevicesFromOtherClusters so Rook wipes the LUKS headers
+# and provisions new encrypted OSDs. LSO is restored once OSD pods are Running.
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  ui_deployment: false
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  mon_type: 'hostpath'
+  osd_type: 'nvme'
+  simulate_bluestore_label_dmcrypt: true
+  wipe_devices_from_other_clusters: true
+  encryption_at_rest: true
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-8036'
