@@ -5,7 +5,6 @@ Requires ODF 4.22+ (Ceph 9.0) for subvolume-level MDS metrics.
 """
 
 import logging
-import re
 
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -163,7 +162,8 @@ class TestCephFSSubvolumeMetricsLoadWithActiveWorkload(ManageTest):
         5. Switch to 'Total IOPS': verify column header and that all 3 test
            namespaces appear with non-zero values.
         6. Switch to 'Total Latency': verify column header and non-zero
-           values for all 3 test namespace rows.
+           values for all 3 test namespace rows (polls up to 2 minutes
+           to tolerate transient zero readings between Prometheus scrapes).
         7. Switch to 'Total Throughput': verify column header and that
            values carry a Bps unit suffix (Bps/KBps/MBps/GBps).
         """
@@ -189,9 +189,6 @@ class TestCephFSSubvolumeMetricsLoadWithActiveWorkload(ManageTest):
         logger.test_step("Wait until subvolume rows are visible (max 6 minutes)")
         subvolume_metrics_card.wait_for_namespaces_in_subvolume_table(namespaces)
 
-        is_throughput_metric = {
-            constants.CEPHFS_SUBVOLUME_METRIC_THROUGHPUT,
-        }
         for metric in [
             constants.CEPHFS_SUBVOLUME_DEFAULT_METRIC,
             constants.CEPHFS_SUBVOLUME_METRIC_LATENCY,
@@ -213,33 +210,16 @@ class TestCephFSSubvolumeMetricsLoadWithActiveWorkload(ManageTest):
                     f"Namespace '{namespace}' not found in subvolume table "
                     f"for metric '{metric}'"
                 )
+                assert subvolume_metrics_card.wait_for_valid_metric_value_for_namespace(
+                    namespace, metric
+                ), (
+                    f"Metric '{metric}' did not show a valid value "
+                    f"for namespace '{namespace}'"
+                )
                 value = subvolume_metrics_card.get_cephfs_subvolume_value_for_namespace(
                     namespace
                 )
                 logger.info("Metric '%s', namespace '%s': %s", metric, namespace, value)
-                assert value, (
-                    f"Metric value is empty for namespace '{namespace}', "
-                    f"metric '{metric}'"
-                )
-                if metric in is_throughput_metric:
-                    # FIO data writes bypass MDS and go directly to OSD, so
-                    # MDS-tracked throughput may legitimately be 0 Bps.
-                    # Verify format only (value carries a Bps unit suffix).
-                    assert "Bps" in value, (
-                        f"Throughput value '{value}' for namespace "
-                        f"'{namespace}' missing Bps unit suffix"
-                    )
-                else:
-                    # Strip commas and take the first whitespace-delimited
-                    # token, then extract the leading number via regex so
-                    # values like "1.5KBps" (no space before unit) don't
-                    # cause float() to raise ValueError.
-                    token = value.replace(",", "").split()[0]
-                    numeric = re.match(r"^\d+(?:\.\d+)?", token)
-                    assert numeric and float(numeric.group(0)) > 0, (
-                        f"Metric '{metric}' is zero for namespace "
-                        f"'{namespace}': '{value}'"
-                    )
 
 
 @green_squad

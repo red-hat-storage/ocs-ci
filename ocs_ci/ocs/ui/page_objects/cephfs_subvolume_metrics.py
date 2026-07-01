@@ -1,5 +1,8 @@
 import logging
+import re
 
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 from ocs_ci.utility.utils import TimeoutSampler
@@ -298,6 +301,56 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         loc = format_locator(self.value_by_namespace_loc, namespace, metric)
         self.wait_for_element_to_be_present(loc, timeout=timeout)
         return self.get_element_text(loc).strip()
+
+    def wait_for_valid_metric_value_for_namespace(
+        self, namespace, metric, timeout=120, sleep=30
+    ):
+        """
+        Return True if a valid metric value for namespace is found.
+
+        The validation strategy depends on the metric:
+
+        * **Total Throughput**: FIO data writes bypass MDS and go directly to
+          OSD, so MDS-tracked throughput may legitimately be 0 Bps.  The value
+          is read once and considered valid if it is non-empty and contains a
+          Bps unit suffix (Bps / KBps / MBps / GBps).
+
+        * **Other metrics (IOPS, Latency)**: the ODF console refreshes
+          Prometheus-backed metrics every ~30 s, so a single read can
+          transiently return 0 between scrape windows even when FIO is active.
+          This method polls every `sleep` seconds for up to `timeout` seconds
+          until the numeric part of the value is > 0.
+
+        Args:
+            namespace (str): namespace whose metric value to check.
+            metric (str): active metric label (e.g.
+                ``constants.CEPHFS_SUBVOLUME_DEFAULT_METRIC``).
+            timeout (int): maximum seconds to poll for a non-zero value
+                (non-throughput metrics only; default 120).
+            sleep (int): seconds between polls
+                (non-throughput metrics only; default 30).
+
+        Returns:
+            bool: True if a valid value was found within the allowed time.
+        """
+        if metric == constants.CEPHFS_SUBVOLUME_METRIC_THROUGHPUT:
+            value = self.get_cephfs_subvolume_value_for_namespace(namespace)
+            return bool(value) and "Bps" in value
+        try:
+            for value in TimeoutSampler(
+                timeout=timeout,
+                sleep=sleep,
+                func=self.get_cephfs_subvolume_value_for_namespace,
+                namespace=namespace,
+            ):
+                if value:
+                    token = value.replace(",", "").split()[0]
+                    numeric = re.match(r"^\d+(?:\.\d+)?", token)
+                    if numeric and float(numeric.group(0)) > 0:
+                        return True
+        except TimeoutExpiredError:
+            pass
+        return False
 
     def verify_cephfs_subvolume_view_all_link_visible(self, timeout=10):
         """
