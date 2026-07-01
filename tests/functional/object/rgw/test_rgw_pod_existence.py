@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     rgw,
     runs_on_provider,
+    zstream_4_20_14,
 )
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs import constants
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @runs_on_provider
 @acceptance
+@zstream_4_20_14
 class TestRGWPodExistence:
     """
     Test the existence of RGW pods based on platform
