@@ -21,4 +21,4 @@ ENV_DATA:
   encryption_at_rest: false
 REPORTING:
   polarion:
-    deployment_id: ''
+    deployment_id: 'OCS-8037'

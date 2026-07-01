@@ -21,4 +21,4 @@ ENV_DATA:
   encryption_at_rest: true
 REPORTING:
   polarion:
-    deployment_id: ''
+    deployment_id: 'OCS-8036'
