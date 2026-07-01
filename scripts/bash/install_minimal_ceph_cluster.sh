@@ -31,7 +31,7 @@ else
     # an internal auth error that is non-fatal — the MON and bootstrap-osd
     # key are fully operational despite it.
     cephadm bootstrap --mon-ip ${NODE_IP} --skip-monitoring-stack \
-        --no-cleanup-on-failure || true
+        --allow-fqdn-hostname --no-cleanup-on-failure || true
 fi
 
 if cephadm shell -- ceph health | grep -qE 'HEALTH_OK|HEALTH_WARN'; then
