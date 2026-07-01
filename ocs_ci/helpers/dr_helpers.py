@@ -44,7 +44,11 @@ from ocs_ci.ocs.node import (
     get_node_internal_ip,
     get_worker_nodes,
 )
-from ocs_ci.ocs.resources.storage_cluster import StorageCluster, validate_serviceexport
+from ocs_ci.ocs.resources.storage_cluster import (
+    StorageCluster,
+    validate_serviceexport,
+    get_storage_cluster,
+)
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.utils import (
     enable_literal_block_style,
@@ -2851,15 +2855,19 @@ def create_service_exporter(annotate=True):
 
         if not (
             cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
-            and get_provider_service_type() == "NodePort"
+            or get_provider_service_type() == "NodePort"
             or is_hostnetwork_enabled()
         ):
             logger.info("Checking if multiClusterService exists")
             create_multiclusterservice_dr()
         else:
             logger.info("Skipping multiClusterService creation for multiclient cluster")
+
+        if cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT:
+            continue
+
         logger.info("Creating Service exporter")
-        run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+        exec_cmd(f"oc apply -f {constants.DR_SERVICE_EXPORTER}")
 
         if annotate:
             cluster_type = cluster.ENV_DATA.get("cluster_type", "").lower()
@@ -2880,12 +2888,17 @@ def create_service_exporter(annotate=True):
                 cluster_service_export_provider_server = (
                     ".ocs-provider-server.openshift-storage.svc.clusterset.local"
                 )
-
-            run_cmd(
-                "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
-                f" ocs.openshift.io/api-server-exported-address={cluster_address}"
-                f"{cluster_service_export_provider_server}:{cluster_address_port}"
-            )
+            if (
+                not get_storage_cluster()
+                .get()["items"][0]["metadata"]
+                .get("annotations", {})
+                .get("ocs.openshift.io/api-server-exported-address")
+            ):
+                exec_cmd(
+                    "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
+                    f" ocs.openshift.io/api-server-exported-address={cluster_address}"
+                    f"{cluster_service_export_provider_server}:{cluster_address_port}"
+                )
     config.switch_ctx(restore_index)
 
 
