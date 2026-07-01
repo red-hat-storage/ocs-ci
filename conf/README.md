@@ -520,8 +520,11 @@ Configuration specific to external Ceph cluster
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 * `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
-* `rgw_cert_ca` - URL for the RGW signing CA when external Ceph is **below 19.0**, or as a **fallback** if cephadm CA fetch fails on 19.0+
-* For external Ceph **19.0 and newer**, ocs-ci runs ``ceph orch certmgr cert get cephadm_root_ca_cert`` via ``cephadm shell`` on the ``_admin`` node (``get_external_cluster_client("_admin")``, falling back to ``node1``) instead of using ``rgw_cert_ca``, unless that command fails
+* `rgw_cert_ca` - URL for the RGW signing CA, used as a **fallback** when automatic certificate retrieval fails
+* For external Ceph **19.0+ (Squid and newer)**: ocs-ci runs ``ceph orch certmgr cert get cephadm_root_ca_cert`` via ``cephadm shell`` on the ``_admin`` node to fetch the cephadm root CA certificate
+* For external Ceph **18.x (Reef)**: ocs-ci fetches the certificate directly from the RGW server endpoint using ``openssl s_client``, since cephadm certmgr is not available in this version
+* For external Ceph **below 18.0**: Falls back to downloading from ``rgw_cert_ca`` URL
+* All methods fall back to ``rgw_cert_ca`` URL if the automatic fetch fails
 * `use_rbd_namespace` - boolean parameter to use RBD namespace in pool
 * `rbd_namespace` - Name of RBD namespace to use in pool
 
