@@ -252,7 +252,8 @@ class CephCrashMonitor(threading.Thread):
         super().__init__(daemon=True, name="ceph-crash-monitor")
         self.interval = interval
         self.context = context
-        self._stop = threading.Event()
+        # Avoid ``_stop`` — it shadows Thread._stop and breaks join() on Python 3.11+.
+        self._stop_event = threading.Event()
         self.crash_error = None
 
     def run(self):
@@ -285,12 +286,12 @@ class CephCrashMonitor(threading.Thread):
 
         if not _check_once():
             return
-        while not self._stop.wait(self.interval):
+        while not self._stop_event.wait(self.interval):
             if not _check_once():
                 break
 
     def stop(self):
-        self._stop.set()
+        self._stop_event.set()
 
     def raise_if_crash_detected(self):
         """Re-raise any crash detected by the background thread."""

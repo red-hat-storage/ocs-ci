@@ -391,6 +391,10 @@ deployment_4_22 = {
         "input#forceful-deployment-confirmation",
         By.CSS_SELECTOR,
     ),
+    "next_button_element": (
+        "//button[normalize-space(.)='Next']",
+        By.XPATH,
+    ),
     "use_erasure_coding": ("input#use-erasure-coding", By.CSS_SELECTOR),
     # Perspective switcher for ACM hub cluster (PF v6)
     "perspective_switcher_toggle": (
@@ -2559,6 +2563,41 @@ validation_4_22 = {
         "//button[@id='{0}-link'] | //li[@id='{0}-link']",
         By.XPATH,
     ),
+    "cephfs_subvolume_card_title": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_metric_toggle": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::button[@aria-expanded][1]",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_metric_option": (
+        "//button[@role='option' and normalize-space(.)='{0}']",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_table_rows": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::div[contains(@class,'odf-loading-box')]"
+        "//table/tbody/tr",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_help_button": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::button[@aria-label='Help'"
+        " and contains(@class,'odf-field-level-help')][1]",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_popover_body": (
+        "//div[@role='dialog' and @aria-modal='true' and @aria-label='Help']",
+        By.XPATH,
+    ),
+    "cephfs_subvolume_col_headers": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::div[contains(@class,'odf-loading-box')]"
+        "//table/thead/tr/th",
+        By.XPATH,
+    ),
 }
 
 topology = {
@@ -2747,6 +2786,10 @@ topology = {
         "div[@class='row']//*[normalize-space()='Memory']/following-sibling::span",
         By.XPATH,
     ),
+    "osd_information_sidebar_tab": (
+        "//span[normalize-space()='OSD Information']",
+        By.XPATH,
+    ),
     "observe_sidebar_tab": ("//span[normalize-space()='Observe']", By.XPATH),
     "topology_search_bar": ("//input[@placeholder='Search...']", By.XPATH),
     "topology_search_bar_enter_arrow": ("//button[@aria-label='Search']", By.XPATH),
@@ -2799,6 +2842,18 @@ bucket_tab = {
     "s3_bucket_name_input": (
         "[data-test='bucket-name']",
         By.CSS_SELECTOR,
+    ),
+    "s3_namespace_store_dropdown_toggle": (
+        "[data-test='nns-dropdown-toggle']",
+        By.CSS_SELECTOR,
+    ),
+    "s3_namespace_store_item": (
+        "//button[@id='{}']",
+        By.XPATH,
+    ),
+    "submit_button_s3": (
+        "//button[@id='create-s3-bucket-btn']",
+        By.XPATH,
     ),
     "submit_button_obc": (
         "button[data-test='obc-create'][type='submit']",
@@ -3251,6 +3306,132 @@ bucket_tab = {
         By.XPATH,
     ),
 }
+s3_vector_tab = {
+    # S3 Vector sub-tab within Buckets page
+    "s3_vector_tab_button": (
+        "//button[normalize-space()='S3 Vector']",
+        By.XPATH,
+    ),
+    # Vector bucket list
+    "vector_bucket_list_items": (
+        "//td[@data-label='Name']//a",
+        By.XPATH,
+    ),
+    "vector_bucket_link_by_name": (
+        "//td[@data-label='Name']//a[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    # OBC creation for vector bucket - bucket class selection
+    "obc_bucketclass_dropdown": (
+        "//button[@data-test='bc-dropdown']",
+        By.XPATH,
+    ),
+    "obc_bucketclass_input": (
+        'input[id="search-bar"]',
+        By.CSS_SELECTOR,
+    ),
+    # Vector index creation - on bucket detail page.
+    # Button text confirmed as "Create vector index" from s3VectorBucketOverview.js bundle.
+    # No data-test attribute on this button; text match is the only available selector.
+    "create_vector_index_button": (
+        "//button[normalize-space()='Create vector index']",
+        By.XPATH,
+    ),
+    "index_name_input": (
+        "//input[@data-test='vector-index-name']",
+        By.XPATH,
+    ),
+    "dimension_input": (
+        "//div[@id='vector-index-dimension-input']//input[@type='number']",
+        By.XPATH,
+    ),
+    "distance_metric_cosine": (
+        "//input[@id='distance-metric-cosine']",
+        By.XPATH,
+    ),
+    "distance_metric_euclidean": (
+        "//input[@id='distance-metric-euclidean']",
+        By.XPATH,
+    ),
+    "data_type_float32": (
+        "//input[@data-test='data-type-float32']",
+        By.XPATH,
+    ),
+    "create_index_submit_button": (
+        "//button[@data-test='create-vector-index']",
+        By.XPATH,
+    ),
+    # Index list on bucket detail page.
+    "index_list_items": (
+        "//td[@data-label='Name']//a",
+        By.XPATH,
+    ),
+    "index_link_by_name": (
+        "//td[@data-label='Name']//a[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    # Index detail page - info fields.
+    "index_detail_name": (
+        "//dt[normalize-space()='Name']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "index_detail_dimension": (
+        "//dt[normalize-space()='Dimension']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "index_detail_data_type": (
+        "//dt[normalize-space()='DataType']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    "index_detail_distance_metric": (
+        "//dt[normalize-space()='Distance metric']/following-sibling::dd[1]",
+        By.XPATH,
+    ),
+    # The index detail page has no "Vector bucket" description field; the bucket
+    # name appears only in the breadcrumb. breadcrumb-link-1 is a stable
+    # data-test-id attribute set by the ODF console BreadCrumbs component for the
+    # second breadcrumb item (Buckets / <bucket-name> / Vector index).
+    "index_detail_vector_bucket": (
+        "//a[@data-test-id='breadcrumb-link-1']",
+        By.XPATH,
+    ),
+    "obc_bucketclass_item": (
+        "//button[@id='{}-link']",
+        By.XPATH,
+    ),
+    # Shared kebab toggle for any named table row (index rows and bucket rows
+    # share the same DOM pattern; callers differ only by which page they are on).
+    "row_kebab_by_name": (
+        "//tr[.//a[normalize-space()='{}']]//button[@aria-label='Kebab toggle']",
+        By.XPATH,
+    ),
+    # Delete index via row kebab on the bucket detail page
+    "delete_index_option": (
+        "//button[normalize-space()='Delete index']",
+        By.XPATH,
+    ),
+    "delete_index_name_input": (
+        "//input[@aria-label='Index name input']",
+        By.XPATH,
+    ),
+    "delete_index_confirm_button": (
+        "//div[@role='dialog']//button[.//span[text()='Delete index']]",
+        By.XPATH,
+    ),
+    # Delete vector bucket from the S3 Vector tab bucket list
+    "delete_vector_bucket_option": (
+        "//button[normalize-space()='Delete bucket']",
+        By.XPATH,
+    ),
+    "delete_vector_bucket_name_input": (
+        "//input[@aria-label='Bucket name input']",
+        By.XPATH,
+    ),
+    "delete_vector_bucket_confirm_button": (
+        "//div[@role='dialog']//button[.//span[text()='Delete bucket']]",
+        By.XPATH,
+    ),
+}
 locate_aws_regions = {
     "region_table": ('//*[@id="main-col-body"]/div[4]/div/table', By.XPATH)
 }
@@ -3447,6 +3628,7 @@ locators = {
         "mcg_stores": mcg_stores,
         "alerting": alerting,
         "bucket_tab": bucket_tab,
+        "s3_vector_tab": s3_vector_tab,
         "external_systems": external_systems,
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,

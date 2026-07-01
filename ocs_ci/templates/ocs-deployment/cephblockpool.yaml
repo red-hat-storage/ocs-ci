@@ -4,6 +4,8 @@ kind: CephBlockPool
 metadata:
   name: replicapool
   namespace: default
+  annotations:
+  #  key: valueplica_size | default('3') }}
 spec:
   # The failure domain will spread the replicas of the data across different failure zones
   failureDomain: host
@@ -16,5 +18,3 @@ spec:
     # Further reference: https://docs.ceph.com/docs/nautilus/rados/configuration/bluestore-config-ref/#inline-compression
     compression_mode: none
   # A key/value list of annotations
-  annotations:
-  #  key: valueplica_size | default('3') }}

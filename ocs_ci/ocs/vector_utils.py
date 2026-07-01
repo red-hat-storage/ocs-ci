@@ -8,7 +8,9 @@ import logging
 import random
 
 from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
+from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +192,19 @@ def create_index(
         "distanceMetric": distance_metric,
     }
     params.update(kwargs)
-    return s3vectors_client.create_index(**params)
+    try:
+        return s3vectors_client.create_index(**params)
+    except ClientError as e:
+        # botocore retries CreateIndex on InternalFailure; if the first call
+        # succeeded but the response was lost, subsequent retries get
+        # VECTOR_INDEX_ALREADY_OWNED_BY_YOU — the index exists and we own it,
+        # which is the desired state.
+        if "VECTOR_INDEX_ALREADY_OWNED_BY_YOU" in str(e):
+            logger.warning(
+                "Index '%s' already owned; treating create as idempotent", index_name
+            )
+            return {"ResponseMetadata": {"HTTPStatusCode": 200}}
+        raise
 
 
 def delete_index(s3vectors_client, **kwargs):
@@ -452,4 +466,41 @@ def delete_vector_bucket_policy(s3vectors_client, vector_bucket_name):
     """
     return s3vectors_client.delete_vector_bucket_policy(
         vectorBucketName=vector_bucket_name
+    )
+
+
+def gen_vector_bucket_policy(
+    user_list,
+    actions_list,
+    resources_list,
+    effect=None,
+    sid="statement",
+):
+    """
+    Generate a vector bucket policy dict for the S3 Vectors API.
+
+    Thin wrapper around gen_bucket_policy that applies the s3vectors: action
+    prefix and arn:aws:s3vectors::: resource format.
+
+    Args:
+        user_list (list or str): Principal ARNs, e.g. ["*"] or "arn:aws:iam::id:root"
+        actions_list (list): Action names without the "s3vectors:" prefix,
+                             e.g. ["ListVectors"] or ["DeleteVectors", "GetVectors"]
+        resources_list (list): Resource suffixes or full ARNs. Bare strings are
+                               prefixed with "arn:aws:s3vectors:::"; strings already
+                               starting with "arn:" are used as-is.
+        effect (str): "Allow" or "Deny". Default: "Allow"
+        sid (str): Statement ID. Default: "statement"
+
+    Returns:
+        dict: Vector bucket policy dict with a single statement, ready for json.dumps()
+    """
+    return gen_bucket_policy(
+        user_list=user_list,
+        actions_list=actions_list,
+        resources_list=resources_list,
+        effect=effect,
+        sid=sid,
+        action_prefix="s3vectors",
+        resource_arn_service="s3vectors",
     )

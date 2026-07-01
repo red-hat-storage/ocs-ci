@@ -86,6 +86,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     get_server_version,
     get_client_type_by_name,
+    get_registry_svc,
 )
 from ocs_ci.utility.aws import AWS, get_unused_vpc_cidr, get_cluster_region
 from botocore.exceptions import ClientError
@@ -1921,7 +1922,7 @@ class SpokeOCP(ABC):
 
         target_version = ocp_version or provider_version
         if "nightly" in target_version:
-            return f"{constants.REGISTRY_SVC}:{target_version}"
+            return f"{get_registry_svc(target_version)}:{target_version}"
         return f"{constants.QUAY_REGISTRY_SVC}:{target_version}-x86_64"
 
     @abstractmethod
@@ -7521,6 +7522,13 @@ class SpokeODF(SpokeOCP, ABC):
 
         logger.info("Creating ODF client operator group")
         self.create_operator_group()
+
+        if self.is_external:
+            self.exec_oc_cmd(
+                constants.PATCH_SPECIFIC_SOURCES_CMD.format(
+                    disable="true", source_name=constants.OPERATOR_CATALOG_SOURCE_NAME
+                ).removeprefix("oc ")
+            )
 
         logger.info("Creating ODF client catalog source")
         self.create_catalog_source()
