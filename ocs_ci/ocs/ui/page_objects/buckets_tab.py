@@ -613,16 +613,17 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             self.page_has_loaded(sleep_time=2)
             _check_three_dots_disabled("check three dots inactive after refresh")
 
-    def upload_folder_to_bucket(
-        self, folder_path: str, wait_time: int = 2, timeout: int = 30
-    ) -> None:
+    def upload_folder_to_bucket(self, folder_path: str, wait_time: int = 2) -> None:
         """
         Upload a folder to the bucket.
 
         Args:
             folder_path (str): Path to the folder to upload.
             wait_time (int): Time to wait after upload (default: 2 seconds).
-            timeout (int): Time to wait after upload (default: 30 seconds).
+
+        Raises:
+            exceptions.TimeoutExpiredError: If the folder does not appear
+                  in the bucket after upload.
         """
         file_input = self.driver.find_element(
             self.bucket_tab["file_input_directory"][1],
@@ -638,12 +639,13 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         folder_name = os.path.basename(folder_path)
         try:
             self.wait_for_element_to_be_present(
-                (f"//span[contains(text(), '{folder_name}')]", By.XPATH),
-                timeout=timeout,
+                (f"//span[contains(text(), '{folder_name}')]", By.XPATH)
             )
             logger.info(f"Upload verified: {folder_name} appears in bucket")
-        except TimeoutException:
-            raise Exception(f"Upload failed: {folder_name} not found after {timeout}s")
+        except TimeoutException as err:
+            raise exceptions.TimeoutExpiredError(
+                f"Upload failed: {folder_name} not found in bucket"
+            ) from err
 
     def navigate_to_bucket(self, bucket_name: str) -> None:
         """
