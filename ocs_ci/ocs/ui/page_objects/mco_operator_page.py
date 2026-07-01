@@ -49,7 +49,7 @@ class MCOOperatorPage(AcmPageNavigator):
         """
         logger.info(f"Searching for operator: {operator_name}")
         search_box = self.wait_for_element_to_be_visible(
-            self.dep_loc["search_operators"], timeout=30
+            self.dep_loc["mco_search_operators"], timeout=30
         )
         search_box.clear()
         search_box.send_keys(operator_name)
@@ -73,9 +73,8 @@ class MCOOperatorPage(AcmPageNavigator):
                 "not found in Installed Operators"
             )
             self.take_screenshot()
-            if self.check_element_presence(
-                self.dep_loc["mco_operator_row_old_name"], timeout=10
-            ):
+            loc = self.dep_loc["mco_operator_row_old_name"]
+            if self.check_element_presence((loc[1], loc[0]), timeout=10):
                 raise AssertionError(
                     "Operator still displays old name "
                     "'ODF Multicluster Orchestrator' "
@@ -129,66 +128,14 @@ class MCOOperatorPage(AcmPageNavigator):
             element = self.wait_for_element_to_be_visible(
                 self.dep_loc["operator_installed_status"], timeout=30
             )
-            assert element.is_displayed(), "Operator does not show 'Installed' status"
-            logger.info("Operator is in 'Installed' state")
+            status_text = element.text.strip()
+            assert status_text in (
+                "Installed",
+                "Succeeded",
+            ), f"Unexpected operator status: '{status_text}'"
+            logger.info("Operator status: %s", status_text)
             self.take_screenshot()
         except TimeoutException:
             logger.error("Operator 'Installed' status indicator not found")
             self.take_screenshot()
             raise AssertionError("Operator does not show 'Installed' status")
-
-    def get_capability_levels(self):
-        """
-        Check which capability levels are present on the operator
-        details page.
-
-        Returns:
-            dict: A dict with capability names as keys and booleans
-                indicating presence as values.
-        """
-        capabilities = {}
-        if self.check_element_presence(
-            self.dep_loc["operator_capability_basic_install"],
-            timeout=10,
-        ):
-            logger.info("Basic Install capability found")
-            capabilities["Basic Install"] = True
-
-        if self.check_element_presence(
-            self.dep_loc["operator_capability_seamless_upgrades"],
-            timeout=10,
-        ):
-            logger.info("Seamless Upgrades capability found")
-            capabilities["Seamless Upgrades"] = True
-
-        self.take_screenshot()
-        return capabilities
-
-    def get_channel_and_version(self):
-        """
-        Get the channel and installed version from the operator
-        details page.
-
-        Returns:
-            tuple: (channel, version) strings, either may be None
-                if not found.
-        """
-        channel = None
-        ver = None
-        try:
-            channel_element = self.wait_for_element_to_be_visible(
-                self.dep_loc["operator_channel"], timeout=30
-            )
-            channel = channel_element.text
-            logger.info(f"Channel: {channel}")
-
-            version_element = self.wait_for_element_to_be_visible(
-                self.dep_loc["operator_installed_version"], timeout=30
-            )
-            ver = version_element.text
-            logger.info(f"Installed Version: {ver}")
-            self.take_screenshot()
-        except TimeoutException:
-            logger.warning("Channel or version information not found")
-            self.take_screenshot()
-        return channel, ver
