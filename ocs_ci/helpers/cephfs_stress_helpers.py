@@ -806,25 +806,43 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
                     restart_count = item.get("restartCount", 0)
                     key = f"{pod_name}/{container_name}"
 
-                    # Record current count into the new baseline regardless of delta
-                    new_baseline[key] = restart_count
+                    baseline_count = current_baseline.get(key, 0)
+                    delta = restart_count - baseline_count
 
-                    # Delta: restarts that occurred since the last check cycle
-                    delta = restart_count - current_baseline.get(key, 0)
+                    if delta < 0:
+                        # restartCount went backwards — the pod was recreated with the
+                        # same name and its counter reset to 0.
+                        delta = restart_count
+                        new_baseline[key] = 0
+                        logger.warning(
+                            f"Pod {pod_name} container {container_name}: restartCount "
+                            f"dropped from baseline {baseline_count} to {restart_count} "
+                            f"— pod likely recreated, resetting baseline"
+                        )
+                    else:
+                        new_baseline[key] = restart_count
+
                     if delta > 0:
                         new_restarts += delta
                         container_restart_details.append(
                             f"{container_name}: +{delta} (total: {restart_count})"
                         )
 
+                    current_state_reason = (
+                        item.get("state", {}).get("terminated", {}).get("reason", "")
+                    )
                     last_state_reason = (
                         item.get("lastState", {})
                         .get("terminated", {})
                         .get("reason", "")
                     )
-                    if last_state_reason == "OOMKilled":
+                    if current_state_reason == "OOMKilled":
                         oomkilled_pods.append(
-                            f"Pod: {pod_name}, Container: {container_name}"
+                            f"Pod: {pod_name}, Container: {container_name} (state: current)"
+                        )
+                    elif last_state_reason == "OOMKilled":
+                        oomkilled_pods.append(
+                            f"Pod: {pod_name}, Container: {container_name} (state: previous)"
                         )
 
                 if new_restarts > 0:
@@ -950,7 +968,7 @@ def get_mon_db_usage():
 def get_nodes_resource_utilization():
     """
     Gets the node cpu and memory utilization in percentage using 'adm top' and 'oc describe'
-    for all nodes in the cluster.
+    for both master and worker nodes.
 
     """
     logger.info(
@@ -959,8 +977,10 @@ def get_nodes_resource_utilization():
         "\n=================================================="
         "\n"
     )
-    get_node_resource_utilization_from_adm_top(print_table=True)
-    for node_type in ["master", "worker"]:
+    for node_type in [constants.MASTER_MACHINE, constants.WORKER_MACHINE]:
+        get_node_resource_utilization_from_adm_top(
+            node_type=node_type, print_table=True
+        )
         get_node_resource_utilization_from_oc_describe(
             node_type=node_type, print_table=True
         )
