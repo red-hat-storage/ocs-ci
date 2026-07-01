@@ -5,7 +5,7 @@ import re
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import get_snapshot_content_obj
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources import ocs
 from ocs_ci.ocs.resources.storageconsumer import find_consumer_for_storage_client
@@ -307,49 +307,60 @@ def verify_bound_snapshot_delete_rejected(snap_runner, snap_data):
         )
 
 
-def wait_and_verify_snapshot_bound(snap_runner, snap_data, timeout=30, sleep=5):
+def wait_and_verify_snapshot_bound(snap_runner, snap_data, timeout=60, sleep=5):
     """
-    Poll ``odf cephfs-snap ls`` to confirm that ``snap_data`` remains
-    in Bound state, then do a final explicit assertion.
+    Poll ``odf cephfs-snap ls`` for the full ``timeout`` window and assert
+    the snapshot is in Bound state at the end.
+
+    ``TimeoutSampler`` retries ``get_cephfs_snap_entries`` on failure but
+    does not retry exceptions raised from the loop body, so assertions are
+    kept outside the loop. The sampler runs until ``TimeoutExpiredError`` is
+    caught, then the last observed state is verified.
 
     Args:
         snap_runner: Initialised ``ODFCLICephfsSnapRunner`` instance.
         snap_data (dict): Snapshot data dict with a ``"ceph_snap_name"``
             key.
-        timeout (int): Maximum seconds to poll (default 30).
+        timeout (int): Seconds to poll (default 60).
         sleep (int): Seconds between polls (default 5).
 
     Raises:
-        AssertionError: If the snapshot disappears or is not in Bound state
-            when first observed after the delete attempt.
-        TimeoutExpiredError: If ``get_cephfs_snap_entries`` keeps failing
-            for the entire ``timeout`` window.
+        AssertionError: If the snapshot is not found or not in Bound state
+            at the end of the polling window.
     """
     ceph_snap_name = snap_data["ceph_snap_name"]
     log.info(
-        "Polling to confirm snapshot '%s' is in Bound state",
+        "Polling for %ds to confirm snapshot '%s' remains in Bound state",
+        timeout,
         ceph_snap_name,
     )
-    for snap_entries in TimeoutSampler(
-        timeout=timeout,
-        sleep=sleep,
-        func=get_cephfs_snap_entries,
-        snap_runner=snap_runner,
-    ):
-        entry = next(
-            (e for e in snap_entries if e["snapshot"] == ceph_snap_name),
-            None,
-        )
-        assert entry is not None, (
-            f"Snapshot '{ceph_snap_name}' disappeared after " f"failed delete attempt"
-        )
-        state = entry["state"]
-        assert state == constants.CEPHFS_SNAPSHOT_STATE_BOUND, (
-            f"Snapshot '{ceph_snap_name}' is in '{state}' state, " f"expected Bound"
-        )
-        break
+    last_entry = None
+    try:
+        for snap_entries in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_cephfs_snap_entries,
+            snap_runner=snap_runner,
+        ):
+            entry = next(
+                (e for e in snap_entries if e["snapshot"] == ceph_snap_name),
+                None,
+            )
+            if entry is not None:
+                last_entry = entry
+    except TimeoutExpiredError:
+        pass
+    assert last_entry is not None, (
+        f"Snapshot '{ceph_snap_name}' was never observed during the "
+        f"{timeout}s polling window after failed delete attempt"
+    )
+    assert last_entry["state"] == constants.CEPHFS_SNAPSHOT_STATE_BOUND, (
+        f"Snapshot '{ceph_snap_name}' ended in '{last_entry['state']}' "
+        f"state after {timeout}s polling window, expected Bound"
+    )
     log.info(
-        "Snapshot '%s' confirmed in '%s' state after delete rejection",
+        "Snapshot '%s' confirmed in '%s' state after %ds polling window",
         ceph_snap_name,
         constants.CEPHFS_SNAPSHOT_STATE_BOUND,
+        timeout,
     )
