@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     rgw,
     runs_on_provider,
+    zstream_4_20_14,
 )
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2
 from ocs_ci.ocs.resources.objectbucket import OBC
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @runs_on_provider
 @skipif_mcg_only
+@zstream_4_20_14
 class TestObjectIntegrity(ManageTest):
     """
     Test data integrity of RGW buckets

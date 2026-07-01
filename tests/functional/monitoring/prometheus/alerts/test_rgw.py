@@ -4,7 +4,7 @@ import pytest
 from semantic_version import Version
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad, zstream_4_20_14
 from ocs_ci.framework.testlib import tier4c, runs_on_provider, skipif_managed_service
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-2323")
 @runs_on_provider
 @skipif_managed_service
+@zstream_4_20_14
 def test_rgw_unavailable(measure_stop_rgw, threading_lock):
     """
     Test that there is appropriate alert when RGW is unavailable and that
