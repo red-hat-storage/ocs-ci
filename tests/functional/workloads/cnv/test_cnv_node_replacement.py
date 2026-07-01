@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     skipif_external_mode,
     skipif_bm,
+    zstream_4_20_14,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io
 from ocs_ci.ocs import constants
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @skipif_bm
 @skipif_external_mode
+@zstream_4_20_14
 class TestCnvNodeReplace(E2ETest):
     """
     Node replacement proactive

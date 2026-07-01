@@ -18,6 +18,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     provider_client_platform_required,
     provider_mode,
     skipif_external_mode,
+    zstream_4_20_14,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, ocp, defaults
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-1261")
 @skipif_managed_service
 @runs_on_provider
+@zstream_4_20_14
 def test_monitoring_enabled(threading_lock):
     """
     OCS Monitoring is enabled after OCS installation (which is why this test
@@ -90,6 +92,7 @@ def test_monitoring_enabled(threading_lock):
 @pytest.mark.polarion_id("OCS-1265")
 @skipif_managed_service
 @runs_on_provider
+@zstream_4_20_14
 def test_ceph_mgr_dashboard_not_deployed():
     """
     Check that `ceph mgr dashboard`_ is not deployed after installation of OCS
@@ -130,6 +133,7 @@ def test_ceph_mgr_dashboard_not_deployed():
 @pytest.mark.polarion_id("OCS-1267")
 @skipif_managed_service
 @runs_on_provider
+@zstream_4_20_14
 def test_ceph_rbd_metrics_available(threading_lock):
     """
     Ceph RBD metrics should be provided via OCP Prometheus as well.
@@ -155,6 +159,7 @@ def test_ceph_rbd_metrics_available(threading_lock):
 @pytest.mark.polarion_id("OCS-1268")
 @skipif_managed_service
 @runs_on_provider
+@zstream_4_20_14
 def test_ceph_metrics_available(threading_lock):
     """
     Ceph metrics as listed in KNIP-634 should be provided via OCP Prometheus.
@@ -189,6 +194,7 @@ def test_ceph_metrics_available(threading_lock):
 @pytest.mark.polarion_id("OCS-1302")
 @skipif_managed_service
 @runs_on_provider
+@zstream_4_20_14
 def test_monitoring_reporting_ok_when_idle(workload_idle, threading_lock):
     """
     When nothing is happening, OCP Prometheus reports OCS status as OK.
@@ -272,6 +278,7 @@ def test_monitoring_reporting_ok_when_idle(workload_idle, threading_lock):
 @runs_on_provider
 @provider_client_platform_required
 @pytest.mark.polarion_id("OCS-5204")
+@zstream_4_20_14
 def test_provider_metrics_available(threading_lock):
     """
     Metrics added in provider-client mode should be provided via OCP Prometheus on provider.
@@ -291,6 +298,7 @@ def test_provider_metrics_available(threading_lock):
 @tier1
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-6796")
+@zstream_4_20_14
 def test_monitoring_ip_connectivity(threading_lock):
     """
     Procedure:
