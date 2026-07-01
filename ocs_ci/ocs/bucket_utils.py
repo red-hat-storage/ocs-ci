@@ -2234,6 +2234,53 @@ def compare_bucket_object_list(
         return False
 
 
+def wait_for_expected_objects_in_bucket(
+    mcg_obj, object_names, bucket_name, timeout=600
+):
+    """
+    Wait for specific objects to appear in a bucket (subset check).
+
+    Unlike compare_bucket_object_list which checks for exact set equality
+    between two buckets, this function checks that a given set of object
+    names exists in the target bucket. Use this when multiple sources
+    replicate to the same target, making exact comparison impossible.
+
+    Args:
+        mcg_obj (MCG): An initialized MCG object
+        object_names (list): Object names expected to appear in the bucket
+        bucket_name (str): Bucket to check
+        timeout (int): The maximum time in seconds to wait for the objects
+            to appear
+
+    Returns:
+        bool: True if all expected objects are found within timeout,
+        False otherwise
+    """
+    expected = set(object_names)
+    try:
+        for bucket_objects in TimeoutSampler(
+            timeout,
+            30,
+            mcg_obj.s3_list_all_objects_in_bucket,
+            bucketname=bucket_name,
+        ):
+            found = {obj.key for obj in bucket_objects}
+            if expected.issubset(found):
+                logger.info(
+                    f"All {len(expected)} expected objects found in {bucket_name}"
+                )
+                return True
+            logger.debug(
+                f"Waiting for objects in {bucket_name}: " f"missing={expected - found}"
+            )
+    except TimeoutExpiredError:
+        logger.error(
+            f"Expected objects were not found in {bucket_name} "
+            f"after {timeout} seconds"
+        )
+        return False
+
+
 def write_random_test_objects_to_bucket(
     io_pod,
     bucket_to_write,

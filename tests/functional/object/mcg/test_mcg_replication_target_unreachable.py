@@ -13,6 +13,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     update_replication_policy,
+    wait_for_expected_objects_in_bucket,
     write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -462,13 +463,8 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
                 for label, t in zip(("a", "b", "c"), target_buckets)
             ]
         }
-        initial_replication_policy = ("rule-a", target_a.name, None)
-        source_a = bucket_factory(
-            1, "OC", replication_policy=initial_replication_policy
-        )[0]
-        source_b = bucket_factory(
-            1, "OC", replication_policy=initial_replication_policy
-        )[0]
+        source_a = bucket_factory(1, "OC")[0]
+        source_b = bucket_factory(1, "OC")[0]
         for src in (source_a, source_b):
             update_replication_policy(src.name, multi_rule_policy)
             logger.info(
@@ -480,7 +476,7 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         logger.test_step(
             "Write objects and verify replication from both sources to all targets"
         )
-        write_random_test_objects_to_bucket(
+        src_a_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             source_a.name,
             f"{test_directory_setup.origin_dir}/src_a_init",
@@ -488,7 +484,7 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
             pattern="src-a-init-",
             mcg_obj=mcg_obj,
         )
-        write_random_test_objects_to_bucket(
+        src_b_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             source_b.name,
             f"{test_directory_setup.origin_dir}/src_b_init",
@@ -496,12 +492,15 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
             pattern="src-b-init-",
             mcg_obj=mcg_obj,
         )
-        for src in (source_a, source_b):
+        for src_name, obj_names in (
+            (source_a.name, src_a_objects),
+            (source_b.name, src_b_objects),
+        ):
             for tgt in target_buckets:
-                logger.assertion(f"Replication check: {src.name} -> {tgt.name}")
-                assert compare_bucket_object_list(
-                    mcg_obj, src.name, tgt.name, timeout=600
-                ), f"Replication failed: {src.name} -> {tgt.name}"
+                logger.assertion(f"Replication check: {src_name} -> {tgt.name}")
+                assert wait_for_expected_objects_in_bucket(
+                    mcg_obj, obj_names, tgt.name, timeout=600
+                ), f"Replication failed: {src_name} -> {tgt.name}"
         logger.info("Initial replication verified for all source-target pairs")
 
         # 4. Delete the underlying MCG bucket of targetA's backingstore
@@ -604,7 +603,7 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
 
         # 12. Verify replication resumes from both sources to all targets
         logger.test_step("Verify replication resumes from both sources to all targets")
-        write_random_test_objects_to_bucket(
+        src_a_recovery_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             source_a.name,
             f"{test_directory_setup.origin_dir}/src_a_recovery",
@@ -612,7 +611,7 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
             pattern="src-a-recovery-",
             mcg_obj=mcg_obj,
         )
-        write_random_test_objects_to_bucket(
+        src_b_recovery_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             source_b.name,
             f"{test_directory_setup.origin_dir}/src_b_recovery",
@@ -620,14 +619,17 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
             pattern="src-b-recovery-",
             mcg_obj=mcg_obj,
         )
-        for src in (source_a, source_b):
+        for src_name, obj_names in (
+            (source_a.name, src_a_recovery_objects),
+            (source_b.name, src_b_recovery_objects),
+        ):
             for tgt in target_buckets:
                 logger.assertion(
-                    f"Replication recovery check: {src.name} -> {tgt.name}"
+                    f"Replication recovery check: {src_name} -> {tgt.name}"
                 )
-                assert compare_bucket_object_list(
-                    mcg_obj, src.name, tgt.name, timeout=600
-                ), f"Replication not recovered: {src.name} -> {tgt.name}"
+                assert wait_for_expected_objects_in_bucket(
+                    mcg_obj, obj_names, tgt.name, timeout=600
+                ), f"Replication not recovered: {src_name} -> {tgt.name}"
         logger.info("Replication recovered for all source-target pairs")
 
         # 13. Wait for all alerts to clear
