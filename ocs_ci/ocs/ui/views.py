@@ -1708,6 +1708,35 @@ acm_configuration_4_22 = {
         "//h2[normalize-space()='Core platform']",
         By.XPATH,
     ),
+    "switch-perspective": (
+        "//button[@data-test-id='perspective-switcher-toggle'] | "
+        "//*[contains(@class, 'perspective-switcher')]//button | "
+        "//*[normalize-space()='Fleet management']/parent::button | "
+        "//*[normalize-space()='Fleet management']/ancestor::button[1]",
+        By.XPATH,
+    ),
+    "fleet-virtual": (
+        "//*[normalize-space()='Fleet virtualization'"
+        " or normalize-space()='Fleet Virtualization']",
+        By.XPATH,
+    ),
+    "nav-bar-vms-page": (
+        "//a[@data-test-id='virtualmachines-nav-item'] | "
+        "//*[normalize-space()='VirtualMachines']",
+        By.XPATH,
+    ),
+    "vm-page-next-btn": (
+        "//button[normalize-space()='Next']",
+        By.XPATH,
+    ),
+    "assign": (
+        "//button[normalize-space()='Assign']",
+        By.XPATH,
+    ),
+    "all-clusters": ("//li[@role='treeitem']//*[text()='All clusters']", By.XPATH),
+    "managed-cluster-name": ("//li[@role='treeitem']//*[text()='{}']", By.XPATH),
+    "cnv-workload-namespace": ("//li[@role='treeitem']//*[text()='{}']", By.XPATH),
+    "vm-status": ("//*[normalize-space()='Running']", By.XPATH),
 }
 
 add_capacity = {
@@ -3714,6 +3743,7 @@ locators = {
             **acm_page_nav_420,
             **acm_configuration_4_20,
             **acm_configuration_4_21,
+            **acm_page_nav_421,
             **acm_configuration_4_22,
         },
         "validation": {

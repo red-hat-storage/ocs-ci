@@ -1047,17 +1047,31 @@ def remove_drprotection_for_discovered_vm_via_ui(
         )
         # Guard: the namespace sidebar button occasionally triggers a navigation to
         # the ACM Search page instead of filtering the Fleet Virtualization VM list.
-        # Detect this by checking for the Fleet Virtualization nav and re-navigate
-        # if we've been taken to the wrong page.
-        fleet_nav_present = acm_obj.check_element_presence(
-            (
+        # Detect this by checking the perspective switcher text or the Fleet
+        # Virtualization nav and re-navigate if we've been taken to the wrong page.
+        still_in_fleet_virt = False
+        switcher_found = False
+        try:
+            switcher_el = acm_obj.driver.find_element(
                 By.XPATH,
-                "//nav[@data-test-id="
-                "'fleet-virtualization-perspective-perspective-nav']",
-            ),
-            timeout=5,
-        )
-        if not fleet_nav_present:
+                "//button[@data-test-id='perspective-switcher-toggle']"
+                " | //*[contains(@class, 'perspective-switcher')]//button",
+            )
+            switcher_found = True
+            if "fleet virtualization" in switcher_el.text.strip().lower():
+                still_in_fleet_virt = True
+        except Exception:
+            pass
+        if not switcher_found and not still_in_fleet_virt:
+            still_in_fleet_virt = acm_obj.check_element_presence(
+                (
+                    By.XPATH,
+                    "//nav[@data-test-id="
+                    "'fleet-virtualization-perspective-perspective-nav']",
+                ),
+                timeout=5,
+            )
+        if not still_in_fleet_virt:
             log.warning(
                 "Namespace button click navigated away from Fleet "
                 "Virtualization page. Re-navigating."
@@ -1122,20 +1136,43 @@ def navigate_using_fleet_virtualization(acm_obj):
     """
     acm_version_str = ".".join(get_running_acm_version().split(".")[:2])
     acm_loc = locators_for_current_ocp_version()["acm_page"]
-    log.info("Navigate to VMs console using Fleet Virtulization dropdown")
+    log.info("Navigate to VMs console using Fleet Virtualization dropdown")
     acm_obj.page_has_loaded(retries=10, sleep_time=5)
-    # Check for the Fleet Virtualization perspective-specific nav container.
-    # Using the nav data-test-id avoids false positives from the AI locator
-    # fallback, which can match the Clusters nav link as the VMs nav item.
-    fleet_virt_nav_visible = acm_obj.check_element_presence(
-        (
+    # Check whether we are already in the Fleet Virtualization perspective
+    # by looking at the perspective switcher text. In OCP 4.22 (PF6) the
+    # nav data-test-id changed, so the old nav-based check triggers AI
+    # fallback false positives that match the Fleet Management nav instead.
+    already_in_fleet_virt = False
+    switcher_found = False
+    try:
+        switcher_el = acm_obj.driver.find_element(
             By.XPATH,
-            "//nav[@data-test-id="
-            "'fleet-virtualization-perspective-perspective-nav']",
-        ),
-        timeout=5,
-    )
-    if fleet_virt_nav_visible:
+            "//button[@data-test-id='perspective-switcher-toggle']"
+            " | //*[contains(@class, 'perspective-switcher')]//button",
+        )
+        switcher_text = switcher_el.text.strip().lower()
+        switcher_found = True
+        if "fleet virtualization" in switcher_text:
+            already_in_fleet_virt = True
+        else:
+            log.info(
+                f"Perspective switcher shows '{switcher_el.text.strip()}', "
+                "need to switch to Fleet Virtualization"
+            )
+    except Exception:
+        pass
+    if not switcher_found and not already_in_fleet_virt:
+        fleet_virt_nav_visible = acm_obj.check_element_presence(
+            (
+                By.XPATH,
+                "//nav[@data-test-id="
+                "'fleet-virtualization-perspective-perspective-nav']",
+            ),
+            timeout=5,
+        )
+        if fleet_virt_nav_visible:
+            already_in_fleet_virt = True
+    if already_in_fleet_virt:
         log.info(
             "Already in Fleet Virtualization with sidebar visible, "
             "skipping perspective switch"
@@ -1172,7 +1209,7 @@ def navigate_using_fleet_virtualization(acm_obj):
     nav_clicked = False
     if acm_obj.check_element_presence(
         (acm_loc["nav-bar-vms-page"][1], acm_loc["nav-bar-vms-page"][0]),
-        timeout=10,
+        timeout=30,
     ):
         try:
             acm_obj.do_click(acm_loc["nav-bar-vms-page"])
@@ -1183,20 +1220,32 @@ def navigate_using_fleet_virtualization(acm_obj):
                 "falling back to direct URL navigation"
             )
     if not nav_clicked:
-        # Fleet Virtualization perspective may have been renamed or its sidebar
-        # nav items reorganised; fall back to direct URL navigation.
         log.info("VMs nav item not in sidebar, navigating to VMs page via URL")
         current_url = acm_obj.driver.current_url
         base_url = current_url.split("/k8s")[0].split("/multicloud")[0]
+        base_url = base_url.split("/fleet-virtualization")[0]
         vms_url = (
-            f"{base_url}/k8s/all-clusters"
-            "/all-namespaces/kubevirt.io~v1~VirtualMachine"
+            f"{base_url}/fleet-virtualization"
+            "/kubevirt.io~v1~VirtualMachine"
+            "/all-clusters/all-namespaces"
         )
         log.info(f"Navigating to VMs URL: {vms_url}")
         acm_obj.driver.get(vms_url)
         acm_obj.page_has_loaded(retries=10, sleep_time=5)
+    # In OCP 4.22 the Fleet Virtualization VMs page defaults to the Overview
+    # tab. Click the "Virtual machines" tab to show the actual VM list.
+    vm_tab_locator = (
+        "//a[normalize-space()='Virtual machines'] | "
+        "//button[normalize-space()='Virtual machines']",
+        By.XPATH,
+    )
+    if acm_obj.check_element_presence(
+        (vm_tab_locator[1], vm_tab_locator[0]), timeout=10
+    ):
+        acm_obj.do_click(vm_tab_locator)
+        acm_obj.page_has_loaded(retries=5, sleep_time=3)
     log.info(
-        "Successfully navigate to the VirtualMachines page under Fleet Virtualization"
+        "Successfully navigated to the VirtualMachines page under Fleet Virtualization"
     )
     if compare_versions(f"{acm_version_str} < 2.16"):
         if acm_obj.check_element_presence(
