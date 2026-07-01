@@ -614,7 +614,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             _check_three_dots_disabled("check three dots inactive after refresh")
 
     def upload_folder_to_bucket(
-        self, folder_path: str, wait_time: int = 30, timeout: int = 30
+        self, folder_path: str, wait_time: int = 2, timeout: int = 30
     ) -> None:
         """
         Upload a folder to the bucket.
