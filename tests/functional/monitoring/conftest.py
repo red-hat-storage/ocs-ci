@@ -1210,8 +1210,24 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
     def teardown():
         nonlocal client
         nonlocal client_cluster
+        nonlocal current_version
         logger.info(f"Switch to client cluster ({client_cluster})")
+
+        # First restore the original version explicitly
+        logger.info(f"Restoring original OCS version: {current_version}")
+        client.set_ocs_version(current_version)
+
+        # Then resume heartbeat
         client.resume_heartbeat()
+
+        # Wait to ensure the version is properly restored
+        logger.info("Waiting for version restoration to complete")
+        restored_version = client.get_ocs_version()
+        if restored_version != current_version:
+            logger.warning(
+                f"Version mismatch after restoration. Expected: {current_version}, "
+                f"Got: {restored_version}"
+            )
 
     request.addfinalizer(teardown)
 
