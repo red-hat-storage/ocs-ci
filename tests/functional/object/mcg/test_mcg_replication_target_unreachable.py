@@ -462,8 +462,13 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
                 for label, t in zip(("a", "b", "c"), target_buckets)
             ]
         }
-        source_a = bucket_factory(1, "OC")[0]
-        source_b = bucket_factory(1, "OC")[0]
+        initial_replication_policy = ("rule-a", target_a.name, None)
+        source_a = bucket_factory(
+            1, "OC", replication_policy=initial_replication_policy
+        )[0]
+        source_b = bucket_factory(
+            1, "OC", replication_policy=initial_replication_policy
+        )[0]
         for src in (source_a, source_b):
             update_replication_policy(src.name, multi_rule_policy)
             logger.info(
