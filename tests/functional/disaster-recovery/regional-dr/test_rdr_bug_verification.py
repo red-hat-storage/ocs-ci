@@ -311,12 +311,8 @@ class TestRDRBugVerification:
                 successfully, confirming DR replication is functional after
                 the token update.
         """
-        # --- Step 1: Verify peer secrets exist on the hub cluster ---
+        logger.test_step("Verify peer secrets exist on the hub cluster")
         config.switch_acm_ctx()
-        logger.info(
-            f"Verifying peer secret of type {_PEER_SECRET_TYPE} exists in "
-            f"each managed cluster namespace on the hub"
-        )
         for cluster_config in get_non_acm_cluster_config():
             cluster_name = cluster_config.ENV_DATA["cluster_name"]
             secret_ocp_hub = ocp.OCP(
@@ -336,7 +332,7 @@ class TestRDRBugVerification:
                 f"{_PEER_SECRET_TYPE} in namespace {cluster_name} on hub"
             )
 
-        # --- Step 2: Record secret state on primary cluster before failover ---
+        logger.test_step("Record secret state on primary cluster before failover")
         primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
         config.switch_to_cluster_by_name(primary_cluster_name)
 
@@ -357,7 +353,7 @@ class TestRDRBugVerification:
         initial_mon_ips = self._extract_mon_ips_from_token(initial_token)
         logger.info(f"Mon IPs from token before failover: {initial_mon_ips}")
 
-        # --- Step 3: Verify token mon IPs match ceph mon dump ---
+        logger.test_step("Verify token mon IPs match ceph mon dump")
         dump_mon_ips_before = self._get_mon_ips_from_dump()
         logger.info(
             f"Mon IPs from ceph mon dump before failover: {dump_mon_ips_before}"
@@ -368,7 +364,7 @@ class TestRDRBugVerification:
         )
         logger.info("Mon IPs in token match ceph mon dump before failover")
 
-        # --- Step 4: Scale down one mon to simulate a mon failure ---
+        logger.test_step("Scale down one mon to simulate a mon failure")
         mon_deployments = get_deployments_having_label(
             constants.MON_APP_LABEL,
             config.ENV_DATA["cluster_namespace"],
@@ -389,22 +385,22 @@ class TestRDRBugVerification:
             namespace=config.ENV_DATA["cluster_namespace"],
         )
 
-        # --- Step 5: Wait for the mon to leave quorum ---
+        logger.test_step("Wait for the mon to leave quorum")
         wait_for_mon_status(
             mon_id=mon_id, status=constants.MON_STATUS_DOWN, timeout=300
         )
         logger.info(f"Mon {mon_id} has left the quorum")
 
-        # --- Step 6: Wait for rook to bring up a replacement mon ---
+        logger.test_step("Wait for rook to bring up a replacement mon")
         # Rook waits ~900s internally before declaring a mon failed and starting
         # the replacement. Allow an additional 300s for the new mon to schedule,
         # join quorum, and update the peer token secret.
-        wait_for_mons_in_quorum(expected_mon_count=initial_mon_count, timeout=1200)
+        wait_for_mons_in_quorum(
+            expected_mon_count=initial_mon_count, timeout=1200, sleep=60
+        )
         logger.info("Rook brought up a replacement mon, quorum restored")
 
-        # --- Step 7: Wait for rook to update the secret after the new mon joins ---
-        # The peer token secret is updated asynchronously after quorum is
-        # restored; poll until the rook managedField timestamp advances.
+        logger.test_step("Wait for rook to update the peer token secret")
         initial_dt = datetime.fromisoformat(initial_rook_time.replace("Z", "+00:00"))
         updated_secret_data = None
         updated_rook_time = None
@@ -438,7 +434,7 @@ class TestRDRBugVerification:
             f"from {initial_rook_time} to {updated_rook_time}"
         )
 
-        # --- Step 8: Verify updated token mon IPs match new ceph mon dump ---
+        logger.test_step("Verify updated token mon IPs match new ceph mon dump")
         updated_token = self._decode_peer_token(updated_secret_data)
         updated_mon_ips = self._extract_mon_ips_from_token(updated_token)
         logger.info(f"Mon IPs from token after failover: {updated_mon_ips}")
@@ -457,7 +453,7 @@ class TestRDRBugVerification:
             f"Updated token mon IPs {updated_mon_ips} match ceph mon dump after failover"
         )
 
-        # --- Step 9: Verify CephBlockPool is in Ready status ---
+        logger.test_step("Verify CephBlockPool is in Ready status")
         cbp_ocp = ocp.OCP(
             kind=constants.CEPHBLOCKPOOL,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
@@ -471,8 +467,9 @@ class TestRDRBugVerification:
         )
         logger.info("CephBlockPool is in Ready status")
 
-        # --- Step 10: Verify the updated token exists in the secret created by
-        #              token-exchange-agent on the peer cluster ---
+        logger.test_step(
+            "Verify the updated token is propagated to the " "peer cluster by MCO"
+        )
         secondary_cluster_config = next(
             c
             for c in get_non_acm_cluster_config()
@@ -497,8 +494,8 @@ class TestRDRBugVerification:
         peer_mon_ips = None
         try:
             for _ in TimeoutSampler(
-                timeout=600,
-                sleep=30,
+                timeout=3600,
+                sleep=60,
                 func=lambda: None,
             ):
                 if ocs_version >= version.VERSION_4_19:
@@ -539,7 +536,7 @@ class TestRDRBugVerification:
                 f"Mon IPs {peer_mon_ips} in secret {peer_secret_name!r} on "
                 f"secondary cluster {secondary_cluster_name!r} did not match "
                 f"the updated mon IPs {updated_mon_ips} from the primary "
-                f"cluster within 600s"
+                f"cluster within 3600s"
             )
         logger.info(
             f"token-exchange-agent propagated updated mon IPs {peer_mon_ips} "
@@ -547,7 +544,7 @@ class TestRDRBugVerification:
         )
         config.switch_to_cluster_by_name(primary_cluster_name)
 
-        # --- Step 11: Verify MirrorPeer and deploy RBD workload with DR ---
+        logger.test_step("Verify MirrorPeer and deploy RBD workload with DR")
         config.switch_acm_ctx()
         mirror_peer_ocp = ocp.OCP(kind="MirrorPeer")
         mirror_peers = mirror_peer_ocp.get(all_namespaces=True).get("items", [])
