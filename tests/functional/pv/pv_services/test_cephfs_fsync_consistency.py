@@ -5,6 +5,7 @@ from ocs_ci.framework.testlib import ManageTest, tier1, green_squad, polarion_id
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import exec_cmd
 from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.framework.pytest_customization.marks import zstream_4_20_14, zstream_4_20_14_ceph_csi
 
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,8 @@ logger = logging.getLogger(__name__)
 @tier1
 @green_squad
 @polarion_id("OCS-6797")
+@zstream_4_20_14
+@zstream_4_20_14_ceph_csi
 class TestCephfsFsyncConsistency(ManageTest):
     """
     Ensuring File Completeness Post-fsync with Shared CephFS Volume

@@ -864,3 +864,27 @@ skipif_lean_deployment = pytest.mark.skipif(
     or not check_cluster_resources_for_nfs(),
     reason="Test cannot run on lean profile or requires higher cluster resources (insufficient CPU/memory)",
 )
+# z-stream marker
+zstream_4_20_14 = pytest.mark.zstream_4_20_14
+# z-stream marker
+zstream_4_20_14_monitoring = pytest.mark.zstream_4_20_14_monitoring
+# z-stream marker
+zstream_4_20_14_nfs = pytest.mark.zstream_4_20_14_nfs
+# z-stream marker
+zstream_4_20_14_ceph_csi = pytest.mark.zstream_4_20_14_ceph_csi
+# z-stream marker
+zstream_4_20_14_disaster_recovery = pytest.mark.zstream_4_20_14_disaster_recovery
+# z-stream marker
+zstream_4_20_14_mcg = pytest.mark.zstream_4_20_14_mcg
+# z-stream marker
+zstream_4_20_14_upgrade = pytest.mark.zstream_4_20_14_upgrade
+# z-stream marker
+zstream_4_20_14_odf_dr_multicluster_orchestrator = pytest.mark.zstream_4_20_14_odf_dr_multicluster_orchestrator
+# z-stream marker
+zstream_4_20_14_ocs_operator = pytest.mark.zstream_4_20_14_ocs_operator
+# z-stream marker
+zstream_4_20_14_rook = pytest.mark.zstream_4_20_14_rook
+# z-stream marker
+zstream_4_20_14_odf_console = pytest.mark.zstream_4_20_14_odf_console
+# z-stream marker
+zstream_4_20_14_odf_cli = pytest.mark.zstream_4_20_14_odf_cli
