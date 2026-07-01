@@ -12,7 +12,7 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
 )
 
-
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
@@ -639,7 +639,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         folder_name = os.path.basename(folder_path)
         try:
             self.wait_for_element_to_be_present(
-                (f"//span[contains(text(), '{folder_name}')]", By.XPATH)
+                format_locator(self.bucket_tab["uploaded_folder_name"], folder_name),
             )
             logger.info(f"Upload verified: {folder_name} appears in bucket")
         except TimeoutException as err:

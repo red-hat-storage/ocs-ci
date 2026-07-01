@@ -2952,6 +2952,10 @@ bucket_tab = {
         "//button[text()='Upload']",
         By.XPATH,
     ),
+    "uploaded_folder_name": (
+        "//span[contains(text(), '{}')]",
+        By.XPATH,
+    ),
     "create_bucket_button": (
         "//*[@id='yaml-create']",
         By.XPATH,
