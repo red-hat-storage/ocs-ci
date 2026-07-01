@@ -2,7 +2,7 @@ ENV_DATA:
   deploy_via_cli: True
   cg_enabled: True
   dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
-  dr_workload_repo_branch: "ss_apps"
+  dr_workload_repo_branch: "master"
   dr_workload_subscription_rbd: [
     {name: "busybox-1", workload_dir: "rdr/busybox/rbd/subscription_with_placementrule/app-busybox-1",
      pod_count: 10, pvc_count: 10
@@ -55,6 +55,13 @@ ENV_DATA:
       workload_path: "rdr/busybox/rbd/workloads/deployments/app-busybox-6"
     },
   ]
+  dr_workload_appset_rbd_statefulsets: [
+    { name: "appset-busybox-sfs-1", workload_dir: "rdr/busybox/rbd/appset/statefulsets/appset-busybox-sfs-1.yaml",
+      dr_workload_app_placement_name: "busybox-sfs-1-placement",
+      dr_workload_app_pvc_selector: {'appname': 'busybox_app_sfs_1'}, pod_count: 5, pvc_count: 5,
+      workload_path: "rdr/busybox/rbd/workloads/statefulsets/app-busybox-1"
+    },
+  ]
 
   dr_workload_subscription_cephfs: [
     { name: "busybox-1", workload_dir: "rdr/busybox/cephfs/subscription_with_placementrule/app-busybox-1",
@@ -91,6 +98,13 @@ ENV_DATA:
       dr_workload_app_placement_name: "busybox-4-placement-cephfs",
       dr_workload_app_pvc_selector: { 'appname': 'busybox_app3_cephfs' }, pod_count: 10, pvc_count: 10,
       workload_path: "rdr/busybox/cephfs/workloads/deployments/app-busybox-4"
+    },
+  ]
+  dr_workload_appset_cephfs_statefulsets: [
+    { name: "appset-busybox-sfs-1-cephfs", workload_dir: "rdr/busybox/cephfs/appset/statefulsets/appset-busybox-sfs-1-cephfs.yaml",
+      dr_workload_app_placement_name: "busybox-sfs-1-cephfs-placement",
+      dr_workload_app_pvc_selector: { 'appname': 'busybox_app_sfs_1' }, pod_count: 5, pvc_count: 5,
+      workload_path: "rdr/busybox/cephfs/workloads/statefulsets/app-busybox-1"
     },
   ]
 
@@ -249,6 +263,13 @@ ENV_DATA:
       workload_path: "rdr/busybox/rbd/workloads/deployments/app-busybox-6",
     },
   ]
+  dr_workload_subscription_placement_rbd_statefulsets: [
+    { name: "busybox-sfs-1", workload_dir: "rdr/busybox/rbd/subscription_with_placement/statefulsets/app-busybox-1",
+      pod_count: 5, pvc_count: 5, is_placement: True,
+      dr_workload_app_pvc_selector: { "appname": "busybox_app_sfs_1" },
+      workload_path: "rdr/busybox/rbd/workloads/statefulsets/app-busybox-1",
+    },
+  ]
   dr_workload_subscription_placement_cephfs: [
     { name: "busybox-1", workload_dir: "rdr/busybox/cephfs/subscription_with_placement/deployments/app-busybox-1",
       pod_count: 10, pvc_count: 10, is_placement: True,
@@ -269,6 +290,13 @@ ENV_DATA:
       pod_count: 10, pvc_count: 10, is_placement: True,
       dr_workload_app_pvc_selector: { "appname": "busybox_app4_cephfs" },
       workload_path: "rdr/busybox/cephfs/workloads/deployments/app-busybox-4"
+    },
+  ]
+  dr_workload_subscription_placement_cephfs_statefulsets: [
+    { name: "busybox-sfs-1-cephfs", workload_dir: "rdr/busybox/cephfs/subscription_with_placement/statefulsets/app-busybox-1",
+      pod_count: 5, pvc_count: 5, is_placement: True,
+      dr_workload_app_pvc_selector: { "appname": "busybox_app_sfs_1" },
+      workload_path: "rdr/busybox/cephfs/workloads/statefulsets/app-busybox-1"
     },
   ]
   dr_cnv_discovered_apps: [
