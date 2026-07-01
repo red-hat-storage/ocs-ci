@@ -352,7 +352,7 @@ def relocate(
     relocate_condition = constants.STATUS_RELOCATED
     if discovered_apps:
         relocate_condition = constants.STATUS_RELOCATING
-    drpc_obj.wait_for_phase(relocate_condition)
+    drpc_obj.wait_for_phase(relocate_condition, timeout=1200)
 
     if multi_ns:
         logger.info("Doing Cleanup Operations")
