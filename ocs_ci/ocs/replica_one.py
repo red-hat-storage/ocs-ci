@@ -23,6 +23,7 @@ from ocs_ci.ocs.constants import (
     REPLICA1_STORAGECLASS,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.helpers.helpers import wait_for_osds_down
 
 
 log = getLogger(__name__)
@@ -80,9 +81,13 @@ def get_failures_domain_name() -> list[str]:
     return failure_domains
 
 
-def get_replica_1_osds() -> dict:
+def get_replica_1_osds(failure_domains: list[str] = None) -> dict:
     """
     Gets the names and IDs of OSD associated with replica1
+
+    Args:
+        failure_domains (list[str]): List of failure domain names.
+                                   If None, will fetch from get_failure_domains()
 
     Returns:
         dict: osd name(str): osd id(str)
@@ -90,7 +95,8 @@ def get_replica_1_osds() -> dict:
     """
     replica1_osds = dict()
     all_osds = get_pods_having_label(label=OSD_APP_LABEL)
-    for domain in get_failure_domains():
+    domains = failure_domains if failure_domains is not None else get_failure_domains()
+    for domain in domains:
         for osd in all_osds:
             if osd["metadata"]["labels"]["ceph.rook.io/DeviceSet"] == domain:
                 replica1_osds[osd["metadata"]["name"]] = osd["metadata"]["labels"][
@@ -177,23 +183,231 @@ def delete_replica_1_sc() -> None:
             raise CommandFailed(f"Failed to delete storage class: {str(e)}")
 
 
-def purge_replica1_osd():
+def purge_replica1_osd() -> None:
     """
     Purge OSDs associated with replica1
         1. scale down its deployments to 0
-        2. use OSD removal template
+        2. use OSD removal template (if OSDs are found)
 
     """
     deployments_name = get_replica1_osd_deployment()
     log.info(f"Deployments Name: {deployments_name}")
     scaledown_deployment(deployments_name)
     replica1_osds = get_replica_1_osds()
-    log.info(f"OSDS : {replica1_osds.keys()}")
-    log.info(f"OSD IDs: {replica1_osds.values()}")
+    log.info(f"Found replica-1 OSDs: {replica1_osds}")
+    log.info(f"OSD IDs: {list(replica1_osds.values())}")
+
+    if not replica1_osds:
+        log.warning("No replica-1 OSDs found – skipping OSD removal job")
+        return
+
     run_osd_removal_job(osd_ids=replica1_osds.values())
     verify_osd_removal_job_completed_successfully("4")
     sleep(120)
     delete_osd_removal_job()
+
+
+def _retry_osd_removal(osd_name: str, osd_id: str) -> bool:
+    """
+    Retry OSD removal after job cleanup for AlreadyExists errors
+
+    Args:
+        osd_name (str): Name of the OSD being removed
+        osd_id (str): ID of the OSD being removed
+
+    Returns:
+        bool: True if retry successful, False if failed
+
+    Raises:
+        CommandFailed: If cleanup or removal operations fail
+    """
+    log.info("Attempting additional job cleanup and retry")
+    try:
+        delete_osd_removal_job()
+        sleep(5)  # Brief wait
+        run_osd_removal_job(osd_ids=[osd_id])
+        verify_osd_removal_job_completed_successfully(osd_id)
+        delete_osd_removal_job()
+        log.info(f"Successfully removed OSD {osd_name} after retry")
+        return True
+    except CommandFailed as e:
+        log.error(f"Retry failed for OSD {osd_name}: {e}")
+        return False
+
+
+def sequential_remove_replica1_osds(failure_domains: list[str] = None) -> dict:
+    """
+    Sequentially remove OSDs associated with replica-1 for safer cluster operation.
+    Removes OSDs one by one with cluster health validation between removals.
+
+    Args:
+        failure_domains (list[str]): List of failure domain names.
+                                   If None, will fetch from get_failure_domains()
+
+    Returns:
+        dict: Summary of removal operation with counts and any failures
+    """
+    log.info("Starting sequential removal of replica-1 OSDs")
+
+    # Get all replica-1 OSDs and deployments
+    replica1_osds = get_replica_1_osds(failure_domains)
+    deployments_name = get_replica1_osd_deployment()
+
+    if not replica1_osds:
+        log.warning("No replica-1 OSDs found – skipping sequential OSD removal")
+        return {"removed": 0, "failed": 0, "skipped": 0}
+
+    log.info(f"Found {len(replica1_osds)} replica-1 OSDs to remove sequentially")
+    log.info(f"OSD deployments: {deployments_name}")
+    log.info(f"OSD names and IDs: {replica1_osds}")
+
+    removal_summary = {"removed": 0, "failed": 0, "skipped": 0, "failures": []}
+
+    # PHASE 1: Scale down ALL replica-1 OSD deployments first (bulk operation)
+    log.info("PHASE 1: Scaling down ALL replica-1 OSD deployments before removal")
+    deployment_obj = OCP(
+        kind=DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+
+    # Dual detection approach: Traditional + fallback
+    if deployments_name:
+        log.info(f"Scaling down deployments {deployments_name}")
+        scaledown_deployment(deployments_name)
+    else:
+        log.info(
+            "No replica-1 deployments found via failure domains. Using direct deployment targeting."
+        )
+        # Fallback: Direct deployment targeting by OSD ID
+        for osd_name, osd_id in replica1_osds.items():
+            deployment_name = f"rook-ceph-osd-{osd_id}"
+            try:
+                log.info(f"Scaling down deployment {deployment_name} to 0 replicas")
+                deployment_obj.exec_oc_cmd(
+                    f"scale deployment {deployment_name} --replicas=0"
+                )
+                log.info(f"Successfully scaled down {deployment_name}")
+            except CommandFailed as e:
+                log.warning(f"Failed to scale down {deployment_name}: {e}")
+
+    # PHASE 2: Wait for OSDs to go "down" in Ceph
+    log.info("PHASE 2: Waiting for OSDs to be marked as 'down' in Ceph")
+    target_osd_ids = list(replica1_osds.values())
+    wait_for_osds_down(osd_ids=target_osd_ids, timeout=300, sleep=10)
+    log.info("All deployments scaled down - OSDs are now 'down' and removable")
+
+    # PHASE 3: Sequential OSD removal with comprehensive job cleanup
+    log.info("PHASE 3: Starting sequential OSD removal")
+    for osd_name, osd_id in replica1_osds.items():
+        try:
+            log.info(f"Starting removal of OSD {osd_name} (ID: {osd_id})")
+
+            # Comprehensive job cleanup before each removal
+            log.info("Checking for existing OSD removal job...")
+            try:
+                job_ocp = OCP(
+                    kind="Job", namespace=config.ENV_DATA["cluster_namespace"]
+                )
+                existing_job = job_ocp.get(
+                    resource_name="ocs-osd-removal-job", dont_raise=True
+                )
+                if existing_job:
+                    log.warning("Found existing OSD removal job, deleting it first...")
+
+                    # Get logs from existing job pod before deleting (for debugging)
+                    try:
+                        job_pods = get_pods_having_label(
+                            label="job-name=ocs-osd-removal-job",
+                            namespace=config.ENV_DATA["cluster_namespace"],
+                        )
+                        if job_pods:
+                            pod_name = job_pods[0]["metadata"]["name"]
+                            log.info(f"Getting logs from existing job pod: {pod_name}")
+                            pod_logs = job_ocp.get_logs(name=pod_name)
+                            log.info(f"Existing job pod logs:\n{pod_logs}")
+                    except CommandFailed as e:
+                        log.warning(f"Could not get logs from existing job pod: {e}")
+
+                    # Delete the existing job
+                    delete_osd_removal_job()
+                    log.info("Existing OSD removal job deleted")
+            except CommandFailed as e:
+                log.warning(f"Error checking/cleaning existing job: {e}")
+
+            # Remove single OSD using removal job with enhanced error handling
+            log.info(f"Running OSD removal job for OSD {osd_id}")
+            try:
+                run_osd_removal_job(osd_ids=[osd_id])
+
+                # Verify removal completed
+                verify_osd_removal_job_completed_successfully(osd_id)  # Single OSD
+
+                # Clean up removal job
+                delete_osd_removal_job()
+
+                # Wait for cluster stabilization
+                log.info(
+                    f"OSD {osd_name} removed successfully, waiting for cluster stabilization"
+                )
+                sleep(30)  # Brief pause between removals
+
+                removal_summary["removed"] += 1
+                log.info(
+                    f"Successfully removed OSD {osd_name} ({removal_summary['removed']}/{len(replica1_osds)})"
+                )
+
+            except CommandFailed as e:
+                error_msg = str(e).lower()
+                if "alreadyexists" in error_msg:
+                    log.error(f"Job already exists error for OSD {osd_name}: {e}")
+
+                    if _retry_osd_removal(osd_name, osd_id):
+                        removal_summary["removed"] += 1
+                    else:
+                        removal_summary["failed"] += 1
+                        removal_summary["failures"].append(
+                            {
+                                "osd": osd_name,
+                                "error": "AlreadyExists + retry failed",
+                            }
+                        )
+
+                elif "osd is healthy" in error_msg:
+                    log.error(
+                        f"OSD {osd_name} is still healthy and cannot be removed: {e}"
+                    )
+                    log.warning(
+                        "This indicates deployment scaling may not have worked properly"
+                    )
+                    removal_summary["failed"] += 1
+                    removal_summary["failures"].append(
+                        {
+                            "osd": osd_name,
+                            "error": f"OSD healthy (deployment scaling issue): {e}",
+                        }
+                    )
+
+                else:
+                    log.error(f"Command failed for OSD {osd_name}: {e}")
+                    removal_summary["failed"] += 1
+                    removal_summary["failures"].append(
+                        {"osd": osd_name, "error": f"CommandFailed: {e}"}
+                    )
+
+        except CommandFailed as e:
+            log.error(f"Unexpected error removing OSD {osd_name}: {e}")
+            removal_summary["failed"] += 1
+            removal_summary["failures"].append(
+                {"osd": osd_name, "error": f"Unexpected: {e}"}
+            )
+            # Continue with next OSD even if this one fails
+
+    # Final summary
+    log.info(f"Sequential OSD removal completed: {removal_summary}")
+
+    if removal_summary["failed"] > 0:
+        log.warning(f"Some OSDs failed to remove: {removal_summary['failures']}")
+
+    return removal_summary
 
 
 def delete_replica1_cephblockpools_cr(cbp_object: OCP):
