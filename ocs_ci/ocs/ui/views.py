@@ -2598,6 +2598,67 @@ validation_4_22 = {
         "//table/thead/tr/th",
         By.XPATH,
     ),
+    # {0} = active metric label, e.g. 'Total IOPS'
+    "cephfs_subvolume_first_row_value": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::div[contains(@class,'odf-loading-box')]"
+        "//table/tbody/tr[1]/td[@data-label='{0}']",
+        By.XPATH,
+    ),
+    # Name cell uses <button aria-label="Show related pods">, not an <a> tag.
+    # Clicking it opens the "Related pods" popover.
+    "cephfs_subvolume_first_row_name_button": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::div[contains(@class,'odf-loading-box')]"
+        "//table/tbody/tr[1]//button[@aria-label='Show related pods']",
+        By.XPATH,
+    ),
+    # "Related pods" popover: anchored by role=dialog + header text.
+    # The help popover carries aria-label='Help'; this one uses aria-labelledby.
+    "cephfs_subvolume_name_popover": (
+        "//div[@role='dialog'" " and .//header[normalize-space(.)='Related pods']]",
+        By.XPATH,
+    ),
+    # <header> inside the name popover; text content is "Related pods".
+    "cephfs_subvolume_related_pods_header": (
+        "//div[@role='dialog'"
+        " and .//header[normalize-space(.)='Related pods']]"
+        "//header[normalize-space(.)='Related pods']",
+        By.XPATH,
+    ),
+    # Pod <a> links inside the popover body ul > li > span > a.
+    # Scoped to the specific popover; excludes the "View all" link.
+    "cephfs_subvolume_related_pods_links": (
+        "//div[@role='dialog'"
+        " and .//header[normalize-space(.)='Related pods']]"
+        "//a[normalize-space(.) and not(normalize-space(.)='View all')]",
+        By.XPATH,
+    ),
+    # "View all" <a> inside <div class="pf-v6-u-mt-sm"> at the popover bottom.
+    "cephfs_subvolume_view_all_link": (
+        "//div[@role='dialog'"
+        " and .//header[normalize-space(.)='Related pods']]"
+        "//a[normalize-space(.)='View all']",
+        By.XPATH,
+    ),
+    # Table row whose Namespace cell matches the given namespace (format arg).
+    # The Namespace td carries data-label='Namespace' and contains an <a>.
+    "cephfs_subvolume_row_by_namespace": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::div[contains(@class,'odf-loading-box')]"
+        "//table/tbody/tr"
+        "[.//td[@data-label='Namespace']//a[normalize-space(text())='{0}']]",
+        By.XPATH,
+    ),
+    # {0} = namespace, {1} = active metric label, e.g. 'Total IOPS'
+    "cephfs_subvolume_value_by_namespace": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::div[contains(@class,'odf-loading-box')]"
+        "//table/tbody/tr"
+        "[.//td[@data-label='Namespace']//a[normalize-space(text())='{0}']]"
+        "/td[@data-label='{1}']",
+        By.XPATH,
+    ),
 }
 
 topology = {

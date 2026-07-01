@@ -649,6 +649,8 @@ CEPHFS_SUBVOLUME_POPOVER_TEXT = (
     "Use subvolumes to find pods with poor performing workloads"
 )
 CEPHFS_SUBVOLUME_DEFAULT_METRIC = "Total IOPS"
+CEPHFS_SUBVOLUME_METRIC_LATENCY = "Total Latency"
+CEPHFS_SUBVOLUME_METRIC_THROUGHPUT = "Total Throughput"
 
 # hyperconverged defaults
 HYPERCONVERGED_NAMESPACE = "kubevirt-hyperconverged"

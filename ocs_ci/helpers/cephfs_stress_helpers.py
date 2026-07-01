@@ -32,6 +32,7 @@ from ocs_ci.helpers.helpers import (
     validate_pod_oomkilled,
     get_mon_db_size_in_kb,
     create_pod,
+    create_project,
     create_pvc,
     wait_for_resource_state,
     get_current_test_name,
@@ -1403,3 +1404,110 @@ def verify_no_filesystem_hangs(stress_manager=None):
         raise Exception(error_msg)
     logger.info("No filesystem hangs detected")
     return True
+
+
+def create_cephfs_subvolume_workload(
+    teardown_project_factory=None,
+    project_name="cephfs-subvolume-metrics-test",
+    pvc_size="5Gi",
+    fio_size="5GB",
+    fio_rate="100m",
+    fio_runtime=360,
+):
+    """
+    Create a CephFS subvolume workload: namespace, PVC, pod, and running FIO.
+
+    Provisions a CephFS subvolume by creating a namespace and RWX PVC, then
+    starts FIO on a pod so that Prometheus scrapes non-zero subvolume metrics.
+
+    Args:
+        teardown_project_factory (callable, optional): Pytest fixture that
+            registers the project for deletion at test teardown. Pass the
+            ``teardown_project_factory`` fixture from the test function.
+        project_name (str): Name of the namespace/project to create.
+        pvc_size (str): PVC capacity (e.g. '5Gi').
+        fio_size (str): Total IO size for the FIO workload (e.g. '5GB').
+        fio_rate (str): FIO target rate (e.g. '100m' for 100 MB/s). A higher
+            rate makes the subvolume appear in the top-10 subvolume list.
+        fio_runtime (int): FIO ``--runtime`` in seconds. Must be long enough
+            to still be running when the UI is checked; default 360 s (6 min)
+            covers the typical setup + 2-min Prometheus wait + UI assertions.
+
+    Returns:
+        tuple: (project_obj, pvc_obj, pod_obj)
+    """
+    project_obj = create_project(project_name=project_name)
+    if teardown_project_factory:
+        teardown_project_factory(project_obj)
+
+    pvc_obj = create_pvc(
+        sc_name=constants.CEPHFILESYSTEM_SC,
+        namespace=project_obj.namespace,
+        size=pvc_size,
+        access_mode=constants.ACCESS_MODE_RWX,
+    )
+
+    pod_obj = create_pod(
+        pvc_name=pvc_obj.name,
+        namespace=project_obj.namespace,
+        interface_type=constants.CEPHFILESYSTEM,
+    )
+    wait_for_resource_state(pod_obj, state=STATUS_RUNNING, timeout=300)
+    pod_obj.run_io(
+        storage_type=constants.WORKLOAD_STORAGE_TYPE_FS,
+        size=fio_size,
+        rate=fio_rate,
+        runtime=fio_runtime,
+    )
+
+    return project_obj, pvc_obj, pod_obj
+
+
+def create_cephfs_subvolume_workloads(
+    count=3,
+    teardown_project_factory=None,
+    project_name_prefix="cephfs-subvolume-metrics-test",
+    pvc_size="5Gi",
+    fio_size="5GB",
+    fio_rate="100m",
+    fio_runtime=360,
+):
+    """
+    Create multiple CephFS subvolume workloads by calling
+    :func:`create_cephfs_subvolume_workload` ``count`` times.
+
+    Each workload gets its own namespace named
+    ``<project_name_prefix>-<index>`` (e.g.
+    ``cephfs-subvolume-metrics-test-0``).
+
+    Args:
+        count (int): Number of workloads (subvolumes) to create.
+        teardown_project_factory (callable, optional): Pytest fixture that
+            registers each project for deletion at test teardown.
+        project_name_prefix (str): Common prefix for namespace names.
+        pvc_size (str): PVC capacity for each workload (e.g. '5Gi').
+        fio_size (str): Total IO size per FIO workload (e.g. '5GB').
+        fio_rate (str): FIO target rate per workload (e.g. '100m').
+        fio_runtime (int): FIO ``--runtime`` in seconds (default 360).
+
+    Returns:
+        list[tuple]: One ``(project_obj, pvc_obj, pod_obj)`` tuple per
+            workload, in creation order.
+    """
+    if count < 1:
+        raise ValueError(f"count must be >= 1, got {count}")
+
+    workloads = []
+    for i in range(count):
+        project_name = f"{project_name_prefix}-{i}"
+        workloads.append(
+            create_cephfs_subvolume_workload(
+                teardown_project_factory=teardown_project_factory,
+                project_name=project_name,
+                pvc_size=pvc_size,
+                fio_size=fio_size,
+                fio_rate=fio_rate,
+                fio_runtime=fio_runtime,
+            )
+        )
+    return workloads
