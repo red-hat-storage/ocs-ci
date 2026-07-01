@@ -39,12 +39,13 @@ def test_acm_import():
     if version.compare_versions(f"{config.ENV_DATA.get('acm_version')} >= 2.14"):
         # Step 1: Apply IDMS to all clusters
         for cluster in config.clusters:
-            try:
-                apply_idms(cluster)
-            except Exception as e:
-                logger.error(
-                    f"Error applying IDMS on cluster index {cluster.MULTICLUSTER['multicluster_index']}: {e}"
-                )
+            if not cluster.DEPLOYMENT.get("disconnected", False):
+                try:
+                    apply_idms(cluster)
+                except Exception as e:
+                    logger.error(
+                        f"Error applying IDMS on cluster index {cluster.MULTICLUSTER['multicluster_index']}: {e}"
+                    )
 
         # Step 2: Wait for MCP update on all clusters
         for cluster in config.clusters:
