@@ -20,6 +20,7 @@ class TestCephfsStress(E2ETest):
     def test_cephfs_breakpoint(
         self,
         project_factory,
+        storageclass_factory,
     ):
         """
         The primary objective of this test is to find the system's breaking point which is the critical
@@ -48,7 +49,9 @@ class TestCephfsStress(E2ETest):
         stress_mgr = CephFSStressTestManager(namespace=proj_name)
 
         try:
-            pvc_obj, _ = stress_mgr.setup_stress_test_environment(pvc_size="500Gi")
+            pvc_obj, _ = stress_mgr.setup_stress_test_environment(
+                pvc_size="500Gi", storageclass_factory=storageclass_factory
+            )
 
             stress_mgr.start_background_checks(
                 interval_minutes=CHECKS_RUNNER_INTERVAL_MINUTES

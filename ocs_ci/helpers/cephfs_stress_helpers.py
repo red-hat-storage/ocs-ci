@@ -29,7 +29,6 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.job import get_job_pods
 from ocs_ci.helpers.helpers import (
-    validate_pod_oomkilled,
     get_mon_db_size_in_kb,
     create_pod,
     create_pvc,
@@ -85,25 +84,38 @@ class CephFSStressTestManager:
         self.standby_pod = None
         # Reuse PrometheusAPI instance to prevent memory leaks from creating new instances
         self.prometheus_api = PrometheusAPI(threading_lock=self.verification_lock)
+        self.pod_restart_baseline = {}
 
-    def setup_stress_test_environment(self, pvc_size):
+    def setup_stress_test_environment(self, pvc_size, storageclass_factory):
         """
         Creates the foundational resources (PVC and Standby Pod) for the stress test.
 
         Args:
             pvc_size (str): Size of pvc to create
+            storageclass_factory (function): Factory function to create storageclass
 
         Returns:
             tuple: Created PVC and standby pod objs
 
         """
+        sc_name = constants.CEPHFILESYSTEM_SC_SELINUX
+        logger.info(f"Creating SELinux CephFS storageclass: {sc_name}")
+        sc_obj = storageclass_factory(
+            sc_name=sc_name,
+            interface=constants.CEPHFILESYSTEM,
+            kernelMountOptions='context="system_u:object_r:container_file_t:s0"',
+        )
+        self.created_resources.append(sc_obj)
+        logger.info(f"Created SELinux CephFS StorageClass: {sc_name}")
+
         pvc_obj = create_pvc(
-            sc_name=constants.CEPHFILESYSTEM_SC,
+            sc_name=sc_name,
             namespace=self.namespace,
             size=pvc_size,
             access_mode=constants.ACCESS_MODE_RWX,
             pvc_name="cephfs-stress-pvc",
         )
+        self.created_resources.append(pvc_obj)
         standby_pod_obj = create_pod(
             interface_type=constants.CEPHFILESYSTEM,
             pvc_name=pvc_obj.name,
@@ -302,6 +314,9 @@ class CephFSStressTestManager:
         specified interval. If the thread is already running, this method returns
         without creating a new thread.
 
+        Snapshots current restart counts for all openshift-storage pods before starting
+        so the first check cycle can report only new restarts, not pre-existing ones.
+
         Args:
             interval_minutes: Interval in minutes between check executions
 
@@ -312,6 +327,33 @@ class CephFSStressTestManager:
             )
             return
 
+        logger.info("Snapshotting pod restart baseline before starting watchdog...")
+        try:
+            baseline = {}
+            for pod_obj in get_filtered_pods():
+                pod_data = pod_obj.get(retry=3, wait=3)
+                if not pod_data:
+                    continue
+                pod_name = pod_data.get("metadata", {}).get("name")
+                pod_status = pod_data.get("status", {})
+                all_statuses = pod_status.get("containerStatuses", []) + pod_status.get(
+                    "initContainerStatuses", []
+                )
+                for item in all_statuses:
+                    key = f"{pod_name}/{item.get('name')}"
+                    baseline[key] = item.get("restartCount", 0)
+            with self.verification_lock:
+                self.pod_restart_baseline = baseline
+            logger.info(
+                f"Restart baseline captured: {len(baseline)} containers across "
+                f"{len(set(k.split('/')[0] for k in baseline))} pods"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to snapshot restart baseline: {e} — "
+                "new-restart tracking will compare against zero"
+            )
+
         self.stop_event.clear()
         self.background_checks_thread = threading.Thread(
             target=self._continuous_checks_runner,
@@ -320,9 +362,9 @@ class CephFSStressTestManager:
             daemon=True,
         )
         self.background_checks_thread.start()
-        logger.info("Background checks ('StressWatchdog')thread started.")
+        logger.info("Background checks ('StressWatchdog') thread started.")
 
-    def stop_background_checks(self, timeout=10):
+    def stop_background_checks(self, timeout=300):
         """
         Signals the background thread ('StressWatchdog') to stop and waits for it to join.
 
@@ -517,7 +559,7 @@ class CephFSStressTestManager:
             (get_nodes_resource_utilization, {}),
             (get_pods_resource_utilization, {}),
             (get_osd_disk_utilization, {}),
-            (verify_openshift_storage_ns_pods_health, {}),
+            (verify_openshift_storage_ns_pods_health, {"stress_manager": self}),
         ]
         for check_func, kwargs in checks_to_run:
             if self.stop_event.is_set():
@@ -689,8 +731,11 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
     Retries on CommandFailed, then raises PodStabilityError if verification fails after all retries.
 
     It checks for:
-    1. Pods with OOMKilled containers (fails the test)
-    2. Pods with restarts (informational only, logged as warning)
+    1. OOMKilled containers in both regular containers and init containers (fails the test)
+    2. Pods with restarts across all containers (informational only, logged as warning)
+
+    OOMKilled detection reads lastState.terminated.reason directly from the already-fetched
+    pod spec.
 
     Args:
         stress_manager: CephFSStressTestManager instance to check pause status
@@ -727,71 +772,120 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
         pod_restarts = []
         oomkilled_pods = []
 
-        for pod_obj in pod_objs:
-            # Fetch pod data once and reuse to avoid redundant API calls
-            pod_data = pod_obj.get()
-            pod_name = pod_data.get("metadata", {}).get("name")
+        # Take a consistent snapshot of the baseline under the lock so we compare
+        # against a stable reference even if start_background_checks ran concurrently.
+        if stress_manager:
+            with stress_manager.verification_lock:
+                current_baseline = dict(stress_manager.pod_restart_baseline)
+        else:
+            current_baseline = {}
+        new_baseline = {}
 
-            container_statuses = pod_data.get("status", {}).get("containerStatuses", [])
-            if not container_statuses:
-                logger.warning(f"Pod {pod_name} has no containerStatuses")
-                continue
+        try:
+            for pod_obj in pod_objs:
+                pod_data = pod_obj.get(retry=3, wait=3)
+                if not pod_data:
+                    continue
+                pod_name = pod_data.get("metadata", {}).get("name")
+                pod_status = pod_data.get("status", {})
 
-            # Check restart counts for all containers
-            total_restarts = 0
-            container_restart_details = []
-            for item in container_statuses:
-                container_name = item.get("name")
-                restart_count = item.get("restartCount", 0)
-                if restart_count > 0:
-                    total_restarts += restart_count
-                    container_restart_details.append(
-                        f"{container_name}:{restart_count}"
+                # Combine regular containers and init containers into one pass
+                all_container_statuses = pod_status.get(
+                    "containerStatuses", []
+                ) + pod_status.get("initContainerStatuses", [])
+
+                if not all_container_statuses:
+                    logger.warning(f"Pod {pod_name} has no containerStatuses")
+                    continue
+
+                # Check restart counts and OOMKilled state for every container
+                new_restarts = 0
+                container_restart_details = []
+                for item in all_container_statuses:
+                    container_name = item.get("name")
+                    restart_count = item.get("restartCount", 0)
+                    key = f"{pod_name}/{container_name}"
+
+                    baseline_count = current_baseline.get(key, 0)
+                    delta = restart_count - baseline_count
+
+                    if delta < 0:
+                        # restartCount went backwards — the pod was recreated with the
+                        # same name and its counter reset to 0.
+                        delta = restart_count
+                        new_baseline[key] = 0
+                        logger.warning(
+                            f"Pod {pod_name} container {container_name}: restartCount "
+                            f"dropped from baseline {baseline_count} to {restart_count} "
+                            f"— pod likely recreated, resetting baseline"
+                        )
+                    else:
+                        new_baseline[key] = restart_count
+
+                    if delta > 0:
+                        new_restarts += delta
+                        container_restart_details.append(
+                            f"{container_name}: +{delta} (total: {restart_count})"
+                        )
+
+                    current_state_reason = (
+                        item.get("state", {}).get("terminated", {}).get("reason", "")
+                    )
+                    last_state_reason = (
+                        item.get("lastState", {})
+                        .get("terminated", {})
+                        .get("reason", "")
+                    )
+                    if current_state_reason == "OOMKilled":
+                        oomkilled_pods.append(
+                            f"Pod: {pod_name}, Container: {container_name} (state: current)"
+                        )
+                    elif last_state_reason == "OOMKilled":
+                        oomkilled_pods.append(
+                            f"Pod: {pod_name}, Container: {container_name} (state: previous)"
+                        )
+
+                if new_restarts > 0:
+                    container_details = ", ".join(container_restart_details)
+                    logger.warning(
+                        f"Pod {pod_name} has {new_restarts} NEW restart(s) since last check "
+                        f"— {container_details}"
+                    )
+                    pod_restarts.append(
+                        f"{pod_name} (new restarts: {new_restarts}, details: {container_details})"
                     )
 
-            if total_restarts > 0:
-                container_details = ", ".join(container_restart_details)
-                logger.info(
-                    f"Pod {pod_name} has {total_restarts} total restart(s) "
-                    f"across containers: {container_details}"
-                )
-                pod_restarts.append(
-                    f"{pod_name} (restarts: {total_restarts}, "
-                    f"details: {container_details})"
+            if pod_restarts:
+                logger.warning(
+                    f"Found {len(pod_restarts)} pods with new restarts since last check: "
+                    f"{pod_restarts}"
                 )
 
-            # Check for OOMKilled containers
-            for item in container_statuses:
-                container_name = item.get("name")
-                if not validate_pod_oomkilled(
-                    pod_name=pod_name, container=container_name
-                ):
-                    oomkilled_pods.append(
-                        f"Pod: {pod_name}, Container: {container_name}"
-                    )
+            if oomkilled_pods:
+                logger.error("Openshift-storage pods health check verification failed")
+                logger.error(
+                    f"Found {len(oomkilled_pods)} OOMKilled containers: {oomkilled_pods}"
+                )
+                raise CommandFailed(
+                    "Openshift-storage pods health check verification failed due to OOMKilled containers"
+                )
 
-        if pod_restarts:
-            logger.warning(
-                f"Found {len(pod_restarts)} pods with restarts: {pod_restarts}"
+            logger.info(
+                "All pods in the openshift-storage namespace are healthy (no OOMs)"
             )
+            return True
 
-        if oomkilled_pods:
-            logger.error("Openshift-storage pods health check verification failed")
-            logger.error(
-                f"Found {len(oomkilled_pods)} OOMKilled containers: {oomkilled_pods}"
-            )
-            raise CommandFailed(
-                "Openshift-storage pods health check verification failed due to OOMKilled containers"
-            )
-
-        # Explicitly clean up pod objects to prevent memory leaks
-        del pod_objs
-        del pod_restarts
-        del oomkilled_pods
-        gc.collect()
-
-        logger.info("All pods in the openshift-storage namespace are healthy (no OOMs)")
-        return True
+        finally:
+            # Update baseline to current counts so the next cycle reports only
+            # restarts that happen after this cycle, not repeated noise.
+            if new_baseline and stress_manager:
+                with stress_manager.verification_lock:
+                    stress_manager.pod_restart_baseline.update(new_baseline)
+            del pod_objs
+            del pod_restarts
+            del oomkilled_pods
+            del new_baseline
+            gc.collect()
 
     try:
         return _check_pods_health()
@@ -874,7 +968,7 @@ def get_mon_db_usage():
 def get_nodes_resource_utilization():
     """
     Gets the node cpu and memory utilization in percentage using 'adm top' and 'oc describe'
-    for both master and worker node types
+    for both master and worker nodes.
 
     """
     logger.info(
@@ -883,7 +977,7 @@ def get_nodes_resource_utilization():
         "\n=================================================="
         "\n"
     )
-    for node_type in ["master", "worker"]:
+    for node_type in [constants.MASTER_MACHINE, constants.WORKER_MACHINE]:
         get_node_resource_utilization_from_adm_top(
             node_type=node_type, print_table=True
         )
