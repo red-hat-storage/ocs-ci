@@ -2515,7 +2515,7 @@ def ensure_ec_metadata_pool_exists(
     }
     sc_obj.patch(
         resource_name=sc_name,
-        params=patch,
+        params=json.dumps(patch),
         format_type="merge",
     )
 
