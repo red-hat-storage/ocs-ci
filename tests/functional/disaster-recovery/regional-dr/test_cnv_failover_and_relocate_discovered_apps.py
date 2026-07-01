@@ -1,5 +1,4 @@
 import logging
-import time
 
 import pytest
 
@@ -119,8 +118,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             cnv_custom_storage_class(
                 replica=replica, compression=compression, erasure_coded=erasure_coding
             )
-        logger.info("Wait 240 seconds for drpolicy to update the storageclass.")
-        time.sleep(240)
+
         cnv_workloads = discovered_apps_dr_workload_cnv(pvc_vm=1, custom_sc=custom_sc)
 
         primary_cluster_name_before_failover = (
