@@ -1170,6 +1170,11 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
         client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
         logger.info(f"Client cluster key: {client_cluster}")
         cluster_name = config.cluster_ctx.ENV_DATA.get("cluster_name")
+        if not cluster_name:
+            pytest.fail(
+                f"cluster_name is missing from ENV_DATA in client cluster context. "
+                f"Available ENV_DATA keys: {list(config.cluster_ctx.ENV_DATA.keys())}"
+            )
         client_name = f"{constants.STORAGECONSUMER_NAME_PREFIX}{cluster_name}"
     client = storageconsumer.StorageConsumer(
         client_name, consumer_context=client_cluster
@@ -1189,9 +1194,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
         client.stop_heartbeat()
         # Wait for heartbeat critical alert to fire (300s + margin)
         heartbeat_wait_time = 60 * 6  # 6 minutes
-        logger.info(
-            f"Waiting {heartbeat_wait_time} seconds for heartbeat to be missed"
-        )
+        logger.info(f"Waiting {heartbeat_wait_time} seconds for heartbeat to be missed")
         time.sleep(heartbeat_wait_time)
 
         # Now change the version to trigger incompatible version alert
