@@ -49,6 +49,10 @@ from ocs_ci.utility.utils import (
     create_stats_dir,
     create_kubeconfig,
 )
+from ocs_ci.deployment.helpers.hypershift_base import (
+    create_kubeadmin_password_file_hosted_cluster,
+    create_kubeconfig_file_hosted_cluster,
+)
 
 from ocs_ci.utility.memory import (
     get_consumed_ram,
@@ -646,7 +650,11 @@ def process_cluster_cli_params(config):
         or get_cli_param(config, "teardown", default=False)
         or get_cli_param(config, "kubeconfig")
     ):
-        create_kubeconfig(kubeconfig_path)
+        if ocsci_config.ENV_DATA.get("hosted_cluster_exists", False):
+            create_kubeconfig_file_hosted_cluster()
+            create_kubeadmin_password_file_hosted_cluster()
+        else:
+            create_kubeconfig(kubeconfig_path)
 
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
@@ -854,20 +862,20 @@ def pytest_collection_modifyitems(session, config, items):
                 f"\nTest name length: {length} characters (exceeds limit of {MAX_TEST_NAME_LENGTH})\n"
                 f"Test name: {test_name}\n"
                 f"Full path: {nodeid}\n"
-                f"{'-'*80}"
+                f"{'-' * 80}"
             )
 
         # Combine all details into one message
         full_error_message = (
-            f"\n{'='*80}\n"
+            f"\n{'=' * 80}\n"
             f"ERROR: Found {len(long_test_names)} test(s) with names exceeding "
             f"{MAX_TEST_NAME_LENGTH} characters.\n"
             f"Long test names cause issues with data upload and reporting.\n"
-            f"{'='*80}" + "".join(error_details) + f"\n{'='*80}\n"
+            f"{'=' * 80}" + "".join(error_details) + f"\n{'=' * 80}\n"
             f"Test collection failed: {len(long_test_names)} test(s) have names "
             f"exceeding {MAX_TEST_NAME_LENGTH} characters.\n"
             f"Please shorten the parametrization names or test function names.\n"
-            f"{'='*80}"
+            f"{'=' * 80}"
         )
 
         # Exit with the complete error message
