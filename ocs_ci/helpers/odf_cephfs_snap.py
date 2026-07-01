@@ -346,8 +346,7 @@ def wait_and_verify_snapshot_bound(snap_runner, snap_data, timeout=60, sleep=5):
                 (e for e in snap_entries if e["snapshot"] == ceph_snap_name),
                 None,
             )
-            if entry is not None:
-                last_entry = entry
+            last_entry = entry
     except TimeoutExpiredError:
         pass
     assert last_entry is not None, (
