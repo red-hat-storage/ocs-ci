@@ -478,8 +478,9 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         7. Verify the delete operation fails (CommandFailed is raised)
            and a non-empty error message is returned.
         8. Verify the targeted bound snapshot still exists in Bound state.
-        9. List all CephFS snapshots and confirm the bound snapshot is
-           present and unchanged.
+        9. List all CephFS snapshots and confirm the full set of bound
+           snapshots is identical to the set captured before the delete
+           attempt (proves the delete was a complete no-op).
         """
         num_of_orphaned = 1
         num_of_bound = 2
@@ -516,6 +517,8 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         self.verify_cephfs_snapshots_bound(bound_snaps)
 
         target_snap = bound_snaps[0]
+        bound_names_before = {s["ceph_snap_name"] for s in bound_snaps}
+
         log.test_step(
             "Attempt to delete bound snapshot '%s' via odf CLI",
             target_snap["ceph_snap_name"],
@@ -528,19 +531,21 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         )
         wait_and_verify_snapshot_bound(self._snap_runner, target_snap)
 
-        log.test_step("List CephFS snapshots and confirm bound snapshot is unchanged")
+        log.test_step(
+            "List CephFS snapshots and confirm all bound snapshots are unchanged"
+        )
         snap_entries = get_cephfs_snap_entries(self._snap_runner)
-        bound_names = {
+        bound_names_after = {
             e["snapshot"]
             for e in snap_entries
             if e["state"] == constants.CEPHFS_SNAPSHOT_STATE_BOUND
         }
-        assert target_snap["ceph_snap_name"] in bound_names, (
-            f"Bound snapshot '{target_snap['ceph_snap_name']}' not "
-            f"found in snapshot list after failed delete attempt"
+        assert bound_names_after == bound_names_before, (
+            f"Bound snapshot set changed after failed delete attempt: "
+            f"before={bound_names_before}, after={bound_names_after}"
         )
         log.info(
-            "Confirmed: bound snapshot '%s' is unchanged after "
+            "Confirmed: all %d bound snapshot(s) are unchanged after "
             "failed delete attempt",
-            target_snap["ceph_snap_name"],
+            len(bound_names_before),
         )

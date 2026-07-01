@@ -321,7 +321,7 @@ def wait_and_verify_snapshot_bound(snap_runner, snap_data, timeout=30, sleep=5):
 
     Raises:
         AssertionError: If the snapshot disappears or transitions out of
-            Bound state during or after the sampling window.
+            Bound state at any point during the sampling window.
     """
     ceph_snap_name = snap_data["ceph_snap_name"]
     log.info(
@@ -345,17 +345,8 @@ def wait_and_verify_snapshot_bound(snap_runner, snap_data, timeout=30, sleep=5):
         assert state == constants.CEPHFS_SNAPSHOT_STATE_BOUND, (
             f"Snapshot '{ceph_snap_name}' is in '{state}' state, " f"expected Bound"
         )
-        break
-
-    snap_entries = get_cephfs_snap_entries(snap_runner)
-    entry = get_cephfs_snap_by_name(snap_entries, ceph_snap_name)
-    assert entry["state"] == constants.CEPHFS_SNAPSHOT_STATE_BOUND, (
-        f"Expected state '{constants.CEPHFS_SNAPSHOT_STATE_BOUND}' "
-        f"for snapshot '{ceph_snap_name}', "
-        f"got '{entry['state']}'"
-    )
     log.info(
-        "Snapshot '%s' is in '%s' state as expected",
+        "Snapshot '%s' remained in '%s' state throughout the polling window",
         ceph_snap_name,
         constants.CEPHFS_SNAPSHOT_STATE_BOUND,
     )
