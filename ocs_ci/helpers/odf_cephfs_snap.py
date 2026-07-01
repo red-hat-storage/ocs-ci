@@ -320,12 +320,14 @@ def wait_and_verify_snapshot_bound(snap_runner, snap_data, timeout=30, sleep=5):
         sleep (int): Seconds between polls (default 5).
 
     Raises:
-        AssertionError: If the snapshot disappears or transitions out of
-            Bound state at any point during the sampling window.
+        AssertionError: If the snapshot disappears or is not in Bound state
+            when first observed after the delete attempt.
+        TimeoutExpiredError: If ``get_cephfs_snap_entries`` keeps failing
+            for the entire ``timeout`` window.
     """
     ceph_snap_name = snap_data["ceph_snap_name"]
     log.info(
-        "Polling to confirm snapshot '%s' remains in Bound state",
+        "Polling to confirm snapshot '%s' is in Bound state",
         ceph_snap_name,
     )
     for snap_entries in TimeoutSampler(
@@ -345,8 +347,9 @@ def wait_and_verify_snapshot_bound(snap_runner, snap_data, timeout=30, sleep=5):
         assert state == constants.CEPHFS_SNAPSHOT_STATE_BOUND, (
             f"Snapshot '{ceph_snap_name}' is in '{state}' state, " f"expected Bound"
         )
+        break
     log.info(
-        "Snapshot '%s' remained in '%s' state throughout the polling window",
+        "Snapshot '%s' confirmed in '%s' state after delete rejection",
         ceph_snap_name,
         constants.CEPHFS_SNAPSHOT_STATE_BOUND,
     )
