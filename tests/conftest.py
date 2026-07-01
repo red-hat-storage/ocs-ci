@@ -149,6 +149,7 @@ from ocs_ci.ocs.resources.pod import (
     delete_deployment_pods,
     cal_md5sum,
     wait_for_pods_to_be_in_statuses,
+    wait_for_noobaa_db_ready,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -5728,6 +5729,8 @@ def nb_ensure_endpoint_count(request):
                 f" {min_ep_count}, max count: {max_ep_count}, ready count:"
                 f" {ready_nb_ep_count}"
             )
+        log.info("Waiting for NooBaa DB pods to stabilize after endpoint scaling")
+        wait_for_noobaa_db_ready()
 
 
 @pytest.fixture(scope="class")
