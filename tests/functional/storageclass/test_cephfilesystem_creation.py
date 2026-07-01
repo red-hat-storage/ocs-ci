@@ -7,11 +7,12 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.exceptions import CommandFailed
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.framework.testlib import ManageTest
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, zstream_4_20_14
 
 logger = logging.getLogger(__name__)
 
 
+@zstream_4_20_14
 class TestCephFileSystemCreation(ManageTest):
     """
     Testing Creation of a filesystem and checking its existence.
