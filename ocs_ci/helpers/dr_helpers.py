@@ -1038,7 +1038,7 @@ def wait_for_replication_resources_creation(
                 wait_for_resource_existence(
                     kind=constants.VOLUME_GROUP_REPLICATION,
                     namespace=namespace,
-                    timeout=timeout,
+                    timeout=1800,
                     should_exist=True,
                 )
 
