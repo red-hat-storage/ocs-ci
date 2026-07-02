@@ -22,6 +22,7 @@ from ocs_ci.helpers.e2e_helpers import (
     validate_mcg_nsfs_feature,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
@@ -1506,12 +1507,14 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             timeout=900,
         )
         # verify noobaa statefulset is present
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        expected_ready = "2/2" if ocs_version >= version.VERSION_4_23 else "1/1"
         sample = TimeoutSampler(
             timeout=500,
             sleep=30,
             func=run_cmd_verify_cli_output,
             cmd="oc get sts noobaa-core -n openshift-storage",
-            expected_output_lst={"noobaa-core", "1/1"},
+            expected_output_lst={"noobaa-core", expected_ready},
         )
         if not sample.wait_for_func_status(result=True):
             raise Exception("Statefulset noobaa-core is not recreated")

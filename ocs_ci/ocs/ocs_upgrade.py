@@ -232,6 +232,8 @@ def get_expected_noobaa_pod_count(upgrade_version):
         "noobaa-db-pg-cluster-1",
         "noobaa-db-pg-cluster-2",
     ]
+    if upgrade_version >= parse_version("4.23"):
+        expected_noobaa_pods.append("noobaa-core-1")
 
     endpoint_count = 0
     noobaa_pod_obj = get_noobaa_pods()
