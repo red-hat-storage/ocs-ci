@@ -976,7 +976,7 @@ class Deployment(object):
 
             enable_nested_virtualization()
         if (
-            config.DEPLOYMENT.get("enable_data_replication_separation")
+            config.DEPLOYMENT.get("enable_data_replication_separation_public")
             and config.ENV_DATA.get("cluster_type") == "provider"
         ):
             annotate_worker_nodes_with_mon_ip()
