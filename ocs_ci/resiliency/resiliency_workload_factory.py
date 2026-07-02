@@ -97,15 +97,29 @@ class ResiliencyWorkloadOps:
         try:
             from ocs_ci.krkn_chaos.background_cluster_operations import (
                 BackgroundClusterOperations,
+            )
+            from ocs_ci.krkn_chaos.background_cluster_validator import (
                 BackgroundClusterValidator,
             )
 
-            self.background_cluster_ops = BackgroundClusterOperations()
-            self.background_cluster_ops.start_operations()
+            config = ResiliencyWorkloadConfig()
+            bg_ops_config = config.get_background_operations_config()
+            enabled_operations = bg_ops_config.get("enabled_operations")
+            operation_interval = bg_ops_config.get("operation_interval", 60)
+            max_concurrent = bg_ops_config.get("max_concurrent_operations", 3)
 
             self.background_cluster_validator = BackgroundClusterValidator(
-                self.background_cluster_ops
+                self.namespace
             )
+            self.background_cluster_validator.pre_operation_validation()
+
+            self.background_cluster_ops = BackgroundClusterOperations(
+                workload_ops=self,
+                enabled_operations=enabled_operations if enabled_operations else None,
+                operation_interval=operation_interval,
+                max_concurrent_operations=max_concurrent,
+            )
+            self.background_cluster_ops.start()
 
             log.info("Background cluster operations started successfully")
         except Exception as e:
@@ -167,12 +181,12 @@ class ResiliencyWorkloadOps:
         if self.background_cluster_ops:
             log.info("Stopping background cluster operations")
             try:
-                self.background_cluster_ops.stop_operations()
+                self.background_cluster_ops.stop()
 
                 # Validate background operations
                 if self.background_cluster_validator:
-                    validation_result = (
-                        self.background_cluster_validator.validate_all_operations()
+                    validation_result, _ = (
+                        self.background_cluster_validator.post_operation_validation()
                     )
                     if not validation_result:
                         validation_errors.append(
