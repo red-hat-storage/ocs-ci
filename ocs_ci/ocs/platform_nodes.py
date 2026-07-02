@@ -2170,16 +2170,17 @@ class BaremetalNodes(NodesBase):
         """
         self.baremetal.start_baremetal_machines(nodes, wait=wait)
 
-    def restart_nodes(self, nodes, force=True):
+    def restart_nodes(self, nodes, force=True, wait=True):
         """
         Restart Baremetal Machine
 
         Args:
             nodes (list): The OCS objects of the nodes
             force (bool): True for force BM stop, False otherwise
+            wait (bool): Wait for BMs to start
 
         """
-        self.baremetal.restart_baremetal_machines(nodes, force=force)
+        self.baremetal.restart_baremetal_machines(nodes, force=force, wait=wait)
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
         """

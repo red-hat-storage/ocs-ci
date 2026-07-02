@@ -214,7 +214,7 @@ class BAREMETAL(object):
             node_names=get_worker_nodes(), status=constants.NODE_READY, timeout=800
         )
 
-    def restart_baremetal_machines(self, baremetal_machine, force=True):
+    def restart_baremetal_machines(self, baremetal_machine, force=True, wait=True):
         """
 
         Restart Baremetal Machines
@@ -223,10 +223,11 @@ class BAREMETAL(object):
             baremetal_machine (list): BM objects
             force (bool): True for BM ungraceful power off, False for
                 graceful BM shutdown
+            wait (bool): Wait for BMs to start
 
         """
         self.stop_baremetal_machines(baremetal_machine, force=force)
-        self.start_baremetal_machines(baremetal_machine)
+        self.start_baremetal_machines(baremetal_machine, wait=wait)
 
     def get_nodes_ipmi_ctx(self, baremetal_machine):
         """
