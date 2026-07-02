@@ -133,17 +133,49 @@ class Sanity:
             if not is_hci_client_cluster():
                 self.ceph_cluster.wait_for_noobaa_health_ok()
 
-    def delete_resources(self):
+    def delete_resources(self, force_on_unreachable_node=False):
         """
         Sanity validation - Delete resources (pods, PVCs and OBCs)
+
+        Args:
+            force_on_unreachable_node (bool): If True, force-delete pods running
+                on unreachable (NotReady) nodes instead of waiting for graceful
+                termination that can never complete without kubelet.
 
         """
         logger.info("Deleting resources as a sanity functional validation")
 
+        force_deleted_pods = set()
         for pod_obj in self.pod_objs:
+            if force_on_unreachable_node:
+                from ocs_ci.ocs.resources.pod import get_pod_node
+                from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
+
+                try:
+                    pod_node = get_pod_node(pod_obj)
+                    node_status = node.get_node_status(pod_node)
+                    if node_status is None:
+                        logger.warning(
+                            f"Could not determine node status for pod "
+                            f"{pod_obj.name}. Falling back to normal delete"
+                        )
+                    elif node_status != constants.NODE_READY:
+                        logger.info(
+                            f"Node {pod_node.name} is {node_status}, "
+                            f"force-deleting pod {pod_obj.name}"
+                        )
+                        pod_obj.delete(force=True)
+                        force_deleted_pods.add(pod_obj.name)
+                        continue
+                except (CommandFailed, NotFoundError, IndexError) as e:
+                    logger.warning(
+                        f"Could not determine node status for pod "
+                        f"{pod_obj.name}: {e}. Falling back to normal delete"
+                    )
             pod_obj.delete()
         for pod_obj in self.pod_objs:
-            pod_obj.ocp.wait_for_delete(pod_obj.name)
+            if pod_obj.name not in force_deleted_pods:
+                pod_obj.ocp.wait_for_delete(pod_obj.name)
         for pvc_obj in self.pvc_objs:
             pvc_obj.delete()
         for pvc_obj in self.pvc_objs:

@@ -264,7 +264,7 @@ class TestNodesRestart(ManageTest):
             )
         elif operation == "delete_resources":
             # Cluster validation (resources creation and IO running)
-            self.sanity_helpers.delete_resources()
+            self.sanity_helpers.delete_resources(force_on_unreachable_node=True)
 
         # Starting the nodes
         nodes.start_nodes(nodes=[provisioner_node])
@@ -374,7 +374,7 @@ class TestNodesRestart(ManageTest):
             )
         elif operation == "delete_resources":
             # Cluster validation (resources creation and IO running)
-            self.sanity_helpers.delete_resources()
+            self.sanity_helpers.delete_resources(force_on_unreachable_node=True)
 
         # Starting the nodes
         nodes.start_nodes(nodes=[operator_node])
