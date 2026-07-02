@@ -190,19 +190,24 @@ class IBMCloudIPI(CloudDeploymentBase):
         self.export_api_key()
         self.manually_create_iam_for_vpc()
 
-        self.ocp_deployment.deploy(log_cli_level)
-        # logging the cluster UUID so that we can ask for its telemetry data
-        cluster_id = exec_cmd(
-            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
-        )
-        logger.info(f"clusterID (UUID): {cluster_id}")
-        # adding odf-qe security group to the instances
-        if config.ENV_DATA.get("existing_vpc"):
-            instance_names = self.get_instance_names_by_prefix(
-                f"{config.ENV_DATA['cluster_name']}-"
+        try:
+            self.ocp_deployment.deploy(log_cli_level)
+            # logging the cluster UUID so that we can ask for its telemetry data
+            cluster_id = exec_cmd(
+                "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
             )
-            for instance_name in instance_names:
-                self.add_security_group_to_vsi(instance_name)
+            logger.info(f"clusterID (UUID): {cluster_id}")
+            # adding odf-qe security group to the instances
+            if config.ENV_DATA.get("existing_vpc"):
+                instance_names = self.get_instance_names_by_prefix(
+                    f"{config.ENV_DATA['cluster_name']}-"
+                )
+                for instance_name in instance_names:
+                    self.add_security_group_to_vsi(instance_name)
+        finally:
+            # Always check and cleanup bootstrap leftovers after deployment
+            # W/A for bug: https://issues.redhat.com/browse/OCPBUGS-63723
+            self.cleanup_bootstrap_leftovers()
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -1481,3 +1486,124 @@ class IBMCloudIPI(CloudDeploymentBase):
             raise LeftoversExistError(f"Total errors: {total_errors}")
 
         logger.info(f"Successfully deleted {total_resources} resources")
+
+    def cleanup_bootstrap_leftovers(self):
+        """
+        Check if bootstrap machine and COS instances exist and delete them if found.
+        This is a workaround for bug: https://issues.redhat.com/browse/OCPBUGS-63723
+        Issue to track W/A: https://github.com/red-hat-storage/ocs-ci/issues/13519
+
+        The OpenShift installer should clean up bootstrap resources automatically,
+        but sometimes leaves them behind on IBM Cloud even after successful deployments.
+        """
+        logger.info("Checking for bootstrap leftovers on IBM Cloud...")
+        try:
+            ibmcloud.set_target_region()
+            infra_id = get_infra_id(config.ENV_DATA["cluster_name"])
+
+            # Check and delete bootstrap VSI if it exists
+            self._cleanup_bootstrap_vsi(infra_id)
+
+            # Check and delete bootstrap COS instances if they exist
+            self._cleanup_bootstrap_cos(infra_id)
+
+            logger.info("Bootstrap cleanup completed")
+        except Exception as e:
+            logger.warning(
+                f"Failed to check/cleanup bootstrap leftovers (non-fatal): {e}"
+            )
+
+    def _cleanup_bootstrap_vsi(self, infra_id):
+        """
+        Check if bootstrap VSI exists and delete it.
+
+        Args:
+            infra_id (str): Infrastructure ID of the cluster
+        """
+        bootstrap_name = f"{infra_id}-bootstrap"
+        try:
+            # Check if bootstrap instance exists
+            logger.info(f"Checking for bootstrap VSI: {bootstrap_name}")
+            result = exec_cmd(f"ibmcloud is instance {bootstrap_name} --output json")
+
+            if result.stdout:
+                logger.info(f"Found bootstrap VSI '{bootstrap_name}', deleting...")
+                exec_cmd(f"ibmcloud is instance-delete --force {bootstrap_name}")
+                logger.info(f"Successfully deleted bootstrap VSI: {bootstrap_name}")
+            else:
+                logger.info(f"Bootstrap VSI '{bootstrap_name}' not found, skipping")
+        except CommandFailed as e:
+            # If instance doesn't exist, the command will fail - this is expected
+            if "not found" in str(e).lower() or "status code: 404" in str(e).lower():
+                logger.info(f"Bootstrap VSI '{bootstrap_name}' does not exist")
+            else:
+                logger.warning(f"Error checking/deleting bootstrap VSI: {e}")
+        except Exception as e:
+            logger.warning(f"Error checking/deleting bootstrap VSI: {e}")
+
+    def _cleanup_bootstrap_cos(self, infra_id):
+        """
+        Check if bootstrap COS instances exist and delete them.
+
+        Args:
+            infra_id (str): Infrastructure ID of the cluster
+        """
+        cos_name = f"{infra_id}-cos"
+        try:
+            logger.info(f"Checking for bootstrap COS instances: {cos_name}")
+            result = exec_cmd(
+                f"ibmcloud resource service-instance --output json {cos_name}"
+            )
+
+            if not result.stdout or result.stdout.strip() == "[]":
+                logger.info(f"No COS instances found for '{cos_name}'")
+                return
+
+            cos_instances = json.loads(result.stdout)
+            if not cos_instances:
+                logger.info(f"No COS instances found for '{cos_name}'")
+                return
+
+            for cos_instance in cos_instances:
+                cos_guid = cos_instance.get("guid")
+                if not cos_guid:
+                    continue
+
+                # Check if this COS instance only has bootstrap bucket
+                try:
+                    buckets_output = exec_cmd(
+                        f"ibmcloud cos buckets --output json --ibm-service-instance-id {cos_guid}"
+                    )
+                    buckets_data = json.loads(buckets_output.stdout)
+                    buckets = buckets_data.get("Buckets", [])
+
+                    if len(buckets) == 1 and "bootstrap" in buckets[0].get("Name", ""):
+                        logger.info(
+                            f"Found COS instance with only bootstrap bucket, deleting: {cos_instance.get('name')}"
+                        )
+                        exec_cmd(
+                            f"ibmcloud resource service-instance-delete -f {cos_guid}"
+                        )
+                        logger.info(
+                            f"Successfully deleted bootstrap COS instance: {cos_instance.get('name')}"
+                        )
+                    else:
+                        logger.info(
+                            f"COS instance '{cos_instance.get('name')}' has {len(buckets)} bucket(s), skipping"
+                        )
+                except CommandFailed as e:
+                    logger.warning(
+                        f"Error checking/deleting COS instance {cos_instance.get('name')}: {e}"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Error checking/deleting COS instance {cos_instance.get('name')}: {e}"
+                    )
+
+        except CommandFailed as e:
+            if "not found" in str(e).lower() or "status code: 404" in str(e).lower():
+                logger.info(f"COS instance '{cos_name}' does not exist")
+            else:
+                logger.warning(f"Error checking/deleting bootstrap COS: {e}")
+        except Exception as e:
+            logger.warning(f"Error checking/deleting bootstrap COS: {e}")
