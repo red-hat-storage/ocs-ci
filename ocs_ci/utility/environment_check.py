@@ -13,6 +13,41 @@ from ocs_ci.ocs import ocp, defaults, constants, exceptions
 log = logging.getLogger(__name__)
 
 
+def _pv_or_pvc_storage_provisioner(item):
+    """
+    Extract the CSI provisioner driver name from a PV or PVC item.
+
+    Args:
+        item (dict): Kubernetes resource dictionary (PV or PVC)
+
+    Returns:
+        str: The provisioner driver name, or None if not detected
+    """
+    kind = item.get("kind")
+    if kind == constants.PV:
+        driver = (
+            item.get("spec", {}).get("csi", {}).get("driver")
+        )
+        if driver:
+            return driver
+        return (
+            item.get("metadata", {})
+            .get("annotations", {})
+            .get("pv.kubernetes.io/provisioned-by")
+        )
+    if kind == constants.PVC:
+        annotations = item.get("metadata", {}).get("annotations", {})
+        provisioner = annotations.get(
+            "volume.kubernetes.io/storage-provisioner"
+        )
+        if provisioner:
+            return provisioner
+        return annotations.get(
+            "volume.beta.kubernetes.io/storage-provisioner"
+        )
+    return None
+
+
 def compare_dicts(before, after):
     """
     Comparing 2 dicts and providing diff list of [added items, removed items]
@@ -100,6 +135,24 @@ def assign_get_values(
         ):
             log.debug("ignoring item in %s namespace: %s", ns, item)
             continue
+        if item.get("kind") in (constants.PV, constants.PVC):
+            provisioner = _pv_or_pvc_storage_provisioner(item)
+            if provisioner and provisioner not in constants.OCS_PROVISIONERS:
+                log.debug(
+                    "ignoring non-ODF %s provisioned by %s: %s",
+                    item.get("kind"),
+                    provisioner,
+                    item.get("metadata", {}).get("name"),
+                )
+                continue
+        if item.get("kind") == constants.STORAGECLASS:
+            owner_refs = item.get("metadata", {}).get("ownerReferences", [])
+            if any(ref.get("kind") == "StorageClient" for ref in owner_refs):
+                log.debug(
+                    "ignoring StorageClient-owned StorageClass: %s",
+                    item.get("metadata", {}).get("name"),
+                )
+                continue
         if item.get("kind") == constants.POD:
             name = item.get("metadata", {}).get("name", "")
             if name.endswith("-debug") or "-debug-" in name:
