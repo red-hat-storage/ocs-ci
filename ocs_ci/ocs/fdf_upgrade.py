@@ -4,6 +4,7 @@ import os
 import time
 
 import yaml
+from packaging.version import parse as parse_version
 
 from ocs_ci.deployment.fusion_data_foundation import (
     FusionDataFoundationDeployment,
@@ -120,6 +121,35 @@ class FDFUpgrade(BaseUpgrade):
             upgrade_version = upgrade_version[1:]
         return upgrade_version or self.version_before_upgrade
 
+    def validate_upgrade_versions(self):
+        """
+        Validate that the target upgrade version is valid.
+
+        Normalizes both current and target versions to X.Y format and compares them.
+        Logs whether this is a Z-stream or Y-stream upgrade.
+
+        Raises:
+            AssertionError: If target version is lower than current version
+
+        """
+        current_parts = self.version_before_upgrade.split(".")
+        current_xy = f"{current_parts[0]}.{current_parts[1]}"
+        target_parts = self.fdf_upgrade_version.split(".")
+        target_xy = f"{target_parts[0]}.{target_parts[1]}"
+
+        assert parse_version(target_xy) >= parse_version(current_xy), (
+            f"Target upgrade version {target_xy} is lower than "
+            f"current version {current_xy}"
+        )
+
+        if current_xy == target_xy:
+            logger.info(
+                f"Z-stream upgrade: upgrading within {target_xy} stream "
+                f"from {self.version_before_upgrade}"
+            )
+        else:
+            logger.info(f"Y-stream upgrade: upgrading from {current_xy} to {target_xy}")
+
     def load_version_config_file(self, upgrade_version):
         """
         Load FDF version-specific configuration file.
@@ -172,12 +202,7 @@ class FDFUpgrade(BaseUpgrade):
             f"Upgrading FDF from {self.version_before_upgrade} to {self.fdf_upgrade_version}"
         )
 
-        parsed_versions = self.get_parsed_versions()
-        assert parsed_versions[1] >= parsed_versions[0], (
-            f"Target upgrade version {self.fdf_upgrade_version} is not higher than or equal to "
-            f"current version {self.version_before_upgrade}"
-        )
-
+        self.validate_upgrade_versions()
         self.load_version_config_file(self.fdf_upgrade_version)
         if not self.upgrade_in_current_source:
             self.fdf_deployment.create_image_tag_mirror_set()
@@ -200,6 +225,7 @@ class FDFUpgrade(BaseUpgrade):
                 self.channel, self.pre_upgrade_image_data, self.fdf_upgrade_version
             )
         self.verify_required_csvs()
+        parsed_versions = self.get_parsed_versions()
         self.verify_image_versions(old_images, parsed_versions[1], parsed_versions[0])
 
         version = self.fdf_deployment.get_installed_version()
