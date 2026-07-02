@@ -294,34 +294,26 @@ class TestNSFSObjectIntegrity(MCGTest):
         3. Verify that each account can only list its own buckets
         """
         # 1. Create two NSFS accounts with one bucket each
-        nsfs_obj_1 = NSFS(method="CLI", pvc_size=20)
-        nsfs_obj_2 = NSFS(method="CLI", pvc_size=20)
-        nsfs_bucket_factory(nsfs_obj_1)
-        nsfs_bucket_factory(nsfs_obj_2)
+        nsfs_objects = [NSFS(method="CLI", pvc_size=20) for _ in range(2)]
+        for nsfs_obj in nsfs_objects:
+            nsfs_bucket_factory(nsfs_obj)
 
         # 2. Create a second bucket from each account
-        acc_1_buckets = {
-            nsfs_obj_1.bucket_name,
-            retry(CommandFailed, tries=4, delay=10)(bucket_factory)(
-                s3resource=nsfs_obj_1.s3_resource
-            )[0].name,
-        }
-        acc_2_buckets = {
-            nsfs_obj_2.bucket_name,
-            retry(CommandFailed, tries=4, delay=10)(bucket_factory)(
-                s3resource=nsfs_obj_2.s3_resource
-            )[0].name,
-        }
+        expected_buckets = []
+        for nsfs_obj in nsfs_objects:
+            expected_buckets.append(
+                {
+                    nsfs_obj.bucket_name,
+                    retry(CommandFailed, tries=4, delay=10)(bucket_factory)(
+                        s3resource=nsfs_obj.s3_resource
+                    )[0].name,
+                }
+            )
 
         # 3. Verify that each account can only list its own buckets
-        acc_1_listed = set(s3_list_buckets(s3_obj=nsfs_obj_1))
-        assert acc_1_buckets == acc_1_listed, (
-            f"Account 1 bucket list mismatch. "
-            f"Expected: {acc_1_buckets}, Listed: {acc_1_listed}"
-        )
-
-        acc_2_listed = set(s3_list_buckets(s3_obj=nsfs_obj_2))
-        assert acc_2_buckets == acc_2_listed, (
-            f"Account 2 bucket list mismatch. "
-            f"Expected: {acc_2_buckets}, Listed: {acc_2_listed}"
-        )
+        for i, nsfs_obj in enumerate(nsfs_objects):
+            listed = set(s3_list_buckets(s3_obj=nsfs_obj))
+            assert expected_buckets[i] == listed, (
+                f"Account {i + 1} bucket list mismatch. "
+                f"Expected: {expected_buckets[i]}, Listed: {listed}"
+            )
