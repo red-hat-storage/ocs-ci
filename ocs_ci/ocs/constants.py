@@ -247,6 +247,20 @@ DRPC = "DRPlacementControl"
 DRCLUSTER = "DRCluster"
 DRCLUSTERCONFIG = "DRClusterConfig"
 DRPOLICY = "DRPolicy"
+DR_TOPOLOGY_PAGE_TABS = (
+    "Overview",
+    "Topology",
+    "Policies",
+    "Protected applications",
+)
+DR_TOPOLOGY_SIDEBAR_APPLICATIONS_TAB = "Applications"
+DR_TOPOLOGY_SIDEBAR_DETAILS_TAB = "Details"
+DR_TOPOLOGY_SIDEBAR_APPLICATION_DETAILS_TAB = "Application Details"
+DR_TOPOLOGY_SEARCH_FILTER_CLUSTER_NAME = "Cluster name"
+DR_TOPOLOGY_SEARCH_FILTER_POLICY = "Policy"
+DR_TOPOLOGY_SEARCH_FILTER_APPLICATION = "Application name"
+DR_TOPOLOGY_DRPC_READY_STATUS = "Ready"
+DR_TOPOLOGY_DRPC_HEALTHY_STATUS = "healthy"
 ACTION_FENCE = "Fenced"
 ACTION_UNFENCE = "Unfenced"
 CEPHFILESYSTEMSUBVOLUMEGROUP = "cephfilesystemsubvolumegroup"
