@@ -1867,22 +1867,31 @@ def get_all_acm_and_recovery_indexes():
 
 def enable_mco_console_plugin():
     """
-    Enables console plugin for MCO
+    Enables the ODF multicluster console plugin on the ACM hub cluster.
+
+    This function is idempotent — it checks whether the plugin is already
+    present in ``console.operator/cluster`` before patching, so it is safe
+    to call multiple times without side effects.
+
+    If ``spec.plugins`` does not exist yet (fresh cluster with no plugins),
+    the key is treated as an empty list so the membership check never raises
+    a KeyError.
     """
-    if (
-        "odf-multicluster-console"
-        in OCP(kind="console.operator", resource_name="cluster").get()["spec"][
-            "plugins"
-        ]
-    ):
-        log.info("MCO console plugin is enabled")
+    plugins = (
+        OCP(kind="console.operator", resource_name="cluster")
+        .get()
+        .get("spec", {})
+        .get("plugins", [])
+    )
+    if "odf-multicluster-console" in plugins:
+        log.info("MCO console plugin is already enabled — skipping patch")
     else:
+        log.info("Enabling MCO console plugin")
         patch = '\'[{"op": "add", "path": "/spec/plugins/-", "value": "odf-multicluster-console"}]\''
         patch_cmd = (
             f"patch console.operator cluster -n openshift-console"
             f" --type json -p {patch}"
         )
-        log.info("Enabling MCO console plugin")
         ocp_obj = OCP()
         ocp_obj.exec_oc_cmd(command=patch_cmd)
 
@@ -1932,6 +1941,60 @@ def get_recovery_cluster_config():
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER.get("recovery_cluster"):
             return cluster
+
+
+def get_secondary_cluster_config():
+    """
+    Get the secondary cluster config object in a DR scenario.
+    The secondary cluster is the one that is not primary, not recovery,
+    not active_acm, and not passive_acm.
+
+    If multiple clusters remain after filtering, it uses dr_cluster_relations
+    to identify which one is the secondary (the one that is not primary).
+
+    Return:
+        framework.config: secondary cluster config object from config.clusters
+
+    """
+    # Get primary cluster name
+    primary_cluster = get_primary_cluster_config()
+    primary_cluster_name = (
+        primary_cluster.ENV_DATA["cluster_name"] if primary_cluster else None
+    )
+
+    # Filter out primary, recovery, and ACM clusters
+    candidate_clusters = []
+    for cluster in ocsci_config.clusters:
+        if (
+            not cluster.MULTICLUSTER.get("primary_cluster")
+            and not cluster.MULTICLUSTER.get("recovery_cluster")
+            and not cluster.MULTICLUSTER.get("active_acm_cluster")
+            and not (
+                cluster.MULTICLUSTER.get("acm_cluster")
+                and not cluster.MULTICLUSTER.get("active_acm_cluster")
+            )
+        ):
+            candidate_clusters.append(cluster)
+
+    # If only one candidate, return it
+    if len(candidate_clusters) == 1:
+        return candidate_clusters[0]
+
+    # If multiple candidates, use dr_cluster_relations to find secondary
+    if len(candidate_clusters) > 1 and primary_cluster_name:
+        dr_relations = ocsci_config.MULTICLUSTER.get("dr_cluster_relations", [])
+        for relation in dr_relations:
+            if primary_cluster_name in relation:
+                # Find the other cluster in the relation (the secondary)
+                for cluster_name in relation:
+                    if cluster_name != primary_cluster_name:
+                        # Find the cluster config with this name
+                        for cluster in candidate_clusters:
+                            if cluster.ENV_DATA["cluster_name"] == cluster_name:
+                                return cluster
+
+    # Fallback: return first candidate if no match found
+    return candidate_clusters[0] if candidate_clusters else None
 
 
 def set_recovery_as_primary():

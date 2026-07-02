@@ -1,6 +1,7 @@
 import logging
 import platform
 import os
+from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.utility import templating
 import pytest
 import time
@@ -255,12 +256,59 @@ def scale_deployments(request):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def mirror_rdr_images():
+def mirror_rdr_images(request):
     """
     Mirror RDR images to disconnected registry and apply ITMS to managed clusters.
+    Skip this fixture when test_deploy_rdr is being executed.
     """
+    # Skip this fixture for test_deploy_rdr
+    if request.session.items:
+        for item in request.session.items:
+            if "test_deploy_rdr" in item.nodeid:
+                log.info("Skipping mirror_rdr_images fixture for test_deploy_rdr")
+                return
+
     if not config.DEPLOYMENT.get("disconnected"):
         return
+
+    # TODO: update itms_name to  odf-generic-0
+    # Check if odf-generic-0 ITMS already exists on managed clusters - skip mirroring if present
+    itms_name = "itms-generic-0"
+    managed_clusters = get_non_acm_cluster_config()
+
+    if managed_clusters:
+        # Store original context
+        original_ctx = config.cur_index
+        itms_exists_on_all = True
+
+        try:
+            for cluster_config in managed_clusters:
+                cluster_name = cluster_config.ENV_DATA.get("cluster_name", "unknown")
+                cluster_index = cluster_config.MULTICLUSTER.get("multicluster_index")
+
+                if cluster_index is not None:
+                    config.switch_ctx(cluster_index)
+                    try:
+                        # Check if odf-generic-0 ITMS exists on this cluster
+                        run_cmd(f"oc get itms {itms_name}")
+                        log.info(
+                            f"ITMS '{itms_name}' already exists on cluster {cluster_name}"
+                        )
+                    except CommandFailed:
+                        log.info(
+                            f"ITMS '{itms_name}' not found on cluster {cluster_name}"
+                        )
+                        itms_exists_on_all = False
+                        break
+        finally:
+            config.switch_ctx(original_ctx)
+
+        if itms_exists_on_all:
+            log.info(
+                f"ITMS '{itms_name}' already exists on all managed clusters. "
+                "Skipping mirror operation and ITMS application."
+            )
+            return
 
     imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG_V2)
 
@@ -270,8 +318,15 @@ def mirror_rdr_images():
         log.warning("No RDR images found to mirror. Exiting function.")
         return
 
-    imageset_config_data["mirror"]["additionalImages"] = rdr_images
-    log.info(f"Added {len(rdr_images)} RDR images to mirror configuration")
+    # Convert image list to the format required by oc mirror v2
+    # Each image needs to be in format: {"name": "image_url"}
+    # Strip docker:// prefix if present
+    formatted_images = [
+        {"name": image.replace("docker://", "")} for image in rdr_images
+    ]
+
+    imageset_config_data["mirror"]["additionalImages"] = formatted_images
+    log.info(f"Added {len(formatted_images)} RDR images to mirror configuration")
 
     # Mirror required images
     log.info(
@@ -282,11 +337,12 @@ def mirror_rdr_images():
         f"imageset-config-{config.RUN['run_id']}.yaml",
     )
     templating.dump_data_to_temp_yaml(imageset_config_data, imageset_config_file)
-
+    pull_secret_path = download_pull_secret()
     cmd = (
         f"oc mirror --config {imageset_config_file} "
-        f"docker://{config.DEPLOYMENT['mirror_registry']} "
-        "--workspace file://oc-mirror-workspace/results-files --v2"
+        f"docker://{config.DEPLOYMENT['mirror_registry']}/{config.DEPLOYMENT['mirror_registry_path']} "
+        f"--authfile {pull_secret_path} "
+        "--workspace file://oc-mirror-workspace/results-files --v2 --dest-tls-verify=false --src-tls-verify=false"
     )
 
     try:
@@ -302,6 +358,25 @@ def mirror_rdr_images():
 
     if os.path.exists(itms_file_path):
         log.info(f"Found ITMS file at {itms_file_path}")
+
+        # Modify ITMS name to odf-generic-0 (always use -0 suffix)
+        try:
+            itms_data = templating.load_yaml(itms_file_path)
+            if (
+                itms_data.get("metadata", {})
+                .get("name", "")
+                .startswith("itms-generic-")
+            ):
+                old_name = itms_data["metadata"]["name"]
+                new_name = "odf-generic-0"
+                itms_data["metadata"]["name"] = new_name
+                log.info(f"Renaming ITMS from '{old_name}' to '{new_name}'")
+
+                # Save modified ITMS back to file
+                templating.dump_data_to_temp_yaml(itms_data, itms_file_path)
+        except Exception as e:
+            log.warning(f"Failed to rename ITMS: {e}. Continuing with original name.")
+
         apply_itms_to_managed_clusters(itms_file_path)
     else:
         error_msg = f"ITMS file not found at expected location: {itms_file_path}"

@@ -57,7 +57,6 @@ from ocs_ci.ocs.utils import (
     set_recovery_as_primary,
     get_all_acm_indexes,
     get_non_acm_cluster_and_non_provider_cluster_config,
-    get_non_acm_cluster_indexes,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -2859,22 +2858,49 @@ def create_service_exporter(annotate=True):
         else:
             logger.info("Skipping multiClusterService creation for multiclient cluster")
         logger.info("Creating Service exporter")
-        run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+        run_cmd(f"oc apply -f {constants.DR_SERVICE_EXPORTER}")
 
         if annotate:
             cluster_type = cluster.ENV_DATA.get("cluster_type", "").lower()
-            if (
-                config.ENV_DATA.get("odf_provider_mode_deployment")
+            service_type = get_provider_service_type()
+            odf_provider_mode = config.ENV_DATA.get("odf_provider_mode_deployment")
+
+            logger.info(
+                f"Determining cluster address configuration: "
+                f"service_type={service_type}, cluster_type={cluster_type}, "
+                f"odf_provider_mode={odf_provider_mode}"
+            )
+
+            # Check service type first - ClusterIP always uses cluster service
+            if service_type == "ClusterIP":
+                logger.info(
+                    "Using ClusterIP configuration: cluster service with port 50051"
+                )
+                cluster_address = config.ENV_DATA["cluster_name"]
+                cluster_address_port = "50051"
+                cluster_service_export_provider_server = (
+                    ".ocs-provider-server.openshift-storage.svc.clusterset.local"
+                )
+            elif (
+                odf_provider_mode
                 or cluster_type == constants.HCI_PROVIDER
-                or get_provider_service_type() == "NodePort"
+                or service_type == "NodePort"
             ):
+                logger.info(
+                    f"Using NodePort/Provider configuration: node IP with port 31659 "
+                    f"(odf_provider_mode={odf_provider_mode}, "
+                    f"cluster_type={cluster_type}, service_type={service_type})"
+                )
                 cluster_address = get_node_internal_ip(
                     get_node_objs(get_worker_nodes()[0])[0]
                 )
                 cluster_address_port = "31659"
                 cluster_service_export_provider_server = ""
-
             else:
+                logger.info(
+                    f"Using default configuration: cluster service with port 50051 "
+                    f"(service_type={service_type})"
+                )
                 cluster_address = config.ENV_DATA["cluster_name"]
                 cluster_address_port = "50051"
                 cluster_service_export_provider_server = (
@@ -2884,7 +2910,7 @@ def create_service_exporter(annotate=True):
             run_cmd(
                 "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
                 f" ocs.openshift.io/api-server-exported-address={cluster_address}"
-                f"{cluster_service_export_provider_server}:{cluster_address_port}"
+                f"{cluster_service_export_provider_server}:{cluster_address_port} --overwrite"
             )
     config.switch_ctx(restore_index)
 
@@ -3021,26 +3047,124 @@ def create_ingress_cert_dr(
     namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
     patch_proxy=True,
 ):
+    """
+    Build a combined ingress CA bundle from all non-hosted clusters (both spoke
+    and ACM hub), apply it as a ConfigMap on every non-hosted cluster, and
+    optionally patch the cluster-wide proxy so OpenShift trusts the new CAs.
 
-    non_acm_indexes = get_non_acm_cluster_indexes()
+    Why this is needed in a DR setup
+    ---------------------------------
+    In a Regional-DR or Metro-DR topology the spoke clusters and the ACM hub
+    each have their own self-signed ingress CA.  For cross-cluster traffic
+    (e.g. Submariner, OADP, ACM observability) to succeed without TLS errors
+    every cluster must trust the ingress CAs of every other cluster.  This
+    function collects those CAs and distributes the combined bundle cluster-wide.
+
+    Hosted / HCP clusters are skipped entirely because they share the hosting
+    cluster's ingress and therefore have no independent ingress CA or
+    MachineConfigPool to update.
+
+    High-level flow
+    ---------------
+    1. Collect indexes of all non-hosted clusters (spokes + ACM hub).
+    2. For each such cluster fetch the default ingress CA bundle
+       (ConfigMap ``default-ingress-cert`` in ``openshift-config-managed``),
+       split it into individual PEM blocks, and add each block to a combined
+       list — skipping any block already seen to avoid duplicates.
+    3. Write the deduplicated bundle to a temp YAML file as a ConfigMap
+       named *cert_name* in *namespace* (default: ``openshift-config``).
+    4. Apply that ConfigMap on every non-hosted cluster (``oc apply``).
+    5. If *patch_proxy* is True, merge-patch ``proxy/cluster`` so that
+       ``spec.trustedCA.name`` points at the new ConfigMap — this makes the
+       OpenShift node trust store pick up the new CAs.
+    6. Wait for all MachineConfigPools to finish rolling out on every
+       non-hosted cluster (the proxy patch triggers a MCO update).
+
+    Args:
+        cert_name (str): Name of the ConfigMap that will hold the CA bundle.
+                         Defaults to ``user-ca-bundle``.
+        namespace (str): Namespace where the ConfigMap is created.
+                         Defaults to ``openshift-config``.
+        patch_proxy (bool): Whether to patch ``proxy/cluster`` after applying
+                            the ConfigMap.  Set to False when the proxy has
+                            already been configured externally.
+    """
+    logger.info(
+        "create_ingress_cert_dr: collecting ingress CA certs from all "
+        "non-hosted clusters (spokes + ACM hub) to build a combined trust bundle"
+    )
+
+    # --- Phase 1: determine which clusters to collect certs from -------------
+    # Include every cluster that is NOT a hosted (HCP) cluster.
+    # This covers both the DR spoke clusters and the ACM hub(s).
+    # dict.fromkeys preserves insertion order while dropping duplicate indexes.
+    all_cert_indexes = list(
+        dict.fromkeys(
+            [
+                c.MULTICLUSTER["multicluster_index"]
+                for c in config.clusters
+                if not c.MULTICLUSTER.get("is_hosted", False)
+            ]
+        )
+    )
+    logger.info(f"Cluster indexes selected for CA collection: {all_cert_indexes}")
+
     ingress_data = templating.load_yaml(constants.OC_INGRESS_CERT_YAML)
+    # LiteralString ensures the PEM bundle is written with YAML block-scalar
+    # style (|), which preserves embedded newlines correctly in the output file.
     LiteralString = enable_literal_block_style()
+    # ssl_data holds individual deduplicated PEM blocks that will be joined
+    # into the final ca-bundle.crt value.
     ssl_data = []
 
-    # Save original context to restore later
+    # Save original context so we can restore it after switching per-cluster.
     original_index = config.cur_index
 
-    for non_acm_index in non_acm_indexes:
-        config.switch_ctx(non_acm_index)
+    # --- Phase 2: collect and deduplicate individual PEM blocks --------------
+    # Each cluster's ConfigMap may contain multiple PEM certs (leaf + CA chain).
+    # We split on the PEM footer so every cert is checked independently —
+    # this prevents duplicates when two clusters share the same signing CA.
+    seen_certs = set()
+    for cert_index in all_cert_indexes:
+        config.switch_ctx(cert_index)
+        cluster_name = config.clusters[cert_index].MULTICLUSTER.get(
+            "name", f"Cluster-{cert_index}"
+        )
+        logger.info(
+            f"[{cluster_name}] Fetching ingress CA bundle from "
+            f"{constants.DEFAULT_INGRESS_CRT_OPENSHIFT} "
+            f"in {constants.OPENSHIFT_CONFIG_MANAGED_NAMESPACE}"
+        )
         default_ingress_cert = ocp.OCP(
             kind=constants.CONFIGMAP,
             resource_name=constants.DEFAULT_INGRESS_CRT_OPENSHIFT,
             namespace=constants.OPENSHIFT_CONFIG_MANAGED_NAMESPACE,
         )
 
-        ssl_data.append(
-            default_ingress_cert.get()["data"]["ca-bundle.crt"].strip() + "\n"
+        bundle = default_ingress_cert.get()["data"]["ca-bundle.crt"]
+        # Split the multi-cert bundle into individual PEM blocks.
+        # Each block ends with "-----END CERTIFICATE-----"; splitting on that
+        # delimiter leaves the body without the footer, so we re-attach it.
+        new_count = 0
+        for pem_block in bundle.split("-----END CERTIFICATE-----"):
+            pem_block = pem_block.strip()
+            if not pem_block:
+                # Trailing empty segment after the last delimiter — skip it.
+                continue
+            pem_block = pem_block + "\n-----END CERTIFICATE-----\n"
+            if pem_block not in seen_certs:
+                seen_certs.add(pem_block)
+                ssl_data.append(pem_block)
+                new_count += 1
+
+        logger.info(
+            f"[{cluster_name}] Added {new_count} new PEM block(s) "
+            f"(bundle total so far: {len(ssl_data)} cert(s))"
         )
+
+        # Update the ConfigMap template with the growing bundle and write to
+        # a temp file.  The file is overwritten each iteration so the final
+        # file always reflects the fully accumulated bundle.
         ingress_data["data"]["ca-bundle.crt"] = LiteralString("".join(ssl_data))
         ingress_data["metadata"]["name"] = cert_name
         ingress_data["metadata"]["namespace"] = namespace
@@ -3049,30 +3173,47 @@ def create_ingress_cert_dr(
         )
         templating.dump_data_to_temp_yaml(ingress_data, ingress_file.name)
 
-    # Restore original context
+    logger.info(
+        f"Combined CA bundle written to {ingress_file.name} "
+        f"({len(ssl_data)} unique PEM block(s))"
+    )
+
+    # Restore the cluster context that was active before cert collection.
     config.switch_ctx(original_index)
 
+    # --- Phase 3: apply ConfigMap and patch proxy on every non-hosted cluster -
+    # The ConfigMap is applied on ALL clusters (not just the ones we collected
+    # certs from) so that every cluster trusts the complete cross-cluster bundle.
     for cluster in config.clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
         is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
 
+        # Hosted (HCP) clusters have no independent MachineConfigPool or node
+        # trust store — skip them entirely.
         if not is_hosted:
             with config.RunWithConfigContext(index):
-                # Skip proxy patches and MachineConfigPool waits for hosted (HCP) clusters
-                is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
-
-                logger.info(f"[{cluster_name}] Creating Ingress cert")
+                logger.info(f"[{cluster_name}] Applying ingress CA ConfigMap")
                 run_cmd(cmd=f"oc apply -f {ingress_file.name}")
 
-                if patch_proxy and not is_hosted:
-                    logger.info(f"[{cluster_name}] Proxy patch")
+                if patch_proxy:
+                    # Patching proxy/cluster tells the MCO to inject the new
+                    # CA bundle into every node's trust store via a MachineConfig.
+                    logger.info(
+                        f"[{cluster_name}] Patching proxy/cluster to trust "
+                        f"ConfigMap '{cert_name}'"
+                    )
                     cmd = (
                         f"oc patch proxy/cluster --type=merge "
                         f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{cert_name}"}}}}}}\''
                     )
                     run_cmd(cmd=cmd)
 
+    # --- Phase 4: wait for MachineConfigPool rollout on every non-hosted cluster
+    # The proxy patch above triggers the MCO to create a new MachineConfig and
+    # roll it out to all nodes.  We must wait here before declaring success,
+    # otherwise subsequent steps may run against nodes that have not yet
+    # reloaded their trust store.
     for cluster in config.clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
@@ -3081,7 +3222,8 @@ def create_ingress_cert_dr(
         if not is_hosted:
             with config.RunWithConfigContext(index):
                 logger.info(
-                    f"[{cluster_name}] Waiting for MachineConfigPool to be updated"
+                    f"[{cluster_name}] Waiting for MachineConfigPool to finish "
+                    "rolling out the updated trust bundle"
                 )
                 wait_for_machineconfigpool_status(node_type="all")
 
