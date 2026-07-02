@@ -1,8 +1,16 @@
 import logging
 
-from ocs_ci.ocs.cluster import get_percent_used_capacity, get_ceph_used_capacity
+from ocs_ci.ocs.cluster import (
+    get_percent_used_capacity,
+    get_ceph_used_capacity,
+    get_ceph_pool_property,
+)
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.node import get_osd_running_nodes
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.helpers.helpers import get_failure_domain
+from ocs_ci.utility.decorators import switch_to_provider_for_function
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 
@@ -174,6 +182,65 @@ def get_mon_quorum_count() -> int:
     """
     mon_quorum_ranks = get_mon_quorum_ranks()
     return len(mon_quorum_ranks)
+
+
+@switch_to_provider_for_function
+def get_ec_drain_thresholds(pool_name=None):
+    """
+    Calculate how many OSD-host shutdowns an EC pool can tolerate at each tier.
+
+    Args:
+        pool_name (str): CephBlockPool CR name. Defaults to DEFAULT_CEPHBLOCKPOOL.
+
+    Returns:
+        dict: Threshold values with keys k, m, size (k+m), min_size,
+            failure_domain, total_osd_hosts, max_drain_io_ok, and
+            min_drain_io_stops.
+
+    Raises:
+        ValueError: If the pool is not erasure-coded.
+
+    """
+    from ocs_ci.framework import config
+
+    pool_name = pool_name or constants.DEFAULT_CEPHBLOCKPOOL
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    cbp = OCP(kind="CephBlockPool", namespace=namespace, resource_name=pool_name).get()
+    ec_spec = cbp.get("spec", {}).get("erasureCoded", {})
+    k = ec_spec.get("dataChunks")
+    m = ec_spec.get("codingChunks")
+    if not k or not m:
+        raise ValueError(
+            f"Pool {pool_name} is not erasure-coded " f"(erasureCoded spec: {ec_spec})"
+        )
+
+    size = int(get_ceph_pool_property(pool_name, "size"))
+    min_size = int(get_ceph_pool_property(pool_name, "min_size"))
+    failure_domain = get_failure_domain()
+    total_osd_hosts = len(get_osd_running_nodes())
+
+    if failure_domain != "host":
+        logger.warning(
+            f"Failure domain is '{failure_domain}', not 'host'. "
+            f"Host-based drain thresholds may not be accurate."
+        )
+
+    max_drain_io_ok = total_osd_hosts - min_size
+    min_drain_io_stops = max_drain_io_ok + 1
+
+    result = {
+        "k": k,
+        "m": m,
+        "size": size,
+        "min_size": min_size,
+        "failure_domain": failure_domain,
+        "total_osd_hosts": total_osd_hosts,
+        "max_drain_io_ok": max_drain_io_ok,
+        "min_drain_io_stops": min_drain_io_stops,
+    }
+    logger.info(f"EC drain thresholds for pool {pool_name}: {result}")
+    return result
 
 
 def wait_for_mons_in_quorum(expected_mon_count, timeout=300, sleep=20) -> None:
