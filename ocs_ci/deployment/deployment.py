@@ -233,7 +233,14 @@ def _wait_for_multus_pods_ready(timeout=1200, interval=30):
     are recreated with multus network interfaces, and finally verifies
     the full multus network configuration.
     """
-    from ocs_ci.ocs.resources.pod import get_mds_pods
+    from ocs_ci.ocs.resources.pod import (
+        get_mds_pods,
+        get_osd_pods,
+        get_mon_pods,
+        get_mgr_pods,
+        get_cephfsplugin_provisioner_pods,
+        get_rbdfsplugin_provisioner_pods,
+    )
 
     public_net_name = config.ENV_DATA.get("multus_public_net_name", "public-net")
 
@@ -251,8 +258,20 @@ def _wait_for_multus_pods_ready(timeout=1200, interval=30):
         if sample:
             break
 
+    ceph_pod_names = [
+        p.name
+        for getter in (
+            get_osd_pods,
+            get_mon_pods,
+            get_mgr_pods,
+            get_cephfsplugin_provisioner_pods,
+            get_rbdfsplugin_provisioner_pods,
+        )
+        for p in getter()
+    ]
     logger.info("Non-MDS Ceph pods have multus annotations, waiting for pods Running")
     if not wait_for_pods_to_be_running(
+        pod_names=ceph_pod_names,
         timeout=600,
         sleep=20,
         skip_for_status=[
@@ -269,12 +288,22 @@ def _wait_for_multus_pods_ready(timeout=1200, interval=30):
     # so they are recreated with multus network interfaces
     mds_pods = get_mds_pods()
     if mds_pods:
-        mds_names = [p.name for p in mds_pods]
-        logger.info("Restarting MDS pods for multus: %s", mds_names)
+        old_mds_names = [p.name for p in mds_pods]
+        logger.info("Restarting MDS pods for multus: %s", old_mds_names)
         for pod in mds_pods:
             pod.delete(wait=False)
-        logger.info("Waiting for MDS pods to be Running with multus")
+        logger.info("Waiting for new MDS pods to appear")
+        for new_pods in TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=get_mds_pods,
+        ):
+            new_names = [p.name for p in new_pods]
+            if new_names and not set(new_names) & set(old_mds_names):
+                break
+        logger.info("Waiting for MDS pods to be Running: %s", new_names)
         if not wait_for_pods_to_be_running(
+            pod_names=new_names,
             timeout=300,
             sleep=10,
             skip_for_status=[
