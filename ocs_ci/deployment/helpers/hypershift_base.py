@@ -506,6 +506,27 @@ class HyperShiftBase:
 
         return os.path.isfile(self.hypershift_binary_path)
 
+    def ensure_hcp_binaries(self, download_hcp_binary=False):
+        """
+        Ensure hcp and hypershift binaries are available.
+
+        Downloads them if explicitly requested or if they are missing (self-heal
+        for partial dependency setups that failed before completing the download).
+
+        Args:
+            download_hcp_binary (bool): If True, always download/update the binaries.
+
+        """
+        if download_hcp_binary:
+            self.update_hcp_binary()
+        elif not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
+            logger.warning(
+                "HCP/hypershift binary not found but download_hcp_binary=False. "
+                "This may happen when a previous cluster's dependency setup failed "
+                "before completing the download. Downloading now."
+            )
+            self.update_hcp_binary()
+
     def install_hcp_and_hypershift_from_git(self, install_latest=False):
         """
         Install hcp binary from git
