@@ -86,6 +86,9 @@ class Disruptions:
         if self.resource == "mds":
             self.resource_obj = pod.get_mds_pods()
             self.selector = constants.MDS_APP_LABEL
+        if self.resource == "rgw":
+            self.resource_obj = pod.get_rgw_pods()
+            self.selector = constants.RGW_APP_LABEL
         if self.resource == "cephfsplugin":
             self.resource_obj = pod.get_plugin_pods(interface=constants.CEPHFILESYSTEM)
             self.selector = get_node_plugin_label(constants.CEPHFILESYSTEM)
