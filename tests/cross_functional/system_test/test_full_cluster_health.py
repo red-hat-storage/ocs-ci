@@ -230,46 +230,61 @@ class TestFullClusterHealth(PASTest):
         self.full_log_path = get_full_test_logs_path(cname=self)
         logger.info(f"Logs file path name is : {self.full_log_path}")
 
-        logger.info("Create resource file for fio workload")
+        logger.test_step("Setup FIO workload to fill cluster to 85%")
+        logger.info("Creating resource file for FIO workload")
         self.crd_data = templating.load_yaml(constants.FIO_CR_YAML)
         self.calculate_crd_data()
-
         self.set_storageclass(interface=constants.CEPHBLOCKPOOL)
+        logger.info("FIO workload configuration completed")
 
+        logger.test_step("Run FIO workload to fill cluster")
         self.run()
+        logger.info("FIO workload completed successfully")
 
-        logger.info("Checking health before disruptive operations")
+        logger.test_step("Verify cluster health before disruptive operations")
+        logger.info("Checking cluster health before starting disruptive operations")
         assert self.is_cluster_healthy(), "Cluster is not healthy"
+        logger.info("Cluster health verified before disruptive operations")
 
+        logger.test_step("Reboot OSD node and verify cluster health")
+        logger.info("Rebooting OSD node")
         osd_node_reboot()
-        logger.info("Checking health after OSD node reboot")
+        logger.info("OSD node rebooted, checking cluster health")
         assert self.is_cluster_healthy(), "Cluster is not healthy"
+        logger.info("Cluster health verified after OSD node reboot")
 
+        logger.test_step("Restart MGR pod node and verify cluster health")
+        logger.info("Restarting MGR pod node")
         self.mgr_pod_node_restart()
-        logger.info("Checking health after worker node shutdown")
+        logger.info("MGR pod node restarted, checking cluster health")
         assert self.is_cluster_healthy(), "Cluster is not healthy"
+        logger.info("Cluster health verified after MGR node restart")
 
+        logger.test_step("Restart OCS operator node and verify cluster health")
+        logger.info("Restarting OCS operator node")
         self.restart_ocs_operator_node()
-        logger.info("Checking health after OCS operator node restart")
+        logger.info("OCS operator node restarted, checking cluster health")
         assert self.is_cluster_healthy(), "Cluster is not healthy"
+        logger.info("Cluster health verified after OCS operator node restart")
 
+        logger.test_step("Delete Rook, OSD, MGR, MON pods and verify cluster health")
+        logger.info("Deleting Rook, OSD, MGR, and MON pods")
         self.delete_pods()
-        logger.info("Checking health after Rook, OSD, MGR & MON pods deletion")
+        logger.info("Pods deleted, checking cluster health")
         assert self.is_cluster_healthy(), "Cluster is not healthy"
+        logger.info("Cluster health verified after pod deletion")
 
-        # Create resources
-        logger.info("Creating Resources using sanity helpers")
+        logger.test_step("Create and delete test resources, verify cluster health")
+        logger.info("Creating resources using sanity helpers")
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
-        logger.info("Resources Created")
+        logger.info("Resources created successfully")
 
-        # Delete resources
         logger.info("Deleting resources")
         self.sanity_helpers.delete_resources()
-        logger.info("Resources Deleted")
+        logger.info("Resources deleted successfully")
 
-        logger.info(
-            "Checking health after resources creation and deletion using sanity helpers"
-        )
+        logger.info("Verifying cluster health after resource creation and deletion")
         assert self.is_cluster_healthy(), "Cluster is not healthy"
+        logger.info("Cluster health verified after resource operations")

@@ -147,23 +147,25 @@ class TestCloneDeletion(E2ETest):
             6. Clone deletion should be successful and should not give error messages.
         """
 
-        # Creating the clones one by one and wait until they bound
-        self.timeout = 1800
-        logger.info(
-            f"Start creating {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} GB."
+        logger.test_step(
+            f"Create {self.num_of_clones} clones on {interface_type} PVC to fill cluster"
         )
+        self.timeout = 1800
+        logger.info(f"Creating {self.num_of_clones} clones of {self.pvc_size} GB PVC")
 
         # Create the initial set of clones
         self.create_clones(self.num_of_clones, pvc_clone_factory)
+        logger.info(f"Successfully created {self.num_of_clones} initial clones")
 
         # Maximum number of attempts to avoid indefinite looping
         max_attempts = 5
         attempt = 0
 
+        logger.test_step("Verify cluster full alerts are triggered")
         # Verify if expected alerts are seen; if not, continue creating extra clones
         while attempt < max_attempts:
             logger.info(
-                "Verify 'CephClusterCriticallyFull' ,CephOSDNearFull Alerts are seen "
+                "Checking for 'CephClusterCriticallyFull' and 'CephOSDNearFull' alerts"
             )
             expected_alerts = ["CephOSDNearFull", "CephOSDCriticallyFull"]
             prometheus = PrometheusAPI(threading_lock=threading_lock)
@@ -190,14 +192,16 @@ class TestCloneDeletion(E2ETest):
             logger.error("Maximum attempts reached. Expected alerts were not detected.")
             raise TimeoutExpiredError
 
-        # Make the cluster out of full by increasing the full ratio.
-        logger.info("Change Ceph full_ratio from from 85% to 95%")
-
+        logger.test_step("Increase Ceph full ratio to recover cluster from full state")
+        logger.info("Changing Ceph full_ratio from 85% to 95%")
         change_ceph_full_ratio(95)
-        # After the cluster is out of full state try to delete clones.
-        # Delete the clones one by one and wait for deletion
+        logger.info("Ceph full_ratio changed successfully")
+
+        logger.test_step(
+            f"Delete {len(self.clones_list)} clones after cluster recovery"
+        )
         logger.info(
-            f"Start deleting {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} Gi."
+            f"Deleting {len(self.clones_list)} clones on {interface_type} PVC of size {self.pvc_size} GB"
         )
 
         for index, clone in enumerate(self.clones_list):
@@ -208,3 +212,4 @@ class TestCloneDeletion(E2ETest):
             clone.ocp.wait_for_delete(clone.name, self.timeout)
             if pvc_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                 helpers.validate_pv_delete(clone.backed_pv)
+        logger.info(f"All {len(self.clones_list)} clones deleted successfully")

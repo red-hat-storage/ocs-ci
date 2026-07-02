@@ -405,26 +405,25 @@ class TestGracefulNodesShutdown(E2ETest):
          10) Do the Validation of steps 2 to 8 after cluster up and running.
         """
 
-        # Create normal OBCs and buckets
+        logger.test_step("Create normal OBCs and buckets")
         multi_obc_lifecycle_factory(num_of_obcs=2, bulk=True, measure=False)
+        logger.info("OBCs and buckets created successfully")
 
-        # OCP Workloads
-        logger.info("start_ocp_workload")
+        logger.test_step("Start OCP workloads (monitoring, registry, logging)")
+        logger.info("Starting OCP workloads in background")
         start_ocp_workload(
             workloads_list=["monitoring", "registry", "logging"], run_in_bg=True
         )
+        logger.info("OCP workloads started successfully")
 
-        # Setup MCG Features
-        logger.info(
-            "Setup MCG Features- Bucket replication,"
-            " Noobaa caching,Object expiration,"
-            "MCG NSFS,RGW kafka notification"
-        )
+        logger.test_step("Setup MCG background features")
+        logger.info("Setting up MCG features: bucket replication, object expiration")
         feature_setup_map = setup_mcg_bg_features(
             skip_any_features=["caching", "nsfs", "rgw kafka"]
         )
+        logger.info("MCG background features configured successfully")
 
-        # check OSD status after graceful node shutdown
+        logger.test_step("Gracefully shutdown all worker and master nodes")
         worker_nodes = get_nodes(node_type="worker")
         master_nodes = get_nodes(node_type="master")
 
@@ -432,14 +431,19 @@ class TestGracefulNodesShutdown(E2ETest):
             master_instances = nodes.get_ec2_instances(nodes=master_nodes)
             worker_instances = nodes.get_ec2_instances(nodes=worker_nodes)
 
-        logger.info("Gracefully Shutting down worker & master nodes")
+        logger.info(
+            f"Stopping {len(worker_nodes)} worker nodes and {len(master_nodes)} master nodes gracefully"
+        )
         nodes.stop_nodes(nodes=worker_nodes, force=False)
         nodes.stop_nodes(nodes=master_nodes, force=False)
+        logger.info("All nodes stopped gracefully")
 
-        logger.info("waiting for 5 min before starting nodes")
+        logger.test_step("Wait 5 minutes before starting nodes")
+        logger.info("Waiting 5 minutes for stabilization")
         time.sleep(300)
 
-        logger.info("Starting worker & master nodes")
+        logger.test_step("Start all worker and master nodes")
+        logger.info("Starting all nodes")
 
         if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
             nodes.start_nodes(instances=master_instances, nodes=master_nodes)
@@ -448,6 +452,7 @@ class TestGracefulNodesShutdown(E2ETest):
             nodes.start_nodes(nodes=master_nodes)
             nodes.start_nodes(nodes=worker_nodes)
 
+        logger.test_step("Wait for all nodes to reach READY state")
         retry(
             (
                 CommandFailed,
@@ -460,35 +465,49 @@ class TestGracefulNodesShutdown(E2ETest):
         )(wait_for_nodes_status(timeout=1800))
         logger.info("All nodes are now in READY state")
 
-        logger.info("Waiting for 10 min for all pods to come in running state.")
+        logger.info("Waiting 10 minutes for all pods to reach running state")
         time.sleep(600)
 
-        # check cluster health
+        logger.test_step("Validate cluster health after node restart")
         try:
-            logger.info("Making sure ceph health is OK")
+            logger.info("Checking Ceph health status")
             Sanity().health_check(tries=50, cluster_check=False)
+            logger.info("Cluster health check passed")
         except Exception as ex:
-            logger.error("Failed at cluster health check!!")
+            logger.error("Cluster health check failed")
             raise ex
 
+        logger.test_step("Validate data integrity after node restart")
         self.validate_data_integrity()
+        logger.info("Data integrity validated successfully")
 
+        logger.test_step("Validate snapshot restore functionality")
         self.validate_snapshot_restore(
             pod_factory, snapshot_restore_factory, teardown_factory
         )
-        self.validate_pvc_expansion(pvc_size_new=10)
+        logger.info("Snapshot restore validated successfully")
 
+        logger.test_step("Validate PVC expansion to 10GB")
+        self.validate_pvc_expansion(pvc_size_new=10)
+        logger.info("PVC expansion validated successfully")
+
+        logger.test_step("Validate MCG background features")
         validate_mcg_bg_features(
             feature_setup_map, skip_any_features=["caching", "rgw kafka", "nsfs"]
         )
-        self.validate_ocp_workload_exists()
+        logger.info("MCG background features validated successfully")
 
-        # check osd status
+        logger.test_step("Validate OCP workloads are operational")
+        self.validate_ocp_workload_exists()
+        logger.info("OCP workloads validated successfully")
+
+        logger.test_step("Verify no OSDs are down")
         state = "down"
         ct_pod = pod.get_ceph_tools_pod()
         tree_output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
-        logger.info("ceph osd tree output:")
-        logger.info(tree_output)
+        logger.info("Checking OSD status from ceph osd tree")
+        logger.debug(f"ceph osd tree output: {tree_output}")
         assert not (
             state in str(tree_output)
         ), "OSD are down after graceful node shutdown"
+        logger.info("All OSDs are up after graceful node shutdown")
