@@ -39,7 +39,6 @@ from ocs_ci.ocs.resources.pod import (
     get_plugin_pods,
     get_ceph_tools_pod,
     wait_for_storage_pods,
-    wait_for_noobaa_pods_running,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
@@ -956,11 +955,17 @@ class MonitorRecovery(object):
             try:
                 wait_for_resource_state(resource=mds, state=constants.STATUS_RUNNING)
             except (CommandFailed, ResourceWrongStatusException):
+                # Pod may have been replaced (new name) during the deployment rollout.
+                # Confirm it is actually gone, then wait for the replacement to run.
                 if not _pod_exists(mds):
                     logger.info(
                         f"MDS pod {mds.name} no longer exists (replaced by deployment "
-                        "rollout) - skipping"
+                        "rollout) - waiting for replacement pod to reach Running state"
                     )
+                    if not _wait_for_replacement_pod(mds, 300, mds.namespace):
+                        raise AssertionError(
+                            f"Replacement for MDS pod {mds.name} did not reach Running state"
+                        )
                     continue
                 raise
         logger.info(f"All {len(mds_pods)} MDS pods are running")
@@ -1128,6 +1133,50 @@ def _pod_exists(pod_obj):
         raise
 
 
+def _wait_for_replacement_pod(pod_obj, timeout, namespace):
+    """
+    After an original pod has been replaced (new name, same app label), wait for
+    a fresh pod with the same 'app' label selector to reach Running state.
+
+    Args:
+        pod_obj: The original (now-deleted) pod object — its cached labels are read
+        timeout (int): Seconds to wait for the replacement pod
+        namespace (str): Namespace to search in
+
+    Returns:
+        bool: True if a replacement pod reaches Running, False otherwise
+    """
+    app_label = pod_obj.labels.get("app") if pod_obj.labels else None
+    if not app_label:
+        logger.warning(
+            f"Cannot determine app label for replaced pod {pod_obj.name} - "
+            "cannot verify replacement pod"
+        )
+        return False
+
+    selector = f"app={app_label}"
+    logger.info(
+        f"Waiting up to {timeout}s for replacement pod "
+        f"with selector '{selector}' to reach Running state"
+    )
+    ocp_pod = OCP(kind=constants.POD, namespace=namespace)
+    try:
+        ocp_pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=selector,
+            timeout=timeout,
+            sleep=10,
+        )
+        logger.info(f"Replacement pod(s) with selector '{selector}' confirmed running")
+        return True
+    except Exception as e:
+        logger.error(
+            f"Replacement pod for '{app_label}' did not reach Running state "
+            f"within {timeout}s: {e}"
+        )
+        return False
+
+
 def perform_node_restart(node_name, nodes_platform, node_objs):
     """
     Perform node restart operation using platform's restart_nodes_by_stop_and_start
@@ -1199,10 +1248,10 @@ def check_and_recover_sandbox_errors(
         except CommandFailed as e:
             if "NotFound" in str(e):
                 logger.info(
-                    f"Pod {pod_name} no longer exists (replaced by a new pod after restart) - "
-                    "treating as success"
+                    f"Pod {pod_name} no longer exists (replaced by a new pod) - "
+                    "waiting for replacement pod to reach Running state"
                 )
-                return True
+                return _wait_for_replacement_pod(pod_obj, timeout, namespace)
             raise
 
         node_name = pod_data.get("spec", {}).get("nodeName")
@@ -1291,11 +1340,13 @@ def check_and_recover_sandbox_errors(
                 pod_obj.reload()
             except CommandFailed as e:
                 if "NotFound" in str(e):
+                    remaining = max(int(timeout - (time.time() - start_time)), 30)
                     logger.info(
                         f"Pod {pod_name} no longer exists during monitoring (replaced by a new "
-                        "pod after node restart) - treating as success"
+                        f"pod after node restart) - waiting for replacement pod "
+                        f"(remaining timeout: {remaining}s)"
                     )
-                    return True
+                    return _wait_for_replacement_pod(pod_obj, remaining, namespace)
                 raise
             phase = pod_obj.get().get("status", {}).get("phase")
 
@@ -1674,31 +1725,20 @@ def recover_mcg():
     else:
         logger.warning("noobaa-db-pg-cluster-1 pod not found")
 
-    try:
-        wait_for_noobaa_pods_running(timeout=600, sleep=10)
-        logger.info(
-            "All NooBaa pods verified running via wait_for_noobaa_pods_running()"
-        )
-    except Exception as e:
-        logger.warning(
-            f"wait_for_noobaa_pods_running() did not complete successfully: {e}. "
-            "Will attempt individual pod recovery."
-        )
+    current_noobaa_pods = get_noobaa_pods()
+    logger.info(f"Verifying {len(current_noobaa_pods)} NooBaa pods are running")
 
-        current_noobaa_pods = get_noobaa_pods()
-        logger.info(f"Verifying {len(current_noobaa_pods)} NooBaa pods individually")
+    failed_noobaa_pods = verify_pods_running(
+        current_noobaa_pods, pod_type="NooBaa", timeout=600, parallel=False
+    )
 
-        failed_noobaa_pods = verify_pods_running(
-            current_noobaa_pods, pod_type="NooBaa", timeout=600, parallel=False
+    if failed_noobaa_pods:
+        error_msg = (
+            f"NooBaa recovery failed: {len(failed_noobaa_pods)} pods did not reach "
+            f"running state: {failed_noobaa_pods}"
         )
-
-        if failed_noobaa_pods:
-            error_msg = (
-                f"NooBaa recovery failed: {len(failed_noobaa_pods)} pods did not reach "
-                f"running state after recovery attempts: {failed_noobaa_pods}"
-            )
-            logger.error(error_msg)
-            raise ResourceWrongStatusException(error_msg)
+        logger.error(error_msg)
+        raise ResourceWrongStatusException(error_msg)
 
     logger.info("NooBaa pods recovery completed successfully")
 
@@ -1776,14 +1816,14 @@ def remove_global_id_reclaim():
     logger.info(f"Deleting {len(csi_pods)} CSI pods")
     for csi_pod in csi_pods:
         logger.debug(f"Deleting CSI pod: {csi_pod.name}")
-        csi_pod.delete()
+        csi_pod.delete(force=True)
 
     logger.info("Deleting MDS pods")
     mds_pods = get_mds_pods()
     logger.info(f"Found {len(mds_pods)} MDS pods to delete")
     for mds_pod in mds_pods:
         logger.debug(f"Deleting MDS pod: {mds_pod.name}")
-        mds_pod.delete()
+        mds_pod.delete(force=True)
 
     logger.info("Waiting for MDS pods to respawn and reach running state")
     respawned_mds_pods = get_mds_pods()
@@ -1797,7 +1837,7 @@ def remove_global_id_reclaim():
     logger.info(f"Found {len(mon_pods)} monitor pods to delete")
     for mon in mon_pods:
         logger.debug(f"Deleting monitor pod: {mon.name}")
-        mon.delete()
+        mon.delete(force=True)
 
     logger.info("Waiting for monitor pods to respawn and reach running state")
     respawned_mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
