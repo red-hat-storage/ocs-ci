@@ -259,7 +259,16 @@ class AcmPageNavigator(BaseUI):
             ),
             timeout=15,
         ):
-            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=15)
+            try:
+                self.do_click(
+                    self.acm_page_nav["modal_dialog_close_button"],
+                    timeout=15,
+                )
+            except TimeoutException:
+                log.warning(
+                    "Modal dialog close button not clickable, "
+                    "dialog may not be present"
+                )
         log.info("Successfully navigated to ACM console")
         self.take_screenshot()
 
