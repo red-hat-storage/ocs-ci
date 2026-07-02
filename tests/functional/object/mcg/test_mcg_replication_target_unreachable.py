@@ -8,13 +8,16 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     skipif_disconnected_cluster,
 )
-from ocs_ci.framework.testlib import MCGTest, polarion_id, tier2
+from ocs_ci.framework.testlib import MCGTest, polarion_id, tier2, tier3, tier4c
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
+    update_replication_policy,
+    wait_for_expected_objects_in_bucket,
     write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.resources.pod import get_noobaa_core_pod, wait_for_noobaa_pods_running
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -391,6 +394,407 @@ class TestMCGReplicationTargetUnreachableAlert(MCGTest):
         logger.info("Post-recovery replication verified successfully")
 
         # 9. Wait for the alert to clear
+        _wait_for_replication_alert(
+            threading_lock, source_bucket.name, timeout=600, sleep=10, cleared=True
+        )
+
+    @tier3
+    @polarion_id("OCS-8034")
+    def test_noobaa_replication_target_unreachable_multi_source_multi_target(
+        self,
+        bucket_factory,
+        mcg_obj,
+        awscli_pod_session,
+        test_directory_setup,
+        threading_lock,
+    ):
+        """
+        1. Create three target OBCs (targetA, targetB, targetC), each backed
+           by a different self-ref MCG backingstore
+        2. Create two source OBCs with a replication policy targeting all
+           three targets
+        3. Verify newly written objects are replicated from both sources to
+           all three targets
+        4. Delete the underlying MCG bucket of targetA's backingstore
+        5. Write new objects to sourceA and sourceB to trigger the scanner
+        6. Wait for two alerts to start firing for targetA (one per source)
+        7. Verify that no alerts are firing for targetB and targetC
+        8. Delete the underlying MCG bucket of targetB's backingstore
+        9. Write new objects to sourceA and sourceB to trigger the scanner
+        10. Wait for two more alerts to start firing for targetB
+        11. Recreate both underlying MCG buckets with the same names
+        12. Verify that replication resumes from both sources to all targets
+        13. Wait for all NooBaaReplicationTargetUnreachable alerts to clear
+        """
+
+        # 1. Create three target OBCs, each backed by a self-ref MCG backingstore
+        logger.test_step(
+            "Create three target OBCs, each backed by a self-ref MCG backingstore"
+        )
+        target_buckets = []
+        target_to_underlying = {}
+        for label in ("a", "b", "c"):
+            bucketclass_dict = {
+                "interface": "CLI",
+                "backingstore_dict": {"self-ref-mcg": [(1, None)]},
+            }
+            target = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
+            underlying = target.bucketclass.backingstores[0].uls_name
+            target_to_underlying[target.name] = underlying
+            target_buckets.append(target)
+            logger.info(
+                f"Target {label} created: {target.name}, "
+                f"underlying MCG bucket: {underlying}"
+            )
+        target_a, target_b, target_c = target_buckets
+
+        # 2. Create two source OBCs and patch each with a multi-target
+        # replication policy
+        logger.test_step(
+            "Create two source OBCs with multi-target replication policies"
+        )
+        multi_rule_policy = {
+            "rules": [
+                {
+                    "rule_id": f"rule-{label}",
+                    "destination_bucket": t.name,
+                    "filter": {"prefix": ""},
+                }
+                for label, t in zip(("a", "b", "c"), target_buckets)
+            ]
+        }
+        source_a = bucket_factory(1, "OC")[0]
+        source_b = bucket_factory(1, "OC")[0]
+        for src in (source_a, source_b):
+            update_replication_policy(src.name, multi_rule_policy)
+            logger.info(
+                f"Replication configured: {src.name} -> "
+                f"{[t.name for t in target_buckets]}"
+            )
+
+        # 3. Verify replication works from both sources to all three targets
+        logger.test_step(
+            "Write objects and verify replication from both sources to all targets"
+        )
+        src_a_objects = write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_a.name,
+            f"{test_directory_setup.origin_dir}/src_a_init",
+            amount=3,
+            pattern="src-a-init-",
+            mcg_obj=mcg_obj,
+        )
+        src_b_objects = write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_b.name,
+            f"{test_directory_setup.origin_dir}/src_b_init",
+            amount=3,
+            pattern="src-b-init-",
+            mcg_obj=mcg_obj,
+        )
+        for src_name, obj_names in (
+            (source_a.name, src_a_objects),
+            (source_b.name, src_b_objects),
+        ):
+            for tgt in target_buckets:
+                logger.assertion(f"Replication check: {src_name} -> {tgt.name}")
+                assert wait_for_expected_objects_in_bucket(
+                    mcg_obj, obj_names, tgt.name, timeout=600
+                ), f"Replication failed: {src_name} -> {tgt.name}"
+        logger.info("Initial replication verified for all source-target pairs")
+
+        # 4. Delete the underlying MCG bucket of targetA's backingstore
+        logger.test_step("Delete the underlying MCG bucket of targetA's backingstore")
+        underlying_a = target_to_underlying[target_a.name]
+        mcg_obj.s3_resource.Bucket(underlying_a).objects.all().delete()
+        mcg_obj.s3_resource.Bucket(underlying_a).delete()
+        logger.info(f"Underlying MCG bucket deleted: {underlying_a}")
+
+        # 5. Write new objects to both sources to trigger the scanner
+        logger.test_step("Write new objects to both sources to trigger the scanner")
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_a.name,
+            f"{test_directory_setup.origin_dir}/src_a_post_del_a",
+            amount=3,
+            pattern="src-a-post-del-a-",
+            mcg_obj=mcg_obj,
+        )
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_b.name,
+            f"{test_directory_setup.origin_dir}/src_b_post_del_a",
+            amount=3,
+            pattern="src-b-post-del-a-",
+            mcg_obj=mcg_obj,
+        )
+
+        # 6. Wait for two alerts for targetA (one per source)
+        logger.test_step("Wait for two alerts to fire for targetA (one per source)")
+        _wait_for_replication_alert(
+            threading_lock, source_a.name, target_a.name, timeout=600, sleep=10
+        )
+        _wait_for_replication_alert(
+            threading_lock, source_b.name, target_a.name, timeout=600, sleep=10
+        )
+
+        # 7. Verify that no alerts are firing for targetB and targetC
+        logger.test_step(
+            "Verify no alerts are firing for healthy targets (targetB, targetC)"
+        )
+        api = PrometheusAPI(threading_lock=threading_lock)
+        alert_name = constants.ALERT_NOOBAA_REPLICATION_TARGET_UNREACHABLE
+        for tgt in (target_b, target_c):
+            alerts = api.get_alerts_by_labels(
+                alert_name=alert_name,
+                labels_dict={"target_bucket": tgt.name},
+            )
+            logger.assertion(
+                f"No alerts for healthy target {tgt.name}: "
+                f"found={len(alerts)}, expected=0"
+            )
+            assert (
+                not alerts
+            ), f"Unexpected alert firing for healthy target {tgt.name}: {alerts}"
+
+        # 8. Delete the underlying MCG bucket of targetB's backingstore
+        logger.test_step("Delete the underlying MCG bucket of targetB's backingstore")
+        underlying_b = target_to_underlying[target_b.name]
+        mcg_obj.s3_resource.Bucket(underlying_b).objects.all().delete()
+        mcg_obj.s3_resource.Bucket(underlying_b).delete()
+        logger.info(f"Underlying MCG bucket deleted: {underlying_b}")
+
+        # 9. Write new objects to both sources to trigger the scanner
+        logger.test_step("Write new objects to both sources to trigger the scanner")
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_a.name,
+            f"{test_directory_setup.origin_dir}/src_a_post_del_b",
+            amount=3,
+            pattern="src-a-post-del-b-",
+            mcg_obj=mcg_obj,
+        )
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_b.name,
+            f"{test_directory_setup.origin_dir}/src_b_post_del_b",
+            amount=3,
+            pattern="src-b-post-del-b-",
+            mcg_obj=mcg_obj,
+        )
+
+        # 10. Wait for two more alerts for targetB
+        logger.test_step(
+            "Wait for two more alerts to fire for targetB (one per source)"
+        )
+        _wait_for_replication_alert(
+            threading_lock, source_a.name, target_b.name, timeout=600, sleep=10
+        )
+        _wait_for_replication_alert(
+            threading_lock, source_b.name, target_b.name, timeout=600, sleep=10
+        )
+
+        # 11. Recreate both underlying MCG buckets with the same names
+        logger.test_step("Recreate both underlying MCG buckets")
+        mcg_obj.s3_resource.create_bucket(Bucket=underlying_a)
+        logger.info(f"Underlying MCG bucket recreated: {underlying_a}")
+        mcg_obj.s3_resource.create_bucket(Bucket=underlying_b)
+        logger.info(f"Underlying MCG bucket recreated: {underlying_b}")
+
+        # 12. Verify replication resumes from both sources to all targets
+        logger.test_step("Verify replication resumes from both sources to all targets")
+        src_a_recovery_objects = write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_a.name,
+            f"{test_directory_setup.origin_dir}/src_a_recovery",
+            amount=3,
+            pattern="src-a-recovery-",
+            mcg_obj=mcg_obj,
+        )
+        src_b_recovery_objects = write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_b.name,
+            f"{test_directory_setup.origin_dir}/src_b_recovery",
+            amount=3,
+            pattern="src-b-recovery-",
+            mcg_obj=mcg_obj,
+        )
+        for src_name, obj_names in (
+            (source_a.name, src_a_recovery_objects),
+            (source_b.name, src_b_recovery_objects),
+        ):
+            for tgt in target_buckets:
+                logger.assertion(
+                    f"Replication recovery check: {src_name} -> {tgt.name}"
+                )
+                assert wait_for_expected_objects_in_bucket(
+                    mcg_obj, obj_names, tgt.name, timeout=600
+                ), f"Replication not recovered: {src_name} -> {tgt.name}"
+        logger.info("Replication recovered for all source-target pairs")
+
+        # 13. Wait for all alerts to clear
+        logger.test_step("Wait for all alerts to clear")
+        for src in (source_a, source_b):
+            _wait_for_replication_alert(
+                threading_lock, src.name, timeout=600, sleep=10, cleared=True
+            )
+
+    @tier4c
+    @polarion_id("OCS-8035")
+    def test_noobaa_replication_target_unreachable_core_pod_restart(
+        self,
+        bucket_factory,
+        mcg_obj,
+        awscli_pod_session,
+        test_directory_setup,
+        threading_lock,
+    ):
+        """
+        1. Create a target OBC backed by a self-ref MCG backingstore and
+           a source OBC with a replication policy targeting it
+        2. Write test objects and verify replication works
+        3. Delete the underlying MCG bucket of the target's backingstore
+        4. Wait for the NooBaaReplicationTargetUnreachable alert to fire
+        5. Restart the noobaa-core pod and wait for it to become ready
+        6. Wait for the alert to resume firing
+        7. Verify the alert has the correct source and target bucket names
+        8. Recreate the underlying MCG bucket
+        9. Write test objects and verify replication resumes
+        10. Wait for the alert to stop firing
+        """
+
+        # 1. Create target OBC backed by self-ref MCG backingstore and source
+        # with a replication policy
+        logger.test_step(
+            "Create target OBC backed by self-ref MCG backingstore "
+            "and source OBC with replication policy"
+        )
+        bucketclass_dict = {
+            "interface": "CLI",
+            "backingstore_dict": {"self-ref-mcg": [(1, None)]},
+        }
+        target_bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
+        underlying_bucket_name = target_bucket.bucketclass.backingstores[0].uls_name
+        logger.info(
+            f"Target OBC created: {target_bucket.name}, "
+            f"underlying MCG bucket: {underlying_bucket_name}"
+        )
+
+        replication_policy = ("repl-alert-rule", target_bucket.name, None)
+        source_bucket = bucket_factory(1, "OC", replication_policy=replication_policy)[
+            0
+        ]
+        logger.info(
+            f"Replication configured: {source_bucket.name} -> {target_bucket.name}"
+        )
+
+        # 2. Write test objects and verify replication works
+        logger.test_step("Write test objects and verify replication works")
+        pre_disrupt_dir = f"{test_directory_setup.origin_dir}/pre"
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_bucket.name,
+            pre_disrupt_dir,
+            amount=3,
+            pattern="pre-disrupt-",
+            mcg_obj=mcg_obj,
+        )
+        logger.assertion(
+            f"Replication check: {source_bucket.name} -> {target_bucket.name}"
+        )
+        assert compare_bucket_object_list(
+            mcg_obj, source_bucket.name, target_bucket.name, timeout=600
+        ), "Replication did not work before disruption"
+
+        # 3. Delete the underlying MCG bucket of the target's backingstore
+        logger.test_step(
+            "Delete the underlying MCG bucket and write objects to trigger "
+            "failing replication"
+        )
+        mcg_obj.s3_resource.Bucket(underlying_bucket_name).objects.all().delete()
+        mcg_obj.s3_resource.Bucket(underlying_bucket_name).delete()
+        logger.info(f"Underlying MCG bucket deleted: {underlying_bucket_name}")
+
+        post_disrupt_dir = f"{test_directory_setup.origin_dir}/post_disrupt"
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_bucket.name,
+            post_disrupt_dir,
+            amount=3,
+            pattern="post-disrupt-",
+            mcg_obj=mcg_obj,
+        )
+
+        # 4. Wait for the alert to fire
+        logger.test_step("Wait for the alert to fire")
+        _wait_for_replication_alert(
+            threading_lock, source_bucket.name, timeout=600, sleep=10
+        )
+
+        # 5. Restart the noobaa-core pod and wait for it to become ready
+        logger.test_step("Restart the noobaa-core pod and wait for it to become ready")
+        get_noobaa_core_pod().delete()
+        logger.info("NooBaa core pod deleted, waiting for it to become ready")
+        wait_for_noobaa_pods_running(timeout=300)
+        logger.info("NooBaa core pod is ready")
+
+        # 6. Wait for the alert to resume firing
+        logger.test_step("Wait for the alert to resume firing after pod restart")
+        alerts = _wait_for_replication_alert(
+            threading_lock, source_bucket.name, timeout=600, sleep=10
+        )
+
+        # 7. Verify the alert has the correct source and target bucket names
+        logger.test_step(
+            "Verify the alert has the correct source and target bucket names"
+        )
+        alert = alerts[0]
+        alert_labels = alert.get("labels", {})
+        logger.assertion(
+            f"Alert source_bucket label: "
+            f"expected='{source_bucket.name}', "
+            f"actual='{alert_labels.get('source_bucket')}'"
+        )
+        assert alert_labels.get("source_bucket") == source_bucket.name, (
+            f"Expected source_bucket={source_bucket.name}, "
+            f"got {alert_labels.get('source_bucket')}"
+        )
+        logger.assertion(
+            f"Alert target_bucket label: "
+            f"expected='{target_bucket.name}', "
+            f"actual='{alert_labels.get('target_bucket')}'"
+        )
+        assert alert_labels.get("target_bucket") == target_bucket.name, (
+            f"Expected target_bucket={target_bucket.name}, "
+            f"got {alert_labels.get('target_bucket')}"
+        )
+
+        # 8. Recreate the underlying MCG bucket
+        logger.test_step("Recreate the underlying MCG bucket")
+        mcg_obj.s3_resource.create_bucket(Bucket=underlying_bucket_name)
+        logger.info(f"Underlying MCG bucket recreated: {underlying_bucket_name}")
+
+        # 9. Write test objects and verify replication resumes
+        logger.test_step("Write test objects and verify replication resumes")
+        post_recovery_dir = f"{test_directory_setup.origin_dir}/post_recovery"
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            source_bucket.name,
+            post_recovery_dir,
+            amount=3,
+            pattern="post-recovery-",
+            mcg_obj=mcg_obj,
+        )
+        logger.assertion(
+            f"Post-recovery replication check: "
+            f"{source_bucket.name} -> {target_bucket.name}"
+        )
+        assert compare_bucket_object_list(
+            mcg_obj, source_bucket.name, target_bucket.name, timeout=600
+        ), "Replication did not work after pod restart and bucket recreation"
+
+        # 10. Wait for the alert to stop firing
+        logger.test_step("Wait for the alert to stop firing")
         _wait_for_replication_alert(
             threading_lock, source_bucket.name, timeout=600, sleep=10, cleared=True
         )
