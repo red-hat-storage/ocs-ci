@@ -1,0 +1,28 @@
+# Legacy per-run config — prefer config/workflow.example.yaml (shared workflow config)
+#
+# Copy to my-run.yaml in this directory, or use:
+#   cp ../config/workflow.example.yaml ../config/workflow.yaml
+
+pipeline: issue_verification
+description: ODF 4.22 z-stream Lane C qualification run
+
+parameters:
+  odf_version: "4.22"
+  deploy_job_url: https://jenkins-csb-odf-qe-ocs4.dno.corp.redhat.com/job/qe-deploy-ocs-cluster/123/
+
+defaults:
+  dry_run: true
+  top_n: 10
+  use_claude: false
+  refresh_jira: true
+  live_repro_dry_run: true
+  skip_on_env_mismatch: true
+  oc_command_path: oc
+  live_repro_model: null
+  live_repro_max_turns: 40
+  live_repro_backend: auto
+  tests_per_issue: 1
+  force_live_repro: false
+
+run:
+  force: false

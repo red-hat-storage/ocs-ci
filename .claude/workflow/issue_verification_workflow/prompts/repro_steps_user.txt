@@ -1,0 +1,31 @@
+Generate reproduction and verification steps for ODF z-stream qualification.
+
+Issue: {issue_id}
+Summary: {issue_summary}
+Components: {components}
+Labels: {labels}
+Target ODF z-stream: {target_odf_version}
+Topology (heuristic): {topology_label} ({topology}) — {topology_details}
+
+JIRA description:
+{description}
+
+JIRA comments ({comment_count}):
+{comments_text}
+
+Linked fix pull requests ({fix_pr_count}):
+{fix_prs_text}
+
+Use fix PR content (especially changed files and PR description) to strengthen
+verification_steps — confirm the specific code/config change is present on the
+fixed z-stream build.
+
+Return JSON with this exact structure:
+{{
+  "reproduction_steps": ["step 1", "step 2", ...],
+  "verification_steps": ["step 1", "step 2", ...],
+  "expected_result": "single sentence describing success on fixed build",
+  "analysis_notes": "assumptions, gaps, links to PRs/CVEs referenced in JIRA"
+}}
+
+Minimum 3 reproduction_steps and 3 verification_steps when enough context exists.
