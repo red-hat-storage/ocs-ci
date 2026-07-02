@@ -900,6 +900,27 @@ skipif_lean_deployment = pytest.mark.skipif(
     reason="Test cannot run on lean profile or requires higher cluster resources (insufficient CPU/memory)",
 )
 
+# Markers for disabled components
+skipif_noobaa_disabled = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_noobaa", False),
+    reason="Test requires NooBaa but it is disabled",
+)
+
+skipif_rgw_disabled = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_rgw", False),
+    reason="Test requires RGW but it is disabled",
+)
+
+skipif_cephfs_disabled = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_cephfs", False),
+    reason="Test requires CephFS but it is disabled",
+)
+
+skipif_blockpools_disabled = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_blockpools", False),
+    reason="Test requires block pools but they are disabled",
+)
+
 
 def skipif_insufficient_resources(ram_gb=65, cpu_cores=6):
     """
