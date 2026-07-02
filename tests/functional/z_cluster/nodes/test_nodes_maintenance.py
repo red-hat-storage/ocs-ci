@@ -7,14 +7,8 @@ from subprocess import TimeoutExpired
 
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
-    CommandFailed,
     ResourceWrongStatusException,
     ResourceNotFoundError,
-    TimeoutExpiredError,
-)
-from ocs_ci.utility.decorators import (
-    enable_high_recovery_during_rebalance_flag,
-    switch_to_provider_for_function,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check_base, TimeoutSampler
@@ -29,8 +23,6 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     get_osd_running_nodes,
     get_node_objs,
-    get_mon_running_nodes,
-    get_node_mon_ids,
     generate_new_nodes_and_osd_running_nodes_ipi,
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
@@ -40,7 +32,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider,
     skipif_rosa_hcp,
     skipif_compact_mode,
-    runs_on_provider,
 )
 from ocs_ci.framework.testlib import (
     tier1,
@@ -55,17 +46,8 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_more_than_three_workers,
 )
-from ocs_ci.helpers.ceph_helpers import get_ec_drain_thresholds, get_mon_quorum_count
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
-from ocs_ci.ocs.cluster import CephCluster, get_pgs_brief_dump, get_specific_pool_pgid
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.pod import (
-    cal_md5sum,
-    verify_data_integrity,
-    get_ceph_tools_pod,
-    wait_for_storage_pods,
-    get_fio_rw_iops,
-)
 from ocs_ci.helpers.helpers import (
     label_worker_node,
     remove_label_from_worker_node,
