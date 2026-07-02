@@ -3797,3 +3797,163 @@ def get_bucket_status_value(mcg_obj, bucket_name, key):
     op = bucket_status.split("\n")
     value = next(item.split(":")[1].strip() for item in op if key in item)
     return value
+
+
+def get_bucket_tagging(s3_client, bucket_name):
+    """
+    Get S3 bucket tagging via the S3 API.
+
+    Args:
+        s3_client: boto3 S3 client with credentials for the bucket
+        bucket_name (str): Name of the S3 bucket
+
+    Returns:
+        list: TagSet from get_bucket_tagging response
+
+    Raises:
+        botocore.exceptions.ClientError: When tagging is not set (NoSuchTagSet)
+    """
+    response = s3_client.get_bucket_tagging(Bucket=bucket_name)
+    return response.get("TagSet", [])
+
+
+def tag_set_to_dict(tag_set):
+    """
+    Convert S3 TagSet to a key-value dictionary.
+
+    Args:
+        tag_set (list): List of dicts with Key and Value keys
+
+    Returns:
+        dict: Mapping of tag keys to values
+    """
+    return {tag["Key"]: tag["Value"] for tag in tag_set}
+
+
+def verify_bucket_tagging_matches_labels(
+    s3_client, bucket_name, expected_labels, timeout=180, sleep=10
+):
+    """
+    Wait until bucket S3 tags include the expected label key-value pairs.
+
+    Args:
+        s3_client: boto3 S3 client with credentials for the bucket
+        bucket_name (str): Name of the S3 bucket
+        expected_labels (dict): Labels that should appear as bucket tags
+        timeout (int): Timeout in seconds
+        sleep (int): Sleep interval between checks
+
+    Raises:
+        TimeoutExpiredError: If tags do not match within the timeout
+    """
+    for tag_set in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_bucket_tagging,
+        s3_client=s3_client,
+        bucket_name=bucket_name,
+    ):
+        bucket_tags = tag_set_to_dict(tag_set)
+        if all(bucket_tags.get(key) == value for key, value in expected_labels.items()):
+            logger.info(
+                f"Bucket {bucket_name} tags {bucket_tags} match expected labels "
+                f"{expected_labels}"
+            )
+            return bucket_tags
+
+
+def get_noobaa_bucket_tagging_metric_results(
+    metric_name, bucket_name, threading_lock, timeout=30
+):
+    """
+    Query Prometheus for NooBaa bucket tagging metric series filtered by bucket_name.
+
+    Args:
+        metric_name (str): Prometheus metric name (e.g. NooBaa_bucket_tagging)
+        bucket_name (str): Bucket name label value
+        threading_lock: Threading lock for PrometheusAPI
+        timeout (int): Prometheus query timeout in seconds
+
+    Returns:
+        list: Prometheus query result entries for the bucket
+    """
+    query = f'{metric_name}{{bucket_name="{bucket_name}"}}'
+    api = PrometheusAPI(threading_lock=threading_lock)
+    logger.info(f"Prometheus query: {query}")
+    resp = api.get("query", payload={"query": query}, timeout=timeout)
+    if not resp.ok:
+        raise Exception(
+            f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
+        )
+    metrics_output = json.loads(resp.text)
+    results = metrics_output.get("data", {}).get("result", [])
+    if not results:
+        logger.info(f"No results for metric {metric_name} on bucket {bucket_name}")
+    return results
+
+
+def _noobaa_tagging_label_contains_labels(tagging_label, expected_labels):
+    """
+    Check whether a NooBaa_bucket_tagging ``tagging`` label contains expected tags.
+
+    NooBaa formats each tag as ``{ key : value }`` in the label value.
+    """
+    return all(
+        f"{{ {key} : {value} }}" in tagging_label
+        for key, value in expected_labels.items()
+    )
+
+
+def verify_noobaa_bucket_tagging_metric(
+    metric_name,
+    bucket_name,
+    expected_labels,
+    threading_lock,
+    timeout=360,
+    sleep=15,
+):
+    """
+    Wait until NooBaa bucket tagging metrics reflect the expected labels.
+
+    The metric is a gauge updated by the stats aggregator (roughly every 5
+    minutes), so callers should use a timeout that covers at least one cycle.
+
+    Args:
+        metric_name (str): Prometheus metric name
+        bucket_name (str): Bucket name label value
+        expected_labels (dict): Labels that should appear in the tagging label
+        threading_lock: Threading lock for PrometheusAPI
+        timeout (int): Timeout in seconds
+        sleep (int): Sleep interval between checks
+
+    Returns:
+        list: Matching Prometheus query result entries
+
+    Raises:
+        TimeoutExpiredError: If the metric does not match within the timeout
+    """
+    for results in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_noobaa_bucket_tagging_metric_results,
+        metric_name=metric_name,
+        bucket_name=bucket_name,
+        threading_lock=threading_lock,
+    ):
+        matching_results = [
+            result
+            for result in results
+            if _noobaa_tagging_label_contains_labels(
+                result.get("metric", {}).get("tagging", ""), expected_labels
+            )
+        ]
+        if matching_results:
+            logger.info(
+                f"Metric {metric_name} for bucket {bucket_name} reflects "
+                f"expected labels {expected_labels}: {matching_results}"
+            )
+            return matching_results
+    raise TimeoutExpiredError(
+        f"Metric {metric_name} for bucket {bucket_name} did not reflect "
+        f"expected labels {expected_labels} within {timeout}s"
+    )
