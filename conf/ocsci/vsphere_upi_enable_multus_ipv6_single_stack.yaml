@@ -3,6 +3,7 @@ DEPLOYMENT:
   ipv6: true
 ENV_DATA:
   is_multus_enabled: true
+  multus_skip_odf_cli_validation: false
   multus_public_net_interface: "ens224"
   multus_cluster_net_interface: "ens224"
   multus_create_public_net: true

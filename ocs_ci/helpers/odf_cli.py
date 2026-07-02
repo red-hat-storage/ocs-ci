@@ -206,6 +206,34 @@ class ODFCliRunner:
         output = exec_cmd(full_command)
         return output
 
+    def run_raw_command(self, command_args):
+        full_command = f"{self.binary_name} {command_args}"
+        output = exec_cmd(full_command)
+        return output
+
+    def run_multus_validation(
+        self,
+        public_network,
+        cluster_network=None,
+        namespace="openshift-storage",
+        timeout_minutes=5,
+    ):
+        cmd = (
+            f"multus validation run"
+            f" --public-network {public_network}"
+            f" --namespace {namespace}"
+            f" --timeout-minutes {timeout_minutes}"
+        )
+        if cluster_network:
+            cmd += f" --cluster-network {cluster_network}"
+        log.info(f"Running odf multus validation: {cmd}")
+        return self.run_raw_command(cmd)
+
+    def run_multus_validation_cleanup(self, namespace="openshift-storage"):
+        cmd = f"multus validation cleanup --namespace {namespace}"
+        log.info(f"Cleaning up odf multus validation: {cmd}")
+        return self.run_raw_command(cmd)
+
     def run_help(self):
         return self.run_command(" help")
 
