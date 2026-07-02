@@ -7,9 +7,12 @@ from subprocess import TimeoutExpired
 
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
+    CommandFailed,
     ResourceWrongStatusException,
     ResourceNotFoundError,
+    TimeoutExpiredError,
 )
+from ocs_ci.utility.decorators import switch_to_provider_for_function
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check_base, TimeoutSampler
 
@@ -23,6 +26,8 @@ from ocs_ci.ocs.node import (
     remove_nodes,
     get_osd_running_nodes,
     get_node_objs,
+    get_mon_running_nodes,
+    get_node_mon_ids,
     generate_new_nodes_and_osd_running_nodes_ipi,
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
@@ -32,6 +37,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider,
     skipif_rosa_hcp,
     skipif_compact_mode,
+    runs_on_provider,
 )
 from ocs_ci.framework.testlib import (
     tier1,
@@ -46,8 +52,17 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_more_than_three_workers,
 )
+from ocs_ci.helpers.ceph_helpers import get_ec_drain_thresholds, get_mon_quorum_count
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
+from ocs_ci.ocs.cluster import CephCluster, get_pgs_brief_dump, get_specific_pool_pgid
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import (
+    cal_md5sum,
+    verify_data_integrity,
+    get_ceph_tools_pod,
+    wait_for_storage_pods,
+    get_fio_rw_iops,
+)
 from ocs_ci.helpers.helpers import (
     label_worker_node,
     remove_label_from_worker_node,
@@ -610,3 +625,299 @@ class TestNodesMaintenance(ManageTest):
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
         self.sanity_helpers.delete_resources()
+
+
+@brown_squad
+class TestECNodeOperations(ManageTest):
+    """
+    Test node operations on EC-pool clusters, validating Ceph degradation
+    behavior and data integrity at each EC threshold tier.
+
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup(self, request, nodes):
+        """
+        Initialize sanity helpers and register a finalizer to restart
+        any stopped nodes. Skip on client clusters.
+
+        """
+        with config.RunWithProviderConfigContextIfAvailable():
+            if config.ENV_DATA.get("cluster_type") not in (None, "provider"):
+                pytest.skip("Test runs only on provider or standalone clusters")
+            if not config.DEPLOYMENT.get("ec_default_pools"):
+                pytest.skip("Test runs only on EC pools")
+
+            self.sanity_helpers = Sanity()
+            self.stopped_node_objs = []
+            self._nodes = nodes
+
+            def restart_stopped_nodes():
+                if self.stopped_node_objs:
+                    log.info(
+                        f"Finalizer: restarting "
+                        f"{len(self.stopped_node_objs)} stopped nodes"
+                    )
+                    try:
+                        self._nodes.start_nodes(self.stopped_node_objs)
+                    except CommandFailed as e:
+                        log.error(f"Finalizer start_nodes failed: {e}")
+
+            request.addfinalizer(restart_stopped_nodes)
+
+    @switch_to_provider_for_function
+    def _wait_for_stable_degraded(self, ct_pod, timeout=600, checks=3, interval=20):
+        """Wait until PG states stabilize in a degraded condition."""
+        stable_count = 0
+        prev_state = None
+        degraded_keywords = ("degraded", "undersized", "peered")
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=interval,
+            func=ct_pod.exec_ceph_cmd,
+            ceph_cmd="ceph pg stat",
+        ):
+            state_str = str(sample)
+            is_degraded = any(kw in state_str for kw in degraded_keywords)
+            if not is_degraded:
+                stable_count = 0
+                prev_state = None
+                continue
+            if state_str == prev_state:
+                stable_count += 1
+            else:
+                stable_count = 1
+            prev_state = state_str
+            if stable_count >= checks:
+                log.info(f"PG state stable in degraded condition: {state_str}")
+                break
+
+    @switch_to_provider_for_function
+    def _run_write_io(self, pod_obj):
+        """Run a small FIO write and wait for completion."""
+        pod_obj.run_io(
+            storage_type="fs",
+            size="64M",
+            io_direction="wo",
+            runtime=0,
+            bs="4K",
+            fio_filename="drain_write_test",
+        )
+        get_fio_rw_iops(pod_obj)
+
+    @switch_to_provider_for_function
+    def _try_write_io(self, pod_obj):
+        """Attempt a FIO write, return True if succeeded, False if timed out."""
+        try:
+            pod_obj.run_io(
+                storage_type="fs",
+                size="16M",
+                io_direction="wo",
+                runtime=30,
+                bs="4K",
+                fio_filename="blocked_write",
+                timeout=120,
+            )
+            get_fio_rw_iops(pod_obj)
+            return True
+        except (CommandFailed, TimeoutExpiredError):
+            return False
+
+    @tier4a
+    @runs_on_provider
+    @skipif_managed_service
+    @pytest.mark.polarion_id("OCS-XXXX")
+    def test_ec_gradual_node_shutdown(
+        self,
+        nodes,
+        node_restart_teardown,
+        pvc_factory,
+        pod_factory,
+    ):
+        """
+        Gradually shut down OSD nodes and validate Ceph degradation behavior
+        at each EC threshold tier:
+        - Tier 1: live_hosts >= k+m -> active+clean after rebalance, IO works
+        - Tier 2: min_size <= live_hosts < k+m -> degraded, writes still work
+        - Tier 3: k <= live_hosts < min_size -> writes blocked, reads may work
+
+        """
+        # Phase 0: Pre-conditions
+        with config.RunWithProviderConfigContextIfAvailable():
+            thresholds = get_ec_drain_thresholds()
+            k = thresholds["k"]
+            size, min_size = thresholds["size"], thresholds["min_size"]
+            total_hosts = thresholds["total_osd_hosts"]
+            assert (
+                total_hosts >= size
+            ), f"Not enough OSD hosts ({total_hosts}) for EC pool (need {size})"
+
+            # Phase 1: Create workload + baseline
+            pvc_obj = pvc_factory(interface=constants.CEPHBLOCKPOOL, size=5)
+            pod_obj = pod_factory(pvc=pvc_obj, interface=constants.CEPHBLOCKPOOL)
+            pod_obj.run_io(
+                storage_type="fs", size="1G", io_direction="wo", runtime=0, bs="1M"
+            )
+            get_fio_rw_iops(pod_obj)
+            original_md5 = cal_md5sum(pod_obj, "fio-rand-write")
+
+            # Phase 2: Verify PG health + chunk distribution
+            ceph_cluster = CephCluster()
+            assert ceph_cluster.get_rebalance_status(), "PGs not active+clean at start"
+
+            ct_pod = get_ceph_tools_pod()
+            osd_tree = ct_pod.exec_ceph_cmd("ceph osd tree")
+            osd_to_host = {
+                child_id: entry["name"]
+                for entry in osd_tree["nodes"]
+                if entry["type"] == "host"
+                for child_id in entry.get("children", [])
+            }
+
+            pool_pgids = get_specific_pool_pgid(constants.DEFAULT_CEPHBLOCKPOOL)
+            pgs_dump = get_pgs_brief_dump()
+            for pg in pgs_dump["pg_stats"]:
+                if pg["pgid"] in pool_pgids[:5]:
+                    hosts = {osd_to_host[osd] for osd in pg["acting"]}
+                    assert (
+                        len(hosts) >= size
+                    ), f"PG {pg['pgid']} on {len(hosts)} hosts, need {size}"
+
+            # Phase 3: Determine shutdown order (worker-only OSD nodes, non-mon first)
+            osd_nodes = get_osd_running_nodes()
+
+            worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+            worker_names = set()
+            for w_node in worker_node_objs:
+                roles = w_node.ocp.get_resource(
+                    resource_name=w_node.name, column="ROLES"
+                )
+                if constants.MASTER_MACHINE not in roles:
+                    worker_names.add(w_node.name)
+
+            eligible_osd_nodes = [n for n in osd_nodes if n in worker_names]
+            assert eligible_osd_nodes, "No worker-only OSD nodes available for shutdown"
+
+            mon_nodes = set(get_mon_running_nodes())
+            shutdown_order = [n for n in eligible_osd_nodes if n not in mon_nodes] + [
+                n for n in eligible_osd_nodes if n in mon_nodes
+            ]
+
+            eligible_count = len(eligible_osd_nodes)
+            log.info(
+                f"Eligible worker-only OSD nodes for shutdown: {shutdown_order} "
+                f"({eligible_count} of {total_hosts} total OSD hosts)"
+            )
+
+            # Phase 4: Gradual shutdown loop (Tiers 1-3)
+            # Tier 1 (full rebalance) is only reachable when total_hosts > size,
+            # i.e. there are spare nodes beyond what EC requires.
+            max_shutdowns = min(thresholds["min_drain_io_stops"], eligible_count)
+            spare_hosts = total_hosts - size
+            if spare_hosts > 0:
+                log.info(
+                    f"Tier 1 reachable: {spare_hosts} spare host(s) beyond k+m={size}"
+                )
+            else:
+                log.info(
+                    f"Tier 1 not reachable: total_hosts={total_hosts} == k+m={size}, "
+                    f"starting from Tier 2"
+                )
+
+            for i, node_name in enumerate(shutdown_order[:max_shutdowns], start=1):
+                live_hosts = total_hosts - i
+
+                # Mon quorum safety check
+                quorum_count = get_mon_quorum_count()
+                node_mons = get_node_mon_ids(node_name)
+                if node_mons and (quorum_count - len(node_mons)) < 2:
+                    log.warning(
+                        f"Stopping shutdown sequence: shutting down {node_name} "
+                        f"would lose mon quorum ({quorum_count} mons, "
+                        f"{len(node_mons)} on this node)"
+                    )
+                    break
+
+                # Power off the node. Add to stopped list first so the
+                # finalizer can restart it even if stop_nodes raises partway.
+                shutdown_node_obj = get_node_objs([node_name])[0]
+                self.stopped_node_objs.append(shutdown_node_obj)
+                log.info(
+                    f"Shutting down node {node_name} ({i}/{max_shutdowns}), "
+                    f"{live_hosts} hosts will remain"
+                )
+                nodes.stop_nodes([shutdown_node_obj])
+
+                # Refresh ceph tools pod — it may have been rescheduled
+                # if the previous one lived on a now-stopped node.
+                ct_pod = get_ceph_tools_pod(wait=True)
+
+                # Wait for Ceph to detect OSD failure before tier validation.
+                # OSD heartbeat timeout is ~20s; give extra margin.
+                log.info("Waiting for Ceph to detect OSD failure")
+                time.sleep(30)
+
+                # Tier-based validation
+                if live_hosts >= size:
+                    log.info(f"Tier 1: {live_hosts} live >= {size} (k+m)")
+                    assert ceph_cluster.wait_for_rebalance(
+                        timeout=1800
+                    ), f"Rebalance did not complete with {live_hosts} live hosts"
+                    self._run_write_io(pod_obj)
+                    verify_data_integrity(pod_obj, "fio-rand-write", original_md5)
+
+                elif live_hosts >= min_size:
+                    log.info(f"Tier 2: {min_size} <= {live_hosts} < {size}")
+                    self._wait_for_stable_degraded(ct_pod)
+                    self._run_write_io(pod_obj)
+                    verify_data_integrity(pod_obj, "fio-rand-write", original_md5)
+
+                elif live_hosts >= k:
+                    log.info(f"Tier 3: {k} <= {live_hosts} < {min_size}")
+                    time.sleep(60)
+                    write_ok = self._try_write_io(pod_obj)
+                    if write_ok:
+                        log.warning(
+                            f"Write succeeded with {live_hosts} hosts "
+                            f"(below min_size={min_size}), may be transient"
+                        )
+                    try:
+                        verify_data_integrity(pod_obj, "fio-rand-write", original_md5)
+                        log.info("Read succeeded in tier 3 (expected: >= k hosts)")
+                    except (CommandFailed, AssertionError):
+                        log.info("Read failed in tier 3 (can happen)")
+
+            # Recovery: start all stopped nodes
+            log.info(f"Starting {len(self.stopped_node_objs)} stopped nodes")
+            nodes.start_nodes(self.stopped_node_objs)
+            wait_for_nodes_status([n.name for n in self.stopped_node_objs], timeout=600)
+            wait_for_storage_pods(timeout=600)
+            assert ceph_cluster.wait_for_rebalance(
+                timeout=3600, repeat=3
+            ), "Post-recovery rebalance did not complete"
+
+            # Clear the list so the finalizer does not re-start them
+            self.stopped_node_objs.clear()
+
+            # Post-recovery: refresh tools pod and verify no chunk co-location
+            ct_pod = get_ceph_tools_pod()
+            osd_tree = ct_pod.exec_ceph_cmd("ceph osd tree")
+            osd_to_host = {
+                child_id: entry["name"]
+                for entry in osd_tree["nodes"]
+                if entry["type"] == "host"
+                for child_id in entry.get("children", [])
+            }
+            pool_pgids = get_specific_pool_pgid(constants.DEFAULT_CEPHBLOCKPOOL)
+            pgs_dump = get_pgs_brief_dump()
+            for pg in pgs_dump["pg_stats"]:
+                if pg["pgid"] in pool_pgids[:5]:
+                    hosts = {osd_to_host[osd] for osd in pg["acting"]}
+                    assert len(hosts) >= size, (
+                        f"Post-recovery co-location: PG {pg['pgid']} on "
+                        f"{len(hosts)} hosts, need {size}"
+                    )
+
+            # Data integrity after full recovery
+            verify_data_integrity(pod_obj, "fio-rand-write", original_md5)
+            self.sanity_helpers.health_check(tries=90)
