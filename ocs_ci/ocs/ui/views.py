@@ -3123,7 +3123,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "save_policy_generic_button": (
-        "//button[contains(text(), 'Save')]",
+        "//button[normalize-space()='Save changes']",
         By.XPATH,
     ),
     "delete_policy_button": (
@@ -3135,15 +3135,15 @@ bucket_tab = {
         By.CSS_SELECTOR,
     ),
     "delete_policy_confirmation_input": (
-        "#delete-policy",
-        By.CSS_SELECTOR,
+        "//div[@role='dialog' and .//button[normalize-space()='Confirm delete']]//input",
+        By.XPATH,
     ),
     "delete_policy_confirm_button": (
-        "//button[normalize-space()='Confirm delete']",
+        "//div[@role='dialog']//button[normalize-space()='Confirm delete']",
         By.XPATH,
     ),
     "delete_policy_confirm_button_enabled": (
-        "//button[normalize-space()='Confirm delete' and not(@disabled)]",
+        "//div[@role='dialog']//button[normalize-space()='Confirm delete' and not(@aria-disabled='true')]",
         By.XPATH,
     ),
     "primary_button": (
