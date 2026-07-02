@@ -1867,22 +1867,31 @@ def get_all_acm_and_recovery_indexes():
 
 def enable_mco_console_plugin():
     """
-    Enables console plugin for MCO
+    Enables the ODF multicluster console plugin on the ACM hub cluster.
+
+    This function is idempotent — it checks whether the plugin is already
+    present in ``console.operator/cluster`` before patching, so it is safe
+    to call multiple times without side effects.
+
+    If ``spec.plugins`` does not exist yet (fresh cluster with no plugins),
+    the key is treated as an empty list so the membership check never raises
+    a KeyError.
     """
-    if (
-        "odf-multicluster-console"
-        in OCP(kind="console.operator", resource_name="cluster").get()["spec"][
-            "plugins"
-        ]
-    ):
-        log.info("MCO console plugin is enabled")
+    plugins = (
+        OCP(kind="console.operator", resource_name="cluster")
+        .get()
+        .get("spec", {})
+        .get("plugins", [])
+    )
+    if "odf-multicluster-console" in plugins:
+        log.info("MCO console plugin is already enabled — skipping patch")
     else:
+        log.info("Enabling MCO console plugin")
         patch = '\'[{"op": "add", "path": "/spec/plugins/-", "value": "odf-multicluster-console"}]\''
         patch_cmd = (
             f"patch console.operator cluster -n openshift-console"
             f" --type json -p {patch}"
         )
-        log.info("Enabling MCO console plugin")
         ocp_obj = OCP()
         ocp_obj.exec_oc_cmd(command=patch_cmd)
 

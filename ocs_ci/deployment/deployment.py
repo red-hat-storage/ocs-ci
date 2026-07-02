@@ -4691,6 +4691,60 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                     resource_count=1,
                     timeout=300,
                 )
+
+                # --- Version check + DR hub operator check ------------------------
+                # Verify the installed orchestrator CSV matches the expected channel
+                # version, and that the DR hub operator CSV (deployed automatically
+                # by the orchestrator) has reached Succeeded phase.
+                # Both checks are opt-in — set ENV_DATA
+                # orchestrator_version_check: true to enable them.
+                # If the key is absent or false the checks are skipped silently.
+                if config.ENV_DATA.get("orchestrator_version_check", False):
+                    orchestrator_sub = ocp.OCP(
+                        kind=constants.SUBSCRIPTION,
+                        resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
+                        namespace=constants.OPENSHIFT_OPERATORS,
+                    )
+                    installed_csv = orchestrator_sub.get()["status"]["currentCSV"]
+                    expected_csv = packagemanifest.PackageManifest(
+                        resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
+                    ).get_current_csv(
+                        channel=self.channel,
+                        csv_pattern=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
+                    )
+                    logger.info(
+                        f"Orchestrator version check — installed CSV: {installed_csv} | "
+                        f"expected CSV for channel '{self.channel}': {expected_csv}"
+                    )
+                    assert installed_csv == expected_csv, (
+                        f"Installed orchestrator CSV '{installed_csv}' does not match "
+                        f"expected '{expected_csv}' for channel '{self.channel}'. "
+                        f"Re-deploy or upgrade the multicluster orchestrator."
+                    )
+
+                    logger.info(
+                        "Verifying DR hub operator CSV is in Succeeded phase "
+                        f"(namespace: {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE})"
+                    )
+                    dr_hub_csvs = get_csvs_start_with_prefix(
+                        constants.ACM_ODR_HUB_OPERATOR_RESOURCE,
+                        constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+                    )
+                    assert dr_hub_csvs, (
+                        f"No CSV starting with '{constants.ACM_ODR_HUB_OPERATOR_RESOURCE}' "
+                        f"found in {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE}. "
+                        f"The DR hub operator may not have been deployed yet."
+                    )
+                    dr_hub_csv = CSV(
+                        resource_name=dr_hub_csvs[0]["metadata"]["name"],
+                        namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+                    )
+                    dr_hub_csv.wait_for_phase("Succeeded", timeout=300)
+                    logger.info(
+                        f"DR hub operator CSV '{dr_hub_csvs[0]['metadata']['name']}' "
+                        f"is Succeeded"
+                    )
+
                 continue
             if config.ENV_DATA.get("setup_fdf_catsrc_for_hub"):
                 setup_fdf_catsrc_for_hub()
