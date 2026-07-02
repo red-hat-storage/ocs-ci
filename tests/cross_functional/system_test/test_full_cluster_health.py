@@ -4,24 +4,33 @@ Test to verify cluster health/stability when it's full (85%)
 
 import logging
 import pytest
+import time
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.cluster import CephCluster, get_percent_used_capacity
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.constants import MGR_APP_LABEL, MON_APP_LABEL, OSD_APP_LABEL
 from ocs_ci.ocs.perftests import PASTest
-from ocs_ci.helpers.helpers import get_full_test_logs_path
-from ocs_ci.utility import templating
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.disruptive_operations import osd_node_reboot
 from ocs_ci.ocs.node import wait_for_nodes_status
+from ocs_ci.ocs.disruptive_operations import osd_node_reboot
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     polarion_id,
     magenta_squad,
 )
-from ocs_ci.helpers import sanity_helpers
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.cluster import (
+    change_ceph_full_ratio,
+)
 
 logger = logging.getLogger(__name__)
+
+from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
+from ocs_ci.helpers.managed_services import (
+    verify_osd_used_capacity_greater_than_expected,
+)
 
 
 @magenta_squad
@@ -30,82 +39,68 @@ class TestFullClusterHealth(PASTest):
     Test Cluster health when storage is ~85%
     """
 
+    TIMEOUT_CEPH_MGR = 600
+    TIMEOUT_CEPH_MON = 1500
+    TIMEOUT_CEPH_OSD = 600
+    TIMEOUT_POD_RUNNING = 600
+    TIMEOUT_BENCHMARK_SETUP = 2500
+
     @pytest.fixture(autouse=True)
     def setup(self, request, nodes):
         """
         Setting up test parameters
         """
 
+        logger.info("Starting the test setup")
+        logger.info(
+            "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
+        )
+        size = get_file_size(100)
+        self.benchmark_obj = BenchmarkOperatorFIO()
+        self.benchmark_obj.setup_benchmark_fio(total_size=size)
+        self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
+        self.benchmark_operator_teardown = True
+
+        logger.info("Verify used capacity bigger than 85%")
+        sample = TimeoutSampler(
+            timeout=self.TIMEOUT_BENCHMARK_SETUP,
+            sleep=40,
+            func=verify_osd_used_capacity_greater_than_expected,
+            expected_used_capacity=85.0,
+        )
+
+        if not sample.wait_for_func_status(result=True):
+            logger.error(
+                "After %s seconds the used capacity was still below 85%%",
+                self.TIMEOUT_BENCHMARK_SETUP,
+            )
+            raise TimeoutExpiredError
+
         def teardown():
+            if self.benchmark_obj:
+                logger.info("Change Ceph full_ratio from 85% to 95%")
+                change_ceph_full_ratio(95)
+
+                logger.info("Delete benchmark-operator PVCs")
+                self.benchmark_obj.cleanup()
+                self.benchmark_operator_teardown = False
+
             logger.info("cleanup the environment")
             nodes.restart_nodes_by_stop_and_start_teardown()
 
+            change_ceph_full_ratio(85)
+
+        logger.info("Benchmark setup completed. Cluster at ~85% capacity")
+
         request.addfinalizer(teardown)
 
-        logger.info("Starting the test setup")
-        self.percent_to_fill = 85.0
         self.ceph_cluster = CephCluster()
         self.nodes = None
 
-        self.benchmark_name = "FIO"
-        self.client_pod_name = "fio-client"
-
-        self.sanity_helpers = sanity_helpers.Sanity()
-
+        # Save benchmark_obj before parent setup(); PASTest.setup() sets self.benchmark_obj = None
+        benchmark_obj = self.benchmark_obj
         super(TestFullClusterHealth, self).setup()
-        # deploy the benchmark-operator
-        self.deploy_benchmark_operator()
-
-    def run(self):
-        """
-
-        Run the test, and wait until it finished
-        """
-
-        self.deploy_and_wait_for_wl_to_start(timeout=900)
-        self.wait_for_wl_to_finish(sleep=300)
-
-        try:
-            if "Fio failed to execute" not in self.test_logs:
-                logger.info("FIO has completed successfully")
-        except IOError:
-            logger.warning("FIO failed to complete")
-
-    def calculate_crd_data(self):
-        """
-        Getting the storage capacity and calculate pod count and pvc size
-
-        """
-
-        ceph_used_capacity_percent = get_percent_used_capacity()
-        logger.info(f"Ceph used capacity percent is {ceph_used_capacity_percent}%")
-
-        ceph_capacity = self.ceph_cluster.get_ceph_capacity()
-        logger.info(f"Total storage capacity is {ceph_capacity} GiB")
-
-        self.percent_to_fill = self.percent_to_fill - ceph_used_capacity_percent
-        logger.info(f"Percentage to fill is {self.percent_to_fill}%")
-
-        self.total_data_set = int(ceph_capacity * (int(self.percent_to_fill) / 100))
-        self.filesize = int(
-            self.crd_data["spec"]["workload"]["args"]["filesize"].replace("GiB", "")
-        )
-
-        # Make sure that filesize>=10 and servers<=60
-        self.servers = 60
-        self.filesize = int(self.total_data_set / self.servers)
-        if self.filesize < 10:
-            self.filesize = 10
-            self.servers = int(self.total_data_set / self.filesize)
-
-        self.crd_data["spec"]["workload"]["args"]["filesize"] = f"{self.filesize}GiB"
-        self.crd_data["spec"]["workload"]["args"][
-            "storagesize"
-        ] = f"{int(self.total_data_set)}Gi"
-        self.crd_data["spec"]["workload"]["args"]["servers"] = self.servers
-        self.crd_data["spec"]["workload"]["args"]["bs"] = "1024KiB"
-        self.crd_data["spec"]["workload"]["args"]["jobs"] = ["write", "read"]
-        self.crd_data["spec"]["workload"]["args"]["iodepth"] = 1
+        self.benchmark_obj = benchmark_obj
 
     def delete_pods(self):
         """
@@ -134,17 +129,46 @@ class TestFullClusterHealth(PASTest):
         logger.info(f"Deleting pods: {[p.name for p in pod_list]}")
         pod.delete_pods(pod_objs=pod_list)
 
-    def ceph_not_health_error(self):
+    def ceph_not_health_error(self, timeout=0):
         """
         Check if Ceph is NOT in "HEALTH_ERR" state
         Warning state is ok since the cluster is low in storage space
 
+        Args:
+            timeout (int): Time to wait for Ceph to recover from HEALTH_ERR (default: 0 - no wait)
+                          Pass 600 for 10 minutes wait during recovery scenarios
+
         Returns:
             bool: True if Ceph state is NOT "HEALTH_ERR"
         """
-        ceph_status = self.ceph_cluster.get_ceph_health()
-        logger.info(f"Ceph status is: {ceph_status}")
-        return ceph_status != "HEALTH_ERR"
+        if timeout == 0:
+            # No wait - immediate check
+            ceph_status = self.ceph_cluster.get_ceph_health()
+            logger.info(f"Ceph status is: {ceph_status}")
+            return "HEALTH_ERR" not in ceph_status
+
+        # Wait for Ceph to recover from HEALTH_ERR
+        logger.info(
+            f"Waiting up to {timeout} seconds for Ceph to recover from HEALTH_ERR state"
+        )
+        sample = TimeoutSampler(
+            timeout=timeout, sleep=30, func=self.ceph_cluster.get_ceph_health
+        )
+
+        try:
+            for ceph_status in sample:
+                if "HEALTH_ERR" not in ceph_status:
+                    logger.info(f"Ceph recovered successfully. Status: {ceph_status}")
+                    return True
+                logger.debug(f"Ceph still in HEALTH_ERR state: {ceph_status}")
+        except TimeoutExpiredError:
+            ceph_status = self.ceph_cluster.get_ceph_health()
+            logger.error(
+                f"Ceph did not recover from HEALTH_ERR within {timeout} seconds. Final status: {ceph_status}"
+            )
+            return False
+
+        return False
 
     def mgr_pod_node_restart(self):
         """
@@ -162,19 +186,21 @@ class TestFullClusterHealth(PASTest):
             kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
         assert pod_obj.wait_for_resource(
-            condition="Running", selector="app=rook-ceph-mgr", timeout=600
+            condition="Running",
+            selector=MGR_APP_LABEL,
+            timeout=self.TIMEOUT_CEPH_MGR,
         )
         assert pod_obj.wait_for_resource(
             condition="Running",
-            selector="app=rook-ceph-mon",
+            selector=MON_APP_LABEL,
             resource_count=3,
-            timeout=600,
+            timeout=self.TIMEOUT_CEPH_MON,
         )
         assert pod_obj.wait_for_resource(
             condition="Running",
-            selector="app=rook-ceph-osd",
+            selector=OSD_APP_LABEL,
             resource_count=3,
-            timeout=600,
+            timeout=self.TIMEOUT_CEPH_OSD,
         )
 
     def restart_ocs_operator_node(self):
@@ -188,29 +214,53 @@ class TestFullClusterHealth(PASTest):
         self.nodes.restart_nodes([node_obj])
 
         wait_for_nodes_status()
-
+        time.sleep(180)
         pod.wait_for_pods_to_be_running(
-            namespace=config.ENV_DATA["cluster_namespace"], pod_names=[pod_obj.name]
+            namespace=config.ENV_DATA["cluster_namespace"],
+            pod_names=[pod_obj.name],
+            timeout=300,
         )
 
-    def is_cluster_healthy(self):
+    def is_cluster_healthy(self, ceph_recovery_timeout=600):
         """
         Wrapper function for cluster health check
 
+        Args:
+            ceph_recovery_timeout (int): Time to wait for Ceph to recover (default: 600s/10min)
+
         Returns:
-            bool: True if ALL checks passed, False otherwise
+            bool: True if ALL checks passed (Ceph healthy AND all pods running), False otherwise
         """
-        return self.ceph_not_health_error() and pod.wait_for_pods_to_be_running()
+        start_time = time.time()
+
+        # First check if Ceph is healthy (with optional wait for recovery)
+        ceph_healthy = self.ceph_not_health_error(timeout=ceph_recovery_timeout)
+
+        if not ceph_healthy:
+            logger.error("Ceph is in HEALTH_ERR state, skipping pod check")
+            execution_time = time.time() - start_time
+            logger.info(
+                f"is_cluster_healthy took {execution_time:.2f} seconds to execute"
+            )
+            return False
+
+        # Only check pods if Ceph is healthy
+        pods_running = pod.wait_for_pods_to_be_running(timeout=self.TIMEOUT_POD_RUNNING)
+
+        execution_time = time.time() - start_time
+        result = ceph_healthy and pods_running
+        logger.info(f"is_cluster_healthy took {execution_time:.2f} seconds to execute")
+        logger.info(
+            f"Ceph healthy: {ceph_healthy}, Pods running: {pods_running}, Overall result: {result}"
+        )
+
+        return result
 
     @system_test
     @polarion_id("OCS-2749")
     def test_full_cluster_health(
         self,
         nodes,
-        pvc_factory,
-        pod_factory,
-        bucket_factory,
-        rgw_bucket_factory,
     ):
         """
         Verify that the cluster health is ok when the storage is ~85% full
@@ -227,49 +277,33 @@ class TestFullClusterHealth(PASTest):
         """
         self.nodes = nodes
 
-        self.full_log_path = get_full_test_logs_path(cname=self)
-        logger.info(f"Logs file path name is : {self.full_log_path}")
-
-        logger.info("Create resource file for fio workload")
-        self.crd_data = templating.load_yaml(constants.FIO_CR_YAML)
-        self.calculate_crd_data()
-
-        self.set_storageclass(interface=constants.CEPHBLOCKPOOL)
-
-        self.run()
-
         logger.info("Checking health before disruptive operations")
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
+        assert self.is_cluster_healthy(
+            ceph_recovery_timeout=0
+        ), "Cluster is not healthy before starting disruptive operations"
 
+        logger.info("Starting OSD node reboot")
         osd_node_reboot()
         logger.info("Checking health after OSD node reboot")
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
+        assert self.is_cluster_healthy(), "Cluster is not healthy after OSD node reboot"
 
+        logger.info("Starting MGR pod node restart (worker node shutdown)")
         self.mgr_pod_node_restart()
         logger.info("Checking health after worker node shutdown")
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
+        assert (
+            self.is_cluster_healthy()
+        ), "Cluster is not healthy after MGR pod node restart (worker node shutdown)"
 
+        logger.info("Starting OCS operator node restart")
         self.restart_ocs_operator_node()
         logger.info("Checking health after OCS operator node restart")
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
+        assert (
+            self.is_cluster_healthy()
+        ), "Cluster is not healthy after OCS operator node restart"
 
+        logger.info("Starting Rook, OSD, MGR & MON pods deletion")
         self.delete_pods()
         logger.info("Checking health after Rook, OSD, MGR & MON pods deletion")
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
-
-        # Create resources
-        logger.info("Creating Resources using sanity helpers")
-        self.sanity_helpers.create_resources(
-            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
-        )
-        logger.info("Resources Created")
-
-        # Delete resources
-        logger.info("Deleting resources")
-        self.sanity_helpers.delete_resources()
-        logger.info("Resources Deleted")
-
-        logger.info(
-            "Checking health after resources creation and deletion using sanity helpers"
-        )
-        assert self.is_cluster_healthy(), "Cluster is not healthy"
+        assert (
+            self.is_cluster_healthy()
+        ), "Cluster is not healthy after Rook, OSD, MGR & MON pods deletion"
