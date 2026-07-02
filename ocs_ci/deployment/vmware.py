@@ -579,6 +579,11 @@ class VSPHEREUPI(VSPHEREBASE):
         self.token = config.ENV_DATA.get("ipam_token")
         self.cidr = config.ENV_DATA.get("machine_cidr")
         self.vm_network = config.ENV_DATA.get("vm_network")
+        if (
+            config.DEPLOYMENT.get("dual_stack")
+            and config.DEPLOYMENT.get("primary_stack") == "ipv6"
+        ):
+            self.cidr = config.ENV_DATA.get("machine_cidr_ipv6", self.cidr)
 
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
@@ -1003,6 +1008,22 @@ class VSPHEREUPI(VSPHEREBASE):
             ocp_install_template_path = os.path.join(
                 "ocp-deployment", ocp_install_template
             )
+
+            # Inject dual-stack flag into ENV_DATA so Jinja2 template can use it
+            config.ENV_DATA["dual_stack"] = config.DEPLOYMENT.get("dual_stack", False)
+
+            if config.DEPLOYMENT.get("dual_stack"):
+                if config.DEPLOYMENT.get("ipv6"):
+                    raise UnexpectedDeploymentConfiguration(
+                        "Cannot set both 'dual_stack' and 'ipv6'. "
+                        "Use 'dual_stack: true' with 'primary_stack: ipv6' "
+                        "for IPv6-primary dual-stack."
+                    )
+                if not config.ENV_DATA.get("machine_cidr_ipv6"):
+                    raise UnexpectedDeploymentConfiguration(
+                        "Dual-stack deployment requires ENV_DATA.machine_cidr_ipv6"
+                    )
+
             install_config_str = _templating.render_template(
                 ocp_install_template_path, config.ENV_DATA
             )
@@ -1016,6 +1037,17 @@ class VSPHEREUPI(VSPHEREBASE):
                 install_config_obj["platform"]["vsphere"]["network"] = config.ENV_DATA[
                     "vm_network"
                 ]
+
+            # Reorder network lists for IPv6-primary dual-stack
+            if (
+                config.DEPLOYMENT.get("dual_stack")
+                and config.DEPLOYMENT.get("primary_stack") == "ipv6"
+            ):
+                networking = install_config_obj["networking"]
+                networking["clusterNetwork"].reverse()
+                networking["machineNetwork"].reverse()
+                networking["serviceNetwork"].reverse()
+
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
 
@@ -1135,9 +1167,9 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{self.installer} create ignition-configs "
                     f"--dir {self.cluster_path} "
                 )
-                # Because ignition file for bootstrap in ipv6 is too big to be passed by terraform changing
-                # encoding to gzip+base64 instead of pain text.
-                if config.DEPLOYMENT.get("ipv6"):
+                # Because ignition file for bootstrap in ipv6/dual-stack is too big to be passed by terraform
+                # changing encoding to gzip+base64 instead of plain text.
+                if config.DEPLOYMENT.get("ipv6") or config.DEPLOYMENT.get("dual_stack"):
                     bootstrap_ignition_path = os.path.join(
                         config.ENV_DATA["cluster_path"], constants.BOOTSTRAP_IGN
                     )
@@ -1152,6 +1184,7 @@ class VSPHEREUPI(VSPHEREBASE):
                         control_plane_ignition_path,
                         compute_ignition_path,
                     ]
+
                     for ignition_path in ignition_paths:
                         # Read the file and compress it + base64
                         with open(ignition_path, "rb") as f_in:
@@ -1250,11 +1283,14 @@ class VSPHEREUPI(VSPHEREBASE):
                 time.sleep(600)
                 logger.info("waiting for bootstrap to complete")
                 try:
+                    bootstrap_timeout = (
+                        7200 if config.DEPLOYMENT.get("dual_stack") else 3600
+                    )
                     run_cmd(
                         f"{self.installer} wait-for bootstrap-complete "
                         f"--dir {self.cluster_path} "
                         f"--log-level {log_cli_level}",
-                        timeout=3600,
+                        timeout=bootstrap_timeout,
                     )
                 except (CommandFailed, TimeoutExpired) as e:
                     err = str(e)
@@ -1328,11 +1364,12 @@ class VSPHEREUPI(VSPHEREBASE):
 
                 # wait for install to complete
                 logger.info("waiting for install to complete")
+                install_timeout = 7200 if config.DEPLOYMENT.get("dual_stack") else 3600
                 run_cmd(
                     f"{self.installer} wait-for install-complete "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=3600,
+                    timeout=install_timeout,
                 )
 
                 # Approving CSRs here in-case if any exists
@@ -2730,11 +2767,14 @@ def clone_openshift_installer():
                     branch="release-4.12",
                 )
             else:
-                if config.DEPLOYMENT.get("ipv6"):
+                if config.DEPLOYMENT.get("dual_stack") or config.DEPLOYMENT.get("ipv6"):
                     constants.VSPHERE_INSTALLER_REPO = (
                         "https://gitlab.cee.redhat.com/srozen/installer_ipv6.git"
                     )
-                    branch = "master"
+                    if config.DEPLOYMENT.get("dual_stack"):
+                        branch = "dual-stack"
+                    else:
+                        branch = "master"
                 else:
                     branch = f"release-{ocp_version}"
                 clone_repo(
@@ -2792,9 +2832,11 @@ def update_gw(str_to_replace, config_file):
     """
     # update gateway
     if config.ENV_DATA.get("gateway"):
-        replace_content_in_file(
-            config_file, str_to_replace, f"{config.ENV_DATA.get('gateway')}"
-        )
+        if config.DEPLOYMENT.get("dual_stack"):
+            gw = config.ENV_DATA.get("gateway_ipv6", config.ENV_DATA.get("gateway"))
+        else:
+            gw = config.ENV_DATA.get("gateway")
+        replace_content_in_file(config_file, str_to_replace, f"{gw}")
 
 
 def add_shutdown_wait_timeout():
@@ -2806,13 +2848,23 @@ def add_shutdown_wait_timeout():
     force powered-off after this timeout, otherwise an error is returned. Default: 3 minutes.
 
     """
-    with open(constants.VM_MAIN, "r") as fd:
-        obj = hcl2.load(fd)
-        obj["resource"][0]["vsphere_virtual_machine"]["vm"][
-            "shutdown_wait_timeout"
-        ] = 10
-    dump_data_to_json(obj, f"{constants.VM_MAIN}.json")
-    os.rename(constants.VM_MAIN, f"{constants.VM_MAIN}.backup")
+    if config.DEPLOYMENT.get("dual_stack"):
+        with open(constants.VM_MAIN, "r") as fd:
+            content = fd.read()
+        content = content.replace(
+            '"stealclock.enable"',
+            '"shutdown_wait_timeout" = 10\n' '    "stealclock.enable"',
+        )
+        with open(constants.VM_MAIN, "w") as fd:
+            fd.write(content)
+    else:
+        with open(constants.VM_MAIN, "r") as fd:
+            obj = hcl2.load(fd)
+            obj["resource"][0]["vsphere_virtual_machine"]["vm"][
+                "shutdown_wait_timeout"
+            ] = 10
+        dump_data_to_json(obj, f"{constants.VM_MAIN}.json")
+        os.rename(constants.VM_MAIN, f"{constants.VM_MAIN}.backup")
 
 
 def enable_efi_secure_boot():
@@ -2898,8 +2950,10 @@ def update_machine_conf(folder_structure=True):
             Currently True for OCP release greater than 4.4 versions
 
     """
+    cidr_var = "var.machine_cidr"
+
     if not folder_structure:
-        gw_string = "${cidrhost(var.machine_cidr,1)}"
+        gw_string = "${cidrhost(%s,1)}" % cidr_var
         gw_conf_file = constants.INSTALLER_IGNITION
         disk_size_conf_file = constants.INSTALLER_MACHINE_CONF
         # update dns
@@ -2913,10 +2967,11 @@ def update_machine_conf(folder_structure=True):
 
     else:
         if Version.coerce(get_ocp_version()) >= Version.coerce("4.6"):
-            gw_string = "${cidrhost(var.machine_cidr, 1)}"
+            gw_string = "${cidrhost(%s, 1)}" % cidr_var
             gw_conf_file = constants.VM_MAIN
         else:
-            gw_string = "${cidrhost(machine_cidr, 1)}"
+            cidr_ref = cidr_var.replace("var.", "")
+            gw_string = "${cidrhost(%s, 1)}" % cidr_ref
             gw_conf_file = constants.VM_IFCFG
 
         disk_size_conf_file = constants.VM_MAIN

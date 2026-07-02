@@ -6,10 +6,23 @@ networking:
   clusterNetwork:
     - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
       hostPrefix: {{ cluster_host_prefix | default(23) }}
+{% if dual_stack %}
+    - cidr: {{ cluster_network_cidr_ipv6 | default('fd01::/48') }}
+      hostPrefix: {{ cluster_host_prefix_ipv6 | default(64) }}
+{% endif %}
+{% if dual_stack %}
+  machineNetwork:
+    - cidr: '{{ machine_cidr }}'
+    - cidr: '{{ machine_cidr_ipv6 }}'
+{% else %}
   machineCIDR: '{{ machine_cidr }}'
+{% endif %}
   networkType: {{ network_type | default('OVNKubernetes') }}
   serviceNetwork:
     - {{ service_network_cidr | default('172.30.0.0/16') }}
+{% if dual_stack %}
+    - {{ service_network_cidr_ipv6 | default('fd02::/112') }}
+{% endif %}
 {% if fips %}
 fips: {{ fips }}
 {% endif %}

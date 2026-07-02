@@ -1,0 +1,3 @@
+DEPLOYMENT:
+  dual_stack: true
+  primary_stack: "ipv4"
