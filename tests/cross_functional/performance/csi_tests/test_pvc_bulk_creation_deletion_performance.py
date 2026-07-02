@@ -17,6 +17,7 @@ from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.perfresult import ResultsAnalyse
+from ocs_ci.helpers.helpers import set_configmap_log_level_csi_sidecar
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class TestPVCCreationPerformance(PASTest):
         self.create_test_project()
         self.pvc_size = "1Gi"
         self.pvc_objs = []
+        set_configmap_log_level_csi_sidecar(value=5)
 
     def teardown(self):
         """
@@ -52,6 +54,7 @@ class TestPVCCreationPerformance(PASTest):
         # Delete All PVC (if exists)
         for pvc_obj in self.pvc_objs:
             pvc_obj.delete()
+        set_configmap_log_level_csi_sidecar(value=1)
         # Delete the test project (namespace)
         self.delete_test_project()
         super(TestPVCCreationPerformance, self).teardown()
