@@ -11,7 +11,6 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility.utils import (
     clone_repo,
     exec_cmd,
-    get_ocp_version,
     prepare_bin_dir,
 )
 
@@ -54,7 +53,7 @@ def get_oc_mirror_tool():
         # https://github.com/openshift/oc-mirror
         oc_mirror_repo = "https://github.com/openshift/oc-mirror.git"
         oc_mirror_dir = os.path.join(constants.EXTERNAL_DIR, "oc-mirror")
-        oc_mirror_branch = f"release-{get_ocp_version()}"
+        oc_mirror_branch = "main"
         clone_repo(url=oc_mirror_repo, location=oc_mirror_dir, branch=oc_mirror_branch)
         # build oc-mirror tool
         exec_cmd("make build", cwd=oc_mirror_dir, timeout=1800)
