@@ -1773,9 +1773,18 @@ def verify_mcg_only_pods():
     if config.ENV_DATA.get("noobaa_external_pgsql"):
         del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+        default_bs = OCP(
+            kind="backingstore",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+        )
+        default_bs_data = default_bs.get()
+        num_volumes = (
+            default_bs_data.get("spec", {}).get("pvPool", {}).get("numVolumes", 1)
+        )
         resources_dict.update(
             {
-                constants.NOOBAA_DEFAULT_BACKINGSTORE_LABEL: 1,
+                constants.NOOBAA_DEFAULT_BACKINGSTORE_LABEL: num_volumes,
             }
         )
     if ocs_version >= version.VERSION_4_15:
