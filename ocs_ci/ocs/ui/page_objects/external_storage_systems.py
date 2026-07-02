@@ -7,6 +7,7 @@ from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs import ocp
+from selenium.common.exceptions import TimeoutException
 
 
 class ExternalSystems(ResourceList):
@@ -37,6 +38,70 @@ class ExternalSystems(ResourceList):
         logger.info(f"Navigate to External Storage Cluster {esc_name}")
         self.nav_to_resource_via_name(esc_name)
         return ExternalStorageCluster()
+
+    def get_page_title(self):
+        """
+        Get the page title text from the External Systems page.
+
+        Returns:
+            str: The page title text
+        """
+        logger.info("Getting External Systems page title")
+        return self.get_element_text(self.external_systems["page_title"])
+
+    def get_empty_state_elements(self):
+        """
+        Collect empty state element details when no external systems
+        are connected. Uses locators defined in views.py.
+
+        Returns:
+            dict: Keys:
+                - heading_text (str or None): Heading text, None if not found
+                - description_text (str or None): Description text, None if not found
+                - connect_button_enabled (bool): True if Connect button is visible and enabled
+                - explore_link_text (str or None): Explore link text, None if not found
+        """
+        logger.info("Collecting empty state element details")
+        info = {}
+
+        try:
+            heading = self.wait_for_element_to_be_visible(
+                self.external_systems["empty_state_heading"], timeout=10
+            )
+            info["heading_text"] = heading.text
+        except TimeoutException:
+            logger.warning("Empty state heading not found")
+            info["heading_text"] = None
+
+        try:
+            description = self.wait_for_element_to_be_visible(
+                self.external_systems["empty_state_description"], timeout=5
+            )
+            info["description_text"] = description.text
+        except TimeoutException:
+            logger.warning("Empty state description not found")
+            info["description_text"] = None
+
+        try:
+            connect_button = self.wait_for_element_to_be_visible(
+                self.external_systems["connect_external_system_button"], timeout=5
+            )
+            info["connect_button_enabled"] = connect_button.is_enabled()
+        except TimeoutException:
+            logger.warning("Connect external systems button not found")
+            info["connect_button_enabled"] = False
+
+        try:
+            explore_link = self.wait_for_element_to_be_visible(
+                self.external_systems["explore_external_systems_link"], timeout=5
+            )
+            info["explore_link_text"] = explore_link.text
+        except TimeoutException:
+            logger.warning("Explore external systems link not found")
+            info["explore_link_text"] = None
+
+        logger.info(f"Empty state elements collected: {info}")
+        return info
 
     def connect_external_system(self):
         """
