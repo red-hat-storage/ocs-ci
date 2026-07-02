@@ -73,7 +73,7 @@ dependencies = [
     "protobuf==4.25.8",
     "psutil==5.9.0",
     "psycopg2-binary==2.9.9",
-    "pyopenssl==24.2.1",
+    "pyopenssl==26.0.0",
     "pyotp==2.9.0",
     "pyparsing==2.4.7",
     "pytest==6.2.5",
