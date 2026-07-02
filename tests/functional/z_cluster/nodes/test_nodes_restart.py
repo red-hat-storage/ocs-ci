@@ -1,4 +1,6 @@
 import logging
+from functools import partial
+
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import brown_squad
@@ -191,12 +193,6 @@ class TestNodesRestart(ManageTest):
         - Check cluster and Ceph health
 
         """
-        if operation == "delete_resources":
-            # Create resources that their deletion will be tested later
-            self.sanity_helpers.create_resources(
-                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
-            )
-
         provisioner_pods = None
         # Get the provisioner pod according to the interface
         if interface == "rbd":
@@ -223,6 +219,22 @@ class TestNodesRestart(ManageTest):
         logger.info(
             f"{interface} provisioner pod is running on node {provisioner_node_name}"
         )
+
+        if operation == "delete_resources":
+            # Create resources on a node that won't be stopped, so
+            # delete_resources() doesn't hang on a terminated kubelet
+            worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
+            safe_node = next(
+                (n.name for n in worker_nodes if n.name != provisioner_node_name),
+                None,
+            )
+            assert (
+                safe_node
+            ), f"No safe worker node found (all workers match {provisioner_node_name})"
+            safe_pod_factory = partial(pod_factory, node_name=safe_node)
+            self.sanity_helpers.create_resources(
+                pvc_factory, safe_pod_factory, bucket_factory, rgw_bucket_factory
+            )
 
         # Stopping the nodes
         nodes.stop_nodes(nodes=[provisioner_node])
@@ -315,12 +327,6 @@ class TestNodesRestart(ManageTest):
         - Start the worker node
         - Check cluster and Ceph health
         """
-        if operation == "delete_resources":
-            # Create resources that their deletion will be tested later
-            self.sanity_helpers.create_resources(
-                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
-            )
-
         rook_operator_pods = pod.get_operator_pods()
         rook_operator_pod = rook_operator_pods[0]
 
@@ -333,6 +339,22 @@ class TestNodesRestart(ManageTest):
         logger.info(
             f"{rook_operator_pod_name} pod is running on node {operator_node_name}"
         )
+
+        if operation == "delete_resources":
+            # Create resources on a node that won't be stopped, so
+            # delete_resources() doesn't hang on a terminated kubelet
+            worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
+            safe_node = next(
+                (n.name for n in worker_nodes if n.name != operator_node_name),
+                None,
+            )
+            assert (
+                safe_node
+            ), f"No safe worker node found (all workers match {operator_node_name})"
+            safe_pod_factory = partial(pod_factory, node_name=safe_node)
+            self.sanity_helpers.create_resources(
+                pvc_factory, safe_pod_factory, bucket_factory, rgw_bucket_factory
+            )
 
         # Stopping the node
         nodes.stop_nodes(nodes=[operator_node])
