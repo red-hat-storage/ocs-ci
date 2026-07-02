@@ -38,6 +38,43 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+def verify_drpc_protected_vms(resource_name, expected_vms, unexpected_vms=None):
+    """
+    Verify DRPC PROTECTED_VMS list via CLI.
+
+    Args:
+        resource_name (str): DRPC resource name.
+        expected_vms (list): VM names that must be in PROTECTED_VMS.
+        unexpected_vms (list): VM names that must NOT be in
+            PROTECTED_VMS (default None).
+
+    Raises:
+        AssertionError: if any expected VM is missing or unexpected
+            VM is present.
+    """
+    config.switch_acm_ctx()
+    drpc_obj = DRPC(
+        namespace=constants.DR_OPS_NAMESPACE,
+        resource_name=resource_name,
+    )
+    drpc_data = drpc_obj.get()
+    protected_vms = (
+        drpc_data.get("spec", {})
+        .get("kubeObjectProtection", {})
+        .get("recipeParameters", {})
+        .get("PROTECTED_VMS", [])
+    )
+    for vm_name in expected_vms:
+        assert (
+            vm_name in protected_vms
+        ), f"VM '{vm_name}' not found in PROTECTED_VMS: {protected_vms}"
+    for vm_name in unexpected_vms or []:
+        assert (
+            vm_name not in protected_vms
+        ), f"VM '{vm_name}' still in PROTECTED_VMS: {protected_vms}"
+    logger.info(f"DRPC PROTECTED_VMS verified: {protected_vms}")
+
+
 @rdr
 @tier2
 @turquoise_squad
@@ -163,6 +200,13 @@ class TestACMKubevirtDRIntergration:
         logger.info(
             f'Placement name is "{cnv_workloads[0].discovered_apps_placement_name}"'
         )
+
+        if protection_type:
+            logger.test_step("Verify DRPC PROTECTED_VMS contains both VMs")
+            verify_drpc_protected_vms(
+                resource_name,
+                expected_vms=[wl.vm_name for wl in cnv_workloads],
+            )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
             cnv_workloads[0].workload_namespace,
@@ -471,19 +515,12 @@ class TestACMKubevirtDRIntergration:
                 timeout=120,
                 should_exist=True,
             )
-            # Validate: 1st VM still shows Running and is still protected
-            logger.info("Validating 1st VM is still running and protected on UI")
-            logger.assertion(
-                f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
-                f" vm={cnv_workloads[0].vm_name}, cluster={primary_cluster_name}, expected=True"
-            )
-            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-                acm_obj,
-                vms=[cnv_workloads[0]],
-                protection_name=protection_name,
-                namespace=cnv_workloads[0].workload_namespace,
-                managed_cluster_name=primary_cluster_name,
-                assign_policy=False,
+            # Validate: 1st VM still protected, 2nd VM removed from DRPC
+            logger.info("Validating DRPC PROTECTED_VMS contains only the 1st VM")
+            verify_drpc_protected_vms(
+                resource_name,
+                expected_vms=[cnv_workloads[0].vm_name],
+                unexpected_vms=[cnv_workloads[1].vm_name],
             )
             logger.info("Shared VM removed from DRPC; Standalone VM remains protected")
         else:
@@ -1105,18 +1142,11 @@ class TestACMKubevirtDRIntergration:
             timeout=120,
             should_exist=True,
         )
-        logger.info("Validating VM 1 is still running and protected (UI check)")
-        logger.assertion(
-            f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
-            f" vm={all_cnv_workloads[0].vm_name}, cluster={primary_cluster_name}, expected=True"
-        )
-        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=[all_cnv_workloads[0]],
-            protection_name=protection_name_1,
-            namespace=workload_namespace,
-            managed_cluster_name=primary_cluster_name,
-            assign_policy=False,
+        logger.info("Validating DRPC1 PROTECTED_VMS contains only VM 1")
+        verify_drpc_protected_vms(
+            resource_name_1,
+            expected_vms=[all_cnv_workloads[0].vm_name],
+            unexpected_vms=[all_cnv_workloads[2].vm_name],
         )
         logger.info("VM 3 removed from DRPC1; VM 1 remains protected under DRPC1")
 
@@ -1277,6 +1307,12 @@ class TestACMKubevirtDRIntergration:
 
         logger.info(f"All VMs enrolled under DRPC: {resource_name}")
 
+        logger.test_step("Verify DRPC PROTECTED_VMS contains all 3 VMs")
+        verify_drpc_protected_vms(
+            resource_name,
+            expected_vms=[wl.vm_name for wl in all_cnv_workloads],
+        )
+
         config.switch_to_cluster_by_name(primary_cluster_name)
 
         total_pvc_count = sum(wl.workload_pvc_count for wl in all_cnv_workloads)
@@ -1342,22 +1378,16 @@ class TestACMKubevirtDRIntergration:
             timeout=120,
             should_exist=True,
         )
-        logger.info(
-            "Validating VM 1 and VM 3 are still Running and protected (UI check)"
+        logger.info("Validating DRPC PROTECTED_VMS contains VM 1 and VM 3 but not VM 2")
+        verify_drpc_protected_vms(
+            resource_name,
+            expected_vms=[
+                all_cnv_workloads[0].vm_name,
+                all_cnv_workloads[2].vm_name,
+            ],
+            unexpected_vms=[all_cnv_workloads[1].vm_name],
         )
-        logger.assertion(
-            f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
-            f" vms=[VM1, VM3], cluster={primary_cluster_name}, expected=True"
-        )
-        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=[all_cnv_workloads[0], all_cnv_workloads[2]],
-            protection_name=protection_name,
-            namespace=workload_namespace,
-            managed_cluster_name=primary_cluster_name,
-            assign_policy=False,
-        )
-        logger.info("VM 2 removed; DRPC intact with VM 1 and VM 3 still enrolled")
+        logger.info("VM 2 removed; DRPC intact with VM 1 and VM 3")
 
         # ------------------------------------------------------------------ #
         # Step 8: Remove protection from VM 3 (Shared)                        #
@@ -1389,20 +1419,13 @@ class TestACMKubevirtDRIntergration:
             timeout=120,
             should_exist=True,
         )
-        logger.info("Validating VM 1 is still Running and protected (UI check)")
-        logger.assertion(
-            f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
-            f" vm={all_cnv_workloads[0].vm_name}, cluster={primary_cluster_name}, expected=True"
+        logger.info("Validating DRPC PROTECTED_VMS contains only VM 1")
+        verify_drpc_protected_vms(
+            resource_name,
+            expected_vms=[all_cnv_workloads[0].vm_name],
+            unexpected_vms=[all_cnv_workloads[2].vm_name],
         )
-        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=[all_cnv_workloads[0]],
-            protection_name=protection_name,
-            namespace=workload_namespace,
-            managed_cluster_name=primary_cluster_name,
-            assign_policy=False,
-        )
-        logger.info("VM 3 removed; DRPC intact with VM 1 still enrolled")
+        logger.info("VM 3 removed; DRPC intact with VM 1")
 
         # ------------------------------------------------------------------ #
         # Step 9: Remove protection from VM 1 (Standalone – last enrollment)  #
