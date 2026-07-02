@@ -7547,3 +7547,113 @@ def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) 
         )
 
     log.info(f"All OSDs {osd_ids} are now marked as 'down'")
+
+
+def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
+    """
+    Add an EC data pool to the CephFilesystem via StorageCluster patch.
+
+    Patches spec.managedResources.cephFilesystems.additionalDataPools
+    and waits for the Ceph pool to appear.
+
+    Args:
+        pool_name (str): Short pool name (e.g. "test-ec-fs")
+        data_chunks (int): Number of data chunks (k)
+        coding_chunks (int): Number of coding chunks (m)
+
+    Returns:
+        str: Full pool name (e.g. "ocs-storagecluster-cephfilesystem-test-ec-fs")
+    """
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+
+    sc_obj = get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"])
+    sc_data = sc_obj.get()["items"][0]
+    sc_name = sc_data["metadata"]["name"]
+
+    current_pools = (
+        sc_data.get("spec", {})
+        .get("managedResources", {})
+        .get("cephFilesystems", {})
+        .get("additionalDataPools", [])
+    )
+
+    new_entry = {
+        "name": pool_name,
+        "erasureCoded": {"dataChunks": data_chunks, "codingChunks": coding_chunks},
+    }
+    updated_pools = current_pools + [new_entry]
+
+    patch = {
+        "spec": {
+            "managedResources": {
+                "cephFilesystems": {"additionalDataPools": updated_pools}
+            }
+        }
+    }
+    logger.info(f"Patching StorageCluster to add CephFS EC pool '{pool_name}'")
+    sc_obj.patch(resource_name=sc_name, params=json.dumps(patch), format_type="merge")
+
+    fs_name = get_cephfs_name()
+    full_pool_name = f"{fs_name}-{pool_name}"
+
+    ct_pod = pod.get_ceph_tools_pod()
+    logger.info(f"Waiting for Ceph pool '{full_pool_name}' to appear")
+    for pools in TimeoutSampler(300, 10, ct_pod.exec_ceph_cmd, "ceph osd pool ls"):
+        if full_pool_name in pools:
+            logger.info(f"Ceph pool '{full_pool_name}' created successfully")
+            break
+
+    return full_pool_name
+
+
+def delete_cephfs_ec_pool(pool_name):
+    """
+    Remove an EC data pool from CephFilesystem via StorageCluster patch.
+
+    Removes the entry with matching name from
+    spec.managedResources.cephFilesystems.additionalDataPools
+    and waits for the Ceph pool to disappear.
+
+    Args:
+        pool_name (str): Short pool name (e.g. "test-ec-fs")
+    """
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+
+    sc_obj = get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"])
+    sc_data = sc_obj.get()["items"][0]
+    sc_name = sc_data["metadata"]["name"]
+
+    current_pools = (
+        sc_data.get("spec", {})
+        .get("managedResources", {})
+        .get("cephFilesystems", {})
+        .get("additionalDataPools", [])
+    )
+
+    updated_pools = [p for p in current_pools if p.get("name") != pool_name]
+
+    patch = {
+        "spec": {
+            "managedResources": {
+                "cephFilesystems": {"additionalDataPools": updated_pools}
+            }
+        }
+    }
+    logger.info(f"Patching StorageCluster to remove CephFS EC pool '{pool_name}'")
+    sc_obj.patch(resource_name=sc_name, params=json.dumps(patch), format_type="merge")
+
+    fs_name = get_cephfs_name()
+    full_pool_name = f"{fs_name}-{pool_name}"
+
+    ct_pod = pod.get_ceph_tools_pod()
+    logger.info(f"Waiting for Ceph pool '{full_pool_name}' to be removed")
+    try:
+        for pools in TimeoutSampler(600, 15, ct_pod.exec_ceph_cmd, "ceph osd pool ls"):
+            if full_pool_name not in pools:
+                logger.info(f"Ceph pool '{full_pool_name}' removed successfully")
+                break
+    except TimeoutExpiredError:
+        logger.warning(
+            f"Ceph pool '{full_pool_name}' was not removed within timeout. "
+            "The pool entry was already removed from StorageCluster CR."
+        )
