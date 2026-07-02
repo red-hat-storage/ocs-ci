@@ -10,14 +10,17 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     hci_provider_and_client_required,
     tier1,
+    tier2,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import get_cephfs_subvolumegroup
 from ocs_ci.helpers.odf_cephfs_snap import (
+    verify_bound_snapshot_delete_rejected,
     create_provider_retain_cephfs_snapclass,
     delete_volumesnaps_volumesnapcontents,
     get_cephfs_snap_by_name,
     get_cephfs_snap_entries,
+    wait_and_verify_snapshot_bound,
 )
 from ocs_ci.ocs.resources.storageconsumer import get_consumer_svg_on_provider
 from ocs_ci.helpers.odf_cli import odf_cli_cephfs_snap_setup_helper
@@ -337,8 +340,12 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         """
         if svg_param == "consumer_svg_on_provider":
             storage_client_name = get_storage_client().resource_name
+            client_cluster_name = config.ENV_DATA.get("cluster_name")
             with config.RunWithProviderConfigContextIfAvailable():
-                svg = get_consumer_svg_on_provider(storage_client_name)
+                svg = get_consumer_svg_on_provider(
+                    storage_client_name,
+                    client_cluster_name=client_cluster_name,
+                )
             log.info("Using consumer SVG on provider: %s", svg)
         elif svg_param == "default_svg":
             svg = get_cephfs_subvolumegroup()
@@ -450,3 +457,96 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
 
         log.test_step("Wait for CephFSOrphanedSnapshot alerts to clear")
         self._wait_for_orphaned_alert_cleared()
+
+    @tier2
+    @polarion_id("OCS-8027")
+    def test_cephfs_bound_snapshot_delete_rejected(self):
+        """
+        Verify that attempting to delete a Bound CephFS snapshot via the
+        odf CLI is rejected with an error and the snapshot is preserved.
+
+        Steps:
+        1. Resolve the odf-cli --svg value (no explicit svg).
+        2. Verify no CephFS snapshots exist.
+        3. Create snapshots with Retain policy: 1 to be orphaned,
+           2 to remain bound.
+        4. Delete VolumeSnapshot/VolumeSnapshotContent for the orphaned
+           snapshot so it becomes orphaned; bound snapshots remain bound.
+        5. Verify the orphaned snapshot is orphaned and the bound
+           snapshots remain bound.
+        6. Attempt to delete a bound snapshot via odf cephfs-snap delete.
+        7. Verify the delete operation fails (CommandFailed is raised)
+           and a non-empty error message is returned.
+        8. Verify the targeted bound snapshot still exists in Bound state.
+        9. List all CephFS snapshots and confirm the full snapshot set
+           (names and states) is identical to a fresh capture taken
+           just before the delete attempt (proves a complete no-op).
+        """
+        num_of_orphaned = 1
+        num_of_bound = 2
+
+        log.test_step("Resolve odf-cli --svg (no explicit svg)")
+        self._resolve_svg(None)
+
+        log.test_step("Verify no CephFS snapshots exist")
+        assert not get_cephfs_snap_entries(
+            self._snap_runner
+        ), "Expected no CephFS snapshots before the test"
+
+        log.test_step(
+            "Create %d CephFS VolumeSnapshots with Retain policy",
+            num_of_orphaned + num_of_bound,
+        )
+        self.create_retain_cephfs_snapshots(num_of_orphaned + num_of_bound)
+        orphaned_snaps = self.snap_list_names[:num_of_orphaned]
+        bound_snaps = self.snap_list_names[num_of_orphaned:]
+
+        log.test_step(
+            "Delete VolumeSnapshot/VolumeSnapshotContent for "
+            "%d orphaned snapshot(s)",
+            num_of_orphaned,
+        )
+        delete_volumesnaps_volumesnapcontents(orphaned_snaps)
+
+        log.test_step(
+            "Verify %d snapshot(s) are orphaned and " "%d snapshot(s) remain bound",
+            num_of_orphaned,
+            num_of_bound,
+        )
+        self.verify_cephfs_snapshots_orphaned(orphaned_snaps)
+        self.verify_cephfs_snapshots_bound(bound_snaps)
+
+        target_snap = bound_snaps[0]
+        snap_state_before = {
+            e["snapshot"]: e["state"]
+            for e in get_cephfs_snap_entries(self._snap_runner)
+        }
+
+        log.test_step(
+            "Attempt to delete bound snapshot '%s' via odf CLI",
+            target_snap["ceph_snap_name"],
+        )
+        verify_bound_snapshot_delete_rejected(self._snap_runner, target_snap)
+
+        log.test_step(
+            "Verify bound snapshot '%s' still exists in Bound state",
+            target_snap["ceph_snap_name"],
+        )
+        wait_and_verify_snapshot_bound(self._snap_runner, target_snap)
+
+        log.test_step(
+            "List CephFS snapshots and confirm the full snapshot set is unchanged"
+        )
+        snap_state_after = {
+            e["snapshot"]: e["state"]
+            for e in get_cephfs_snap_entries(self._snap_runner)
+        }
+        assert snap_state_after == snap_state_before, (
+            f"Snapshot set changed after failed delete attempt: "
+            f"before={snap_state_before}, after={snap_state_after}"
+        )
+        log.info(
+            "Confirmed: all %d snapshot(s) are unchanged after "
+            "failed delete attempt",
+            len(snap_state_before),
+        )
