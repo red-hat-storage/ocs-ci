@@ -22,6 +22,7 @@ FUSION_CONF_DIR = os.path.join(DEPLOYMENT_CONF_DIR, "fusion_hci_pc")
 FRAMEWORK_CONF_DIR = os.path.join(TOP_DIR, "ocs_ci", "framework", "conf")
 OCP_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "ocp_version")
 OCS_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "ocs_version")
+FDF_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "fdf_version")
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
 TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
@@ -2049,6 +2050,9 @@ ORDER_OCP_ON_KUBEVIRT_UPGRADE = 48
 ORDER_BEFORE_OCS_UPGRADE = 50
 ORDER_OCS_UPGRADE = 60
 ORDER_AFTER_OCS_UPGRADE = 70
+ORDER_BEFORE_FDF_UPGRADE = 50
+ORDER_FDF_UPGRADE = 60
+ORDER_AFTER_FDF_UPGRADE = 70
 ORDER_AFTER_UPGRADE = 80
 
 # Deployment constants
