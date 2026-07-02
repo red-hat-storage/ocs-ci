@@ -4228,9 +4228,7 @@ KRKN_RESTART_KUBELET = "restart_kubelet_scenario"
 KRKN_NODE_CRASH = "node_crash_scenario"
 
 # krknclt chaos constants
-KRKNCTL_BINARY_TAR = (
-    "https://krkn-chaos.gateway.scarf.sh/krknctl-v0.10.22-beta-linux-amd64.tar.gz"
-)
+KRKNCTL_BINARY_TAR = "https://krkn-chaos.gateway.scarf.sh/krknctl-v0.14.2-beta-linux-amd64-centos9.tar.gz"
 KRKNCTL = os.path.join(DATA_DIR, "krknctl")
 KRKNCTL_PLAN_TEMPLATE = os.path.join(
     KRKN_SCENARIO_TEMPLATE_DIR, "scenarios", "keknctl", "plan.json.j2"

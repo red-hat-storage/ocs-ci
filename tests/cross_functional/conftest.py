@@ -1813,11 +1813,16 @@ def run_platform_stress(request):
 
     def finalizer():
         """Cleanup function to stop all PlatformStress instances."""
+        health_errors = []
         for stress_obj in created_instances:
             if stress_obj.run_status:
                 logger.info("Stopping stress for PlatformStress instance...")
                 stress_obj.stop()
                 logger.info("Stress stopped.")
+            if stress_obj.health_error:
+                health_errors.append(stress_obj.health_error)
+        if health_errors:
+            raise health_errors[0]
 
     request.addfinalizer(finalizer)
     return factory

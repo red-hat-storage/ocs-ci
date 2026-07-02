@@ -1442,6 +1442,10 @@ def collect_ocs_logs(
     """
     Collects OCS logs
 
+    Also copies Krkn scenario/output logs from ``data/krkn_scenarios`` and
+    ``data/krkn_output`` into the collected log directory when those trees
+    exist. Missing or empty sources are skipped.
+
     Args:
         dir_name (str): directory name to store OCS logs. Logs will be stored
             in dir_name suffix with _ocs_logs.
@@ -1461,6 +1465,18 @@ def collect_ocs_logs(
         since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
 
     """
+    try:
+        from ocs_ci.krkn_chaos.krkn_log_collector import (
+            collect_krkn_run_logs,
+            get_krkn_logs_collection_dir,
+        )
+
+        collect_krkn_run_logs(
+            get_krkn_logs_collection_dir(dir_name, status_failure=status_failure)
+        )
+    except Exception:
+        log.exception("Failed to collect Krkn run logs")
+
     cwd = os.getcwd()
     results = list()
     with ThreadPoolExecutor() as executor:
