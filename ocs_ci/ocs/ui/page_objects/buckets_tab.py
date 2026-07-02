@@ -12,7 +12,7 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
 )
 
-
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
@@ -620,6 +620,10 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         Args:
             folder_path (str): Path to the folder to upload.
             wait_time (int): Time to wait after upload (default: 2 seconds).
+
+        Raises:
+            exceptions.TimeoutExpiredError: If the folder does not appear
+                  in the bucket after upload.
         """
         file_input = self.driver.find_element(
             self.bucket_tab["file_input_directory"][1],
@@ -632,6 +636,16 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         file_input.clear()
         file_input.send_keys(folder_path)
         time.sleep(wait_time)
+        folder_name = os.path.basename(folder_path)
+        try:
+            self.wait_for_element_to_be_present(
+                format_locator(self.bucket_tab["uploaded_folder_name"], folder_name),
+            )
+            logger.info(f"Upload verified: {folder_name} appears in bucket")
+        except TimeoutException as err:
+            raise exceptions.TimeoutExpiredError(
+                f"Upload failed: {folder_name} not found in bucket"
+            ) from err
 
     def navigate_to_bucket(self, bucket_name: str) -> None:
         """
