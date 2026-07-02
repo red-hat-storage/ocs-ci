@@ -1368,6 +1368,57 @@ def storageclass_factory_fixture(
         instances.append(sc_obj)
         return sc_obj
 
+    def _strip_storageclient_owner_refs(instance):
+        """
+        Remove StorageClient ownerReferences from a StorageClass so that
+        the finalizer delete is not blocked by the ownership chain.
+
+        Only StorageClient entries are removed; other ownerReferences are
+        preserved.
+
+        Args:
+            instance: OCS StorageClass instance with .ocp and .name attrs
+        """
+        try:
+            sc_data = instance.ocp.get(resource_name=instance.name)
+        except CommandFailed as ex:
+            if "NotFound" in str(ex):
+                log.debug(
+                    f"StorageClass {instance.name} already removed, "
+                    "skipping ownerRef strip"
+                )
+                return
+            raise
+        owner_refs = (
+            sc_data.get("metadata", {}).get("ownerReferences") or []
+        )
+        sc_client_refs = [
+            ref for ref in owner_refs if ref.get("kind") == "StorageClient"
+        ]
+        if not sc_client_refs:
+            return
+        filtered_refs = [
+            ref for ref in owner_refs if ref.get("kind") != "StorageClient"
+        ]
+        patch_data = json.dumps(
+            {"metadata": {"ownerReferences": filtered_refs or None}}
+        )
+        try:
+            instance.ocp.patch(
+                resource_name=instance.name,
+                params=patch_data,
+                format_type="merge",
+            )
+            log.info(
+                f"Stripped StorageClient ownerReferences from "
+                f"StorageClass {instance.name}"
+            )
+        except CommandFailed as ex:
+            log.warning(
+                f"Failed to strip StorageClient ownerReferences from "
+                f"StorageClass {instance.name}: {ex}"
+            )
+
     def finalizer():
         """
         Delete the storageclass by deregistering from StorageConsumer first
@@ -1379,10 +1430,20 @@ def storageclass_factory_fixture(
         teardown_errors = []
         for instance in instances:
             try:
+                _strip_storageclient_owner_refs(instance)
                 delete_storageclass_and_deregister(
                     sc_name=instance.name,
                     sc_ocp=instance.ocp,
                 )
+            except CommandFailed as ex:
+                if "NotFound" in str(ex):
+                    log.info(
+                        f"StorageClass {instance.name} not found, "
+                        "skipping deletion"
+                    )
+                    continue
+                log.error(f"Failed to delete storageclass {instance.name}: {ex}")
+                teardown_errors.append((instance.name, ex))
             except Exception as e:
                 log.error(f"Failed to delete storageclass {instance.name}: {e}")
                 teardown_errors.append((instance.name, e))
