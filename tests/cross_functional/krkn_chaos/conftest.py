@@ -481,6 +481,10 @@ def workload_ops(request, project_factory, multi_pvc_factory, storageclass_facto
     try:
         yield ops
     finally:
+        # Stop background ops (including aggressive clone loop) before workload teardown
+        log.info("Stopping background cluster operations before workload finalizer")
+        with suppress(Exception):
+            ops._stop_background_cluster_operations()
         # Best-effort cleanup if the test aborted before calling validate_and_cleanup
         log.info("Performing best-effort workload cleanup")
         with suppress(Exception):
