@@ -36,8 +36,6 @@ class TestBucketCreationAndDeletion(MCGTest):
     Test creation of a bucket
     """
 
-    ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
-
     @pytest.mark.parametrize(
         argnames="amount,interface,bucketclass_dict",
         argvalues=[
@@ -67,7 +65,6 @@ class TestBucketCreationAndDeletion(MCGTest):
             pytest.param(
                 *[100, "OC", None],
                 marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
                     pytest.mark.polarion_id("OCS-1826"),
                 ],
@@ -75,7 +72,6 @@ class TestBucketCreationAndDeletion(MCGTest):
             pytest.param(
                 *[1000, "OC", None],
                 marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance,
                     pytest.mark.polarion_id("OCS-1827"),
                 ],
