@@ -38,13 +38,15 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     get_plugin_pods,
     get_ceph_tools_pod,
+    get_deployment_name,
     wait_for_storage_pods,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
 from ocs_ci.helpers.helpers import wait_for_resource_state, get_secret_names
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, run_cmd
+from ocs_ci.utility.utils import exec_cmd, run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import TimeoutExpiredError
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 from ocs_ci.ocs.node import get_node_objs
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -1135,46 +1137,55 @@ def _pod_exists(pod_obj):
 
 def _wait_for_replacement_pod(pod_obj, timeout, namespace):
     """
-    After an original pod has been replaced (new name, same app label), wait for
-    a fresh pod with the same 'app' label selector to reach Running state.
+    Wait for the replacement of a deleted pod to reach Running state.
+
+    Derives the stable name prefix from the original pod's name and polls all
+    pods in the namespace until one with that prefix is Running.
 
     Args:
-        pod_obj: The original (now-deleted) pod object — its cached labels are read
+        pod_obj: The original (now-deleted) pod object — its name is read
         timeout (int): Seconds to wait for the replacement pod
         namespace (str): Namespace to search in
 
     Returns:
-        bool: True if a replacement pod reaches Running, False otherwise
+        bool: True if the replacement pod reaches Running, False otherwise
     """
-    app_label = pod_obj.labels.get("app") if pod_obj.labels else None
-    if not app_label:
-        logger.warning(
-            f"Cannot determine app label for replaced pod {pod_obj.name} - "
-            "cannot verify replacement pod"
-        )
+    pod_name = pod_obj.name
+    last_segment = pod_name.rsplit("-", 1)[-1]
+    if last_segment.isdigit():
+        prefix = pod_name
+    else:
+        prefix = get_deployment_name(pod_name)
+    logger.info(
+        f"Waiting up to {timeout}s for replacement of pod '{pod_obj.name}' "
+        f"(name prefix: '{prefix}') to reach Running state"
+    )
+
+    ocp_pod = OCP(kind=constants.POD, namespace=namespace)
+
+    def _replacement_is_running():
+        all_pods = ocp_pod.get().get("items", [])
+        for p in all_pods:
+            name = p.get("metadata", {}).get("name", "")
+            phase = p.get("status", {}).get("phase", "")
+            if name.startswith(prefix) and phase == constants.STATUS_RUNNING:
+                logger.info(f"Replacement pod '{name}' is Running")
+                return True
         return False
 
-    selector = f"app={app_label}"
-    logger.info(
-        f"Waiting up to {timeout}s for replacement pod "
-        f"with selector '{selector}' to reach Running state"
-    )
-    ocp_pod = OCP(kind=constants.POD, namespace=namespace)
     try:
-        ocp_pod.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector=selector,
-            timeout=timeout,
-            sleep=10,
-        )
-        logger.info(f"Replacement pod(s) with selector '{selector}' confirmed running")
-        return True
-    except Exception as e:
+        for result in TimeoutSampler(
+            timeout=timeout, sleep=10, func=_replacement_is_running
+        ):
+            if result:
+                return True
+    except TimeoutExpiredError:
         logger.error(
-            f"Replacement pod for '{app_label}' did not reach Running state "
-            f"within {timeout}s: {e}"
+            f"Replacement pod for '{pod_obj.name}' (prefix='{prefix}') did not reach "
+            f"Running state within {timeout}s"
         )
         return False
+    return False
 
 
 def perform_node_restart(node_name, nodes_platform, node_objs):
