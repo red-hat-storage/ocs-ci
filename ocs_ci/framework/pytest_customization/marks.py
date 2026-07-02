@@ -892,6 +892,12 @@ vault_kms_deployment_required = pytest.mark.skipif(
     reason="This test requires both Vault or HPCS KMS deployment to be enabled and a valid KMS provider.",
 )
 
+vault_only_kms_deployment_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("kms_deployment", False)
+    or config.ENV_DATA.get("KMS_PROVIDER", "") != VAULT_KMS_PROVIDER,
+    reason="This test requires Vault KMS deployment to be enabled with a valid Vault provider.",
+)
+
 ui = compose(skipif_ibm_cloud_managed, pytest.mark.ui)
 
 skipif_lean_deployment = pytest.mark.skipif(
