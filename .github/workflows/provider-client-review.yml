@@ -1,0 +1,72 @@
+name: Provider/Client Pattern Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**.py'  # Only run on Python file changes
+      - 'tools/code-review/provider-client/**'  # Re-run if tool itself changes
+
+jobs:
+  provider-client-review:
+    name: Claude-Powered Provider/Client Review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # Required to post review comments
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git diff
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r tools/code-review/provider-client/requirements.txt
+
+      - name: Install GitHub CLI
+        run: |
+          # GitHub CLI is pre-installed on ubuntu-latest runners
+          gh --version
+
+      - name: Run Provider/Client Pattern Review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get PR number from GitHub context
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          echo "🤖 Running Provider/Client pattern review on PR #${PR_NUMBER}..."
+
+          # Run the analyzer with Claude and GitHub integration
+          python tools/code-review/provider-client/review.py \
+            --pr "${PR_NUMBER}" \
+            --use-claude \
+            --post-to-github
+
+          EXIT_CODE=$?
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "✅ Provider/Client patterns look good!"
+          else
+            echo "⚠️  Found Provider/Client pattern issues (see PR comments)"
+          fi
+
+          # Don't fail the workflow, just post comments
+          exit 0
+
+      - name: Comment on missing API key
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body \
+            "❌ Provider/Client pattern review failed to run. Please ensure ANTHROPIC_API_KEY is configured in repository secrets."

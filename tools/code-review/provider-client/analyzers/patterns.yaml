@@ -1,0 +1,63 @@
+# Provider/Client Pattern Detection Rules
+# Used by provider_client_analyzer.py to identify missing context managers and markers
+
+# Functions that require RunWithProviderConfigContextIfAvailable context manager
+provider_functions:
+  # Provider cluster operations
+  - get_provider_address
+  - get_provider_server_version
+  - get_provider_info
+  - get_provider_endpoint
+
+  # StorageCluster operations on provider
+  - get_storage_cluster  # When used without client context
+
+  # Provider-specific resources
+  - get_provider_pods
+  - get_provider_services
+  - check_provider_health
+
+# Context managers that protect provider operations
+valid_context_managers:
+  - RunWithProviderConfigContextIfAvailable
+  - RunWithConfigContext  # When switching to provider index
+
+# Test markers that indicate provider operations
+provider_markers:
+  - runs_on_provider
+  - provider_client_required
+  - provider_mode
+
+# Client cluster operations (for reference)
+client_functions:
+  - setup_storage_client
+  - enable_storage_client
+  - create_client_cluster
+
+# Namespace patterns that indicate provider context
+provider_namespaces:
+  - openshift-storage  # Default provider namespace
+
+# Patterns to detect in code that suggest provider operations
+provider_code_patterns:
+  # Direct cluster switching
+  - "config.switch_ctx(0)"  # Index 0 is typically provider
+  - "switch_to_provider"
+
+  # Provider cluster detection
+  - "is_provider_cluster"
+  - "ENV_DATA.get('cluster_type') == 'provider'"
+
+  # Storage cluster operations without context
+  - "StorageCluster("  # Should check if in provider context
+
+# Exemptions - files/patterns that don't need provider context managers
+exemptions:
+  paths:
+    - "ocs_ci/deployment/hub_spoke.py"  # Provider/client deployment code itself
+    - "ocs_ci/framework/conf/"  # Configuration framework
+    - "tests/conftest.py"  # Fixture definitions
+
+  comment_markers:
+    - "# provider-context-exempt"  # Inline exemption marker
+    - "# TODO: add provider context"  # Acknowledged technical debt
