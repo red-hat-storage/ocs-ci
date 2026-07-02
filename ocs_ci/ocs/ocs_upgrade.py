@@ -762,7 +762,16 @@ class OCSUpgrade(object):
             if not ocs_catalog.is_exist():
                 log.info("OCS catalog source doesn't exist. Creating new one.")
                 create_catalog_source(self.ocs_registry_image, ignore_upgrade=True)
-                prune_old_df_repo_idms()
+                if not config.ENV_DATA.get("platform", "").lower() in (
+                    constants.HCI_PROVIDER_CLIENT_PLATFORMS
+                ):
+                    prune_old_df_repo_idms()
+                else:
+                    log.info(
+                        "Skipping IDMS pruning during upgrade on "
+                        "provider/client platform to avoid "
+                        "simultaneous MCP rollout on all workers"
+                    )
                 # We can return here as new CatalogSource contains right images
                 return
             image_url = ocs_catalog.get_image_url()
@@ -788,7 +797,16 @@ class OCSUpgrade(object):
                 if not config.DEPLOYMENT.get("disconnected"):
                     # on Disconnected cluster, ICSP /IDMS from the ocs-registry image is not needed/valid
                     get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
-                    prune_old_df_repo_idms()
+                    if not config.ENV_DATA.get("platform", "").lower() in (
+                        constants.HCI_PROVIDER_CLIENT_PLATFORMS
+                    ):
+                        prune_old_df_repo_idms()
+                    else:
+                        log.info(
+                            "Skipping IDMS pruning during upgrade on "
+                            "provider/client platform to avoid "
+                            "simultaneous MCP rollout on all workers"
+                        )
 
                 # Wait for catalog source to be ready
                 log.info("Waiting for catalog source to be ready after update.")
