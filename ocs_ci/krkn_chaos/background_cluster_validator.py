@@ -281,8 +281,15 @@ class BackgroundClusterValidator:
         """
         try:
             ct_pod = pod_helpers.get_ceph_tools_pod()
-            result = ct_pod.exec_ceph_cmd("ceph health")
-            return result.strip() if result else "UNKNOWN"
+            result = ct_pod.exec_ceph_cmd(
+                ceph_cmd="ceph health",
+                format=None,
+                out_yaml_format=False,
+                timeout=120,
+            )
+            if not result:
+                return "UNKNOWN"
+            return str(result).strip().split()[0]
         except Exception as e:
             log.error(f"Failed to check Ceph health: {e}")
             return "ERROR"

@@ -1041,12 +1041,18 @@ class KrknWorkloadFactory:
 
         workloads = []
         # Get configurable values from krkn config
-        num_pvcs = self.config.get_num_pvcs_per_interface()
+        num_rbd_pvcs = self.config.get_num_rbd_pvcs()
+        num_cephfs_pvcs = self.config.get_num_cephfs_pvcs()
+        num_pvcs_by_interface = {
+            constants.CEPHBLOCKPOOL: num_rbd_pvcs,
+            constants.CEPHFILESYSTEM: num_cephfs_pvcs,
+        }
         pvc_size = self.config.get_pvc_size()
         use_encrypted = self.config.use_encrypted_pvc()
 
         log.info(
-            f"Creating {num_pvcs} PVCs per storage interface with size {pvc_size}Gi"
+            f"Creating {num_rbd_pvcs} RBD PVCs and {num_cephfs_pvcs} CephFS PVCs "
+            f"with size {pvc_size}Gi"
         )
         if use_encrypted:
             log.info(
@@ -1102,6 +1108,7 @@ class KrknWorkloadFactory:
 
         for interface, cfg in interface_configs.items():
             try:
+                num_pvcs = num_pvcs_by_interface[interface]
                 log.info(f"Creating {num_pvcs} PVCs for {interface} interface...")
 
                 # Use encrypted storage class if available and encryption is enabled

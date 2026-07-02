@@ -2,6 +2,7 @@ import logging
 import random
 
 from ocs_ci.helpers.disruption_helpers import Disruptions
+from ocs_ci.ocs.resources.pod import get_rgw_pods
 from ocs_ci.resiliency.resiliency_tools import (
     CephStatusTool,
     raise_if_ceph_crashes_detected,
@@ -27,6 +28,7 @@ class StorageClusterComponentFailures:
         "MON_POD_FAILURES": "mon",
         "CEPHFS_POD_FAILURES": "cephfsplugin",
         "RBD_POD_FAILURES": "rbdplugin",
+        "RGW_POD_FAILURES": "rgw",
     }
 
     def __init__(self, failure_data):
@@ -34,8 +36,19 @@ class StorageClusterComponentFailures:
         self.disruptions = Disruptions()
         logger.info("Initialized StorageClusterComponentFailures")
 
+    def _rgw_pods_present(self):
+        """Return True when at least one rook-ceph-rgw pod exists on the cluster."""
+        return bool(get_rgw_pods())
+
     def _restart_pods(self, resource_type, wait=True):
         """Handles pod restarts for any Ceph component."""
+        if resource_type == "rgw" and not self._rgw_pods_present():
+            logger.info(
+                "No RGW pods (app=rook-ceph-rgw) found on cluster; "
+                "skipping RGW pod failure injection"
+            )
+            return
+
         logger.info(f"Restarting '{resource_type}' pods...")
         self.disruptions.set_resource(resource_type)
         self.disruptions.delete_resource()
@@ -64,6 +77,13 @@ class StorageClusterComponentFailures:
         """
         logger.info(f" Starting {self.SCENARIO_NAME} for {iterations} iterations")
         from ocs_ci.resiliency.resiliency_helper import ResiliencyConfig
+
+        if failure_method == "RGW_POD_FAILURES" and not self._rgw_pods_present():
+            logger.info(
+                "No RGW pods (app=rook-ceph-rgw) found on cluster; "
+                "skipping RGW_POD_FAILURES scenario"
+            )
+            return
 
         resiliency_config = ResiliencyConfig()
         ceph_tool = CephStatusTool()

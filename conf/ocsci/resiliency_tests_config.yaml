@@ -22,7 +22,8 @@ ENV_DATA:
       workload_loop: 20  # Number of times to run workload (1 = run once, 20 = run 20 times)
 
       # Deployment configuration
-      num_pvcs_per_interface: 5  # Number of PVCs to create per storage interface (CephFS, CephBlockPool)
+      num_rbd_pvcs: 5  # Number of RBD (CephBlockPool) PVCs to create
+      num_cephfs_pvcs: 5  # Number of CephFS PVCs to create
       pvc_size: 50  # PVC size in GiB
 
       # Encryption configuration (requires KMS to be configured)
@@ -130,10 +131,43 @@ ENV_DATA:
         rotation_timeout: 1200
         keep_prior_key_count_max: 1
 
+      # Aggressive clone operation tuning (optional)
+      aggressive_clone_config:
+        max_parallel: 5
+        large_scale_count: 8
+        max_pool_size: 40
+        repeated_clone_count: 3
+        concurrent_create_count: 3
+        concurrent_delete_count: 2
+        actions_per_invocation: 3
+        vdbench_on_clone_elapsed: 120
+        vdbench_on_clone_interval: 30
+        max_vdbench_on_clone_parallel: 2
+        loop_interval: 60  # Seconds between aggressive clone loop iterations
+        stop_join_timeout: 300  # Max wait for aggressive clone loop to exit on teardown
+
+      # Aggressive snapshot operation tuning (optional)
+      aggressive_snapshot_config:
+        max_parallel: 5
+        large_scale_count: 8
+        max_snapshot_pool_size: 40
+        max_restore_pool_size: 20
+        repeated_snapshot_count: 3
+        concurrent_create_count: 3
+        concurrent_delete_count: 2
+        actions_per_invocation: 3
+        vdbench_on_restore_elapsed: 120
+        vdbench_on_restore_interval: 30
+        max_vdbench_on_restore_parallel: 2
+        loop_interval: 60  # Seconds between aggressive snapshot loop iterations
+        stop_join_timeout: 300  # Max wait for aggressive snapshot loop to exit on teardown
+
       # Enabled operation types (comment out to disable specific operations)
       enabled_operations:
         - snapshot_lifecycle      # PVC snapshot create/restore/delete/verify
         - clone_lifecycle         # PVC clone create/attach/verify/delete
+        - aggressive_clone_operation  # Parallel/nested clone stress testing
+        - aggressive_snapshot_operation  # Parallel/nested snapshot+restore stress testing
         - node_taint_churn       # Node taints for pod rescheduling
         - osd_operations         # OSD noout flag operations
         - mds_failover           # MDS daemon failover (CephFS)
