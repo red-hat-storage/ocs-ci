@@ -32,13 +32,9 @@ from ocs_ci.ocs.resources.pod import (
     get_deployments_having_label,
     get_mds_pods,
     get_mgr_pods,
-    get_cephfsplugin_provisioner_pods,
-    get_rbdfsplugin_provisioner_pods,
     get_rgw_pods,
     get_noobaa_pods,
-    get_plugin_pods,
     get_ceph_tools_pod,
-    get_deployment_name,
     wait_for_storage_pods,
 )
 from ocs_ci.ocs.resources import pod
@@ -275,8 +271,6 @@ class TestMonitorRecovery(E2ETest):
         logger.test_step("Recover MCG by re-spinning noobaa pods")
         recover_mcg()
 
-        logger.test_step("Remove global ID reclaim warnings")
-        remove_global_id_reclaim()
         logger.test_step("Verify data integrity after recovery")
 
         logger.info("Checking current state of application pods before verification")
@@ -1155,7 +1149,7 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace):
     if last_segment.isdigit():
         prefix = pod_name
     else:
-        prefix = get_deployment_name(pod_name)
+        prefix = pod_name.rsplit("-", 1)[0]
     logger.info(
         f"Waiting up to {timeout}s for replacement of pod '{pod_obj.name}' "
         f"(name prefix: '{prefix}') to reach Running state"
@@ -1798,66 +1792,6 @@ def recover_mcg():
         logger.debug(
             f"Skipping RGW recovery on non-on-prem platform: {config.ENV_DATA['platform']}"
         )
-
-
-def remove_global_id_reclaim():
-    """
-    Removes global id warning by re-spinning client and mon pods
-
-    """
-    logger.info(
-        "Removing global ID reclaim warnings by re-spinning CSI, MDS, and monitor pods"
-    )
-
-    logger.info("Collecting CSI plugin and provisioner pods")
-    csi_pods = []
-    interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
-    for interface in interfaces:
-        plugin_pods = get_plugin_pods(interface)
-        logger.debug(f"Found {len(plugin_pods)} plugin pods for interface: {interface}")
-        csi_pods += plugin_pods
-
-    cephfs_provisioner_pods = get_cephfsplugin_provisioner_pods()
-    rbd_provisioner_pods = get_rbdfsplugin_provisioner_pods()
-    logger.debug(f"Found {len(cephfs_provisioner_pods)} CephFS provisioner pods")
-    logger.debug(f"Found {len(rbd_provisioner_pods)} RBD provisioner pods")
-
-    csi_pods += cephfs_provisioner_pods
-    csi_pods += rbd_provisioner_pods
-    logger.info(f"Deleting {len(csi_pods)} CSI pods")
-    for csi_pod in csi_pods:
-        logger.debug(f"Deleting CSI pod: {csi_pod.name}")
-        csi_pod.delete(force=True)
-
-    logger.info("Deleting MDS pods")
-    mds_pods = get_mds_pods()
-    logger.info(f"Found {len(mds_pods)} MDS pods to delete")
-    for mds_pod in mds_pods:
-        logger.debug(f"Deleting MDS pod: {mds_pod.name}")
-        mds_pod.delete(force=True)
-
-    logger.info("Waiting for MDS pods to respawn and reach running state")
-    respawned_mds_pods = get_mds_pods()
-    for mds_pod in respawned_mds_pods:
-        logger.debug(f"Waiting for MDS pod: {mds_pod.name}")
-        wait_for_resource_state(resource=mds_pod, state=constants.STATUS_RUNNING)
-    logger.info(f"All {len(respawned_mds_pods)} MDS pods are running")
-
-    logger.info("Deleting monitor pods")
-    mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
-    logger.info(f"Found {len(mon_pods)} monitor pods to delete")
-    for mon in mon_pods:
-        logger.debug(f"Deleting monitor pod: {mon.name}")
-        mon.delete(force=True)
-
-    logger.info("Waiting for monitor pods to respawn and reach running state")
-    respawned_mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
-    for mon in respawned_mon_pods:
-        logger.debug(f"Waiting for monitor pod: {mon.name}")
-        wait_for_resource_state(resource=mon, state=constants.STATUS_RUNNING)
-    logger.info(f"All {len(respawned_mon_pods)} monitor pods are running")
-
-    logger.info("Global ID reclaim warning removal completed")
 
 
 def replace_mds_deployments():
