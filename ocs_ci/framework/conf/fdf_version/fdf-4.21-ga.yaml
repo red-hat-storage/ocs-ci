@@ -1,0 +1,5 @@
+# Installs the FDF GA version matching the OCP version
+---
+DEPLOYMENT:
+  fdf_pre_release: false
+  fdf_image_tag: v4.21
