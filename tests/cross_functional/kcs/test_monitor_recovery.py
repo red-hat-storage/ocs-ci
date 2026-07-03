@@ -1952,14 +1952,20 @@ def get_spun_dc_pods(pod_list):
     new_pods = []
 
     for pod_obj in pod_list:
-        pod_label = pod_obj.labels.get("deploymentconfig")
-        label_selector = f"deploymentconfig={pod_label}"
+        pod_label = pod_obj.labels.get("name") or pod_obj.labels.get("deploymentconfig")
+        if not pod_label:
+            logger.warning(
+                f"Pod {pod_obj.name} has no 'name' or 'deploymentconfig' label, skipping"
+            )
+            continue
+        label_key = "name" if pod_obj.labels.get("name") else "deploymentconfig"
+        label_selector = f"{label_key}={pod_label}"
         logger.debug(f"Searching for pods with label: {label_selector}")
 
         pods_data = get_pods_having_label(label_selector, pod_obj.namespace)
         for pod_data in pods_data:
             pod_name = pod_data.get("metadata").get("name")
-            if "-deploy" not in pod_name and pod_name not in pod_obj.name:
+            if "-deploy" not in pod_name and pod_name != pod_obj.name:
                 logger.debug(f"Found re-spun pod: {pod_name}")
                 new_pods.append(get_pod_obj(pod_name, pod_obj.namespace))
 
