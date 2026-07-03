@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_hci_provider_and_client,
 )
+from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_disabled
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -108,7 +109,11 @@ class TestDynamicPvc(ManageTest):
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
-                marks=[pytest.mark.polarion_id("OCS-526"), acceptance],
+                marks=[
+                    pytest.mark.polarion_id("OCS-526"),
+                    acceptance,
+                    skipif_cephfs_disabled,
+                ],
             ),
         ],
     )
@@ -239,7 +244,11 @@ class TestDynamicPvc(ManageTest):
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
-                marks=[pytest.mark.polarion_id("OCS-529"), acceptance],
+                marks=[
+                    pytest.mark.polarion_id("OCS-529"),
+                    acceptance,
+                    skipif_cephfs_disabled,
+                ],
             ),
         ],
     )
