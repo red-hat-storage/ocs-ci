@@ -967,9 +967,10 @@ def _exec_cmd_on_pod(cmd, pod_obj):
     pod_obj.exec_cmd_on_pod(cmd)
 
 
+@retry(CommandFailed, tries=10, delay=5, backoff=1)
 def insert_delay(mon_dep):
     """
-    Inserts delay on a monitor
+    Inserts delay on a monitor.
 
     Args:
         mon_dep (str): Name of a monitor deployment
@@ -988,6 +989,7 @@ def insert_delay(mon_dep):
     logger.debug(f"Successfully updated initialDelaySeconds for {mon_dep}")
 
 
+@retry(CommandFailed, tries=10, delay=5, backoff=1)
 def update_mon_initial_delay():
     """
     Inserts delay on all monitors
