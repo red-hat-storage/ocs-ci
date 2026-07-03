@@ -295,7 +295,12 @@ class TestAgnosticDRFailoverAndRelocate:
             )
             config.switch_to_cluster_by_name(primary_cluster_name)
             nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
-            wait_for_nodes_status([node.name for node in primary_cluster_nodes])
+            logger.info(
+                "Waiting up to 600s for primary cluster nodes to reach Ready status"
+            )
+            wait_for_nodes_status(
+                [node.name for node in primary_cluster_nodes], timeout=600
+            )
             logger.info("Waiting 180 seconds for pods to stabilize")
             sleep(180)
             logger.assertion("All pods Running after primary cluster restart")
