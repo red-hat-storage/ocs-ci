@@ -105,6 +105,7 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.polarion_id("OCS-525"),
                     skipif_managed_service,
                     skipif_hci_provider_and_client,
+                    skipif_cephfs_disabled,
                 ],
             ),
             pytest.param(
@@ -240,6 +241,7 @@ class TestDynamicPvc(ManageTest):
                     pytest.mark.polarion_id("OCS-542"),
                     skipif_managed_service,
                     skipif_hci_provider_and_client,
+                    skipif_cephfs_disabled,
                 ],
             ),
             pytest.param(

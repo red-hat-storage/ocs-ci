@@ -5,7 +5,10 @@ from ocs_ci.utility import metadata_utils
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    skipif_cephfs_disabled,
+)
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -194,7 +197,11 @@ class TestMetadata(ManageTest):
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
                 constants.DEFAULT_STORAGECLASS_CEPHFS,
-                marks=[tier1, pytest.mark.polarion_id("OCS-4676")],
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-4676"),
+                    skipif_cephfs_disabled,
+                ],
             ),
             pytest.param(
                 "ocs-storagecluster-cephblockpool",

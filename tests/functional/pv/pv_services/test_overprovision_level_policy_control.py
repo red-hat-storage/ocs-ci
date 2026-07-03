@@ -13,7 +13,10 @@ from ocs_ci.helpers.helpers import (
     verify_substrings_in_string,
 )
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    skipif_cephfs_disabled,
+)
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -89,7 +92,8 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
                 *[constants.CEPHBLOCKPOOL_SC, constants.CEPHBLOCKPOOL], marks=[tier1]
             ),
             pytest.param(
-                *[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM], marks=[tier2]
+                *[constants.CEPHFILESYSTEM_SC, constants.CEPHFILESYSTEM],
+                marks=[tier2, skipif_cephfs_disabled],
             ),
             pytest.param(
                 *["sc-test-blk", constants.CEPHBLOCKPOOL],
@@ -97,7 +101,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
             ),
             pytest.param(
                 *["sc-test-fs", constants.CEPHFILESYSTEM],
-                marks=[tier2, skipif_ocs_version("<4.10")],
+                marks=[tier2, skipif_ocs_version("<4.10"), skipif_cephfs_disabled],
             ),
         ],
     )
