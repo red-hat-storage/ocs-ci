@@ -36,8 +36,10 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     get_ceph_tools_pod,
     wait_for_storage_pods,
+    get_pod_obj,
+    cal_md5sum,
+    get_pods_having_label,
 )
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
 from ocs_ci.helpers.helpers import wait_for_resource_state, get_secret_names
 from ocs_ci.utility.retry import retry
@@ -141,7 +143,7 @@ class TestMonitorRecovery(E2ETest):
         self.md5sum = []
         for pod_obj in self.dc_pods:
             pod_obj.exec_cmd_on_pod(command=self.dd_cmd)
-            checksum = pod.cal_md5sum(pod_obj, self.filename)
+            checksum = cal_md5sum(pod_obj, self.filename)
             self.md5sum.append(checksum)
             logger.info(f"Pod {pod_obj.name}: checksum={checksum}")
         logger.info(f"Checksums before recovery: {self.md5sum}")
@@ -220,8 +222,7 @@ class TestMonitorRecovery(E2ETest):
             == "a"
         )
         logger.info(f"Copying mon-store to monitor: {mon_a.name}")
-        ocp_obj = MonitorRecovery()
-        ocp_obj._exec_oc_cmd(
+        mon_recovery._exec_oc_cmd(
             cmd=f"cp /tmp/monstore {constants.OPENSHIFT_STORAGE_NAMESPACE}/{mon_a.name}:/tmp/"
         )
 
@@ -233,6 +234,7 @@ class TestMonitorRecovery(E2ETest):
         logger.info(f"Keyrings extracted to: {file_path}")
 
         logger.test_step("Copy ceph daemon keyrings to mon-a pod")
+        # Re-fetch mon-a: the pod may have been replaced between steps
         mon_a = next(
             mon
             for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
@@ -240,7 +242,7 @@ class TestMonitorRecovery(E2ETest):
             == "a"
         )
         logger.info(f"Copying keyring from {file_path} to monitor: {mon_a.name}")
-        ocp_obj._exec_oc_cmd(
+        mon_recovery._exec_oc_cmd(
             cmd=f"cp {file_path} {constants.OPENSHIFT_STORAGE_NAMESPACE}/{mon_a.name}:/tmp/keyring"
         )
 
@@ -288,7 +290,7 @@ class TestMonitorRecovery(E2ETest):
                 timeout=600,
                 sleep=10,
             )
-            checksum = pod.cal_md5sum(pod_obj, self.filename)
+            checksum = cal_md5sum(pod_obj, self.filename)
             new_md5_sum.append(checksum)
             logger.info(f"Pod {pod_obj.name}: checksum={checksum}")
 
@@ -676,76 +678,47 @@ class MonitorRecovery(object):
             deployment_paths (list): List of paths to deployment yamls
 
         """
+
+        def _verify_pod_type(dep_name, pod_type, get_pods_fn, timeout=600):
+            """Wait 30s then verify all pods of a given type are running."""
+            time.sleep(30)
+            pods = get_pods_fn()
+            logger.info(
+                f"Verifying {len(pods)} {pod_type} pods with sandbox error recovery"
+            )
+            failed = verify_pods_running(pods, pod_type=pod_type, timeout=timeout)
+            if failed:
+                raise AssertionError(
+                    f"{pod_type} deployment {dep_name} recovery failed: {failed}"
+                )
+            logger.info(
+                f"{pod_type} deployment {dep_name}: all {len(pods)} pods are running"
+            )
+
         logger.info(
             f"Reverting {len(deployment_paths)} deployments to original configuration"
         )
         for dep in deployment_paths:
             dep_name = dep.split("/")[-1].replace(".yaml", "")
             logger.info(f"Reverting deployment: {dep_name}")
-            revert_patch = f"replace --force -f {dep}"
-            self.ocp_obj.exec_oc_cmd(revert_patch)
-
-            logger.debug(
-                f"Waiting for pods from deployment {dep_name} to reach running state"
-            )
+            self.ocp_obj.exec_oc_cmd(f"replace --force -f {dep}")
 
             if "rook-ceph-mon" in dep_name:
-                logger.debug("Waiting 30s before validating monitor pods")
                 time.sleep(30)
-                logger.debug("Validating monitor pods are running")
                 validate_mon_pods()
                 logger.info(f"Monitor deployment {dep_name} pods are running")
             elif "rook-ceph-osd" in dep_name:
-                logger.debug("Waiting 30s before checking OSD pods")
-                time.sleep(30)
-                osd_pods = get_osd_pods()
-                logger.info(
-                    f"Verifying {len(osd_pods)} OSD pods with sandbox error recovery"
-                )
-                failed_osd_pods = verify_pods_running(
-                    osd_pods, pod_type="OSD", timeout=600
-                )
-                if failed_osd_pods:
-                    raise AssertionError(
-                        f"OSD deployment {dep_name} recovery failed: {failed_osd_pods}"
-                    )
-                logger.info(
-                    f"OSD deployment {dep_name}: all {len(osd_pods)} pods are running"
-                )
+                _verify_pod_type(dep_name, "OSD", get_osd_pods)
             elif "rook-ceph-mgr" in dep_name:
-                logger.debug("Waiting 30s before checking MGR pods")
-                time.sleep(30)
-                mgr_pods = get_mgr_pods(namespace=config.ENV_DATA["cluster_namespace"])
-                logger.info(
-                    f"Verifying {len(mgr_pods)} MGR pods with sandbox error recovery"
-                )
-                failed_mgr_pods = verify_pods_running(
-                    mgr_pods, pod_type="MGR", timeout=600
-                )
-                if failed_mgr_pods:
-                    raise AssertionError(
-                        f"MGR deployment {dep_name} recovery failed: {failed_mgr_pods}"
-                    )
-                logger.info(
-                    f"MGR deployment {dep_name}: all {len(mgr_pods)} pods are running"
+                _verify_pod_type(
+                    dep_name,
+                    "MGR",
+                    lambda: get_mgr_pods(
+                        namespace=config.ENV_DATA["cluster_namespace"]
+                    ),
                 )
             elif "rook-ceph-mds" in dep_name:
-                logger.debug("Waiting 30s before checking MDS pods")
-                time.sleep(30)
-                mds_pods = get_mds_pods()
-                logger.info(
-                    f"Verifying {len(mds_pods)} MDS pods with sandbox error recovery"
-                )
-                failed_mds_pods = verify_pods_running(
-                    mds_pods, pod_type="MDS", timeout=600
-                )
-                if failed_mds_pods:
-                    raise AssertionError(
-                        f"MDS deployment {dep_name} recovery failed: {failed_mds_pods}"
-                    )
-                logger.info(
-                    f"MDS deployment {dep_name}: all {len(mds_pods)} pods are running"
-                )
+                _verify_pod_type(dep_name, "MDS", get_mds_pods)
         logger.info("All deployments successfully reverted")
 
     def backup_deployments(self):
@@ -951,19 +924,22 @@ class MonitorRecovery(object):
             try:
                 wait_for_resource_state(resource=mds, state=constants.STATUS_RUNNING)
             except (CommandFailed, ResourceWrongStatusException):
-                # Pod may have been replaced (new name) during the deployment rollout.
-                # Confirm it is actually gone, then wait for the replacement to run.
-                if not _pod_exists(mds):
-                    logger.info(
-                        f"MDS pod {mds.name} no longer exists (replaced by deployment "
-                        "rollout) - waiting for replacement pod to reach Running state"
+                try:
+                    mds.get()
+                    raise
+                except CommandFailed as e:
+                    if "NotFound" not in str(e):
+                        raise
+                logger.info(
+                    f"MDS pod {mds.name} no longer exists (replaced by deployment "
+                    "rollout) - waiting for replacement pod to reach Running state"
+                )
+                ok, final_name = _wait_for_replacement_pod(mds, 300, mds.namespace)
+                if not ok:
+                    raise AssertionError(
+                        f"Replacement for MDS pod '{mds.name}' "
+                        f"(last seen: '{final_name}') did not reach Running state"
                     )
-                    if not _wait_for_replacement_pod(mds, 300, mds.namespace):
-                        raise AssertionError(
-                            f"Replacement for MDS pod {mds.name} did not reach Running state"
-                        )
-                    continue
-                raise
         logger.info(f"All {len(mds_pods)} MDS pods are running")
 
     @retry(CommandFailed, tries=10, delay=10, backoff=1)
@@ -1093,132 +1069,154 @@ def corrupt_ceph_monitors():
     )
 
 
-def is_pod_running(pod_obj):
+def _pod_name_prefix(pod_name):
     """
-    Check if pod is in Running phase
+    Derive the stable name prefix used to identify a replacement for *pod_name*.
 
-    Args:
-        pod_obj: Pod object to check
-
-    Returns:
-        bool: True if pod is running, False otherwise
     """
-    try:
-        phase = pod_obj.get().get("status", {}).get("phase")
-        return phase == constants.STATUS_RUNNING
-    except Exception:
-        return False
-
-
-def _pod_exists(pod_obj):
-    """
-    Check whether a pod still exists on the cluster.
-
-    Args:
-        pod_obj: Pod object to check
-
-    Returns:
-        bool: True if the pod exists (regardless of phase), False if NotFound
-    """
-    try:
-        pod_obj.get()
-        return True
-    except CommandFailed as e:
-        if "NotFound" in str(e):
-            return False
-        raise
-
-
-def _wait_for_replacement_pod(pod_obj, timeout, namespace):
-    """
-    Wait for the replacement of a deleted pod to reach Running state.
-
-    Derives the stable name prefix from the original pod's name and polls all
-    pods in the namespace until one with that prefix is Running.
-
-    Args:
-        pod_obj: The original (now-deleted) pod object — its name is read
-        timeout (int): Seconds to wait for the replacement pod
-        namespace (str): Namespace to search in
-
-    Returns:
-        bool: True if the replacement pod reaches Running, False otherwise
-    """
-    pod_name = pod_obj.name
     last_segment = pod_name.rsplit("-", 1)[-1]
     if last_segment.isdigit():
-        prefix = pod_name
-    else:
-        prefix = pod_name.rsplit("-", 1)[0]
-    logger.info(
-        f"Waiting up to {timeout}s for replacement of pod '{pod_obj.name}' "
-        f"(name prefix: '{prefix}') to reach Running state"
-    )
-
-    ocp_pod = OCP(kind=constants.POD, namespace=namespace)
-
-    def _replacement_is_running():
-        all_pods = ocp_pod.get().get("items", [])
-        for p in all_pods:
-            name = p.get("metadata", {}).get("name", "")
-            phase = p.get("status", {}).get("phase", "")
-            if name.startswith(prefix) and phase == constants.STATUS_RUNNING:
-                logger.info(f"Replacement pod '{name}' is Running")
-                return True
-        return False
-
-    try:
-        for result in TimeoutSampler(
-            timeout=timeout, sleep=10, func=_replacement_is_running
-        ):
-            if result:
-                return True
-    except TimeoutExpiredError:
-        logger.error(
-            f"Replacement pod for '{pod_obj.name}' (prefix='{prefix}') did not reach "
-            f"Running state within {timeout}s"
-        )
-        return False
-    return False
+        return pod_name
+    return pod_name.rsplit("-", 1)[0]
 
 
-def perform_node_restart(node_name, nodes_platform, node_objs):
+def _find_replacement_pod_name(deleted_name, prefix, namespace, timeout):
     """
-    Perform node restart operation using platform's restart_nodes_by_stop_and_start
+    Poll *namespace* until a pod whose name starts with *prefix* and is
+    **different** from *deleted_name* appears (any phase).
 
     Args:
-        node_name: Name of the node to restart
-        nodes_platform: Platform-specific nodes object
-        node_objs: List of node objects
+        deleted_name (str): Name of the pod that was deleted / disappeared.
+        prefix (str): Name prefix derived from *deleted_name*.
+        namespace (str): Namespace to search in.
+        timeout (int): Seconds to wait before giving up.
 
     Returns:
-        bool: True if restart successful, False otherwise
+        str | None: The new pod name, or ``None`` if not found in time.
     """
-    target_node = None
-    for n in node_objs:
-        if n.name == node_name:
-            target_node = n
-            break
+    ocp_pod = OCP(kind=constants.POD, namespace=namespace)
 
-    if not target_node:
-        logger.error(f"Could not find node object for {node_name}")
-        return False
-
-    logger.info(
-        f"Restarting node {node_name} using platform: {nodes_platform.__class__.__name__}"
-    )
+    def _new_pod_exists():
+        for p in ocp_pod.get().get("items", []):
+            name = p.get("metadata", {}).get("name", "")
+            if name.startswith(prefix) and name != deleted_name:
+                return name
+        return None
 
     try:
-        nodes_platform.restart_nodes_by_stop_and_start([target_node], wait=True)
-        logger.info(f"Node {node_name} restarted successfully")
-    except Exception as e:
-        logger.error(f"Failed to restart node {node_name}: {e}")
-        return False
+        for name in TimeoutSampler(timeout=timeout, sleep=10, func=_new_pod_exists):
+            if name:
+                logger.info(
+                    f"Replacement pod '{name}' appeared for deleted pod '{deleted_name}'"
+                )
+                return name
+    except TimeoutExpiredError:
+        pass
+    return None
 
-    logger.info("Waiting 60s for pods to stabilize after node restart...")
-    time.sleep(60)
 
-    return True
+def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
+    """
+    Wait for a replacement pod to reach Running state, with up to *max_attempts*
+    recovery cycles.
+
+    Each cycle:
+      1. Discovers the current replacement pod by name-prefix (skipping the
+         last-known deleted name — the name changes on every restart).
+      2. Calls ``check_and_recover_sandbox_errors`` on that replacement pod.
+      3. If the replacement itself disappears again (another restart), treats
+         *its* name as the new deleted name and repeats from step 1.
+
+    Args:
+        pod_obj: The original (now-deleted) pod object whose name seeds the
+                 prefix derivation.
+        timeout (int): Total seconds budget shared across all attempts.
+        namespace (str): Namespace to search in.
+        max_attempts (int): Maximum recovery cycles (default 3).
+
+    Returns:
+        tuple[bool, str]: ``(success, final_pod_name)`` where *final_pod_name*
+        is the name of the last replacement pod seen (original name if none
+        was ever found).
+    """
+    original_name = pod_obj.name
+    prefix = _pod_name_prefix(original_name)
+
+    logger.info(
+        f"Waiting up to {timeout}s for replacement of pod '{original_name}' "
+        f"(name prefix: '{prefix}', max attempts: {max_attempts})"
+    )
+
+    global_start = time.time()
+    deleted_name = original_name
+
+    for attempt in range(1, max_attempts + 1):
+        elapsed = time.time() - global_start
+        remaining = max(int(timeout - elapsed), 30)
+
+        # --- 1. Discover the replacement pod (name changed after restart) ------
+        logger.info(
+            f"Attempt {attempt}/{max_attempts}: looking for replacement of "
+            f"'{deleted_name}' (prefix='{prefix}', budget={remaining}s)"
+        )
+        new_name = _find_replacement_pod_name(
+            deleted_name, prefix, namespace, timeout=min(120, remaining)
+        )
+        if not new_name:
+            logger.error(
+                f"Attempt {attempt}/{max_attempts}: no replacement pod found for "
+                f"'{deleted_name}' (prefix='{prefix}') within {min(120, remaining)}s"
+            )
+            return False, deleted_name
+
+        # --- 2. Monitor / recover the replacement pod --------------------------
+        elapsed = time.time() - global_start
+        remaining = max(int(timeout - elapsed), 30)
+        logger.info(
+            f"Attempt {attempt}/{max_attempts}: monitoring replacement pod "
+            f"'{new_name}' (remaining budget: {remaining}s)"
+        )
+        try:
+            replacement_obj = get_pod_obj(name=new_name, namespace=namespace)
+        except Exception as e:
+            logger.warning(
+                f"Attempt {attempt}/{max_attempts}: could not get pod object "
+                f"for '{new_name}': {e} — will retry"
+            )
+            deleted_name = new_name
+            continue
+
+        ok = check_and_recover_sandbox_errors(
+            replacement_obj, timeout=remaining, max_recovery_attempts=1
+        )
+        if ok:
+            logger.info(
+                f"Replacement pod '{new_name}' reached Running state "
+                f"(attempt {attempt}/{max_attempts})"
+            )
+            return True, new_name
+
+        # --- 3. Replacement failed — check if it disappeared (another restart) -
+        elapsed = time.time() - global_start
+        remaining = int(timeout - elapsed)
+        if remaining <= 0 or attempt == max_attempts:
+            logger.error(
+                f"Attempt {attempt}/{max_attempts}: replacement pod '{new_name}' "
+                f"failed to reach Running state"
+            )
+            return False, new_name
+
+        logger.warning(
+            f"Attempt {attempt}/{max_attempts}: replacement pod '{new_name}' did not "
+            f"reach Running state — checking for another replacement..."
+        )
+        deleted_name = new_name
+
+    logger.error(
+        f"Original pod '{original_name}': replacement did not reach Running state "
+        f"after {max_attempts} attempt(s) (last pod: '{deleted_name}')"
+    )
+    return False, deleted_name
 
 
 def check_and_recover_sandbox_errors(
@@ -1244,9 +1242,12 @@ def check_and_recover_sandbox_errors(
         pod_name = pod_obj.name
         namespace = pod_obj.namespace
 
-        if is_pod_running(pod_obj):
-            logger.debug(f"Pod {pod_name} is already running, no recovery needed")
-            return True
+        try:
+            if pod_obj.get().get("status", {}).get("phase") == constants.STATUS_RUNNING:
+                logger.debug(f"Pod {pod_name} is already running, no recovery needed")
+                return True
+        except Exception:
+            pass
 
         try:
             pod_data = pod_obj.get()
@@ -1256,7 +1257,13 @@ def check_and_recover_sandbox_errors(
                     f"Pod {pod_name} no longer exists (replaced by a new pod) - "
                     "waiting for replacement pod to reach Running state"
                 )
-                return _wait_for_replacement_pod(pod_obj, timeout, namespace)
+                ok, final_name = _wait_for_replacement_pod(pod_obj, timeout, namespace)
+                if not ok:
+                    logger.error(
+                        f"Pod '{pod_name}': replacement pod '{final_name}' "
+                        f"failed to reach Running state"
+                    )
+                return ok
             raise
 
         node_name = pod_data.get("spec", {}).get("nodeName")
@@ -1326,11 +1333,26 @@ def check_and_recover_sandbox_errors(
                 logger.info(f"Recovering pod {pod_name} by restarting node {node_name}")
                 nodes_platform = PlatformNodesFactory().get_nodes_platform()
                 node_objs = get_node_objs()
-
-                if perform_node_restart(node_name, nodes_platform, node_objs):
+                target_node = next((n for n in node_objs if n.name == node_name), None)
+                if not target_node:
+                    logger.error(f"Could not find node object for {node_name}")
+                    return handle_multi_attach_error(pod_obj, timeout)
+                logger.info(
+                    f"Restarting node {node_name} using platform: "
+                    f"{nodes_platform.__class__.__name__}"
+                )
+                try:
+                    nodes_platform.restart_nodes_by_stop_and_start(
+                        [target_node], wait=True
+                    )
+                    logger.info(f"Node {node_name} restarted successfully")
+                    logger.info(
+                        "Waiting 60s for pods to stabilize after node restart..."
+                    )
+                    time.sleep(60)
                     _node_restart_tracker[node_name] = current_time
-                else:
-                    logger.error(f"Node restart failed for {node_name}")
+                except Exception as e:
+                    logger.error(f"Failed to restart node {node_name}: {e}")
                     return handle_multi_attach_error(pod_obj, timeout)
         else:
             logger.debug(f"Pod {pod_name} has no sandbox/RWOP errors initially")
@@ -1351,7 +1373,15 @@ def check_and_recover_sandbox_errors(
                         f"pod after node restart) - waiting for replacement pod "
                         f"(remaining timeout: {remaining}s)"
                     )
-                    return _wait_for_replacement_pod(pod_obj, remaining, namespace)
+                    ok, final_name = _wait_for_replacement_pod(
+                        pod_obj, remaining, namespace
+                    )
+                    if not ok:
+                        logger.error(
+                            f"Pod '{pod_name}': replacement pod '{final_name}' "
+                            f"failed to reach Running state"
+                        )
+                    return ok
                 raise
             phase = pod_obj.get().get("status", {}).get("phase")
 
@@ -1429,11 +1459,16 @@ def verify_pods_running(
     failed_pods = []
 
     def check_single_pod(pod_obj):
-        """Check a single pod and return its name if it fails"""
-        logger.debug(f"Checking {pod_type} pod: {pod_obj.name}")
+        """Check a single pod and return its name (or replacement name) if it fails"""
+        original_name = pod_obj.name
+        logger.debug(f"Checking {pod_type} pod: {original_name}")
         if not check_and_recover_sandbox_errors(pod_obj, timeout=timeout):
-            logger.error(f"{pod_type} pod {pod_obj.name} failed to reach running state")
-            return pod_obj.name
+            # check_and_recover_sandbox_errors already logs the replacement name;
+            # we surface the original name here so callers can correlate.
+            logger.error(
+                f"{pod_type} pod '{original_name}' failed to reach running state"
+            )
+            return original_name
         return None
 
     if parallel and len(pod_list) > 1:
@@ -1478,7 +1513,7 @@ def cleanup_stale_volume_attachments():
     logger.info("Cleaning up stale volume attachments")
     deleted_count = 0
     try:
-        va_ocp = OCP(kind="VolumeAttachment", namespace="")
+        va_ocp = OCP(kind="VolumeAttachment")
         attachments = va_ocp.get()
         if attachments and "items" in attachments:
             for attachment in attachments["items"]:
@@ -1613,64 +1648,44 @@ def recover_mcg():
     logger.info("Waiting 120s for NooBaa pods to fully respawn")
     time.sleep(120)
 
-    max_count_retries = 5
-    retry_wait_time = 30
+    # Wait for the minimum required pod types to appear (db-pg-cluster-2 is excluded
+    # because it is only created after db-pg-cluster-1 is fully running).
+    minimum_required_types = {
+        k: v for k, v in expected_pod_types.items() if k != "noobaa-db-pg-cluster-2"
+    }
+    minimum_required_count = sum(minimum_required_types.values())
 
-    # Check if we have at least 4 pods (excluding noobaa-db-pg-cluster-2)
-    # If noobaa-db-pg-cluster-1 is not running, noobaa-db-pg-cluster-2 won't be created
-    for retry_attempt in range(max_count_retries):
-        current_noobaa_pods = get_noobaa_pods()
-        current_pod_count = len(current_noobaa_pods)
-
+    def _minimum_pods_present():
+        current_pods = get_noobaa_pods()
         current_pod_types = {}
-        for pod_obj in current_noobaa_pods:
-            prefix = get_pod_type_prefix(pod_obj.name)
+        for p in current_pods:
+            prefix = get_pod_type_prefix(p.name)
             current_pod_types[prefix] = current_pod_types.get(prefix, 0) + 1
-
+        missing = [
+            f"{pt} ({current_pod_types.get(pt, 0)}/{cnt})"
+            for pt, cnt in minimum_required_types.items()
+            if current_pod_types.get(pt, 0) < cnt
+        ]
+        if missing:
+            logger.debug(f"NooBaa pods not yet ready — missing: {missing}")
+            return False
         logger.info(
-            f"Pod count check attempt {retry_attempt + 1}/{max_count_retries}: "
-            f"Found {current_pod_count}/{expected_pod_count} NooBaa pods by type: {current_pod_types}"
+            f"All minimum required NooBaa pod types present: {current_pod_types}"
         )
+        return True
 
-        # Check if we have the minimum required pods (excluding db-pg-cluster-2)
-        # Expected: noobaa-core, noobaa-endpoint, noobaa-operator, cnpg-controller-manager, noobaa-db-pg-cluster-1
-        minimum_required_types = {
-            k: v for k, v in expected_pod_types.items() if k != "noobaa-db-pg-cluster-2"
-        }
-        missing_types = []
-        for pod_type, expected_count in minimum_required_types.items():
-            current_count = current_pod_types.get(pod_type, 0)
-            if current_count < expected_count:
-                missing_types.append(f"{pod_type} ({current_count}/{expected_count})")
-
-        # If we have all minimum required pods (4 pods), proceed even if db-pg-cluster-2 is missing
-        if not missing_types and current_pod_count >= len(minimum_required_types):
-            logger.info(
-                f"Found {current_pod_count} NooBaa pods including all minimum required types: {current_pod_types}"
-            )
-            break
-
-        if missing_types:
-            logger.warning(
-                f"Missing or incomplete pod types: {missing_types}. "
-                f"Waiting {retry_wait_time}s..."
-            )
-        else:
-            logger.warning(
-                f"Pod count mismatch: {current_pod_count}/{len(minimum_required_types)} minimum required. "
-                f"Waiting {retry_wait_time}s..."
-            )
-
-        if retry_attempt < max_count_retries - 1:
-            time.sleep(retry_wait_time)
-        else:
-            error_msg = (
-                f"NooBaa recovery failed: Expected minimum {len(minimum_required_types)} pods "
-                f"but only found {current_pod_count} after {max_count_retries} attempts. "
-                f"Expected types: {minimum_required_types}, Current types: {current_pod_types}"
-            )
-            logger.error(error_msg)
-            raise ResourceWrongStatusException(error_msg)
+    try:
+        for ready in TimeoutSampler(timeout=150, sleep=30, func=_minimum_pods_present):
+            if ready:
+                break
+    except TimeoutExpiredError:
+        current_pods = get_noobaa_pods()
+        error_msg = (
+            f"NooBaa recovery failed: expected at least {minimum_required_count} pods "
+            f"({minimum_required_types}) but found {len(current_pods)} after 150s"
+        )
+        logger.error(error_msg)
+        raise ResourceWrongStatusException(error_msg)
 
     # Special handling for noobaa-db-pg-cluster-1 pod
     # If it's not running, noobaa-db-pg-cluster-2 won't be created
@@ -1803,12 +1818,15 @@ def replace_mds_deployments():
     """
     logger.info("Replacing MDS deployments to recover from CephFS reset")
 
-    mds_deployment_names = [
-        "rook-ceph-mds-ocs-storagecluster-cephfilesystem-a",
-        "rook-ceph-mds-ocs-storagecluster-cephfilesystem-b",
-    ]
-
     dep_ocp = OCP(kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    mds_deployments = get_deployments_having_label(
+        label=constants.MDS_APP_LABEL,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    )
+    mds_deployment_names = [d["metadata"]["name"] for d in mds_deployments]
+    logger.info(
+        f"Found {len(mds_deployment_names)} MDS deployments to replace: {mds_deployment_names}"
+    )
 
     with tempfile.TemporaryDirectory() as backup_dir:
         logger.info(
@@ -1857,7 +1875,7 @@ def ceph_fs_recovery():
     logger.info(
         f"Starting CephFS recovery for filesystem: {defaults.CEPHFILESYSTEM_NAME}"
     )
-    toolbox = pod.get_ceph_tools_pod()
+    toolbox = get_ceph_tools_pod()
     logger.debug(f"Using ceph tools pod: {toolbox.name}")
 
     try:
@@ -1938,12 +1956,12 @@ def get_spun_dc_pods(pod_list):
         label_selector = f"deploymentconfig={pod_label}"
         logger.debug(f"Searching for pods with label: {label_selector}")
 
-        pods_data = pod.get_pods_having_label(label_selector, pod_obj.namespace)
+        pods_data = get_pods_having_label(label_selector, pod_obj.namespace)
         for pod_data in pods_data:
             pod_name = pod_data.get("metadata").get("name")
             if "-deploy" not in pod_name and pod_name not in pod_obj.name:
                 logger.debug(f"Found re-spun pod: {pod_name}")
-                new_pods.append(pod.get_pod_obj(pod_name, pod_obj.namespace))
+                new_pods.append(get_pod_obj(pod_name, pod_obj.namespace))
 
     logger.info(f"Previous pods: {[pod_obj.name for pod_obj in pod_list]}")
     logger.info(f"Re-spun pods: {[pod_obj.name for pod_obj in new_pods]}")
