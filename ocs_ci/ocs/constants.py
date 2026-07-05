@@ -3931,6 +3931,8 @@ ENCRYPTION_DASHBOARD_CONTEXT_MAP = {
     "In-transit encryption": "intransit_encryption",
     "Object storage": "object_storage",
 }
+# PatternFly success/enabled icon colors (PF5 color/fill attrs; PF6 prefers data-test)
+UI_SUCCESS_ICON_COLORS = ("#3e8635", "#1a7f37", "#3d7317")
 
 # Multiple device classes Yaml files
 STORAGE_DEVICESET_YAML = os.path.join(

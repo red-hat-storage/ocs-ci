@@ -1,7 +1,11 @@
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
 from ocs_ci.ocs.ui.helpers_ui import logger
-from ocs_ci.ocs.constants import ENCRYPTION_DASHBOARD_CONTEXT_MAP
+from ocs_ci.ocs.constants import (
+    ENCRYPTION_DASHBOARD_CONTEXT_MAP,
+    UI_SUCCESS_ICON_COLORS,
+)
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationTabBar,
 )
@@ -27,11 +31,14 @@ class EncryptionModule(DataFoundationTabBar):
 
         logger.info(f"Getting Encryption Summary for context: {context_key}")
 
+        self.wait_for_encryption_summary_ready(context_key)
+
+        enabled_locator = self.validation_loc["encryption_summary"][context_key][
+            "enabled"
+        ]
+
         # Open the encryption summary popup
-        self.do_click(
-            self.validation_loc["encryption_summary"][context_key]["enabled"],
-            enable_screenshot=True,
-        )
+        self.do_click(enabled_locator, enable_screenshot=True)
 
         self.page_has_loaded(
             module_loc=self.validation_loc["encryption_summary"][context_key][
@@ -49,22 +56,14 @@ class EncryptionModule(DataFoundationTabBar):
             raise ValueError("Error getting root web element")
         root_element = root_elements[0]
 
-        # Extract headers and statuses
-        enc_headers = [
-            head
-            for head in root_element.find_elements(By.TAG_NAME, "h6")
-            if head.text in ENCRYPTION_DASHBOARD_CONTEXT_MAP
-        ]
-        enc_status = [
-            svg
-            for svg in root_element.find_elements(By.TAG_NAME, "svg")
-            if svg.get_attribute("color")
-        ]
-
-        for header, svg in zip(enc_headers, enc_status):
-            context = ENCRYPTION_DASHBOARD_CONTEXT_MAP[header.text]
-            encryption_summary[context]["status"] = (
-                svg.get_attribute("color") == "#3e8635"
+        # Extract headers and statuses (PF6 uses data-test on icons, not color attr)
+        for header in root_element.find_elements(By.TAG_NAME, "h6"):
+            header_text = EncryptionModule._encryption_header_text(header)
+            if header_text not in ENCRYPTION_DASHBOARD_CONTEXT_MAP:
+                continue
+            context = ENCRYPTION_DASHBOARD_CONTEXT_MAP[header_text]
+            encryption_summary[context]["status"] = self._encryption_row_status_enabled(
+                header
             )
 
         # Process encryption summary text
@@ -91,6 +90,63 @@ class EncryptionModule(DataFoundationTabBar):
         )
 
         return encryption_summary
+
+    @staticmethod
+    def _encryption_header_text(header_element) -> str:
+        """Return visible header label (PF6 h6 elements may have empty .text)."""
+        text = (header_element.text or "").strip()
+        if text:
+            return text
+        return (header_element.get_attribute("textContent") or "").strip()
+
+    def _encryption_row_status_enabled(self, header_element) -> bool:
+        """
+        Return whether the encryption row shows an enabled/success status icon.
+
+        PF5 icons expose color="#3e8635"; PF6 icons use data-test="success-icon".
+        """
+        row = None
+        for row_xpath in self.validation_loc["encryption_summary"]["status_row_xpaths"]:
+            try:
+                row = header_element.find_element(By.XPATH, row_xpath)
+                break
+            except NoSuchElementException:
+                continue
+            except Exception as e:
+                logger.warning(
+                    "Unexpected error locating encryption status row via %s: %s",
+                    row_xpath,
+                    e,
+                )
+                raise
+
+        if row is None:
+            return False
+
+        if row.find_elements(By.CSS_SELECTOR, '[data-test="success-icon"]'):
+            return True
+
+        for svg in row.find_elements(By.TAG_NAME, "svg"):
+            color = (
+                svg.get_attribute("color") or svg.get_attribute("fill") or ""
+            ).lower()
+            if color in UI_SUCCESS_ICON_COLORS:
+                return True
+        return False
+
+    def wait_for_encryption_summary_ready(self, context_key):
+        """
+        Wait until the encryption summary control is present on the dashboard.
+
+        Args:
+            context_key (str): Key under encryption_summary locators
+                (e.g. "file_and_block", "object_storage").
+        """
+        enabled_locator = self.validation_loc["encryption_summary"][context_key][
+            "enabled"
+        ]
+        self.wait_for_element_to_be_present(enabled_locator, timeout=60)
+        self.page_has_loaded(module_loc=enabled_locator, retries=15, sleep_time=2)
 
     def get_object_encryption_summary(self):
         """

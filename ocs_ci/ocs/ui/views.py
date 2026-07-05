@@ -2611,38 +2611,40 @@ validation_4_17 = {
     ),
 }
 
+_ENCRYPTION_SUMMARY_ENABLED = (
+    "//dt[@data-test='detail-item-title' and normalize-space()='Encryption']"
+    "/following-sibling::dd[@data-test='detail-item-value']"
+    "//button[normalize-space()='Enabled' or normalize-space()='Not enabled']",
+    By.XPATH,
+)
+_ENCRYPTION_SUMMARY_CLOSE = (
+    "//div[@role='dialog']//button[@aria-label='Close']",
+    By.XPATH,
+)
+_ENCRYPTION_SUMMARY_CONTENT = (
+    "//div[@role='dialog'][.//button[@aria-label='Close']][.//h6]",
+    By.XPATH,
+)
+# Relative xpaths from an encryption summary h6 to its status row (PF5/PF6)
+_ENCRYPTION_STATUS_ROW_XPATHS = (
+    "./parent::*/parent::*",
+    "./ancestor::*[contains(@class, 'l-flex') and not(contains(@class, '__item'))][1]",
+    "./ancestor::*[contains(@class, 'flex') and not(contains(@class, '__item'))][1]",
+)
+
 validation_4_18 = {
     "encryption_summary": {
         "file_and_block": {
-            "enabled": (
-                "//button[contains(@class, 'c-button') and contains(@class, 'm-link') and contains(@class, 'm-inline') "
-                "and (text()='Enabled' or text()='Not enabled')]",
-                By.XPATH,
-            ),
-            "close": (
-                "//button[contains(@class, 'c-button') and contains(@class, 'm-plain') and @aria-label='Close']",
-                By.XPATH,
-            ),
-            "encryption_content_data": (
-                "//div[contains(@class, 'c-popover__body')]",
-                By.XPATH,
-            ),
+            "enabled": _ENCRYPTION_SUMMARY_ENABLED,
+            "close": _ENCRYPTION_SUMMARY_CLOSE,
+            "encryption_content_data": _ENCRYPTION_SUMMARY_CONTENT,
         },
         "object_storage": {
-            "enabled": (
-                "//button[contains(@class, 'c-button') and contains(@class, 'm-link') and contains(@class, 'm-inline') "
-                "and (text()='Enabled' or text()='Not enabled')]",
-                By.XPATH,
-            ),
-            "close": (
-                "//button[contains(@class, 'c-button') and contains(@class, 'm-plain') and @aria-label='Close']",
-                By.XPATH,
-            ),
-            "encryption_content_data": (
-                "//div[contains(@class, 'c-popover__content')]",
-                By.XPATH,
-            ),
+            "enabled": _ENCRYPTION_SUMMARY_ENABLED,
+            "close": _ENCRYPTION_SUMMARY_CLOSE,
+            "encryption_content_data": _ENCRYPTION_SUMMARY_CONTENT,
         },
+        "status_row_xpaths": _ENCRYPTION_STATUS_ROW_XPATHS,
     }
 }
 validation_4_20 = {
@@ -2650,8 +2652,15 @@ validation_4_20 = {
         "//button[@data-test='horizontal-link-Block and File' and @aria-selected='true']",
         By.XPATH,
     ),
-    "block-and-file-tab": ("//span[contains(.,'Block and File')]", By.XPATH),
+    "block-and-file-tab": (
+        "//button[@data-test='horizontal-link-Block and File']",
+        By.XPATH,
+    ),
     "object-tab": ("//button[@data-test='horizontal-link-Object']", By.XPATH),
+    "object-tab-active": (
+        "//button[@data-test='horizontal-link-Object' and @aria-selected='true']",
+        By.XPATH,
+    ),
     "storage-pools-tab": (
         "//button[@data-test='horizontal-link-Storage pools']",
         By.XPATH,

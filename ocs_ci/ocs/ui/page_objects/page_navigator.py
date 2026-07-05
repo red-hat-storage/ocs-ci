@@ -105,13 +105,20 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(locator=self.page_nav["storage_cluster"], timeout=90)
         self.page_has_loaded(retries=15)
+
+        from ocs_ci.ocs.ui.page_objects.storage_cluster import StorageClusterPage
+
+        storage_cluster_page = StorageClusterPage()
+        storage_cluster_page.wait_for_element_to_be_present(
+            storage_cluster_page.validation_loc["block-and-file-tab-active"],
+            timeout=60,
+        )
+        storage_cluster_page.wait_for_encryption_summary_ready("file_and_block")
         logger.info(f"Default page is {self.driver.title}")
 
         logger.info("Successfully navigated to ODF tab under Storage section")
 
-        from ocs_ci.ocs.ui.page_objects.storage_cluster import StorageClusterPage
-
-        return StorageClusterPage()
+        return storage_cluster_page
 
     def nav_object_storage_page(self):
         """

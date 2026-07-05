@@ -24,17 +24,20 @@ class StorageClusterPage(
 
     def validate_block_and_file_tab_active(self) -> bool:
         """
-        Validate Overview tab is active
+        Validate Block and File tab is active and encryption summary is loaded.
 
         Returns:
             bool: True if active, False otherwise
         """
         logger.info("Validate Block and File tab is active")
-        is_default = self.is_block_and_file_tab()
-        if not is_default:
-            logger.warning("Block and File tab is not active")
+        if not self.is_block_and_file_tab():
+            logger.warning("Block and File tab is not active, navigating to it")
+            self.nav_block_and_file_tab()
 
-        return is_default
+        is_active = self.is_block_and_file_tab()
+        if is_active:
+            self.wait_for_encryption_summary_ready("file_and_block")
+        return is_active
 
     def nav_cephblockpool_verify_statusready(self):
         """
