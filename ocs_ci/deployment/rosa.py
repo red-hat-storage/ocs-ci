@@ -166,7 +166,10 @@ class ROSAOCP(BaseOCPDeployment):
                     )
                     return
                 raise
-            subnet_ids = aws.get_cluster_subnet_ids(cluster_name=self.cluster_name)
+            if rosa_hcp:
+                subnet_ids = rosa.get_rosa_hcp_subnet_ids()
+            else:
+                subnet_ids = aws.get_cluster_subnet_ids(cluster_name=self.cluster_name)
             oidc_endpoint_url = None
             if rosa_hcp:
                 try:
@@ -217,6 +220,11 @@ class ROSAOCP(BaseOCPDeployment):
                 f"{constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
             )
             delete_account_roles(account_roles_prefix)
+            if rosa_hcp and subnet_ids:
+                try:
+                    rosa.clean_stale_subnet_tags(subnet_ids)
+                except Exception as e:
+                    logger.warning(f"Stale subnet tag cleanup failed: {e}")
             logger.info(
                 f"Cluster {self.cluster_name} and associated resources deleted successfully"
             )
