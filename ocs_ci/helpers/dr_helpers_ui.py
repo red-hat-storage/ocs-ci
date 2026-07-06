@@ -801,6 +801,7 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
     standalone=True,
     protection_name=None,
     namespace=None,
+    dr_policy_name=None,
 ):
     """
     This function can be used to check the VM status and assign Data Policy using UI to Discovered VMs
@@ -817,6 +818,8 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
         protection_name (str): Protection name used to DR protect the workload using which
                                 DRPC and Placement would be created
         namespace (str): None by default, namespace of the workload
+        dr_policy_name (str): Name of the DRPolicy to select. When None,
+            the first available policy is selected.
 
 
      Returns:
@@ -939,7 +942,17 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
             if standalone:
                 log.info("Select policy")
                 acm_obj.do_click(acm_loc["dr-policy"], enable_screenshot=True)
-                acm_obj.do_click(acm_loc["select-policy"], enable_screenshot=True)
+                if dr_policy_name:
+                    policy_locator = (
+                        f'//*[text()="{dr_policy_name}"]',
+                        By.XPATH,
+                    )
+                    acm_obj.do_click(policy_locator, enable_screenshot=True)
+                else:
+                    acm_obj.do_click(
+                        acm_loc["select-policy"],
+                        enable_screenshot=True,
+                    )
             log.info("Click next")
             acm_obj.do_click(acm_loc["vm-page-next-btn"], enable_screenshot=True)
             log.info("Verify selected protection type")

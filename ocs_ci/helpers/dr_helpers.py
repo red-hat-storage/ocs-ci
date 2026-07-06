@@ -1626,6 +1626,23 @@ def get_all_drpolicy():
     return return_drpolicy_list
 
 
+def delete_drpolicy(drpolicy_name):
+    """
+    Delete a DRPolicy resource from the hub cluster.
+
+    Args:
+        drpolicy_name (str): Name of the DRPolicy to delete
+
+    """
+    config.switch_acm_ctx()
+    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
+    try:
+        drpolicy_obj.delete(resource_name=drpolicy_name)
+        logger.info(f"DRPolicy {drpolicy_name} deleted")
+    except Exception as ex:
+        logger.warning(f"Failed to delete DRPolicy {drpolicy_name}: {ex}")
+
+
 @retry(UnexpectedBehaviour, tries=5, delay=10, backoff=2)
 def validate_drpolicy_grouping(drpolicy_name=None):
     """
@@ -1846,6 +1863,60 @@ def validate_vgrc_count():
 
     logger.info("VGRC count validation completed successfully")
     return True
+
+
+def validate_vgr_vgrc_binding(namespace, drpc_names):
+    """
+    Validate that each DRPC's VolumeGroupReplication has a bound
+    VolumeGroupReplicationContent and that the VGRC references back
+    to the same VGR (bidirectional check).
+
+    Args:
+        namespace (str): Namespace where the VGRs are created
+        drpc_names (list): List of DRPC resource names to validate
+
+    Raises:
+        AssertionError: If a VGR is missing, has no bound VGRC,
+            or the VGRC references a different VGR (stale binding)
+
+    """
+    vgr_ocp = ocp.OCP(
+        kind=constants.VOLUME_GROUP_REPLICATION,
+        namespace=namespace,
+    )
+    vgrc_ocp = ocp.OCP(kind="VolumeGroupReplicationContent")
+    vgr_items = vgr_ocp.get().get("items", [])
+    vgrc_items = vgrc_ocp.get().get("items", [])
+
+    for drpc_name in drpc_names:
+        matched = [v for v in vgr_items if drpc_name in v["metadata"]["name"]]
+        assert matched, (
+            f"No VGR found for DRPC {drpc_name} in " f"namespace {namespace}"
+        )
+        vgr = matched[0]
+        vgr_name = vgr["metadata"]["name"]
+        vgrc_name = vgr["spec"].get("volumeGroupReplicationContentName", "")
+        assert vgrc_name, (
+            f"VGR {vgr_name} has no bound " f"VolumeGroupReplicationContent"
+        )
+
+        vgrc_match = [v for v in vgrc_items if v["metadata"]["name"] == vgrc_name]
+        assert vgrc_match, (
+            f"VGRC {vgrc_name} referenced by VGR " f"{vgr_name} does not exist"
+        )
+        vgrc_ref = (
+            vgrc_match[0]
+            .get("spec", {})
+            .get("volumeGroupReplicationRef", {})
+            .get("name", "")
+        )
+        assert vgrc_ref == vgr_name, (
+            f"VGRC {vgrc_name} references VGR "
+            f"{vgrc_ref!r} instead of {vgr_name!r} "
+            f"(stale binding)"
+        )
+        logger.info(f"VGR {vgr_name} <-> VGRC {vgrc_name} " f"binding verified")
+    logger.info("VGR-VGRC binding validation completed")
 
 
 def verify_last_group_sync_time(

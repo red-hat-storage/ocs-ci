@@ -1,4 +1,5 @@
 import logging
+import tempfile
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import sleep
@@ -21,7 +22,7 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_replication_resources_creation,
     wait_for_resource_existence,
 )
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.acm.acm import AcmAddClusters, login_to_acm
 from ocs_ci.ocs.ui.base_ui import close_browser
 from ocs_ci.helpers.dr_helpers_ui import (
@@ -33,7 +34,8 @@ from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.templating import load_yaml, dump_data_to_temp_yaml
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, exec_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -90,12 +92,11 @@ class TestACMKubevirtDRIntergration:
         argnames=["protection_type"],
         argvalues=[
             pytest.param(
-                False, id="standalone", marks=pytest.mark.polarion_id("OCS-xxxx")
+                False, id="standalone", marks=pytest.mark.polarion_id("OCS-8047")
             ),
-            pytest.param(True, id="shared", marks=pytest.mark.polarion_id("OCS-yyyy")),
+            pytest.param(True, id="shared", marks=pytest.mark.polarion_id("OCS-8048")),
         ],
     )
-    # TODO: Add Polarion ID when available
     def test_acm_kubevirt_using_different_protection_types(
         self,
         setup_acm_ui,
@@ -558,10 +559,10 @@ class TestACMKubevirtDRIntergration:
         except Exception:
             logger.warning("Browser already closed or crashed, proceeding")
 
-    # TODO: Add Polarion ID when available
-    @pytest.mark.polarion_id("OCS-zzzz")
+    @pytest.mark.polarion_id("OCS-8045")
     def test_acm_kubevirt_mixed_protection_types(
         self,
+        request,
         setup_acm_ui,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
@@ -574,23 +575,34 @@ class TestACMKubevirtDRIntergration:
         can coexist in the same namespace and perform DR operations
         successfully.
 
+        Bug: Granular VM DR is broken
+        ref: https://redhat.atlassian.net/browse/DFBUGS-8039
+
         Test steps:
 
         1. Deploy 4 CNV discovered workloads in a single namespace
            via CLI
-        2. DR protect VMs 1 and 2 as Standalone via ACM UI
-        3. DR protect VM 3 as Shared (tied to VM 1's DRPC)
-        4. DR protect VM 4 as Shared (tied to VM 2's DRPC)
-        5. Write data to all VMs, record md5sums
-        6. Shut down all nodes of the primary managed cluster
-        7. Failover all workloads to the secondary cluster
-        8. Verify data integrity on all VMs after failover
-        9. Recover the down managed cluster and perform cleanup
-        10. Verify all VM statuses via ACM UI after failover
-        11. Relocate all workloads back to the primary cluster
-        12. Verify all VM statuses via ACM UI after relocate
-        13. Validate data integrity after relocate
-        14. Remove DR protection via ACM UI
+        2. Create a second DRPolicy (odr-policy-6m) with a different
+           scheduling interval
+        3. DR protect VM 1 as Standalone with default DRPolicy via
+           ACM UI
+        4. DR protect VM 3 as Shared (tied to VM 1's DRPC)
+        5. DR protect VM 2 as Standalone with odr-policy-6m via
+           ACM UI
+        6. DR protect VM 4 as Shared (tied to VM 2's DRPC)
+        7. Write data to all VMs, record md5sums
+        8. Shut down all nodes of the primary managed cluster
+        9. Failover all workloads to the secondary cluster
+        10. Verify VGR-VGRC binding on secondary cluster
+        11. Verify data integrity on all VMs after failover
+        12. Recover the down managed cluster and perform cleanup
+        13. Verify all VM statuses via ACM UI after failover
+        14. Relocate all workloads back to the primary cluster
+        15. Verify VGR-VGRC binding on primary cluster
+        16. Verify all VM statuses via ACM UI after relocate
+        17. Validate data integrity after relocate
+        18. Remove DR protection via ACM UI
+        19. Delete the second DRPolicy (odr-policy-6m)
 
         """
 
@@ -634,13 +646,46 @@ class TestACMKubevirtDRIntergration:
         ), f"Expected 4 VMs, found {len(all_cnv_workloads)}"
 
         config.switch_acm_ctx()
-        login_to_acm()
         workload_namespace = all_cnv_workloads[0].workload_namespace
         logger.info(f"All VMs deployed in namespace: {workload_namespace}")
-
-        acm_obj = AcmAddClusters()
         primary_cluster_name = all_cnv_workloads[0].preferred_primary_cluster
         logger.info(f"Primary managed cluster name is {primary_cluster_name}")
+
+        # Create a second DRPolicy with a different scheduling interval
+        # so each DRPC uses a distinct policy.
+        logger.test_step("Create second DRPolicy odr-policy-6m")
+        existing_policies = dr_helpers.get_all_drpolicy()
+        dr_clusters = existing_policies[0]["spec"]["drClusters"]
+        dr_policy_6m_name = "odr-policy-6m"
+        dr_policy_data = load_yaml(constants.DR_POLICY_ACM_HUB)
+        dr_policy_data["metadata"]["name"] = dr_policy_6m_name
+        dr_policy_data["spec"]["drClusters"] = dr_clusters
+        dr_policy_data["spec"]["schedulingInterval"] = "6m"
+        dr_policy_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="dr_policy_6m_", delete=False
+        )
+        dump_data_to_temp_yaml(dr_policy_data, dr_policy_yaml.name)
+        exec_cmd(f"oc create -f {dr_policy_yaml.name}")
+        drpolicy_ocp = ocp.OCP(
+            kind=constants.DRPOLICY,
+            resource_name=dr_policy_6m_name,
+        )
+        for sample in TimeoutSampler(
+            timeout=120,
+            sleep=5,
+            func=lambda: drpolicy_ocp.get()
+            .get("status", {})
+            .get("conditions", [{}])[0]
+            .get("reason", ""),
+        ):
+            if sample in constants.DRPOLICY_SUCCESS_REASONS:
+                break
+        logger.info(f"DRPolicy {dr_policy_6m_name} created and validated")
+
+        request.addfinalizer(lambda: dr_helpers.delete_drpolicy(dr_policy_6m_name))
+
+        login_to_acm()
+        acm_obj = AcmAddClusters()
 
         assert navigate_using_fleet_virtualization(acm_obj)
 
@@ -690,8 +735,10 @@ class TestACMKubevirtDRIntergration:
             namespace=workload_namespace,
         )
 
-        # VM 2: Standalone (creates a second independent DRPC)
-        logger.test_step("DR protect VM 2 with Standalone protection")
+        # VM 2: Standalone with odr-policy-6m (creates a second independent DRPC)
+        logger.test_step(
+            "DR protect VM 2 with Standalone protection " f"using {dr_policy_6m_name}"
+        )
         protection_name_2 = f"{workload_namespace}-standalone-2"
         resource_name_2 = f"{protection_name_2}-drpc"
         for attempt in range(3):
@@ -704,6 +751,7 @@ class TestACMKubevirtDRIntergration:
                     standalone=True,
                     protection_name=protection_name_2,
                     namespace=workload_namespace,
+                    dr_policy_name=dr_policy_6m_name,
                 )
                 break
             except (AssertionError, Exception) as e:
@@ -752,11 +800,19 @@ class TestACMKubevirtDRIntergration:
 
         logger.info(f"DRPC resources created: {drpc_resources}")
 
-        # Get scheduling interval from first DRPC
-        scheduling_interval = dr_helpers.get_scheduling_interval(
-            workload_namespace,
-            discovered_apps=True,
-            resource_name=resource_name_1,
+        # Use the larger scheduling interval (6m from DRPC2) to ensure
+        # both DRPCs have completed at least one sync cycle.
+        scheduling_interval = max(
+            dr_helpers.get_scheduling_interval(
+                workload_namespace,
+                discovered_apps=True,
+                resource_name=resource_name_1,
+            ),
+            dr_helpers.get_scheduling_interval(
+                workload_namespace,
+                discovered_apps=True,
+                resource_name=resource_name_2,
+            ),
         )
 
         config.switch_to_cluster_by_name(primary_cluster_name)
@@ -850,14 +906,9 @@ class TestACMKubevirtDRIntergration:
         )
         wait_for_managed_cluster_unreachable(primary_cluster_name)
 
-        # Failover DRPCs one at a time to avoid VGR/VGRC conflicts
-        # when both DRPCs share the same namespace.
-        drpc_vm_map = {
-            resource_name_1: [all_cnv_workloads[0], all_cnv_workloads[2]],
-            resource_name_2: [all_cnv_workloads[1], all_cnv_workloads[3]],
-        }
-        for resource_name, vms in drpc_vm_map.items():
-            logger.test_step(f"Failover {resource_name} to secondary cluster")
+        # Failover all workloads (both DRPCs)
+        logger.test_step("Failover all workloads to secondary cluster")
+        for resource_name in drpc_resources:
             dr_helpers.failover(
                 failover_cluster=secondary_cluster_name,
                 namespace=workload_namespace,
@@ -866,31 +917,45 @@ class TestACMKubevirtDRIntergration:
                 old_primary=primary_cluster_name,
             )
 
-            config.switch_to_cluster_by_name(secondary_cluster_name)
-            pvc_count = sum(wl.workload_pvc_count for wl in vms)
-            pod_count = sum(wl.workload_pod_count for wl in vms)
-            dr_helpers.wait_for_all_resources_creation(
-                pvc_count,
-                pod_count,
-                workload_namespace,
-                timeout=900,
-                discovered_apps=True,
-                vrg_name=resource_name,
-                skip_replication_resources=True,
-            )
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        dr_helpers.wait_for_all_resources_creation(
+            total_pvc_count,
+            total_pod_count,
+            workload_namespace,
+            timeout=1800,
+            discovered_apps=True,
+            vrg_name=resource_name_1,
+            skip_replication_resources=True,
+        )
+
+        for resource_name in drpc_resources:
             wait_for_replication_resources_creation(
-                pvc_count,
+                total_pvc_count,
                 workload_namespace,
                 timeout=900,
                 discovered_apps=True,
                 vrg_name=resource_name,
             )
-            for cnv_wl in vms:
-                dr_helpers.wait_for_cnv_workload(
+
+        # Verify each VGR has a bound VGRC after failover
+        logger.test_step("Verify VGR-VGRC binding on secondary cluster")
+        dr_helpers.validate_vgr_vgrc_binding(workload_namespace, drpc_resources)
+
+        # Wait for all VMs to be running on secondary cluster
+        logger.test_step("Verify all VMs running on secondary cluster")
+        with ThreadPoolExecutor(max_workers=len(all_cnv_workloads)) as executor:
+            futures = {
+                executor.submit(
+                    dr_helpers.wait_for_cnv_workload,
                     vm_name=cnv_wl.vm_name,
                     namespace=workload_namespace,
                     phase=constants.STATUS_RUNNING,
-                )
+                ): cnv_wl
+                for cnv_wl in all_cnv_workloads
+            }
+            for future in as_completed(futures):
+                cnv_wl = futures[future]
+                future.result()
                 logger.info(f"VM {cnv_wl.vm_name} is Running")
 
         # Validating data integrity (file1) after failing-over VMs to secondary managed cluster
@@ -984,75 +1049,86 @@ class TestACMKubevirtDRIntergration:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
-        # Relocate DRPCs one at a time to avoid VGR/VGRC conflicts
-        drpc_relocate_map = {
-            resource_name_1: {
-                "vms": [all_cnv_workloads[0], all_cnv_workloads[2]],
-                "workload_instance": all_cnv_workloads[0],
-                "workload_instances_shared": [
-                    all_cnv_workloads[0],
-                    all_cnv_workloads[2],
-                ],
-            },
-            resource_name_2: {
-                "vms": [all_cnv_workloads[1], all_cnv_workloads[3]],
-                "workload_instance": all_cnv_workloads[1],
-                "workload_instances_shared": [
-                    all_cnv_workloads[1],
-                    all_cnv_workloads[3],
-                ],
-            },
-        }
-        for resource_name, params in drpc_relocate_map.items():
-            logger.test_step(f"Relocate {resource_name} back to primary cluster")
-            dr_helpers.relocate(
-                preferred_cluster=primary_cluster_name,
-                namespace=workload_namespace,
-                workload_placement_name=resource_name,
-                discovered_apps=True,
-                old_primary=secondary_cluster_name,
-                workload_instance=params["workload_instance"],
-                workload_instances_shared=params["workload_instances_shared"],
-            )
+        logger.test_step("Relocate all workloads back to primary cluster")
+        dr_helpers.relocate(
+            preferred_cluster=primary_cluster_name,
+            namespace=workload_namespace,
+            workload_placement_name=resource_name_1,
+            discovered_apps=True,
+            old_primary=secondary_cluster_name,
+            workload_instance=all_cnv_workloads[0],
+            workload_instances_shared=[
+                all_cnv_workloads[0],
+                all_cnv_workloads[2],
+            ],
+        )
+        dr_helpers.relocate(
+            preferred_cluster=primary_cluster_name,
+            namespace=workload_namespace,
+            workload_placement_name=resource_name_2,
+            discovered_apps=True,
+            old_primary=secondary_cluster_name,
+            workload_instance=all_cnv_workloads[1],
+            workload_instances_shared=[
+                all_cnv_workloads[1],
+                all_cnv_workloads[3],
+            ],
+        )
 
+        for resource_name in drpc_resources:
             wait_for_all_resources_deletion(
                 namespace=workload_namespace,
                 discovered_apps=True,
                 vrg_name=resource_name,
             )
 
-            config.switch_acm_ctx()
+        config.switch_acm_ctx()
+        for resource_name in drpc_resources:
             drpc_obj = DRPC(
                 namespace=constants.DR_OPS_NAMESPACE,
                 resource_name=resource_name,
             )
             drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
-            config.switch_to_cluster_by_name(primary_cluster_name)
-            pvc_count = sum(wl.workload_pvc_count for wl in params["vms"])
-            pod_count = sum(wl.workload_pod_count for wl in params["vms"])
-            dr_helpers.wait_for_all_resources_creation(
-                pvc_count,
-                pod_count,
-                workload_namespace,
-                timeout=900,
-                discovered_apps=True,
-                vrg_name=resource_name,
-                skip_replication_resources=True,
-            )
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        dr_helpers.wait_for_all_resources_creation(
+            total_pvc_count,
+            total_pod_count,
+            workload_namespace,
+            timeout=1800,
+            discovered_apps=True,
+            vrg_name=resource_name_1,
+            skip_replication_resources=True,
+        )
+
+        for resource_name in drpc_resources:
             wait_for_replication_resources_creation(
-                pvc_count,
+                total_pvc_count,
                 workload_namespace,
                 timeout=900,
                 discovered_apps=True,
                 vrg_name=resource_name,
             )
-            for cnv_wl in params["vms"]:
-                dr_helpers.wait_for_cnv_workload(
+
+        # Verify each VGR has a bound VGRC after relocate
+        logger.test_step("Verify VGR-VGRC binding on primary cluster")
+        dr_helpers.validate_vgr_vgrc_binding(workload_namespace, drpc_resources)
+
+        # Wait for all VMs to be running on primary cluster
+        logger.info("Waiting for all VMs to reach Running state " "on primary cluster")
+        with ThreadPoolExecutor(max_workers=len(all_cnv_workloads)) as executor:
+            futures = {
+                executor.submit(
+                    dr_helpers.wait_for_cnv_workload,
                     vm_name=cnv_wl.vm_name,
                     namespace=workload_namespace,
                     phase=constants.STATUS_RUNNING,
-                )
+                ): cnv_wl
+                for cnv_wl in all_cnv_workloads
+            }
+            for future in as_completed(futures):
+                cnv_wl = futures[future]
+                future.result()
                 logger.info(f"VM {cnv_wl.vm_name} is Running")
 
         config.switch_acm_ctx()
@@ -1177,8 +1253,7 @@ class TestACMKubevirtDRIntergration:
             f"DRPC groups: {protection_name_1}, {protection_name_2}"
         )
 
-    # TODO: Add Polarion ID when available
-    @pytest.mark.polarion_id("OCS-wwww")
+    @pytest.mark.polarion_id("OCS-8046")
     def test_acm_kubevirt_remove_all_shared_protection_vms(
         self,
         setup_acm_ui,
