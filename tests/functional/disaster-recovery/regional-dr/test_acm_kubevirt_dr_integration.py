@@ -850,9 +850,14 @@ class TestACMKubevirtDRIntergration:
         )
         wait_for_managed_cluster_unreachable(primary_cluster_name)
 
-        # Failover all workloads (both DRPCs)
-        logger.test_step("Failover all workloads to secondary cluster")
-        for resource_name in drpc_resources:
+        # Failover DRPCs one at a time to avoid VGR/VGRC conflicts
+        # when both DRPCs share the same namespace.
+        drpc_vm_map = {
+            resource_name_1: [all_cnv_workloads[0], all_cnv_workloads[2]],
+            resource_name_2: [all_cnv_workloads[1], all_cnv_workloads[3]],
+        }
+        for resource_name, vms in drpc_vm_map.items():
+            logger.test_step(f"Failover {resource_name} to secondary cluster")
             dr_helpers.failover(
                 failover_cluster=secondary_cluster_name,
                 namespace=workload_namespace,
@@ -861,44 +866,31 @@ class TestACMKubevirtDRIntergration:
                 old_primary=primary_cluster_name,
             )
 
-        config.switch_to_cluster_by_name(secondary_cluster_name)
-        # 1800s: two DRPCs fail over sequentially so DRPC2's VMs start up
-        # to 360s after DRPC1's, leaving too little of the default 900s
-        # window for all four pods to reach Running state.
-        dr_helpers.wait_for_all_resources_creation(
-            total_pvc_count,
-            total_pod_count,
-            workload_namespace,
-            timeout=1800,
-            discovered_apps=True,
-            vrg_name=resource_name_1,
-            skip_replication_resources=True,
-        )
-
-        for resource_name in drpc_resources:
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            pvc_count = sum(wl.workload_pvc_count for wl in vms)
+            pod_count = sum(wl.workload_pod_count for wl in vms)
+            dr_helpers.wait_for_all_resources_creation(
+                pvc_count,
+                pod_count,
+                workload_namespace,
+                timeout=900,
+                discovered_apps=True,
+                vrg_name=resource_name,
+                skip_replication_resources=True,
+            )
             wait_for_replication_resources_creation(
-                total_pvc_count,
+                pvc_count,
                 workload_namespace,
                 timeout=900,
                 discovered_apps=True,
                 vrg_name=resource_name,
             )
-
-        # Wait for all VMs to be running on secondary cluster concurrently
-        logger.test_step("Verify all VMs running on secondary cluster")
-        with ThreadPoolExecutor(max_workers=len(all_cnv_workloads)) as executor:
-            futures = {
-                executor.submit(
-                    dr_helpers.wait_for_cnv_workload,
+            for cnv_wl in vms:
+                dr_helpers.wait_for_cnv_workload(
                     vm_name=cnv_wl.vm_name,
                     namespace=workload_namespace,
                     phase=constants.STATUS_RUNNING,
-                ): cnv_wl
-                for cnv_wl in all_cnv_workloads
-            }
-            for future in as_completed(futures):
-                cnv_wl = futures[future]
-                future.result()
+                )
                 logger.info(f"VM {cnv_wl.vm_name} is Running")
 
         # Validating data integrity (file1) after failing-over VMs to secondary managed cluster
@@ -992,79 +984,75 @@ class TestACMKubevirtDRIntergration:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
-        logger.test_step("Relocate all workloads back to primary cluster")
-        # Relocate workloads for first DRPC (VM 1 and VM 3)
-        dr_helpers.relocate(
-            preferred_cluster=primary_cluster_name,
-            namespace=workload_namespace,
-            workload_placement_name=resource_name_1,
-            discovered_apps=True,
-            old_primary=secondary_cluster_name,
-            workload_instance=all_cnv_workloads[0],
-            workload_instances_shared=[all_cnv_workloads[0], all_cnv_workloads[2]],
-        )
+        # Relocate DRPCs one at a time to avoid VGR/VGRC conflicts
+        drpc_relocate_map = {
+            resource_name_1: {
+                "vms": [all_cnv_workloads[0], all_cnv_workloads[2]],
+                "workload_instance": all_cnv_workloads[0],
+                "workload_instances_shared": [
+                    all_cnv_workloads[0],
+                    all_cnv_workloads[2],
+                ],
+            },
+            resource_name_2: {
+                "vms": [all_cnv_workloads[1], all_cnv_workloads[3]],
+                "workload_instance": all_cnv_workloads[1],
+                "workload_instances_shared": [
+                    all_cnv_workloads[1],
+                    all_cnv_workloads[3],
+                ],
+            },
+        }
+        for resource_name, params in drpc_relocate_map.items():
+            logger.test_step(f"Relocate {resource_name} back to primary cluster")
+            dr_helpers.relocate(
+                preferred_cluster=primary_cluster_name,
+                namespace=workload_namespace,
+                workload_placement_name=resource_name,
+                discovered_apps=True,
+                old_primary=secondary_cluster_name,
+                workload_instance=params["workload_instance"],
+                workload_instances_shared=params["workload_instances_shared"],
+            )
 
-        # Relocate workloads for second DRPC (VM 2 and VM 4)
-        dr_helpers.relocate(
-            preferred_cluster=primary_cluster_name,
-            namespace=workload_namespace,
-            workload_placement_name=resource_name_2,
-            discovered_apps=True,
-            old_primary=secondary_cluster_name,
-            workload_instance=all_cnv_workloads[1],
-            workload_instances_shared=[all_cnv_workloads[1], all_cnv_workloads[3]],
-        )
-
-        # Verify cleanup after relocate
-        for resource_name in drpc_resources:
             wait_for_all_resources_deletion(
                 namespace=workload_namespace,
                 discovered_apps=True,
                 vrg_name=resource_name,
             )
 
-        config.switch_acm_ctx()
-        for resource_name in drpc_resources:
+            config.switch_acm_ctx()
             drpc_obj = DRPC(
-                namespace=constants.DR_OPS_NAMESPACE, resource_name=resource_name
+                namespace=constants.DR_OPS_NAMESPACE,
+                resource_name=resource_name,
             )
             drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        dr_helpers.wait_for_all_resources_creation(
-            total_pvc_count,
-            total_pod_count,
-            workload_namespace,
-            timeout=1800,
-            discovered_apps=True,
-            vrg_name=resource_name_1,
-            skip_replication_resources=True,
-        )
-
-        for resource_name in drpc_resources:
+            config.switch_to_cluster_by_name(primary_cluster_name)
+            pvc_count = sum(wl.workload_pvc_count for wl in params["vms"])
+            pod_count = sum(wl.workload_pod_count for wl in params["vms"])
+            dr_helpers.wait_for_all_resources_creation(
+                pvc_count,
+                pod_count,
+                workload_namespace,
+                timeout=900,
+                discovered_apps=True,
+                vrg_name=resource_name,
+                skip_replication_resources=True,
+            )
             wait_for_replication_resources_creation(
-                total_pvc_count,
+                pvc_count,
                 workload_namespace,
                 timeout=900,
                 discovered_apps=True,
                 vrg_name=resource_name,
             )
-
-        # Wait for all VMs to be running on primary cluster concurrently
-        logger.info("Waiting for all VMs to reach Running state on primary cluster")
-        with ThreadPoolExecutor(max_workers=len(all_cnv_workloads)) as executor:
-            futures = {
-                executor.submit(
-                    dr_helpers.wait_for_cnv_workload,
+            for cnv_wl in params["vms"]:
+                dr_helpers.wait_for_cnv_workload(
                     vm_name=cnv_wl.vm_name,
                     namespace=workload_namespace,
                     phase=constants.STATUS_RUNNING,
-                ): cnv_wl
-                for cnv_wl in all_cnv_workloads
-            }
-            for future in as_completed(futures):
-                cnv_wl = futures[future]
-                future.result()
+                )
                 logger.info(f"VM {cnv_wl.vm_name} is Running")
 
         config.switch_acm_ctx()
