@@ -11,6 +11,7 @@ from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.helpers.dr_helpers import (
     check_mirroring_status_for_custom_pool,
+    validate_drpolicy_replication_ids,
     verify_custom_pool_image_isolation,
 )
 from ocs_ci.ocs import constants
@@ -79,12 +80,28 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     ):
         """
         Tests to verify cnv application failover and Relocate with Discovered Apps
-        There are two test cases:
-            1) Failover to secondary cluster when primary cluster is down. Primary managed cluster is failed
-            before failover operation and recovered after successful failover.
-            2) Relocate back to primary
 
-        Test is parametrized to run with Custom RBD Storage Class and Pool of Replica-2.
+        Test steps:
+            1. Create custom CephBlockPool, StorageClass, and DRPolicy
+               (custom_sc parametrized cases only)
+            2. Validate groupreplicationID: SC labels match DRPolicy
+               peerClasses and SCs from different pools have unique IDs
+            3. Deploy CNV discovered app workloads
+            4. Write initial data to VMs and record checksums
+            5. Verify RBD image isolation and mirroring status for
+               custom pool (custom_sc cases only)
+            6. Shutdown primary managed cluster nodes
+            7. Failover workloads to the secondary cluster
+            8. Verify resources and data integrity after failover
+            9. Recover the primary managed cluster
+            10. Relocate workloads back to the primary cluster
+            11. Verify resources and data integrity after relocate
+
+        Test is parametrized to run with default and custom RBD
+        StorageClass/Pool with varying replica and compression settings.
+
+        Also validates DFBUGS-8114: SCs from different blockpools must
+        have unique groupreplicationID values in DRPolicy peerClasses.
 
         """
 
@@ -100,6 +117,14 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             )
             custom_dr_policy_name = cnv_custom_storage_class(
                 replica=replica, compression=compression
+            )
+            logger.test_step("Validate groupreplicationID for default and custom SCs")
+            validate_drpolicy_replication_ids(
+                drpolicy_name=custom_dr_policy_name,
+                sc_names=[
+                    constants.DEFAULT_STORAGECLASS_RBD,
+                    constants.RDR_CUSTOM_RBD_STORAGECLASS,
+                ],
             )
 
         logger.test_step("Deploy CNV discovered app workloads")

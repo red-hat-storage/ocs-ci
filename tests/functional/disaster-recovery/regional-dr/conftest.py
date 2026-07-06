@@ -300,7 +300,10 @@ def cnv_custom_storage_class(
                 log.error(f"Error creating SC '{sc_name}' on {cluster_name}: {e}")
                 raise
 
-        from ocs_ci.helpers.dr_helpers import get_all_drpolicy
+        from ocs_ci.helpers.dr_helpers import (
+            get_all_drpolicy,
+            validate_drpolicy_replication_ids,
+        )
 
         dr_policy_name = constants.RDR_CUSTOM_RBD_DR_POLICY
 
@@ -348,6 +351,14 @@ def cnv_custom_storage_class(
                     f"DRPolicy {dr_policy_name}" f" peerClasses now includes {sc_name}"
                 )
                 break
+
+        log.test_step(
+            "Validate groupreplicationID values across default and custom SCs"
+        )
+        validate_drpolicy_replication_ids(
+            drpolicy_name=dr_policy_name,
+            sc_names=[constants.DEFAULT_STORAGECLASS_RBD, sc_name],
+        )
 
         config.reset_ctx()
         return dr_policy_name
