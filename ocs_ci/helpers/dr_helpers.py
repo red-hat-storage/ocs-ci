@@ -1731,65 +1731,74 @@ def validate_drpolicy_replication_ids(drpolicy_name, sc_names):
             unique across different pools.
 
     """
-    config.switch_acm_ctx()
-    drpolicy_ocp = ocp.OCP(
-        kind=constants.DRPOLICY,
-        resource_name=drpolicy_name,
-    )
-    drpolicy_data = drpolicy_ocp.get()
-    peer_classes = (
-        drpolicy_data.get("status", {}).get("async", {}).get("peerClasses", [])
-    )
-    pc_by_sc = {
-        pc["storageClassName"]: pc
-        for pc in peer_classes
-        if pc.get("storageClassName") in sc_names
-    }
-
-    missing = set(sc_names) - set(pc_by_sc.keys())
-    if missing:
-        raise UnexpectedBehaviour(
-            f"StorageClasses {missing} not found in DRPolicy"
-            f" {drpolicy_name} peerClasses"
+    restore_index = config.cur_index
+    try:
+        config.switch_acm_ctx()
+        drpolicy_ocp = ocp.OCP(
+            kind=constants.DRPOLICY,
+            resource_name=drpolicy_name,
         )
+        drpolicy_data = drpolicy_ocp.get()
+        peer_classes = (
+            drpolicy_data.get("status", {}).get("async", {}).get("peerClasses", [])
+        )
+        pc_by_sc = {
+            pc["storageClassName"]: pc
+            for pc in peer_classes
+            if pc.get("storageClassName") in sc_names
+        }
 
-    group_rep_ids = {}
-    for sc_name in sc_names:
-        pc = pc_by_sc[sc_name]
-        pc_group_rep_id = pc.get("groupreplicationID")
-        if not pc_group_rep_id:
+        missing = set(sc_names) - set(pc_by_sc.keys())
+        if missing:
+            raise UnexpectedBehaviour(
+                f"StorageClasses {missing} not found in DRPolicy"
+                f" {drpolicy_name} peerClasses"
+            )
+
+        # Switch to a managed cluster to read SC labels
+        managed_clusters = get_non_acm_cluster_config()
+        config.switch_ctx(managed_clusters[0].MULTICLUSTER["multicluster_index"])
+
+        group_rep_ids = {}
+        for sc_name in sc_names:
+            pc = pc_by_sc[sc_name]
+            pc_group_rep_id = pc.get("groupreplicationID")
+            if not pc_group_rep_id:
+                logger.info(
+                    f"No groupreplicationID in peerClass for SC" f" {sc_name}, skipping"
+                )
+                continue
+
+            sc_ocp = ocp.OCP(kind=constants.STORAGECLASS)
+            sc_data = sc_ocp.get(resource_name=sc_name)
+            sc_labels = sc_data.get("metadata", {}).get("labels", {})
+            sc_group_rep_id = sc_labels.get(constants.RAMEN_GROUP_REPLICATION_ID_LABEL)
+
+            if sc_group_rep_id != pc_group_rep_id:
+                raise UnexpectedBehaviour(
+                    f"SC {sc_name} label groupreplicationid"
+                    f" ({sc_group_rep_id}) does not match DRPolicy"
+                    f" peerClass value ({pc_group_rep_id})"
+                )
             logger.info(
-                f"No groupreplicationID in peerClass for SC" f" {sc_name}, skipping"
+                f"SC {sc_name} groupreplicationID matches DRPolicy"
+                f" peerClass: {pc_group_rep_id}"
             )
-            continue
+            group_rep_ids[sc_name] = pc_group_rep_id
 
-        sc_ocp = ocp.OCP(kind=constants.STORAGECLASS)
-        sc_data = sc_ocp.get(resource_name=sc_name)
-        sc_labels = sc_data.get("metadata", {}).get("labels", {})
-        sc_group_rep_id = sc_labels.get(constants.RAMEN_GROUP_REPLICATION_ID_LABEL)
-
-        if sc_group_rep_id != pc_group_rep_id:
-            raise UnexpectedBehaviour(
-                f"SC {sc_name} label groupreplicationid"
-                f" ({sc_group_rep_id}) does not match DRPolicy"
-                f" peerClass value ({pc_group_rep_id})"
+        if len(group_rep_ids) >= 2:
+            unique_ids = set(group_rep_ids.values())
+            if len(unique_ids) < len(group_rep_ids):
+                raise UnexpectedBehaviour(
+                    f"SCs from different pools share the same"
+                    f" groupreplicationID: {group_rep_ids}"
+                )
+            logger.info(
+                f"Verified SCs have unique groupreplicationID"
+                f" values: {group_rep_ids}"
             )
-        logger.info(
-            f"SC {sc_name} groupreplicationID matches DRPolicy"
-            f" peerClass: {pc_group_rep_id}"
-        )
-        group_rep_ids[sc_name] = pc_group_rep_id
-
-    if len(group_rep_ids) >= 2:
-        unique_ids = set(group_rep_ids.values())
-        if len(unique_ids) < len(group_rep_ids):
-            raise UnexpectedBehaviour(
-                f"SCs from different pools share the same"
-                f" groupreplicationID: {group_rep_ids}"
-            )
-        logger.info(
-            f"Verified SCs have unique groupreplicationID" f" values: {group_rep_ids}"
-        )
+    finally:
+        config.switch_ctx(restore_index)
 
     return True
 
