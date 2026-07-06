@@ -93,7 +93,7 @@ class TestVirtSCAutoProvisioning:
                 func=self.sc_handler.is_exist,
                 resource_name=self.virt_sc_name,
             )
-            if not sampler.wait_for_func_status(True):
+            if not sampler.wait_for_func_status(result=True):
                 pytest.fail(
                     f"Failure: {self.virt_sc_name} was not automatically provisioned."
                 )
@@ -112,15 +112,23 @@ class TestVirtSCAutoProvisioning:
                 log.info(f"Waiting for VM {vm_name} to reach Running status...")
                 vm_obj.wait_for_vm_status(status=constants.VM_RUNNING, timeout=300)
             finally:
-                log.info(f"Cleaning up VM resources in {vm_namespace}...")
+                log.info("Cleaning up VM resources in namespace: %s", vm_namespace)
+                cleanup_exception = None
+
                 try:
                     vm_obj.delete()
                 except Exception as e:
-                    log.warning(f"VM deletion failed: {e}")
+                    log.error("VM workload deletion resource trace failed: %s", str(e))
+                    cleanup_exception = e
+
                 ns_handler = ocp.OCP(kind=constants.NAMESPACE)
                 if ns_handler.is_exist(resource_name=vm_namespace):
                     ns_handler.delete(resource_name=vm_namespace)
                     ns_handler.wait_for_delete(resource_name=vm_namespace, timeout=300)
+
+                # If a VM deletion anomaly occurred, raise it to fail the testcase execution explicitly
+                if cleanup_exception:
+                    raise cleanup_exception
         else:
             log.info(
                 "Validating that Virt SC does not exist when Virtualization is disabled."
@@ -141,16 +149,31 @@ class TestVirtSCAutoProvisioning:
                 "Virtualization not enabled on this deployment template. Skipping testcase."
             )
 
+        # STABILITY IMPROVEMENT: Pre-validate existence baseline to avoid race conditions
+        pre_sampler = TimeoutSampler(
+            timeout=420,
+            sleep=15,
+            func=self.sc_handler.is_exist,
+            resource_name=self.virt_sc_name,
+        )
+        if not pre_sampler.wait_for_func_status(result=True):
+            pytest.fail(
+                f"Precondition Failed: {self.virt_sc_name} did not appear during initial stabilization window."
+            )
+
+        # Execute test mutation step
         self.sc_handler.delete(resource_name=self.virt_sc_name)
-        sampler = TimeoutSampler(
+
+        post_sampler = TimeoutSampler(
             timeout=180,
             sleep=15,
             func=self.sc_handler.is_exist,
             resource_name=self.virt_sc_name,
         )
-        assert sampler.wait_for_func_status(
-            True
+        assert post_sampler.wait_for_func_status(
+            result=True
         ), f"Testcase Failed: The operator did not re-create {self.virt_sc_name} after manual deletion."
+
         log.info(
             f"Self-healing verified successfully: {self.virt_sc_name} was restored automatically."
         )
