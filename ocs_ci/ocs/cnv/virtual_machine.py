@@ -762,7 +762,8 @@ chpasswd:
                     resource_name=self.pvc_obj.name, timeout=180
                 )
                 # Clean up backing PV (handles Retain policy Released PVs)
-                # PV may already be deleted by PVC (Delete reclaim policy) - check first
+                # PV may already be deleted by PVC (Delete reclaim policy).
+                # Reload the PV and gracefully handle the race if it no longer exists.
 
                 try:
                     self.pv_obj.reload()
@@ -793,11 +794,19 @@ chpasswd:
                     resource_name=self.dv_obj.name, timeout=300
                 )
                 # Clean up backing PV (handles Retain policy Released PVs)
-                # PV may already be deleted (Delete reclaim policy) - check first
-                if (
-                    self.dv_pv.ocp.get(resource_name=self.dv_pv.name, dont_raise=True)
-                    is not None
-                ):
+                # PV may already be deleted by PVC (Delete reclaim policy).
+                # Reload the PV and gracefully handle the race if it no longer exists.
+                try:
+                    self.dv_pv.reload()
+                except CommandFailed as ex:
+                    if "not found" in str(ex).lower():
+                        logger.info(
+                            "PV %s already deleted. Skipping PV cleanup.",
+                            self.dv_pv.name,
+                        )
+                    else:
+                        raise
+                else:
                     delete_pv_with_force_and_finalizers(self.dv_pv, timeout=600)
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
