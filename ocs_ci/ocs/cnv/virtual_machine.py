@@ -736,6 +736,26 @@ chpasswd:
         """
         return self.get().get("status").get("printableStatus")
 
+    def _cleanup_backing_pv(self, pv_obj):
+        """
+        Clean up the backing PV.
+
+        Handles the case where the PV was already deleted due to the
+        Delete reclaim policy before VM teardown reaches it.
+        """
+        try:
+            pv_obj.reload()
+        except CommandFailed as ex:
+            if "not found" in str(ex).lower():
+                logger.info(
+                    "PV %s already deleted. Skipping PV cleanup.",
+                    pv_obj.name,
+                )
+            else:
+                raise
+        else:
+            delete_pv_with_force_and_finalizers(pv_obj, timeout=600)
+
     def delete(self):
         """
         Delete the VirtualMachine
@@ -762,21 +782,8 @@ chpasswd:
                     resource_name=self.pvc_obj.name, timeout=180
                 )
                 # Clean up backing PV (handles Retain policy Released PVs)
-                # PV may already be deleted by PVC (Delete reclaim policy).
-                # Reload the PV and gracefully handle the race if it no longer exists.
+                self._cleanup_backing_pv(self.pv_obj)
 
-                try:
-                    self.pv_obj.reload()
-                except CommandFailed as ex:
-                    if "not found" in str(ex).lower():
-                        logger.info(
-                            "PV %s already deleted. Skipping PV cleanup.",
-                            self.pv_obj.name,
-                        )
-                    else:
-                        raise
-                else:
-                    delete_pv_with_force_and_finalizers(self.pv_obj, timeout=600)
             if self.volumeimportsource_obj:
                 self.volumeimportsource_obj.delete()
         elif self.volume_interface == constants.VM_VOLUME_DV:
@@ -794,20 +801,7 @@ chpasswd:
                     resource_name=self.dv_obj.name, timeout=300
                 )
                 # Clean up backing PV (handles Retain policy Released PVs)
-                # PV may already be deleted by PVC (Delete reclaim policy).
-                # Reload the PV and gracefully handle the race if it no longer exists.
-                try:
-                    self.dv_pv.reload()
-                except CommandFailed as ex:
-                    if "not found" in str(ex).lower():
-                        logger.info(
-                            "PV %s already deleted. Skipping PV cleanup.",
-                            self.dv_pv.name,
-                        )
-                    else:
-                        raise
-                else:
-                    delete_pv_with_force_and_finalizers(self.dv_pv, timeout=600)
+                self._cleanup_backing_pv(self.dv_pv)
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
 
