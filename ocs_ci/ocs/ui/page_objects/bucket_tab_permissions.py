@@ -116,7 +116,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             bucket_name (str): Name of the bucket to get account ID for.
 
         Returns:
-            str: Real account ID associated with the bucket.
+            str: Real account ID (or ARN, on OCS >= 4.21) associated with the bucket.
 
         Raises:
             ValueError: If bucket is not found or account ID cannot be retrieved.
@@ -128,8 +128,8 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                     continue
 
                 obc_obj = OBC(obc["metadata"]["name"])
-                if hasattr(obc_obj, "obc_account") and obc_obj.obc_account:
-                    return obc_obj.obc_account
+                if obc_obj.id_for_policy_principal:
+                    return obc_obj.id_for_policy_principal
 
                 break
 

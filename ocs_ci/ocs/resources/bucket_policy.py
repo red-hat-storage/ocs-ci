@@ -274,9 +274,9 @@ def gen_bucket_policy_ui_compatible(
         # Public access: use direct wildcard
         principals = "*"
     elif isinstance(user_list, str):
-        # Check if it's a NooBaa account (contains @noobaa.io)
-        if "@noobaa.io" in user_list:
-            # NooBaa accounts should not be wrapped in AWS ARN format
+        # Check if it's a NooBaa account (contains @noobaa.io) or already a full ARN
+        if "@noobaa.io" in user_list or user_list.startswith("arn:"):
+            # NooBaa accounts and ARNs should not be wrapped in AWS ARN format
             principals = {"AWS": user_list}
         else:
             # AWS account: wrap in AWS ARN format
@@ -284,8 +284,8 @@ def gen_bucket_policy_ui_compatible(
     elif isinstance(user_list, list) and len(user_list) == 1:
         # Single account passed as list
         account = user_list[0]
-        if "@noobaa.io" in account:
-            # NooBaa account: use directly
+        if "@noobaa.io" in account or account.startswith("arn:"):
+            # NooBaa account or ARN: use directly
             principals = {"AWS": account}
         else:
             # AWS account: wrap in ARN format
@@ -294,8 +294,8 @@ def gen_bucket_policy_ui_compatible(
         # Multiple accounts: handle each appropriately
         formatted_accounts = []
         for account in user_list:
-            if "@noobaa.io" in account:
-                # NooBaa account: use directly
+            if "@noobaa.io" in account or account.startswith("arn:"):
+                # NooBaa account or ARN: use directly
                 formatted_accounts.append(account)
             else:
                 # AWS account: wrap in ARN format
