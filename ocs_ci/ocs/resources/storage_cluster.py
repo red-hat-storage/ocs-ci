@@ -1507,6 +1507,23 @@ def verify_storage_cluster_version(storage_cluster):
                     raise e
 
 
+def get_cephcluster_storage_spec() -> Optional[dict]:
+    """
+    Fetch the CephCluster CR and return its spec.storage section.
+
+    Returns:
+        dict: The spec.storage section, or None if the key path is missing.
+
+    """
+    cephcluster = OCP(
+        kind="CephCluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CEPH_CLUSTER_NAME,
+    )
+    resource = cephcluster.get()
+    return resource.get("spec", {}).get("storage")
+
+
 def verify_storage_device_class(
     device_class,
     check_multiple_deviceclasses=False,
