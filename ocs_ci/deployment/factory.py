@@ -79,6 +79,7 @@ class DeploymentFactory(object):
             self.cls_map["powervs_upi"] = IBMDeployment
         elif self.deployment_platform in constants.BAREMETAL_PLATFORMS:
             from .baremetal import BAREMETALUPI, BAREMETALAI, BaremetalPSIUPI
+            from .tnf import TNFOCPDeployment, TNFDeployment
 
             self.cls_map.update(
                 {
@@ -86,6 +87,8 @@ class DeploymentFactory(object):
                     "baremetal_upi": BAREMETALUPI,
                     "baremetal_ai": BAREMETALAI,
                     "hci_baremetal_ai": BAREMETALAI,
+                    "baremetal_tnf": TNFOCPDeployment,
+                    "baremetal_tnf_odf": TNFDeployment,
                 }
             )
         elif self.deployment_platform == constants.OPENSHIFT_DEDICATED_PLATFORM:

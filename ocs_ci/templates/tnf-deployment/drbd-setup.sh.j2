@@ -1,0 +1,50 @@
+#!/bin/bash
+# DRBD setup script for two-node OpenShift Data Foundation deployment
+# This script configures DRBD for the floating monitor
+
+set -euo pipefail
+
+# Configuration
+DRBD_CONF_PATH="{{ drbd_conf_path | default('/etc/drbd.conf') }}"
+DRBD_DIR_PATH="{{ drbd_dir_path | default('/etc/drbd.d') }}"
+DRBD_RESOURCE_NAME="{{ drbd_resource_name | default('r0') }}"
+DRBD_DEVICE_NAME="{{ drbd_device_name | default('/dev/drbd0') }}"
+DRBD_PORT="{{ drbd_port | default('7794') }}"
+NODE_0_NAME="{{ node_0_name }}"
+NODE_0_IP="{{ node_0_ip }}"
+NODE_1_NAME="{{ node_1_name }}"
+NODE_1_IP="{{ node_1_ip }}"
+DISK_BY_ID_NODE_0="{{ disk_by_id_node_0 }}"
+DISK_BY_ID_NODE_1="{{ disk_by_id_node_1 }}"
+NAMESPACE="{{ namespace | default('openshift-storage') }}"
+
+echo "Configuring DRBD for two-node ODF deployment..."
+
+# Create DRBD configuration ConfigMap
+cat <<EOF | oc apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: drbd-configure
+  namespace: ${NAMESPACE}
+data:
+  BLOCK_DEVICE_PATH_NODE_0: "${DISK_BY_ID_NODE_0}"
+  BLOCK_DEVICE_PATH_NODE_1: "${DISK_BY_ID_NODE_1}"
+  DISK_BY_ID_NODE_0: "${DISK_BY_ID_NODE_0}"
+  DISK_BY_ID_NODE_1: "${DISK_BY_ID_NODE_1}"
+  DRBD_CONF_PATH: "${DRBD_CONF_PATH}"
+  DRBD_DEVICE_NAME: "${DRBD_DEVICE_NAME}"
+  DRBD_DIR_PATH: "${DRBD_DIR_PATH}"
+  DRBD_PORT: "${DRBD_PORT}"
+  DRBD_RESOURCE_NAME: "${DRBD_RESOURCE_NAME}"
+  DRBD_UTILS_IMAGE: "{{ drbd_utils_image | default('registry.redhat.io/odf4/odf-drbd-rhel9:latest') }}"
+  DRBD_VERSION: "9.2.18"
+  NODE_0_IP: "${NODE_0_IP}"
+  NODE_0_NAME: "${NODE_0_NAME}"
+  NODE_1_IP: "${NODE_1_IP}"
+  NODE_1_NAME: "${NODE_1_NAME}"
+  SETUP_TIMESTAMP: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+EOF
+
+echo "DRBD configuration completed successfully"
+echo "ConfigMap 'drbd-configure' created in namespace '${NAMESPACE}'"
