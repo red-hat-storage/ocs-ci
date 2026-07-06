@@ -1030,18 +1030,26 @@ def get_ready_consumers_names():
     return [consumer.name for consumer in ready_consumers]
 
 
-def find_consumer_for_storage_client(storage_client_name):
+def find_consumer_for_storage_client(storage_client_name, client_cluster_name=None):
     """
-    Find the StorageConsumer CR on the provider that owns ``storage_client_name``.
+    Find the StorageConsumer CR on the provider that owns
+    ``storage_client_name``.
 
     Must be called within an active provider config context.
 
     Args:
-        storage_client_name (str): StorageClient CR name on the client cluster.
+        storage_client_name (str): StorageClient CR name on the client
+            cluster.
+        client_cluster_name (str or None): When multiple consumers share
+            the same storage-client name, pass the client cluster name
+            (e.g. ``config.ENV_DATA["cluster_name"]``) to disambiguate.
+            The value is matched against the prefix of the consumer's
+            ``status.client.clusterName`` field.  When ``None`` the first
+            name-only match is returned (original behaviour).
 
     Returns:
-        tuple[str, dict]: ``(consumer_name, consumer_data)`` for the matching
-            StorageConsumer.
+        tuple[str, dict]: ``(consumer_name, consumer_data)`` for the
+            matching StorageConsumer.
 
     Raises:
         AssertionError: If no matching StorageConsumer is found.
@@ -1050,17 +1058,22 @@ def find_consumer_for_storage_client(storage_client_name):
     consumer_ocp = ocp.OCP(kind=constants.STORAGECONSUMER, namespace=consumer_ns)
     for name in get_consumer_names():
         consumer_data = consumer_ocp.get(resource_name=name)
-        if (
-            consumer_data.get("status", {}).get("client", {}).get("name")
-            == storage_client_name
-        ):
-            return name, consumer_data
+        client_info = consumer_data.get("status", {}).get("client", {})
+        if client_info.get("name") != storage_client_name:
+            continue
+        if client_cluster_name:
+            cluster_name_field = client_info.get("clusterName", "")
+            if not cluster_name_field.startswith(client_cluster_name + "."):
+                continue
+        return name, consumer_data
     raise AssertionError(
-        f"No StorageConsumer found for storage client '{storage_client_name}'"
+        f"No StorageConsumer found for storage client "
+        f"'{storage_client_name}'"
+        + (f" on cluster '{client_cluster_name}'" if client_cluster_name else "")
     )
 
 
-def get_consumer_svg_on_provider(storage_client_name):
+def get_consumer_svg_on_provider(storage_client_name, client_cluster_name=None):
     """
     Return the CephFS subvolume group name for a storage client on the
     provider cluster.
@@ -1071,6 +1084,9 @@ def get_consumer_svg_on_provider(storage_client_name):
     Args:
         storage_client_name (str): StorageClient CR name on the client
             cluster.
+        client_cluster_name (str or None): Pass ``config.ENV_DATA["cluster_name"]``
+            from the client context when multiple consumers share the same
+            storage-client name, to ensure the correct consumer is found.
 
     Returns:
         str: Subvolume group name on the provider cluster.
@@ -1078,7 +1094,10 @@ def get_consumer_svg_on_provider(storage_client_name):
     Raises:
         AssertionError: If no matching StorageConsumer is found.
     """
-    consumer_name, _ = find_consumer_for_storage_client(storage_client_name)
+    consumer_name, _ = find_consumer_for_storage_client(
+        storage_client_name,
+        client_cluster_name=client_cluster_name,
+    )
     # The CephFS subvolume group name on the provider equals the
     # StorageConsumer CR name (this mapping may change in future versions).
     return consumer_name
