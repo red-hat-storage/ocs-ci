@@ -1,4 +1,5 @@
 import logging
+import sys
 import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
@@ -10,6 +11,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.vmware import enable_hardware_virtualization
 from ocs_ci.utility.utils import TimeoutSampler
@@ -42,9 +44,10 @@ class TestVirtSCAutoProvisioning:
             log.info("Verifying if Hardware Virtualization is available on nodes...")
             try:
                 enable_hardware_virtualization()
-            except Exception as e:
+            except (OSError, CommandFailed) as e:
                 log.warning(
-                    f"Hardware virtualization check failed: {e}. Emulation will be used."
+                    "Hardware virtualization check failed: %s. Emulation will be used.",
+                    str(e),
                 )
 
         ns_exists = ns_handler.is_exist(resource_name=constants.CNV_NAMESPACE)
@@ -73,8 +76,8 @@ class TestVirtSCAutoProvisioning:
             try:
                 cnv_installer.uninstall_cnv(check_cnv_installed=True)
                 log.info("CNV uninstallation completed successfully.")
-            except Exception as e:
-                log.error(f"Failed to uninstall CNV during teardown: {str(e)}")
+            except CommandFailed as e:
+                log.error("Failed to uninstall CNV during teardown: %s", str(e))
                 raise e
         else:
             log.info(
@@ -111,23 +114,56 @@ class TestVirtSCAutoProvisioning:
                 )
                 log.info(f"Waiting for VM {vm_name} to reach Running status...")
                 vm_obj.wait_for_vm_status(status=constants.VM_RUNNING, timeout=300)
+            except CommandFailed as e:
+                log.error(
+                    "VM Deployment testcase failed during creation phase: %s", str(e)
+                )
+                raise e
             finally:
                 log.info("Cleaning up VM resources in namespace: %s", vm_namespace)
+
+                # Check if a primary test exception is currently propagating
+                primary_exception_active = sys.exc_info()[0] is not None
                 cleanup_exception = None
 
                 try:
                     vm_obj.delete()
-                except Exception as e:
-                    log.error("VM workload deletion resource trace failed: %s", str(e))
-                    cleanup_exception = e
+                except CommandFailed as e:
+                    # Specific scenario handling: catch expected cluster API failures on resource dropping
+                    if primary_exception_active:
+                        log.warning(
+                            "VM workload deletion failed during teardown, but suppressing "
+                            "to prioritize the primary test failure. Cleanup error: %s",
+                            str(e),
+                        )
+                    else:
+                        log.error(
+                            "VM workload deletion resource trace failed: %s", str(e)
+                        )
+                        cleanup_exception = e
 
                 ns_handler = ocp.OCP(kind=constants.NAMESPACE)
                 if ns_handler.is_exist(resource_name=vm_namespace):
-                    ns_handler.delete(resource_name=vm_namespace)
-                    ns_handler.wait_for_delete(resource_name=vm_namespace, timeout=300)
+                    try:
+                        ns_handler.delete(resource_name=vm_namespace)
+                        ns_handler.wait_for_delete(
+                            resource_name=vm_namespace, timeout=300
+                        )
+                    except CommandFailed as e:
+                        if primary_exception_active:
+                            log.warning(
+                                "Namespace deletion tracking failed during active error bubble up: %s",
+                                str(e),
+                            )
+                        else:
+                            log.error(
+                                "Namespace deletion failed explicitly: %s", str(e)
+                            )
+                            if not cleanup_exception:
+                                cleanup_exception = e
 
-                # If a VM deletion anomaly occurred, raise it to fail the testcase execution explicitly
-                if cleanup_exception:
+                # Only raise the cleanup error if the test body itself ran cleanly
+                if cleanup_exception and not primary_exception_active:
                     raise cleanup_exception
         else:
             log.info(
@@ -149,7 +185,6 @@ class TestVirtSCAutoProvisioning:
                 "Virtualization not enabled on this deployment template. Skipping testcase."
             )
 
-        # STABILITY IMPROVEMENT: Pre-validate existence baseline to avoid race conditions
         pre_sampler = TimeoutSampler(
             timeout=420,
             sleep=15,
@@ -161,7 +196,6 @@ class TestVirtSCAutoProvisioning:
                 f"Precondition Failed: {self.virt_sc_name} did not appear during initial stabilization window."
             )
 
-        # Execute test mutation step
         self.sc_handler.delete(resource_name=self.virt_sc_name)
 
         post_sampler = TimeoutSampler(
