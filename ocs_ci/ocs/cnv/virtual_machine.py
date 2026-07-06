@@ -763,22 +763,19 @@ chpasswd:
                 )
                 # Clean up backing PV (handles Retain policy Released PVs)
                 # PV may already be deleted by PVC (Delete reclaim policy) - check first
-                if (
-                    self.pv_obj.ocp.get(resource_name=self.pv_obj.name, dont_raise=True)
-                    is not None
-                ):
-                    try:
-                        self.pv_obj.reload()
-                    except CommandFailed as ex:
-                        if "not found" in str(ex).lower():
-                            logger.info(
-                                "PV %s already deleted. Skipping PV cleanup.",
-                                self.pv_obj.name,
-                            )
-                        else:
-                            raise
+
+                try:
+                    self.pv_obj.reload()
+                except CommandFailed as ex:
+                    if "not found" in str(ex).lower():
+                        logger.info(
+                            "PV %s already deleted. Skipping PV cleanup.",
+                            self.pv_obj.name,
+                        )
                     else:
-                        delete_pv_with_force_and_finalizers(self.pv_obj, timeout=600)
+                        raise
+                else:
+                    delete_pv_with_force_and_finalizers(self.pv_obj, timeout=600)
             if self.volumeimportsource_obj:
                 self.volumeimportsource_obj.delete()
         elif self.volume_interface == constants.VM_VOLUME_DV:
