@@ -441,6 +441,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     wl_meta["workload_namespace"],
                     discovered_apps=wl_meta["is_discovered_app"],
                     timeout=1200,
+                    performed_dr_action=True,
                 )
                 wait_for_pods_to_be_running(
                     namespace=wl_meta["workload_namespace"],
@@ -639,6 +640,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     wl_meta["workload_namespace"],
                     discovered_apps=wl_meta["is_discovered_app"],
                     timeout=1200,
+                    performed_dr_action=True,
                 )
                 wait_for_pods_to_be_running(
                     namespace=wl_meta["workload_namespace"],
