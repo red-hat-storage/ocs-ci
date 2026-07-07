@@ -870,3 +870,5 @@ zstream_4_20_14 = pytest.mark.zstream_4_20_14
 zstream_4_20_14_monitoring = pytest.mark.zstream_4_20_14_monitoring
 # z-stream marker
 zstream_4_20_14_nfs = pytest.mark.zstream_4_20_14_nfs
+# z-stream marker
+zstream_4_20_14_ceph_csi = pytest.mark.zstream_4_20_14_ceph_csi
