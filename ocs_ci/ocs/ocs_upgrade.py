@@ -762,7 +762,7 @@ class OCSUpgrade(object):
             if not ocs_catalog.is_exist():
                 log.info("OCS catalog source doesn't exist. Creating new one.")
                 create_catalog_source(self.ocs_registry_image, ignore_upgrade=True)
-                if not config.ENV_DATA.get("platform", "").lower() in (
+                if config.ENV_DATA.get("platform", "").lower() not in (
                     constants.HCI_PROVIDER_CLIENT_PLATFORMS
                 ):
                     prune_old_df_repo_idms()
@@ -797,7 +797,7 @@ class OCSUpgrade(object):
                 if not config.DEPLOYMENT.get("disconnected"):
                     # on Disconnected cluster, ICSP /IDMS from the ocs-registry image is not needed/valid
                     get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
-                    if not config.ENV_DATA.get("platform", "").lower() in (
+                    if config.ENV_DATA.get("platform", "").lower() not in (
                         constants.HCI_PROVIDER_CLIENT_PLATFORMS
                     ):
                         prune_old_df_repo_idms()
