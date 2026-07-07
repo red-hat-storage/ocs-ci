@@ -75,7 +75,7 @@ from ocs_ci.ocs.resources.storageconsumer import (
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating, version
-from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.version import get_ocp_ga_version
 from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.networking import create_drs_machine_config, create_drs_nad
