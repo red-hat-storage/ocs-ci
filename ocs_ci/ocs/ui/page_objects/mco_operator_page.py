@@ -96,7 +96,10 @@ class MCOOperatorPage(AcmPageNavigator):
         element = self.wait_for_element_to_be_visible(
             self.dep_loc["operator_display_name"], timeout=30
         )
-        return element.text
+        text = element.text
+        if not text:
+            text = element.get_attribute("textContent") or ""
+        return text.strip()
 
     def get_operator_provider(self):
         """
@@ -109,7 +112,10 @@ class MCOOperatorPage(AcmPageNavigator):
             element = self.wait_for_element_to_be_visible(
                 self.dep_loc["operator_provider"], timeout=30
             )
-            return element.text
+            text = element.text
+            if not text:
+                text = element.get_attribute("textContent") or ""
+            return text.strip()
         except TimeoutException:
             logger.warning("Provider information not found on the page")
             self.take_screenshot()

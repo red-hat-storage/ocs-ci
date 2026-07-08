@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 @tier1
 @turquoise_squad
 @skipif_ocs_version("<4.22")
+@pytest.mark.skip_rdr_health_check
 class TestMCOOperatorRebrandingUI:
     """
     Test class for MCO operator rebranding validation on hub cluster UI
