@@ -73,7 +73,13 @@ class HyperConverged:
                 constants.HYPERCONVERGED_OPERATOR_GROUP_YAML
             )
             operator_group_yaml = OCS(**operator_group_yaml_file)
-            operator_group_yaml.create()
+            try:
+                operator_group_yaml.create()
+            except CommandFailed as e:
+                if "AlreadyExists" in str(e):
+                    logger.info("OperatorGroup already exists, continuing")
+                else:
+                    raise
         return self.operator_group.check_resource_existence(
             should_exist=True,
             resource_name=constants.HYPERCONVERGED_OPERATOR_GROUP_NAME,

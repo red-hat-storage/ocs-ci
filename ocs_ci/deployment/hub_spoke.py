@@ -75,7 +75,7 @@ from ocs_ci.ocs.resources.storageconsumer import (
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating, version
-from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.version import get_ocp_ga_version
 from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.networking import create_drs_machine_config, create_drs_nad
@@ -2354,8 +2354,7 @@ class HypershiftHostedOCP(
 
         if deploy_metallb:
             self.deploy_lb()
-        if download_hcp_binary:
-            self.update_hcp_binary()
+        self.ensure_hcp_binaries(download_hcp_binary=download_hcp_binary)
 
         # Enable central infrastructure management service for agent
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
@@ -3608,8 +3607,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             self.deploy_mce()
             self.enable_hypershift_preview()
 
-        if download_hcp_binary:
-            self.update_hcp_binary()
+        self.ensure_hcp_binaries(download_hcp_binary=download_hcp_binary)
 
         log_step("Saving IDMS mirrors list to file for image-content-sources")
         self.save_mirrors_list_to_file()

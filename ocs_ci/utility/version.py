@@ -16,6 +16,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.utility.retry import retry
 
 log = logging.getLogger(__name__)
 
@@ -150,25 +151,62 @@ def get_ocp_version(seperator=None):
     return char.join([str(version.major), str(version.minor)])
 
 
+@retry(
+    (requests.exceptions.RequestException, json.JSONDecodeError),
+    tries=6,
+    delay=10,
+    backoff=2,
+)
 def get_ocp_ga_version(channel):
     """
-    Retrieve the latest GA version for
+    Retrieve the latest GA version for the given OCP channel.
+
+    This function queries the Red Hat OpenShift upgrade graph API to find
+    the latest GA version. It includes retry logic to handle transient
+    network issues and API timeouts.
 
     Args:
         channel (str): the OCP version channel to retrieve GA version for
 
     Returns:
         str: latest GA version for the provided channel.
-            An empty string is returned if no version exists.
+            An empty string is returned if no version exists or if all retries fail.
 
-
+    Raises:
+        requests.exceptions.RequestException: if the HTTP request fails after all retries
+        json.JSONDecodeError: if the response is not valid JSON after all retries
     """
     log.debug("Retrieving GA version for channel: %s", channel)
     url = "https://api.openshift.com/api/upgrades_info/v1/graph"
     headers = {"Accept": "application/json"}
     payload = {"channel": f"stable-{channel}"}
-    r = requests.get(url, headers=headers, params=payload, timeout=120)
-    nodes = r.json()["nodes"]
+
+    try:
+        r = requests.get(url, headers=headers, params=payload, timeout=120)
+        r.raise_for_status()
+        nodes = r.json()["nodes"]
+    except requests.exceptions.HTTPError as http_err:
+        log.error(
+            f"HTTP error {r.status_code} when retrieving GA version for channel {channel}: {http_err}"
+        )
+        raise
+    except requests.exceptions.Timeout as timeout_err:
+        log.error(
+            f"Timeout when retrieving GA version for channel {channel}: {timeout_err}"
+        )
+        raise
+    except requests.exceptions.RequestException as req_err:
+        log.error(
+            f"Request error when retrieving GA version for channel {channel}: {req_err}"
+        )
+        raise
+    except json.JSONDecodeError as json_err:
+        log.error(
+            f"Invalid JSON response when retrieving GA version for channel {channel}. "
+            f"Response status: {r.status_code}, Response text: {r.text[:200]}, Error: {json_err}"
+        )
+        raise
+
     if nodes:
         versions = [node["version"] for node in nodes]
         versions.sort()

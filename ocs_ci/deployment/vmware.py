@@ -113,7 +113,7 @@ from .helpers.hypershift_base import (
 from .hub_spoke import create_agent_service_config, create_patch_provisioning
 from .mce import set_mirror_registry_configmap
 from ..helpers.helpers import change_default_storageclass
-from ..utility.deployment import get_ocp_ga_version
+from ..utility.version import get_ocp_ga_version
 
 logger = logging.getLogger(__name__)
 

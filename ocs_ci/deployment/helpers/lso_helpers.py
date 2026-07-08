@@ -21,7 +21,7 @@ from ocs_ci.ocs.node import (
     get_master_nodes,
 )
 from ocs_ci.utility import templating, version
-from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.version import get_ocp_ga_version
 from ocs_ci.utility.operators import LocalStorageOperator
 from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.retry import retry

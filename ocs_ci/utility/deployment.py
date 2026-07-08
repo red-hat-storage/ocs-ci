@@ -14,8 +14,6 @@ from ocs_ci.utility.retry import retry
 
 import yaml
 
-import requests
-
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
@@ -29,36 +27,6 @@ from ocs_ci.utility.utils import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-# TODO: remove this function and use the one in version.py
-def get_ocp_ga_version(channel):
-    """
-    Retrieve the latest GA version for
-
-    Args:
-        channel (str): the OCP version channel to retrieve GA version for
-
-    Returns:
-        str: latest GA version for the provided channel.
-            An empty string is returned if no version exists.
-
-
-    """
-    logger.debug("Retrieving GA version for channel: %s", channel)
-    url = "https://api.openshift.com/api/upgrades_info/v1/graph"
-    headers = {"Accept": "application/json"}
-    payload = {"channel": f"stable-{channel}"}
-    r = requests.get(url, headers=headers, params=payload, timeout=120)
-    nodes = r.json()["nodes"]
-    if nodes:
-        versions = [node["version"] for node in nodes]
-        versions.sort()
-        ga_version = versions[-1]
-        logger.debug("Found GA version: %s", ga_version)
-        return ga_version
-    logger.debug("No GA version found")
-    return ""
 
 
 def create_external_secret(ocs_version=None, apply=False):
