@@ -434,7 +434,7 @@ deployment_4_22 = {
         By.XPATH,
     ),
     "operator_display_name": (
-        "//h1[@data-ouia-component-id='PageHeader-title']",
+        "//h1[contains(@class,'co-clusterserviceversion-logo__name__clusterserviceversion')]",
         By.XPATH,
     ),
     "operator_provider": (
