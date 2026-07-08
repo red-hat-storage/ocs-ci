@@ -3865,3 +3865,25 @@ CEPH_MON_LEGACY_PORT = 6789  # Ceph Monitor (legacy protocol)
 CEPH_EXPORTER_PORT = 9283  # Ceph Exporter (metrics)
 CEPH_OSD_PORT_MIN = 6800  # Ceph OSD port range start
 CEPH_OSD_PORT_MAX = 7300  # Ceph OSD port range end
+
+# IBM HCI
+IBM_HCI_RACK_DIR = os.path.join(DATA_DIR, "rack_details")
+
+MANIFEST_WORKS = "manifestworks.work.open-cluster-management.io"
+# IBM Fusion Access Operator for SAN
+TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS = os.path.join(TEMPLATE_DIR, "fusion-access")
+FUSION_ACCESS_NAMESPACE = "ibm-fusion-access"
+FUSION_ACCESS_CATALOG_SOURCE_NAME = "certified-operators"
+FUSION_ACCESS_OPERATOR_NAME = "openshift-fusion-access-operator"
+FUSION_ACCESS_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "subscription.yaml"
+)
+FUSION_ACCESS_NS_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "namespace.yaml"
+)
+FUSION_ACCESS_CATALOG_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "catalog-source.yaml"
+)
+FUSION_ACCESS_CR_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "fusion-access-san.yaml"
+)
