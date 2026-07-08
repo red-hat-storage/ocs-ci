@@ -66,6 +66,7 @@ class MCOOperatorPage(AcmPageNavigator):
         logger.info("Clicking on MCO operator to view details")
         try:
             self.do_click(self.dep_loc["mco_operator_row"], timeout=30)
+            self.page_has_loaded()
         except TimeoutException:
             logger.error(
                 "MCO operator with expected name "
@@ -98,7 +99,10 @@ class MCOOperatorPage(AcmPageNavigator):
         )
         text = element.text
         if not text:
-            text = element.get_attribute("textContent") or ""
+            text = (
+                self.driver.execute_script("return arguments[0].innerText", element)
+                or ""
+            )
         return text.strip()
 
     def get_operator_provider(self):
