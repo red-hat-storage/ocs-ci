@@ -6,12 +6,12 @@ IBM Fusion Access for SAN provides block storage access via Fibre Channel / iSCS
 (SAN) using IBM Spectrum Scale as the underlying storage technology.
 
 Deployment flow:
-  1. Create the CatalogSource (ibm-operator-catalog) if not already present.
+  1. Verify the certified-operators CatalogSource is present (pre-exists on every OCP cluster).
   2. Create the Namespace and OperatorGroup for ibm-fusion-access.
-  3. Create the Subscription to install the operator from the catalog.
+  3. Create the Subscription to install the operator from certified-operators.
   4. Wait for the operator CSV to reach the Succeeded phase.
-  5. Create the FusionAccessSAN CR to trigger the actual storage provisioner setup.
-  6. Wait for the FusionAccessSAN CR to reach the Ready state.
+  5. Create the FusionAccess CR to trigger the actual storage provisioner setup.
+  6. Wait for the FusionAccess CR to reach the Ready state.
 """
 
 import logging
@@ -39,9 +39,8 @@ class FusionAccessDeployment:
 
     DEPLOYMENT section (optional overrides):
         fusion_access_channel (str): Operator subscription channel.
-            Defaults to ``defaults.FUSION_ACCESS_CHANNEL``.
-        fusion_access_catalog_image (str): Override the catalog source image.
-        fusion_access_skip_cr (bool): When True, skip FusionAccessSAN CR creation
+            Defaults to ``"stable-v1"``.
+        fusion_access_skip_cr (bool): When True, skip FusionAccess CR creation
             (useful when the CR is managed externally). Default False.
 
     ENV_DATA section:
@@ -52,7 +51,7 @@ class FusionAccessDeployment:
         self.operator_name = defaults.FUSION_ACCESS_OPERATOR_NAME
         self.namespace = defaults.FUSION_ACCESS_NAMESPACE
         self.kubeconfig = config.RUN["kubeconfig"]
-        self.channel = config.DEPLOYMENT.get("fusion_access_channel", "v1.1")
+        self.channel = config.DEPLOYMENT.get("fusion_access_channel", "stable-v1")
 
     def deploy(self):
         """
@@ -67,10 +66,10 @@ class FusionAccessDeployment:
         self.verify_operator()
 
         if not config.DEPLOYMENT.get("fusion_access_skip_cr", False):
-            self.create_fusion_access_san_cr()
+            self.create_fusion_access_cr()
         else:
             logger.info(
-                "fusion_access_skip_cr is set — skipping FusionAccessSAN CR creation"
+                "fusion_access_skip_cr is set — skipping FusionAccess CR creation"
             )
 
         logger.info("IBM Fusion Access Operator for SAN deployed successfully")
@@ -81,48 +80,27 @@ class FusionAccessDeployment:
 
     def create_catalog_source(self):
         """
-        Create the ibm-operator-catalog CatalogSource in openshift-marketplace.
+        Verify the certified-operators CatalogSource is present and READY.
 
-        If the CatalogSource already exists and is READY the step is skipped.
-        An optional catalog image override may be supplied via
-        ``config.DEPLOYMENT["fusion_access_catalog_image"]``.
+        The certified-operators catalog is pre-installed on every OCP cluster so
+        no creation is necessary.  This step only asserts its presence to surface
+        a clear error early when the environment is misconfigured.
         """
         catalog_source_name = constants.FUSION_ACCESS_CATALOG_SOURCE_NAME
-        ibm_catalog_source = CatalogSource(
+        certified_catalog_source = CatalogSource(
             resource_name=catalog_source_name,
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
 
-        if ibm_catalog_source.check_state("READY"):
-            logger.info(
-                f"CatalogSource '{catalog_source_name}' already exists and is READY, "
-                "skipping creation"
-            )
+        if certified_catalog_source.check_state("READY"):
+            logger.info(f"CatalogSource '{catalog_source_name}' is present and READY")
             return
 
-        logger.info(f"Creating CatalogSource '{catalog_source_name}'")
-        catalog_source_data = templating.load_yaml(
-            constants.FUSION_ACCESS_CATALOG_SOURCE_YAML
+        raise AssertionError(
+            f"CatalogSource '{catalog_source_name}' is not READY in "
+            f"'{constants.MARKETPLACE_NAMESPACE}'. "
+            "Ensure the cluster has a functional certified-operators catalog."
         )
-
-        override_image = config.DEPLOYMENT.get("fusion_access_catalog_image")
-        if override_image:
-            logger.info(f"Overriding catalog image with: {override_image}")
-            catalog_source_data["spec"]["image"] = override_image
-
-        catalog_source_manifest = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="fusion_access_catalog_source", delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            catalog_source_data, catalog_source_manifest.name
-        )
-        exec_cmd(
-            f"oc --kubeconfig {self.kubeconfig} apply -f {catalog_source_manifest.name}"
-        )
-
-        logger.info(f"Waiting for CatalogSource '{catalog_source_name}' to be READY")
-        ibm_catalog_source.wait_for_state("READY", timeout=960)
-        logger.info(f"CatalogSource '{catalog_source_name}' is READY")
 
     # ------------------------------------------------------------------
     # Step 2: Namespace + OperatorGroup
@@ -156,7 +134,7 @@ class FusionAccessDeployment:
 
     def create_subscription(self):
         """
-        Create the ibm-fusion-access Subscription.
+        Create the openshift-fusion-access-operator Subscription in certified-operators.
 
         If a Subscription with the same name already exists the step is skipped.
         The channel can be overridden via ``config.DEPLOYMENT["fusion_access_channel"]``.
@@ -219,29 +197,29 @@ class FusionAccessDeployment:
         )
 
     # ------------------------------------------------------------------
-    # Step 5: FusionAccessSAN CR
+    # Step 5: FusionAccess CR
     # ------------------------------------------------------------------
 
-    def create_fusion_access_san_cr(self):
+    def create_fusion_access_cr(self):
         """
-        Create the FusionAccessSAN custom resource to configure the SAN storage layer.
+        Create the FusionAccess custom resource to configure the SAN storage layer.
 
-        If a FusionAccessSAN CR named 'fusionaccesssan' already exists the step
+        If a FusionAccess CR named 'fusionaccess-object' already exists the step
         is skipped and a health check is performed instead.
         """
-        san_ocp = OCP(kind="FusionAccessSAN", namespace=self.namespace)
-        if san_ocp.is_exist(resource_name="fusionaccesssan"):
-            logger.info("FusionAccessSAN CR already exists, skipping creation")
-            fusion_access_san_status_check()
+        cr_ocp = OCP(kind="FusionAccess", namespace=self.namespace)
+        if cr_ocp.is_exist(resource_name="fusionaccess-object"):
+            logger.info("FusionAccess CR already exists, skipping creation")
+            fusion_access_status_check()
             return
 
-        logger.info("Creating FusionAccessSAN CR")
+        logger.info("Creating FusionAccess CR")
         exec_cmd(
             f"oc --kubeconfig {self.kubeconfig} apply -f "
             f"{constants.FUSION_ACCESS_CR_YAML}"
         )
-        fusion_access_san_status_check()
-        logger.info("FusionAccessSAN CR created and reached Ready state")
+        fusion_access_status_check()
+        logger.info("FusionAccess CR created and reached Ready state")
 
 
 # ---------------------------------------------------------------------------
@@ -275,26 +253,24 @@ def _wait_for_subscription(subscription_name: str, namespace: str) -> None:
 
 
 @retry((AssertionError, KeyError), tries=20, delay=30, backoff=1)
-def fusion_access_san_status_check() -> None:
+def fusion_access_status_check() -> None:
     """
-    Assert that the FusionAccessSAN CR is in the *Ready* state.
+    Assert that the FusionAccess CR has reached the *Ready* phase.
 
     Retries up to 20 times with a 30-second delay between attempts to allow
     the operator time to reconcile the CR.
 
     Raises:
-        AssertionError: If the FusionAccessSAN CR is not in the Ready state.
+        AssertionError: If the FusionAccess CR is not in the Ready phase.
         KeyError: If the status field is missing from the CR data.
     """
-    san_cr = OCP(
-        kind="FusionAccessSAN",
+    cr = OCP(
+        kind="FusionAccess",
         namespace=defaults.FUSION_ACCESS_NAMESPACE,
-        resource_name="fusionaccesssan",
+        resource_name="fusionaccess-object",
     )
-    san_cr.reload()
-    status = san_cr.data["status"]["state"]
-    logger.debug(f"FusionAccessSAN status.state = '{status}'")
-    assert (
-        status == "Ready"
-    ), f"FusionAccessSAN is not Ready (current state: '{status}')"
-    logger.info("FusionAccessSAN is in Ready state")
+    cr.reload()
+    phase = cr.data["status"]["phase"]
+    logger.debug(f"FusionAccess status.phase = '{phase}'")
+    assert phase == "Ready", f"FusionAccess is not Ready (current phase: '{phase}')"
+    logger.info("FusionAccess is in Ready state")
