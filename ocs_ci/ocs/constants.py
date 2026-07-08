@@ -1549,6 +1549,12 @@ RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
 RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool"
 RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc"
+RDR_CUSTOM_RBD_DR_POLICY = "custom-pool-dr-policy"
+
+# Ramen DR labels on StorageClass
+RAMEN_GROUP_REPLICATION_ID_LABEL = "ramendr.openshift.io/groupreplicationid"
+RAMEN_REPLICATION_ID_LABEL = "ramendr.openshift.io/replicationid"
+RAMEN_STORAGE_ID_LABEL = "ramendr.openshift.io/storageid"
 RDR_VM_PROTECTION_LABEL = "ramendr.openshift.io/k8s-resource-selector"
 
 # constants

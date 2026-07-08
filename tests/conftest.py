@@ -1148,6 +1148,9 @@ def ceph_pool_factory_fixture(
 
         for instance in instances:
             try:
+                if not instance.ocp.is_exist(resource_name=instance.name):
+                    log.info(f"Pool {instance.name} already deleted, skipping")
+                    continue
                 instance.delete(wait=False)
 
                 try:
@@ -1335,6 +1338,23 @@ def storageclass_factory_fixture(
                         interface_name = get_ec_metadata_pool_name()
                         ec_data_pool_name = pool_obj.name
                     else:
+                        pool_ocp = ocp.OCP(
+                            kind=constants.CEPHBLOCKPOOL,
+                            namespace=pool_obj.namespace,
+                            resource_name=pool_obj.name,
+                        )
+                        for sample in TimeoutSampler(
+                            600,
+                            10,
+                            pool_ocp.get,
+                        ):
+                            phase = (
+                                sample.get("status", {}).get("phase")
+                                if sample
+                                else None
+                            )
+                            if phase == constants.STATUS_READY:
+                                break
                         interface_name = pool_obj.name
                 else:
                     if pool_name is None:
@@ -8402,6 +8422,7 @@ def discovered_apps_dr_workload_cnv(request):
         dr_protect=True,
         shared_drpc_protection=False,
         vm_type=constants.VM_VOLUME_PVC,
+        dr_policy_name=None,
     ):
         """
         Args:
@@ -8413,6 +8434,7 @@ def discovered_apps_dr_workload_cnv(request):
             shared_drpc_protection (bool): False by default, True will use Shared Protection type to DR Protect
                                         a workload using the existing DRPC in the same namespace
             vm_type (str): VM deployment type
+            dr_policy_name (str): Name of the DRPolicy to use. If None, uses the default.
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
 
@@ -8439,7 +8461,7 @@ def discovered_apps_dr_workload_cnv(request):
             if shared_drpc_protection and instances:
                 workload_details["workload_namespace"] = instances[0].workload_namespace
                 workload_namespace = instances[0].workload_namespace
-            workload = CnvWorkloadDiscoveredApps(
+            wl_kwargs = dict(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
@@ -8464,6 +8486,9 @@ def discovered_apps_dr_workload_cnv(request):
                 workload_name=workload_details["name"],
                 vm_name=workload_details["vm_name"],
             )
+            if dr_policy_name:
+                wl_kwargs["dr_policy_name"] = dr_policy_name
+            workload = CnvWorkloadDiscoveredApps(**wl_kwargs)
 
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]

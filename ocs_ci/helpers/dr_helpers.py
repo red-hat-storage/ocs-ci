@@ -706,6 +706,61 @@ def check_mirroring_status_for_custom_pool(
     return True
 
 
+def verify_custom_pool_image_isolation(pool_name):
+    """
+    Verify that RBD images in a custom pool are isolated from the
+    default pool on both managed clusters.
+
+    Checks on each managed cluster that:
+    - The custom pool contains at least one RBD image
+    - No images are shared between the custom pool and the default pool
+
+    Args:
+        pool_name (str): Name of the custom CephBlockPool to verify
+
+    Returns:
+        bool: True if isolation checks pass on both clusters
+
+    Raises:
+        AssertionError: If no images found in custom pool or if
+            images overlap between pools
+
+    """
+    from ocs_ci.ocs.resources.pod import list_ceph_images
+
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        cluster_name = config.ENV_DATA.get("cluster_name")
+
+        custom_images = list_ceph_images(pool_name=pool_name)
+        default_images = list_ceph_images(pool_name=constants.DEFAULT_CEPHBLOCKPOOL)
+        logger.info(
+            f"Cluster {cluster_name}: custom pool {pool_name}"
+            f" images={custom_images},"
+            f" default pool images={default_images}"
+        )
+        assert custom_images, (
+            f"No RBD images found in custom pool {pool_name}" f" on {cluster_name}"
+        )
+        overlap = set(custom_images) & set(default_images)
+        assert not overlap, (
+            f"Pool isolation violated on {cluster_name}:"
+            f" images {overlap} found in both"
+            f" {pool_name} and {constants.DEFAULT_CEPHBLOCKPOOL}"
+        )
+        logger.info(
+            f"Pool isolation verified on {cluster_name}:"
+            f" {len(custom_images)} images in {pool_name},"
+            f" no overlap with default pool"
+        )
+
+    config.switch_ctx(restore_index)
+    return True
+
+
 def is_cg_enabled():
     """
     Check if Consistency Group feature is enabled via environment variable
@@ -1649,6 +1704,102 @@ def validate_drpolicy_grouping(drpolicy_name=None):
         )
 
     logger.info("DRPolicy grouping validation completed successfully")
+    return True
+
+
+def validate_drpolicy_replication_ids(drpolicy_name, sc_names):
+    """
+    Validate groupreplicationID values in DRPolicy peerClasses against
+    StorageClass labels.
+
+    Checks:
+        1. Each SC's ramendr.openshift.io/groupreplicationid label matches
+           the groupreplicationID in the corresponding DRPolicy peerClass.
+        2. SCs backed by different pools have different groupreplicationID
+           values in peerClasses.
+
+    Args:
+        drpolicy_name (str): Name of the DRPolicy to validate.
+        sc_names (list): List of StorageClass names to validate
+            (e.g. [default_sc, custom_sc]).
+
+    Returns:
+        bool: True if validation passes.
+
+    Raises:
+        UnexpectedBehaviour: If replication IDs don't match or aren't
+            unique across different pools.
+
+    """
+    restore_index = config.cur_index
+    try:
+        config.switch_acm_ctx()
+        drpolicy_ocp = ocp.OCP(
+            kind=constants.DRPOLICY,
+            resource_name=drpolicy_name,
+        )
+        drpolicy_data = drpolicy_ocp.get()
+        peer_classes = (
+            drpolicy_data.get("status", {}).get("async", {}).get("peerClasses", [])
+        )
+        pc_by_sc = {
+            pc["storageClassName"]: pc
+            for pc in peer_classes
+            if pc.get("storageClassName") in sc_names
+        }
+
+        missing = set(sc_names) - set(pc_by_sc.keys())
+        if missing:
+            raise UnexpectedBehaviour(
+                f"StorageClasses {missing} not found in DRPolicy"
+                f" {drpolicy_name} peerClasses"
+            )
+
+        # Switch to a managed cluster to read SC labels
+        managed_clusters = get_non_acm_cluster_config()
+        config.switch_ctx(managed_clusters[0].MULTICLUSTER["multicluster_index"])
+
+        group_rep_ids = {}
+        for sc_name in sc_names:
+            pc = pc_by_sc[sc_name]
+            pc_group_rep_id = pc.get("groupreplicationID")
+            if not pc_group_rep_id:
+                logger.info(
+                    f"No groupreplicationID in peerClass for SC" f" {sc_name}, skipping"
+                )
+                continue
+
+            sc_ocp = ocp.OCP(kind=constants.STORAGECLASS)
+            sc_data = sc_ocp.get(resource_name=sc_name)
+            sc_labels = sc_data.get("metadata", {}).get("labels", {})
+            sc_group_rep_id = sc_labels.get(constants.RAMEN_GROUP_REPLICATION_ID_LABEL)
+
+            if sc_group_rep_id != pc_group_rep_id:
+                raise UnexpectedBehaviour(
+                    f"SC {sc_name} label groupreplicationid"
+                    f" ({sc_group_rep_id}) does not match DRPolicy"
+                    f" peerClass value ({pc_group_rep_id})"
+                )
+            logger.info(
+                f"SC {sc_name} groupreplicationID matches DRPolicy"
+                f" peerClass: {pc_group_rep_id}"
+            )
+            group_rep_ids[sc_name] = pc_group_rep_id
+
+        if len(group_rep_ids) >= 2:
+            unique_ids = set(group_rep_ids.values())
+            if len(unique_ids) < len(group_rep_ids):
+                raise UnexpectedBehaviour(
+                    f"SCs from different pools share the same"
+                    f" groupreplicationID: {group_rep_ids}"
+                )
+            logger.info(
+                f"Verified SCs have unique groupreplicationID"
+                f" values: {group_rep_ids}"
+            )
+    finally:
+        config.switch_ctx(restore_index)
+
     return True
 
 
