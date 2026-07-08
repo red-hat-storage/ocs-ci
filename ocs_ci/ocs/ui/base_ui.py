@@ -37,7 +37,7 @@ from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
 )
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version, login as login_view
 from ocs_ci.ocs.ui.llm_tools.locator_fallback import LocatorFallback
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
@@ -1395,6 +1395,11 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
     password_el.send_keys(password)
 
     logger.info("Username and password filled in, clicking Log in")
+    # ROSA HCP uses the standard login button, not the 4.19+ co-login-button
+    if config.ENV_DATA.get("platform", "").lower() == constants.ROSA_HCP_PLATFORM:
+        click_login_locator = login_view["click_login"]
+    else:
+        click_login_locator = login_loc["click_login"]
     # Client clusters have OAuth-based login with different button structure
     is_client_cluster = (
         config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
@@ -1409,9 +1414,7 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
         )
         confirm_login_el.click()
     else:
-        confirm_login_el = wait_for_element_to_be_clickable(
-            login_loc["click_login"], 60
-        )
+        confirm_login_el = wait_for_element_to_be_clickable(click_login_locator, 60)
         confirm_login_el.click()
 
     hci_platform_conf = (
