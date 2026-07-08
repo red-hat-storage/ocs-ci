@@ -215,19 +215,27 @@ def get_ec_drain_thresholds(pool_name=None):
             f"Pool {pool_name} is not erasure-coded " f"(erasureCoded spec: {ec_spec})"
         )
 
-    size = int(get_ceph_pool_property(pool_name, "size"))
-    min_size = int(get_ceph_pool_property(pool_name, "min_size"))
+    raw_size = get_ceph_pool_property(pool_name, "size")
+    raw_min_size = get_ceph_pool_property(pool_name, "min_size")
+    if raw_size is None:
+        raise ValueError(f"Pool {pool_name}: failed to resolve property 'size'")
+    if raw_min_size is None:
+        raise ValueError(f"Pool {pool_name}: failed to resolve property 'min_size'")
+    size = int(raw_size)
+    min_size = int(raw_min_size)
     failure_domain = get_failure_domain()
     total_osd_hosts = len(get_osd_running_nodes())
 
-    if failure_domain != "host":
+    if failure_domain == "host":
+        max_drain_io_ok = total_osd_hosts - min_size
+        min_drain_io_stops = max_drain_io_ok + 1
+    else:
         logger.warning(
             f"Failure domain is '{failure_domain}', not 'host'. "
-            f"Host-based drain thresholds may not be accurate."
+            f"Host-based drain thresholds are not applicable."
         )
-
-    max_drain_io_ok = total_osd_hosts - min_size
-    min_drain_io_stops = max_drain_io_ok + 1
+        max_drain_io_ok = 0
+        min_drain_io_stops = 1
 
     result = {
         "k": k,
