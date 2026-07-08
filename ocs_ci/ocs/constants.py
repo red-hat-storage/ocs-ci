@@ -4072,9 +4072,6 @@ FUSION_ACCESS_SUBSCRIPTION_YAML = os.path.join(
 FUSION_ACCESS_NS_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "namespace.yaml"
 )
-FUSION_ACCESS_CATALOG_SOURCE_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "catalog-source.yaml"
-)
 FUSION_ACCESS_CR_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "fusion-access-san.yaml"
 )
