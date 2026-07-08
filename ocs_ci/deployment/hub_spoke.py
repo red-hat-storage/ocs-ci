@@ -2354,8 +2354,7 @@ class HypershiftHostedOCP(
 
         if deploy_metallb:
             self.deploy_lb()
-        if download_hcp_binary:
-            self.update_hcp_binary()
+        self.ensure_hcp_binaries(download_hcp_binary=download_hcp_binary)
 
         # Enable central infrastructure management service for agent
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
@@ -3608,8 +3607,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             self.deploy_mce()
             self.enable_hypershift_preview()
 
-        if download_hcp_binary:
-            self.update_hcp_binary()
+        self.ensure_hcp_binaries(download_hcp_binary=download_hcp_binary)
 
         log_step("Saving IDMS mirrors list to file for image-content-sources")
         self.save_mirrors_list_to_file()
