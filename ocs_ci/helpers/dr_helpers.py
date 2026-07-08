@@ -1919,6 +1919,62 @@ def validate_vgr_vgrc_binding(namespace, drpc_names):
     logger.info("VGR-VGRC binding validation completed")
 
 
+def validate_vgr_pvc_refs(
+    namespace, drpc_name, expected_pvc_names, timeout=120, sleep=30
+):
+    """
+    Validate that a DRPC's VolumeGroupReplication contains exactly
+    the expected PVCs in status.persistentVolumeClaimsRefList.
+
+    The VGR PVC ref list may take a sync cycle to update after
+    a shared VM is enrolled, so this polls until the expected
+    PVCs appear or the timeout is reached.
+
+    Args:
+        namespace (str): Namespace where VGRs are created
+        drpc_name (str): DRPC resource name to match in VGR name
+        expected_pvc_names (list): Expected PVC names
+        timeout (int): Timeout in seconds (default: 120)
+        sleep (int): Polling interval in seconds (default: 30)
+
+    Raises:
+        TimeoutExpiredError: If VGR PVC refs do not match within
+            the timeout
+        AssertionError: If no VGR is found for the DRPC
+
+    """
+    expected = sorted(expected_pvc_names)
+
+    vgr_ocp = ocp.OCP(
+        kind=constants.VOLUME_GROUP_REPLICATION,
+        namespace=namespace,
+    )
+
+    def _check_pvc_refs():
+        vgr_items = vgr_ocp.get().get("items", [])
+        matched = [v for v in vgr_items if drpc_name in v["metadata"]["name"]]
+        assert matched, (
+            f"No VGR found for DRPC {drpc_name} in " f"namespace {namespace}"
+        )
+        vgr = matched[0]
+        pvc_refs = vgr.get("status", {}).get("persistentVolumeClaimsRefList", [])
+        return sorted([p["name"] for p in pvc_refs])
+
+    for sample in TimeoutSampler(timeout=timeout, sleep=sleep, func=_check_pvc_refs):
+        if sample == expected:
+            break
+        logger.info(
+            "VGR PVC refs not yet matching: expected %s, " "got %s. Retrying",
+            expected,
+            sample,
+        )
+
+    vgr_items = vgr_ocp.get().get("items", [])
+    matched = [v for v in vgr_items if drpc_name in v["metadata"]["name"]]
+    vgr_name = matched[0]["metadata"]["name"]
+    logger.info("VGR %s PVC refs validated: %s", vgr_name, expected)
+
+
 def verify_last_group_sync_time(
     drpc_obj,
     scheduling_interval,

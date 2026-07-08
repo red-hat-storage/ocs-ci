@@ -582,14 +582,16 @@ class TestACMKubevirtDRIntergration:
 
         1. Deploy 4 CNV discovered workloads in a single namespace
            via CLI
-        2. Create a second DRPolicy (odr-policy-6m) with a different
-           scheduling interval
+        2. Create a second DRPolicy with a unique runtime name
+           and a different scheduling interval
         3. DR protect VM 1 as Standalone with default DRPolicy via
-           ACM UI
-        4. DR protect VM 3 as Shared (tied to VM 1's DRPC)
-        5. DR protect VM 2 as Standalone with odr-policy-6m via
-           ACM UI
-        6. DR protect VM 4 as Shared (tied to VM 2's DRPC)
+           ACM UI, validate VGR-VGRC binding and PVC refs
+        4. DR protect VM 3 as Shared (tied to VM 1's DRPC),
+           validate PVC refs updated
+        5. DR protect VM 2 as Standalone with the second DRPolicy
+           via ACM UI, validate 2 VGRs and PVC refs
+        6. DR protect VM 4 as Shared (tied to VM 2's DRPC),
+           validate PVC refs updated
         7. Write data to all VMs, record md5sums
         8. Shut down all nodes of the primary managed cluster
         9. Failover all workloads to the secondary cluster
@@ -601,8 +603,13 @@ class TestACMKubevirtDRIntergration:
         15. Verify VGR-VGRC binding on primary cluster
         16. Verify all VM statuses via ACM UI after relocate
         17. Validate data integrity after relocate
-        18. Remove DR protection via ACM UI
-        19. Delete the second DRPolicy (odr-policy-6m)
+        18. Remove VM 3 (Shared) from DRPC1, verify DRPC1 persists
+        19. Remove VM 1 (Standalone, last VM) from DRPC1, verify
+            DRPC1 is deleted
+        20. Remove VM 4 (Shared) from DRPC2, verify DRPC2 persists
+        21. Remove VM 2 (Standalone, last VM) from DRPC2, verify
+            DRPC2 is deleted
+        22. Delete the second DRPolicy
 
         """
 
@@ -656,7 +663,8 @@ class TestACMKubevirtDRIntergration:
         logger.test_step("Create second DRPolicy odr-policy-6m")
         existing_policies = dr_helpers.get_all_drpolicy()
         dr_clusters = existing_policies[0]["spec"]["drClusters"]
-        dr_policy_6m_name = "odr-policy-6m"
+        run_id = config.RUN["run_id"]
+        dr_policy_6m_name = f"odr-policy-6m-{str(run_id)[-4:]}"
         dr_policy_data = load_yaml(constants.DR_POLICY_ACM_HUB)
         dr_policy_data["metadata"]["name"] = dr_policy_6m_name
         dr_policy_data["spec"]["drClusters"] = dr_clusters
@@ -705,6 +713,19 @@ class TestACMKubevirtDRIntergration:
         resource_name_1 = f"{protection_name_1}-drpc"
         drpc_resources.append(resource_name_1)
 
+        def _pvc_name(vm_name):
+            return vm_name.replace("vm-workload-", "vm-") + "-pvc"
+
+        # Validate VGR/VGRC after VM 1 Standalone enrollment
+        logger.test_step("Validate VGR-VGRC binding and PVC refs after VM 1")
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        dr_helpers.validate_vgr_vgrc_binding(workload_namespace, [resource_name_1])
+        dr_helpers.validate_vgr_pvc_refs(
+            workload_namespace,
+            resource_name_1,
+            [_pvc_name(all_cnv_workloads[0].vm_name)],
+        )
+
         # Wait for VM 1's DRPC to exist in Kubernetes before enrolling VM 3 as
         # Shared. The ACM UI queries existing DRPCs when opening the enrollment
         # wizard; if the DRPC has not yet been created the Shared option
@@ -735,6 +756,19 @@ class TestACMKubevirtDRIntergration:
             namespace=workload_namespace,
         )
 
+        # Validate VGR/VGRC after VM 3 Shared enrollment
+        logger.test_step("Validate VGR-VGRC binding and PVC refs after VM 3")
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        dr_helpers.validate_vgr_vgrc_binding(workload_namespace, [resource_name_1])
+        dr_helpers.validate_vgr_pvc_refs(
+            workload_namespace,
+            resource_name_1,
+            [
+                _pvc_name(all_cnv_workloads[0].vm_name),
+                _pvc_name(all_cnv_workloads[2].vm_name),
+            ],
+        )
+
         # VM 2: Standalone with odr-policy-6m (creates a second independent DRPC)
         logger.test_step(
             "DR protect VM 2 with Standalone protection " f"using {dr_policy_6m_name}"
@@ -763,6 +797,19 @@ class TestACMKubevirtDRIntergration:
                     raise
                 sleep(30)
         drpc_resources.append(resource_name_2)
+
+        # Validate VGR/VGRC after VM 2 Standalone enrollment
+        logger.test_step("Validate VGR-VGRC binding and PVC refs after VM 2")
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        dr_helpers.validate_vgr_vgrc_binding(
+            workload_namespace,
+            [resource_name_1, resource_name_2],
+        )
+        dr_helpers.validate_vgr_pvc_refs(
+            workload_namespace,
+            resource_name_2,
+            [_pvc_name(all_cnv_workloads[1].vm_name)],
+        )
 
         # Override discovered_apps_placement_name on the Standalone workload objects
         # so delete_workload can find the custom UI-created DRPCs at teardown.
@@ -796,6 +843,22 @@ class TestACMKubevirtDRIntergration:
             standalone=False,
             protection_name=protection_name_2,
             namespace=workload_namespace,
+        )
+
+        # Validate VGR/VGRC after VM 4 Shared enrollment
+        logger.test_step("Validate VGR-VGRC binding and PVC refs after VM 4")
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        dr_helpers.validate_vgr_vgrc_binding(
+            workload_namespace,
+            [resource_name_1, resource_name_2],
+        )
+        dr_helpers.validate_vgr_pvc_refs(
+            workload_namespace,
+            resource_name_2,
+            [
+                _pvc_name(all_cnv_workloads[1].vm_name),
+                _pvc_name(all_cnv_workloads[3].vm_name),
+            ],
         )
 
         logger.info(f"DRPC resources created: {drpc_resources}")
@@ -1174,26 +1237,15 @@ class TestACMKubevirtDRIntergration:
         # ------------------------------------------------------------------ #
         # Remove DR protection scenario                                        #
         #                                                                      #
-        # Step A: Remove protection from VM 3 (Shared with VM 1 / DRPC1).    #
-        #   Validate: DRPC1 still exists, VM 1 is still protected.            #
-        #                                                                      #
-        # Step B: Remove protection from VM 2 (Standalone / DRPC2).          #
-        #   Validate: DRPC2 is deleted.                                        #
+        # Validates that a DRPC is NOT deleted until ALL VMs (standalone +      #
+        # shared) are removed from it.                                         #
         # ------------------------------------------------------------------ #
         config.switch_acm_ctx()
-        logger.test_step("Remove DR protection via ACM UI")
-        logger.assertion("navigate_using_fleet_virtualization: expected=True")
-        assert navigate_using_fleet_virtualization(acm_obj)
+        acm_obj = AcmAddClusters()
 
-        # Step A: remove the Shared VM (VM 3, index 2) from DRPC1
-        logger.info(
-            "Removing DR protection from Shared VM 3 "
-            f"'{all_cnv_workloads[2].vm_name}' (tied to DRPC1)"
-        )
-        logger.assertion(
-            f"remove_drprotection_for_discovered_vm_via_ui:"
-            f" vm={all_cnv_workloads[2].vm_name}, expected=True"
-        )
+        # -- DRPC1: remove VM3 (Shared), then VM1 (Standalone) ------------- #
+        logger.test_step("Remove DR protection from VM 3 (Shared with DRPC1)")
+        assert navigate_using_fleet_virtualization(acm_obj)
         assert remove_drprotection_for_discovered_vm_via_ui(
             acm_obj,
             vm=all_cnv_workloads[2],
@@ -1201,8 +1253,7 @@ class TestACMKubevirtDRIntergration:
             namespace=workload_namespace,
         )
 
-        # Validate DRPC1 still exists and VM 1 is still protected
-        logger.info("Validating DRPC1 still exists after removing Shared VM 3")
+        logger.info("Validating DRPC1 still exists after removing VM 3")
         config.switch_acm_ctx()
         wait_for_resource_existence(
             kind=constants.DRPC,
@@ -1211,306 +1262,16 @@ class TestACMKubevirtDRIntergration:
             timeout=120,
             should_exist=True,
         )
-        logger.info("Validating DRPC1 PROTECTED_VMS contains only VM 1")
         verify_drpc_protected_vms(
             resource_name_1,
             expected_vms=[all_cnv_workloads[0].vm_name],
             unexpected_vms=[all_cnv_workloads[2].vm_name],
         )
-        logger.info("VM 3 removed from DRPC1; VM 1 remains protected under DRPC1")
 
-        # Step B: remove the Standalone VM (VM 2, index 1) → DRPC2 deleted
-        logger.info(
-            "Removing DR protection from Standalone VM 2 "
-            f"'{all_cnv_workloads[1].vm_name}' (DRPC2)"
+        logger.test_step(
+            "Remove DR protection from VM 1 (Standalone, last VM in DRPC1)"
         )
-        logger.assertion(
-            f"remove_drprotection_for_discovered_vm_via_ui:"
-            f" vm={all_cnv_workloads[1].vm_name}, expected=True"
-        )
-        assert remove_drprotection_for_discovered_vm_via_ui(
-            acm_obj,
-            vm=all_cnv_workloads[1],
-            managed_cluster_name=primary_cluster_name,
-            namespace=workload_namespace,
-        )
-
-        # Validate DRPC2 is deleted
-        logger.info("Validating DRPC2 is deleted after removing Standalone VM 2")
-        config.switch_acm_ctx()
-        wait_for_resource_existence(
-            kind=constants.DRPC,
-            namespace=constants.DR_OPS_NAMESPACE,
-            resource_name=resource_name_2,
-            timeout=120,
-            should_exist=False,
-        )
-        logger.info("Standalone VM 2 DR protection removed and DRPC2 deleted")
-
-        logger.info(
-            f"Test for mixed protection types (Standalone and Shared) "
-            f"in namespace {workload_namespace} passed. "
-            f"DRPC groups: {protection_name_1}, {protection_name_2}"
-        )
-
-    @pytest.mark.polarion_id("OCS-8046")
-    def test_acm_kubevirt_remove_all_shared_protection_vms(
-        self,
-        setup_acm_ui,
-        discovered_apps_dr_workload_cnv,
-    ):
-        """
-        Verify that the DRPC is deleted when DR protection is removed from
-        every VM enrolled under a shared protection group.
-
-        Three VMs are deployed in the same namespace.  One is DR-protected as
-        Standalone (this creates the DRPC), and the other two join the same
-        DRPC as Shared.  The test then removes protection from the Shared VMs
-        one at a time, asserting the DRPC is still present after each partial
-        removal, and finally removes the Standalone VM's protection, asserting
-        the DRPC is deleted once no VMs remain enrolled.
-
-        Test steps:
-
-        1. Deploy 3 CNV discovered workloads in a single namespace via CLI
-        2. DR protect VM 1 as Standalone (creates the DRPC)
-        3. DR protect VM 2 as Shared (joins VM 1's DRPC; only 1 DRPC exists)
-        4. DR protect VM 3 as Shared (joins VM 1's DRPC; still only 1 DRPC)
-        5. Verify all VMs are Running and replication resources are created
-        6. Write data to all VMs and record md5sums
-        7. Remove DR protection from VM 2 (Shared)
-           - Verify DRPC still exists and VM 1 / VM 3 are still protected
-        8. Remove DR protection from VM 3 (Shared)
-           - Verify DRPC still exists and VM 1 is still protected
-        9. Remove DR protection from VM 1 (Standalone – last enrolled VM)
-           - Verify DRPC is deleted
-        """
-
-        vm_filepaths = ["/dd_file1.txt"]
-        all_cnv_workloads = []
-
-        logger.test_step("Deploy VM 1 (will be Standalone)")
-        cnv_workload_1 = discovered_apps_dr_workload_cnv(
-            pvc_vm=1, dr_protect=False, shared_drpc_protection=False
-        )
-        all_cnv_workloads.append(cnv_workload_1[-1])
-
-        logger.test_step("Deploy VM 2 in the same namespace (will be Shared)")
-        cnv_workload_2 = discovered_apps_dr_workload_cnv(
-            pvc_vm=1, dr_protect=False, shared_drpc_protection=True
-        )
-        all_cnv_workloads.append(cnv_workload_2[-1])
-
-        logger.test_step("Deploy VM 3 in the same namespace (will be Shared)")
-        cnv_workload_3 = discovered_apps_dr_workload_cnv(
-            pvc_vm=1, dr_protect=False, shared_drpc_protection=True
-        )
-        all_cnv_workloads.append(cnv_workload_3[-1])
-
-        assert all_cnv_workloads, "No discovered VMs found"
-        assert (
-            len(all_cnv_workloads) == 3
-        ), f"Expected 3 VMs, found {len(all_cnv_workloads)}"
-
-        config.switch_acm_ctx()
-        login_to_acm()
-        workload_namespace = all_cnv_workloads[0].workload_namespace
-        logger.info(f"All VMs deployed in namespace: {workload_namespace}")
-
-        acm_obj = AcmAddClusters()
-        primary_cluster_name = all_cnv_workloads[0].preferred_primary_cluster
-        logger.info(f"Primary cluster: {primary_cluster_name}")
-
         assert navigate_using_fleet_virtualization(acm_obj)
-
-        # VM 1: Standalone – creates the DRPC
-        protection_name = workload_namespace
-        logger.test_step("DR protect VM 1 with Standalone protection")
-        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=[all_cnv_workloads[0]],
-            managed_cluster_name=primary_cluster_name,
-            standalone=True,
-            protection_name=protection_name,
-            namespace=workload_namespace,
-        )
-        resource_name = f"{protection_name}-drpc"
-
-        # Wait for VM 1's DRPC to exist before enrolling VMs 2 and 3 as Shared.
-        logger.info(
-            f"Waiting for DRPC {resource_name} to exist before enrolling VMs 2/3 as Shared"
-        )
-        config.switch_acm_ctx()
-        wait_for_resource_existence(
-            kind=constants.DRPC,
-            namespace=constants.DR_OPS_NAMESPACE,
-            resource_name=resource_name,
-            timeout=120,
-            should_exist=True,
-        )
-
-        # VM 2: Shared – exactly 1 DRPC exists at this point
-        logger.test_step("DR protect VM 2 with Shared protection (tied to VM 1)")
-        assert navigate_using_fleet_virtualization(acm_obj)
-        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=[all_cnv_workloads[1]],
-            managed_cluster_name=primary_cluster_name,
-            standalone=False,
-            protection_name=protection_name,
-            namespace=workload_namespace,
-        )
-
-        # VM 3: Shared – still only 1 DRPC, radio-button assertion holds
-        logger.test_step("DR protect VM 3 with Shared protection (tied to VM 1)")
-        assert navigate_using_fleet_virtualization(acm_obj)
-        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=[all_cnv_workloads[2]],
-            managed_cluster_name=primary_cluster_name,
-            standalone=False,
-            protection_name=protection_name,
-            namespace=workload_namespace,
-        )
-
-        logger.info(f"All VMs enrolled under DRPC: {resource_name}")
-
-        logger.test_step("Verify DRPC PROTECTED_VMS contains all 3 VMs")
-        verify_drpc_protected_vms(
-            resource_name,
-            expected_vms=[wl.vm_name for wl in all_cnv_workloads],
-        )
-
-        config.switch_to_cluster_by_name(primary_cluster_name)
-
-        total_pvc_count = sum(wl.workload_pvc_count for wl in all_cnv_workloads)
-        total_pod_count = sum(wl.workload_pod_count for wl in all_cnv_workloads)
-        dr_helpers.wait_for_all_resources_creation(
-            total_pvc_count,
-            total_pod_count,
-            workload_namespace,
-            discovered_apps=True,
-            vrg_name=resource_name,
-        )
-
-        for cnv_wl in all_cnv_workloads:
-            dr_helpers.wait_for_cnv_workload(
-                vm_name=cnv_wl.vm_name,
-                namespace=workload_namespace,
-                phase=constants.STATUS_RUNNING,
-            )
-
-        # Download virtctl if not already present
-        CNVInstaller().download_and_extract_virtctl_binary()
-
-        # Write data to all VMs
-        logger.test_step("Write data to all VMs")
-        for cnv_wl in all_cnv_workloads:
-            run_dd_io(
-                vm_obj=cnv_wl.vm_obj,
-                file_path=vm_filepaths[0],
-                username=cnv_wl.vm_username,
-                verify=True,
-            )
-
-        # ------------------------------------------------------------------ #
-        # Step 7: Remove protection from VM 2 (Shared)                        #
-        # ------------------------------------------------------------------ #
-        config.switch_acm_ctx()
-        logger.test_step("Remove DR protection from VM 2 (Shared)")
-        logger.assertion("navigate_using_fleet_virtualization: expected=True")
-        assert navigate_using_fleet_virtualization(acm_obj)
-
-        logger.info(
-            f"Removing DR protection from Shared VM 2 '{all_cnv_workloads[1].vm_name}'"
-        )
-        logger.assertion(
-            f"remove_drprotection_for_discovered_vm_via_ui:"
-            f" vm={all_cnv_workloads[1].vm_name}, expected=True"
-        )
-        assert remove_drprotection_for_discovered_vm_via_ui(
-            acm_obj,
-            vm=all_cnv_workloads[1],
-            managed_cluster_name=primary_cluster_name,
-            namespace=workload_namespace,
-        )
-
-        logger.info(
-            "Validating DRPC still exists after removing VM 2 (VM 1 and VM 3 remain)"
-        )
-        config.switch_acm_ctx()
-        wait_for_resource_existence(
-            kind=constants.DRPC,
-            namespace=constants.DR_OPS_NAMESPACE,
-            resource_name=resource_name,
-            timeout=120,
-            should_exist=True,
-        )
-        logger.info("Validating DRPC PROTECTED_VMS contains VM 1 and VM 3 but not VM 2")
-        verify_drpc_protected_vms(
-            resource_name,
-            expected_vms=[
-                all_cnv_workloads[0].vm_name,
-                all_cnv_workloads[2].vm_name,
-            ],
-            unexpected_vms=[all_cnv_workloads[1].vm_name],
-        )
-        logger.info("VM 2 removed; DRPC intact with VM 1 and VM 3")
-
-        # ------------------------------------------------------------------ #
-        # Step 8: Remove protection from VM 3 (Shared)                        #
-        # ------------------------------------------------------------------ #
-        logger.test_step("Remove DR protection from VM 3 (Shared)")
-        logger.assertion("navigate_using_fleet_virtualization: expected=True")
-        assert navigate_using_fleet_virtualization(acm_obj)
-
-        logger.info(
-            f"Removing DR protection from Shared VM 3 '{all_cnv_workloads[2].vm_name}'"
-        )
-        logger.assertion(
-            f"remove_drprotection_for_discovered_vm_via_ui:"
-            f" vm={all_cnv_workloads[2].vm_name}, expected=True"
-        )
-        assert remove_drprotection_for_discovered_vm_via_ui(
-            acm_obj,
-            vm=all_cnv_workloads[2],
-            managed_cluster_name=primary_cluster_name,
-            namespace=workload_namespace,
-        )
-
-        logger.info("Validating DRPC still exists after removing VM 3 (VM 1 remains)")
-        config.switch_acm_ctx()
-        wait_for_resource_existence(
-            kind=constants.DRPC,
-            namespace=constants.DR_OPS_NAMESPACE,
-            resource_name=resource_name,
-            timeout=120,
-            should_exist=True,
-        )
-        logger.info("Validating DRPC PROTECTED_VMS contains only VM 1")
-        verify_drpc_protected_vms(
-            resource_name,
-            expected_vms=[all_cnv_workloads[0].vm_name],
-            unexpected_vms=[all_cnv_workloads[2].vm_name],
-        )
-        logger.info("VM 3 removed; DRPC intact with VM 1")
-
-        # ------------------------------------------------------------------ #
-        # Step 9: Remove protection from VM 1 (Standalone – last enrollment)  #
-        # DRPC must be deleted once no VMs remain enrolled.                   #
-        # ------------------------------------------------------------------ #
-        logger.test_step("Remove DR protection from VM 1 (Standalone, last enrollment)")
-        logger.assertion("navigate_using_fleet_virtualization: expected=True")
-        assert navigate_using_fleet_virtualization(acm_obj)
-
-        logger.info(
-            f"Removing DR protection from Standalone VM 1 '{all_cnv_workloads[0].vm_name}'"
-            " (last VM in the group)"
-        )
-        logger.assertion(
-            f"remove_drprotection_for_discovered_vm_via_ui:"
-            f" vm={all_cnv_workloads[0].vm_name}, expected=True"
-        )
         assert remove_drprotection_for_discovered_vm_via_ui(
             acm_obj,
             vm=all_cnv_workloads[0],
@@ -1518,18 +1279,68 @@ class TestACMKubevirtDRIntergration:
             namespace=workload_namespace,
         )
 
-        logger.info(
-            "Validating DRPC is deleted now that all enrolled VMs have been removed"
-        )
+        logger.info("Validating DRPC1 is deleted after removing last VM")
         config.switch_acm_ctx()
         wait_for_resource_existence(
             kind=constants.DRPC,
             namespace=constants.DR_OPS_NAMESPACE,
-            resource_name=resource_name,
+            resource_name=resource_name_1,
             timeout=300,
             should_exist=False,
         )
+
+        # -- DRPC2: remove VM4 (Shared), then VM2 (Standalone) ------------- #
+        logger.test_step("Remove DR protection from VM 4 (Shared with DRPC2)")
+        assert navigate_using_fleet_virtualization(acm_obj)
+        assert remove_drprotection_for_discovered_vm_via_ui(
+            acm_obj,
+            vm=all_cnv_workloads[3],
+            managed_cluster_name=primary_cluster_name,
+            namespace=workload_namespace,
+        )
+
+        logger.info("Validating DRPC2 still exists after removing VM 4")
+        config.switch_acm_ctx()
+        wait_for_resource_existence(
+            kind=constants.DRPC,
+            namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=resource_name_2,
+            timeout=120,
+            should_exist=True,
+        )
+        verify_drpc_protected_vms(
+            resource_name_2,
+            expected_vms=[all_cnv_workloads[1].vm_name],
+            unexpected_vms=[all_cnv_workloads[3].vm_name],
+        )
+
+        logger.test_step(
+            "Remove DR protection from VM 2 (Standalone, last VM in DRPC2)"
+        )
+        assert navigate_using_fleet_virtualization(acm_obj)
+        assert remove_drprotection_for_discovered_vm_via_ui(
+            acm_obj,
+            vm=all_cnv_workloads[1],
+            managed_cluster_name=primary_cluster_name,
+            namespace=workload_namespace,
+        )
+
+        logger.info("Validating DRPC2 is deleted after removing last VM")
+        config.switch_acm_ctx()
+        wait_for_resource_existence(
+            kind=constants.DRPC,
+            namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=resource_name_2,
+            timeout=300,
+            should_exist=False,
+        )
+
+        # Delete the second DRPolicy
+        logger.test_step("Delete the second DRPolicy")
+        dr_helpers.delete_drpolicy(dr_policy_6m_name)
+
         logger.info(
-            f"DRPC '{resource_name}' deleted as expected after removing "
-            "all VMs from the shared protection group"
+            f"Test for mixed protection types (Standalone and Shared) "
+            f"in namespace {workload_namespace} passed. "
+            f"DRPC groups: {protection_name_1}, {protection_name_2}"
         )
