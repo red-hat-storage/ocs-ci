@@ -71,9 +71,9 @@ class Test2AZFailoverAndRelocateZoneFailure:
     ):
         """
         Tests to verify application failover and relocate with multiple workloads:
-        - 2 GitOps/Subscription apps
-        - 2 Discovered apps
-        - 2 CNV apps (only for RBD/CEPHBLOCKPOOL)
+        - 1 GitOps/Subscription apps
+        - 1 Discovered apps
+        - 1 CNV apps (only for RBD/CEPHBLOCKPOOL)
 
         This test covers:
         1. Deploy workloads on primary cluster
