@@ -363,9 +363,14 @@ class TestUpgradeOCP(ManageTest):
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)
 
+        acm_cluster = config.multicluster and is_acm_cluster(config)
+        hci_client = (
+            config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+        )
         if (
             not config.ENV_DATA["mcg_only_deployment"]
-            and not config.multicluster
+            and not acm_cluster
+            and not hci_client
             and not config.DEPLOYMENT.get("ocp_only_upgrade")
         ):
             new_ceph_cluster = CephCluster()
