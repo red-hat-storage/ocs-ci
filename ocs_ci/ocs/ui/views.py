@@ -434,7 +434,7 @@ deployment_4_22 = {
         By.XPATH,
     ),
     "operator_provider": (
-        "//dt[normalize-space(.)='Provider']/following-sibling::dd[1]",
+        "//dt[normalize-space(.)='Provider']/following-sibling::dd",
         By.XPATH,
     ),
     "operator_description": (
