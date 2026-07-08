@@ -4058,8 +4058,8 @@ MANIFEST_WORKS = "manifestworks.work.open-cluster-management.io"
 # IBM Fusion Access Operator for SAN
 TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS = os.path.join(TEMPLATE_DIR, "fusion-access")
 FUSION_ACCESS_NAMESPACE = "ibm-fusion-access"
-FUSION_ACCESS_CATALOG_SOURCE_NAME = "ibm-operator-catalog"
-FUSION_ACCESS_OPERATOR_NAME = "ibm-fusion-access"
+FUSION_ACCESS_CATALOG_SOURCE_NAME = "certified-operators"
+FUSION_ACCESS_OPERATOR_NAME = "openshift-fusion-access-operator"
 FUSION_ACCESS_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "subscription.yaml"
 )
