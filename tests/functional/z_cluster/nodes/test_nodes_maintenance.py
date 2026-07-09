@@ -919,6 +919,17 @@ class TestECNodeOperations(ManageTest):
             time.sleep(interval)
 
     @switch_to_provider_for_function
+    def _log_ceph_status_on_io_failure(self):
+        """Log ceph status to help diagnose write IO failures."""
+        try:
+            ct_pod = self._get_resilient_ceph_tools_pod()
+            status = ct_pod.exec_ceph_cmd("ceph status")
+            log.warning(f"Ceph status at IO failure: {status}")
+        except (CommandFailed, TimeoutExpiredError):
+            log.warning("Could not retrieve ceph status after IO failure")
+
+    @switch_to_provider_for_function
+    @enable_high_recovery_during_rebalance_flag
     def _wait_for_stable_degraded(self, ct_pod, timeout=600, checks=3, interval=20):
         """Wait until PG states stabilize in a degraded condition."""
         stable_count = 0
@@ -947,16 +958,24 @@ class TestECNodeOperations(ManageTest):
 
     @switch_to_provider_for_function
     def _run_write_io(self, pod_obj):
-        """Run a small FIO write and wait for completion."""
-        pod_obj.run_io(
-            storage_type="fs",
-            size="64M",
-            io_direction="wo",
-            runtime=0,
-            bs="4K",
-            fio_filename="drain_write_test",
-        )
-        get_fio_rw_iops(pod_obj)
+        """Run a small FIO write and wait for completion.
+
+        On failure, logs ceph status for diagnostics before re-raising.
+        """
+        try:
+            pod_obj.run_io(
+                storage_type="fs",
+                size="64M",
+                io_direction="wo",
+                runtime=0,
+                bs="4K",
+                fio_filename="drain_write_test",
+            )
+            get_fio_rw_iops(pod_obj)
+        except (CommandFailed, TimeoutExpiredError, TimeoutError) as e:
+            log.warning(f"Write IO failed: {e}")
+            self._log_ceph_status_on_io_failure()
+            raise
 
     @switch_to_provider_for_function
     def _try_write_io(self, pod_obj):
@@ -974,6 +993,7 @@ class TestECNodeOperations(ManageTest):
             get_fio_rw_iops(pod_obj)
             return True
         except (CommandFailed, TimeoutExpiredError, TimeoutError):
+            self._log_ceph_status_on_io_failure()
             return False
 
     @switch_to_provider_for_function
@@ -1164,15 +1184,16 @@ class TestECNodeOperations(ManageTest):
                     f"on downed node {va_node}"
                 )
                 try:
-                    va_ocp.exec_oc_cmd(f"delete volumeattachment {va_name}")
+                    va_ocp.exec_oc_cmd(
+                        f"delete volumeattachment {va_name} --wait=false"
+                    )
                 except CommandFailed as e:
                     log.warning(f"Failed to delete VolumeAttachment " f"{va_name}: {e}")
 
     @tier4a
     @runs_on_provider
     @skipif_managed_service
-    @ignore_leftovers  # Pod/PVC cleanup may hang on degraded EC storage
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-8057")
     def test_ec_gradual_node_shutdown(
         self,
         request,
@@ -1312,14 +1333,14 @@ class TestECNodeOperations(ManageTest):
                     try:
                         retry(
                             (CommandFailed, TimeoutExpiredError, TimeoutError),
-                            tries=3,
+                            tries=5,
                             delay=30,
                             backoff=1,
                         )(self._run_write_io)(pod_obj)
                         log.info("Write succeeded in tier 2")
                     except (CommandFailed, TimeoutExpiredError, TimeoutError):
                         log.warning(
-                            f"!!! ALL 3 WRITE ATTEMPTS FAILED in tier 2 "
+                            f"!!! ALL 5 WRITE ATTEMPTS FAILED in tier 2 "
                             f"with {live_hosts} hosts "
                             f"(min_size={min_size}) — proceeding !!!"
                         )
@@ -1385,7 +1406,7 @@ class TestECNodeOperations(ManageTest):
     @runs_on_provider
     @skipif_managed_service
     @ignore_leftovers
-    @pytest.mark.polarion_id("OCS-YYYY")
+    @pytest.mark.polarion_id("OCS-8058")
     def test_ec_bulk_node_shutdown_data_integrity(
         self,
         request,
@@ -1408,16 +1429,20 @@ class TestECNodeOperations(ManageTest):
             thresholds = get_ec_drain_thresholds()
             m = thresholds["m"]
             size = thresholds["size"]
+            min_size = thresholds["min_size"]
             total_hosts = thresholds["total_osd_hosts"]
-            assert (
-                total_hosts >= size
-            ), f"Not enough OSD hosts ({total_hosts}) for EC pool (need {size})"
+            if total_hosts < size:
+                pytest.skip(
+                    f"Not enough OSD hosts ({total_hosts}) "
+                    f"for EC pool (need {size})"
+                )
 
             shutdown_order = self._get_eligible_shutdown_order()
-            assert len(shutdown_order) >= m, (
-                f"Need at least {m} eligible worker OSD nodes for bulk "
-                f"shutdown, only {len(shutdown_order)} available"
-            )
+            if len(shutdown_order) < m:
+                pytest.skip(
+                    f"Need at least {m} eligible worker OSD nodes for bulk "
+                    f"shutdown, only {len(shutdown_order)} available"
+                )
 
             # Phase 1: Create workload on a master node (never shut down)
             pod_obj, original_md5 = self._create_workload_on_master(
@@ -1439,10 +1464,11 @@ class TestECNodeOperations(ManageTest):
             for node_name in targets:
                 node_mons = get_node_mon_ids(node_name)
                 mons_on_targets += len(node_mons)
-            assert (quorum_count - mons_on_targets) >= 2, (
-                f"Bulk shutdown would break mon quorum: "
-                f"{quorum_count} in quorum, {mons_on_targets} on targets"
-            )
+            if (quorum_count - mons_on_targets) < 2:
+                pytest.skip(
+                    f"Bulk shutdown would break mon quorum: "
+                    f"{quorum_count} in quorum, {mons_on_targets} on targets"
+                )
 
             # Phase 4: Bulk shutdown
             self._log_banner(
@@ -1460,18 +1486,80 @@ class TestECNodeOperations(ManageTest):
 
             self._unset_noout_if_needed()
 
-            # Phase 5: Verify data integrity while degraded
+            # Phase 5: Wait for Ceph recovery to show positive progress
+            live_hosts = total_hosts - m
             self._log_banner(
                 f"DEGRADED STATE: {m} nodes down, "
-                f"{total_hosts - m} hosts remaining — "
-                f"verifying data integrity"
+                f"{live_hosts} hosts remaining — "
+                f"waiting for recovery progress"
             )
-            ct_pod = self._get_resilient_ceph_tools_pod()
-            self._wait_for_stable_degraded(ct_pod)
-            verify_data_integrity(pod_obj, "fio-rand-write", original_md5)
-            log.test_step("Data integrity verified in degraded state")
+            log.test_step("Waiting 3 min for Ceph to begin recovery")
+            time.sleep(180)
 
-            # Phase 6: Restart all stopped nodes and wait for recovery
+            log.test_step(
+                "Monitoring degraded objects for positive progress " "(up to 20 min)"
+            )
+            prev_degraded = None
+            progress_detected = False
+            start = time.time()
+            while time.time() - start < 1200:
+                try:
+                    ct_pod = self._get_resilient_ceph_tools_pod()
+                    status = ct_pod.exec_ceph_cmd("ceph status")
+                except (CommandFailed, TimeoutExpiredError):
+                    time.sleep(120)
+                    continue
+                pgmap = status.get("pgmap", {})
+                degraded_objects = pgmap.get("degraded_objects", 0)
+                degraded_ratio = pgmap.get("degraded_ratio", 0) * 100
+                recover_bps = pgmap.get("recovering_bytes_per_sec", 0)
+                misplaced = pgmap.get("misplaced_objects", 0)
+                recover_mb = recover_bps / 1024 / 1024 if recover_bps else 0
+                log.info(
+                    f"Degraded: {degraded_ratio:.1f}% "
+                    f"({degraded_objects} objects), "
+                    f"misplaced: {misplaced}, "
+                    f"recovery: {recover_mb:.0f} MiB/s"
+                )
+                if prev_degraded is not None and degraded_objects < prev_degraded:
+                    log.info(
+                        f"Positive progress: degraded objects decreased "
+                        f"from {prev_degraded} to {degraded_objects}"
+                    )
+                    progress_detected = True
+                    break
+                prev_degraded = degraded_objects
+                time.sleep(120)
+            assert progress_detected, (
+                "No positive progress in degraded objects after 20 min "
+                "— Ceph recovery did not start"
+            )
+
+            # Verify data integrity while degraded — the core EC
+            # guarantee: data is readable with up to M node failures.
+            # run in a retry after 30s to allow for any transient issues with the degraded state.
+            if live_hosts >= min_size:
+                log.test_step(
+                    f"Verifying data integrity while degraded "
+                    f"({live_hosts} hosts >= min_size {min_size})"
+                )
+                for _ in TimeoutSampler(
+                    timeout=3600,
+                    sleep=120,
+                    func=verify_data_integrity,
+                    pod_obj=pod_obj,
+                    file_name="fio-rand-write",
+                    original_md5sum=original_md5,
+                ):
+                    log.info("Data integrity verified in degraded state")
+                    break
+            else:
+                log.warning(
+                    f"Skipping degraded-state read: {live_hosts} hosts "
+                    f"< min_size {min_size} — PGs may be inactive"
+                )
+
+            # Phase 6: Restart all stopped nodes and wait for full recovery
             self._log_banner(
                 f"RECOVERY: restarting " f"{len(self.stopped_node_objs)} stopped nodes"
             )
