@@ -1225,7 +1225,7 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
 
 
 def check_and_recover_sandbox_errors(
-    pod_obj, timeout=600, max_recovery_attempts=2, _attempt=0
+    pod_obj, timeout=600, max_recovery_attempts=3, _attempt=0
 ):
     """
     Check if a pod has sandbox errors and recover by power cycling its node.
@@ -1602,7 +1602,7 @@ def handle_multi_attach_error(pod_obj, timeout=300):
 
 def recover_mcg():
     """
-    Recovery procedure for NooBaa by re-spinning the pods after mon recovery
+    Recovery procedure for NooBaa by re-spinning the pods after mon recovery.
 
     Raises:
         ResourceWrongStatusException: If any NooBaa or RGW pods fail to reach running state
@@ -1610,149 +1610,51 @@ def recover_mcg():
     logger.info("Starting MCG recovery by re-spinning NooBaa pods")
 
     noobaa_pods_before = get_noobaa_pods()
-    expected_pod_count = len(noobaa_pods_before)
-
-    NOOBAA_POD_PREFIXES = [
-        "noobaa-db-pg-cluster-1",
-        "noobaa-db-pg-cluster-2",
-        "cnpg-controller-manager",
-        "noobaa-core",
-        "noobaa-endpoint",
-        "noobaa-operator",
-    ]
-
-    def get_pod_type_prefix(pod_name):
-        """Extract pod type prefix from pod name using known prefixes"""
-        for prefix in NOOBAA_POD_PREFIXES:
-            if pod_name.startswith(prefix):
-                return prefix
-        logger.warning(f"Unknown NooBaa pod type: {pod_name}")
-        parts = pod_name.rsplit("-", 2)
-        return parts[0] if len(parts) > 1 else pod_name
-
-    expected_pod_types = {}
-    for pod_obj in noobaa_pods_before:
-        prefix = get_pod_type_prefix(pod_obj.name)
-        expected_pod_types[prefix] = expected_pod_types.get(prefix, 0) + 1
-
     logger.info(
-        f"Found {expected_pod_count} NooBaa pods to respawn by type: {expected_pod_types}"
+        f"Found {len(noobaa_pods_before)} NooBaa pods to respawn: "
+        f"{[p.name for p in noobaa_pods_before]}"
     )
-
-    for idx, noobaa_pod in enumerate(noobaa_pods_before):
-        logger.info(
-            f"Force deleting NooBaa pod {idx+1}/{expected_pod_count}: {noobaa_pod.name}"
-        )
+    for noobaa_pod in noobaa_pods_before:
+        logger.info(f"Force deleting NooBaa pod: {noobaa_pod.name}")
         noobaa_pod.delete(force=True)
 
-        if idx < expected_pod_count - 1:
-            wait_time = 60
-            logger.info(f"Waiting {wait_time}s before deleting next NooBaa pod")
-            time.sleep(wait_time)
-
-    logger.info("Waiting 120s for NooBaa pods to fully respawn")
-    time.sleep(120)
-
-    # Wait for the minimum required pod types to appear (db-pg-cluster-2 is excluded
-    # because it is only created after db-pg-cluster-1 is fully running).
-    minimum_required_types = {
-        k: v for k, v in expected_pod_types.items() if k != "noobaa-db-pg-cluster-2"
-    }
-    minimum_required_count = sum(minimum_required_types.values())
-
-    def _minimum_pods_present():
-        current_pods = get_noobaa_pods()
-        current_pod_types = {}
-        for p in current_pods:
-            prefix = get_pod_type_prefix(p.name)
-            current_pod_types[prefix] = current_pod_types.get(prefix, 0) + 1
-        missing = [
-            f"{pt} ({current_pod_types.get(pt, 0)}/{cnt})"
-            for pt, cnt in minimum_required_types.items()
-            if current_pod_types.get(pt, 0) < cnt
-        ]
-        if missing:
-            logger.debug(f"NooBaa pods not yet ready — missing: {missing}")
-            return False
-        logger.info(
-            f"All minimum required NooBaa pod types present: {current_pod_types}"
-        )
-        return True
-
+    logger.info("Waiting for noobaa-db-pg-cluster-1 to reach Running (timeout 300s)")
+    db_pg_1_pod = None
     try:
-        for ready in TimeoutSampler(timeout=150, sleep=30, func=_minimum_pods_present):
-            if ready:
+        for db_pg_1_pods in TimeoutSampler(
+            timeout=300,
+            sleep=15,
+            func=lambda: [
+                p
+                for p in get_noobaa_pods()
+                if p.name.startswith("noobaa-db-pg-cluster-1")
+            ],
+        ):
+            if db_pg_1_pods:
+                db_pg_1_pod = db_pg_1_pods[0]
                 break
     except TimeoutExpiredError:
-        current_pods = get_noobaa_pods()
-        error_msg = (
-            f"NooBaa recovery failed: expected at least {minimum_required_count} pods "
-            f"({minimum_required_types}) but found {len(current_pods)} after 150s"
+        raise ResourceWrongStatusException(
+            "noobaa-db-pg-cluster-1 pod did not appear within 300s"
         )
-        logger.error(error_msg)
-        raise ResourceWrongStatusException(error_msg)
+    assert db_pg_1_pod is not None, "noobaa-db-pg-cluster-1 pod not set after wait"
+    failed = verify_pods_running(
+        [db_pg_1_pod], pod_type="NooBaa DB cluster-1", timeout=600, parallel=False
+    )
+    if failed:
+        raise ResourceWrongStatusException(
+            f"noobaa-db-pg-cluster-1 did not reach Running state within 600s: {failed}"
+        )
+    logger.info("noobaa-db-pg-cluster-1 is in Running state")
 
-    # Special handling for noobaa-db-pg-cluster-1 pod
-    # If it's not running, noobaa-db-pg-cluster-2 won't be created
-    logger.info("Checking if noobaa-db-pg-cluster-1 needs recovery")
-    db_pg_1_pods = [
-        p for p in get_noobaa_pods() if p.name.startswith("noobaa-db-pg-cluster-1")
-    ]
-
-    if db_pg_1_pods:
-        db_pg_1_pod = db_pg_1_pods[0]
-        logger.info(f"Found noobaa-db-pg-cluster-1 pod: {db_pg_1_pod.name}")
-
-        try:
-            if (
-                db_pg_1_pod.get().get("status", {}).get("phase")
-                != constants.STATUS_RUNNING
-            ):
-                logger.info(
-                    f"noobaa-db-pg-cluster-1 pod {db_pg_1_pod.name} is not running, attempting recovery"
-                )
-
-                failed_pods = verify_pods_running(
-                    [db_pg_1_pod], pod_type="NooBaa DB", timeout=600, parallel=False
-                )
-
-                if not failed_pods:
-                    logger.info("noobaa-db-pg-cluster-1 pod recovered successfully")
-
-                    logger.info("Waiting 180s for noobaa-db-pg-cluster-2 to be created")
-                    time.sleep(180)
-
-                    db_pods = [
-                        p
-                        for p in get_noobaa_pods()
-                        if p.name.startswith("noobaa-db-pg-cluster-")
-                    ]
-                    logger.info(f"Verifying {len(db_pods)} NooBaa DB pods are running")
-
-                    failed_db_pods = verify_pods_running(
-                        db_pods, pod_type="NooBaa DB", timeout=300, parallel=False
-                    )
-
-                    if failed_db_pods:
-                        logger.warning(
-                            f"Some NooBaa DB pods failed recovery: {failed_db_pods}"
-                        )
-                    else:
-                        logger.info("Both NooBaa DB pods are running successfully")
-                else:
-                    logger.warning(
-                        f"noobaa-db-pg-cluster-1 pod recovery failed: {failed_pods}"
-                    )
-            else:
-                logger.info("noobaa-db-pg-cluster-1 pod is already running")
-        except Exception as e:
-            logger.warning(f"Error during noobaa-db-pg-cluster-1 recovery check: {e}")
-    else:
-        logger.warning("noobaa-db-pg-cluster-1 pod not found")
+    logger.info("Waiting 300s for operator to create dependent NooBaa pods")
+    time.sleep(300)
 
     current_noobaa_pods = get_noobaa_pods()
-    logger.info(f"Verifying {len(current_noobaa_pods)} NooBaa pods are running")
-
+    logger.info(
+        f"Verifying {len(current_noobaa_pods)} NooBaa pods are running: "
+        f"{[p.name for p in current_noobaa_pods]}"
+    )
     failed_noobaa_pods = verify_pods_running(
         current_noobaa_pods, pod_type="NooBaa", timeout=600, parallel=False
     )
