@@ -868,3 +868,5 @@ skipif_lean_deployment = pytest.mark.skipif(
 zstream_4_20_14 = pytest.mark.zstream_4_20_14
 # z-stream marker
 zstream_4_20_14_monitoring = pytest.mark.zstream_4_20_14_monitoring
+# z-stream marker
+zstream_4_20_14_nfs = pytest.mark.zstream_4_20_14_nfs
