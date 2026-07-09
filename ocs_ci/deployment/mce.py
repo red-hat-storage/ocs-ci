@@ -393,17 +393,32 @@ class MCEInstaller(object):
     def mce_installed(self):
         """
         Check if MCE is already installed.
+        Verifies both the operator resource and the subscription exist.
 
         Returns:
              bool: True if MCE is installed, False otherwise
         """
         ocp_obj = OCP(kind=constants.ROOK_OPERATOR)
         # unlike other k8s resources, operators are OLM manager resources that identified by merged name.namespace
-        return ocp_obj.check_resource_existence(
+        operator_exists = ocp_obj.check_resource_existence(
             timeout=12,
             should_exist=True,
             resource_name=constants.MCE_OPERATOR_OPERATOR_NAME_WITH_NS,
         )
+        if not operator_exists:
+            return False
+        sub_exists = self.subs.check_resource_existence(
+            timeout=12,
+            should_exist=True,
+            resource_name=constants.MCE_OPERATOR,
+        )
+        if not sub_exists:
+            logger.warning(
+                "MCE operator resource exists but subscription is missing. "
+                "Likely leftover from partial cleanup."
+            )
+            return False
+        return True
 
     def mce_exists(self):
         """
@@ -646,11 +661,21 @@ class MCEInstaller(object):
             TimeoutExpiredError: If the CSV is not in the 'Succeeded' state within the timeout
 
         """
-        csv_ocp_obj = OCP(
-            kind=constants.CLUSTER_SERVICE_VERSION,
-            namespace=self.mce_namespace,
+        sampler = TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=self.get_mce_csv_name,
         )
-        csv_name = csv_ocp_obj.get(resource_name="")["items"][0]["metadata"]["name"]
+        csv_name = ""
+        try:
+            for csv_name in sampler:
+                if csv_name:
+                    logger.info(f"Found MCE CSV: {csv_name}")
+                    break
+        except TimeoutExpiredError:
+            raise MultiClusterEngineNotDeployedException(
+                "MCE CSV not found in namespace %s" % self.mce_namespace
+            )
         csv_obj = CSV(
             resource_name=csv_name,
             namespace=self.mce_namespace,
