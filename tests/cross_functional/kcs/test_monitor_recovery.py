@@ -99,45 +99,25 @@ class TestMonitorRecovery(E2ETest):
 
         def finalizer():
             """
-            Teardown: Force delete pods and clean up volume attachments
+            Teardown to clean up test resources
             """
             logger.test_step("Teardown: Clean up test resources")
-            logger.info("Force deleting test pods to release PVCs")
-            pods_to_delete = list(self.dc_pods)
-            for dc_pod in self.dc_pods:
+            for dc_pod in getattr(self, "dc_pods", []):
                 try:
                     pod_label = dc_pod.labels.get("name") or dc_pod.labels.get(
                         "deploymentconfig"
                     )
                     if pod_label:
-                        label_key = (
-                            "name" if dc_pod.labels.get("name") else "deploymentconfig"
+                        logger.info(f"Deleting deployment: {pod_label}")
+                        deploy_ocp = ocp.OCP(
+                            kind="Deployment", namespace=dc_pod.namespace
                         )
-                        current_pods_data = get_pods_having_label(
-                            f"{label_key}={pod_label}", dc_pod.namespace
-                        )
-                        for pod_data in current_pods_data:
-                            current_pod_name = pod_data.get("metadata", {}).get("name")
-                            if current_pod_name and current_pod_name != dc_pod.name:
-                                pods_to_delete.append(
-                                    get_pod_obj(current_pod_name, dc_pod.namespace)
-                                )
+                        deploy_ocp.delete(resource_name=pod_label)
+                        deploy_ocp.wait_for_delete(resource_name=pod_label)
                 except Exception as e:
                     logger.warning(
-                        f"Failed to look up current pods for {dc_pod.name}: {e}"
+                        f"Failed to delete deployment for pod {dc_pod.name}: {e}"
                     )
-
-            for pod_obj in pods_to_delete:
-                try:
-                    logger.debug(f"Force deleting pod: {pod_obj.name}")
-                    pod_obj.delete(force=True, wait=False)
-                except Exception as e:
-                    logger.warning(f"Failed to delete pod {pod_obj.name}: {e}")
-
-            logger.info("Waiting 30s for pods to terminate")
-            time.sleep(30)
-
-            cleanup_stale_volume_attachments()
 
         request.addfinalizer(finalizer)
 
