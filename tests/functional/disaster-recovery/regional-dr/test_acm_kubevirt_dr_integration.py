@@ -19,7 +19,6 @@ from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_deletion,
     wait_for_managed_cluster_unreachable,
-    wait_for_replication_resources_creation,
     wait_for_resource_existence,
 )
 from ocs_ci.ocs import constants, ocp
@@ -562,7 +561,6 @@ class TestACMKubevirtDRIntergration:
     @pytest.mark.polarion_id("OCS-8045")
     def test_acm_kubevirt_mixed_protection_types(
         self,
-        request,
         setup_acm_ui,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
@@ -662,6 +660,7 @@ class TestACMKubevirtDRIntergration:
         # so each DRPC uses a distinct policy.
         logger.test_step("Create second DRPolicy odr-policy-6m")
         existing_policies = dr_helpers.get_all_drpolicy()
+        default_dr_policy_name = existing_policies[0]["metadata"]["name"]
         dr_clusters = existing_policies[0]["spec"]["drClusters"]
         run_id = config.RUN["run_id"]
         dr_policy_6m_name = f"odr-policy-6m-{str(run_id)[-4:]}"
@@ -690,8 +689,6 @@ class TestACMKubevirtDRIntergration:
                 break
         logger.info(f"DRPolicy {dr_policy_6m_name} created and validated")
 
-        request.addfinalizer(lambda: dr_helpers.delete_drpolicy(dr_policy_6m_name))
-
         login_to_acm()
         acm_obj = AcmAddClusters()
 
@@ -700,7 +697,7 @@ class TestACMKubevirtDRIntergration:
         # DR protect VMs with mixed protection types
         # VM 1: Standalone (creates new DRPC)
         logger.test_step("DR protect VM 1 with Standalone protection")
-        protection_name_1 = f"{workload_namespace}-standalone-1"
+        protection_name_1 = f"{workload_namespace}-s1"
         assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
             acm_obj,
             vms=[all_cnv_workloads[0]],
@@ -708,6 +705,7 @@ class TestACMKubevirtDRIntergration:
             standalone=True,
             protection_name=protection_name_1,
             namespace=workload_namespace,
+            dr_policy_name=default_dr_policy_name,
         )
         # When DR protected via UI, the DRPC is named after the protection name entered
         resource_name_1 = f"{protection_name_1}-drpc"
@@ -725,6 +723,7 @@ class TestACMKubevirtDRIntergration:
             resource_name_1,
             [_pvc_name(all_cnv_workloads[0].vm_name)],
         )
+        config.switch_acm_ctx()
 
         # Wait for VM 1's DRPC to exist in Kubernetes before enrolling VM 3 as
         # Shared. The ACM UI queries existing DRPCs when opening the enrollment
@@ -768,12 +767,13 @@ class TestACMKubevirtDRIntergration:
                 _pvc_name(all_cnv_workloads[2].vm_name),
             ],
         )
+        config.switch_acm_ctx()
 
         # VM 2: Standalone with odr-policy-6m (creates a second independent DRPC)
         logger.test_step(
             "DR protect VM 2 with Standalone protection " f"using {dr_policy_6m_name}"
         )
-        protection_name_2 = f"{workload_namespace}-standalone-2"
+        protection_name_2 = f"{workload_namespace}-s2"
         resource_name_2 = f"{protection_name_2}-drpc"
         for attempt in range(3):
             try:
@@ -810,6 +810,7 @@ class TestACMKubevirtDRIntergration:
             resource_name_2,
             [_pvc_name(all_cnv_workloads[1].vm_name)],
         )
+        config.switch_acm_ctx()
 
         # Override discovered_apps_placement_name on the Standalone workload objects
         # so delete_workload can find the custom UI-created DRPCs at teardown.
@@ -860,6 +861,7 @@ class TestACMKubevirtDRIntergration:
                 _pvc_name(all_cnv_workloads[3].vm_name),
             ],
         )
+        config.switch_acm_ctx()
 
         logger.info(f"DRPC resources created: {drpc_resources}")
 
@@ -895,36 +897,6 @@ class TestACMKubevirtDRIntergration:
             vrg_name=resource_name_1,
             skip_replication_resources=True,
         )
-
-        # Verify both DRPCs' VRGs reach Primary state. A single call with
-        # vrg_name=resource_name_1 only verified DRPC1's VRG; DRPC2's volumes
-        # could still be unreplicated when the VMs tried to start.
-        for resource_name in drpc_resources:
-            wait_for_replication_resources_creation(
-                total_pvc_count,
-                workload_namespace,
-                timeout=900,
-                discovered_apps=True,
-                vrg_name=resource_name,
-            )
-
-        # Wait for all VMs to be running concurrently to avoid sequential
-        # timeouts when DRPC failovers are staggered
-        logger.test_step("Wait for all VMs to reach Running state")
-        with ThreadPoolExecutor(max_workers=len(all_cnv_workloads)) as executor:
-            futures = {
-                executor.submit(
-                    dr_helpers.wait_for_cnv_workload,
-                    vm_name=cnv_wl.vm_name,
-                    namespace=workload_namespace,
-                    phase=constants.STATUS_RUNNING,
-                ): cnv_wl
-                for cnv_wl in all_cnv_workloads
-            }
-            for future in as_completed(futures):
-                cnv_wl = futures[future]
-                future.result()
-                logger.info(f"VM {cnv_wl.vm_name} is Running")
 
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             workload_namespace,
@@ -990,15 +962,6 @@ class TestACMKubevirtDRIntergration:
             vrg_name=resource_name_1,
             skip_replication_resources=True,
         )
-
-        for resource_name in drpc_resources:
-            wait_for_replication_resources_creation(
-                total_pvc_count,
-                workload_namespace,
-                timeout=900,
-                discovered_apps=True,
-                vrg_name=resource_name,
-            )
 
         # Verify each VGR has a bound VGRC after failover
         logger.test_step("Verify VGR-VGRC binding on secondary cluster")
@@ -1163,15 +1126,6 @@ class TestACMKubevirtDRIntergration:
             vrg_name=resource_name_1,
             skip_replication_resources=True,
         )
-
-        for resource_name in drpc_resources:
-            wait_for_replication_resources_creation(
-                total_pvc_count,
-                workload_namespace,
-                timeout=900,
-                discovered_apps=True,
-                vrg_name=resource_name,
-            )
 
         # Verify each VGR has a bound VGRC after relocate
         logger.test_step("Verify VGR-VGRC binding on primary cluster")

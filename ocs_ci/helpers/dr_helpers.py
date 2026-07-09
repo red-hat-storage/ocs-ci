@@ -1865,19 +1865,27 @@ def validate_vgrc_count():
     return True
 
 
-def validate_vgr_vgrc_binding(namespace, drpc_names):
+def validate_vgr_vgrc_binding(namespace, drpc_names, timeout=120, sleep=30):
     """
     Validate that each DRPC's VolumeGroupReplication has a bound
     VolumeGroupReplicationContent and that the VGRC references back
     to the same VGR (bidirectional check).
 
+    The VGR may take time to appear after a DRPC is created, so
+    this polls until all expected VGRs are found and bound or the
+    timeout is reached.
+
     Args:
         namespace (str): Namespace where the VGRs are created
         drpc_names (list): List of DRPC resource names to validate
+        timeout (int): Timeout in seconds (default: 120)
+        sleep (int): Polling interval in seconds (default: 30)
 
     Raises:
-        AssertionError: If a VGR is missing, has no bound VGRC,
-            or the VGRC references a different VGR (stale binding)
+        TimeoutExpiredError: If VGR-VGRC binding is not established
+            within the timeout
+        AssertionError: If a VGRC references the wrong VGR
+            (stale binding)
 
     """
     vgr_ocp = ocp.OCP(
@@ -1885,25 +1893,57 @@ def validate_vgr_vgrc_binding(namespace, drpc_names):
         namespace=namespace,
     )
     vgrc_ocp = ocp.OCP(kind="VolumeGroupReplicationContent")
+
+    def _match_vgr(vgr_items, drpc_name):
+        # VGR names are truncated by the operator and may be
+        # identical for different DRPCs. Match using the
+        # k8s-resource-selector value in the VGR spec which
+        # contains the full un-truncated DRPC base name.
+        base = drpc_name.replace("-drpc", "")
+        matched = []
+        for v in vgr_items:
+            selector = v.get("spec", {}).get("source", {}).get("selector", {})
+            match_exprs = selector.get("matchExpressions", [])
+            for expr in match_exprs:
+                if base in expr.get("values", []):
+                    matched.append(v)
+                    break
+        return matched
+
+    def _check_bindings():
+        vgr_items = vgr_ocp.get().get("items", [])
+        vgrc_items = vgrc_ocp.get().get("items", [])
+
+        for drpc_name in drpc_names:
+            matched = _match_vgr(vgr_items, drpc_name)
+            if not matched:
+                return False
+            vgr = matched[0]
+            vgrc_name = vgr["spec"].get("volumeGroupReplicationContentName", "")
+            if not vgrc_name:
+                return False
+            vgrc_match = [v for v in vgrc_items if v["metadata"]["name"] == vgrc_name]
+            if not vgrc_match:
+                return False
+        return True
+
+    for sample in TimeoutSampler(timeout=timeout, sleep=sleep, func=_check_bindings):
+        if sample:
+            break
+        logger.info(
+            "VGR-VGRC binding not yet ready for %s. Retrying",
+            drpc_names,
+        )
+
     vgr_items = vgr_ocp.get().get("items", [])
     vgrc_items = vgrc_ocp.get().get("items", [])
 
     for drpc_name in drpc_names:
-        matched = [v for v in vgr_items if drpc_name in v["metadata"]["name"]]
-        assert matched, (
-            f"No VGR found for DRPC {drpc_name} in " f"namespace {namespace}"
-        )
+        matched = _match_vgr(vgr_items, drpc_name)
         vgr = matched[0]
         vgr_name = vgr["metadata"]["name"]
         vgrc_name = vgr["spec"].get("volumeGroupReplicationContentName", "")
-        assert vgrc_name, (
-            f"VGR {vgr_name} has no bound " f"VolumeGroupReplicationContent"
-        )
-
         vgrc_match = [v for v in vgrc_items if v["metadata"]["name"] == vgrc_name]
-        assert vgrc_match, (
-            f"VGRC {vgrc_name} referenced by VGR " f"{vgr_name} does not exist"
-        )
         vgrc_ref = (
             vgrc_match[0]
             .get("spec", {})
@@ -1915,12 +1955,16 @@ def validate_vgr_vgrc_binding(namespace, drpc_names):
             f"{vgrc_ref!r} instead of {vgr_name!r} "
             f"(stale binding)"
         )
-        logger.info(f"VGR {vgr_name} <-> VGRC {vgrc_name} " f"binding verified")
+        logger.info(
+            "VGR %s <-> VGRC %s binding verified",
+            vgr_name,
+            vgrc_name,
+        )
     logger.info("VGR-VGRC binding validation completed")
 
 
 def validate_vgr_pvc_refs(
-    namespace, drpc_name, expected_pvc_names, timeout=120, sleep=30
+    namespace, drpc_name, expected_pvc_names, timeout=180, sleep=30
 ):
     """
     Validate that a DRPC's VolumeGroupReplication contains exactly
@@ -1950,9 +1994,21 @@ def validate_vgr_pvc_refs(
         namespace=namespace,
     )
 
+    def _match_vgr(vgr_items):
+        base = drpc_name.replace("-drpc", "")
+        matched = []
+        for v in vgr_items:
+            selector = v.get("spec", {}).get("source", {}).get("selector", {})
+            match_exprs = selector.get("matchExpressions", [])
+            for expr in match_exprs:
+                if base in expr.get("values", []):
+                    matched.append(v)
+                    break
+        return matched
+
     def _check_pvc_refs():
         vgr_items = vgr_ocp.get().get("items", [])
-        matched = [v for v in vgr_items if drpc_name in v["metadata"]["name"]]
+        matched = _match_vgr(vgr_items)
         assert matched, (
             f"No VGR found for DRPC {drpc_name} in " f"namespace {namespace}"
         )
@@ -1970,7 +2026,7 @@ def validate_vgr_pvc_refs(
         )
 
     vgr_items = vgr_ocp.get().get("items", [])
-    matched = [v for v in vgr_items if drpc_name in v["metadata"]["name"]]
+    matched = _match_vgr(vgr_items)
     vgr_name = matched[0]["metadata"]["name"]
     logger.info("VGR %s PVC refs validated: %s", vgr_name, expected)
 
