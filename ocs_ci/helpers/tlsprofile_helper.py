@@ -235,7 +235,7 @@ SCAN_CLUSTER_DEFAULT_TLS13_GROUPS = (
     "X25519MLKEM768,SecP256r1MLKEM768,SecP384r1MLKEM1024"
 )
 
-TLS_SCANNER_IMAGE = "ghcr.io/leelavg/scantls@sha256:f9b6547c7285b28539b23d2135108b57ac8bbac0c51a82c5a274a2674a6eff70"
+TLS_SCANNER_IMAGE = "ghcr.io/leelavg/scantls@sha256:5e80dd5576812f3c8248fad7cbf19a74b74384aafd14614ccd53ef6b4e1f40d1"
 TLS_SCANNER_NAMESPACE = "scantls-system"
 # Seconds between ``oc get pod … jsonpath={.status.phase}`` samples (scanner pod startup).
 TLS_SCAN_POD_PHASE_POLL_SLEEP = 2
