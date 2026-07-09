@@ -103,12 +103,36 @@ class TestMonitorRecovery(E2ETest):
             """
             logger.test_step("Teardown: Clean up test resources")
             logger.info("Force deleting test pods to release PVCs")
+            pods_to_delete = list(self.dc_pods)
             for dc_pod in self.dc_pods:
                 try:
-                    logger.debug(f"Force deleting pod: {dc_pod.name}")
-                    dc_pod.delete(force=True, wait=False)
+                    pod_label = dc_pod.labels.get("name") or dc_pod.labels.get(
+                        "deploymentconfig"
+                    )
+                    if pod_label:
+                        label_key = (
+                            "name" if dc_pod.labels.get("name") else "deploymentconfig"
+                        )
+                        current_pods_data = get_pods_having_label(
+                            f"{label_key}={pod_label}", dc_pod.namespace
+                        )
+                        for pod_data in current_pods_data:
+                            current_pod_name = pod_data.get("metadata", {}).get("name")
+                            if current_pod_name and current_pod_name != dc_pod.name:
+                                pods_to_delete.append(
+                                    get_pod_obj(current_pod_name, dc_pod.namespace)
+                                )
                 except Exception as e:
-                    logger.warning(f"Failed to delete pod {dc_pod.name}: {e}")
+                    logger.warning(
+                        f"Failed to look up current pods for {dc_pod.name}: {e}"
+                    )
+
+            for pod_obj in pods_to_delete:
+                try:
+                    logger.debug(f"Force deleting pod: {pod_obj.name}")
+                    pod_obj.delete(force=True, wait=False)
+                except Exception as e:
+                    logger.warning(f"Failed to delete pod {pod_obj.name}: {e}")
 
             logger.info("Waiting 30s for pods to terminate")
             time.sleep(30)
@@ -275,15 +299,14 @@ class TestMonitorRecovery(E2ETest):
 
         logger.test_step("Verify data integrity after recovery")
 
-        logger.info("Checking current state of application pods before verification")
-        current_dc_pods = get_spun_dc_pods(self.dc_pods)
-        for pod_obj in current_dc_pods:
+        logger.info("Force deleting original dc pods to trigger re-spawn")
+        for pod_obj in self.dc_pods:
             logger.debug(f"Force deleting pod: {pod_obj.name}")
             pod_obj.delete(force=True)
 
         new_md5_sum = []
         logger.info("Waiting for pods to respawn and calculating checksums")
-        for pod_obj in get_spun_dc_pods(current_dc_pods):
+        for pod_obj in get_spun_dc_pods(self.dc_pods):
             pod_obj.ocp.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 resource_name=pod_obj.name,
