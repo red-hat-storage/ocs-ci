@@ -7561,7 +7561,14 @@ def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) 
     log.info(f"All OSDs {osd_ids} are now marked as 'down'")
 
 
-def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
+def create_cephfs_data_pool(
+    pool_name,
+    replica=3,
+    compression="none",
+    erasure_coded=False,
+    data_chunks=None,
+    coding_chunks=None,
+):
     """
     Add an EC data pool to the CephFilesystem via StorageCluster patch.
 
@@ -7570,6 +7577,10 @@ def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
 
     Args:
         pool_name (str): Short pool name (e.g. "test-ec-fs")
+        replica (int): Number of replicas for the pool
+        compression (str): Compression mode (none, passive, aggressive, force)
+        erasure_coded (bool): True to create an erasure coded pool instead of replicated.
+            If True, arguments not related to erasure coding will be invalidated.
         data_chunks (int): Number of data chunks (k)
         coding_chunks (int): Number of coding chunks (m)
 
@@ -7577,6 +7588,12 @@ def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
         str: Full pool name (e.g. "ocs-storagecluster-cephfilesystem-test-ec-fs")
     """
     from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+
+    allowed = {"none", "passive", "aggressive", "force", ""}
+    if compression not in allowed:
+        raise ValueError(
+            f"Invalid compressionMode '{compression}'. Supported values: {allowed}"
+        )
 
     sc_obj = get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"])
     sc_data = sc_obj.get()["items"][0]
@@ -7589,10 +7606,37 @@ def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
         .get("additionalDataPools", [])
     )
 
-    new_entry = {
-        "name": pool_name,
-        "erasureCoded": {"dataChunks": data_chunks, "codingChunks": coding_chunks},
-    }
+    fs_name = get_cephfs_name()
+    full_pool_name = f"{fs_name}-{pool_name}"
+
+    pool_names = {p.get("name") for p in current_pools}
+    if pool_name in pool_names:
+        logger.warning(
+            f"Data pool '{pool_name}' already exists in CephFilesystem. The configuration is not verified"
+        )
+        return full_pool_name
+
+    if erasure_coded:
+        from ocs_ci.ocs.cluster import get_ec_profile
+
+        resolved_data_chunks, resolved_coding_chunks = (
+            (data_chunks, coding_chunks)
+            if data_chunks is not None and coding_chunks is not None
+            else get_ec_profile()
+        )
+        new_entry = {
+            "name": pool_name,
+            "erasureCoded": {
+                "dataChunks": resolved_data_chunks,
+                "codingChunks": resolved_coding_chunks,
+            },
+        }
+    else:
+        new_entry = {
+            "name": pool_name,
+            "compressionMode": compression,
+            "replicated": {"size": replica},
+        }
     updated_pools = current_pools + [new_entry]
 
     patch = {
@@ -7605,9 +7649,6 @@ def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
     logger.info(f"Patching StorageCluster to add CephFS EC pool '{pool_name}'")
     sc_obj.patch(resource_name=sc_name, params=json.dumps(patch), format_type="merge")
 
-    fs_name = get_cephfs_name()
-    full_pool_name = f"{fs_name}-{pool_name}"
-
     ct_pod = pod.get_ceph_tools_pod()
     logger.info(f"Waiting for Ceph pool '{full_pool_name}' to appear")
     for pools in TimeoutSampler(300, 10, ct_pod.exec_ceph_cmd, "ceph osd pool ls"):
@@ -7618,7 +7659,7 @@ def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
     return full_pool_name
 
 
-def delete_cephfs_ec_pool(pool_name):
+def delete_cephfs_data_pool(pool_name):
     """
     Remove an EC data pool from CephFilesystem via StorageCluster patch.
 
