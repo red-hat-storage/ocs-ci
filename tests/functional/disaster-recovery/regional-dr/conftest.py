@@ -2,6 +2,7 @@ import logging
 import platform
 import os
 import tempfile
+import time
 from ocs_ci.utility import templating
 import pytest
 
@@ -446,6 +447,70 @@ def cnv_custom_storage_class(
         config.reset_ctx()
 
     request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def cephfs_custom_storage_class(request, storageclass_factory):
+    """
+    Fixture that returns a factory for creating a custom CephFS storage class
+    with a custom data pool on all non-ACM managed clusters.
+
+    The factory creates the storage class and pool on each cluster if they do
+    not already exist, then resets the cluster context.
+
+    Raises:
+        Exception: If storage class creation fails on any of the managed clusters
+
+    Returns:
+        callable: factory(replica, compression) that creates the custom SC
+    """
+
+    def factory(replica, compression):
+        """
+        Create the custom CephFS storage class and data pool on all clusters.
+
+        Args:
+            replica (int): Replica count for the CephFS data pool
+            compression (str): Compression mode for the pool
+                (e.g. None, 'aggressive', 'passive', 'force')
+        """
+
+        cephfs_pool_name = constants.RDR_CUSTOM_CEPHFS_POOL
+        cephfs_sc_name = constants.RDR_CUSTOM_CEPHFS_STORAGECLASS
+
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            # Create or verify existing SC in all clusters
+            existing_sc_list = get_all_storageclass()
+            if cephfs_sc_name in existing_sc_list:
+                log.info(f"Storage class {cephfs_sc_name} already exists")
+            else:
+                try:
+                    sc_obj = storageclass_factory(
+                        interface=constants.CEPHFILESYSTEM,
+                        sc_name=cephfs_sc_name,
+                        replica=replica,
+                        compression=compression,
+                        new_cephfs_pool=True,
+                        pool_name=f"ocs-storagecluster-cephfilesystem-{cephfs_pool_name}",
+                    )
+                    if sc_obj is None or sc_obj.name != cephfs_sc_name:
+                        log.error(
+                            f"Failed to create SC '{cephfs_sc_name}' or name mismatch: "
+                            f"Created '{sc_obj.name if sc_obj else 'None'}'"
+                        )
+                    else:
+                        log.info(
+                            f"Successfully created custom CephFS SC: {cephfs_sc_name}"
+                        )
+                        time.sleep(60)
+
+                except Exception as e:
+                    log.error(f"Error creating SC '{cephfs_sc_name}': {e}")
+                    raise
+        config.reset_ctx()
+
     return factory
 
 
