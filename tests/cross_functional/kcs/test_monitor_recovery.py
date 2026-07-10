@@ -129,6 +129,7 @@ class TestMonitorRecovery(E2ETest):
                 try:
                     pod_ocp = ocp.OCP(kind="Pod", namespace=namespace)
                     result = pod_ocp.get(selector=f"name={pod_label}")
+                    pod_names_to_wait = []
                     for item in (result or {}).get("items", []):
                         pod_name = item.get("metadata", {}).get("name", "")
                         if not pod_name:
@@ -140,11 +141,22 @@ class TestMonitorRecovery(E2ETest):
                             pod_ocp.delete(
                                 resource_name=pod_name, wait=False, force=True
                             )
+                            pod_names_to_wait.append(pod_name)
                         except Exception as pod_e:
                             if "NotFound" not in str(pod_e):
                                 logger.warning(
                                     f"Could not force-delete pod {pod_name}: {pod_e}"
                                 )
+                    for pod_name in pod_names_to_wait:
+                        logger.info(f"Waiting for pod {pod_name} to terminate")
+                        try:
+                            pod_ocp.wait_for_delete(resource_name=pod_name, timeout=120)
+                            logger.info(f"Pod {pod_name} terminated")
+                        except Exception as wait_e:
+                            logger.warning(
+                                f"Pod {pod_name} did not terminate within 120s: "
+                                f"{wait_e} — continuing anyway"
+                            )
                 except Exception as e:
                     logger.warning(
                         f"Error force-deleting pods for label name={pod_label}: {e}"
@@ -1355,7 +1367,10 @@ def check_and_recover_sandbox_errors(
             )
             for msg in error_messages[:3]:
                 logger.warning(f"  - {msg}")
-            return handle_multi_attach_error(pod_obj, timeout)
+            handle_multi_attach_error(pod_obj, timeout=30)
+            return check_and_recover_sandbox_errors(
+                pod_obj, 600, max_recovery_attempts, _attempt
+            )
 
         if has_sandbox_error or has_rwop_error:
             error_type = (
@@ -1426,7 +1441,7 @@ def check_and_recover_sandbox_errors(
 
         while time.time() - start_time < timeout:
             try:
-                pod_obj.reload()
+                pod_data = pod_obj.get()
             except CommandFailed as e:
                 if "NotFound" in str(e):
                     logger.info(
@@ -1441,7 +1456,7 @@ def check_and_recover_sandbox_errors(
                         )
                     return ok
                 raise
-            phase = pod_obj.get().get("status", {}).get("phase")
+            phase = pod_data.get("status", {}).get("phase")
 
             if phase == constants.STATUS_RUNNING:
                 logger.info(f"Pod {pod_name} is running")
@@ -1488,10 +1503,12 @@ def check_and_recover_sandbox_errors(
                             logger.warning(
                                 f"Multi-Attach error detected during monitoring for "
                                 f"pod {pod_name} — resolving via VolumeAttachment "
-                                "cleanup (no node restart)"
+                                "cleanup then re-entering sandbox recovery"
                             )
-                            remaining = max(int(timeout - elapsed), 60)
-                            return handle_multi_attach_error(pod_obj, remaining)
+                            handle_multi_attach_error(pod_obj, timeout=30)
+                            return check_and_recover_sandbox_errors(
+                                pod_obj, 600, max_recovery_attempts, _attempt
+                            )
 
                         if _attempt >= max_recovery_attempts:
                             logger.error(
@@ -1590,53 +1607,66 @@ def verify_pods_running(
     return failed_pods
 
 
-def cleanup_stale_volume_attachments():
+def _delete_volume_attachments_for_pv(pv_name):
     """
-    Clean up all unattached VolumeAttachment resources.
+    Delete all VolumeAttachment objects whose spec.source.persistentVolumeName
+    matches *pv_name*, regardless of their ``status.attached`` value.
+
+    Args:
+        pv_name (str): The PersistentVolume name extracted from the Multi-Attach
+            error message (e.g. ``pvc-6c090725-...``).
 
     Returns:
-        int: Number of VolumeAttachments deleted
+        int: Number of VolumeAttachment objects deleted.
     """
-    logger.info("Cleaning up stale volume attachments")
+    logger.info(f"Deleting VolumeAttachment(s) for PV: {pv_name}")
     deleted_count = 0
     try:
         va_ocp = OCP(kind="VolumeAttachment")
         attachments = va_ocp.get()
-        if attachments and "items" in attachments:
-            for attachment in attachments["items"]:
-                if not attachment.get("status", {}).get("attached", False):
-                    va_name = attachment["metadata"]["name"]
-                    logger.debug(f"Deleting unattached VolumeAttachment: {va_name}")
-                    try:
-                        va_ocp.delete(resource_name=va_name)
-                        deleted_count += 1
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to delete VolumeAttachment {va_name}: {e}"
-                        )
-            if deleted_count > 0:
-                logger.info(f"Deleted {deleted_count} stale volume attachments")
-            else:
-                logger.debug("No stale volume attachments found")
+        for attachment in (attachments or {}).get("items", []):
+            spec_pv = (
+                attachment.get("spec", {})
+                .get("source", {})
+                .get("persistentVolumeName", "")
+            )
+            if spec_pv == pv_name:
+                va_name = attachment["metadata"]["name"]
+                attached = attachment.get("status", {}).get("attached", False)
+                logger.info(
+                    f"Deleting VolumeAttachment {va_name} "
+                    f"(attached={attached}, pv={pv_name})"
+                )
+                try:
+                    va_ocp.delete(resource_name=va_name)
+                    deleted_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to delete VolumeAttachment {va_name}: {e}")
     except Exception:
-        logger.exception("Failed to cleanup stale volume attachments")
-
+        logger.exception(f"Failed to delete VolumeAttachments for PV {pv_name}")
+    if deleted_count:
+        logger.info(f"Deleted {deleted_count} VolumeAttachment(s) for PV {pv_name}")
+    else:
+        logger.info(
+            f"No VolumeAttachment found for PV {pv_name} — "
+            "already gone or already cleaned up"
+        )
     return deleted_count
 
 
 def handle_multi_attach_error(pod_obj, timeout=300):
     """
-    Handle multi-attach volume errors by deleting stale VolumeAttachment resources.
+    Resolve a Multi-Attach volume error by deleting the specific VolumeAttachment
+    that is blocking the pod, then optionally waiting for the pod to reach Running.
 
     Args:
-        pod_obj: Pod object that may have multi-attach error
-        timeout: Maximum time to wait for pod to become running (default: 300s)
+        pod_obj: Pod object that has a Multi-Attach error.
+        timeout (int): Maximum time to wait for pod to become Running (default: 300s).
 
     Returns:
-        bool: True if pod is running, False otherwise
-
+        bool: True if pod is Running, False otherwise.
     """
-    logger.debug(f"Checking pod {pod_obj.name} for multi-attach errors")
+    logger.info(f"Resolving Multi-Attach error for pod: {pod_obj.name}")
 
     try:
         pod_describe = pod_obj.ocp.exec_oc_cmd(
@@ -1644,27 +1674,39 @@ def handle_multi_attach_error(pod_obj, timeout=300):
         )
 
         if "Multi-Attach error" in pod_describe:
-            logger.warning(f"Multi-attach error detected for pod: {pod_obj.name}")
-
-            pvc_match = re.search(
+            pv_match = re.search(
                 r'Multi-Attach error for volume "([^"]+)"', pod_describe
             )
-            if pvc_match:
-                pvc_id = pvc_match.group(1)
-                logger.info(f"Identified PVC with multi-attach error: {pvc_id}")
-
-                deleted_count = cleanup_stale_volume_attachments()
-                if deleted_count > 0:
-                    logger.info("Waiting 10s for VolumeAttachment cleanup to propagate")
-                    time.sleep(10)
+            if pv_match:
+                pv_name = pv_match.group(1)
+                logger.info(f"Pod {pod_obj.name}: Multi-Attach error on PV {pv_name}")
+                deleted = _delete_volume_attachments_for_pv(pv_name)
+                if deleted:
+                    logger.info("VolumeAttachment deleted; waiting 15s to propagate")
+                    time.sleep(15)
+                else:
+                    logger.warning(
+                        f"No VolumeAttachment deleted for PV {pv_name}; "
+                        "pod may recover on its own or need manual intervention"
+                    )
             else:
                 logger.warning(
-                    "Multi-attach error detected but could not extract PVC ID from pod description"
+                    f"Pod {pod_obj.name}: Multi-Attach error in describe but "
+                    "could not extract PV name"
                 )
+        else:
+            logger.debug(
+                f"Pod {pod_obj.name}: no Multi-Attach error in describe output"
+            )
     except Exception:
-        logger.exception(
-            f"Error while checking pod {pod_obj.name} for multi-attach errors"
+        logger.exception(f"Error resolving Multi-Attach error for pod {pod_obj.name}")
+
+    if timeout <= 30:
+        logger.debug(
+            f"Short-circuit: skipping wait for pod {pod_obj.name} "
+            f"(timeout={timeout}s, caller will re-enter full monitoring)"
         )
+        return False
 
     logger.debug(
         f"Waiting for pod {pod_obj.name} to reach running state (timeout: {timeout}s)"
@@ -1799,6 +1841,7 @@ def recover_mcg():
         f"Waiting for remaining NooBaa pods to appear "
         f"(expected ~{expected_pod_count}, timeout 300s)"
     )
+    current_pods = get_noobaa_pods()
     try:
         for current_pods in TimeoutSampler(
             timeout=300,
@@ -1821,13 +1864,12 @@ def recover_mcg():
             f"{[p.name for p in current_pods]} — proceeding to verify what is present"
         )
 
-    current_noobaa_pods = get_noobaa_pods()
     logger.info(
-        f"Verifying {len(current_noobaa_pods)} NooBaa pods reach Running state: "
-        f"{[p.name for p in current_noobaa_pods]}"
+        f"Verifying {len(current_pods)} NooBaa pods reach Running state: "
+        f"{[p.name for p in current_pods]}"
     )
     failed_noobaa_pods = verify_pods_running(
-        current_noobaa_pods, pod_type="NooBaa", timeout=600, parallel=False
+        current_pods, pod_type="NooBaa", timeout=600, parallel=False
     )
 
     if failed_noobaa_pods:
