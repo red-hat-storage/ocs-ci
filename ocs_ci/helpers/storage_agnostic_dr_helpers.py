@@ -560,6 +560,9 @@ def migrate_pvc_pv(
     vgr_namespace,
     vgr_name=None,
     vgr_class=None,
+    namespace=None,
+    local_pv=False,
+    no_pv=False,
 ):
     """
     Migrate PVs and PVCs from the primary managed cluster to the secondary and
@@ -579,12 +582,13 @@ def migrate_pvc_pv(
        restore annotation, and applies it to the secondary cluster.
     2. Creates the PVC namespace on the secondary cluster if it does not exist.
     3. Fetches the PVC from the primary cluster, strips runtime metadata and
-       finalizers, retains only ACM annotations plus the Ramen restore
-       annotation, and applies it to the secondary cluster.
-    4. Creates the VGR namespace on the secondary cluster if needed.
-    5. Creates a ``VolumeGroupReplication`` resource in ``replicationState:
-       secondary`` on the secondary cluster, targeting PVCs with the same
-       consistency-group label.
+       finalizers, retains only ACM/VolSync/ArgoCD annotations plus the Ramen
+       restore annotation, and applies it to the secondary cluster.
+    4. Syncs the VolSync PSK secret between clusters for each namespace.
+    5. Creates the VGR namespace on the secondary cluster if needed.
+    6. Creates a ``VolumeGroupReplication`` resource in ``replicationState:
+       secondary`` on the secondary cluster, mirroring labels from the source
+       VGR (including ``owner-name`` and ``owner-namespace-name``).
 
     **Prerequisites**
 
@@ -603,29 +607,38 @@ def migrate_pvc_pv(
     The script is called as::
 
         bash manifests/migrate-pvc-pv.sh \\
-            'ramendr.openshift.io/consistency-group=<cg>' \\
-            <primary-kubeconfig> \\
-            <secondary-kubeconfig> \\
-            <vgr-name> \\
-            <vgr-namespace> \\
-            <vgr-class>
+            --label 'ramendr.openshift.io/consistency-group=<cg>' \\
+            --from <primary-kubeconfig> \\
+            --to <secondary-kubeconfig> \\
+            --vgr-name <vgr-name> \\
+            --vgr-ns <vgr-namespace> \\
+            --vgr-class <vgr-class> \\
+            [--namespace <namespace>] \\
+            [--local-pv] \\
+            [--no-pv]
 
     Args:
         consistency_group (str): Value of the
             ``ramendr.openshift.io/consistency-group`` label used to identify
             the PVCs to migrate (e.g. ``"test-group-1"``).
         primary_cluster_config: Cluster config object for the primary (source)
-            cluster. Its ``RUN["kubeconfig"]`` is passed as C1 to the script.
+            cluster. Its ``RUN["kubeconfig"]`` is passed to the script.
         secondary_cluster_config: Cluster config object for the secondary
-            (destination) cluster. Its ``RUN["kubeconfig"]`` is passed as C2.
+            (destination) cluster. Its ``RUN["kubeconfig"]`` is passed to the
+            script.
+        vgr_namespace (str): Namespace in which the VGR is created on the
+            secondary cluster.
         vgr_name (str): Name of the VolumeGroupReplication resource to create
             on the secondary cluster.  Defaults to
             ``constants.MOCK_VGRC_NAME`` (``"vgrc-1"``).
-        vgr_namespace (str): Namespace in which the VGR is created on the
-            secondary cluster.
         vgr_class (str): Name of the VolumeGroupReplicationClass to reference
             in the secondary VGR.  Defaults to ``constants.MOCK_VGRC_NAME``
             (``"vgrc-1"``).
+        namespace (str): Scope PVC discovery to this namespace only. When
+            ``None`` (default), all namespaces are searched.
+        local_pv (bool): When ``True``, auto-provision local PVs on the
+            target cluster matching the source PV names. Skips PV migration.
+        no_pv (bool): When ``True``, skip PV migration entirely (PVC only).
 
     Raises:
         CommandFailed: if the migration script exits with a non-zero status.
@@ -645,15 +658,24 @@ def migrate_pvc_pv(
         f"from primary to secondary cluster"
     )
 
-    exec_cmd(
+    cmd = (
         f"bash {constants.MIGRATE_PVC_PV_SCRIPT}"
-        f" '{label_query}'"
-        f" {primary_kubeconfig}"
-        f" {secondary_kubeconfig}"
-        f" {vgr_name}"
-        f" {vgr_namespace}"
-        f" {vgr_class}",
+        f" --label '{label_query}'"
+        f" --from {primary_kubeconfig}"
+        f" --to {secondary_kubeconfig}"
+        f" --vgr-name {vgr_name}"
+        f" --vgr-ns {vgr_namespace}"
+        f" --vgr-class {vgr_class}"
     )
+
+    if namespace:
+        cmd += f" --namespace {namespace}"
+    if local_pv:
+        cmd += " --local-pv"
+    if no_pv:
+        cmd += " --no-pv"
+
+    exec_cmd(cmd)
 
     logger.info(
         f"Migration complete: VGR '{vgr_name}' created in namespace"
