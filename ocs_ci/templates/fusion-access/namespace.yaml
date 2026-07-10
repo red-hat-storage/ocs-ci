@@ -12,6 +12,4 @@ kind: OperatorGroup
 metadata:
   name: ibm-fusion-access-operatorgroup
   namespace: ibm-fusion-access
-spec:
-  targetNamespaces:
-    - ibm-fusion-access
+spec: {}
