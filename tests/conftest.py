@@ -1257,6 +1257,7 @@ def storageclass_factory_fixture(
 
     """
     instances = []
+    additional_cephfs_data_pools = []
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
@@ -1279,6 +1280,7 @@ def storageclass_factory_fixture(
         mounter=None,
         erasure_coded=False,
         data_pool_name=None,
+        new_cephfs_pool=False,
     ):
         """
         Args:
@@ -1312,6 +1314,7 @@ def storageclass_factory_fixture(
                 metadata pool and dataPool set to the new EC data pool.
             data_pool_name (str): Explicit EC data pool name to set as dataPool in the StorageClass.
                 Use when sharing an existing EC pool across multiple SCs without creating a new one.
+            new_cephfs_pool (bool): True if user wants to create new cephfs pool for SC
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -1362,7 +1365,23 @@ def storageclass_factory_fixture(
                     else:
                         interface_name = pool_name
             elif interface == constants.CEPHFILESYSTEM:
-                interface_name = helpers.get_cephfs_data_pool_name()
+                if ocsci_config.ENV_DATA.get("new_cephfs_pool") or new_cephfs_pool:
+                    new_data_pool_name = helpers.create_cephfs_data_pool(
+                        pool_name=constants.RDR_CUSTOM_CEPHFS_POOL,
+                        compression=ocsci_config.ENV_DATA.get("compression")
+                        or compression,
+                        replica=ocsci_config.ENV_DATA.get("replica") or replica,
+                    )
+                    if new_data_pool_name:
+                        additional_cephfs_data_pools.append(new_data_pool_name)
+                    interface_name = (
+                        f"ocs-storagecluster-cephfilesystem-{new_data_pool_name}"
+                    )
+                else:
+                    if pool_name is None:
+                        interface_name = helpers.get_cephfs_data_pool_name()
+                    else:
+                        interface_name = pool_name
 
             sc_obj = helpers.create_storage_class(
                 interface_type=interface,
@@ -1390,7 +1409,8 @@ def storageclass_factory_fixture(
 
     def finalizer():
         """
-        Delete the storageclass by deregistering from StorageConsumer first
+        Delete the storageclass by deregistering from StorageConsumer first.
+        Removes any CephFS additional data pools if available.
         """
         from ocs_ci.ocs.resources.storage_cluster import (
             delete_storageclass_and_deregister,
@@ -1406,6 +1426,8 @@ def storageclass_factory_fixture(
             except Exception as e:
                 log.error(f"Failed to delete storageclass {instance.name}: {e}")
                 teardown_errors.append((instance.name, e))
+        for cfs_data_pool in additional_cephfs_data_pools:
+            assert helpers.delete_cephfs_data_pool(cfs_data_pool)
         if teardown_errors:
             parts = [f"{name}: {exc}" for name, exc in teardown_errors]
             raise RuntimeError(
@@ -8226,14 +8248,17 @@ def discovered_apps_dr_workload(request):
         pvc_interface=constants.CEPHBLOCKPOOL,
         multi_ns=False,
         workloads=None,
+        custom_sc=False,
     ):
         """
         Args:
-            kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
-            recipe (int): Number if Discovered Apps workload with recipe protection to be created
+            kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
+            recipe (int): Number of Discovered Apps workload with recipe protection to be created
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             multi_ns (bool): True for Multi Namespace
+            custom_sc (bool): False by default, will create and use custom Pool and Storage Class
+                            when set to True for discovered apps workload
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8249,7 +8274,10 @@ def discovered_apps_dr_workload(request):
         if multi_ns and kubeobject <= 1:
             raise UnsupportedWorkloadError("kubeobject count should be more than 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
-            workload_key = "dr_workload_discovered_apps_cephfs"
+            if custom_sc:
+                workload_key = "dr_workload_discovered_apps_cephfs_custom_pool_and_sc"
+            else:
+                workload_key = "dr_workload_discovered_apps_cephfs"
         if workloads == "filebrowser":
             if pvc_interface == constants.CEPHFILESYSTEM:
                 workload_key = "dr_workload_discovered_apps_filebrowser_cephfs"

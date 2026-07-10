@@ -4,7 +4,7 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
+from ocs_ci.framework.testlib import acceptance, tier1, tier4, skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers import (
@@ -27,35 +27,98 @@ logger = logging.getLogger(__name__)
 @skipif_ocs_version("<4.16")
 class TestFailoverAndRelocateWithDiscoveredApps:
     """
-    Test Failover and Relocate with Discovered Apps
+    Test Failover and Relocate with Discovered Apps and
+    custom CephFS SC and Pool
 
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down", "pvc_interface"],
+        argnames=[
+            "primary_cluster_down",
+            "pvc_interface",
+            "kubeobject",
+            "recipe",
+            "custom_sc",
+            "replica",
+            "compression",
+        ],
         argvalues=[
             pytest.param(
                 False,
                 constants.CEPHBLOCKPOOL,
-                marks=acceptance,
+                1,
+                1,
+                False,
+                None,
+                None,
+                marks=[tier1, acceptance],
                 id="primary_up-rbd",
             ),
             pytest.param(
                 True,
                 constants.CEPHBLOCKPOOL,
+                1,
+                1,
+                False,
+                None,
+                None,
+                marks=tier4,
                 id="primary_down-rbd",
             ),
             pytest.param(
                 False,
                 constants.CEPHFILESYSTEM,
-                marks=[skipif_ocs_version("<4.19"), acceptance],
+                1,
+                1,
+                False,
+                None,
+                None,
+                marks=[skipif_ocs_version("<4.19"), tier1, acceptance],
                 id="primary_up-cephfs",
             ),
             pytest.param(
                 True,
                 constants.CEPHFILESYSTEM,
-                marks=skipif_ocs_version("<4.19"),
+                1,
+                1,
+                False,
+                None,
+                None,
+                marks=[skipif_ocs_version("<4.19"), tier4],
                 id="primary_down-cephfs",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                1,
+                0,
+                True,
+                2,
+                None,
+                marks=[skipif_ocs_version("<4.21")],
+                id="custom_pool_replica2_without_compression_with_primary-down",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                1,
+                0,
+                True,
+                3,
+                "aggressive",
+                marks=[skipif_ocs_version("<4.21")],
+                id="custom_pool_replica3_with_compression_with_primary-down",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                1,
+                0,
+                True,
+                2,
+                "aggressive",
+                marks=[skipif_ocs_version("<4.21")],
+                id="custom_pool_replica2_with_compression_with_primary-down",
             ),
         ],
     )
@@ -66,14 +129,36 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         discovered_apps_dr_workload,
         nodes_multicluster,
         node_restart_teardown,
+        kubeobject,
+        recipe,
+        custom_sc,
+        replica,
+        compression,
+        cephfs_custom_storage_class,
     ):
         """
         Tests to verify application failover and relocate with discovered applications
         Covers primary cluster up or down scenarios.
 
+        Test is parametrized to run with Custom CephFS Storage Class and Pool of Replica-2.
         """
+        if custom_sc:
+            logger.test_step(
+                f"Creating custom CephFS pool and storage class "
+                f"(replica={replica}, compression={compression})"
+            )
+            cephfs_custom_storage_class(replica=replica, compression=compression)
+
+        logger.test_step(
+            f"Deploying discovered apps DR workload "
+            f"(interface={pvc_interface}, kubeobject={kubeobject}, "
+            f"recipe={recipe}, custom_sc={custom_sc})"
+        )
         rdr_workloads = discovered_apps_dr_workload(
-            pvc_interface=pvc_interface, kubeobject=1, recipe=1
+            pvc_interface=pvc_interface,
+            kubeobject=kubeobject,
+            recipe=recipe,
+            custom_sc=custom_sc,
         )
         first_workload = rdr_workloads[0]
         drpc_objs = [
@@ -106,6 +191,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             resource_name=first_workload.discovered_apps_placement_name,
         )
 
+        logger.test_step(
+            f"Verifying initial replication state on secondary "
+            f"cluster '{secondary_cluster_name}'"
+        )
         if pvc_interface == constants.CEPHFILESYSTEM:
             cg_cephfs_enabled = is_cg_cephfs_enabled()
             # Verify the creation of ReplicationDestination resources on secondary cluster
@@ -127,9 +216,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 )
 
         wait_time = 2 * scheduling_interval  # Time in minutes
-        logger.info(f"Waiting for {wait_time} minutes to run IOs")
+        logger.test_step(f"Waiting {wait_time} minutes for IOs to run before failover")
         sleep(wait_time * 60)
 
+        logger.test_step("Verifying lastKubeObjectProtectionTime before failover")
         for drpc_obj, rdr_workload in zip(drpc_objs, rdr_workloads):
             logger.info(
                 "Checking for lastKubeObjectProtectionTime before Failover Operation"
@@ -138,6 +228,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 drpc_obj, rdr_workload.kubeobject_capture_interval_int
             )
 
+        logger.test_step(
+            f"Initiating failover to secondary cluster '{secondary_cluster_name}'"
+        )
         if primary_cluster_down:
             config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
             logger.info(
@@ -187,6 +280,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 vrg_name=rdr_workload.discovered_apps_placement_name,
             )
 
+        logger.test_step(
+            f"Verifying resources on secondary (failover) cluster "
+            f"'{secondary_cluster_name}'"
+        )
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
         for rdr_workload in rdr_workloads:
@@ -237,9 +334,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
 
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
 
-        logger.info(f"Waiting for {wait_time} minutes to run IOs")
+        logger.test_step(f"Waiting {wait_time} minutes for IOs to run after failover")
         sleep(wait_time * 60)
 
+        logger.test_step("Verifying lastKubeObjectProtectionTime after failover")
         for drpc_obj, rdr_workload in zip(drpc_objs, rdr_workloads):
             logger.info(
                 "Checking for lastKubeObjectProtectionTime after Failover Operation"
@@ -248,7 +346,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 drpc_obj, rdr_workload.kubeobject_capture_interval_int
             )
 
-        logger.info("Running Relocate Steps")
+        logger.test_step(
+            f"Running relocate back to primary cluster "
+            f"'{primary_cluster_name_before_failover}'"
+        )
         for rdr_workload in rdr_workloads:
             dr_helpers.relocate(
                 preferred_cluster=primary_cluster_name_before_failover,
@@ -259,6 +360,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 workload_instance=rdr_workload,
             )
 
+        logger.test_step(
+            f"Verifying resources on primary (preferred) cluster "
+            f"'{primary_cluster_name_before_failover}' after relocate"
+        )
         # Verify resources creation on primary cluster (preferredCluster)
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         for rdr_workload in rdr_workloads:
@@ -307,6 +412,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                         expected_count=rdr_workload.workload_pvc_count,
                     )
 
+        logger.test_step("Verifying lastKubeObjectProtectionTime post relocate")
         for drpc_obj, rdr_workload in zip(drpc_objs, rdr_workloads):
             logger.info(
                 "Checking for lastKubeObjectProtectionTime post Relocate Operation"
