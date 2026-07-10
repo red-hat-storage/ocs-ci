@@ -1574,7 +1574,9 @@ RDR_OSD_MODE_GREENFIELD = "greenfield"
 RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
 RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool"
+CUSTOM_CEPHFS_POOL = "rdr-test-cephfs-storage-pool"
 RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc"
+CUSTOM_CEPHFS_STORAGECLASS = "cephfs-custom-sc"
 RDR_CUSTOM_RBD_DR_POLICY = "custom-pool-dr-policy"
 
 # Ramen DR labels on StorageClass
