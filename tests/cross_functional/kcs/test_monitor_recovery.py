@@ -1278,7 +1278,7 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
 
 
 def check_and_recover_sandbox_errors(
-    pod_obj, timeout=600, max_recovery_attempts=3, _attempt=0
+    pod_obj, timeout=600, max_recovery_attempts=3, _attempt=0, _session_start=None
 ):
     """
     Check if a pod has sandbox errors and recover by power cycling its node.
@@ -1289,8 +1289,11 @@ def check_and_recover_sandbox_errors(
     Args:
         pod_obj: Pod object to check
         timeout: Maximum time to wait for recovery (default: 600s)
-        max_recovery_attempts: Maximum number of recovery attempts (default: 2)
-        _attempt: Internal counter for recursion depth (do not set manually)
+        max_recovery_attempts: Maximum number of recovery attempts (default: 3)
+        _attempt: Internal counter for recursion depth
+        _session_start: Unix timestamp of the first call in this session.
+            Used to filter stale events that pre-date the entire monitoring
+            session.
 
     Returns:
         bool: True if pod reaches running state, False otherwise
@@ -1299,13 +1302,12 @@ def check_and_recover_sandbox_errors(
     try:
         pod_name = pod_obj.name
         namespace = pod_obj.namespace
-
-        try:
-            if pod_obj.get().get("status", {}).get("phase") == constants.STATUS_RUNNING:
-                logger.debug(f"Pod {pod_name} is already running, no recovery needed")
-                return True
-        except Exception:
-            pass
+        # Anchor the stale-event cutoff to the very first call in this session.
+        # Subsequent recursions inherit this timestamp unchanged so that errors
+        # that occurred after session start are never silently dropped.
+        if _session_start is None:
+            _session_start = time.time()
+        entry_time = _session_start
 
         try:
             pod_data = pod_obj.get()
@@ -1324,13 +1326,17 @@ def check_and_recover_sandbox_errors(
                 return ok
             raise
 
+        phase = pod_data.get("status", {}).get("phase")
+        if phase == constants.STATUS_RUNNING:
+            logger.debug(f"Pod {pod_name} is already running, no recovery needed")
+            return True
+
         node_name = pod_data.get("spec", {}).get("nodeName")
 
         if not node_name:
             logger.debug(f"Pod {pod_name} not scheduled to a node yet")
             return handle_multi_attach_error(pod_obj, timeout)
 
-        phase = pod_data.get("status", {}).get("phase")
         logger.info(f"Pod {pod_name} is in phase '{phase}', checking for errors...")
 
         ocp_pod = OCP(kind=constants.POD, namespace=namespace)
@@ -1344,19 +1350,36 @@ def check_and_recover_sandbox_errors(
         has_multi_attach_error = False
         error_messages = []
 
+        entry_dt = datetime.datetime.fromtimestamp(entry_time, tz=datetime.timezone.utc)
+
         for event in events.get("items", []):
             msg = event.get("message", "")
             reason = event.get("reason", "")
 
+            # Skip events that pre-date this function call — they are stale
+            # (e.g. a Multi-Attach event that already triggered VA deletion on
+            # a previous recursion; the VA is gone but the event lingers).
+            event_time_str = event.get("lastTimestamp") or event.get("eventTime") or ""
+            if event_time_str:
+                try:
+                    event_dt = datetime.datetime.fromisoformat(
+                        event_time_str.rstrip("Z")
+                    ).replace(tzinfo=datetime.timezone.utc)
+                    if event_dt < entry_dt:
+                        logger.debug(
+                            f"Skipping stale event (ts={event_time_str}): {msg[:80]}"
+                        )
+                        continue
+                except Exception:
+                    pass
+
             if any(err in msg for err in SANDBOX_ERROR_PATTERNS):
                 has_sandbox_error = True
                 error_messages.append(f"{reason}: {msg[:150]}")
-
-            if any(err in msg for err in RWOP_ERROR_PATTERNS):
+            elif any(err in msg for err in RWOP_ERROR_PATTERNS):
                 has_rwop_error = True
                 error_messages.append(f"{reason}: {msg[:150]}")
-
-            if any(err in msg for err in MULTI_ATTACH_PATTERNS):
+            elif any(err in msg for err in MULTI_ATTACH_PATTERNS):
                 has_multi_attach_error = True
                 error_messages.append(f"{reason}: {msg[:150]}")
 
@@ -1369,7 +1392,7 @@ def check_and_recover_sandbox_errors(
                 logger.warning(f"  - {msg}")
             handle_multi_attach_error(pod_obj, timeout=30)
             return check_and_recover_sandbox_errors(
-                pod_obj, 600, max_recovery_attempts, _attempt
+                pod_obj, 600, max_recovery_attempts, _attempt, _session_start
             )
 
         if has_sandbox_error or has_rwop_error:
@@ -1507,7 +1530,11 @@ def check_and_recover_sandbox_errors(
                             )
                             handle_multi_attach_error(pod_obj, timeout=30)
                             return check_and_recover_sandbox_errors(
-                                pod_obj, 600, max_recovery_attempts, _attempt
+                                pod_obj,
+                                600,
+                                max_recovery_attempts,
+                                _attempt,
+                                _session_start,
                             )
 
                         if _attempt >= max_recovery_attempts:
@@ -1526,6 +1553,7 @@ def check_and_recover_sandbox_errors(
                             600,
                             max_recovery_attempts,
                             _attempt + 1,
+                            _session_start,
                         )
                 except Exception as e:
                     logger.debug(f"Error checking events: {e}")
@@ -1533,6 +1561,32 @@ def check_and_recover_sandbox_errors(
                 last_check = elapsed
 
             time.sleep(10)
+
+        if _attempt < max_recovery_attempts:
+            logger.info(
+                f"Pod {pod_name} timed out after {timeout}s — checking for errors "
+                f"before retry (attempt {_attempt + 1}/{max_recovery_attempts})"
+            )
+            try:
+                events = ocp_pod.exec_oc_cmd(
+                    f"get events --field-selector involvedObject.name={pod_name} "
+                    f"-n {namespace} -o json"
+                )
+                for event in events.get("items", []):
+                    msg = event.get("message", "")
+                    if any(err in msg for err in ALL_POD_ERROR_PATTERNS):
+                        logger.warning(
+                            f"Error found after timeout, retrying recovery: {msg[:150]}"
+                        )
+                        return check_and_recover_sandbox_errors(
+                            pod_obj,
+                            600,
+                            max_recovery_attempts,
+                            _attempt + 1,
+                            _session_start,
+                        )
+            except Exception as e:
+                logger.debug(f"Error checking events after timeout: {e}")
 
         logger.error(f"Pod {pod_name} failed to reach running state after {timeout}s")
         return False
