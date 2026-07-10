@@ -64,7 +64,14 @@ RWOP_ERROR_PATTERNS = [
     "volume is already exclusively attached",
 ]
 
-ALL_POD_ERROR_PATTERNS = SANDBOX_ERROR_PATTERNS + RWOP_ERROR_PATTERNS
+MULTI_ATTACH_PATTERNS = [
+    "Multi-Attach error",
+    "Volume is already exclusively attached to one node",
+]
+
+ALL_POD_ERROR_PATTERNS = (
+    SANDBOX_ERROR_PATTERNS + RWOP_ERROR_PATTERNS + MULTI_ATTACH_PATTERNS
+)
 
 _node_restart_tracker = {}
 NODE_RESTART_COOLDOWN = 300
@@ -292,7 +299,16 @@ class TestMonitorRecovery(E2ETest):
         logger.info("Force deleting original dc pods to trigger re-spawn")
         for pod_obj in self.dc_pods:
             logger.debug(f"Force deleting pod: {pod_obj.name}")
-            pod_obj.delete(force=True)
+            try:
+                pod_obj.delete(force=True)
+            except Exception as e:
+                if "NotFound" in str(e):
+                    logger.info(
+                        f"Pod {pod_obj.name} already gone (replaced during recovery), "
+                        "skipping delete"
+                    )
+                else:
+                    raise
 
         new_md5_sum = []
         logger.info("Waiting for pods to respawn and calculating checksums")
@@ -1290,6 +1306,7 @@ def check_and_recover_sandbox_errors(
 
         has_sandbox_error = False
         has_rwop_error = False
+        has_multi_attach_error = False
         error_messages = []
 
         for event in events.get("items", []):
@@ -1303,6 +1320,19 @@ def check_and_recover_sandbox_errors(
             if any(err in msg for err in RWOP_ERROR_PATTERNS):
                 has_rwop_error = True
                 error_messages.append(f"{reason}: {msg[:150]}")
+
+            if any(err in msg for err in MULTI_ATTACH_PATTERNS):
+                has_multi_attach_error = True
+                error_messages.append(f"{reason}: {msg[:150]}")
+
+        if has_multi_attach_error:
+            logger.warning(
+                f"Pod {pod_name} has Multi-Attach error — resolving via "
+                "VolumeAttachment cleanup (no node restart)"
+            )
+            for msg in error_messages[:3]:
+                logger.warning(f"  - {msg}")
+            return handle_multi_attach_error(pod_obj, timeout)
 
         if has_sandbox_error or has_rwop_error:
             error_type = (
@@ -1362,7 +1392,9 @@ def check_and_recover_sandbox_errors(
                     logger.exception(f"Failed to restart node {node_name}: {e}")
                     return handle_multi_attach_error(pod_obj, timeout)
         else:
-            logger.debug(f"Pod {pod_name} has no sandbox/RWOP errors initially")
+            logger.debug(
+                f"Pod {pod_name} has no sandbox/RWOP/multi-attach errors initially"
+            )
 
         logger.info(f"Monitoring pod {pod_name} for up to {timeout}s...")
         start_time = time.time()
@@ -1428,6 +1460,15 @@ def check_and_recover_sandbox_errors(
                                 pass
 
                         logger.warning(f"New error detected: {msg[:150]}")
+
+                        if any(err in msg for err in MULTI_ATTACH_PATTERNS):
+                            logger.warning(
+                                f"Multi-Attach error detected during monitoring for "
+                                f"pod {pod_name} — resolving via VolumeAttachment "
+                                "cleanup (no node restart)"
+                            )
+                            remaining = max(int(timeout - elapsed), 60)
+                            return handle_multi_attach_error(pod_obj, remaining)
 
                         if _attempt >= max_recovery_attempts:
                             logger.error(
