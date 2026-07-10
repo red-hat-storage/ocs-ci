@@ -1,4 +1,5 @@
 import collections
+import datetime
 import logging
 import time
 from os.path import join
@@ -1096,8 +1097,7 @@ def _pod_name_prefix(pod_name):
 
 def _find_replacement_pod_name(deleted_name, prefix, namespace, timeout):
     """
-    Poll *namespace* until a pod whose name starts with *prefix* and is
-    **different** from *deleted_name* appears (any phase).
+    Poll *namespace* until a pod whose name starts with *prefix* appears (any phase).
 
     Args:
         deleted_name (str): Name of the pod that was deleted / disappeared.
@@ -1106,19 +1106,22 @@ def _find_replacement_pod_name(deleted_name, prefix, namespace, timeout):
         timeout (int): Seconds to wait before giving up.
 
     Returns:
-        str | None: The new pod name, or ``None`` if not found in time.
+        str | None: The (re)appearing pod name, or ``None`` if not found in time.
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
 
-    def _new_pod_exists():
+    is_statefulset_pod = prefix == deleted_name
+
+    def _pod_exists():
         for p in ocp_pod.get().get("items", []):
             name = p.get("metadata", {}).get("name", "")
-            if name.startswith(prefix) and name != deleted_name:
-                return name
+            if name.startswith(prefix):
+                if is_statefulset_pod or name != deleted_name:
+                    return name
         return None
 
     try:
-        for name in TimeoutSampler(timeout=timeout, sleep=10, func=_new_pod_exists):
+        for name in TimeoutSampler(timeout=timeout, sleep=10, func=_pod_exists):
             if name:
                 logger.info(
                     f"Replacement pod '{name}' appeared for deleted pod '{deleted_name}'"
@@ -1133,13 +1136,6 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
     """
     Wait for a replacement pod to reach Running state, with up to *max_attempts*
     recovery cycles.
-
-    Each cycle:
-      1. Discovers the current replacement pod by name-prefix (skipping the
-         last-known deleted name — the name changes on every restart).
-      2. Calls ``check_and_recover_sandbox_errors`` on that replacement pod.
-      3. If the replacement itself disappears again (another restart), treats
-         *its* name as the new deleted name and repeats from step 1.
 
     Args:
         pod_obj: The original (now-deleted) pod object whose name seeds the
@@ -1168,7 +1164,6 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
         elapsed = time.time() - global_start
         remaining = max(int(timeout - elapsed), 30)
 
-        # --- 1. Discover the replacement pod (name changed after restart) ------
         logger.info(
             f"Attempt {attempt}/{max_attempts}: looking for replacement of "
             f"'{deleted_name}' (prefix='{prefix}', budget={remaining}s)"
@@ -1183,7 +1178,6 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
             )
             return False, deleted_name
 
-        # --- 2. Monitor / recover the replacement pod --------------------------
         elapsed = time.time() - global_start
         remaining = max(int(timeout - elapsed), 30)
         logger.info(
@@ -1210,7 +1204,6 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
             )
             return True, new_name
 
-        # --- 3. Replacement failed — check if it disappeared (another restart) -
         elapsed = time.time() - global_start
         remaining = int(timeout - elapsed)
         if remaining <= 0 or attempt == max_attempts:
@@ -1271,7 +1264,7 @@ def check_and_recover_sandbox_errors(
                     f"Pod {pod_name} no longer exists (replaced by a new pod) - "
                     "waiting for replacement pod to reach Running state"
                 )
-                ok, final_name = _wait_for_replacement_pod(pod_obj, timeout, namespace)
+                ok, final_name = _wait_for_replacement_pod(pod_obj, 600, namespace)
                 if not ok:
                     logger.error(
                         f"Pod '{pod_name}': replacement pod '{final_name}' "
@@ -1374,22 +1367,18 @@ def check_and_recover_sandbox_errors(
         logger.info(f"Monitoring pod {pod_name} for up to {timeout}s...")
         start_time = time.time()
         last_check = 0
-        check_interval = 120
+        check_interval = 30
 
         while time.time() - start_time < timeout:
             try:
                 pod_obj.reload()
             except CommandFailed as e:
                 if "NotFound" in str(e):
-                    remaining = max(int(timeout - (time.time() - start_time)), 30)
                     logger.info(
                         f"Pod {pod_name} no longer exists during monitoring (replaced by a new "
-                        f"pod after node restart) - waiting for replacement pod "
-                        f"(remaining timeout: {remaining}s)"
+                        f"pod after node restart) - waiting for replacement pod (600s budget)"
                     )
-                    ok, final_name = _wait_for_replacement_pod(
-                        pod_obj, remaining, namespace
-                    )
+                    ok, final_name = _wait_for_replacement_pod(pod_obj, 600, namespace)
                     if not ok:
                         logger.error(
                             f"Pod '{pod_name}': replacement pod '{final_name}' "
@@ -1415,26 +1404,48 @@ def check_and_recover_sandbox_errors(
 
                     for event in events.get("items", []):
                         msg = event.get("message", "")
-                        if any(err in msg for err in ALL_POD_ERROR_PATTERNS):
-                            logger.warning(f"New error detected: {msg[:150]}")
+                        if not any(err in msg for err in ALL_POD_ERROR_PATTERNS):
+                            continue
 
-                            if _attempt >= max_recovery_attempts:
-                                logger.error(
-                                    f"Pod {pod_name} still has errors after {max_recovery_attempts} "
-                                    "recovery attempts, giving up on automatic recovery"
+                        event_time_str = (
+                            event.get("lastTimestamp") or event.get("eventTime") or ""
+                        )
+                        if event_time_str:
+                            try:
+                                event_dt = datetime.datetime.fromisoformat(
+                                    event_time_str.rstrip("Z")
+                                ).replace(tzinfo=datetime.timezone.utc)
+                                monitor_start_dt = datetime.datetime.fromtimestamp(
+                                    start_time, tz=datetime.timezone.utc
                                 )
-                                return False
+                                if event_dt < monitor_start_dt:
+                                    logger.debug(
+                                        f"Ignoring stale event (ts={event_time_str}): "
+                                        f"{msg[:100]}"
+                                    )
+                                    continue
+                            except Exception:
+                                pass
 
-                            logger.info(
-                                f"Triggering recovery for newly detected error "
-                                f"(attempt {_attempt + 1}/{max_recovery_attempts})..."
+                        logger.warning(f"New error detected: {msg[:150]}")
+
+                        if _attempt >= max_recovery_attempts:
+                            logger.error(
+                                f"Pod {pod_name} still has errors after {max_recovery_attempts} "
+                                "recovery attempts, giving up on automatic recovery"
                             )
-                            return check_and_recover_sandbox_errors(
-                                pod_obj,
-                                int(timeout - elapsed),
-                                max_recovery_attempts,
-                                _attempt + 1,
-                            )
+                            return False
+
+                        logger.info(
+                            f"Triggering recovery for newly detected error "
+                            f"(attempt {_attempt + 1}/{max_recovery_attempts})..."
+                        )
+                        return check_and_recover_sandbox_errors(
+                            pod_obj,
+                            600,
+                            max_recovery_attempts,
+                            _attempt + 1,
+                        )
                 except Exception as e:
                     logger.debug(f"Error checking events: {e}")
 
@@ -1477,8 +1488,6 @@ def verify_pods_running(
         original_name = pod_obj.name
         logger.debug(f"Checking {pod_type} pod: {original_name}")
         if not check_and_recover_sandbox_errors(pod_obj, timeout=timeout):
-            # check_and_recover_sandbox_errors already logs the replacement name;
-            # we surface the original name here so callers can correlate.
             logger.error(
                 f"{pod_type} pod '{original_name}' failed to reach running state"
             )
