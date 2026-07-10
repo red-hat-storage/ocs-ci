@@ -118,6 +118,14 @@ class TestMonitorRecovery(E2ETest):
                     logger.warning(
                         f"Failed to delete deployment for pod {dc_pod.name}: {e}"
                     )
+            try:
+                logger.info("Teardown: archiving ceph crash warnings")
+                get_ceph_tools_pod().exec_ceph_cmd(
+                    ceph_cmd="ceph crash archive-all", format=None
+                )
+                logger.info("Teardown: ceph crashes archived")
+            except Exception as e:
+                logger.warning(f"Teardown: failed to archive ceph crashes: {e}")
 
         request.addfinalizer(finalizer)
 
@@ -176,8 +184,9 @@ class TestMonitorRecovery(E2ETest):
         https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.8/html/troubleshooting_openshift_container_storage/restoring-the-monitor-pods-in-openshift-container-storage_rhocs
 
         """
+        logger.info("Starting monitor recovery test procedure")
         mon_recovery = MonitorRecovery()
-        logger.info(
+        logger.debug(
             f"Monitor recovery initialized with backup dir: {mon_recovery.backup_dir}"
         )
 
@@ -1357,7 +1366,7 @@ def check_and_recover_sandbox_errors(
                     time.sleep(60)
                     _node_restart_tracker[node_name] = current_time
                 except Exception as e:
-                    logger.error(f"Failed to restart node {node_name}: {e}")
+                    logger.exception(f"Failed to restart node {node_name}: {e}")
                     return handle_multi_attach_error(pod_obj, timeout)
         else:
             logger.debug(f"Pod {pod_name} has no sandbox/RWOP errors initially")
@@ -1437,7 +1446,7 @@ def check_and_recover_sandbox_errors(
         return False
 
     except Exception as e:
-        logger.error(f"Error during sandbox error recovery for {pod_obj.name}: {e}")
+        logger.exception(f"Error during sandbox error recovery for {pod_obj.name}: {e}")
         return handle_multi_attach_error(pod_obj, timeout)
 
 
@@ -1488,7 +1497,7 @@ def verify_pods_running(
                         failed_pods.append(result)
                 except Exception as e:
                     pod = futures[future]
-                    logger.error(
+                    logger.exception(
                         f"Exception while checking {pod_type} pod {pod.name}: {e}"
                     )
                     failed_pods.append(pod.name)
@@ -1594,10 +1603,41 @@ def handle_multi_attach_error(pod_obj, timeout=300):
         logger.info(f"Pod {pod_obj.name} is running")
         return True
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Pod {pod_obj.name} failed to reach running state after {timeout}s: {e}"
         )
         return False
+
+
+def _wait_for_noobaa_pod_type(prefix, timeout, description):
+    """
+    Poll get_noobaa_pods() until a pod whose name starts with *prefix* appears,
+    then return that pod object.
+
+    Args:
+        prefix (str): Name prefix to match (e.g. "cnpg-controller-manager").
+        timeout (int): Seconds to wait before giving up.
+        description (str): Human-readable name used in log messages.
+
+    Returns:
+        Pod | None: The first matching pod object, or None if not found in time.
+    """
+    logger.info(
+        f"Polling for {description} pod to appear (prefix={prefix!r}, timeout={timeout}s)"
+    )
+    try:
+        for pods in TimeoutSampler(
+            timeout=timeout,
+            sleep=15,
+            func=lambda: [p for p in get_noobaa_pods() if p.name.startswith(prefix)],
+        ):
+            if pods:
+                logger.info(f"Found {description} pod: {pods[0].name}")
+                return pods[0]
+    except TimeoutExpiredError:
+        pass
+    logger.error(f"{description} pod did not appear within {timeout}s")
+    return None
 
 
 def recover_mcg():
@@ -1610,49 +1650,107 @@ def recover_mcg():
     logger.info("Starting MCG recovery by re-spinning NooBaa pods")
 
     noobaa_pods_before = get_noobaa_pods()
+    expected_pod_count = len(noobaa_pods_before)
     logger.info(
-        f"Found {len(noobaa_pods_before)} NooBaa pods to respawn: "
+        f"Found {expected_pod_count} NooBaa pods to respawn: "
         f"{[p.name for p in noobaa_pods_before]}"
     )
+
     for noobaa_pod in noobaa_pods_before:
         logger.info(f"Force deleting NooBaa pod: {noobaa_pod.name}")
         noobaa_pod.delete(force=True)
 
-    logger.info("Waiting for noobaa-db-pg-cluster-1 to reach Running (timeout 300s)")
-    db_pg_1_pod = None
-    try:
-        for db_pg_1_pods in TimeoutSampler(
-            timeout=300,
-            sleep=15,
-            func=lambda: [
-                p
-                for p in get_noobaa_pods()
-                if p.name.startswith("noobaa-db-pg-cluster-1")
-            ],
-        ):
-            if db_pg_1_pods:
-                db_pg_1_pod = db_pg_1_pods[0]
-                break
-    except TimeoutExpiredError:
+    logger.info(
+        "Waiting for noobaa-operator to appear and reach Running (timeout 600s)"
+    )
+    operator_pod = _wait_for_noobaa_pod_type(
+        prefix="noobaa-operator", timeout=600, description="noobaa-operator"
+    )
+    if operator_pod is None:
         raise ResourceWrongStatusException(
-            "noobaa-db-pg-cluster-1 pod did not appear within 300s"
+            "noobaa-operator pod did not appear within 600s"
         )
-    assert db_pg_1_pod is not None, "noobaa-db-pg-cluster-1 pod not set after wait"
-    failed = verify_pods_running(
+    failed_operator = verify_pods_running(
+        [operator_pod], pod_type="NooBaa operator", timeout=600, parallel=False
+    )
+    if failed_operator:
+        raise ResourceWrongStatusException(
+            f"noobaa-operator did not reach Running state within 600s: {failed_operator}"
+        )
+    logger.info("noobaa-operator is in Running state")
+
+    logger.info(
+        "Waiting for cnpg-controller-manager to appear and reach Running (timeout 600s)"
+    )
+    cnpg_pod = _wait_for_noobaa_pod_type(
+        prefix="cnpg-controller-manager",
+        timeout=600,
+        description="cnpg-controller-manager",
+    )
+    if cnpg_pod is None:
+        raise ResourceWrongStatusException(
+            "cnpg-controller-manager pod did not appear within 600s"
+        )
+    failed_cnpg = verify_pods_running(
+        [cnpg_pod], pod_type="NooBaa CNPG controller", timeout=600, parallel=False
+    )
+    if failed_cnpg:
+        raise ResourceWrongStatusException(
+            f"cnpg-controller-manager did not reach Running state within 600s: {failed_cnpg}"
+        )
+    logger.info("cnpg-controller-manager is in Running state")
+
+    logger.info(
+        "Waiting for noobaa-db-pg-cluster-1 to appear and reach Running (timeout 600s)"
+    )
+    db_pg_1_pod = _wait_for_noobaa_pod_type(
+        prefix="noobaa-db-pg-cluster-1",
+        timeout=600,
+        description="noobaa-db-pg-cluster-1",
+    )
+    if db_pg_1_pod is None:
+        raise ResourceWrongStatusException(
+            "noobaa-db-pg-cluster-1 pod did not appear within 600s after cnpg-controller-manager"
+            " was Running. Check CNPG cluster resource status."
+        )
+    failed_db1 = verify_pods_running(
         [db_pg_1_pod], pod_type="NooBaa DB cluster-1", timeout=600, parallel=False
     )
-    if failed:
+    if failed_db1:
         raise ResourceWrongStatusException(
-            f"noobaa-db-pg-cluster-1 did not reach Running state within 600s: {failed}"
+            f"noobaa-db-pg-cluster-1 did not reach Running state within 600s: {failed_db1}"
         )
     logger.info("noobaa-db-pg-cluster-1 is in Running state")
 
-    logger.info("Waiting 300s for operator to create dependent NooBaa pods")
-    time.sleep(300)
+    logger.info(
+        f"Waiting for remaining NooBaa pods to appear "
+        f"(expected ~{expected_pod_count}, timeout 300s)"
+    )
+    try:
+        for current_pods in TimeoutSampler(
+            timeout=300,
+            sleep=15,
+            func=get_noobaa_pods,
+        ):
+            if len(current_pods) >= expected_pod_count:
+                logger.info(
+                    f"All {len(current_pods)} expected NooBaa pods have appeared: "
+                    f"{[p.name for p in current_pods]}"
+                )
+                break
+            logger.debug(
+                f"Waiting for NooBaa pods: {len(current_pods)}/{expected_pod_count} present"
+            )
+    except TimeoutExpiredError:
+        current_pods = get_noobaa_pods()
+        logger.warning(
+            f"Only {len(current_pods)}/{expected_pod_count} NooBaa pods appeared after 300s: "
+            f"{[p.name for p in current_pods]} — proceeding to verify what is present"
+        )
 
     current_noobaa_pods = get_noobaa_pods()
     logger.info(
-        f"Verifying {len(current_noobaa_pods)} NooBaa pods are running: "
+        f"Verifying {len(current_noobaa_pods)} NooBaa pods reach Running state: "
         f"{[p.name for p in current_noobaa_pods]}"
     )
     failed_noobaa_pods = verify_pods_running(
@@ -1678,16 +1776,9 @@ def recover_mcg():
         else:
             logger.info(f"Found {len(rgw_pods_before)} RGW pods to respawn")
 
-            for idx, rgw_pod in enumerate(rgw_pods_before):
-                logger.info(
-                    f"Force deleting RGW pod {idx+1}/{len(rgw_pods_before)}: {rgw_pod.name}"
-                )
+            for rgw_pod in rgw_pods_before:
+                logger.info(f"Force deleting RGW pod: {rgw_pod.name}")
                 rgw_pod.delete(force=True)
-
-                if idx < len(rgw_pods_before) - 1:
-                    wait_time = 60
-                    logger.info(f"Waiting {wait_time}s before deleting next RGW pod")
-                    time.sleep(wait_time)
 
             logger.info("Waiting 120s for RGW pods to fully respawn")
             time.sleep(120)
