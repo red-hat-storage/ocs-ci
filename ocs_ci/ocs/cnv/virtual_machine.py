@@ -742,6 +742,9 @@ chpasswd:
 
         Handles the case where the PV was already deleted due to the
         Delete reclaim policy before VM teardown reaches it.
+
+        Args:
+            pv_obj (PV): PersistentVolume object associated with the VM.
         """
         try:
             pv_obj.reload()
