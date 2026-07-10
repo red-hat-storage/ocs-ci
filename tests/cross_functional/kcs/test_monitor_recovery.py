@@ -107,24 +107,47 @@ class TestMonitorRecovery(E2ETest):
 
         def finalizer():
             """
-            Teardown to clean up test resources
+            Teardown to clean up test resources.
             """
             logger.test_step("Teardown: Clean up test resources")
             for dc_pod in getattr(self, "dc_pods", []):
+                pod_label = dc_pod.labels.get("name") or dc_pod.labels.get(
+                    "deploymentconfig"
+                )
+                if not pod_label:
+                    continue
+                namespace = dc_pod.namespace
+
                 try:
-                    pod_label = dc_pod.labels.get("name") or dc_pod.labels.get(
-                        "deploymentconfig"
-                    )
-                    if pod_label:
-                        logger.info(f"Deleting deployment: {pod_label}")
-                        deploy_ocp = ocp.OCP(
-                            kind="Deployment", namespace=dc_pod.namespace
+                    logger.info(f"Deleting deployment: {pod_label}")
+                    deploy_ocp = ocp.OCP(kind="Deployment", namespace=namespace)
+                    deploy_ocp.delete(resource_name=pod_label)
+                    deploy_ocp.wait_for_delete(resource_name=pod_label)
+                except Exception as e:
+                    logger.warning(f"Failed to delete deployment {pod_label}: {e}")
+
+                try:
+                    pod_ocp = ocp.OCP(kind="Pod", namespace=namespace)
+                    result = pod_ocp.get(selector=f"name={pod_label}")
+                    for item in (result or {}).get("items", []):
+                        pod_name = item.get("metadata", {}).get("name", "")
+                        if not pod_name:
+                            continue
+                        logger.info(
+                            f"Force deleting pod {pod_name} to release volume mount"
                         )
-                        deploy_ocp.delete(resource_name=pod_label)
-                        deploy_ocp.wait_for_delete(resource_name=pod_label)
+                        try:
+                            pod_ocp.delete(
+                                resource_name=pod_name, wait=False, force=True
+                            )
+                        except Exception as pod_e:
+                            if "NotFound" not in str(pod_e):
+                                logger.warning(
+                                    f"Could not force-delete pod {pod_name}: {pod_e}"
+                                )
                 except Exception as e:
                     logger.warning(
-                        f"Failed to delete deployment for pod {dc_pod.name}: {e}"
+                        f"Error force-deleting pods for label name={pod_label}: {e}"
                     )
             try:
                 logger.info("Teardown: archiving ceph crash warnings")
