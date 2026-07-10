@@ -979,9 +979,7 @@ class VMCloner(VirtualMachine):
             self.pvc_obj.ocp.wait_for_delete(
                 resource_name=self.pvc_obj.name, timeout=180
             )
-            # PV may already be deleted (Delete reclaim policy) - check first
-            if pv_obj.ocp.get(resource_name=pv_obj.name, dont_raise=True) is not None:
-                delete_pv_with_force_and_finalizers(pv_obj, timeout=600)
+            self._cleanup_backing_pv(pv_obj)
         elif self.volume_interface == constants.VM_VOLUME_DV:
             dv_pvc_name = self.dv_obj.get().get("status").get("claimName")
             data = dict()
@@ -992,9 +990,7 @@ class VMCloner(VirtualMachine):
             dv_pv = dv_pvc.backed_pv_obj
             self.dv_obj.delete()
             self.dv_obj.ocp.wait_for_delete(resource_name=self.dv_obj.name, timeout=180)
-            # PV may already be deleted (Delete reclaim policy) - check first
-            if dv_pv.ocp.get(resource_name=dv_pv.name, dont_raise=True) is not None:
-                delete_pv_with_force_and_finalizers(dv_pv, timeout=600)
+            self._cleanup_backing_pv(dv_pv)
         elif self.volume_interface == constants.VM_VOLUME_DVT:
             self.dv_rb_data_obj.delete()
             self.dv_cr_data_obj.delete()
