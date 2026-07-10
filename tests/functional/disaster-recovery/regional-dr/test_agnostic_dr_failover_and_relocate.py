@@ -210,6 +210,8 @@ class TestAgnosticDRFailoverAndRelocate:
             vgr_name=vgr_name,
             vgr_namespace=workload.workload_namespace,
             vgr_class=constants.MOCK_VGRC_NAME,
+            namespace=workload.workload_namespace,
+            local_pv=True,
         )
 
         logger.test_step(
@@ -512,6 +514,8 @@ class TestAgnosticDRFailoverAndRelocate:
             vgr_name=vgr_name,
             vgr_namespace=workload.workload_namespace,
             vgr_class=constants.MOCK_VGRC_NAME,
+            namespace=workload.workload_namespace,
+            local_pv=True,
         )
 
         # -- Step 7: Verify VGR --
@@ -696,6 +700,8 @@ class TestAgnosticDRFailoverAndRelocate:
             vgr_name=vgr_name,
             vgr_namespace=cnv_wl.workload_namespace,
             vgr_class=constants.MOCK_VGRC_NAME,
+            namespace=cnv_wl.workload_namespace,
+            local_pv=True,
         )
 
         logger.test_step("Verify VGR spec.external=true on both clusters")
@@ -886,6 +892,8 @@ class TestAgnosticDRFailoverAndRelocate:
             vgr_name=vgr_name,
             vgr_namespace=workload.workload_namespace,
             vgr_class=constants.MOCK_VGRC_NAME,
+            namespace=workload.workload_namespace,
+            local_pv=True,
         )
 
         logger.test_step("Verify VGR spec.external=true on both clusters")
