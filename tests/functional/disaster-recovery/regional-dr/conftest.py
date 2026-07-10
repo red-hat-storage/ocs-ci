@@ -2,6 +2,7 @@ import logging
 import platform
 import os
 import tempfile
+import time
 from ocs_ci.utility import templating
 import pytest
 
@@ -452,18 +453,27 @@ def cnv_custom_storage_class(
 @pytest.fixture()
 def cephfs_custom_storage_class(request, storageclass_factory):
     """
-    Uses storage class factory fixture to create a custom CephFS storage class and a custom
-    cephfs pool with replica-2 to be used by discovered applications
+    Fixture that returns a factory for creating a custom CephFS storage class
+    with a custom data pool on all non-ACM managed clusters.
 
-    Raises Exception if the custom SC creation fails on any of the managed clusters
+    The factory creates the storage class and pool on each cluster if they do
+    not already exist, then resets the cluster context.
+
+    Raises:
+        Exception: If storage class creation fails on any of the managed clusters
+
+    Returns:
+        callable: factory(replica, compression) that creates the custom SC
     """
 
     def factory(replica, compression):
         """
-        Args:
-            replica (int):  Replica count used in Pool creation
-            compression (str): Type of compression to be used in the Pool, defaults to None
+        Create the custom CephFS storage class and data pool on all clusters.
 
+        Args:
+            replica (int): Replica count for the CephFS data pool
+            compression (str): Compression mode for the pool
+                (e.g. None, 'aggressive', 'passive', 'force')
         """
 
         cephfs_pool_name = constants.RDR_CUSTOM_CEPHFS_POOL

@@ -89,7 +89,7 @@ class TestFailoverAndRelocate:
             True,
             2,
             None,
-           # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
             id="primary_down-rbd-custom_pool_replica2_without_compression",
         ),
         pytest.param(
@@ -106,6 +106,9 @@ class TestFailoverAndRelocate:
             False,  # primary_cluster_down = False
             constants.CEPHFILESYSTEM,
             False,  # via_ui = False
+            False,
+            None,
+            None,
             marks=[acceptance, pytest.mark.polarion_id("OCS-4730")],
             id="primary_up-cephfs-cli",
         ),
@@ -123,6 +126,9 @@ class TestFailoverAndRelocate:
             True,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
             False,  # via_ui = False
+            False,
+            None,
+            None,
             marks=[acceptance, pytest.mark.polarion_id("OCS-4727")],
             id="primary_down-cephfs-cli",
         ),
@@ -170,6 +176,9 @@ class TestFailoverAndRelocate:
             False,  # primary_cluster_down = False
             constants.CEPHBLOCKPOOL,
             True,  # via_ui = True
+            False,
+            None,
+            None,
             marks=pytest.mark.polarion_id("OCS-6861"),
             id="primary_up-rbd-ui",
         ),
@@ -177,6 +186,9 @@ class TestFailoverAndRelocate:
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
             True,  # via_ui = True
+            False,
+            None,
+            None,
             marks=pytest.mark.polarion_id("OCS-4743"),
             id="primary_down-rbd-ui",
         ),
@@ -184,13 +196,24 @@ class TestFailoverAndRelocate:
             True,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
             True,  # via_ui = True
+            False,
+            None,
+            None,
             marks=pytest.mark.polarion_id("OCS-6859"),
             id="primary_down-cephfs-ui",
         ),
     ]
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down", "pvc_interface", "via_ui", "custom_sc", "replica", "compression"], argvalues=params
+        argnames=[
+            "primary_cluster_down",
+            "pvc_interface",
+            "via_ui",
+            "custom_sc",
+            "replica",
+            "compression",
+        ],
+        argvalues=params,
     )
     def test_failover_and_relocate(
         self,
@@ -216,7 +239,7 @@ class TestFailoverAndRelocate:
         """
         if via_ui:
             acm_obj = AcmAddClusters()
-        
+
         if custom_sc:
             if pvc_interface == constants.CEPHBLOCKPOOL:
                 logger.info("Calling fixture to create Custom rbd Pool/SC..")
@@ -225,10 +248,12 @@ class TestFailoverAndRelocate:
             elif pvc_interface == constants.CEPHFILESYSTEM:
                 logger.info("Calling fixture to create Custom Pool/SC..")
                 cephfs_custom_storage_class(replica=replica, compression=compression)
-            
 
         workloads = dr_workload(
-            num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface, custom_sc=custom_sc
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=pvc_interface,
+            custom_sc=custom_sc,
         )
         drpc_subscription = DRPC(namespace=workloads[0].workload_namespace)
         drpc_appset = DRPC(
