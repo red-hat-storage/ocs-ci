@@ -91,7 +91,7 @@ fast and avoiding merge conflicts.
 
 **Prerequisites:**
 Gitleaks must be installed on your system before using pre-commit hooks.
-See [Getting Started - Prerequisites](getting_started.md#prerequisites) for installation instructions.
+See [Getting Started](getting_started.md) (Prerequisites section) for installation instructions.
 
 **Suppressing False Positives:**
 If Gitleaks flags something that isn't a real secret (test data, examples, etc.),
