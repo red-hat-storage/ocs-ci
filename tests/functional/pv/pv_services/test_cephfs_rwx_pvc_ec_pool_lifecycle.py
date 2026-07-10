@@ -29,8 +29,10 @@ def cephfs_ec_pool_and_sc(request):
     Yields:
         tuple: (OCS StorageClass object, full Ceph pool name)
     """
-    full_pool_name = helpers.create_cephfs_ec_pool(
-        EC_POOL_NAME, EC_DATA_CHUNKS, EC_CODING_CHUNKS
+    full_pool_name = helpers.create_cephfs_data_pool(
+        pool_name=EC_POOL_NAME,
+        data_chunks=EC_DATA_CHUNKS,
+        coding_chunks=EC_CODING_CHUNKS,
     )
 
     secret_obj = helpers.create_secret(interface_type=constants.CEPHFILESYSTEM)
@@ -49,7 +51,7 @@ def cephfs_ec_pool_and_sc(request):
         sc_obj.ocp.wait_for_delete(sc_obj.name)
         secret_obj.delete()
         secret_obj.ocp.wait_for_delete(secret_obj.name)
-        helpers.delete_cephfs_ec_pool(EC_POOL_NAME)
+        helpers.delete_cephfs_data_pool(EC_POOL_NAME)
 
     request.addfinalizer(finalizer)
     return sc_obj, full_pool_name
