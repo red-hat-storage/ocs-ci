@@ -108,25 +108,23 @@ class FusionAccessDeployment:
 
     def create_namespace_and_operator_group(self):
         """
-        Create the ibm-fusion-access Namespace and its OperatorGroup.
+        Create the ibm-fusion-access Namespace and OperatorGroup.
 
-        If the Namespace already exists the step is skipped (the OperatorGroup
-        is assumed to already be present as well since both objects live in the
-        same YAML manifest).
+        Uses ``oc apply`` so both objects are always reconciled to the desired
+        state, even on re-runs.  In particular this ensures that an OperatorGroup
+        created by a previous (broken) run with ``targetNamespaces`` set is
+        patched to ``spec: {}`` (AllNamespaces mode), which is required by the
+        Fusion Access operator and its KMM dependency.
         """
-        ns_ocp = OCP(kind="Namespace")
-        if ns_ocp.is_exist(resource_name=self.namespace):
-            logger.info(
-                f"Namespace '{self.namespace}' already exists, skipping creation"
-            )
-            return
-
-        logger.info(f"Creating Namespace '{self.namespace}' and its OperatorGroup")
+        logger.info(
+            f"Applying Namespace '{self.namespace}' and OperatorGroup "
+            "(AllNamespaces mode)"
+        )
         exec_cmd(
             f"oc --kubeconfig {self.kubeconfig} apply -f "
             f"{constants.FUSION_ACCESS_NS_YAML}"
         )
-        logger.info(f"Namespace '{self.namespace}' and OperatorGroup created")
+        logger.info(f"Namespace '{self.namespace}' and OperatorGroup applied")
 
     # ------------------------------------------------------------------
     # Step 3: Subscription
