@@ -1041,14 +1041,14 @@ def pytest_runtest_makereport(item, call):
                 )
                 # Must-gather (OCS) is complete when collect_ocs_logs returns
                 if ocs_logs_collection:
-                    mg_report_urls = trigger_reports_after_collect_ocs_logs(
+                    mg_report_infos = trigger_reports_after_collect_ocs_logs(
                         dir_name=test_case_name,
                         status_failure=True,
                         cluster_configs=ocsci_config.clusters,
                     )
-                    for report_url in mg_report_urls:
+                    for report_info in mg_report_infos:
                         item.user_properties.append(
-                            (MUST_GATHER_ANALYSIS_URL_PROPERTY, report_url)
+                            (MUST_GATHER_ANALYSIS_URL_PROPERTY, report_info["text_url"])
                         )
         except Exception:
             log.exception("Failed to collect OCS logs")
