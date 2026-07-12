@@ -174,6 +174,10 @@ class VSPHEREBASE(Deployment):
         """
         Add a new disk to worker nodes (and optionally master nodes).
 
+        When include_masters is True, control-plane nodes are processed one
+        at a time with stabilization waits between restarts to prevent etcd
+        quorum loss. Worker nodes are always processed first.
+
         Args:
             size (int): Size of disk in GB (default: 100)
             ssd (bool): if True, mark disk as SSD
@@ -183,10 +187,30 @@ class VSPHEREBASE(Deployment):
         vms = self.vsphere.get_all_vms_in_pool(
             config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
         )
-        for vm in vms:
-            if "compute" in vm.name or (include_masters and "control-plane" in vm.name):
+        extra_disks = config.ENV_DATA.get("extra_disks", 1)
+
+        worker_vms = [vm for vm in vms if "compute" in vm.name]
+        master_vms = (
+            [vm for vm in vms if "control-plane" in vm.name] if include_masters else []
+        )
+
+        for vm in worker_vms:
+            self.vsphere.add_disks_with_same_size(extra_disks, vm, size, disk_type, ssd)
+
+        if master_vms:
+            logger.info(
+                "Processing %d control-plane node(s) sequentially with "
+                "stabilization waits to preserve etcd quorum",
+                len(master_vms),
+            )
+            for vm in master_vms:
                 self.vsphere.add_disks_with_same_size(
-                    config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type, ssd
+                    extra_disks,
+                    vm,
+                    size,
+                    disk_type,
+                    ssd,
+                    is_control_plane=True,
                 )
 
     def add_nodes(self):
