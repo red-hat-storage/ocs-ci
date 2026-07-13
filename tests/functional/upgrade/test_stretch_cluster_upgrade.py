@@ -71,7 +71,7 @@ from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 ZONE_B = "data-2"
 CEPH_CHECK_TIMEOUT = 120
@@ -83,22 +83,17 @@ _upgrade_shared: dict = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Module-level helpers
-# ---------------------------------------------------------------------------
-
-
 def _verify_cluster_health(storage_pod_timeout=600, ceph_tries=20, ceph_delay=30):
     """
     Assert the cluster is healthy: storage pods running, CephCluster healthy,
     ceph_health_check passes.
     """
     wait_for_storage_pods(timeout=storage_pod_timeout)
-    log.info("All storage pods are Running / Completed")
+    logger.info("All storage pods are Running / Completed")
     CephCluster().cluster_health_check(timeout=storage_pod_timeout)
-    log.info("Ceph cluster health check passed")
+    logger.info("Ceph cluster health check passed")
     ceph_health_check(tries=ceph_tries, delay=ceph_delay)
-    log.info("Ceph health confirmed")
+    logger.info("Ceph health confirmed")
 
 
 def _deploy_stretch_workloads(
@@ -131,10 +126,10 @@ def _deploy_stretch_workloads(
         )
     )
     md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
-    log.info(f"VM file md5sum captured: {md5sum_before}")
+    logger.info(f"VM file md5sum captured: {md5sum_before}")
 
     check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
-    log.info("All zone-aware workload pods are Running and healthy")
+    logger.info("All zone-aware workload pods are Running and healthy")
 
     sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
     sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
@@ -158,12 +153,7 @@ def _check_ceph_accessible(sc_obj, context: str):
         assert recover_from_ceph_stuck(
             sc_obj
         ), f"Ceph became inaccessible {context} and could not be recovered"
-    log.info(f"Ceph is accessible {context}")
-
-
-# ---------------------------------------------------------------------------
-# PRE-UPGRADE
-# ---------------------------------------------------------------------------
+    logger.info(f"Ceph is accessible {context}")
 
 
 @pre_upgrade
@@ -192,7 +182,7 @@ def test_pre_upgrade_stretch_cluster_workloads(
 
     sc_obj = StretchCluster()
 
-    log.info("PRE-UPGRADE Step 1: Deploying zone-aware workloads")
+    logger.info("PRE-UPGRADE Step 1: Deploying zone-aware workloads")
     vm_obj, md5sum_before = _deploy_stretch_workloads(
         sc_obj,
         setup_logwriter_cephfs_workload_factory,
@@ -205,15 +195,10 @@ def test_pre_upgrade_stretch_cluster_workloads(
     _upgrade_shared["vm_obj"] = vm_obj
     _upgrade_shared["md5sum_before"] = md5sum_before
 
-    log.info(
+    logger.info(
         "PRE-UPGRADE complete: zone-aware workloads deployed, data snapshot taken. "
         "Cluster is ready for OCP/ODF 4.22 upgrade."
     )
-
-
-# ---------------------------------------------------------------------------
-# POST-UPGRADE
-# ---------------------------------------------------------------------------
 
 
 @post_upgrade
@@ -255,33 +240,37 @@ def test_post_upgrade_stretch_cluster_zone_b_shutdown(
     def _remove_taints():
         if tainted_nodes:
             names = [n.name for n in tainted_nodes]
-            log.info(f"Removing out-of-service taint from nodes: {names}")
+            logger.info(f"Removing out-of-service taint from nodes: {names}")
             try:
                 untaint_nodes(
                     taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
                     nodes_to_untaint=tainted_nodes,
                 )
             except Exception as exc:
-                log.warning(f"untaint_nodes raised during cleanup: {exc}")
+                logger.warning(f"untaint_nodes raised during cleanup: {exc}")
             tainted_nodes.clear()
 
-    log.info("POST-UPGRADE Step 3: Verifying cluster health after OCP/ODF 4.22 upgrade")
+    logger.info(
+        "POST-UPGRADE Step 3: Verifying cluster health after OCP/ODF 4.22 upgrade"
+    )
     _verify_cluster_health()
-    log.info("POST-UPGRADE Step 3: Cluster health confirmed after upgrade")
+    logger.info("POST-UPGRADE Step 3: Cluster health confirmed after upgrade")
 
     sc_pre = _upgrade_shared.get("sc_obj")
     vm_obj = _upgrade_shared.get("vm_obj")
     md5sum_before = _upgrade_shared.get("md5sum_before")
 
     if sc_pre is not None:
-        log.info(
+        logger.info(
             "POST-UPGRADE Step 4: Verifying pre-upgrade workloads are still running"
         )
         check_for_logwriter_workload_pods(sc_pre, nodes=nodes)
-        log.info("POST-UPGRADE Step 4: Pre-upgrade workloads are Running after upgrade")
+        logger.info(
+            "POST-UPGRADE Step 4: Pre-upgrade workloads are Running after upgrade"
+        )
 
         if vm_obj is not None and md5sum_before is not None:
-            log.info(
+            logger.info(
                 "POST-UPGRADE Step 4: Checking pre-upgrade VM data integrity "
                 "after OCP/ODF upgrade"
             )
@@ -291,15 +280,17 @@ def test_post_upgrade_stretch_cluster_zone_b_shutdown(
                 f"VM data integrity lost across OCP/ODF upgrade: "
                 f"before={md5sum_before}, after={md5sum_after_upgrade}"
             )
-            log.info("POST-UPGRADE Step 4: VM data integrity confirmed across upgrade")
+            logger.info(
+                "POST-UPGRADE Step 4: VM data integrity confirmed across upgrade"
+            )
     else:
-        log.warning(
+        logger.warning(
             "POST-UPGRADE Step 4: No pre-upgrade workload state found "
             "(pre-upgrade test may not have run in this session). "
             "Proceeding with post-upgrade workload deployment only."
         )
 
-    log.info(
+    logger.info(
         "POST-UPGRADE Step 5: Deploying NEW zone-aware workloads on upgraded cluster"
     )
     sc_new = StretchCluster()
@@ -310,7 +301,9 @@ def test_post_upgrade_stretch_cluster_zone_b_shutdown(
         cnv_workload,
         nodes,
     )
-    log.info(f"POST-UPGRADE Step 5: New VM file md5sum captured: {new_md5sum_before}")
+    logger.info(
+        f"POST-UPGRADE Step 5: New VM file md5sum captured: {new_md5sum_before}"
+    )
 
     zone_b_nodes = sc_new.get_nodes_in_zone(ZONE_B)
     assert len(zone_b_nodes) > 0, (
@@ -318,9 +311,9 @@ def test_post_upgrade_stretch_cluster_zone_b_shutdown(
         f"Check that the cluster has nodes labeled {constants.ZONE_LABEL}={ZONE_B}"
     )
     zone_b_node_names = [n.name for n in zone_b_nodes]
-    log.info(f"Zone-B nodes: {zone_b_node_names}")
+    logger.info(f"Zone-B nodes: {zone_b_node_names}")
 
-    log.info(f"POST-UPGRADE Step 6: Stopping all Zone-B nodes: {zone_b_node_names}")
+    logger.info(f"POST-UPGRADE Step 6: Stopping all Zone-B nodes: {zone_b_node_names}")
     start_time = datetime.now(timezone.utc)
     nodes.stop_nodes(nodes=zone_b_nodes)
     wait_for_nodes_status(
@@ -328,23 +321,23 @@ def test_post_upgrade_stretch_cluster_zone_b_shutdown(
         status=constants.NODE_NOT_READY,
         timeout=300,
     )
-    log.info(f"All Zone-B nodes are NotReady: {zone_b_node_names}")
+    logger.info(f"All Zone-B nodes are NotReady: {zone_b_node_names}")
 
-    log.info("POST-UPGRADE Step 6: Tainting all Zone-B nodes with out-of-service")
+    logger.info("POST-UPGRADE Step 6: Tainting all Zone-B nodes with out-of-service")
     assert taint_nodes(
         nodes=zone_b_node_names,
         taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
     ), f"Failed to taint Zone-B nodes {zone_b_node_names} with out-of-service"
     tainted_nodes.extend(zone_b_nodes)
-    log.info(f"out-of-service taint applied to Zone-B nodes: {zone_b_node_names}")
+    logger.info(f"out-of-service taint applied to Zone-B nodes: {zone_b_node_names}")
 
-    log.info(
+    logger.info(
         "POST-UPGRADE Step 7: Refreshing pod state – workloads should have "
         "left Zone B (evicted or pending)"
     )
     _refresh_pod_state(sc_new)
 
-    log.info(
+    logger.info(
         "POST-UPGRADE Step 7: Verifying zone-aware RBD pods enter Pending state "
         "(FailedScheduling – no Zone-B nodes available)"
     )
@@ -362,54 +355,56 @@ def test_post_upgrade_stretch_cluster_zone_b_shutdown(
             timeout=300,
             namespace=constants.STRETCH_CLUSTER_NAMESPACE,
         )
-        log.info(
+        logger.info(
             "POST-UPGRADE Step 7: Zone-aware RBD pods are Pending (FailedScheduling) "
             "as expected on upgraded cluster"
         )
 
     _check_ceph_accessible(sc_new, "during Zone-B outage on upgraded cluster")
 
-    log.info(f"POST-UPGRADE Step 10: Starting all Zone-B nodes: {zone_b_node_names}")
+    logger.info(f"POST-UPGRADE Step 10: Starting all Zone-B nodes: {zone_b_node_names}")
     try:
         nodes.start_nodes(nodes=zone_b_nodes)
     except Exception:
-        log.error("Something went wrong while starting Zone-B nodes!")
+        logger.error("Something went wrong while starting Zone-B nodes!")
         _remove_taints()
         raise
 
     wait_for_nodes_status(timeout=600)
-    log.info(f"All Zone-B nodes are Ready: {zone_b_node_names}")
+    logger.info(f"All Zone-B nodes are Ready: {zone_b_node_names}")
 
-    log.info("POST-UPGRADE Step 10: Removing out-of-service taint from Zone-B nodes")
+    logger.info("POST-UPGRADE Step 10: Removing out-of-service taint from Zone-B nodes")
     untaint_nodes(
         taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
         nodes_to_untaint=list(tainted_nodes),
     )
     tainted_nodes.clear()
-    log.info("out-of-service taint removed from all Zone-B nodes")
+    logger.info("out-of-service taint removed from all Zone-B nodes")
 
     time.sleep(30)
 
-    log.info("POST-UPGRADE Step 11: Refreshing workload pod state post-recovery")
+    logger.info("POST-UPGRADE Step 11: Refreshing workload pod state post-recovery")
     _refresh_pod_state(sc_new)
 
     recovery_end_time = datetime.now(timezone.utc)
-    log.info("POST-UPGRADE Step 11: Running post-recovery IO/data integrity checks")
+    logger.info("POST-UPGRADE Step 11: Running post-recovery IO/data integrity checks")
     sc_new.post_failure_checks(
         start_time, recovery_end_time, wait_for_read_completion=False
     )
-    log.info(
+    logger.info(
         "POST-UPGRADE Step 11: Post-recovery checks passed "
         "(no DU/DL/DC after Zone-B recovery on upgraded cluster)"
     )
 
     _check_ceph_accessible(sc_new, "after Zone-B recovery")
 
-    log.info("POST-UPGRADE Step 11: Validating Ceph mon connection scores")
+    logger.info("POST-UPGRADE Step 11: Validating Ceph mon connection scores")
     sc_new.reset_conn_score()
-    log.info("POST-UPGRADE Step 11: Connection scores are clean after Zone-B recovery")
+    logger.info(
+        "POST-UPGRADE Step 11: Connection scores are clean after Zone-B recovery"
+    )
 
-    log.info(
+    logger.info(
         "POST-UPGRADE Step 11: Checking new VM data integrity after Zone-B recovery"
     )
     retry(CommandFailed, tries=5, delay=10)(new_vm_obj.wait_for_ssh_connectivity)()
@@ -417,56 +412,56 @@ def test_post_upgrade_stretch_cluster_zone_b_shutdown(
         new_vm_obj, new_md5sum_before
     )
     new_vm_obj.stop()
-    log.info("POST-UPGRADE Step 11: New VM data integrity verified")
+    logger.info("POST-UPGRADE Step 11: New VM data integrity verified")
 
-    log.info("POST-UPGRADE Step 11: Checking for data loss (new workloads)")
+    logger.info("POST-UPGRADE Step 11: Checking for data loss (new workloads)")
     check_for_logwriter_workload_pods(sc_new, nodes=nodes)
     verify_data_loss(sc_new)
-    log.info("POST-UPGRADE Step 11: No data loss detected in new workloads")
+    logger.info("POST-UPGRADE Step 11: No data loss detected in new workloads")
 
-    log.info("POST-UPGRADE Step 11: Checking for data corruption (new workloads)")
+    logger.info("POST-UPGRADE Step 11: Checking for data corruption (new workloads)")
     sc_new.cephfs_logreader_job.delete()
     for pod in sc_new.cephfs_logreader_pods:
         pod.wait_for_pod_delete(timeout=120)
-    log.info("Old CephFS logreader pods deleted")
+    logger.info("Old CephFS logreader pods deleted")
     verify_data_corruption(sc_new, logreader_workload_factory)
-    log.info("POST-UPGRADE Step 11: No data corruption detected in new workloads")
+    logger.info("POST-UPGRADE Step 11: No data corruption detected in new workloads")
 
     if sc_pre is not None:
-        log.info(
+        logger.info(
             "POST-UPGRADE Step 11: Checking pre-upgrade workload data integrity "
             "after Zone-B recovery"
         )
         check_for_logwriter_workload_pods(sc_pre, nodes=nodes)
         verify_data_loss(sc_pre)
-        log.info(
+        logger.info(
             "POST-UPGRADE Step 11: No data loss in pre-upgrade workloads post recovery"
         )
 
-    log.info(
+    logger.info(
         "POST-UPGRADE Step 12: Deleting new logwriter-rbd pods to verify "
         "re-schedule on recovered Zone-B nodes"
     )
     for pod_obj in sc_new.rbd_logwriter_pods:
-        log.info(f"Deleting pod {pod_obj.name}")
+        logger.info(f"Deleting pod {pod_obj.name}")
         pod_obj.delete()
 
     sc_new.get_logwriter_reader_pods(
         label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
     )
-    log.info(
+    logger.info(
         "POST-UPGRADE Step 12: New logwriter-rbd pods re-scheduled and Running "
         "after Zone-B recovery on upgraded cluster; IOs running without errors"
     )
 
-    log.info(
+    logger.info(
         "POST-UPGRADE Step 13: Deploying fresh zone-aware logwriter-rbd workload "
         f"on recovered Zone-B nodes {zone_b_node_names}"
     )
     new_rbd_sts = setup_logwriter_rbd_workload_factory(zone_aware=True)
-    log.info(f"POST-UPGRADE Step 13: Fresh workload deployed: {new_rbd_sts.name}")
+    logger.info(f"POST-UPGRADE Step 13: Fresh workload deployed: {new_rbd_sts.name}")
     check_for_logwriter_workload_pods(sc_new, nodes=nodes)
-    log.info(
+    logger.info(
         "POST-UPGRADE Step 13: All workloads healthy on recovered Zone-B nodes "
         "after OCP/ODF 4.22 upgrade – IOs running without errors"
     )

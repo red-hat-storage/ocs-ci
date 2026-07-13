@@ -39,9 +39,9 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
-    tier4b,
     magenta_squad,
 )
+from ocs_ci.framework.testlib import ManageTest, tier4b
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
     check_for_logwriter_workload_pods,
@@ -66,15 +66,10 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.utility.retry import retry
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 ZONE_B = "data-2"
 CEPH_CHECK_TIMEOUT = 120
-
-
-# ---------------------------------------------------------------------------
-# Module-level helpers shared across all test classes
-# ---------------------------------------------------------------------------
 
 
 def _teardown_taints(tainted_nodes: list) -> None:
@@ -82,14 +77,14 @@ def _teardown_taints(tainted_nodes: list) -> None:
     if not tainted_nodes:
         return
     names = [n.name for n in tainted_nodes]
-    log.info(f"Teardown: removing out-of-service taint from nodes {names}")
+    logger.info(f"Teardown: removing out-of-service taint from nodes {names}")
     try:
         untaint_nodes(
             taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
             nodes_to_untaint=tainted_nodes,
         )
     except Exception as exc:
-        log.warning(f"untaint_nodes during teardown raised: {exc}")
+        logger.warning(f"untaint_nodes during teardown raised: {exc}")
     tainted_nodes.clear()
 
 
@@ -105,11 +100,19 @@ def _deploy_workloads(
     Deploy CephFS logwriter, RBD logwriter and VM workloads; verify all pods
     are healthy; capture logfile maps for data-loss detection.
 
+    Args:
+        sc_obj: StretchCluster instance to attach workloads to.
+        setup_logwriter_cephfs_workload_factory: fixture factory for CephFS logwriter.
+        setup_logwriter_rbd_workload_factory: fixture factory for RBD logwriter.
+        cnv_workload: fixture factory for VM workload.
+        nodes: nodes fixture for topology checks.
+        zone_aware (bool): Whether to deploy with zone-aware topology constraints.
+
     Returns:
-        tuple: (vm_obj, md5sum_before) — the VM object and the md5sum of the
-        test file written inside the VM before any disruption.
+        tuple: (vm_obj, md5sum_before) — VM object and md5sum of the test file
+        written inside the VM before any disruption.
     """
-    log.info(f"Deploying zone-{'aware' if zone_aware else 'unaware'} workloads")
+    logger.info(f"Deploying zone-{'aware' if zone_aware else 'unaware'} workloads")
     (
         sc_obj.cephfs_logwriter_dep,
         sc_obj.cephfs_logreader_job,
@@ -129,10 +132,10 @@ def _deploy_workloads(
         )
     )
     md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
-    log.info(f"VM file md5sum before failure: {md5sum_before}")
+    logger.info(f"VM file md5sum before failure: {md5sum_before}")
 
     check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
-    log.info("All logwriter/logreader workload pods are running successfully")
+    logger.info("All logwriter/logreader workload pods are running successfully")
 
     sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
     sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
@@ -143,6 +146,9 @@ def _deploy_workloads(
 def _get_zone_b_nodes(sc_obj):
     """
     Return all OCS node objects in Zone B and assert at least one exists.
+
+    Args:
+        sc_obj: StretchCluster instance used to query zone topology.
 
     Returns:
         list: Zone-B node objects.
@@ -159,6 +165,10 @@ def _apply_out_of_service_taint(zone_b_nodes: list, tainted_nodes_ref: list) -> 
     """
     Apply the out-of-service NoExecute taint to all *zone_b_nodes* and record
     them in *tainted_nodes_ref* so teardown can remove the taint on failure.
+
+    Args:
+        zone_b_nodes (list): Node objects in Zone B to taint.
+        tainted_nodes_ref (list): Mutable list updated with the tainted nodes.
     """
     node_names = [n.name for n in zone_b_nodes]
     assert taint_nodes(
@@ -167,13 +177,15 @@ def _apply_out_of_service_taint(zone_b_nodes: list, tainted_nodes_ref: list) -> 
     ), f"Failed to add out-of-service taint to Zone-B nodes {node_names}"
     tainted_nodes_ref.clear()
     tainted_nodes_ref.extend(zone_b_nodes)
-    log.info(f"out-of-service taint applied to Zone-B nodes: {node_names}")
+    logger.info(f"out-of-service taint applied to Zone-B nodes: {node_names}")
 
 
 def _refresh_pod_state(sc_obj) -> None:
     """
-    Refresh the CephFS and RBD logwriter/logreader pod state on *sc_obj*,
-    expecting pods to have left Zone B (exp_num_replicas=0 means 'any count').
+    Refresh CephFS and RBD logwriter/logreader pod state on *sc_obj*.
+
+    Args:
+        sc_obj: StretchCluster instance whose pod state will be refreshed.
     """
     for label in (
         constants.LOGWRITER_CEPHFS_LABEL,
@@ -184,18 +196,32 @@ def _refresh_pod_state(sc_obj) -> None:
 
 
 def _check_ceph_accessible(sc_obj, context: str) -> None:
-    """Assert Ceph is accessible; attempt recovery if it is not."""
+    """
+    Assert Ceph is accessible; attempt recovery if it is not.
+
+    Args:
+        sc_obj: StretchCluster instance to check.
+        context (str): Description used in log/assert messages.
+    """
     if not sc_obj.check_ceph_accessibility(timeout=CEPH_CHECK_TIMEOUT):
         assert recover_from_ceph_stuck(
             sc_obj
         ), f"Ceph became inaccessible {context} and could not be recovered"
-    log.info(f"Ceph is accessible {context}")
+    logger.info(f"Ceph is accessible {context}")
 
 
 def _run_post_failure_checks(sc_obj, start_time, end_time, context: str) -> None:
-    """Run post_failure_checks and verify Ceph accessibility during a failure window."""
+    """
+    Run post_failure_checks and verify Ceph accessibility during a failure window.
+
+    Args:
+        sc_obj: StretchCluster instance.
+        start_time: Failure window start (datetime).
+        end_time: Failure window end (datetime).
+        context (str): Description used in log messages.
+    """
     sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
-    log.info(f"Post-failure IO/integrity checks passed ({context})")
+    logger.info(f"Post-failure IO/integrity checks passed ({context})")
     _check_ceph_accessible(sc_obj, context)
 
 
@@ -203,14 +229,18 @@ def _run_post_recovery_checks(
     sc_obj, start_time, nodes, vm_obj, md5sum_before, logreader_workload_factory
 ) -> None:
     """
-    Full post-recovery verification sequence:
-      - Refresh pod state
-      - post_failure_checks over the full window
-      - Ceph accessibility check
-      - Connection score reset
-      - VM data integrity (md5sum) and SSH connectivity
-      - Data loss check (logwriter logs)
-      - Data corruption check (logreader logs)
+    Full post-recovery verification sequence.
+
+    Runs: pod state refresh, post_failure_checks, Ceph accessibility check,
+    connection score reset, VM data integrity, data loss check, data corruption check.
+
+    Args:
+        sc_obj: StretchCluster instance.
+        start_time: Start of the failure window (datetime).
+        nodes: nodes fixture used by check_for_logwriter_workload_pods.
+        vm_obj: VM workload object for SSH and md5sum verification.
+        md5sum_before: Expected md5sum captured before the disruption.
+        logreader_workload_factory: fixture factory for spawning logreader jobs.
     """
     recovery_end_time = datetime.now(timezone.utc)
 
@@ -219,62 +249,63 @@ def _run_post_recovery_checks(
     sc_obj.post_failure_checks(
         start_time, recovery_end_time, wait_for_read_completion=False
     )
-    log.info("Post-recovery IO/integrity checks passed (no DU/DL/DC)")
+    logger.info("Post-recovery IO/integrity checks passed (no DU/DL/DC)")
 
     _check_ceph_accessible(sc_obj, "after Zone-B recovery")
 
     sc_obj.reset_conn_score()
-    log.info("Connection scores are clean after Zone-B recovery")
+    logger.info("Connection scores are clean after Zone-B recovery")
 
     retry(CommandFailed, tries=5, delay=10)(vm_obj.wait_for_ssh_connectivity)()
     retry(CommandFailed, tries=5, delay=10)(verify_vm_workload)(vm_obj, md5sum_before)
     vm_obj.stop()
-    log.info("VM data integrity verified and VM stopped")
+    logger.info("VM data integrity verified and VM stopped")
 
     check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
     verify_data_loss(sc_obj)
-    log.info("No data loss detected")
+    logger.info("No data loss detected")
 
     sc_obj.cephfs_logreader_job.delete()
     for pod in sc_obj.cephfs_logreader_pods:
         pod.wait_for_pod_delete(timeout=120)
     verify_data_corruption(sc_obj, logreader_workload_factory)
-    log.info("No data corruption detected")
+    logger.info("No data corruption detected")
 
 
 def _redeploy_and_verify(
     sc_obj, setup_logwriter_rbd_workload_factory, nodes, zone_aware: bool
 ) -> None:
     """
-    Delete existing RBD logwriter pods and wait for the StatefulSet to recreate
-    them, then deploy a fresh RBD logwriter StatefulSet and verify all workload
+    Delete existing RBD logwriter pods, wait for the StatefulSet to recreate
+    them, deploy a fresh RBD logwriter StatefulSet and verify all workload
     pods are healthy.
+
+    Args:
+        sc_obj: StretchCluster instance.
+        setup_logwriter_rbd_workload_factory: fixture factory for the new StatefulSet.
+        nodes: nodes fixture for topology checks.
+        zone_aware (bool): Whether the new workload should use zone-aware scheduling.
     """
     for pod_obj in sc_obj.rbd_logwriter_pods:
-        log.info(f"Deleting pod {pod_obj.name}")
+        logger.info(f"Deleting pod {pod_obj.name}")
         pod_obj.delete()
     sc_obj.get_logwriter_reader_pods(
         label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
     )
-    log.info("Logwriter-RBD pods re-scheduled and Running after Zone-B recovery")
+    logger.info("Logwriter-RBD pods re-scheduled and Running after Zone-B recovery")
 
     new_rbd_sts = setup_logwriter_rbd_workload_factory(zone_aware=zone_aware)
-    log.info(f"New logwriter-rbd workload deployed: {new_rbd_sts.name}")
+    logger.info(f"New logwriter-rbd workload deployed: {new_rbd_sts.name}")
     check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
-    log.info(
+    logger.info(
         "All workloads healthy on recovered Zone-B nodes – IOs running without errors"
     )
-
-
-# ---------------------------------------------------------------------------
-# Test classes
-# ---------------------------------------------------------------------------
 
 
 @tier4b
 @stretchcluster_required
 @magenta_squad
-class TestStretchClusterZoneBNodeShutdown:
+class TestStretchClusterZoneBNodeShutdown(ManageTest):
     """
     Shutdown one Zone-B node while zone-aware workloads are running.
 
@@ -284,7 +315,7 @@ class TestStretchClusterZoneBNodeShutdown:
 
     _tainted_nodes = []
 
-    @pytest.fixture(autouse=False)
+    @pytest.fixture(scope="function")
     def zone_b_shutdown_teardown(self, request):
         """Remove out-of-service taints on failure or test end."""
 
@@ -339,7 +370,7 @@ class TestStretchClusterZoneBNodeShutdown:
         zone_b_nodes = _get_zone_b_nodes(sc_obj)
         node_to_shutdown = zone_b_nodes[0]
         zone_b_node_names = [n.name for n in zone_b_nodes]
-        log.info(
+        logger.info(
             f"Zone-B nodes: {zone_b_node_names}; "
             f"selecting '{node_to_shutdown.name}' for shutdown"
         )
@@ -351,7 +382,7 @@ class TestStretchClusterZoneBNodeShutdown:
             status=constants.NODE_NOT_READY,
             timeout=300,
         )
-        log.info(f"Node {node_to_shutdown.name} is NotReady")
+        logger.info(f"Node {node_to_shutdown.name} is NotReady")
 
         _apply_out_of_service_taint(zone_b_nodes, self._tainted_nodes)
         _refresh_pod_state(sc_obj)
@@ -359,10 +390,10 @@ class TestStretchClusterZoneBNodeShutdown:
         healthy_zone_b_nodes = [
             n.name for n in zone_b_nodes if n.name != node_to_shutdown.name
         ]
-        log.info(f"Healthy Zone-B nodes remaining: {healthy_zone_b_nodes}")
+        logger.info(f"Healthy Zone-B nodes remaining: {healthy_zone_b_nodes}")
 
         if not healthy_zone_b_nodes:
-            log.info(
+            logger.info(
                 "No healthy Zone-B nodes – verifying zone-aware RBD pods "
                 "enter Pending / FailedScheduling state"
             )
@@ -380,16 +411,16 @@ class TestStretchClusterZoneBNodeShutdown:
                     timeout=300,
                     namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                 )
-                log.info(
+                logger.info(
                     "Zone-aware RBD pods are Pending (FailedScheduling) as expected"
                 )
         else:
-            log.info("Healthy Zone-B nodes exist – verifying pods relocated there")
+            logger.info("Healthy Zone-B nodes exist – verifying pods relocated there")
             sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
             sc_obj.get_logwriter_reader_pods(
                 label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
             )
-            log.info("Zone-aware workload pods relocated to healthy Zone-B nodes")
+            logger.info("Zone-aware workload pods relocated to healthy Zone-B nodes")
 
         end_time = datetime.now(timezone.utc)
         if healthy_zone_b_nodes:
@@ -401,7 +432,7 @@ class TestStretchClusterZoneBNodeShutdown:
 
         nodes.start_nodes(nodes=[node_to_shutdown])
         wait_for_nodes_status(timeout=600)
-        log.info(f"Node {node_to_shutdown.name} is Ready; Zone B recovered")
+        logger.info(f"Node {node_to_shutdown.name} is Ready; Zone B recovered")
 
         untaint_nodes(
             taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
@@ -459,7 +490,7 @@ class TestStretchClusterZoneBNodeShutdown:
 
         zone_b_nodes = _get_zone_b_nodes(sc_obj)
         zone_b_node_names = [n.name for n in zone_b_nodes]
-        log.info(f"All Zone-B nodes will be shut down: {zone_b_node_names}")
+        logger.info(f"All Zone-B nodes will be shut down: {zone_b_node_names}")
 
         start_time = datetime.now(timezone.utc)
         nodes.stop_nodes(nodes=zone_b_nodes)
@@ -468,7 +499,7 @@ class TestStretchClusterZoneBNodeShutdown:
             status=constants.NODE_NOT_READY,
             timeout=300,
         )
-        log.info(f"All Zone-B nodes are NotReady: {zone_b_node_names}")
+        logger.info(f"All Zone-B nodes are NotReady: {zone_b_node_names}")
 
         _apply_out_of_service_taint(zone_b_nodes, self._tainted_nodes)
         _refresh_pod_state(sc_obj)
@@ -487,7 +518,7 @@ class TestStretchClusterZoneBNodeShutdown:
                 timeout=300,
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE,
             )
-            log.info(
+            logger.info(
                 "Zone-aware RBD pods are Pending (FailedScheduling) – "
                 "no Zone-B nodes available"
             )
@@ -496,7 +527,7 @@ class TestStretchClusterZoneBNodeShutdown:
 
         nodes.start_nodes(nodes=zone_b_nodes)
         wait_for_nodes_status(timeout=600)
-        log.info(f"All Zone-B nodes are Ready: {zone_b_node_names}")
+        logger.info(f"All Zone-B nodes are Ready: {zone_b_node_names}")
 
         untaint_nodes(
             taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
@@ -516,7 +547,7 @@ class TestStretchClusterZoneBNodeShutdown:
 @tier4b
 @stretchcluster_required
 @magenta_squad
-class TestStretchClusterZoneBShutdownZoneUnaware:
+class TestStretchClusterZoneBShutdownZoneUnaware(ManageTest):
     """
     Shutdown all Zone-B nodes while zone-UNAWARE workloads are running.
 
@@ -526,7 +557,7 @@ class TestStretchClusterZoneBShutdownZoneUnaware:
 
     _tainted_nodes = []
 
-    @pytest.fixture(autouse=False)
+    @pytest.fixture(scope="function")
     def zone_b_unaware_teardown(self, request):
         """Remove out-of-service taints on failure or test end."""
 
@@ -577,7 +608,7 @@ class TestStretchClusterZoneBShutdownZoneUnaware:
 
         zone_b_nodes = _get_zone_b_nodes(sc_obj)
         zone_b_node_names = [n.name for n in zone_b_nodes]
-        log.info(f"Zone-B nodes to be shut down: {zone_b_node_names}")
+        logger.info(f"Zone-B nodes to be shut down: {zone_b_node_names}")
 
         start_time = datetime.now(timezone.utc)
         nodes.stop_nodes(nodes=zone_b_nodes)
@@ -586,12 +617,12 @@ class TestStretchClusterZoneBShutdownZoneUnaware:
             status=constants.NODE_NOT_READY,
             timeout=300,
         )
-        log.info(f"All Zone-B nodes are NotReady: {zone_b_node_names}")
+        logger.info(f"All Zone-B nodes are NotReady: {zone_b_node_names}")
 
         _apply_out_of_service_taint(zone_b_nodes, self._tainted_nodes)
         _refresh_pod_state(sc_obj)
 
-        log.info(
+        logger.info(
             "Verifying zone-unaware workloads migrated to healthy nodes "
             "in available zones with PVCs mounted and IOs active"
         )
@@ -600,7 +631,7 @@ class TestStretchClusterZoneBShutdownZoneUnaware:
             label=constants.LOGREADER_CEPHFS_LABEL,
             statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
         )
-        log.info("CephFS logwriter/logreader pods Running on healthy nodes")
+        logger.info("CephFS logwriter/logreader pods Running on healthy nodes")
 
         # RBD (RWO) pods may be stuck Terminating; force-delete and wait.
         try:
@@ -608,7 +639,7 @@ class TestStretchClusterZoneBShutdownZoneUnaware:
                 label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
             )
         except Exception:
-            log.info(
+            logger.info(
                 "RBD pod may be Terminating; force-deleting and "
                 "waiting for re-schedule on healthy zone"
             )
@@ -617,19 +648,19 @@ class TestStretchClusterZoneBShutdownZoneUnaware:
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE,
             ):
                 pod_obj = Pod(**pod_info)
-                log.info(f"Force-deleting stuck pod {pod_obj.name}")
+                logger.info(f"Force-deleting stuck pod {pod_obj.name}")
                 pod_obj.delete(force=True)
             sc_obj.get_logwriter_reader_pods(
                 label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
             )
-        log.info("All zone-unaware workload pods Running on healthy nodes")
+        logger.info("All zone-unaware workload pods Running on healthy nodes")
 
         end_time = datetime.now(timezone.utc)
         _run_post_failure_checks(sc_obj, start_time, end_time, "during Zone-B outage")
 
         nodes.start_nodes(nodes=zone_b_nodes)
         wait_for_nodes_status(timeout=600)
-        log.info(f"All Zone-B nodes are Ready: {zone_b_node_names}")
+        logger.info(f"All Zone-B nodes are Ready: {zone_b_node_names}")
 
         untaint_nodes(
             taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
@@ -649,7 +680,7 @@ class TestStretchClusterZoneBShutdownZoneUnaware:
 @tier4b
 @stretchcluster_required
 @magenta_squad
-class TestStretchClusterZoneBKubeletDown:
+class TestStretchClusterZoneBKubeletDown(ManageTest):
     """
     Zone B down / network down — simulated by stopping kubelet.
 
@@ -666,14 +697,14 @@ class TestStretchClusterZoneBKubeletDown:
     _kubelet_stopped_nodes = []
     _tainted_nodes = []
 
-    @pytest.fixture(autouse=False)
+    @pytest.fixture(scope="function")
     def zone_b_kubelet_teardown(self, request):
         """Restart kubelet and remove out-of-service taints on failure."""
 
         def finalizer():
             if self._kubelet_stopped_nodes:
                 names = [n.name for n in self._kubelet_stopped_nodes]
-                log.info(f"Teardown: restarting kubelet on nodes {names}")
+                logger.info(f"Teardown: restarting kubelet on nodes {names}")
                 ocp_obj = OCP(kind="node")
                 for node_obj in self._kubelet_stopped_nodes:
                     try:
@@ -683,7 +714,7 @@ class TestStretchClusterZoneBKubeletDown:
                             timeout=self.KUBELET_START_TIMEOUT,
                         )
                     except Exception as exc:
-                        log.warning(
+                        logger.warning(
                             f"Kubelet restart on {node_obj.name} during teardown: {exc}"
                         )
                 self._kubelet_stopped_nodes.clear()
@@ -736,10 +767,10 @@ class TestStretchClusterZoneBKubeletDown:
 
         zone_b_nodes = _get_zone_b_nodes(sc_obj)
         zone_b_node_names = [n.name for n in zone_b_nodes]
-        log.info(f"Zone-B nodes: {zone_b_node_names}")
+        logger.info(f"Zone-B nodes: {zone_b_node_names}")
 
         start_time = datetime.now(timezone.utc)
-        log.info(f"Stopping kubelet on Zone-B nodes: {zone_b_node_names}")
+        logger.info(f"Stopping kubelet on Zone-B nodes: {zone_b_node_names}")
         for node_obj in zone_b_nodes:
             try:
                 ocp_node.exec_oc_debug_cmd(
@@ -747,10 +778,10 @@ class TestStretchClusterZoneBKubeletDown:
                     cmd_list=[self._STOP_KUBELET_CMD],
                     timeout=self.KUBELET_STOP_TIMEOUT,
                 )
-                log.info(f"Kubelet stopped on {node_obj.name}")
+                logger.info(f"Kubelet stopped on {node_obj.name}")
             except Exception as exc:
                 # Connection is cut when kubelet stops — expected.
-                log.info(
+                logger.info(
                     f"exec_oc_debug_cmd raised on {node_obj.name} "
                     f"after kubelet stop (expected): {exc}"
                 )
@@ -761,14 +792,14 @@ class TestStretchClusterZoneBKubeletDown:
             status=constants.NODE_NOT_READY,
             timeout=300,
         )
-        log.info(
+        logger.info(
             f"All Zone-B nodes are NotReady after kubelet stop: {zone_b_node_names}"
         )
 
         _apply_out_of_service_taint(zone_b_nodes, self._tainted_nodes)
         _refresh_pod_state(sc_obj)
 
-        log.info(
+        logger.info(
             "Force-deleting any pods still on Zone-B nodes "
             "to unblock rescheduling onto healthy zones"
         )
@@ -786,10 +817,10 @@ class TestStretchClusterZoneBKubeletDown:
                 if pod_info.get("spec", {}).get("nodeName") in zone_b_node_names
             ]
             for pod_obj in stuck_pods:
-                log.info(f"Force-deleting pod {pod_obj.name} (kubelet stopped)")
+                logger.info(f"Force-deleting pod {pod_obj.name} (kubelet stopped)")
                 pod_obj.delete(force=True)
 
-        log.info(
+        logger.info(
             "Verifying workloads rescheduled onto healthy nodes "
             "with PVCs mounted and IOs started"
         )
@@ -801,25 +832,29 @@ class TestStretchClusterZoneBKubeletDown:
         sc_obj.get_logwriter_reader_pods(
             label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
         )
-        log.info("All workload pods Running on healthy nodes after Zone-B kubelet stop")
+        logger.info(
+            "All workload pods Running on healthy nodes after Zone-B kubelet stop"
+        )
 
         end_time = datetime.now(timezone.utc)
         _run_post_failure_checks(
             sc_obj, start_time, end_time, "during Zone-B kubelet-down"
         )
 
-        log.info(f"Restarting kubelet on Zone-B nodes: {zone_b_node_names}")
+        logger.info(f"Restarting kubelet on Zone-B nodes: {zone_b_node_names}")
         for node_obj in list(self._kubelet_stopped_nodes):
             ocp_node.exec_oc_debug_cmd(
                 node=node_obj.name,
                 cmd_list=[self._START_KUBELET_CMD],
                 timeout=self.KUBELET_START_TIMEOUT,
             )
-            log.info(f"Kubelet restarted on {node_obj.name}")
+            logger.info(f"Kubelet restarted on {node_obj.name}")
         self._kubelet_stopped_nodes.clear()
 
         wait_for_nodes_status(timeout=600)
-        log.info(f"All Zone-B nodes Ready after kubelet restart: {zone_b_node_names}")
+        logger.info(
+            f"All Zone-B nodes Ready after kubelet restart: {zone_b_node_names}"
+        )
 
         untaint_nodes(
             taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
