@@ -1,4 +1,5 @@
 import logging
+import re
 import pytest
 from time import sleep
 
@@ -53,6 +54,14 @@ class TestFDFSANConnection(ManageTest):
         """
         iscsi_ip = config.ENV_DATA.get("san_iscsi_ip")
         iscsi_iqn = config.ENV_DATA.get("san_iscsi_iqn")
+
+        # Validate values before interpolating into a shell command.
+        # IP must be a dotted-decimal address; IQN must follow the iqn. format.
+        if not re.fullmatch(r"[\d]{1,3}(\.[\d]{1,3}){3}", iscsi_ip or ""):
+            raise ValueError(f"san_iscsi_ip '{iscsi_ip}' is not a valid IPv4 address")
+        if not re.fullmatch(r"iqn\.\d{4}-\d{2}\.[a-zA-Z0-9.\-:]+", iscsi_iqn or ""):
+            raise ValueError(f"san_iscsi_iqn '{iscsi_iqn}' is not a valid IQN")
+
         logger.info(
             f"Starting LUN discovery on all worker nodes "
             f"(portal: {iscsi_ip}, iqn: {iscsi_iqn})"
@@ -61,9 +70,9 @@ class TestFDFSANConnection(ManageTest):
         ocp_obj.exec_oc_cmd(
             f"get nodes -l node-role.kubernetes.io/worker --no-headers -o name "
             f"| xargs -I {{}} -- oc debug {{}} -- bash -c "
-            f"'chroot /host iscsiadm -m discovery -t st -p {iscsi_ip}; "
-            f"chroot /host iscsiadm --mode node --target {iscsi_iqn} "
-            f"--portal {iscsi_ip} -l' 2> /dev/null",
+            f'\'chroot /host iscsiadm -m discovery -t st -p "{iscsi_ip}"; '
+            f'chroot /host iscsiadm --mode node --target "{iscsi_iqn}" '
+            f'--portal "{iscsi_ip}" -l\' 2> /dev/null',
             shell=True,
         )
         logger.info("LUN discovery completed on all worker nodes")
@@ -171,7 +180,8 @@ class TestFDFSANConnection(ManageTest):
             f"--docker-server='{quay_server}' "
             f"--docker-username='{quay_username}' "
             f"--docker-password='{quay_password}' "
-            f"--docker-email='{quay_email}'"
+            f"--docker-email='{quay_email}'",
+            secrets=[quay_password, quay_username],
         )
         logger.info(f"Waiting for secret '{secret_name}' to be created...")
         ocp_obj.wait_for_resource(
@@ -209,18 +219,20 @@ class TestFDFSANConnection(ManageTest):
         self.fusion_access.click_connect_and_create()
         self.base_ui.take_screenshot("connection_initiated")
 
-        # Step 9: Wait for backend processing then navigate back
-        logger.info("Step 9: Waiting 30 seconds for backend to process the request...")
+        # Step 9: Wait for backend to process the request before navigating away
+        logger.info("Step 9: Waiting 60 seconds for backend to process the request...")
         sleep(60)
 
-        # Step 10: Refresh browser and wait for page to load completely
+        # Step 10: Refresh browser and wait for page to fully settle
         logger.info("Step 10: Refreshing browser and waiting for page to load...")
         self.base_ui.driver.refresh()
         self.base_ui.page_has_loaded()
+        sleep(10)
         self.base_ui.take_screenshot("browser_refreshed")
 
-        # Step 10a: Navigate to external systems page and click on SAN_Storage
+        # Step 10a: Navigate to external systems page and click on SAN_Storage.
         logger.info("Step 10a: Navigate to Storage > External systems > SAN_Storage")
+        self.base_ui.page_has_loaded()
         self.page_nav.nav_external_systems_page()
         self.fusion_access.navigate_to_san_storage_tab()
         self.base_ui.take_screenshot("file_systems_tab")

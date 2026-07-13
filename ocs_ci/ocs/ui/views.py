@@ -927,20 +927,40 @@ FDF_SAN_LOCATORS = {
         " or @data-test='image-repository-name']",
         By.XPATH,
     ),
-    # Secret key dropdown toggle button (PF6 MenuToggle)
+    # Secret key dropdown toggle button
     "secret_key_dropdown": (
         "//button[@data-test='secret-key-dropdown']",
         By.XPATH,
     ),
-    # All options inside the Secret key dropdown (PF6 Menu list)
+    # Wait anchor: any button inside a <li> inside the dropdown <ul>
+    # Intentionally avoids PF version-specific class names so it works
+    # across PatternFly versions.
+    "secret_key_dropdown_wait": (
+        "//ul[@role='listbox' or @role='menu']//li//button",
+        By.XPATH,
+    ),
+    # All enabled options inside the Secret key dropdown.
+    # Uses aria-disabled rather than a PF-version class so the locator
+    # remains stable across PatternFly upgrades.
     "secret_key_dropdown_options": (
-        "//ul[contains(@class,'pf-v6-c-menu__list')]"
-        "//li[not(contains(@class,'pf-v6-c-menu__list-item--disabled'))]"
+        "//ul[@role='listbox' or @role='menu']"
+        "//li[not(@aria-disabled='true')]"
         "//button",
         By.XPATH,
     ),
     # All nodes radio button
     "all_nodes_radio": ("//input[@id='use-all-nodes']", By.XPATH),
+    # LUN table checkbox for row i — use @aria-label to anchor the table,
+    # avoids PF version-specific class names.
+    "lun_table_checkbox": (
+        "//table[@aria-label='LUNs table']//tbody//tr[{i}]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    # LUN table second column (WWID) for row i
+    "lun_table_row_id": (
+        "//table[@aria-label='LUNs table']//tbody//tr[{i}]//td[2]",
+        By.XPATH,
+    ),
     # LUN group name input field
     "lun_group_name_input": (
         "//input[@id='lunGroupName' or @name='lunGroupName' or @placeholder='Enter LUN group name']",

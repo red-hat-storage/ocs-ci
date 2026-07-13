@@ -1,6 +1,5 @@
 import logging
 
-from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ui.base_ui import BaseUI, wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.views import FDF_SAN_LOCATORS, SCALE_DASHBOARD_LOCATORS
@@ -85,18 +84,17 @@ class FusionAccessUI(PageNavigator, BaseUI):
         """
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
-        from selenium.webdriver.common.by import By
 
         # Open the dropdown
         self.base_ui.do_click(FDF_SAN_LOCATORS["secret_key_dropdown"])
         logger.info("Opened Secret key dropdown")
 
         # Wait for dropdown options to appear in the DOM (up to 15 seconds)
-        options_xpath = "//ul[contains(@class,'pf-v6-c-menu__list')]//li//button"
+        wait_path, wait_by = FDF_SAN_LOCATORS["secret_key_dropdown_wait"]
         logger.info("Waiting for Secret key dropdown options to appear...")
         try:
             WebDriverWait(self.base_ui.driver, 15).until(
-                EC.presence_of_element_located((By.XPATH, options_xpath))
+                EC.presence_of_element_located((wait_by, wait_path))
             )
         except Exception:
             self.base_ui.take_screenshot("secret_dropdown_no_options")
@@ -104,7 +102,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
                 "Secret key dropdown options did not appear after 15 seconds"
             )
 
-        # Get all available options
+        # Get all enabled options
         options = self.base_ui.get_elements(
             FDF_SAN_LOCATORS["secret_key_dropdown_options"]
         )
@@ -165,21 +163,13 @@ class FusionAccessUI(PageNavigator, BaseUI):
             TimeoutExpiredError: If LUN table is not found
         """
         selected_luns = []
+        checkbox_path, checkbox_by = FDF_SAN_LOCATORS["lun_table_checkbox"]
+        row_id_path, row_id_by = FDF_SAN_LOCATORS["lun_table_row_id"]
         for i in range(1, num_luns + 1):
-            # XPath for checkbox in row i
-            lun_checkbox_xpath = (
-                f"//table[@aria-label='LUNs table' or contains(@class, 'pf-v5-c-table')]"
-                f"//tbody//tr[{i}]//input[@type='checkbox']"
-            )
-            lun_checkbox_locator = (lun_checkbox_xpath, By.XPATH)
+            lun_checkbox_locator = (checkbox_path.format(i=i), checkbox_by)
             self.base_ui.do_click(lun_checkbox_locator)
 
-            # XPath for LUN identifier in column 2 of row i
-            lun_id_xpath = (
-                f"//table[@aria-label='LUNs table' or contains(@class, 'pf-v5-c-table__text')]"
-                f"//tbody//tr[{i}]//td[2]"
-            )
-            lun_id_locator = (lun_id_xpath, By.XPATH)
+            lun_id_locator = (row_id_path.format(i=i), row_id_by)
             lun_id = self.base_ui.get_element_text(lun_id_locator)
             selected_luns.append(lun_id)
             logger.info(f"Selected LUN: {lun_id}")
