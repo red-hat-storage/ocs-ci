@@ -3,6 +3,7 @@ import logging
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from ocs_ci.ocs.ui.base_ui import BaseUI, wait_for_element_to_be_clickable
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.views import FDF_SAN_LOCATORS, SCALE_DASHBOARD_LOCATORS
 from ocs_ci.utility.retry import retry
@@ -204,22 +205,27 @@ class FusionAccessUI(PageNavigator, BaseUI):
         ), "Scale dashboard connection is not green"
         logger.info("Scale dashboard connection is green")
 
-        # 2. Check for the SPECIFIC LUN group row
-        path_row, strategy_row = SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"]
-        specific_row_xpath = f"{path_row}[contains(., '{lun_group_name}')]"
-
+        # 2. Check for the SPECIFIC LUN group row.
+        row_xpath, row_by = format_locator(
+            SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"],
+            lun_group_name=lun_group_name,
+        )
         assert self.check_element_presence(
-            (strategy_row, specific_row_xpath), timeout=20
+            (row_by, row_xpath), timeout=20
         ), f"LUN group '{lun_group_name}' not found in the table"
         logger.info(f"LUN group {lun_group_name} found in the table")
 
         # 3. Check that the SPECIFIC LUN group has an OK/Healthy/Connected status.
-        status_path, strategy_ok = SCALE_DASHBOARD_LOCATORS[
-            "lun_group_status_ok_by_name"
-        ]
-        specific_ok_xpath = status_path.format(lun_group_name=lun_group_name)
-
-        assert self.check_element_presence(
-            (strategy_ok, specific_ok_xpath), timeout=25
-        ), f"LUN group '{lun_group_name}' is not in Healthy/OK/Connected state"
+        status_xpath, status_by = format_locator(
+            SCALE_DASHBOARD_LOCATORS["lun_group_status_ok_by_name"],
+            lun_group_name=lun_group_name,
+        )
+        try:
+            WebDriverWait(self.driver, 25).until(
+                EC.presence_of_element_located((status_by, status_xpath))
+            )
+        except Exception:
+            assert (
+                False
+            ), f"LUN group '{lun_group_name}' is not in Healthy/OK/Connected state"
         logger.info(f"LUN group {lun_group_name} health status is OK/Healthy/Connected")

@@ -976,9 +976,9 @@ SCALE_DASHBOARD_LOCATORS = {
         "//*[@data-test='Connection-health-item-icon']//*[@data-test='success-icon']",
         By.XPATH,
     ),
-    # Base XPath for a table row — caller appends a name filter via .format()
+    # Row locator for a specific LUN group — anchored on td[1] (name column)
     "lun_group_row_by_name": (
-        "//table//tbody//tr",
+        "//table//tbody//tr[contains(td[1], '{lun_group_name}')]",
         By.XPATH,
     ),
     # Status cell locator for a specific LUN group row.

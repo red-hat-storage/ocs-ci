@@ -14,8 +14,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     fusion_access_required,
     ignore_leftovers,
 )
-from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp
 from ocs_ci.helpers.helpers import (
@@ -87,10 +85,7 @@ class TestFDFSANConnection(ManageTest):
         Args:
             setup_ui_class_factory: Factory fixture to setup UI session
         """
-        setup_ui_class_factory()
-        self.page_nav = PageNavigator()
-        self.base_ui = BaseUI()
-        self.fusion_access = FusionAccessUI()
+        self.setup_ui_class_factory = setup_ui_class_factory
 
     @tier1
     @pytest.mark.polarion_id("OCS-5500")
@@ -133,36 +128,40 @@ class TestFDFSANConnection(ManageTest):
         """
         logger.info("Starting FDF SAN connection test")
 
+        # Initialise UI session and page object — FusionAccessUI inherits both
+        self.setup_ui_class_factory()
+        fusion_access = FusionAccessUI()
+
         # Step 1: Navigate to External Storage Systems page
         logger.info("Step 1: Navigate to Storage > External systems")
-        self.page_nav.nav_external_systems_page()
-        self.base_ui.take_screenshot("external_systems_page")
+        fusion_access.nav_external_systems_page()
+        fusion_access.take_screenshot("external_systems_page")
 
         # Step 2: On the external systems page click on “Create External system” button
         logger.info("Step 2: Click on Connect External system")
-        self.fusion_access.click_connect_external_systems()
+        fusion_access.click_connect_external_systems()
 
         # Step 3: Select Storage Area Network radio button
         logger.info("Step 3: Select Storage Area Network option")
-        self.fusion_access.select_storage_area_network()
-        self.base_ui.take_screenshot("san_selected")
+        fusion_access.select_storage_area_network()
+        fusion_access.take_screenshot("san_selected")
 
         # Step 4: Click Next button
         logger.info("Step 4: Click Next")
-        self.fusion_access.click_next_button()
-        self.base_ui.take_screenshot("san_configuration_page")
+        fusion_access.click_next_button()
+        fusion_access.take_screenshot("san_configuration_page")
 
         # Step 4a: Enter Image registry URL
         image_registry_url = config.ENV_DATA.get("san_image_registry_url", "quay.io")
         logger.info(f"Step 4a: Enter Image registry URL: {image_registry_url}")
-        self.fusion_access.enter_image_registry_url(image_registry_url)
-        self.base_ui.take_screenshot("image_registry_url_entered")
+        fusion_access.enter_image_registry_url(image_registry_url)
+        fusion_access.take_screenshot("image_registry_url_entered")
 
         # Step 4b: Enter Image repository name
         image_repository_name = config.ENV_DATA.get("san_image_repository_name")
         logger.info(f"Step 4b: Enter Image repository name: {image_repository_name}")
-        self.fusion_access.enter_image_repository_name(image_repository_name)
-        self.base_ui.take_screenshot("image_repository_name_entered")
+        fusion_access.enter_image_repository_name(image_repository_name)
+        fusion_access.take_screenshot("image_repository_name_entered")
 
         # Step 4c: Create docker-registry secret in ibm-spectrum-scale namespace
         secret_name = "quayio-secret"
@@ -194,30 +193,30 @@ class TestFDFSANConnection(ManageTest):
 
         # Step 4d: Select Secret key from dropdown
         logger.info("Step 4d: Select Secret key from dropdown")
-        self.fusion_access.select_secret_key()
-        self.base_ui.take_screenshot("secret_key_selected")
+        fusion_access.select_secret_key()
+        fusion_access.take_screenshot("secret_key_selected")
 
         # Step 5: Select AllNodes (Default) radio button
         logger.info("Step 5: Select All Nodes (Default)")
-        self.fusion_access.select_all_nodes_option()
-        self.base_ui.take_screenshot("all_nodes_selected")
+        fusion_access.select_all_nodes_option()
+        fusion_access.take_screenshot("all_nodes_selected")
 
         # Step 6: Provide LUN group name
         lun_group_name = create_unique_resource_name("test", "lungroup")
         logger.info(f"Step 6: Enter LUN group name: {lun_group_name}")
-        self.fusion_access.enter_lun_group_name(lun_group_name)
-        self.base_ui.take_screenshot("lun_group_name_entered")
+        fusion_access.enter_lun_group_name(lun_group_name)
+        fusion_access.take_screenshot("lun_group_name_entered")
 
         # Step 7: Select LUNs from the table
         logger.info("Step 7: Select LUNs from the table")
-        selected_luns = self.fusion_access.select_luns_from_table()
+        selected_luns = fusion_access.select_luns_from_table()
         logger.info(f"Selected LUNs: {selected_luns}")
-        self.base_ui.take_screenshot("luns_selected")
+        fusion_access.take_screenshot("luns_selected")
 
         # Step 8: Click Connect and Create
         logger.info("Step 8: Click Connect and Create")
-        self.fusion_access.click_connect_and_create()
-        self.base_ui.take_screenshot("connection_initiated")
+        fusion_access.click_connect_and_create()
+        fusion_access.take_screenshot("connection_initiated")
 
         # Step 9: Wait for backend to process the request before navigating away
         logger.info("Step 9: Waiting 60 seconds for backend to process the request...")
@@ -225,21 +224,21 @@ class TestFDFSANConnection(ManageTest):
 
         # Step 10: Refresh browser and wait for page to fully settle
         logger.info("Step 10: Refreshing browser and waiting for page to load...")
-        self.base_ui.driver.refresh()
-        self.base_ui.page_has_loaded()
+        fusion_access.refresh_page()
+        fusion_access.page_has_loaded()
         sleep(10)
-        self.base_ui.take_screenshot("browser_refreshed")
+        fusion_access.take_screenshot("browser_refreshed")
 
         # Step 10a: Navigate to external systems page and click on SAN_Storage.
         logger.info("Step 10a: Navigate to Storage > External systems > SAN_Storage")
-        self.base_ui.page_has_loaded()
-        self.page_nav.nav_external_systems_page()
-        self.fusion_access.navigate_to_san_storage_tab()
-        self.base_ui.take_screenshot("file_systems_tab")
+        fusion_access.page_has_loaded()
+        fusion_access.nav_external_systems_page()
+        fusion_access.navigate_to_san_storage_tab()
+        fusion_access.take_screenshot("file_systems_tab")
 
         # Step 11: Wait for LUN group creation and verify SAN Scale state
         logger.info("Step 11: Wait for LUN group creation and verify SAN Scale state")
         logger.info("Waiting for filesystem creation")
-        self.fusion_access.wait_for_filesystem_and_verify_connection(
+        fusion_access.wait_for_filesystem_and_verify_connection(
             lun_group_name=lun_group_name,
         )
