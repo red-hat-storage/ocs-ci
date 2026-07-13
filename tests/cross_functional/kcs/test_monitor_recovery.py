@@ -156,6 +156,19 @@ class TestMonitorRecovery(E2ETest):
                     logger.warning(
                         f"Error force-deleting pods for label name={pod_label}: {e}"
                     )
+
+                # Clean up any stale VolumeAttachments for this pod's PVC.
+                try:
+                    pvc_obj = getattr(dc_pod, "pvc", None)
+                    if pvc_obj:
+                        pv_name = pvc_obj.backed_pv_obj.name
+                        _delete_volume_attachments_for_pv(pv_name)
+                except Exception as e:
+                    logger.warning(
+                        f"Teardown: could not clean VolumeAttachments for "
+                        f"{dc_pod.name}: {e}"
+                    )
+
             try:
                 logger.info("Teardown: archiving ceph crash warnings")
                 get_ceph_tools_pod().exec_ceph_cmd(
@@ -343,11 +356,9 @@ class TestMonitorRecovery(E2ETest):
         new_md5_sum = []
         logger.info("Waiting for pods to respawn and calculating checksums")
         for pod_obj in get_spun_dc_pods(self.dc_pods):
-            pod_obj.ocp.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                resource_name=pod_obj.name,
-                timeout=600,
-                sleep=10,
+            assert check_and_recover_sandbox_errors(pod_obj, timeout=600), (
+                f"Pod {pod_obj.name} failed to reach Running state "
+                "after recovery — cannot verify data integrity"
             )
             checksum = cal_md5sum(pod_obj, self.filename)
             new_md5_sum.append(checksum)
@@ -886,9 +897,9 @@ class MonitorRecovery(object):
             formatted_data.append(pod_name)
             for block in keyring_data:
                 if block == "[client.admin]" and "[mon.]" in keyring_data:
-                    logger.info(
-                        "Skipping adding the [client.admin] details present in rook-ceph-mons-keyring"
-                        "as the secret details are already fecthed with rook-ceph-admin-keyring"
+                    logger.debug(
+                        "Skipping [client.admin] from rook-ceph-mons-keyring — "
+                        "already extracted via rook-ceph-admin-keyring"
                     )
                     break
                 key = None
@@ -1175,6 +1186,10 @@ def _find_replacement_pod_name(deleted_name, prefix, namespace, timeout):
                 return name
     except TimeoutExpiredError:
         pass
+    logger.error(
+        f"No replacement pod found for '{deleted_name}' "
+        f"(prefix='{prefix}') within {timeout}s"
+    )
     return None
 
 
@@ -1275,22 +1290,28 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
 def _classify_pod_errors(pod_obj):
     """
     Run ``oc describe pod`` and classify which error types are present in the
-    Events section.  Returns a tuple of three booleans:
-    ``(has_multi_attach, has_sandbox, has_rwop)``.
+    Events section.  Returns a 4-tuple:
+    ``(has_multi_attach, has_sandbox, has_rwop, events_text)``.
 
     """
+    logger.debug(f"Classifying pod errors for: {pod_obj.name}")
     try:
         describe_out = pod_obj.ocp.exec_oc_cmd(
             f"describe pod {pod_obj.name}", out_yaml_format=False
         )
     except Exception:
         logger.exception(f"Failed to describe pod {pod_obj.name}")
-        return False, False, False
+        return False, False, False, ""
 
     has_multi_attach = any(p in describe_out for p in MULTI_ATTACH_PATTERNS)
     has_sandbox = any(p in describe_out for p in SANDBOX_ERROR_PATTERNS)
     has_rwop = any(p in describe_out for p in RWOP_ERROR_PATTERNS)
-    return has_multi_attach, has_sandbox, has_rwop
+
+    events_idx = describe_out.find("\nEvents:")
+    events_text = (
+        describe_out[events_idx:].strip() if events_idx != -1 else describe_out[-2000:]
+    )
+    return has_multi_attach, has_sandbox, has_rwop, events_text
 
 
 def check_and_recover_sandbox_errors(
@@ -1351,13 +1372,16 @@ def check_and_recover_sandbox_errors(
 
         logger.info(f"Pod {pod_name} is in phase '{phase}', checking for errors...")
 
-        has_multi_attach, has_sandbox, has_rwop = _classify_pod_errors(pod_obj)
+        has_multi_attach, has_sandbox, has_rwop, events_text = _classify_pod_errors(
+            pod_obj
+        )
 
         if has_multi_attach:
             logger.warning(
                 f"Pod {pod_name} has Multi-Attach error — resolving via "
                 "VolumeAttachment cleanup (no node restart)"
             )
+            logger.warning(f"Pod {pod_name} events:\n{events_text}")
             handle_multi_attach_error(pod_obj, timeout=30)
             return check_and_recover_sandbox_errors(
                 pod_obj, 600, max_recovery_attempts, _attempt, _session_start
@@ -1372,6 +1396,7 @@ def check_and_recover_sandbox_errors(
             logger.warning(
                 f"Pod {pod_name} on node {node_name} has {error_type} errors"
             )
+            logger.warning(f"Pod {pod_name} events:\n{events_text}")
 
             current_time = time.time()
             should_restart_node = True
@@ -1455,13 +1480,14 @@ def check_and_recover_sandbox_errors(
             if elapsed - last_check >= check_interval:
                 logger.debug(f"Checking for errors after {int(elapsed)}s...")
                 try:
-                    has_ma, has_sb, has_rw = _classify_pod_errors(pod_obj)
+                    has_ma, has_sb, has_rw, events_text = _classify_pod_errors(pod_obj)
 
                     if has_ma:
                         logger.warning(
                             f"Multi-Attach error detected during monitoring for pod "
                             f"{pod_name} — resolving via VolumeAttachment cleanup"
                         )
+                        logger.warning(f"Pod {pod_name} events:\n{events_text}")
                         handle_multi_attach_error(pod_obj, timeout=30)
                         return check_and_recover_sandbox_errors(
                             pod_obj,
@@ -1502,15 +1528,22 @@ def check_and_recover_sandbox_errors(
                 f"Pod {pod_name} timed out after {timeout}s — checking for errors "
                 f"before retry (attempt {_attempt + 1}/{max_recovery_attempts})"
             )
-            has_ma, has_sb, has_rw = _classify_pod_errors(pod_obj)
+            has_ma, has_sb, has_rw, events_text = _classify_pod_errors(pod_obj)
             if has_ma or has_sb or has_rw:
-                logger.warning("Errors still present after timeout — retrying recovery")
+                logger.warning(
+                    f"Errors still present after timeout — retrying recovery\n{events_text}"
+                )
                 return check_and_recover_sandbox_errors(
                     pod_obj,
                     600,
                     max_recovery_attempts,
                     _attempt + 1,
                     _session_start,
+                )
+            elif events_text:
+                logger.warning(
+                    f"Pod {pod_name} timed out with no recognised error pattern — "
+                    f"last known events:\n{events_text}"
                 )
 
         logger.error(f"Pod {pod_name} failed to reach running state after {timeout}s")
