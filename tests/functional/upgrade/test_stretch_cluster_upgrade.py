@@ -44,7 +44,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     post_upgrade,
     stretchcluster_required,
-    turquoise_squad,
+    magenta_squad,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
@@ -168,7 +168,7 @@ def _check_ceph_accessible(sc_obj, context: str):
 
 @pre_upgrade
 @stretchcluster_required
-@turquoise_squad
+@magenta_squad
 @pytest.mark.polarion_id("OCS-7376")
 def test_pre_upgrade_stretch_cluster_workloads(
     reset_conn_score,
@@ -218,7 +218,7 @@ def test_pre_upgrade_stretch_cluster_workloads(
 
 @post_upgrade
 @stretchcluster_required
-@turquoise_squad
+@magenta_squad
 @pytest.mark.polarion_id("OCS-7377")
 def test_post_upgrade_stretch_cluster_zone_b_shutdown(
     node_restart_teardown,

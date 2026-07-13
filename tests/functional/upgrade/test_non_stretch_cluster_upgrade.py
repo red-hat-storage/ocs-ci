@@ -43,7 +43,7 @@ import random
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    green_squad,
+    magenta_squad,
     pre_upgrade,
     post_upgrade,
     skipif_hci_provider_or_client,
@@ -214,7 +214,7 @@ def _wait_for_migration_off_node(pod_obj_list, outage_node_name, label="workload
 
 
 @pre_upgrade
-@green_squad
+@magenta_squad
 @tier4b
 @skipif_managed_service
 @skipif_hci_provider_or_client
@@ -270,7 +270,7 @@ def test_pre_upgrade_non_stretch_workloads(nodes, deployment_pod_factory):
 
 
 @post_upgrade
-@green_squad
+@magenta_squad
 @tier4b
 @skipif_managed_service
 @skipif_hci_provider_or_client

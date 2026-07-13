@@ -40,7 +40,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
     tier4b,
-    turquoise_squad,
+    magenta_squad,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
@@ -273,7 +273,7 @@ def _redeploy_and_verify(
 
 @tier4b
 @stretchcluster_required
-@turquoise_squad
+@magenta_squad
 class TestStretchClusterZoneBNodeShutdown:
     """
     Shutdown one Zone-B node while zone-aware workloads are running.
@@ -515,7 +515,7 @@ class TestStretchClusterZoneBNodeShutdown:
 
 @tier4b
 @stretchcluster_required
-@turquoise_squad
+@magenta_squad
 class TestStretchClusterZoneBShutdownZoneUnaware:
     """
     Shutdown all Zone-B nodes while zone-UNAWARE workloads are running.
@@ -648,7 +648,7 @@ class TestStretchClusterZoneBShutdownZoneUnaware:
 
 @tier4b
 @stretchcluster_required
-@turquoise_squad
+@magenta_squad
 class TestStretchClusterZoneBKubeletDown:
     """
     Zone B down / network down — simulated by stopping kubelet.
