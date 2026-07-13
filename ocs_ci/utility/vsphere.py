@@ -17,6 +17,7 @@ from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     ResourcePoolNotFound,
+    TimeoutExpiredError,
     VMMaxDisksReachedException,
     VSLMNotFoundException,
 )
@@ -449,7 +450,7 @@ class VSPHERE(object):
             self._configure_disk_for_vm(vm, size, disk_type, ssd)
 
         if ssd:
-            self.start_vms(vms=[vm])
+            self._start_vm_with_retry(vm)
 
         from ocs_ci.ocs.node import get_compute_node_names, wait_for_nodes_status
 
@@ -465,8 +466,47 @@ class VSPHERE(object):
                 )
                 logger.warning(f"Trying to restart the node vm {vm.name} once again.")
                 self.stop_vms(vms=[vm])
-                self.start_vms(vms=[vm])
+                self._start_vm_with_retry(vm)
                 wait_for_nodes_status(compute_nodes, NODE_READY)
+
+    def _start_vm_with_retry(self, vm, max_retries=2):
+        """
+        Start a VM and wait for it to obtain an IP address. If the VM
+        fails to get an IP within the timeout, power-cycle it and retry.
+
+        This handles transient vSphere networking issues where a VM boots
+        but never obtains network connectivity.
+
+        Args:
+            vm (vim.VirtualMachine): VM to start
+            max_retries (int): Maximum number of power-cycle retries
+
+        Raises:
+            TimeoutExpiredError: If the VM fails to obtain an IP after
+                all retries are exhausted
+
+        """
+        for attempt in range(1, max_retries + 1):
+            try:
+                self.start_vms(vms=[vm])
+                return
+            except TimeoutExpiredError:
+                if attempt >= max_retries:
+                    logger.error(
+                        "VM %s failed to obtain an IP after %d attempt(s). "
+                        "Giving up.",
+                        vm.name,
+                        max_retries,
+                    )
+                    raise
+                logger.warning(
+                    "VM %s did not obtain an IP within the timeout "
+                    "(attempt %d/%d). Retrying power cycle.",
+                    vm.name,
+                    attempt,
+                    max_retries,
+                )
+                self.stop_vms(vms=[vm])
 
     def _wait_for_control_plane_stable(self, vm_name, timeout=600):
         """
@@ -487,8 +527,6 @@ class VSPHERE(object):
                 within the timeout
 
         """
-        from ocs_ci.ocs.exceptions import TimeoutExpiredError
-
         logger.info(
             "Waiting for control-plane node %s to reach Ready status "
             "and etcd to stabilize (timeout=%ds)",
@@ -545,7 +583,12 @@ class VSPHERE(object):
                 timeout=10,
             )
             return True
-        except (ResourceWrongStatusException, CommandFailed) as ex:
+        except (
+            ResourceWrongStatusException,
+            CommandFailed,
+            TimeoutExpiredError,
+            AssertionError,
+        ) as ex:
             logger.debug(
                 "Node %s not yet Ready or API unavailable: %s",
                 node_name,

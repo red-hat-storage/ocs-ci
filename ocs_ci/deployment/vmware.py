@@ -170,6 +170,7 @@ class VSPHEREBASE(Deployment):
         disk_type=constants.VM_DISK_TYPE,
         ssd=False,
         include_masters=False,
+        target_node_names=None,
     ):
         """
         Add a new disk to worker nodes (and optionally master nodes).
@@ -182,6 +183,9 @@ class VSPHEREBASE(Deployment):
             size (int): Size of disk in GB (default: 100)
             ssd (bool): if True, mark disk as SSD
             include_masters (bool): if True, also add disks to control-plane VMs
+            target_node_names (list): if provided, only attach disks to VMs
+                whose name is in this list. This avoids unnecessarily
+                power-cycling nodes that don't need storage disks.
 
         """
         vms = self.vsphere.get_all_vms_in_pool(
@@ -189,9 +193,33 @@ class VSPHEREBASE(Deployment):
         )
         extra_disks = config.ENV_DATA.get("extra_disks", 1)
 
-        worker_vms = [vm for vm in vms if "compute" in vm.name]
-        master_vms = (
-            [vm for vm in vms if "control-plane" in vm.name] if include_masters else []
+        if target_node_names:
+            target_set = set(target_node_names)
+            worker_vms = [
+                vm for vm in vms if "compute" in vm.name and vm.name in target_set
+            ]
+            master_vms = (
+                [
+                    vm
+                    for vm in vms
+                    if "control-plane" in vm.name and vm.name in target_set
+                ]
+                if include_masters
+                else []
+            )
+        else:
+            worker_vms = [vm for vm in vms if "compute" in vm.name]
+            master_vms = (
+                [vm for vm in vms if "control-plane" in vm.name]
+                if include_masters
+                else []
+            )
+
+        logger.info(
+            "Attaching disks to %d worker VM(s)%s: %s",
+            len(worker_vms),
+            f" and {len(master_vms)} control-plane VM(s)" if master_vms else "",
+            [vm.name for vm in worker_vms + master_vms],
         )
 
         for vm in worker_vms:
@@ -412,15 +440,16 @@ class VSPHEREBASE(Deployment):
 
     def add_vmdk_disks(self):
         """
-        Attach VMDK disks to all worker nodes (and master nodes when EC with
-        schedulable masters is configured), skipping if sufficient disks
-        already exist (idempotent).
+        Attach VMDK disks to OCS-labeled worker nodes (and master nodes when
+        EC with schedulable masters is configured), skipping if sufficient
+        disks already exist (idempotent).
 
-        Reads device_size, provision_type, extra_disks, hdd_disks, and
-        deploy_multiple_device_classes from config. Checks existing non-boot
-        disks via disks_available_to_cleanup before attaching to avoid
-        duplicates on re-runs.
+        Only nodes with the OCS storage label are targeted, avoiding
+        unnecessary power-cycles on nodes that don't need storage disks.
         """
+        from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+        from ocs_ci.ocs.machine import get_labeled_nodes
+
         ssd_disk = True
         if config.ENV_DATA.get("hdd_disks"):
             ssd_disk = False
@@ -433,19 +462,37 @@ class VSPHEREBASE(Deployment):
             "ec_default_pools"
         ) and config.ENV_DATA.get("mark_masters_schedulable", True)
 
-        # Importing here to avoid circular dependency (baremetal imports lso_helpers)
-        from ocs_ci.deployment.baremetal import disks_available_to_cleanup
-
-        target_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
+        ocs_labeled_names = set(get_labeled_nodes(constants.OPERATOR_NODE_LABEL))
+        all_workers = get_nodes(node_type=constants.WORKER_MACHINE)
+        all_masters = (
+            get_nodes(node_type=constants.MASTER_MACHINE) if include_masters else []
+        )
+        target_nodes = [n for n in all_workers if n.name in ocs_labeled_names]
         if include_masters:
-            target_nodes += get_nodes(node_type=constants.MASTER_MACHINE)
+            target_nodes += [n for n in all_masters if n.name in ocs_labeled_names]
+
+        if not target_nodes:
+            logger.warning(
+                "No nodes found with OCS label %s, falling back to all " "worker nodes",
+                constants.OPERATOR_NODE_LABEL,
+            )
+            target_nodes = all_workers
+            if include_masters:
+                target_nodes += all_masters
+
+        target_node_names = [n.name for n in target_nodes]
+        logger.info(
+            "OCS-labeled target nodes for disk attachment: %s",
+            target_node_names,
+        )
+
         extra_disks = config.ENV_DATA.get("extra_disks", 1)
         total_available_disks = sum(
             len(disks_available_to_cleanup(n)) for n in target_nodes
         )
         logger.info(
-            "Total available (non-boot) disks across %s nodes: %s",
-            "all" if include_masters else constants.WORKER_MACHINE,
+            "Total available (non-boot) disks across %d target nodes: %s",
+            len(target_nodes),
             total_available_disks,
         )
 
@@ -456,6 +503,7 @@ class VSPHEREBASE(Deployment):
                 provision_type,
                 ssd=ssd_disk,
                 include_masters=include_masters,
+                target_node_names=target_node_names,
             )
         else:
             logger.info(
@@ -475,6 +523,7 @@ class VSPHEREBASE(Deployment):
                     provision_type,
                     ssd=ssd_disk,
                     include_masters=include_masters,
+                    target_node_names=target_node_names,
                 )
             else:
                 logger.info(
