@@ -897,6 +897,85 @@ page_nav_4_20 = {
     "external_systems_page": ("External systems", By.LINK_TEXT),
 }
 
+# FDF SAN UI Locators
+FDF_SAN_LOCATORS = {
+    # Connect to external storage button on External Systems page
+    "connect_external_storage_button": (
+        "//button[@data-test='configure-external-systems' or contains(text(), 'Connect external systems')]",
+        By.XPATH,
+    ),
+    # Storage Area Network card clickable button (radio input is hidden behind the card)
+    "san_radio_button": ("//button[@id='san-storage']", By.XPATH),
+    # Next button in wizard
+    "next_button": (
+        "//button[contains(text(), 'Next') or .//span[contains(text(), 'Next')]]",
+        By.XPATH,
+    ),
+    # Image registry URL input field
+    "image_registry_url_input": (
+        "//input["
+        "@id='imageRegistryURL' or @name='imageRegistryURL'"
+        " or @aria-label='Image registry URL'"
+        " or @data-test='image-registry-url']",
+        By.XPATH,
+    ),
+    # Image repository name input field
+    "image_repository_name_input": (
+        "//input["
+        "@id='imageRepositoryName' or @name='imageRepositoryName'"
+        " or @aria-label='Image repository name'"
+        " or @data-test='image-repository-name']",
+        By.XPATH,
+    ),
+    # Secret key dropdown toggle button (PF6 MenuToggle)
+    "secret_key_dropdown": (
+        "//button[@data-test='secret-key-dropdown']",
+        By.XPATH,
+    ),
+    # All options inside the Secret key dropdown (PF6 Menu list)
+    "secret_key_dropdown_options": (
+        "//ul[contains(@class,'pf-v6-c-menu__list')]"
+        "//li[not(contains(@class,'pf-v6-c-menu__list-item--disabled'))]"
+        "//button",
+        By.XPATH,
+    ),
+    # All nodes radio button
+    "all_nodes_radio": ("//input[@id='use-all-nodes']", By.XPATH),
+    # LUN group name input field
+    "lun_group_name_input": (
+        "//input[@id='lunGroupName' or @name='lunGroupName' or @placeholder='Enter LUN group name']",
+        By.XPATH,
+    ),
+    # Connect and create button
+    "connect_and_create_button": (
+        "//button[@data-test='connect-and-create-san-system' "
+        "or contains(text(), 'Connect and create') "
+        "or contains(text(), 'Connect and Create')]",
+        By.XPATH,
+    ),
+    # SAN storage page
+    "san_storage_link": (
+        "//a[normalize-space(text())='SAN_Storage' "
+        "and contains(@href, '/odf/external-systems/scale.spectrum.ibm.com')]",
+        By.XPATH,
+    ),
+}
+
+SCALE_DASHBOARD_LOCATORS = {
+    "scale_connection_green": (
+        "//*[@data-test='Connection-health-item-icon']//*[@data-test='success-icon']",
+        By.XPATH,
+    ),
+    "lun_group_row_by_name": (
+        "//table//tbody//tr",
+        By.XPATH,
+    ),
+    "lun_group_status_ok_by_name": (
+        "//table//tbody//tr//*[text()='OK' or text()='Healthy' or text()='Connected']",
+        By.XPATH,
+    ),
+}
+
 acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
