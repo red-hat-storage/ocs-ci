@@ -141,48 +141,6 @@ class TestFullClusterHealth(PASTest):
         logger.info(f"Deleting {len(pod_list)} pods: {[p.name for p in pod_list]}")
         pod.delete_pods(pod_objs=pod_list)
 
-    def ceph_not_health_error(self, timeout=0):
-        """
-        Check if Ceph is NOT in "HEALTH_ERR" state
-        Warning state is ok since the cluster is low in storage space
-
-        Args:
-            timeout (int): Time to wait for Ceph to recover from HEALTH_ERR (default: 0 - no wait)
-                          Pass 600 for 10 minutes wait during recovery scenarios
-
-        Returns:
-            bool: True if Ceph state is NOT "HEALTH_ERR"
-        """
-        if timeout == 0:
-            # No wait - immediate check
-            ceph_status = self.ceph_cluster.get_ceph_health()
-            result = "HEALTH_ERR" not in ceph_status
-            logger.info(f"Ceph health check: status={ceph_status}, healthy={result}")
-            return result
-
-        # Wait for Ceph to recover from HEALTH_ERR
-        logger.info(
-            f"Waiting for Ceph to recover from HEALTH_ERR state (timeout: {timeout}s)"
-        )
-        sample = TimeoutSampler(
-            timeout=timeout, sleep=30, func=self.ceph_cluster.get_ceph_health
-        )
-
-        try:
-            for ceph_status in sample:
-                if "HEALTH_ERR" not in ceph_status:
-                    logger.info(f"Ceph recovered successfully: status={ceph_status}")
-                    return True
-                logger.debug(f"Ceph health check iteration: status={ceph_status}")
-        except TimeoutExpiredError:
-            ceph_status = self.ceph_cluster.get_ceph_health()
-            logger.error(
-                f"Ceph recovery timeout after {timeout}s: final_status={ceph_status}"
-            )
-            return False
-
-        return False
-
     def mgr_pod_node_restart(self):
         """
         Restart node that runs mgr pod
