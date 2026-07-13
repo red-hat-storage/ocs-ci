@@ -2772,6 +2772,122 @@ def check_pods_in_running_state(
     return ret_val
 
 
+def log_pods_status(namespace=None):
+    """
+    Logs a full diagnostic snapshot of the storage cluster for the given
+    namespace.  All sub-commands use ignore_error=True so a single failure
+    never prevents the remaining sections from being collected.
+
+    Sections captured:
+      1. All pods (oc get pods -o wide)
+      2. NooBaa / cnpg pod summary (filtered from full pod list)
+      3. NooBaa phase       (oc get noobaa noobaa -o jsonpath)
+      4. StorageCluster phase (oc get storagecluster ocs-storagecluster -o jsonpath)
+      5. NooBaa DB PVCs     (oc get pvc | grep noobaa-db)
+      6. Ceph health        (oc rsh <rook-ceph-tools> ceph health)
+      7. Cluster resource   (oc get cluster)
+      8. BackingStore       (oc get backingstore)
+
+    Args:
+        namespace (str): Cluster namespace (default: config.ENV_DATA["cluster_namespace"])
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ocp_obj = OCP(namespace=namespace)
+
+    # 1. Full pod table
+    try:
+        pods_output = OCP(kind=constants.POD, namespace=namespace).exec_oc_cmd(
+            "get pods -o wide", out_yaml_format=False, ignore_error=True
+        )
+        logger.info(f"=== Pods in {namespace} ===\n{pods_output}")
+    except Exception as e:
+        logger.warning(f"Could not retrieve pod list: {e}")
+
+    # 2. NooBaa / cnpg pod summary (filtered from the same list)
+    try:
+        all_pods = ocp_obj.exec_oc_cmd(
+            "get pods", out_yaml_format=False, ignore_error=True
+        )
+        noobaa_lines = "\n".join(
+            line
+            for line in all_pods.splitlines()
+            if "NAME" in line or "noobaa" in line or "cnpg" in line
+        )
+        logger.info(f"=== NooBaa pods ===\n{noobaa_lines}")
+    except Exception as e:
+        logger.warning(f"Could not retrieve NooBaa pods: {e}")
+
+    # 3. NooBaa phase
+    try:
+        noobaa_phase = ocp_obj.exec_oc_cmd(
+            "get noobaa noobaa -o jsonpath='{.status.phase}'",
+            out_yaml_format=False,
+            ignore_error=True,
+        )
+        logger.info(f"=== NooBaa phase ===\n{noobaa_phase}")
+    except Exception as e:
+        logger.warning(f"Could not retrieve NooBaa phase: {e}")
+
+    # 4. StorageCluster phase
+    try:
+        sc_phase = ocp_obj.exec_oc_cmd(
+            "get storagecluster ocs-storagecluster -o jsonpath='{.status.phase}'",
+            out_yaml_format=False,
+            ignore_error=True,
+        )
+        logger.info(f"=== StorageCluster phase ===\n{sc_phase}")
+    except Exception as e:
+        logger.warning(f"Could not retrieve StorageCluster phase: {e}")
+
+    # 5. NooBaa DB PVCs
+    try:
+        pvcs = ocp_obj.exec_oc_cmd("get pvc", out_yaml_format=False, ignore_error=True)
+        noobaa_pvcs = "\n".join(
+            line for line in pvcs.splitlines() if "NAME" in line or "noobaa-db" in line
+        )
+        logger.info(f"=== NooBaa DB PVCs ===\n{noobaa_pvcs}")
+    except Exception as e:
+        logger.warning(f"Could not retrieve NooBaa DB PVCs: {e}")
+
+    # 6. Ceph health via rook-ceph-tools toolbox
+    try:
+        toolbox_name = ocp_obj.exec_oc_cmd(
+            "get pod -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}'",
+            out_yaml_format=False,
+            ignore_error=True,
+        ).strip()
+        if toolbox_name:
+            ceph_health = ocp_obj.exec_oc_cmd(
+                f"rsh {toolbox_name} ceph health",
+                out_yaml_format=False,
+                ignore_error=True,
+            )
+            logger.info(f"=== Ceph health ===\n{ceph_health}")
+        else:
+            logger.warning("rook-ceph-tools pod not found; skipping ceph health check")
+    except Exception as e:
+        logger.warning(f"Could not retrieve Ceph health: {e}")
+
+    # 7. Cluster resource
+    try:
+        cluster_info = ocp_obj.exec_oc_cmd(
+            "get cluster", out_yaml_format=False, ignore_error=True
+        )
+        logger.info(f"=== Cluster ===\n{cluster_info}")
+    except Exception as e:
+        logger.warning(f"Could not retrieve cluster info: {e}")
+
+    # 8. BackingStore
+    try:
+        backingstore = ocp_obj.exec_oc_cmd(
+            "get backingstore", out_yaml_format=False, ignore_error=True
+        )
+        logger.info(f"=== BackingStore ===\n{backingstore}")
+    except Exception as e:
+        logger.warning(f"Could not retrieve BackingStore: {e}")
+
+
 def get_running_state_pods(namespace=None, ignore_selector=None):
     """
     Checks the running state pods in a given namespace.

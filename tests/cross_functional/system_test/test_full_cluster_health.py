@@ -51,17 +51,21 @@ class TestFullClusterHealth(PASTest):
         Setting up test parameters
         """
 
-        logger.info("Starting the test setup")
-        logger.info(
-            "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
-        )
+        logger.info("Setup test environment with cluster at 85% capacity")
+        logger.info("Starting full cluster health test setup")
+
+        logger.info("Calculating workload size to fill cluster to 85%")
         size = get_file_size(100)
+
+        logger.info(f"Initializing benchmark operator with total_size={size}")
         self.benchmark_obj = BenchmarkOperatorFIO()
         self.benchmark_obj.setup_benchmark_fio(total_size=size)
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
         self.benchmark_operator_teardown = True
 
-        logger.info("Verify used capacity bigger than 85%")
+        logger.info(
+            f"Waiting for cluster capacity to reach 85% (timeout: {self.TIMEOUT_BENCHMARK_SETUP}s)"
+        )
         sample = TimeoutSampler(
             timeout=self.TIMEOUT_BENCHMARK_SETUP,
             sleep=40,
@@ -71,26 +75,27 @@ class TestFullClusterHealth(PASTest):
 
         if not sample.wait_for_func_status(result=True):
             logger.error(
-                "After %s seconds the used capacity was still below 85%%",
-                self.TIMEOUT_BENCHMARK_SETUP,
+                f"Cluster capacity did not reach 85% after {self.TIMEOUT_BENCHMARK_SETUP}s timeout"
             )
             raise TimeoutExpiredError
 
         def teardown():
             if self.benchmark_obj:
-                logger.info("Change Ceph full_ratio from 85% to 95%")
+                logger.info("Teardown: Reset Ceph configuration and cleanup resources")
+                logger.info("Changing Ceph full_ratio from 85% to 95%")
                 change_ceph_full_ratio(95)
 
-                logger.info("Delete benchmark-operator PVCs")
+                logger.info("Deleting benchmark-operator PVCs")
                 self.benchmark_obj.cleanup()
                 self.benchmark_operator_teardown = False
 
-            logger.info("cleanup the environment")
+            logger.info("Running environment cleanup")
             nodes.restart_nodes_by_stop_and_start_teardown()
 
+            logger.info("Resetting Ceph full_ratio to 85%")
             change_ceph_full_ratio(85)
 
-        logger.info("Benchmark setup completed. Cluster at ~85% capacity")
+        logger.info("Benchmark setup completed successfully - cluster at ~85% capacity")
 
         request.addfinalizer(teardown)
 
@@ -110,23 +115,29 @@ class TestFullClusterHealth(PASTest):
             - MGR
             - MON
         """
+        logger.info("Collecting Rook operator, OSD, MGR, and MON pods for deletion")
         pod_list = []
+
         rook_operator_pod = pod.get_ocs_operator_pod(
             ocs_label=constants.OPERATOR_LABEL,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         pod_list.append(rook_operator_pod)
+        logger.debug(f"Found Rook operator pod: {rook_operator_pod.name}")
 
         osd_pods = pod.get_osd_pods()
         pod_list.extend(osd_pods)
+        logger.debug(f"Found {len(osd_pods)} OSD pods")
 
         mgr_pods = pod.get_mgr_pods()
         pod_list.extend(mgr_pods)
+        logger.debug(f"Found {len(mgr_pods)} MGR pods")
 
         mon_pods = pod.get_mon_pods()
         pod_list.extend(mon_pods)
+        logger.debug(f"Found {len(mon_pods)} MON pods")
 
-        logger.info(f"Deleting pods: {[p.name for p in pod_list]}")
+        logger.info(f"Deleting {len(pod_list)} pods: {[p.name for p in pod_list]}")
         pod.delete_pods(pod_objs=pod_list)
 
     def ceph_not_health_error(self, timeout=0):
@@ -144,12 +155,13 @@ class TestFullClusterHealth(PASTest):
         if timeout == 0:
             # No wait - immediate check
             ceph_status = self.ceph_cluster.get_ceph_health()
-            logger.info(f"Ceph status is: {ceph_status}")
-            return "HEALTH_ERR" not in ceph_status
+            result = "HEALTH_ERR" not in ceph_status
+            logger.info(f"Ceph health check: status={ceph_status}, healthy={result}")
+            return result
 
         # Wait for Ceph to recover from HEALTH_ERR
         logger.info(
-            f"Waiting up to {timeout} seconds for Ceph to recover from HEALTH_ERR state"
+            f"Waiting for Ceph to recover from HEALTH_ERR state (timeout: {timeout}s)"
         )
         sample = TimeoutSampler(
             timeout=timeout, sleep=30, func=self.ceph_cluster.get_ceph_health
@@ -158,13 +170,13 @@ class TestFullClusterHealth(PASTest):
         try:
             for ceph_status in sample:
                 if "HEALTH_ERR" not in ceph_status:
-                    logger.info(f"Ceph recovered successfully. Status: {ceph_status}")
+                    logger.info(f"Ceph recovered successfully: status={ceph_status}")
                     return True
-                logger.debug(f"Ceph still in HEALTH_ERR state: {ceph_status}")
+                logger.debug(f"Ceph health check iteration: status={ceph_status}")
         except TimeoutExpiredError:
             ceph_status = self.ceph_cluster.get_ceph_health()
             logger.error(
-                f"Ceph did not recover from HEALTH_ERR within {timeout} seconds. Final status: {ceph_status}"
+                f"Ceph recovery timeout after {timeout}s: final_status={ceph_status}"
             )
             return False
 
@@ -174,52 +186,85 @@ class TestFullClusterHealth(PASTest):
         """
         Restart node that runs mgr pod
         """
+        logger.info("Identifying MGR pod and its node")
         mgr_pod_obj = pod.get_mgr_pods()
         mgr_node_obj = pod.get_pod_node(mgr_pod_obj[0])
+        logger.info(
+            f"MGR pod '{mgr_pod_obj[0].name}' running on node '{mgr_node_obj.name}'"
+        )
 
+        logger.info(f"Restarting node: {mgr_node_obj.name}")
         self.nodes.restart_nodes([mgr_node_obj])
 
+        logger.info("Waiting for all nodes to reach Ready status")
         wait_for_nodes_status()
 
         # Check for Ceph pods
+        logger.info("Verifying Ceph pods are running after node restart")
         pod_obj = ocp.OCP(
             kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+
+        logger.info(
+            f"MGR pod check: waiting for Running state (timeout: {self.TIMEOUT_CEPH_MGR}s)"
         )
         assert pod_obj.wait_for_resource(
             condition="Running",
             selector=MGR_APP_LABEL,
             timeout=self.TIMEOUT_CEPH_MGR,
+        ), f"MGR pod did not reach Running state within {self.TIMEOUT_CEPH_MGR}s"
+
+        logger.info(
+            f"MON pods check: waiting for 3 pods in Running state (timeout: {self.TIMEOUT_CEPH_MON}s)"
         )
         assert pod_obj.wait_for_resource(
             condition="Running",
             selector=MON_APP_LABEL,
             resource_count=3,
             timeout=self.TIMEOUT_CEPH_MON,
+        ), f"MON pods did not reach Running state within {self.TIMEOUT_CEPH_MON}s"
+
+        logger.info(
+            f"OSD pods check: waiting for 3 pods in Running state (timeout: {self.TIMEOUT_CEPH_OSD}s)"
         )
         assert pod_obj.wait_for_resource(
             condition="Running",
             selector=OSD_APP_LABEL,
             resource_count=3,
             timeout=self.TIMEOUT_CEPH_OSD,
-        )
+        ), f"OSD pods did not reach Running state within {self.TIMEOUT_CEPH_OSD}s"
+
+        logger.info("All Ceph pods verified running after MGR node restart")
 
     def restart_ocs_operator_node(self):
         """
         Restart node that runs OCS operator pod
         """
-
+        logger.info("Identifying OCS operator pod and its node")
         pod_obj = pod.get_ocs_operator_pod()
         node_obj = pod.get_pod_node(pod_obj)
+        logger.info(
+            f"OCS operator pod '{pod_obj.name}' running on node '{node_obj.name}'"
+        )
 
+        logger.info(f"Restarting OCS operator node: {node_obj.name}")
         self.nodes.restart_nodes([node_obj])
 
+        logger.info("Waiting for all nodes to reach Ready status")
         wait_for_nodes_status()
+
+        logger.info("Waiting 180s for cluster stabilization after node restart")
         time.sleep(180)
+
+        logger.info(
+            f"Verifying OCS operator pod '{pod_obj.name}' is running (timeout: 300s)"
+        )
         pod.wait_for_pods_to_be_running(
             namespace=config.ENV_DATA["cluster_namespace"],
             pod_names=[pod_obj.name],
             timeout=300,
         )
+        logger.info("OCS operator pod verified running after node restart")
 
     def is_cluster_healthy(self, ceph_recovery_timeout=600):
         """
@@ -231,6 +276,9 @@ class TestFullClusterHealth(PASTest):
         Returns:
             bool: True if ALL checks passed (Ceph healthy AND all pods running), False otherwise
         """
+        logger.debug(
+            f"Starting cluster health check with ceph_recovery_timeout={ceph_recovery_timeout}s"
+        )
         start_time = time.time()
 
         # # First check if Ceph is healthy (with optional wait for recovery)
@@ -240,18 +288,21 @@ class TestFullClusterHealth(PASTest):
         #     logger.error("Ceph is in HEALTH_ERR state, skipping pod check")
         #     execution_time = time.time() - start_time
         #     logger.info(
-        #         f"is_cluster_healthy took {execution_time:.2f} seconds to execute"
+        #         f"Cluster health check completed in {execution_time:.2f}s: result=False (Ceph unhealthy)"
         #     )
         #     return False
         ceph_healthy = True
+
         # Only check pods if Ceph is healthy
+        logger.info("Verifying all pods are running (timeout: 1200s)")
         pods_running = pod.wait_for_pods_to_be_running(timeout=1200)
 
         execution_time = time.time() - start_time
         result = ceph_healthy and pods_running
-        logger.info(f"is_cluster_healthy took {execution_time:.2f} seconds to execute")
+
         logger.info(
-            f"Ceph healthy: {ceph_healthy}, Pods running: {pods_running}, Overall result: {result}"
+            f"Cluster health check completed in {execution_time:.2f}s: "
+            f"ceph_healthy={ceph_healthy}, pods_running={pods_running}, result={result}"
         )
 
         return result
@@ -277,33 +328,45 @@ class TestFullClusterHealth(PASTest):
         """
         self.nodes = nodes
 
-        logger.info("Checking health before disruptive operations")
+        logger.info(
+            "Pre-test cluster health: checking if cluster is healthy before starting tests"
+        )
         assert self.is_cluster_healthy(
             ceph_recovery_timeout=0
         ), "Cluster is not healthy before starting disruptive operations"
 
-        logger.info("Starting OSD node reboot")
+        logger.info("Capturing pod status snapshot before OSD node reboot")
+        pod.log_pods_status(namespace=config.ENV_DATA["cluster_namespace"])
+        logger.info("Executing OSD node reboot")
         osd_node_reboot()
-        logger.info("Checking health after OSD node reboot")
+        logger.info("Post OSD node reboot: verifying cluster health")
         assert self.is_cluster_healthy(), "Cluster is not healthy after OSD node reboot"
 
-        logger.info("Starting MGR pod node restart (worker node shutdown)")
+        logger.info("Capturing pod status snapshot before MGR pod node restart")
+        pod.log_pods_status(namespace=config.ENV_DATA["cluster_namespace"])
+        logger.info("Executing MGR pod node restart (worker node shutdown)")
         self.mgr_pod_node_restart()
-        logger.info("Checking health after worker node shutdown")
+        logger.info("Post MGR node restart: verifying cluster health")
         assert (
             self.is_cluster_healthy()
         ), "Cluster is not healthy after MGR pod node restart (worker node shutdown)"
 
-        logger.info("Starting OCS operator node restart")
+        logger.info("Capturing pod status snapshot before OCS operator node restart")
+        pod.log_pods_status(namespace=config.ENV_DATA["cluster_namespace"])
+        logger.info("Executing OCS operator node restart")
         self.restart_ocs_operator_node()
-        logger.info("Checking health after OCS operator node restart")
+        logger.info("Post OCS operator node restart: verifying cluster health")
         assert (
             self.is_cluster_healthy()
         ), "Cluster is not healthy after OCS operator node restart"
 
-        logger.info("Starting Rook, OSD, MGR & MON pods deletion")
+        logger.info("Capturing pod status snapshot before pod deletion")
+        pod.log_pods_status(namespace=config.ENV_DATA["cluster_namespace"])
+        logger.info("Executing Rook, OSD, MGR & MON pods deletion")
         self.delete_pods()
-        logger.info("Checking health after Rook, OSD, MGR & MON pods deletion")
+        logger.info("Post pod deletion: verifying cluster health and pod recovery")
         assert (
             self.is_cluster_healthy()
         ), "Cluster is not healthy after Rook, OSD, MGR & MON pods deletion"
+
+        logger.info("All cluster resilience tests completed successfully")
