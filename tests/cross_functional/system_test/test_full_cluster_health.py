@@ -5,6 +5,7 @@ Test to verify cluster health/stability when it's full (85%)
 import logging
 import pytest
 import time
+import jira
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster
@@ -281,34 +282,21 @@ class TestFullClusterHealth(PASTest):
         )
         start_time = time.time()
 
-        # # First check if Ceph is healthy (with optional wait for recovery)
-        # ceph_healthy = self.ceph_not_health_error(timeout=ceph_recovery_timeout)
-        #
-        # if not ceph_healthy:
-        #     logger.error("Ceph is in HEALTH_ERR state, skipping pod check")
-        #     execution_time = time.time() - start_time
-        #     logger.info(
-        #         f"Cluster health check completed in {execution_time:.2f}s: result=False (Ceph unhealthy)"
-        #     )
-        #     return False
-        ceph_healthy = True
-
-        # Only check pods if Ceph is healthy
         logger.info("Verifying all pods are running (timeout: 1200s)")
         pods_running = pod.wait_for_pods_to_be_running(timeout=1200)
 
         execution_time = time.time() - start_time
-        result = ceph_healthy and pods_running
 
         logger.info(
             f"Cluster health check completed in {execution_time:.2f}s: "
-            f"ceph_healthy={ceph_healthy}, pods_running={pods_running}, result={result}"
+            f" pods_running={pods_running}"
         )
 
-        return result
+        return pods_running
 
     @system_test
     @polarion_id("OCS-2749")
+    @jira("DFBUGS-5769")
     def test_full_cluster_health(
         self,
         nodes,
@@ -335,15 +323,11 @@ class TestFullClusterHealth(PASTest):
             ceph_recovery_timeout=0
         ), "Cluster is not healthy before starting disruptive operations"
 
-        logger.info("Capturing pod status snapshot before OSD node reboot")
-        pod.log_pods_status(namespace=config.ENV_DATA["cluster_namespace"])
         logger.info("Executing OSD node reboot")
         osd_node_reboot()
         logger.info("Post OSD node reboot: verifying cluster health")
         assert self.is_cluster_healthy(), "Cluster is not healthy after OSD node reboot"
 
-        logger.info("Capturing pod status snapshot before MGR pod node restart")
-        pod.log_pods_status(namespace=config.ENV_DATA["cluster_namespace"])
         logger.info("Executing MGR pod node restart (worker node shutdown)")
         self.mgr_pod_node_restart()
         logger.info("Post MGR node restart: verifying cluster health")
@@ -351,8 +335,6 @@ class TestFullClusterHealth(PASTest):
             self.is_cluster_healthy()
         ), "Cluster is not healthy after MGR pod node restart (worker node shutdown)"
 
-        logger.info("Capturing pod status snapshot before OCS operator node restart")
-        pod.log_pods_status(namespace=config.ENV_DATA["cluster_namespace"])
         logger.info("Executing OCS operator node restart")
         self.restart_ocs_operator_node()
         logger.info("Post OCS operator node restart: verifying cluster health")
@@ -360,8 +342,6 @@ class TestFullClusterHealth(PASTest):
             self.is_cluster_healthy()
         ), "Cluster is not healthy after OCS operator node restart"
 
-        logger.info("Capturing pod status snapshot before pod deletion")
-        pod.log_pods_status(namespace=config.ENV_DATA["cluster_namespace"])
         logger.info("Executing Rook, OSD, MGR & MON pods deletion")
         self.delete_pods()
         logger.info("Post pod deletion: verifying cluster health and pod recovery")
