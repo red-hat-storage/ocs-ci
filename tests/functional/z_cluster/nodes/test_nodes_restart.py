@@ -15,7 +15,12 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import get_node_objs, get_nodes, wait_for_nodes_status
+from ocs_ci.ocs.node import (
+    get_app_pod_running_nodes,
+    get_node_objs,
+    get_nodes,
+    wait_for_nodes_status,
+)
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity, SanityExternalCluster
 from ocs_ci.helpers.helpers import (
@@ -26,7 +31,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import ServiceUnavailable
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
 from ocs_ci.utility.utils import retry
 from ocs_ci.ocs.cluster import is_vsphere_ipi_cluster
 
@@ -205,24 +210,39 @@ class TestNodesRestart(ManageTest):
             provisioner_pods = pod.get_cephfsplugin_provisioner_pods()
         provisioner_pod = provisioner_pods[0]
 
-        # Making sure that the node is not running the rook operator pod:
-        provisioner_node = pod.get_pod_node(provisioner_pod)
+        # Avoid rook operator's node, and NooBaa's node (may miss bucket_creation_timeout)
         rook_operator_pod = pod.get_operator_pods()[0]
         operator_node = pod.get_pod_node(rook_operator_pod)
-        if operator_node.get().get("metadata").get(
-            "name"
-        ) == provisioner_node.get().get("metadata").get("name"):
+        unsafe_nodes = {operator_node.name}
+        if operation == "create_resources":
+            try:
+                unsafe_nodes.update(get_app_pod_running_nodes(pod.get_noobaa_pods()))
+            except (CommandFailed, NotFoundError) as ex:
+                logger.warning(f"Could not determine NooBaa pod nodes: {ex}")
+
+        provisioner_node = pod.get_pod_node(provisioner_pod)
+        if provisioner_node.name in unsafe_nodes:
             provisioner_pod = provisioner_pods[1]
+            provisioner_node = pod.get_pod_node(provisioner_pod)
 
         provisioner_pod_name = provisioner_pod.name
         logger.info(f"{interface} provisioner pod found: {provisioner_pod_name}")
 
-        # Get the node name that has the provisioner pod running on
-        provisioner_node = pod.get_pod_node(provisioner_pod)
-        provisioner_node_name = provisioner_node.get().get("metadata").get("name")
+        provisioner_node_name = provisioner_node.name
         logger.info(
             f"{interface} provisioner pod is running on node {provisioner_node_name}"
         )
+
+        # Only 2 provisioner pods exist; extend timeout if both are unsafe
+        bucket_creation_timeout = 180  # same as sanity_helpers default
+        if operation == "create_resources" and provisioner_node_name in unsafe_nodes:
+            bucket_creation_timeout = 800
+            logger.info(
+                f"Node {provisioner_node_name} running the {interface} provisioner "
+                "pod could not be swapped away from a node also running a NooBaa "
+                f"pod; extending bucket_creation_timeout to {bucket_creation_timeout} "
+                "seconds"
+            )
 
         # Stopping the nodes
         nodes.stop_nodes(nodes=[provisioner_node])
@@ -260,7 +280,11 @@ class TestNodesRestart(ManageTest):
         if operation == "create_resources":
             # Cluster validation (resources creation and IO running)
             self.sanity_helpers.create_resources(
-                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+                pvc_factory,
+                pod_factory,
+                bucket_factory,
+                rgw_bucket_factory,
+                bucket_creation_timeout=bucket_creation_timeout,
             )
         elif operation == "delete_resources":
             # Cluster validation (resources creation and IO running)
@@ -329,10 +353,26 @@ class TestNodesRestart(ManageTest):
 
         # Get the node name that has the rook operator pod running on
         operator_node = pod.get_pod_node(rook_operator_pod)
-        operator_node_name = operator_node.get().get("metadata").get("name")
+        operator_node_name = operator_node.name
         logger.info(
             f"{rook_operator_pod_name} pod is running on node {operator_node_name}"
         )
+
+        # No alternate pod exists here; extend timeout if this node is unsafe
+        bucket_creation_timeout = 180  # same as sanity_helpers default
+        if operation == "create_resources":
+            try:
+                noobaa_nodes = get_app_pod_running_nodes(pod.get_noobaa_pods())
+            except (CommandFailed, NotFoundError) as ex:
+                logger.warning(f"Could not determine NooBaa pod nodes: {ex}")
+                noobaa_nodes = []
+            if operator_node_name in noobaa_nodes:
+                bucket_creation_timeout = 800
+                logger.info(
+                    f"Node {operator_node_name} running the rook operator pod is "
+                    "also running a NooBaa pod; extending bucket_creation_timeout "
+                    f"to {bucket_creation_timeout} seconds"
+                )
 
         # Stopping the node
         nodes.stop_nodes(nodes=[operator_node])
@@ -370,7 +410,11 @@ class TestNodesRestart(ManageTest):
             # Cluster validation (resources creation and IO running)
 
             self.sanity_helpers.create_resources(
-                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+                pvc_factory,
+                pod_factory,
+                bucket_factory,
+                rgw_bucket_factory,
+                bucket_creation_timeout=bucket_creation_timeout,
             )
         elif operation == "delete_resources":
             # Cluster validation (resources creation and IO running)
