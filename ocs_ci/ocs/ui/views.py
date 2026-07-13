@@ -932,16 +932,7 @@ FDF_SAN_LOCATORS = {
         "//button[@data-test='secret-key-dropdown']",
         By.XPATH,
     ),
-    # Wait anchor: any button inside a <li> inside the dropdown <ul>
-    # Intentionally avoids PF version-specific class names so it works
-    # across PatternFly versions.
-    "secret_key_dropdown_wait": (
-        "//ul[@role='listbox' or @role='menu']//li//button",
-        By.XPATH,
-    ),
     # All enabled options inside the Secret key dropdown.
-    # Uses aria-disabled rather than a PF-version class so the locator
-    # remains stable across PatternFly upgrades.
     "secret_key_dropdown_options": (
         "//ul[@role='listbox' or @role='menu']"
         "//li[not(@aria-disabled='true')]"
@@ -951,7 +942,6 @@ FDF_SAN_LOCATORS = {
     # All nodes radio button
     "all_nodes_radio": ("//input[@id='use-all-nodes']", By.XPATH),
     # LUN table checkbox for row i — use @aria-label to anchor the table,
-    # avoids PF version-specific class names.
     "lun_table_checkbox": (
         "//table[@aria-label='LUNs table']//tbody//tr[{i}]//input[@type='checkbox']",
         By.XPATH,
@@ -986,12 +976,17 @@ SCALE_DASHBOARD_LOCATORS = {
         "//*[@data-test='Connection-health-item-icon']//*[@data-test='success-icon']",
         By.XPATH,
     ),
+    # Base XPath for a table row — caller appends a name filter via .format()
     "lun_group_row_by_name": (
         "//table//tbody//tr",
         By.XPATH,
     ),
+    # Status cell locator for a specific LUN group row.
     "lun_group_status_ok_by_name": (
-        "//table//tbody//tr//*[text()='OK' or text()='Healthy' or text()='Connected']",
+        "//tr[contains(td[1], '{lun_group_name}')]"
+        "//td[@data-label='Status' or position()=2]"
+        "[text()='Healthy' or text()='OK' or text()='Connected'"
+        " or .//*[text()='Healthy' or text()='OK' or text()='Connected']]",
         By.XPATH,
     ),
 }

@@ -1,5 +1,7 @@
 import logging
 
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from ocs_ci.ocs.ui.base_ui import BaseUI, wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.views import FDF_SAN_LOCATORS, SCALE_DASHBOARD_LOCATORS
@@ -18,14 +20,13 @@ class FusionAccessUI(PageNavigator, BaseUI):
 
     def __init__(self):
         super().__init__()
-        self.base_ui = BaseUI()
 
     def click_connect_external_systems(self):
         """
         Click on 'Connect external systems' button.
 
         """
-        self.base_ui.do_click(FDF_SAN_LOCATORS["connect_external_storage_button"])
+        self.do_click(FDF_SAN_LOCATORS["connect_external_storage_button"])
         logger.info("Clicked on Connect external systems button")
 
     def select_storage_area_network(self):
@@ -37,7 +38,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
         wait_for_element_to_be_clickable(
             locator=FDF_SAN_LOCATORS["san_radio_button"], timeout=60
         )
-        self.base_ui.do_click(FDF_SAN_LOCATORS["san_radio_button"])
+        self.do_click(FDF_SAN_LOCATORS["san_radio_button"])
         logger.info("Selected Storage Area Network option")
 
     def click_next_button(self):
@@ -45,7 +46,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
         Click the Next button to proceed.
 
         """
-        self.base_ui.do_click(FDF_SAN_LOCATORS["next_button"])
+        self.do_click(FDF_SAN_LOCATORS["next_button"])
         logger.info("Clicked Next button")
 
     def enter_image_registry_url(self, image_registry_url):
@@ -56,7 +57,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
             image_registry_url (str): URL of the image registry e.g. quay.io
 
         """
-        self.base_ui.do_send_keys(
+        self.do_send_keys(
             FDF_SAN_LOCATORS["image_registry_url_input"], image_registry_url
         )
         logger.info(f"Entered Image registry URL: {image_registry_url}")
@@ -69,7 +70,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
             image_repository_name (str): Name of the image repository
 
         """
-        self.base_ui.do_send_keys(
+        self.do_send_keys(
             FDF_SAN_LOCATORS["image_repository_name_input"], image_repository_name
         )
         logger.info(f"Entered Image repository name: {image_repository_name}")
@@ -82,30 +83,25 @@ class FusionAccessUI(PageNavigator, BaseUI):
             TimeoutExpiredError: If the dropdown or its options are not found
 
         """
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-
         # Open the dropdown
-        self.base_ui.do_click(FDF_SAN_LOCATORS["secret_key_dropdown"])
+        self.do_click(FDF_SAN_LOCATORS["secret_key_dropdown"])
         logger.info("Opened Secret key dropdown")
 
-        # Wait for dropdown options to appear in the DOM (up to 15 seconds)
-        wait_path, wait_by = FDF_SAN_LOCATORS["secret_key_dropdown_wait"]
+        # Wait for dropdown options to appear in the DOM (up to 15 seconds).
+        opt_path, opt_by = FDF_SAN_LOCATORS["secret_key_dropdown_options"]
         logger.info("Waiting for Secret key dropdown options to appear...")
         try:
-            WebDriverWait(self.base_ui.driver, 15).until(
-                EC.presence_of_element_located((wait_by, wait_path))
+            WebDriverWait(self.driver, 15).until(
+                EC.presence_of_element_located((opt_by, opt_path))
             )
-        except Exception:
-            self.base_ui.take_screenshot("secret_dropdown_no_options")
+        except Exception as err:
+            self.take_screenshot("secret_dropdown_no_options")
             raise TimeoutExpiredError(
                 "Secret key dropdown options did not appear after 15 seconds"
-            )
+            ) from err
 
         # Get all enabled options
-        options = self.base_ui.get_elements(
-            FDF_SAN_LOCATORS["secret_key_dropdown_options"]
-        )
+        options = self.get_elements(FDF_SAN_LOCATORS["secret_key_dropdown_options"])
         if not options:
             raise TimeoutExpiredError("No options found in Secret key dropdown")
 
@@ -121,7 +117,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
 
         """
 
-        elements = self.base_ui.get_elements(FDF_SAN_LOCATORS["all_nodes_radio"])
+        elements = self.get_elements(FDF_SAN_LOCATORS["all_nodes_radio"])
 
         if not elements:
             raise TimeoutExpiredError("AllNodes radio button not found")
@@ -130,9 +126,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
 
         if not san_element.is_selected():
             logger.info("Selecting All Nodes option")
-            self.base_ui.do_click(
-                FDF_SAN_LOCATORS["all_nodes_radio"], enable_screenshot=True
-            )
+            self.do_click(FDF_SAN_LOCATORS["all_nodes_radio"], enable_screenshot=True)
         else:
             logger.info("All Nodes (Default) option already selected")
 
@@ -144,9 +138,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
             lun_group_name (str): Name for the LUN group
 
         """
-        self.base_ui.do_send_keys(
-            FDF_SAN_LOCATORS["lun_group_name_input"], lun_group_name
-        )
+        self.do_send_keys(FDF_SAN_LOCATORS["lun_group_name_input"], lun_group_name)
         logger.info(f"Entered LUN group name: {lun_group_name}")
 
     def select_luns_from_table(self, num_luns=1):
@@ -167,10 +159,10 @@ class FusionAccessUI(PageNavigator, BaseUI):
         row_id_path, row_id_by = FDF_SAN_LOCATORS["lun_table_row_id"]
         for i in range(1, num_luns + 1):
             lun_checkbox_locator = (checkbox_path.format(i=i), checkbox_by)
-            self.base_ui.do_click(lun_checkbox_locator)
+            self.do_click(lun_checkbox_locator)
 
             lun_id_locator = (row_id_path.format(i=i), row_id_by)
-            lun_id = self.base_ui.get_element_text(lun_id_locator)
+            lun_id = self.get_element_text(lun_id_locator)
             selected_luns.append(lun_id)
             logger.info(f"Selected LUN: {lun_id}")
 
@@ -181,7 +173,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
         Click the 'Connect and Create' button.
 
         """
-        self.base_ui.do_click(
+        self.do_click(
             FDF_SAN_LOCATORS["connect_and_create_button"], enable_screenshot=True
         )
 
@@ -190,9 +182,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
         Navigate to san_storage tab under external systems page
 
         """
-        self.base_ui.do_click(
-            FDF_SAN_LOCATORS["san_storage_link"], enable_screenshot=True
-        )
+        self.do_click(FDF_SAN_LOCATORS["san_storage_link"], enable_screenshot=True)
         logger.info("Navigated to storage san dashboard")
 
     @retry((AssertionError, TimeoutExpiredError), tries=40, delay=30, backoff=1)
@@ -209,7 +199,7 @@ class FusionAccessUI(PageNavigator, BaseUI):
         """
         # 1. Check Connection (Standard Swap)
         path, strategy = SCALE_DASHBOARD_LOCATORS["scale_connection_green"]
-        assert self.base_ui.check_element_presence(
+        assert self.check_element_presence(
             (strategy, path), timeout=20
         ), "Scale dashboard connection is not green"
         logger.info("Scale dashboard connection is green")
@@ -218,21 +208,18 @@ class FusionAccessUI(PageNavigator, BaseUI):
         path_row, strategy_row = SCALE_DASHBOARD_LOCATORS["lun_group_row_by_name"]
         specific_row_xpath = f"{path_row}[contains(., '{lun_group_name}')]"
 
-        assert self.base_ui.check_element_presence(
+        assert self.check_element_presence(
             (strategy_row, specific_row_xpath), timeout=20
         ), f"LUN group '{lun_group_name}' not found in the table"
         logger.info(f"LUN group {lun_group_name} found in the table")
 
         # 3. Check that the SPECIFIC LUN group has an OK/Healthy/Connected status.
-        _, strategy_ok = SCALE_DASHBOARD_LOCATORS["lun_group_status_ok_by_name"]
-        specific_ok_xpath = (
-            f"//tr[contains(td[1], '{lun_group_name}')]"
-            f"//td[@data-label='Status' or position()=2]"
-            f"[text()='Healthy' or text()='OK' or text()='Connected'"
-            f" or .//*[text()='Healthy' or text()='OK' or text()='Connected']]"
-        )
+        status_path, strategy_ok = SCALE_DASHBOARD_LOCATORS[
+            "lun_group_status_ok_by_name"
+        ]
+        specific_ok_xpath = status_path.format(lun_group_name=lun_group_name)
 
-        assert self.base_ui.check_element_presence(
-            (strategy_ok, specific_ok_xpath), timeout=20
+        assert self.check_element_presence(
+            (strategy_ok, specific_ok_xpath), timeout=25
         ), f"LUN group '{lun_group_name}' is not in Healthy/OK/Connected state"
         logger.info(f"LUN group {lun_group_name} health status is OK/Healthy/Connected")
