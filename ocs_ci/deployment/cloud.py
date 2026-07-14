@@ -1,0 +1,203 @@
+# -*- coding: utf8 -*-
+"""
+This module contains common code and a base class for any cloud platform
+deployment.
+"""
+
+import json
+import logging
+import os
+import subprocess
+
+from ocs_ci.ocs import ocp
+from ocs_ci.deployment.deployment import Deployment
+from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, exceptions
+from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.deployment import get_cluster_prefix
+from ocs_ci.utility.ibmcloud import (
+    run_ibmcloud_cmd,
+    set_target_region,
+    configure_ingress_load_balancer_security_group,
+)
+from ocs_ci.utility.utils import get_cluster_name, get_infra_id, run_cmd, TimeoutSampler
+
+logger = logging.getLogger(__name__)
+
+
+class CloudDeploymentBase(Deployment):
+    """
+    Base class for deployment on a cloud platform (such as AWS, Azure, ...).
+    """
+
+    def __init__(self):
+        """
+        Any cloud platform deployment requires region and cluster name.
+        """
+        super(CloudDeploymentBase, self).__init__()
+        self.region = config.ENV_DATA["region"]
+        if config.ENV_DATA.get("cluster_name"):
+            self.cluster_name = config.ENV_DATA["cluster_name"]
+        else:
+            self.cluster_name = get_cluster_name(self.cluster_path)
+        # dict of cluster prefixes with special handling rules (for existence
+        # check or during a cluster cleanup)
+        self.cluster_prefixes_special_rules = {}
+
+    def check_cluster_existence(self, cluster_name_prefix):
+        """
+        Check cluster existence according to cluster name prefix
+
+        Returns:
+            bool: True if a cluster with the same name prefix already exists,
+                False otherwise
+
+        """
+        raise NotImplementedError()
+
+    def deploy_ocp(self, log_cli_level="DEBUG"):
+        """
+        Deployment specific to OCP cluster on a cloud platform.
+
+        Args:
+            log_cli_level (str): openshift installer's log level
+                (default: "DEBUG")
+
+        """
+        if not config.DEPLOYMENT.get("force_deploy_multiple_clusters"):
+            prefix = get_cluster_prefix(
+                self.cluster_name, self.cluster_prefixes_special_rules
+            )
+            if self.check_cluster_existence(prefix):
+                raise exceptions.SameNamePrefixClusterAlreadyExistsException(
+                    f"Cluster with name prefix {prefix} already exists. "
+                    f"Please destroy the existing cluster for a new cluster "
+                    f"deployment"
+                )
+        super(CloudDeploymentBase, self).deploy_ocp(log_cli_level)
+
+
+class IPIOCPDeployment(BaseOCPDeployment):
+    """
+    Common implementation of IPI OCP deployments for cloud platforms.
+    """
+
+    def __init__(self):
+        super(IPIOCPDeployment, self).__init__()
+
+    def deploy_prereq(self):
+        """
+        Overriding deploy_prereq from parent. Perform all necessary
+        prerequisites for cloud IPI here.
+        """
+        super(IPIOCPDeployment, self).deploy_prereq()
+        if config.DEPLOYMENT["preserve_bootstrap_node"]:
+            logger.info("Setting ENV VAR to preserve bootstrap node")
+            os.environ["OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP"] = "True"
+            assert os.getenv("OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP") == "True"
+
+    def deploy(self, log_cli_level="DEBUG"):
+        """
+        Deployment specific to OCP cluster on a cloud platform.
+
+        Args:
+            log_cli_level (str): openshift installer's log level
+                (default: "DEBUG")
+        """
+        logger.info("Deploying OCP cluster")
+        install_timeout = config.DEPLOYMENT.get("openshift_install_timeout")
+        logger.info(
+            f"running openshift-install with '{log_cli_level}' log level "
+            f"and {install_timeout} second timeout"
+        )
+        try:
+            run_cmd(
+                f"{self.installer} create cluster "
+                f"--dir {self.cluster_path} "
+                f"--log-level {log_cli_level}",
+                timeout=install_timeout,
+            )
+        except (exceptions.CommandFailed, subprocess.TimeoutExpired) as e:
+            err = str(e)
+            if constants.GATHER_BOOTSTRAP_PATTERN in err or "timed out" in err:
+                try:
+                    gather_bootstrap()
+                except Exception as ex:
+                    logger.error(ex)
+            # W/A for bug: https://issues.redhat.com/browse/OCPBUGS-63723
+            # Issue to track W/A: https://github.com/red-hat-storage/ocs-ci/issues/13519
+            if (
+                "failed retrieving cos instance for destroy bootstrap: COS Resource Not Found"
+                in str(e)
+            ):
+                logger.warning(
+                    "COS instance not found for destroy bootstrap, related to bug: "
+                    "https://issues.redhat.com/browse/OCPBUGS-63723, continuing..."
+                )
+                logger.warning("Deleting bootstrap leftovers")
+                set_target_region()
+                infra_id = get_infra_id(config.ENV_DATA["cluster_name"])
+                try:
+                    run_ibmcloud_cmd(f"ibmcloud is instance {infra_id}-bootstrap")
+                    run_ibmcloud_cmd(
+                        f"ibmcloud is instance-delete --force {infra_id}-bootstrap"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to delete bootstrap VSI leftovers: {e}")
+                try:
+                    cos_instances = json.loads(
+                        run_ibmcloud_cmd(
+                            f"ibmcloud resource service-instance  --output json {infra_id}-cos"
+                        )
+                    )
+                    for cos_instance in cos_instances:
+                        buckets = json.loads(
+                            run_ibmcloud_cmd(
+                                f"ibmcloud cos buckets --output json --ibm-service-instance-id {cos_instance['guid']}"
+                            )
+                        )["Buckets"]
+                        if len(buckets) == 1 and "bootstrap" in buckets[0]["Name"]:
+                            run_ibmcloud_cmd(
+                                f"ibmcloud resource service-instance-delete -f {cos_instance['guid']}"
+                            )
+                except Exception as e:
+                    logger.error(f"Failed to delete bootstrap COS leftovers: {e}")
+                cluster_operators = ocp.get_all_cluster_operators()
+                for ocp_operator in cluster_operators:
+                    logger.info(f"Checking cluster status of {ocp_operator}")
+                    for sampler in TimeoutSampler(
+                        timeout=1600,
+                        sleep=60,
+                        func=ocp.verify_cluster_operator_status,
+                        cluster_operator=ocp_operator,
+                    ):
+                        if sampler:
+                            break
+                        else:
+                            logger.info(f"{ocp_operator} status is not valid")
+                logger.info("Checking clusterversion status")
+                cluster_version_timeout = 1800
+                for sampler in TimeoutSampler(
+                    timeout=cluster_version_timeout,
+                    sleep=15,
+                    func=ocp.validate_cluster_version_status,
+                ):
+                    if sampler:
+                        logger.info("Installation Completed Successfully!")
+                        break
+            elif "Waiting up to" in str(e):
+                if (
+                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                    and config.ENV_DATA["deployment_type"] == constants.IPI_DEPL_TYPE
+                ):
+                    configure_ingress_load_balancer_security_group()
+                run_cmd(
+                    f"{self.installer} wait-for install-complete "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600,
+                )
+            else:
+                raise e
+        self.test_cluster()

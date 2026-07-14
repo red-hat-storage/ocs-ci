@@ -1,0 +1,1430 @@
+# -*- coding: utf8 -*-
+"""
+Module for interactions with OCP/OCS Cluster on Azure platform level.
+"""
+
+import base64
+import json
+import logging
+import os
+import time
+import yaml
+from datetime import datetime
+
+
+from azure.identity import ClientSecretCredential
+from azure.mgmt.compute import ComputeManagementClient
+from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.storage import StorageManagementClient
+
+
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+    TerrafromFileNotFoundException,
+    UnsupportedPlatformVersionError,
+)
+from ocs_ci.utility import version as version_util
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    TimeoutSampler,
+)
+from ocs_ci.utility.ssl_certs import configure_ingress_and_api_certificates
+
+logger = logging.getLogger(__name__)
+
+
+# default location of files with necessary azure cluster details
+SERVICE_PRINCIPAL_FILEPATH = os.path.expanduser("~/.azure/osServicePrincipal.json")
+TERRRAFORM_FILENAME = "terraform.platform.auto.tfvars.json"
+OLD_TERRRAFORM_FILENAME = "terraform.azure.auto.tfvars.json"
+
+
+def load_cluster_resource_group():
+    """
+    Read terraform tfvars.json file created by ``openshift-installer`` in a
+    cluster dir to get azure ``resource group`` of an OCP cluster. All Azure
+    resources of the cluster are placed in this group.
+
+    Returns:
+        string with resource group name
+
+    Raises:
+        TerrafromFileNotFoundException: When the terraform tfvars file is not found
+    """
+    cluster_path = config.ENV_DATA["cluster_path"]
+    terraform_files = [
+        os.path.join(cluster_path, f)
+        for f in [OLD_TERRRAFORM_FILENAME, TERRRAFORM_FILENAME]
+    ]
+    terraform_filename = None
+    for tf_file in terraform_files:
+        if os.path.exists(tf_file):
+            terraform_filename = os.path.join(cluster_path, tf_file)
+
+    if not terraform_filename:
+        raise TerrafromFileNotFoundException(
+            f"None of terraform file path from {','.join(terraform_files)} exists!"
+        )
+
+    with open(terraform_filename, "r") as tf_file:
+        tf_dict = json.load(tf_file)
+    resource_group = tf_dict.get("azure_network_resource_group_name")
+    logger.debug(
+        "fetching azure resource group (%s) from %s file",
+        tf_dict.get("clientId"),
+        terraform_filename,
+    )
+    return resource_group
+
+
+def load_service_principal_dict(filepath=SERVICE_PRINCIPAL_FILEPATH):
+    """
+    Load Azure Service Principal from osServicePrincipal.json file and parse it
+    into a dictionary.
+
+    Args:
+        filepath (str): path of the
+
+    Returns:
+        dictionary with the service principal details (3 IDs and 1 secret)
+    """
+    with open(filepath, "r") as sp_file:
+        sp_dict = json.load(sp_file)
+    logger.debug(
+        "fetching azure service principal (clientId %s) from %s file",
+        sp_dict.get("clientId"),
+        filepath,
+    )
+    return sp_dict
+
+
+# TODO: rename to AzureUtil
+class AZURE:
+    """
+    Utility wrapper class for Azure OCP cluster. Design of the class follows
+    similar AWS class.
+    """
+
+    _compute_client = None
+    _resource_client = None
+    _storage_client = None
+    _credentials = None
+    _cluster_resource_group = None
+
+    def __init__(
+        self,
+        subscription_id=None,
+        tenant_id=None,
+        client_id=None,
+        client_secret=None,
+        cluster_resource_group=None,
+    ):
+        """
+        Constructor for Azure cluster util class.
+
+        All arguments are optional. If cluster details are not specified via
+        arguments, the this method will try to load the values from files in
+        ~/.azure and openshift cluster directory.
+
+        If you specify 'azure_cluster_resource_group' in ENV section of ocs-ci
+        config file, value from ocs-ci config file will be used as a default
+        instead of a terraform tfvars from openshift cluster dir. This is
+        useful when the cluster wasn't deployed by ocs-ci, you don't have
+        access to terraform files from it's cluster dir, but you know it's
+        resource group.
+
+        Args:
+            subscription_id (str): Azure Subscription ID
+            tenant_id (str): (Active) Directory (tenant) ID
+            client_id (str): Application (client) ID of the service Principal
+            client_secret (str): password of the Service Principal
+            cluster_resource_group (str): Azure Resource Group of the cluster
+        """
+        azure_auth = config.AUTH.get("azure_auth", {})
+        self._subscription_id = subscription_id or azure_auth.get("subscription_id")
+        self._tenant_id = tenant_id or azure_auth.get("tenant_id")
+        self._client_id = client_id or azure_auth.get("client_id")
+        self._client_secret = client_secret or azure_auth.get("client_secret")
+        self._cluster_resource_group = cluster_resource_group
+
+    @property
+    def cluster_resource_group(self):
+        """
+        Azure resource group of the OCP cluster. This group is created
+        by openshift-installer during OCP deployment.
+
+        If the value is not yet available and it's not specified anywhere, it
+        returns None.
+        """
+        if self._cluster_resource_group is not None:
+            return self._cluster_resource_group
+        # we can override the resource group via ocs-ci config
+        if "azure_cluster_resource_group" in config.ENV_DATA:
+            self._cluster_resource_group = config.ENV_DATA[
+                "azure_cluster_resource_group"
+            ]
+        elif "cluster_path" in config.ENV_DATA and os.path.exists(
+            config.ENV_DATA["cluster_path"]
+        ):
+            try:
+                self._cluster_resource_group = load_cluster_resource_group()
+            except Exception as ex:
+                logger.warning("failed to load azure resource group: %s", ex)
+        return self._cluster_resource_group
+
+    @property
+    def credentials(self):
+        """
+        Property for azure service principle credentials used to authenticate
+        the client.
+        """
+        if self._credentials:
+            return self._credentials
+        # tuple of private attributes which defines a service principal
+        sp_attributes = (
+            self._subscription_id,
+            self._tenant_id,
+            self._client_id,
+            self._client_secret,
+        )
+        # load azure service principal file *only* if necessary
+        if None in sp_attributes:
+            sp_dict = load_service_principal_dict()
+        if self._subscription_id is None:
+            self._subscription_id = sp_dict["subscriptionId"]
+        if self._tenant_id is None:
+            self._tenant_id = sp_dict["tenantId"]
+        if self._client_id is None:
+            self._client_id = sp_dict["clientId"]
+        if self._client_secret is None:
+            self._client_secret = sp_dict["clientSecret"]
+        # create azure SP Credentials object
+        self._credentials = ClientSecretCredential(
+            client_id=self._client_id,
+            client_secret=self._client_secret,
+            tenant_id=self._tenant_id,
+        )
+        return self._credentials
+
+    @property
+    def compute_client(self):
+        """Property for Azure vm resource
+
+        Returns:
+            ComputeManagementClient instance for managing Azure vm resource
+        """
+        if not self._compute_client:
+            self._compute_client = ComputeManagementClient(
+                credential=self.credentials, subscription_id=self._subscription_id
+            )
+        return self._compute_client
+
+    @property
+    def resource_client(self):
+        """
+        Azure ResourceManagementClient instance
+        """
+        if not self._resource_client:
+            self._resource_client = ResourceManagementClient(
+                credential=self.credentials, subscription_id=self._subscription_id
+            )
+        return self._resource_client
+
+    @property
+    def storage_client(self):
+        """
+        Azure Stroage Management Client instance
+        """
+        if not self._storage_client:
+            self._storage_client = StorageManagementClient(
+                credential=self.credentials, subscription_id=self._subscription_id
+            )
+        return self._storage_client
+
+    def get_vm_instance(self, vm_name):
+        """
+        Get instance of Azure vm Instance
+
+        Args:
+            vm_name (str): The name of the Azure instance to get
+
+        Returns:
+            vm: instance of Azure vm instance resource
+
+        """
+        vm = self.compute_client.virtual_machines.get(
+            self.cluster_resource_group, vm_name
+        )
+        return vm
+
+    def get_vm_power_status(self, vm_name):
+        """
+        Get the power status of VM
+
+        Args:
+           vm_name (str): Azure VM name
+
+        Returns :
+           str: Power status of Azure VM
+
+        """
+        vm = self.compute_client.virtual_machines.get(
+            self.cluster_resource_group, vm_name, expand="instanceView"
+        )
+        vm_statuses = vm.instance_view.statuses
+        vm_power_state = len(vm_statuses) >= 2 and vm_statuses[1].code.split("/")[1]
+        return vm_power_state
+
+    def get_node_by_attached_volume(self, volume):
+        """
+        Get the Azure Vm instance that has the volume attached to
+
+        Args:
+            volume (Disk): The disk object to get the Azure Vm according to
+
+        Returns:
+            vm: An Azure Vm instance
+
+        """
+        vm_list = self.compute_client.virtual_machines.list(self.cluster_resource_group)
+
+        for vm in vm_list:
+            for disk in vm.storage_profile.data_disks:
+                if disk.name == volume.name:
+                    return vm
+
+    def get_vm_names(self):
+        """
+        Get list of vms in azure resource group
+
+        Returns:
+           (list): list of Azure vm names
+
+        """
+        vm_list = self.compute_client.virtual_machines.list(self.cluster_resource_group)
+        vm_names = [vm.id.split("/")[-1] for vm in vm_list]
+        return vm_names
+
+    def detach_volume(self, volume, node, timeout=120):
+        """
+        Detach volume if attached
+
+        Args:
+            volume (disk): disk object required to delete a volume
+            node (OCS): The OCS object representing the node
+            timeout (int): Timeout in seconds for API calls
+
+        """
+        vm = self.get_vm_instance(node.name)
+        data_disks = vm.storage_profile.data_disks
+        data_disks[:] = [disk for disk in data_disks if disk.name != volume.name]
+        logger.info("Detaching volume: %s Instance: %s", volume.name, vm.name)
+        result = self.compute_client.virtual_machines.create_or_update(
+            self.cluster_resource_group, vm.name, vm
+        )
+        result.wait()
+        try:
+            for sample in TimeoutSampler(timeout, 3, self.get_disk_state, volume.name):
+                logger.info(f"Volume id: {volume.name} has status: {sample}")
+                if sample == "Unattached":
+                    break
+        except TimeoutExpiredError:
+            logger.error(
+                f"Volume {volume.name} failed to be detached from an Azure Vm instance"
+            )
+            raise
+
+    def restart_vm_instances(self, vm_names):
+        """
+        Restart Azure vm instances
+
+        Args:
+            vm_names (list): Names of azure vm instances
+
+        """
+        for vm_name in vm_names:
+            result = self.compute_client.virtual_machines.begin_restart(
+                self.cluster_resource_group, vm_name
+            )
+            result.wait()
+
+    def get_data_volumes(self, deviceset_pvs):
+        """
+        Get the instance data disk objects
+
+        Args:
+            deviceset_pvs (list): PVC objects of the deviceset PVs
+
+        Returns:
+            list: Azure Vm disk objects
+
+        """
+        volume_names = [
+            pv.get()["spec"]["azureDisk"]["diskName"] for pv in deviceset_pvs
+        ]
+        return [
+            self.compute_client.disks.get(self.cluster_resource_group, volume_name)
+            for volume_name in volume_names
+        ]
+
+    def get_disk_state(self, volume_name):
+        """
+        Get the state of the disk
+
+        Args:
+            volume_name (str): Name of the volume/disk
+
+        Returns:
+            str: Azure Vm disk state
+
+        """
+
+        return self.compute_client.disks.get(
+            self.cluster_resource_group, volume_name
+        ).disk_state
+
+    def start_vm_instances(self, vm_names):
+        """
+        Start Azure vm instances
+
+        Args:
+            vm_names (list): Names of azure vm instances
+
+        """
+        for vm_name in vm_names:
+            result = self.compute_client.virtual_machines.begin_start(
+                self.cluster_resource_group, vm_name
+            )
+            result.wait()
+
+    def stop_vm_instances(self, vm_names, force=False):
+        """
+        Stop Azure vm instances
+
+        Args:
+            vm_names (list): Names of azure vm instances
+            force (bool): True for non-graceful VM shutdown, False for
+                graceful VM shutdown
+
+        """
+        for vm_name in vm_names:
+            result = self.compute_client.virtual_machines.begin_power_off(
+                self.cluster_resource_group, vm_name, skip_shutdown=force
+            )
+            result.wait()
+
+    def restart_vm_instances_by_stop_and_start(self, vm_names, force=False):
+        """
+        Stop and Start Azure vm instances
+
+        Args:
+            vm_names (list): Names of azure vm instances
+            force (bool): True for non-graceful VM shutdown, False for
+                graceful VM shutdown
+
+        """
+        self.stop_vm_instances(vm_names, force=force)
+        self.start_vm_instances(vm_names)
+
+    def get_storage_accounts(self):
+        """
+        Get list of storage accounts in azure resource group
+
+        Returns:
+           list: list of Azure storage accounts
+
+        """
+        storage_accounts_list = (
+            self.storage_client.storage_accounts.list_by_resource_group(
+                resource_group_name=self.cluster_resource_group
+            )
+        )
+        return storage_accounts_list
+
+    def get_storage_accounts_names(self):
+        """
+        Get list of names of storage accounts in azure resource group
+
+        Returns:
+           list: list of Azure storage accounts name
+
+        """
+        storage_accounts_list = (
+            self.storage_client.storage_accounts.list_by_resource_group(
+                resource_group_name=self.cluster_resource_group
+            )
+        )
+        storage_accounts_name_list = [account.name for account in storage_accounts_list]
+        return storage_accounts_name_list
+
+    def get_storage_account_properties(self, storage_account_name):
+        """
+        Get the properties of the storage account whose name is passed.
+
+        Args:
+            storage_account_name (str): Name of the storage account
+
+        Returns:
+            str: Properties of the storage account in string format.
+        """
+        storage_account_properties = (
+            self.storage_client.storage_accounts.get_properties(
+                resource_group_name=self.cluster_resource_group,
+                account_name=storage_account_name,
+            )
+        )
+        return str(storage_account_properties)
+
+    def az_login(self):
+        login_cmd = (
+            f"az login --service-principal --username {self._client_id} --password "
+            f"{self._client_secret} --tenant {self._tenant_id}"
+        )
+        exec_cmd(login_cmd, secrets=[self._client_secret, self._tenant_id])
+
+    def set_auth_env_vars(self):
+        """
+        Set environment variables containing auth information.
+        """
+        logger.info("Setting Azure environment variables")
+        os.environ["AZURE_TENANT_ID"] = self._tenant_id
+        os.environ["AZURE_CLIENT_ID"] = self._client_id
+        os.environ["AZURE_CLIENT_SECRET"] = self._client_secret
+
+    def create_noobaa_managed_identity(
+        self, cluster_name, resource_group, subscription_id
+    ):
+        """
+        Create an Azure user-assigned managed identity for NooBaa with
+        federated credentials for workload identity federation (STS).
+
+        Creates:
+
+        1. A user-assigned managed identity named '{cluster_name}-noobaa-mi'
+        2. Role assignments: 'Storage Account Contributor' and
+           'Storage Blob Data Contributor' scoped to the cluster resource group
+           (and to the test storage account from AUTH config, if available)
+        3. Federated credentials for NooBaa service accounts (noobaa,
+           noobaa-core, noobaa-endpoint) linked to the cluster's OIDC issuer
+
+        Assumes the caller has already authenticated via az_login().
+
+        Args:
+            cluster_name (str): Name of the OCP cluster
+            resource_group (str): Azure resource group name
+            subscription_id (str): Azure subscription ID
+
+        Returns:
+            str: The client ID of the created managed identity
+
+        """
+        mi_name = f"{cluster_name}-noobaa-mi"
+        region = config.ENV_DATA["region"]
+
+        logger.info(
+            f"Creating managed identity {mi_name} in resource group {resource_group}"
+        )
+        result = exec_cmd(
+            f"az identity create --name {mi_name} --resource-group {resource_group} "
+            f"--location {region} --subscription {subscription_id} -o json"
+        )
+        mi_data = json.loads(result.stdout)
+        client_id = mi_data["clientId"]
+        principal_id = mi_data["principalId"]
+
+        scope = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}"
+        roles = ["Storage Account Contributor", "Storage Blob Data Contributor"]
+        for role in roles:
+            logger.info(f"Assigning role '{role}' to managed identity {mi_name}")
+            exec_cmd(
+                f"az role assignment create --assignee-object-id {principal_id} "
+                f'--assignee-principal-type ServicePrincipal --role "{role}" '
+                f"--scope {scope} --subscription {subscription_id}"
+            )
+
+        test_storage_account = config.AUTH.get("AZURE", {}).get(
+            "STORAGE_ACCOUNT_NAME", ""
+        )
+        if test_storage_account:
+            logger.info(
+                f"Looking up resource ID for test storage account '{test_storage_account}'"
+            )
+            sa_result = exec_cmd(
+                f"az storage account show --name {test_storage_account} "
+                f"--subscription {subscription_id} --query id -o tsv"
+            )
+            sa_resource_id = sa_result.stdout.decode().strip()
+            if sa_resource_id:
+                for role in roles:
+                    logger.info(
+                        f"Assigning role '{role}' on test storage account "
+                        f"'{test_storage_account}'"
+                    )
+                    exec_cmd(
+                        f"az role assignment create --assignee-object-id {principal_id} "
+                        f'--assignee-principal-type ServicePrincipal --role "{role}" '
+                        f"--scope {sa_resource_id} --subscription {subscription_id}"
+                    )
+
+        logger.info("Retrieving OIDC issuer URL from the cluster")
+        auth_result = exec_cmd("oc get authentication cluster -ojson")
+        auth_data = json.loads(auth_result.stdout)
+        oidc_issuer = auth_data["spec"]["serviceAccountIssuer"]
+
+        namespace = config.ENV_DATA.get(
+            "cluster_namespace", constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        service_accounts = ["noobaa", "noobaa-core", "noobaa-endpoint"]
+        for sa in service_accounts:
+            subject = f"system:serviceaccount:{namespace}:{sa}"
+            logger.info(
+                f"Creating federated credential for {subject} on managed identity {mi_name}"
+            )
+            exec_cmd(
+                f"az identity federated-credential create "
+                f"--name {mi_name}-{sa} "
+                f"--identity-name {mi_name} "
+                f"--resource-group {resource_group} "
+                f"--issuer {oidc_issuer} "
+                f'--subject "{subject}" '
+                f"--audiences openshift "
+                f"--subscription {subscription_id}"
+            )
+
+        logger.info(f"Managed identity {mi_name} created with client ID {client_id}")
+        return client_id
+
+    def delete_noobaa_managed_identity(
+        self, cluster_name, resource_group, subscription_id
+    ):
+        """
+        Delete the NooBaa Azure managed identity created for STS deployments.
+
+        Deleting the MI cascades to its federated credentials, but role
+        assignments are NOT auto-deleted — they become orphaned. This method
+        explicitly removes role assignments before deleting the identity.
+
+        Safe to call if the identity doesn't exist (e.g., partial teardown).
+        Assumes the caller has already authenticated via az_login().
+
+        Args:
+            cluster_name (str): Name of the OCP cluster
+            resource_group (str): Azure resource group name
+            subscription_id (str): Azure subscription ID
+
+        """
+        mi_name = f"{cluster_name}-noobaa-mi"
+        logger.info(
+            f"Deleting managed identity {mi_name} from resource group {resource_group}"
+        )
+
+        # Get the MI's principal ID for role assignment cleanup
+        show_result = exec_cmd(
+            f"az identity show --name {mi_name} --resource-group {resource_group} "
+            f"--subscription {subscription_id} -o json",
+            ignore_error=True,
+        )
+        if show_result.returncode:
+            logger.warning(
+                f"Managed identity {mi_name} not found (may already be deleted): {show_result.stderr}"
+            )
+            return
+
+        mi_data = json.loads(show_result.stdout)
+        principal_id = mi_data.get("principalId", "")
+
+        if principal_id:
+            scope = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}"
+            logger.info(
+                f"Removing role assignments for principal {principal_id} in scope {scope}"
+            )
+            exec_cmd(
+                f"az role assignment delete --assignee {principal_id} --scope {scope}",
+                ignore_error=True,
+            )
+
+        result = exec_cmd(
+            f"az identity delete --name {mi_name} --resource-group {resource_group} "
+            f"--subscription {subscription_id}",
+            ignore_error=True,
+        )
+        if result.returncode:
+            logger.warning(
+                f"Failed to delete managed identity {mi_name}: {result.stderr}"
+            )
+        else:
+            logger.info(f"Managed identity {mi_name} deleted successfully")
+
+
+class AzureAroUtil(AZURE):
+    """
+    Utility wrapper class for Azure ARO OCP cluster.
+    """
+
+    def __init__(
+        self,
+        subscription_id=None,
+        tenant_id=None,
+        client_id=None,
+        client_secret=None,
+        cluster_resource_group=None,
+    ):
+        super(AzureAroUtil, self).__init__(
+            subscription_id, tenant_id, client_id, client_secret, cluster_resource_group
+        )
+        self.az_login()
+
+    def get_aro_ocp_version(self):
+        """
+        Get OCP version available in Azure ARO.
+
+        Returns:
+            str: version of ARO OCP currently available, matching the version from config.
+
+        Raises:
+            UnsupportedPlatformVersionError: In case the version is not supported yet available
+                for the Azure ARO.
+
+        """
+        out = exec_cmd(
+            f"az aro get-versions --location {config.ENV_DATA['region']}"
+        ).stdout
+        data = json.loads(out)
+        ocp_config_version = version_util.get_semantic_ocp_version_from_config()
+        versions = []
+        for version in data:
+            semantic_version = version_util.get_semantic_version(version, False)
+            if (
+                ocp_config_version.major == semantic_version.major
+                and ocp_config_version.minor == semantic_version.minor
+            ):
+                versions.append(semantic_version)
+        if versions:
+            versions.sort()
+            return str(versions[-1])
+        raise UnsupportedPlatformVersionError(
+            f"OCP version {ocp_config_version.major}.{ocp_config_version.minor} is not supported on Azure ARO platform!"
+        )
+
+    def create_aro_service_principal(self, cluster_name):
+        """
+        Create a service principal for ARO cluster.
+
+        Args:
+            cluster_name (str): Cluster name.
+
+        Returns:
+            tuple: (client_id, client_secret) of the created service principal
+
+        """
+        sp_name = f"aro-sp-{cluster_name}"
+        logger.info(f"Creating service principal: {sp_name}")
+
+        create_sp_cmd = (
+            f"az ad sp create-for-rbac --name {sp_name} --role Contributor "
+            f"--scopes /subscriptions/{self._subscription_id}"
+        )
+
+        # Retry logic to handle Azure AD propagation delays
+        # First attempt creates the app, second attempt (after propagation) adds credentials
+        max_attempts = 3
+        retry_delay = 10
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.info(
+                    f"Attempting to create service principal (attempt {attempt}/{max_attempts})"
+                )
+                result = exec_cmd(create_sp_cmd, timeout=120)
+                sp_data = json.loads(result.stdout)
+
+                client_id = sp_data["appId"]
+                client_secret = sp_data["password"]
+
+                logger.info(f"Service principal created successfully: {sp_name}")
+                logger.info(f"Client ID: {client_id}")
+
+                # Wait for service principal to propagate
+                logger.info("Waiting for service principal to propagate in Azure AD...")
+                time.sleep(15)
+
+                return client_id, client_secret
+
+            except CommandFailed as e:
+                error_msg = str(e)
+                # Check if it's an Azure AD propagation error
+                if (
+                    "does not exist or one of its queried reference-property objects are not present"
+                    in error_msg
+                ):
+                    if attempt < max_attempts:
+                        logger.warning(
+                            f"Azure AD propagation delay detected. "
+                            f"Retrying in {retry_delay} seconds... (attempt {attempt}/{max_attempts})"
+                        )
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        logger.error(
+                            f"Failed to create service principal after {max_attempts} attempts "
+                            f"due to Azure AD propagation delays"
+                        )
+                        raise
+                else:
+                    # Different error, raise immediately
+                    logger.error(f"Failed to create service principal: {e}")
+                    raise
+
+        # Should not reach here, but just in case
+        raise CommandFailed(
+            f"Failed to create service principal '{sp_name}' after {max_attempts} attempts"
+        )
+
+    def delete_aro_service_principal(self, cluster_name):
+        """
+        Delete the service principal created for ARO cluster.
+
+        Args:
+            cluster_name (str): Cluster name.
+
+        """
+        sp_name = f"aro-sp-{cluster_name}"
+        logger.info(f"Deleting service principal: {sp_name}")
+
+        try:
+            # Get the service principal by display name
+            # NOTE: --display-name does substring matching, so we need to filter for exact match
+            list_cmd = f"az ad sp list --display-name {sp_name}"
+            result = exec_cmd(list_cmd, timeout=60, ignore_error=True)
+            if result.stdout:
+                sp_list = json.loads(result.stdout)
+
+                # Filter for exact display name match to avoid deleting SPs from clusters
+                # where one cluster name is a substring of another (e.g., "aro-sp-j-002" vs "aro-sp-j-002zm3c33")
+                matching_sps = [
+                    sp for sp in sp_list if sp.get("displayName") == sp_name
+                ]
+
+                if matching_sps:
+                    app_id = matching_sps[0]["appId"]
+                    delete_cmd = f"az ad sp delete --id {app_id}"
+                    exec_cmd(delete_cmd, timeout=60, ignore_error=True)
+                    logger.info(f"Service principal deleted: {sp_name}")
+                else:
+                    logger.info(f"Service principal not found: {sp_name}")
+        except CommandFailed as e:
+            logger.warning(f"Failed to delete service principal, continuing: {e}")
+
+    def create_cluster(self, cluster_name):
+        """
+        Create OCP cluster.
+
+        Args:
+            cluster_name (str): Cluster name.
+
+        Raises:
+            UnexpectedBehaviour: in the case, the cluster is not installed
+                successfully.
+
+        """
+        worker_flavor = config.ENV_DATA["worker_instance_type"]
+        master_flavor = config.ENV_DATA["master_instance_type"]
+        worker_replicas = config.ENV_DATA["worker_replicas"]
+        ocp_version = self.get_aro_ocp_version()
+        resource_group = config.ENV_DATA.get("azure_base_domain_resource_group_name")
+        cluster_resource_group = config.ENV_DATA.get(
+            "azure_cluster_resource_group_name", f"aro-{cluster_name}"
+        )
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        base_domain = config.ENV_DATA["base_domain"]
+
+        # Create service principal for ARO cluster
+        aro_client_id, aro_client_secret = self.create_aro_service_principal(
+            cluster_name
+        )
+
+        # Create network resources with cluster-specific VNET name
+        self.create_network(cluster_name)
+
+        # Get the created VNET and subnet names from ENV_DATA (set by create_network)
+        vnet = config.ENV_DATA.get("aro_vnet")
+        master_subnet = config.ENV_DATA.get(
+            "aro_master_subnet", constants.ARO_MASTER_SUBNET
+        )
+        worker_subnet = config.ENV_DATA.get(
+            "aro_worker_subnet", constants.ARO_WORKER_SUBNET
+        )
+
+        cmd = (
+            f"az aro create --resource-group {resource_group} --cluster-resource-group {cluster_resource_group} "
+            f"--name {cluster_name} --version {ocp_version} --vnet {vnet} --master-subnet {master_subnet} "
+            f"--worker-subnet {worker_subnet} --pull-secret @{pull_secret_path} "
+            f"--worker-vm-size {worker_flavor} --master-vm-size {master_flavor}  "
+            f"--worker-count {worker_replicas} --domain {cluster_name}.{base_domain} "
+            f"--client-id {aro_client_id} --client-secret {aro_client_secret}"
+        )
+        logger.info("Creating Azure ARO cluster.")
+        out = exec_cmd(cmd, timeout=5400, secrets=[aro_client_secret]).stdout
+        self.set_dns_records(cluster_name, resource_group, base_domain)
+        logger.info(f"Cluster deployed: {out}")
+        cluster_info = self.get_cluster_details(cluster_name)
+        # Create metadata file to store the cluster name
+        cluster_info["clusterName"] = cluster_name
+        cluster_info["clusterID"] = cluster_info["id"]
+        cluster_path = config.ENV_DATA["cluster_path"]
+        metadata_file = os.path.join(cluster_path, "metadata.json")
+        with open(metadata_file, "w+") as f:
+            json.dump(cluster_info, f)
+        installer_log_file = os.path.join(cluster_path, ".openshift_install.log")
+        formatted_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        cluster_address = (
+            f"http://console-openshift-console.apps.{cluster_name}.{base_domain}"
+        )
+        logger.info(f"Cluster URL: {cluster_address}")
+        with open(installer_log_file, "w+") as f:
+            f.writelines(
+                [
+                    "W/A for our CI to get URL to the cluster in jenkins job. "
+                    "Cluster is deployed via az aro command!\n"
+                    f'time="{formatted_time}" level=info msg="Access the OpenShift web-console here: '
+                    f"{cluster_address}\"\n'",
+                ]
+            )
+        self.get_kubeconfig(cluster_name, resource_group)
+        self.write_kubeadmin_password(cluster_name, resource_group)
+        self.check_cluster_response_ok(insecure=True)
+        configure_ingress_and_api_certificates(skip_tls_verify=True)
+
+        # Update kubeconfig with OCS QE CA cert from ocs-ca-bundle configmap
+        self.update_kubeconfig_with_ocs_ca()
+
+        self.check_cluster_response_ok()
+
+    def update_kubeconfig_with_ocs_ca(self):
+        """
+        Update kubeconfig with OCS QE CA certificate from ocs-ca-bundle configmap.
+
+        This extracts the CA certificate from the cluster's ocs-ca-bundle
+        configmap (created by configure_ingress_and_api_certificates) and
+        embeds it in the kubeconfig to enable TLS verification.
+
+        """
+        kubeconfig_path = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
+        )
+
+        if not os.path.exists(kubeconfig_path):
+            logger.warning(
+                f"Kubeconfig file '{kubeconfig_path}' does not exist. "
+                "Skipping kubeconfig CA update."
+            )
+            return
+
+        logger.info(
+            f"Updating kubeconfig '{kubeconfig_path}' with OCS QE CA certificate"
+        )
+
+        try:
+            # Get OCS QE CA from ocs-ca-bundle configmap
+            cmd = (
+                "oc get configmap -n openshift-config ocs-ca-bundle "
+                "--insecure-skip-tls-verify -o jsonpath='{.data.ca-bundle\\.crt}'"
+            )
+            result = exec_cmd(cmd)
+            ocs_ca_cert = result.stdout.decode("utf-8").strip()
+
+            if not ocs_ca_cert or "BEGIN CERTIFICATE" not in ocs_ca_cert:
+                logger.warning(
+                    "Failed to extract OCS QE CA certificate from ocs-ca-bundle configmap. "
+                    "TLS verification may not work."
+                )
+                return
+
+            # Encode CA certificate in base64
+            ca_cert_base64 = base64.b64encode(ocs_ca_cert.encode("utf-8")).decode(
+                "utf-8"
+            )
+
+            # Update kubeconfig
+            with open(kubeconfig_path, "r") as f:
+                kubeconfig = yaml.safe_load(f)
+
+            for cluster in kubeconfig.get("clusters", []):
+                cluster_data = cluster.get("cluster", {})
+                if "certificate-authority" in cluster_data:
+                    del cluster_data["certificate-authority"]
+                if "insecure-skip-tls-verify" in cluster_data:
+                    del cluster_data["insecure-skip-tls-verify"]
+                cluster_data["certificate-authority-data"] = ca_cert_base64
+                logger.info(
+                    f"Updated certificate-authority-data for cluster "
+                    f"'{cluster.get('name', 'unknown')}' with OCS QE CA"
+                )
+
+            with open(kubeconfig_path, "w") as f:
+                yaml.dump(kubeconfig, f, default_flow_style=False)
+
+            logger.info(
+                "Kubeconfig updated successfully with OCS QE CA certificate for TLS verification"
+            )
+
+        except CommandFailed as e:
+            logger.warning(
+                f"Failed to update kubeconfig with OCS QE CA certificate: {e}. "
+                "Users will need to use --insecure-skip-tls-verify when using this kubeconfig."
+            )
+
+    def check_cluster_response_ok(
+        self, maximum_attempts=150, successful_connections_in_row=20, insecure=False
+    ):
+        """
+        Check if cluster response OK several times based on parameters of the
+        function.
+
+        Args:
+            maximum_attempts (int): maximum attempts to check cluster is OK
+            successful_connections_in_row (int): how many times the cluster should
+                response OK
+            insecure (bool): if True, it will add --insecure-skip-tls-verify
+
+        """
+        attempts = 0
+        successful_connections = 0
+        insecure_cmd = ""
+        if insecure:
+            insecure_cmd = "--insecure-skip-tls-verify"
+        while successful_connections != successful_connections_in_row:
+            attempts += 1
+            try:
+                exec_cmd(f"oc cluster-info {insecure_cmd}")
+                successful_connections += 1
+                logger.info(
+                    f"{successful_connections}. successful connection to the cluster in row"
+                )
+                time.sleep(2)
+                if successful_connections == successful_connections_in_row:
+                    logger.info(
+                        f"Reached {successful_connections_in_row} successful connection to the cluster!"
+                    )
+                    break
+            except CommandFailed:
+                logger.exception("Failed to connect to the cluster!")
+                if insecure:
+                    logger.warning(
+                        "Waiting till ARO cluster responding OK!"
+                        f"Attempt: {attempts} out of {maximum_attempts}."
+                    )
+                else:
+                    logger.warning(
+                        "Waiting till TLS certificates will get propagated for ARO cluster!"
+                        f"Attempt: {attempts} out of {maximum_attempts}."
+                    )
+                time.sleep(5)
+                successful_connections = 0
+                if attempts >= maximum_attempts:
+                    raise
+
+    def create_network(self, cluster_name=None):
+        """
+        Create network related stuff for the cluster.
+        Each cluster gets its own VNET with cluster-specific name to allow multiple deployments.
+
+        Args:
+            cluster_name (str): Name of the cluster. If not provided, will use cluster_name from ENV_DATA.
+
+        """
+        # Get cluster name from parameter or ENV_DATA
+        if not cluster_name:
+            cluster_name = config.ENV_DATA.get("cluster_name")
+
+        # Create cluster-specific VNET name by appending cluster name
+        vnet = config.ENV_DATA.get("aro_vnet")
+        if not vnet:
+            vnet = f"{constants.ARO_VNET}-{cluster_name}"
+
+        vnet_address_prefixes = config.ENV_DATA.get(
+            "aro_vnet_address_prefixes", constants.ARO_VNET_ADDRESS_PREFIXES
+        )
+        master_subnet = config.ENV_DATA.get(
+            "aro_master_subnet", constants.ARO_MASTER_SUBNET
+        )
+        master_subnet_address_prefixes = config.ENV_DATA.get(
+            "aro_master_subnet_address_prefixes",
+            constants.ARO_MASTER_SUBNET_ADDRESS_PREFIXES,
+        )
+        worker_subnet = config.ENV_DATA.get(
+            "aro_worker_subnet", constants.ARO_WORKER_SUBNET
+        )
+        worker_subnet_address_prefixes = config.ENV_DATA.get(
+            "aro_worker_subnet_address_prefixes",
+            constants.ARO_WORKER_SUBNET_ADDRESS_PREFIXES,
+        )
+        resource_group = config.ENV_DATA.get("azure_base_domain_resource_group_name")
+
+        logger.info(
+            f"Creating VNET '{vnet}' with address prefixes '{vnet_address_prefixes}' "
+            f"for cluster '{cluster_name}'"
+        )
+        vnet_cmd = (
+            f"az network vnet create --resource-group {resource_group} --name {vnet} "
+            f"--address-prefixes {vnet_address_prefixes}"
+        )
+        exec_cmd(vnet_cmd)
+
+        for subnet, prefixes_address in {
+            master_subnet: master_subnet_address_prefixes,
+            worker_subnet: worker_subnet_address_prefixes,
+        }.items():
+            logger.info(
+                f"Creating subnet '{subnet}' with address prefixes '{prefixes_address}' in VNET '{vnet}'"
+            )
+            subnet_prefixes_cmd = (
+                f"az network vnet subnet create --resource-group {resource_group} --vnet-name {vnet} "
+                f"--name {subnet} --address-prefixes {prefixes_address} --service-endpoints Microsoft.ContainerRegistry"
+                " --disable-private-link-service-network-policies true"
+            )
+
+            exec_cmd(subnet_prefixes_cmd)
+
+        # Store the created VNET name in ENV_DATA for later use
+        config.ENV_DATA["aro_vnet"] = vnet
+
+        logger.info(
+            f"Successfully created network resources for cluster '{cluster_name}': "
+            f"VNET='{vnet}', Master subnet='{master_subnet}', Worker subnet='{worker_subnet}'"
+        )
+
+    def get_cluster_details(self, cluster_name):
+        """
+        Returns info about the cluster which is taken from the az command.
+
+        Args:
+            cluster_name (str): Cluster name.
+
+        Returns:
+            dict: Cluster details
+
+        """
+        resource_group = config.ENV_DATA.get("azure_base_domain_resource_group_name")
+        out = exec_cmd(
+            f"az aro show --name {cluster_name} --resource-group {resource_group} -o json"
+        ).stdout
+        return json.loads(out)
+
+    def write_kubeadmin_password(self, cluster_name, resource_group):
+        """
+        Get kubeadmin password for cluster
+        """
+        cmd = f"az aro list-credentials --name {cluster_name} --resource-group {resource_group}"
+        password = json.loads(exec_cmd(cmd).stdout)["kubeadminPassword"]
+        password_file = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["password_location"]
+        )
+        with open(password_file, "w+") as fd:
+            fd.write(password)
+
+    def set_dns_records(self, cluster_name, resource_group, base_domain):
+        """
+        Set DNS records for Azure ARO cluster.
+
+        Args:
+            cluster_name (str): Cluster name.
+            resource_group (str): Base resource group
+            base_domain (str): Base domain for the ARO Cluster
+
+        """
+        cmd = (
+            f"az aro show -n {cluster_name} -g {resource_group} --query "
+            f"'{{api:apiserverProfile.ip, ingress:ingressProfiles[0].ip}}' --only-show-errors"
+        )
+
+        def get_cluster_ips():
+            """Get cluster IPs and return them if both are available."""
+            data = json.loads(exec_cmd(cmd).stdout)
+            api_ip = data.get("api")
+            ingress_ip = data.get("ingress")
+
+            if api_ip and ingress_ip:
+                return {"api": api_ip, "*.apps": ingress_ip}
+
+            missing = []
+            if not api_ip:
+                missing.append("API")
+            if not ingress_ip:
+                missing.append("Ingress")
+            logger.info(f"Waiting for cluster IPs. Missing: {', '.join(missing)}")
+            return None
+
+        logger.info(f"Waiting for cluster IPs to be available for {cluster_name}")
+        dns_data = None
+        try:
+            for sample in TimeoutSampler(timeout=600, sleep=20, func=get_cluster_ips):
+                if sample:
+                    dns_data = sample
+                    logger.info(
+                        f"Cluster IPs available - API: {dns_data['api']}, "
+                        f"Ingress: {dns_data['*.apps']}"
+                    )
+                    break
+        except TimeoutExpiredError:
+            logger.error(
+                f"Timeout waiting for cluster IPs for {cluster_name} after 600 seconds"
+            )
+            raise
+
+        self.delete_dns_records(cluster_name, resource_group, base_domain)
+        for entry, ip in dns_data.items():
+            logger.info(f"Creating DNS record for {entry}.{cluster_name} -> {ip}")
+            create_dns_record_cmd = (
+                f"az network dns record-set a add-record -g {resource_group} "
+                f"-z {base_domain} -n {entry}.{cluster_name} -a {ip}"
+            )
+            exec_cmd(create_dns_record_cmd)
+
+    def delete_dns_records(self, cluster_name, resource_group, base_domain):
+        """
+        Delete DNS records for Azure ARO cluster
+
+        Args:
+            cluster_name (str): Cluster name.
+            resource_group (str): Base resource group
+            base_domain (str): Base domain for the ARO Cluster
+
+        """
+        for each in ["api", "*.apps"]:
+            logger.debug("Deleting DNS records")
+            delete_dns_record_cmd = (
+                f"az network dns record-set a delete -g {resource_group} -z "
+                f"{base_domain} --name {each}.{cluster_name} -y"
+            )
+            exec_cmd(delete_dns_record_cmd)
+
+    def get_kubeconfig(self, cluster_name, resource_group, path=None):
+        """
+        Export kubeconfig to provided path.
+
+        Args:
+            cluster_name (str): Cluster name or ID.
+            resource_group (str): Base resource group
+            path (str): Path where to create kubeconfig file.
+
+        """
+        if path:
+            path = os.path.expanduser(path)
+        else:
+            path = os.path.join(
+                config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+            )
+        base_path = os.path.dirname(path)
+        os.makedirs(base_path, exist_ok=True)
+        cmd = (
+            f"az rest --method post --url '/subscriptions/{self._subscription_id}/resourceGroups/{resource_group}/"
+            f"providers/Microsoft.RedHatOpenShift/openShiftClusters/{cluster_name}/"
+            "listAdminCredentials?api-version=2022-09-04'"
+        )
+        output_data = json.loads(exec_cmd(cmd).stdout)
+        encoded_kubeconfig_data = output_data["kubeconfig"]
+        decoded_kubeconfig_data = base64.b64decode(encoded_kubeconfig_data).decode(
+            "utf-8"
+        )
+        with open(path, "w+") as fd:
+            fd.write(decoded_kubeconfig_data)
+        kubeconfig_path = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+        )
+        config.RUN["kubeconfig"] = kubeconfig_path
+
+    def delete_azure_ad_app(self, cluster_name):
+        """
+        Delete the Azure AD application created by ARO deployment.
+
+        When 'az aro create' is executed, it automatically creates an Azure AD
+        application named 'aro-{cluster_name}'. This method cleans up that application.
+
+        Args:
+            cluster_name (str): Cluster name
+
+        """
+        app_name = f"aro-{cluster_name}"
+        logger.info(
+            f"Deleting Azure AD application '{app_name}' for cluster '{cluster_name}'"
+        )
+        try:
+            # First, try to find the app by display name
+            # NOTE: --display-name does substring matching, so we need to filter for exact match
+            list_cmd = f"az ad app list --display-name {app_name}"
+            result = exec_cmd(list_cmd, timeout=60)
+            apps = json.loads(result.stdout.strip())
+
+            # Filter for exact display name match to avoid deleting apps from clusters
+            # where one cluster name is a substring of another (e.g., "aro-j-002" vs "aro-j-002zm3c33")
+            matching_apps = [app for app in apps if app.get("displayName") == app_name]
+
+            if not matching_apps:
+                logger.info(
+                    f"Azure AD application '{app_name}' not found, may have been already deleted"
+                )
+                return
+
+            # Delete all exactly matching applications (there should typically be only one)
+            for app in matching_apps:
+                app_id = app.get("appId")
+                if app_id:
+                    logger.info(
+                        f"Deleting Azure AD application '{app_name}' with ID '{app_id}'"
+                    )
+                    delete_cmd = f"az ad app delete --id {app_id}"
+                    exec_cmd(delete_cmd, timeout=60)
+                    logger.info(f"Successfully deleted Azure AD application '{app_id}'")
+
+        except CommandFailed as e:
+            if any(
+                pattern in str(e).lower()
+                for pattern in [
+                    "was not found",
+                    "resourcenotfound",
+                    "does not exist",
+                    "could not be found",
+                    "no applications found",
+                ]
+            ):
+                logger.info(
+                    f"Azure AD application '{app_name}' not found, may have been already deleted"
+                )
+            else:
+                logger.warning(
+                    f"Failed to delete Azure AD application '{app_name}': {e}"
+                )
+                logger.info("Continuing with remaining cleanup operations")
+
+    def destroy_cluster(self, cluster_name, resource_group):
+        """
+        Destroy the cluster in Azure ARO.
+
+        Performs cleanup in the following order:
+        1. Delete DNS records
+        2. Delete ARO cluster
+        3. Delete cluster resource group (automatically done by az aro delete)
+        4. Delete VNET
+        5. Delete Azure AD application
+
+        All operations are idempotent and will not fail if resources don't exist.
+
+        Args:
+            cluster_name (str): Cluster name
+            resource_group (str): Azure resource group
+
+        """
+        base_domain = config.ENV_DATA["base_domain"]
+        cleanup_failed = False
+
+        # Delete DNS records
+        logger.info(f"Deleting DNS records for cluster '{cluster_name}'")
+        for dns_record in ["api", "*.apps"]:
+            cmd = (
+                f"az network dns record-set a delete -g {resource_group} -z "
+                f"{base_domain} --name {dns_record}.{cluster_name} -y"
+            )
+            result = exec_cmd(cmd, ignore_error=True)
+            if result.returncode != 0:
+                if any(
+                    pattern in result.stderr.decode().lower()
+                    for pattern in [
+                        "was not found",
+                        "resourcenotfound",
+                        "does not exist",
+                    ]
+                ):
+                    logger.info(
+                        f"DNS record '{dns_record}.{cluster_name}' not found, may have been already deleted"
+                    )
+                else:
+                    logger.warning(
+                        f"Failed to delete DNS record '{dns_record}.{cluster_name}': {result.stderr.decode()}"
+                    )
+                    cleanup_failed = True
+
+        # Delete ARO cluster
+        # Note: This also deletes the cluster resource group automatically
+        logger.info(f"Deleting ARO cluster '{cluster_name}'")
+        cmd = f"az aro delete --resource-group {resource_group} --name {cluster_name} --yes"
+        result = exec_cmd(cmd, timeout=3600, ignore_error=True)
+        if result.returncode != 0:
+            if any(
+                pattern in result.stderr.decode().lower()
+                for pattern in ["was not found", "resourcenotfound", "does not exist"]
+            ):
+                logger.info(
+                    f"ARO cluster '{cluster_name}' not found, may have been already deleted"
+                )
+            else:
+                logger.warning(
+                    f"Failed to delete ARO cluster '{cluster_name}': {result.stderr.decode()}"
+                )
+                cleanup_failed = True
+        else:
+            logger.info(f"Successfully deleted ARO cluster: {cluster_name}")
+
+        # Delete the VNET
+        vnet = config.ENV_DATA.get("aro_vnet")
+        if not vnet:
+            vnet = f"{constants.ARO_VNET}-{cluster_name}"
+
+        logger.info(f"Deleting VNET '{vnet}'")
+        cmd = f"az network vnet delete --resource-group {resource_group} --name {vnet}"
+        result = exec_cmd(cmd, timeout=600, ignore_error=True)
+        if result.returncode != 0:
+            if any(
+                pattern in result.stderr.decode().lower()
+                for pattern in ["was not found", "resourcenotfound", "does not exist"]
+            ):
+                logger.info(f"VNET '{vnet}' not found, may have been already deleted")
+            else:
+                logger.warning(
+                    f"Failed to delete VNET '{vnet}': {result.stderr.decode()}"
+                )
+                cleanup_failed = True
+        else:
+            logger.info(f"Successfully deleted VNET: {vnet}")
+
+        # Delete the Azure AD application created by ARO deployment
+        self.delete_azure_ad_app(cluster_name)
+
+        if not cleanup_failed:
+            logger.info(
+                f"Successfully cleaned up all resources for cluster '{cluster_name}'"
+            )
+
+        # Delete the service principal created for ARO cluster
+        self.delete_aro_service_principal(cluster_name)
+
+
+def azure_storageaccount_check():
+    """
+    Testing that Azure storage account, post deployment.
+
+    Testing for property 'allow_blob_public_access' to be 'false'
+    """
+    logger.info(
+        "Checking if the 'allow_blob_public_access property of storage account is 'false'"
+    )
+    azure = AZURE()
+    storage_account_names = azure.get_storage_accounts_names()
+    for storage in storage_account_names:
+        if "noobaaaccount" in storage:
+            property = azure.get_storage_account_properties(storage)
+            pat = r"'allow_blob_public_access': (True|False),"
+
+            from re import findall
+
+            match = findall(pat, property)
+
+            if match:
+                assert (
+                    match[0] == "False"
+                ), "Property allow_blob_public_access is set to True"
+            else:
+                assert False, "Property allow_blob_public_access not found."

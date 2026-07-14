@@ -1,0 +1,22 @@
+spec:
+  storageDeviceSets:
+    - config: {}
+      count: 3  # Default value
+      dataPVCTemplate:
+        metadata: {}
+        spec:
+          accessModes:
+            - ReadWriteOnce  # Default value
+          resources:
+            requests:
+              storage: "1"
+          storageClassName: ssd2  # Default value
+          volumeMode: Block
+        status: {}
+      deviceClass: ssd2  # Default value
+      encrypted: false
+      name: ssd2  # Default value
+      placement: {}
+      preparePlacement: {}
+      replica: 1  # Default value
+      resources: {}

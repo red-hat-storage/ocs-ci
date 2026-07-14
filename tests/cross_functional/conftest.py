@@ -1,0 +1,2967 @@
+import logging
+import boto3
+import pytest
+import time
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+from subprocess import TimeoutExpired
+
+from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
+from ocs_ci.helpers.helpers import (
+    run_cmd_verify_cli_output,
+    create_unique_resource_name,
+)
+from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
+from ocs_ci.framework import config
+from ocs_ci.helpers.e2e_helpers import (
+    create_muliple_types_provider_obcs,
+    validate_mcg_bucket_replicaton,
+    validate_mcg_caching,
+    validate_mcg_object_expiration,
+    validate_rgw_kafka_notification,
+    validate_mcg_nsfs_feature,
+)
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.amq import AMQ
+from ocs_ci.ocs.bucket_utils import (
+    compare_object_checksums_between_bucket_and_local,
+    compare_directory,
+    patch_replication_policy_to_bucket,
+    random_object_round_trip_verification,
+    sync_object_directory,
+    wait_for_cache,
+    write_random_test_objects_to_bucket,
+    retrieve_verification_mode,
+    bulk_s3_put_bucket_lifecycle_config,
+    list_objects_from_bucket,
+    verify_s3_object_integrity,
+)
+
+from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
+from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS
+from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.ocs.resources.objectbucket import OBC
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pod import (
+    get_noobaa_pods,
+    get_pod_logs,
+)
+from ocs_ci.ocs.resources.pvc import get_pvc_objs
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.helpers.helpers import (
+    wait_for_resource_state,
+    modify_statefulset_replica_count,
+    validate_pv_delete,
+    default_storage_class,
+)
+from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
+from ocs_ci.utility.utils import (
+    clone_notify,
+    TimeoutSampler,
+)
+
+from ocs_ci.resiliency.resiliency_workload import workload_object
+from ocs_ci.resiliency.platform_stress import PlatformStress
+from ocs_ci.ocs.node import get_nodes
+from ocs_ci.workloads.vdbench import VdbenchWorkload
+from ocs_ci.helpers.vdbench_helpers import create_temp_config_file
+
+
+logger = logging.getLogger(__name__)
+
+
+def restore_mcg_reconcilation(ocs_storagecluster_obj):
+    params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "manage"}}}'
+    ocs_storagecluster_obj.patch(
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        params=params,
+        format_type="merge",
+    )
+
+
+def start_noobaa_services(noobaa_endpoint_dc, noobaa_operator_dc):
+    if noobaa_endpoint_dc.get()["spec"]["replicas"] == 0:
+        noobaa_endpoint_dc.scale(replicas=1)
+    if noobaa_operator_dc.get()["spec"]["replicas"] == 0:
+        noobaa_operator_dc.scale(replicas=1)
+    modify_statefulset_replica_count(
+        statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=1
+    )
+
+
+@pytest.fixture()
+def noobaa_db_backup_and_recovery_locally(
+    request,
+    mcg_obj,
+    awscli_pod,
+    bucket_factory,
+    test_directory_setup,
+    noobaa_db_recovery_patch,
+):
+    """
+    Fixture factory for CNPG-based NooBaa DB backup and recovery testing locally.
+
+    Backup procedure:
+        1. Create an OBC (Object Bucket Claim) and write test data to it
+        2. Wait for async backup from primary to secondary DB instance
+        3. Create an on-demand backup using NooBaa CLI
+        4. Wait for backup completion
+
+    Recovery procedure:
+        1. Add recovery configuration to OCS Storage cluster CR
+        2. Validate recovery info is synced between ocs-storagecluster and noobaa CR
+        3. Delete the Cluster CR to trigger automatic recovery
+        4. Verify NooBaa pods are running after recovery
+        5. Validate bucket health and data integrity after recovery
+
+    """
+
+    # Store backup_name in a mutable container to share between factory and finalizer
+    backup_info = {"backup_name": None}
+
+    def factory(
+        mcg_obj=mcg_obj,
+        awscli_pod=awscli_pod,
+        bucket_factory=bucket_factory,
+        test_directory_setup=test_directory_setup,
+        noobaa_db_recovery_patch=noobaa_db_recovery_patch,
+    ):
+
+        # Create OBC and write data
+        obj_download_path = test_directory_setup.result_dir
+        bucket_obj = bucket_factory(1)[0]
+        bucket_name = bucket_obj.name
+        full_object_path = f"s3://{bucket_name}"
+
+        sync_object_directory(
+            awscli_pod, constants.AWSCLI_TEST_OBJ_DIR, full_object_path, mcg_obj
+        )
+        # Adding hard coded sleep to trigger async backup from primary to Secondary DB
+        time.sleep(60)
+
+        objs_in_bucket = list_objects_from_bucket(
+            pod_obj=awscli_pod,
+            target=bucket_name,
+            s3_obj=mcg_obj,
+            recursive=True,
+        )
+
+        ocs_storage_obj = OCP(
+            kind="storagecluster",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+        )
+        noobaa_obj = OCP(
+            kind="noobaa",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
+        )
+
+        # Run noobaa cli command to create on demand backup and validate backup is getting created or not
+        logger.info("Creating on-demand backup using NooBaa CLI")
+        backup_name = create_unique_resource_name("noobaa-cli", "backup")
+        backup_info["backup_name"] = backup_name
+
+        mcg_obj.exec_mcg_cmd(
+            cmd=f"system db-backup --name {backup_name}",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            use_yes=True,
+            ignore_error=False,
+        )
+        logger.info("On-demand backup command executed")
+
+        # Get on-demand backup
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+
+        # Wait for on-demand backup to complete
+        backup_obj.wait_for_resource(
+            "completed",
+            resource_name=backup_name,
+            column="PHASE",
+            timeout=1200,
+            sleep=60,
+        )
+        logger.info(f"On-demand backup {backup_name} completed successfully")
+
+        # Add recovery info in OCS Storage cluster CR with backup snapshot info generated in step #3
+
+        noobaa_db_recovery_patch(backup_name)
+        ocs_storage_obj.reload_data()
+        noobaa_obj.reload_data()
+        info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+            "multiCloudGateway"
+        ]["dbRecovery"]
+        info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbRecovery"]
+        assert (
+            info_from_ocs_storage == info_from_noobaa_cr
+        ), "Mismatch in dbRecovery info between ocs-storagecluster and noobaa CR"
+
+        logger.info("DB recovery configuration added to OCS Storage cluster CR")
+
+        # Delete Cluster CR and check automatic recovery is getting triggered
+        db_cluster_name = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster", "Cluster"
+        )[0]
+        cluster_obj = OCP(
+            kind="Cluster", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        cluster_obj.delete(resource_name=db_cluster_name, force=True)
+        cluster_obj.wait_for_delete(resource_name=db_cluster_name)
+
+        # Validate noobaa pods are up and running after recovery
+        noobaa_pods = get_noobaa_pods()
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_count=len(noobaa_pods),
+            selector=constants.NOOBAA_APP_LABEL,
+            timeout=900,
+        )
+        logger.info("NooBaa pods are up and running after recovery")
+
+        # Verify Bucket health after recovery process
+        bucket_obj.verify_health(timeout=600)
+
+        # Validate data is present in OBC after recovery
+        sync_object_directory(
+            podobj=awscli_pod,
+            src=full_object_path,
+            target=obj_download_path,
+            s3_obj=mcg_obj,
+        )
+        logger.info(f"Objects are downloaded to the dir {obj_download_path}")
+
+        for obj in objs_in_bucket:
+            assert verify_s3_object_integrity(
+                original_object_path=f"{constants.AWSCLI_TEST_OBJ_DIR}/{obj}",
+                result_object_path=f"{obj_download_path}/{obj}",
+                awscli_pod=awscli_pod,
+            ), "Mismatch in Checksum between original object and object downloaded after recovery"
+        logger.info(
+            "Cluster recovered successfully using CLI-created backup and validated data after recovery"
+        )
+
+    def finalizer():
+        """
+        removes the DB backup and recovery information from storage cluster CR
+        """
+        if backup_info["backup_name"] is None:
+            logger.info("No backup was created, skipping cleanup")
+            return
+
+        backup_name = backup_info["backup_name"]
+        logger.info("Removing created backups now")
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+        backup_names = get_all_resource_of_kind_containing_string(backup_name, "Backup")
+        for bkp_name in backup_names:
+            backup_obj.delete(resource_name=bkp_name, force=True)
+            backup_obj.wait_for_delete(resource_name=bkp_name)
+        logger.info("Backups created by CNPG operator Removed successfully")
+
+        logger.info("Removing created volumesnapshots now")
+        volumesnapshot_obj = OCP(
+            kind="volumesnapshot", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        volumesnapshot_names = get_all_resource_of_kind_containing_string(
+            backup_name, "volumesnapshot"
+        )
+        for volumesnapshot_name in volumesnapshot_names:
+            volumesnapshot_obj.delete(resource_name=volumesnapshot_name, force=True)
+            volumesnapshot_obj.wait_for_delete(resource_name=volumesnapshot_name)
+        logger.info("volumesnapshots created by CNPG operator Removed successfully")
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_backup_locally(request, mcg_obj):
+    """
+    Noobaa db backup locally
+
+    """
+
+    # Store backup_name in a mutable container to share between factory and finalizer
+    backup_info = {"backup_name": None}
+
+    def factory(mcg_obj=mcg_obj):
+
+        # add in testcase to wait for 1 minute for async backup to trigger between primary and secondary db
+        ocs_storage_obj = OCP(
+            kind="storagecluster",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+        )
+        noobaa_obj = OCP(
+            kind="noobaa",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
+        )
+
+        # Run noobaa cli command to create on demand backup and validate backup is getting created or not
+        logger.info("Creating on-demand backup using NooBaa CLI")
+        backup_name = create_unique_resource_name("noobaa-cli", "backup")
+        backup_info["backup_name"] = backup_name
+        mcg_obj.exec_mcg_cmd(
+            cmd=f"system db-backup --name {backup_name}",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            use_yes=True,
+            ignore_error=False,
+        )
+        logger.info("On-demand backup command executed")
+
+        # Get on-demand backup
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+
+        # Wait for on-demand backup to complete
+        backup_obj.wait_for_resource(
+            "completed",
+            resource_name=backup_name,
+            column="PHASE",
+            timeout=300,
+        )
+        logger.info(f"On-demand backup {backup_name} completed successfully")
+
+        return ocs_storage_obj, backup_name, noobaa_obj
+
+    def finalizer():
+        if backup_info["backup_name"] is None:
+            logger.info("No backup was created, skipping cleanup")
+            return
+
+        backup_name = backup_info["backup_name"]
+        logger.info("Removing created backups now")
+        backup_obj = OCP(kind="Backup", namespace=config.ENV_DATA["cluster_namespace"])
+        backup_names = get_all_resource_of_kind_containing_string(backup_name, "Backup")
+        for bkp_name in backup_names:
+            backup_obj.delete(resource_name=bkp_name, force=True)
+            backup_obj.wait_for_delete(resource_name=bkp_name)
+        logger.info("Backups created by CNPG operator Removed successfully")
+
+        logger.info("Removing created volumesnapshots now")
+        volumesnapshot_obj = OCP(
+            kind="volumesnapshot", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        volumesnapshot_names = get_all_resource_of_kind_containing_string(
+            backup_name, "volumesnapshot"
+        )
+        for volumesnapshot_name in volumesnapshot_names:
+            volumesnapshot_obj.delete(resource_name=volumesnapshot_name, force=True)
+            volumesnapshot_obj.wait_for_delete(resource_name=volumesnapshot_name)
+        logger.info("volumesnapshots created by CNPG operator Removed successfully")
+
+    request.addfinalizer(finalizer)
+
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_recovery_from_local(request, noobaa_db_recovery_patch):
+
+    def factory(
+        ocs_storage_obj,
+        backup_name,
+        noobaa_obj,
+        noobaa_db_recovery_patch=noobaa_db_recovery_patch,
+    ):
+
+        noobaa_db_recovery_patch(backup_name)
+        ocs_storage_obj.reload_data()
+        noobaa_obj.reload_data()
+        info_from_ocs_storage = ocs_storage_obj.get("ocs-storagecluster")["spec"][
+            "multiCloudGateway"
+        ]["dbRecovery"]
+        info_from_noobaa_cr = noobaa_obj.get("noobaa")["spec"]["dbSpec"]["dbRecovery"]
+        assert (
+            info_from_ocs_storage == info_from_noobaa_cr
+        ), "Mismatch in dbRecovery info between ocs-storagecluster and noobaa CR"
+
+        logger.info("DB recovery configuration added to OCS Storage cluster CR")
+
+        # Delete Cluster CR and check automatic recovery is getting triggered
+        db_cluster_name = get_all_resource_of_kind_containing_string(
+            "noobaa-db-pg-cluster", "Cluster"
+        )[0]
+        cluster_obj = OCP(
+            kind="Cluster", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        cluster_obj.delete(resource_name=db_cluster_name, force=True)
+        cluster_obj.wait_for_delete(resource_name=db_cluster_name)
+
+        # Validate noobaa pods are up and running after recovery
+        noobaa_pods = get_noobaa_pods()
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_count=len(noobaa_pods),
+            selector=constants.NOOBAA_APP_LABEL,
+            timeout=900,
+        )
+        logger.info("NooBaa pods are up and running after recovery")
+
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_backup(request, snapshot_factory):
+    restore_pvc_objs = []
+
+    def factory(noobaa_pvc_obj):
+
+        # Take snapshot db-noobaa-db-0 PVC
+        logger.info(f"Creating snapshot of the {noobaa_pvc_obj[0].name} PVC")
+        snap_obj = snapshot_factory(
+            pvc_obj=noobaa_pvc_obj[0],
+            wait=True,
+            snapshot_name=f"{noobaa_pvc_obj[0].name}-snapshot",
+        )
+        logger.info(f"Successfully created snapshot {snap_obj.name} and in Ready state")
+
+        # Restore it to PVC
+        logger.info(f"Restoring snapshot {snap_obj.name} to create new PVC")
+        sc_name = noobaa_pvc_obj[0].get().get("spec").get("storageClassName")
+        pvc_size = (
+            noobaa_pvc_obj[0]
+            .get()
+            .get("spec")
+            .get("resources")
+            .get("requests")
+            .get("storage")
+        )
+        restore_pvc_obj = pvc.create_restore_pvc(
+            sc_name=sc_name,
+            snap_name=snap_obj.name,
+            namespace=snap_obj.namespace,
+            size=pvc_size,
+            pvc_name=f"{snap_obj.name}-restore",
+            volume_mode=snap_obj.parent_volume_mode,
+            access_mode=snap_obj.parent_access_mode,
+        )
+        restore_pvc_objs.append(restore_pvc_obj)
+        wait_for_resource_state(restore_pvc_obj, constants.STATUS_BOUND)
+        restore_pvc_obj.reload()
+        logger.info(
+            f"Succeesfuly created PVC {restore_pvc_obj.name} "
+            f"from snapshot {snap_obj.name}"
+        )
+        return restore_pvc_objs, snap_obj
+
+    def teardown():
+        """
+        Teardown code to delete the restore pvc objects
+
+        """
+        for pvc_obj in restore_pvc_objs:
+            if pvc_obj.ocp.get(resource_name=pvc_obj.name, dont_raise=True):
+                pvc_obj.delete()
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_recovery_from_backup(request):
+    def factory(snap_obj, noobaa_pvc_obj, noobaa_pods):
+        noobaa_pv_name = noobaa_pvc_obj[0].get("spec").get("spec").get("volumeName")
+
+        # Scale down the statefulset noobaa-db
+        modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=0
+        ), f"Failed to scale down the statefulset {constants.NOOBAA_DB_STATEFULSET}"
+
+        # Get the noobaa-db PVC
+        pvc_obj = OCP(
+            kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        noobaa_pvc_yaml = pvc_obj.get(resource_name=noobaa_pvc_obj[0].name)
+
+        # Get the restored noobaa PVC and
+        # change the parameter persistentVolumeReclaimPolicy to Retain
+        restored_noobaa_pvc_obj = pvc.get_pvc_objs(
+            pvc_names=[f"{snap_obj.name}-restore"]
+        )
+        restored_noobaa_pv_name = (
+            restored_noobaa_pvc_obj[0].get("spec").get("spec").get("volumeName")
+        )
+        pv_obj = OCP(kind=constants.PV, namespace=config.ENV_DATA["cluster_namespace"])
+        params = '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+        assert pv_obj.patch(resource_name=restored_noobaa_pv_name, params=params), (
+            "Failed to change the parameter persistentVolumeReclaimPolicy"
+            f" to Retain {restored_noobaa_pv_name}"
+        )
+
+        # Delete both PVCs
+        pvc.delete_pvcs(pvc_objs=[noobaa_pvc_obj[0], restored_noobaa_pvc_obj[0]])
+
+        # Validate original claim db-noobaa-db-0 removed
+        assert validate_pv_delete(
+            pv_name=noobaa_pv_name
+        ), f"PV not deleted, still exist {noobaa_pv_name}"
+
+        # Validate PV for claim db-noobaa-db-0-snapshot-restore is in Released state
+        pv_obj.wait_for_resource(
+            condition=constants.STATUS_RELEASED, resource_name=restored_noobaa_pv_name
+        )
+
+        # Edit again restore PV and remove the claimRef section
+        logger.info(f"Remove the claimRef section from PVC {restored_noobaa_pv_name}")
+        params = '[{"op": "remove", "path": "/spec/claimRef"}]'
+        pv_obj.patch(
+            resource_name=restored_noobaa_pv_name, params=params, format_type="json"
+        )
+        logger.info(
+            f"Successfully removed claimRef section from PVC {restored_noobaa_pv_name}"
+        )
+
+        # Validate PV is in Available state
+        pv_obj.wait_for_resource(
+            condition=constants.STATUS_AVAILABLE, resource_name=restored_noobaa_pv_name
+        )
+
+        # Edit the yaml db-noobaa-db-0.yaml and change the
+        # setting volumeName to restored PVC
+        noobaa_pvc_yaml["spec"]["volumeName"] = restored_noobaa_pv_name
+        noobaa_pvc_yaml = OCS(**noobaa_pvc_yaml)
+        noobaa_pvc_yaml.create()
+
+        # Validate noobaa PVC is in bound state
+        pvc_obj.wait_for_resource(
+            condition=constants.STATUS_BOUND,
+            resource_name=noobaa_pvc_obj[0].name,
+            timeout=120,
+        )
+
+        # Scale up the statefulset again
+        assert modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=1
+        ), f"Failed to scale up the statefulset {constants.NOOBAA_DB_STATEFULSET}"
+
+        # Validate noobaa pod is up and running
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_count=len(noobaa_pods),
+            selector=constants.NOOBAA_APP_LABEL,
+        )
+
+        # Change the parameter persistentVolumeReclaimPolicy to Delete again
+        params = '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+        assert pv_obj.patch(resource_name=restored_noobaa_pv_name, params=params), (
+            "Failed to change the parameter persistentVolumeReclaimPolicy"
+            f" to Delete {restored_noobaa_pv_name}"
+        )
+        logger.info(
+            "Changed the parameter persistentVolumeReclaimPolicy to Delete again"
+        )
+
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_backup_and_recovery(
+    request, snapshot_factory, noobaa_db_backup, noobaa_db_recovery_from_backup
+):
+    """
+    Verify noobaa backup and recovery
+
+    1. Take snapshot db-noobaa-db-0 PVC and retore it to PVC
+    2. Scale down the statefulset noobaa-db
+    3. Get the yaml of the current PVC, db-noobaa-db-0 and
+       change the parameter persistentVolumeReclaimPolicy to Retain for restored PVC
+    4. Delete both PVCs, the PV for the original claim db-noobaa-db-0 will be removed.
+       The PV for claim db-noobaa-db-0-snapshot-restore will move to ‘Released’
+    5. Edit again restore PV and remove the claimRef section.
+       The volume will transition to Available.
+    6. Edit the yaml db-noobaa-db-0.yaml and change the setting volumeName to restored PVC.
+    7. Scale up the stateful set again and the pod should be running
+
+    """
+    restore_pvc_objs = []
+
+    def factory(snapshot_factory=snapshot_factory):
+        nonlocal restore_pvc_objs
+        # Get noobaa pods before execution
+        noobaa_pods = pod.get_noobaa_pods()
+
+        # Get noobaa PVC before execution
+        noobaa_pvc_obj = pvc.get_pvc_objs(pvc_names=["db-noobaa-db-pg-0"])
+
+        restore_pvc_objs, snap_obj = noobaa_db_backup(noobaa_pvc_obj)
+        noobaa_db_recovery_from_backup(snap_obj, noobaa_pvc_obj, noobaa_pods)
+
+    def finalizer():
+        # Get the statefulset replica count
+        sst_obj = OCP(
+            kind=constants.STATEFULSET,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        noobaa_db_sst_obj = sst_obj.get(resource_name=constants.NOOBAA_DB_STATEFULSET)
+        if noobaa_db_sst_obj["spec"]["replicas"] != 1:
+            modify_statefulset_replica_count(
+                statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=1
+            ), f"Failed to scale up the statefulset {constants.NOOBAA_DB_STATEFULSET}"
+
+        try:
+            for pvc_obj in restore_pvc_objs:
+                pvc_obj.delete()
+        except CommandFailed as ex:
+            if f'"{restore_pvc_objs[0].name}" not found' not in str(ex):
+                raise ex
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def setup_mcg_system(
+    request,
+    awscli_pod_session,
+    mcg_obj_session,
+    bucket_factory,
+    cld_mgr,
+    test_directory_setup,
+):
+    # E2E TODO: Have a cluster with FIPS, KMS for RGW and Hugepages enabled
+    # E2E TODO: Please add the necessary skips to verify that all prerequisites are met
+
+    def mcg_system_setup(bucket_amount=5, object_amount=10):
+        # Create standard MCG buckets
+        test_buckets = bucket_factory(
+            amount=bucket_amount,
+            interface="CLI",
+        )
+
+        uploaded_objects_dir = test_directory_setup.origin_dir
+        downloaded_obejcts_dir = test_directory_setup.result_dir
+
+        test_buckets_pattern = "RandomObject-"
+        first_bidirectional_pattern = "FirstBidi-"
+        second_bidirectional_pattern = "SecondBidi-"
+        cache_pattern = "Cache-"
+
+        # Perform a round-trip object verification -
+        # 1. Generate random objects in uploaded_objects_dir
+        # 2. Upload the objects to the bucket
+        # 3. Download the objects from the bucket
+        # 4. Compare the object checksums in downloaded_obejcts_dir
+        # with the ones in uploaded_objects_dir
+        for count, bucket in enumerate(test_buckets):
+            assert random_object_round_trip_verification(
+                io_pod=awscli_pod_session,
+                bucket_name=bucket.name,
+                upload_dir=uploaded_objects_dir + f"Bucket{count}",
+                download_dir=downloaded_obejcts_dir + f"Bucket{count}",
+                amount=object_amount,
+                pattern=test_buckets_pattern,
+                mcg_obj=mcg_obj_session,
+            ), "Some or all written objects were not found in the list of downloaded objects"
+
+        # E2E TODO: Create RGW kafka notification & see the objects are notified to kafka
+
+        # Create two MCG buckets with a bidirectional replication policy
+        bucketclass = {
+            "interface": "OC",
+            "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+        }
+        first_bidi_bucket_name = bucket_factory(bucketclass=bucketclass)[0].name
+        replication_policy = ("basic-replication-rule", first_bidi_bucket_name, None)
+        second_bidi_bucket_name = bucket_factory(
+            1, bucketclass=bucketclass, replication_policy=replication_policy
+        )[0].name
+        patch_replication_policy_to_bucket(
+            first_bidi_bucket_name, "basic-replication-rule-2", second_bidi_bucket_name
+        )
+
+        bidi_uploaded_objs_dir_1 = uploaded_objects_dir + "/bidi_1"
+        bidi_uploaded_objs_dir_2 = uploaded_objects_dir + "/bidi_2"
+        bidi_downloaded_objs_dir_1 = downloaded_obejcts_dir + "/bidi_1"
+        bidi_downloaded_objs_dir_2 = downloaded_obejcts_dir + "/bidi_2"
+
+        # Verify replication is working as expected by performing a two-way round-trip object verification
+        random_object_round_trip_verification(
+            io_pod=awscli_pod_session,
+            bucket_name=first_bidi_bucket_name,
+            upload_dir=bidi_uploaded_objs_dir_1,
+            download_dir=bidi_downloaded_objs_dir_1,
+            amount=object_amount,
+            pattern=first_bidirectional_pattern,
+            wait_for_replication=True,
+            second_bucket_name=second_bidi_bucket_name,
+            mcg_obj=mcg_obj_session,
+        )
+
+        random_object_round_trip_verification(
+            io_pod=awscli_pod_session,
+            bucket_name=second_bidi_bucket_name,
+            upload_dir=bidi_uploaded_objs_dir_2,
+            download_dir=bidi_downloaded_objs_dir_2,
+            amount=object_amount,
+            pattern=second_bidirectional_pattern,
+            wait_for_replication=True,
+            second_bucket_name=first_bidi_bucket_name,
+            mcg_obj=mcg_obj_session,
+        )
+
+        # Create a cache bucket
+        cache_bucketclass = {
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Cache",
+                "ttl": 3600000,
+                "namespacestore_dict": {
+                    "aws": [(1, "eu-central-1")],
+                },
+            },
+            "placement_policy": {
+                "tiers": [{"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}]
+            },
+        }
+        cache_bucket = bucket_factory(bucketclass=cache_bucketclass)[0]
+
+        cache_uploaded_objs_dir = uploaded_objects_dir + "/cache"
+        cache_uploaded_objs_dir_2 = uploaded_objects_dir + "/cache_2"
+        cache_downloaded_objs_dir = downloaded_obejcts_dir + "/cache"
+        underlying_bucket_name = cache_bucket.bucketclass.namespacestores[0].uls_name
+
+        # Upload a random object to the bucket
+        objs_written_to_cache_bucket = write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            cache_bucket.name,
+            cache_uploaded_objs_dir,
+            pattern=cache_pattern,
+            mcg_obj=mcg_obj_session,
+        )
+        wait_for_cache(
+            mcg_obj_session,
+            cache_bucket.name,
+            objs_written_to_cache_bucket,
+            timeout=600,
+        )
+        # Write a random, larger object directly to the underlying storage of the bucket
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            underlying_bucket_name,
+            cache_uploaded_objs_dir_2,
+            pattern=cache_pattern,
+            s3_creds=cld_mgr.aws_client.nss_creds,
+        )
+        # Download the object from the cache bucket
+        sync_object_directory(
+            awscli_pod_session,
+            f"s3://{cache_bucket.name}",
+            cache_downloaded_objs_dir,
+            mcg_obj_session,
+        )
+        # Make sure the cached object was returned, and not the one that was written to the underlying storage
+        assert compare_directory(
+            awscli_pod_session,
+            cache_uploaded_objs_dir,
+            cache_downloaded_objs_dir,
+            amount=1,
+            pattern=cache_pattern,
+        ), "The uploaded and downloaded cached objects have different checksums"
+        assert (
+            compare_directory(
+                awscli_pod_session,
+                cache_uploaded_objs_dir_2,
+                cache_downloaded_objs_dir,
+                amount=1,
+                pattern=cache_pattern,
+            )
+            is False
+        ), "The cached object was replaced by the new one before the TTL has expired"
+        return {
+            "test_buckets": test_buckets,
+            "test_buckets_upload_dir": uploaded_objects_dir,
+            "object_amount": object_amount,
+            "test_buckets_pattern": test_buckets_pattern,
+            "first_bidi_bucket_name": first_bidi_bucket_name,
+            "bidi_downloaded_objs_dir_2": bidi_downloaded_objs_dir_2,
+            "first_bidirectional_pattern": first_bidirectional_pattern,
+            "second_bidi_bucket_name": second_bidi_bucket_name,
+            "second_bidirectional_pattern": second_bidirectional_pattern,
+            "cache_bucket_name": cache_bucket.name,
+            "cache_pattern": cache_pattern,
+            "cache_downloaded_objs_dir": cache_downloaded_objs_dir,
+        }
+
+    return mcg_system_setup
+
+
+@pytest.fixture()
+def verify_mcg_system_recovery(
+    request,
+    awscli_pod_session,
+    mcg_obj_session,
+):
+    def mcg_system_recovery_check(mcg_sys_setup_dict):
+        # Giving the dict an alias for readability
+        a = mcg_sys_setup_dict
+
+        # Verify the integrity of all objects in all buckets post-recovery
+        for count, bucket in enumerate(a["test_buckets"]):
+            compare_object_checksums_between_bucket_and_local(
+                awscli_pod_session,
+                mcg_obj_session,
+                bucket.name,
+                a["test_buckets_upload_dir"] + f"Bucket{count}",
+                amount=a["object_amount"],
+                pattern=a["test_buckets_pattern"],
+            )
+
+        compare_object_checksums_between_bucket_and_local(
+            awscli_pod_session,
+            mcg_obj_session,
+            a["first_bidi_bucket_name"],
+            a["bidi_downloaded_objs_dir_2"],
+            amount=a["object_amount"],
+            pattern=a["first_bidirectional_pattern"],
+        )
+        compare_object_checksums_between_bucket_and_local(
+            awscli_pod_session,
+            mcg_obj_session,
+            a["second_bidi_bucket_name"],
+            a["bidi_downloaded_objs_dir_2"],
+            amount=a["object_amount"],
+            pattern=a["second_bidirectional_pattern"],
+        )
+
+        compare_object_checksums_between_bucket_and_local(
+            awscli_pod_session,
+            mcg_obj_session,
+            a["cache_bucket_name"],
+            a["cache_downloaded_objs_dir"],
+            pattern=a["cache_pattern"],
+        )
+
+    return mcg_system_recovery_check
+
+
+@pytest.fixture(scope="class")
+def benchmark_fio_factory_fixture(request):
+    bmo_fio_obj = BenchmarkOperatorFIO()
+
+    def factory(
+        total_size=2,
+        jobs="read",
+        read_runtime=30,
+        bs="4096KiB",
+        storageclass=constants.DEFAULT_STORAGECLASS_RBD,
+        timeout_completed=2400,
+    ):
+        bmo_fio_obj.setup_benchmark_fio(
+            total_size=total_size,
+            jobs=jobs,
+            read_runtime=read_runtime,
+            bs=bs,
+            storageclass=storageclass,
+            timeout_completed=timeout_completed,
+        )
+        bmo_fio_obj.run_fio_benchmark_operator()
+
+    def finalizer():
+        """
+        Clean up
+
+        """
+        # Clean up
+        bmo_fio_obj.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+def pytest_collection_modifyitems(items):
+    """
+    A pytest hook to
+
+    Args:
+        items: list of collected tests
+
+    """
+    skip_list = [
+        "test_create_scale_pods_and_pvcs_using_kube_job_ms",
+        "test_create_scale_pods_and_pvcs_with_ms_consumer",
+        "test_create_scale_pods_and_pvcs_with_ms_consumers",
+        "test_create_and_delete_scale_pods_and_pvcs_with_ms_consumers",
+    ]
+    if not config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
+        for item in items.copy():
+            if str(item.name) in skip_list:
+                logger.debug(
+                    f"Test {item} is removed from the collected items"
+                    f" since it requires Managed service platform"
+                )
+                items.remove(item)
+
+
+@pytest.fixture()
+def setup_mcg_replication_feature_buckets(request, bucket_factory):
+    """
+    This fixture does the setup for validating MCG replication
+    feature
+
+    """
+
+    def factory(number_of_buckets, bucket_types, cloud_providers):
+        """
+        factory function implementing the fixture
+
+        Args:
+            number_of_buckets (int): number of buckets
+            bucket_types (dict): dictionary mapping bucket types and
+                configuration
+            cloud_providers (dict): dictionary mapping cloud provider
+                and configuration
+
+        Returns:
+            Dict: source bucket to target bucket map
+
+        """
+        all_buckets = create_muliple_types_provider_obcs(
+            number_of_buckets, bucket_types, cloud_providers, bucket_factory
+        )
+
+        if len(all_buckets) % 2 != 0:
+            all_buckets[len(all_buckets) - 1].delete()
+            all_buckets.remove(all_buckets[len(all_buckets) - 1])
+
+        source_target_map = dict()
+        index = 0
+        for i in range(len(all_buckets) // 2):
+            source_target_map[all_buckets[index]] = all_buckets[index + 1]
+            patch_replication_policy_to_bucket(
+                all_buckets[index].name,
+                "basic-replication-rule-1",
+                all_buckets[index + 1].name,
+                prefix="bidi_1",
+            )
+            patch_replication_policy_to_bucket(
+                all_buckets[index + 1].name,
+                "basic-replication-rule-2",
+                all_buckets[index].name,
+                prefix="bidi_2",
+            )
+
+            index += 2
+
+        logger.info(
+            f"Buckets created under replication setup: {[bucket.name for bucket in all_buckets]}"
+        )
+        return all_buckets, source_target_map
+
+    return factory
+
+
+@pytest.fixture()
+def setup_mcg_caching_feature_buckets(request, bucket_factory):
+    """
+    This fixture does the setup for Noobaa cache buckets validation
+
+    """
+
+    def factory(number_of_buckets, bucket_types, cloud_providers):
+        """
+        factory function implementing fixture
+
+        Args:
+            number_of_buckets (int): number of buckets
+            bucket_types (dict): dictionary mapping bucket types and
+                configuration
+            cloud_providers (dict): dictionary mapping cloud provider
+                and configuration
+
+        Returns:
+            List: List of cache buckets
+
+        """
+        cache_type = dict()
+        cache_type["cache"] = bucket_types["cache"]
+        all_buckets = create_muliple_types_provider_obcs(
+            number_of_buckets, cache_type, cloud_providers, bucket_factory
+        )
+        logger.info(
+            f"These are the cache buckets created: {[bucket.name for bucket in all_buckets]}"
+        )
+        return all_buckets
+
+    return factory
+
+
+@pytest.fixture()
+def setup_mcg_expiration_feature_buckets(
+    request, bucket_factory, mcg_obj, reduce_expiration_interval
+):
+    """
+    This fixture does the setup for validating MCG replication
+    feature
+
+    """
+
+    def factory(number_of_buckets, bucket_types, cloud_providers):
+        """
+        Factory function implementing the fixture
+
+        Args:
+            number_of_buckets (int): number of buckets
+            bucket_types (dict): dictionary mapping bucket types and
+                configuration
+            cloud_providers (dict): dictionary mapping cloud provider
+                and configuration
+
+        Returns:
+            List: list of buckets
+
+        """
+        type = dict()
+        type["data"] = bucket_types["data"]
+        reduce_expiration_interval(interval=1)
+        logger.info("Changed noobaa lifecycle interval to 1 minute")
+
+        expiration_rule = LifecyclePolicy(ExpirationRule(days=1))
+        all_buckets = create_muliple_types_provider_obcs(
+            number_of_buckets, type, cloud_providers, bucket_factory
+        )
+
+        bulk_s3_put_bucket_lifecycle_config(
+            mcg_obj, all_buckets, expiration_rule.as_dict()
+        )
+
+        logger.info(
+            f"Buckets created under expiration setup: {[bucket.name for bucket in all_buckets]}"
+        )
+        return all_buckets
+
+    return factory
+
+
+@pytest.fixture()
+def setup_mcg_nsfs_feature_buckets(request):
+    def factory():
+        pass
+
+
+@pytest.fixture()
+def setup_rgw_kafka_notification(request, rgw_bucket_factory, rgw_obj):
+    """
+    This fixture does the setup for validating RGW kafka
+    notification feature
+
+    """
+
+    # setup AMQ
+    amq = AMQ()
+
+    kafka_topic = kafkadrop_pod = kafkadrop_svc = kafkadrop_route = None
+
+    # get storageclass
+    storage_class = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
+
+    # setup AMQ cluster
+    amq.setup_amq_cluster(storage_class.name)
+
+    # create kafka topic
+    kafka_topic = amq.create_kafka_topic()
+
+    # create kafkadrop pod
+    (
+        kafkadrop_pod,
+        kafkadrop_svc,
+        kafkadrop_route,
+    ) = amq.create_kafkadrop()
+
+    def factory():
+        """
+        Factory function implementing the fixture
+
+        Returns:
+            Dict: This consists of mapping of rgw buckets,
+                kafka_topic, kafkadrop_host objects etc
+
+        """
+
+        # get the kafkadrop route
+        kafkadrop_host = kafkadrop_route.get().get("spec").get("host")
+
+        # create the bucket
+        bucketname = rgw_bucket_factory(amount=1, interface="RGW-OC")[0].name
+
+        # get RGW credentials
+        rgw_endpoint, access_key, secret_key = rgw_obj.get_credentials()
+
+        # clone notify repo
+        notify_path = clone_notify()
+
+        # initilize to upload data
+        data = "A random string data to write on created rgw bucket"
+        obc_obj = OBC(bucketname)
+        s3_resource = boto3.resource(
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=rgw_endpoint,
+            aws_access_key_id=obc_obj.access_key_id,
+            aws_secret_access_key=obc_obj.access_key,
+        )
+        s3_client = s3_resource.meta.client
+
+        # Initialize notify command to run
+        notify_cmd = (
+            f"python {notify_path} -e {rgw_endpoint} -a {obc_obj.access_key_id} "
+            f"-s {obc_obj.access_key} -b {bucketname} "
+            f"-ke {constants.KAFKA_ENDPOINT} -t {kafka_topic.name}"
+        )
+
+        kafka_rgw_dict = {
+            "s3client": s3_client,
+            "kafka_rgw_bucket": bucketname,
+            "notify_cmd": notify_cmd,
+            "data": data,
+            "kafkadrop_host": kafkadrop_host,
+            "kafka_topic": kafka_topic,
+        }
+
+        return kafka_rgw_dict
+
+    def finalizer():
+        if kafka_topic:
+            kafka_topic.delete()
+        if kafkadrop_pod:
+            kafkadrop_pod.delete()
+        if kafkadrop_svc:
+            kafkadrop_svc.delete()
+        if kafkadrop_route:
+            kafkadrop_route.delete()
+
+        amq.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def validate_mcg_bg_features(
+    request, awscli_pod_session, mcg_obj_session, test_directory_setup, cld_mgr
+):
+    """
+    This fixture validates specified features provided neccesary
+    feature setup map. It has option to run the validation to run
+    in the background while not blocking the execution of rest of
+    the code
+
+    """
+
+    def factory(
+        feature_setup_map,
+        run_in_bg=False,
+        skip_any_features=None,
+        object_amount=5,
+    ):
+        """
+        factory functon implementing the fixture
+
+        Args:
+            feature_setup_map (Dict): This has feature to setup of buckets map
+                consists of buckets, executor, event objects
+            run_in_bg (Bool): True if want to run the validation in background
+            skip_any_features (List): List consisting of features that dont need
+                to be validated
+            object_amount (int): Number of objects that you wanna use while doing
+                the validation
+
+        Returns:
+            Event(): this is a threading.Event() object used to send signals to the
+                threads to stop
+            List: List consisting of all the futures objects, ie. threads
+
+        """
+        uploaded_objects_dir = test_directory_setup.origin_dir
+        downloaded_obejcts_dir = test_directory_setup.result_dir
+        futures_obj = list()
+
+        # if any already running background validation threads
+        # then stop those threads
+        if feature_setup_map["executor"]["event"] is not None:
+            feature_setup_map["executor"]["event"].set()
+            for t in feature_setup_map["executor"]["threads"]:
+                t.result()
+
+        event = Event()
+        executor = ThreadPoolExecutor(
+            max_workers=(
+                5 - len(skip_any_features) if skip_any_features is not None else 5
+            )
+        )
+        skip_any_features = list() if skip_any_features is None else skip_any_features
+
+        if "replication" not in skip_any_features:
+            validate_replication = executor.submit(
+                validate_mcg_bucket_replicaton,
+                awscli_pod_session,
+                mcg_obj_session,
+                feature_setup_map["replication"],
+                uploaded_objects_dir,
+                downloaded_obejcts_dir,
+                event,
+                run_in_bg=run_in_bg,
+                object_amount=object_amount,
+            )
+            futures_obj.append(validate_replication)
+
+        if "caching" not in skip_any_features:
+            validate_caching = executor.submit(
+                validate_mcg_caching,
+                awscli_pod_session,
+                mcg_obj_session,
+                cld_mgr,
+                feature_setup_map["caching"],
+                uploaded_objects_dir,
+                downloaded_obejcts_dir,
+                event,
+                run_in_bg=run_in_bg,
+            )
+            futures_obj.append(validate_caching)
+
+        if "expiration" not in skip_any_features:
+            validate_expiration = executor.submit(
+                validate_mcg_object_expiration,
+                mcg_obj_session,
+                feature_setup_map["expiration"],
+                event,
+                run_in_bg=run_in_bg,
+                object_amount=object_amount,
+            )
+            futures_obj.append(validate_expiration)
+
+        if "rgw kafka" not in skip_any_features:
+            validate_rgw_kafka = executor.submit(
+                validate_rgw_kafka_notification,
+                feature_setup_map["rgw kafka"],
+                event,
+                run_in_bg=run_in_bg,
+            )
+            futures_obj.append(validate_rgw_kafka)
+
+        if "nsfs" not in skip_any_features:
+            validate_nsfs = executor.submit(
+                validate_mcg_nsfs_feature,
+            )
+            futures_obj.append(validate_nsfs)
+
+        # if not run in background we wait until the
+        # threads are finsihed executing, ie. single iteration
+        if not run_in_bg:
+            for t in futures_obj:
+                t.result()
+            event = None
+
+        return event, futures_obj
+
+    return factory
+
+
+@pytest.fixture()
+def setup_mcg_bg_features(
+    request,
+    test_directory_setup,
+    awscli_pod_session,
+    mcg_obj_session,
+    setup_mcg_replication_feature_buckets,
+    setup_mcg_caching_feature_buckets,
+    setup_mcg_nsfs_feature_buckets,
+    setup_mcg_expiration_feature_buckets,
+    # setup_rgw_kafka_notification,
+    validate_mcg_bg_features,
+):
+    """
+    Fixture to setup MCG features buckets, run IOs, validate IOs
+
+    1. Bucket replication
+    2. Noobaa caching
+    3. Object expiration
+    4. MCG NSFS
+    5. RGW kafka notification
+
+    """
+
+    def factory(
+        num_of_buckets=10,
+        object_amount=5,
+        is_disruptive=True,
+        skip_any_type=None,
+        skip_any_provider=None,
+        skip_any_features=None,
+    ):
+        """
+        Args:
+            num_of_buckets(int): Number of buckets for each MCG features
+            is_disruptive(bool): Is the test calling this has disruptive flow?
+            skip_any_type(list): If you want to skip any types of OBCs
+            skip_any_provider(list): If you want to skip any cloud provider
+            skip_any_features(list): If you want to skip any MCG features
+
+        Returns:
+            Dict: Representing all the buckets created for the respective features,
+            executor and event objects
+
+        """
+
+        bucket_types = {
+            "data": {
+                "interface": "OC",
+                "backingstore_dict": {},
+            },
+            "namespace": {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Single",
+                    "namespacestore_dict": {},
+                },
+            },
+            "cache": {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": "Cache",
+                    "ttl": 300000,
+                    "namespacestore_dict": {},
+                },
+                "placement_policy": {
+                    "tiers": [
+                        {"backingStores": [constants.DEFAULT_NOOBAA_BACKINGSTORE]}
+                    ]
+                },
+            },
+        }
+
+        # skip if any bucket types one wants to skip
+        if skip_any_type is not None:
+            for type in skip_any_type:
+                if type not in bucket_types.keys():
+                    logger.error(
+                        f"Bucket type {type} you asked to skip is not valid type "
+                        f"and valid are {list(bucket_types.keys())}"
+                    )
+                else:
+                    bucket_types.pop(type)
+
+        cloud_providers = {
+            "aws": (1, "eu-central-1"),
+            "azure": (1, None),
+            "pv": (
+                1,
+                constants.MIN_PV_BACKINGSTORE_SIZE_IN_GB,
+                "ocs-storagecluster-ceph-rbd",
+            ),
+        }
+
+        # skip any cloud providers if one wants to skip
+        if skip_any_provider is not None:
+            for provider in skip_any_provider:
+                if provider not in cloud_providers.keys():
+                    logger.error(
+                        f"Bucket type {provider} you asked to skip is not valid type "
+                        f"and valid are {list(cloud_providers.keys())}"
+                    )
+                else:
+                    cloud_providers.pop(provider)
+
+        all_buckets = list()
+        feature_setup_map = dict()
+        feature_setup_map["executor"] = dict()
+        feature_setup_map["executor"]["event"] = None
+
+        # skip any features if one wants to skip
+        features = ["replication", "caching", "expiration", "nsfs", "rgw kafka"]
+        assert isinstance(skip_any_features, list) and set(skip_any_features).issubset(
+            set(features)
+        ), f"Features asked to skip either not present or you havent provided through a list, valid: {features}"
+
+        if "replication" not in skip_any_features:
+            buckets, source_target_map = setup_mcg_replication_feature_buckets(
+                num_of_buckets, bucket_types, cloud_providers
+            )
+            all_buckets.extend(buckets)
+            feature_setup_map["replication"] = source_target_map
+
+        if "caching" not in skip_any_features:
+            cache_buckets = setup_mcg_caching_feature_buckets(
+                num_of_buckets, bucket_types, cloud_providers
+            )
+            all_buckets.extend(cache_buckets)
+            feature_setup_map["caching"] = cache_buckets
+
+        if "expiration" not in skip_any_features:
+            buckets_with_expiration_policy = setup_mcg_expiration_feature_buckets(
+                num_of_buckets, bucket_types, cloud_providers
+            )
+            all_buckets.extend(buckets_with_expiration_policy)
+            feature_setup_map["expiration"] = buckets_with_expiration_policy
+
+        if "nsfs" not in skip_any_features:
+            setup_mcg_nsfs_feature_buckets()
+            feature_setup_map["nsfs"] = None
+
+        # if "rgw kafka" not in skip_any_features:
+        #     kafka_rgw_dict = setup_rgw_kafka_notification()
+        #     all_buckets.extend([OBC(kafka_rgw_dict["kafka_rgw_bucket"])])
+        #     feature_setup_map["rgw kafka"] = kafka_rgw_dict
+
+        uploaded_objects_dir = test_directory_setup.origin_dir
+        downloaded_obejcts_dir = test_directory_setup.result_dir
+
+        for count, bucket in enumerate(all_buckets):
+            assert random_object_round_trip_verification(
+                io_pod=awscli_pod_session,
+                bucket_name=bucket.name,
+                upload_dir=uploaded_objects_dir + f"Bucket{count}",
+                download_dir=downloaded_obejcts_dir + f"Bucket{count}",
+                amount=1,
+                pattern="Random_object",
+                mcg_obj=mcg_obj_session,
+                cleanup=True,
+            ), "Some or all written objects were not found in the list of downloaded objects"
+        logger.info("Successful object round trip verification")
+
+        event, threads = validate_mcg_bg_features(
+            feature_setup_map,
+            run_in_bg=not is_disruptive,
+            skip_any_features=skip_any_features,
+            object_amount=object_amount,
+        )
+        feature_setup_map["executor"]["event"] = event
+        feature_setup_map["executor"]["threads"] = threads
+        feature_setup_map["all_buckets"] = all_buckets
+        return feature_setup_map
+
+    return factory
+
+
+@pytest.fixture()
+def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_session):
+    """
+    This function is to verify noobaa rebuild. Verifies KCS: https://access.redhat.com/solutions/5948631
+
+        1.Patch noobaa resource and set up cleanup policy as true
+        2.Delete NooBaa/Multcloud Gateway (MCG)
+        3.Waiting some time for the termination/re-creation of all NooBaa resource
+        4.validate the new age of all MCG resources
+
+    """
+
+    def factory(bucket_factory_session, mcg_obj_session):
+
+        noobaa_obj = OCP(
+            kind=constants.NOOBAA_RESOURCE_NAME,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+
+        params = '{"spec":{"cleanupPolicy":{"allowNoobaaDeletion":true}}}'
+        noobaa_obj.patch(
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
+            params=params,
+            format_type="merge",
+        )
+
+        try:
+            noobaa_obj.exec_oc_cmd("delete noobaas.noobaa.io  --all")
+        except TimeoutExpired:
+            params = '{"metadata": {"finalizers":null}}'
+            noobaa_obj.exec_oc_cmd(f"patch noobaas/noobaa --type=merge -p '{params}' ")
+
+        logger.info("--------NooBaa resource rebuild verification----------")
+        logger.info(
+            "waiting for some time for deletion and recreation of all noobaa resources"
+        )
+
+        time.sleep(60)
+        pvc_obj = OCP(
+            kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        noobaa_pvc_obj = get_pvc_objs(
+            pvc_names=["noobaa-db-pg-cluster-1", "noobaa-db-pg-cluster-2"]
+        )
+
+        # Wait and validate noobaa PVC is in bound state
+        for pvc_index in range(len(noobaa_pvc_obj)):
+            pvc_obj.wait_for_resource(
+                condition=constants.STATUS_BOUND,
+                resource_name=noobaa_pvc_obj[pvc_index].name,
+                timeout=600,
+                sleep=120,
+            )
+        # Validate noobaa pods are up and running
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        noobaa_pods = get_noobaa_pods()
+        pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_count=len(noobaa_pods),
+            selector=constants.NOOBAA_APP_LABEL,
+            timeout=900,
+        )
+        # verify noobaa statefulset is present
+        sample = TimeoutSampler(
+            timeout=500,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
+            cmd="oc get sts noobaa-core -n openshift-storage",
+            expected_output_lst={"noobaa-core", "1/1"},
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise Exception("Statefulset noobaa-core is not recreated")
+
+        # Since the rebuild changed the noobaa-admin secret, update
+        # the s3 credentials in mcg_object_session
+        mcg_obj_session.update_s3_creds()
+
+        # Verify default backingstore/bucketclass
+        sample = TimeoutSampler(
+            timeout=1200,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
+            cmd="oc get Backingstore noobaa-default-backing-store -n openshift-storage",
+            expected_output_lst={
+                "noobaa-default-backing-store",
+            },
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise Exception(
+                "Backingstore noobaa-default-backing-store is not recreated"
+            )
+
+        default_bc = OCP(
+            kind=constants.BUCKETCLASS, namespace=config.ENV_DATA["cluster_namespace"]
+        ).get(resource_name=DEFAULT_NOOBAA_BUCKETCLASS)
+        assert (
+            default_bc["status"]["phase"] == constants.STATUS_READY
+        ), "Failed: Default bs/bc are not in ready state"
+
+        # Create OBCs
+        logger.info("Creating OBCs after noobaa rebuild")
+        bucket_factory_session(amount=3, interface="OC", verify_health=True)
+
+    def finalizer():
+        """
+        Cleanup function which clears all the noobaa rebuild entries.
+
+        """
+        # Get the deployment replica count
+        deploy_obj = OCP(
+            kind=constants.DEPLOYMENT,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        noobaa_deploy_obj = deploy_obj.get(
+            resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT
+        )
+        if noobaa_deploy_obj["spec"]["replicas"] != 1:
+            logger.info(
+                f"Scaling back {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 1"
+            )
+            deploy_obj.exec_oc_cmd(
+                f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=1"
+            )
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def validate_noobaa_db_backup_recovery_locally_system(
+    request,
+    bucket_factory_session,
+    noobaa_db_backup_and_recovery_locally,
+    warps3,
+    mcg_obj_session,
+):
+    """
+    Test to verify Backup and Restore for Multicloud Object Gateway database locally
+    Backup procedure:
+    1. Create a test bucket and write some data
+    2. Backup noobaa secrets to local folder OR store it in secret objects
+    3. Backup the PostgreSQL database and save it to a local folder
+    4. For testing, write new data to show a little data loss between backup and restore
+    Restore procedure:
+    1. Stop MCG reconciliation
+    2. Stop the NooBaa Service before restoring the NooBaa DB. There will be no object service after this point
+    3. Verify that all NooBaa components (except NooBaa DB) have 0 replicas
+    4. Login to the NooBaa DB pod and cleanup potential database clients to nbcore
+    5. Restore DB from a local folder
+    6. Delete current noobaa secrets and restore them from a local folder OR secrets objects.
+    7. Restore MCG reconciliation
+    8. Start the NooBaa service
+    9. Restart the NooBaa DB pod
+    10. Check that the old data exists, but not s3://testloss/
+    Run multi client warp benchmarking to verify bug https://bugzilla.redhat.com/show_bug.cgi?id=2141035
+
+    """
+
+    def factory(
+        bucket_factory_session,
+        noobaa_db_backup_and_recovery_locally,
+        warps3,
+        mcg_obj_session,
+    ):
+
+        # create a bucket for warp benchmarking
+        bucket_name = bucket_factory_session()[0].name
+
+        # Backup and restore noobaa db using fixture
+        noobaa_db_backup_and_recovery_locally(bucket_factory_session)
+
+        # Run multi client warp benchmarking
+        warps3.run_benchmark(
+            bucket_name=bucket_name,
+            access_key=mcg_obj_session.access_key_id,
+            secret_key=mcg_obj_session.access_key,
+            duration="10m",
+            concurrent=10,
+            objects=100,
+            obj_size="1MiB",
+            validate=True,
+            timeout=4000,
+            multi_client=True,
+            tls=True,
+            debug=True,
+            insecure=True,
+        )
+
+        # make sure no errors in the noobaa pod logs
+        search_string = (
+            "AssertionError [ERR_ASSERTION]: _id must be unique. "
+            "found 2 rows with _id=undefined in table bucketstats"
+        )
+        nb_pods = get_noobaa_pods()
+        for pd in nb_pods:
+            pod_logs = get_pod_logs(pod_name=pd.name)
+            for line in pod_logs:
+                assert (
+                    search_string not in line
+                ), f"[Error] {search_string} found in the noobaa pod logs"
+        logger.info(f"No {search_string} errors are found in the noobaa pod logs")
+
+    return factory
+
+
+@pytest.fixture(scope="session")
+def setup_stress_testing_buckets(bucket_factory_session, rgw_bucket_factory_session):
+    """
+    This session scoped fixture is for setting up the buckets for the stress testing
+    in MCG. This creates buckets of type AWS, AZURE, PV-POOL, RGW.
+
+    """
+
+    def factory():
+        """
+        Factory function for creating the buckets
+
+        Returns:
+            Dict: { underlying_storage_type : obc object for the bucket created}
+
+        """
+        # These are the bucket configs needed for
+        # creating buckets. They support buckets on
+        # AWS, AZURE, PV-POOL and RGW
+        bucket_configs = {
+            "aws": {
+                "interface": "CLI",
+                "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+            },
+            "azure": {
+                "interface": "CLI",
+                "backingstore_dict": {"azure": [(1, None)]},
+            },
+            "pv-pool": {
+                "interface": "CLI",
+                "backingstore_dict": {
+                    "pv": [(1, 50, constants.DEFAULT_STORAGECLASS_RBD)]
+                },
+            },
+            "rgw": None,
+        }
+
+        # We loop through each bucket configs and
+        # create one bucket after another
+        bucket_objects = dict()
+        logger.info("Creating buckets for stress testing")
+        for type, bucketclass_dict in bucket_configs.items():
+            if type == "rgw":
+
+                # We only create RGW buckets if there is support for RGW
+                # in the cluster platform. RGW is only supported in on-prem
+                # platforms i.e, Vsphere, Baremetal etc.
+                if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
+                    bucket = rgw_bucket_factory_session(interface="rgw-oc")[0]
+                else:
+                    logger.info(
+                        "Can't create RGW bucket as there is no support for RGW in non-onprem platforms"
+                    )
+                    continue
+            else:
+                bucket = bucket_factory_session(
+                    interface="CLI", bucketclass=bucketclass_dict
+                )[0]
+
+            logger.info(f"BUCKET CREATION: Created bucket {bucket.name} of type {type}")
+            bucket_objects[type] = bucket
+
+        return bucket_objects
+
+    return factory
+
+
+@pytest.fixture(scope="function")
+def odf_cli_setup():
+    try:
+        odf_cli_runner = odf_cli_setup_helper()
+    except RuntimeError as ex:
+        pytest.fail(str(ex))
+
+    return odf_cli_runner
+
+
+@pytest.fixture
+def resiliency_workload(request):
+    """
+    Pytest fixture to create and manage a workload object for resiliency testing.
+
+    Usage:
+        workload = resiliency_workload("FIO", pvc_obj, fio_args={"rw": "read", "bs": "128k"})
+        workload = resiliency_workload("VDBENCH", pvc_obj, vdbench_config_file="")
+    """
+
+    def factory(workload_type, pvc_obj, **kwargs):
+        """
+        Factory function to create a workload object.
+
+        Args:
+            workload_type (str): The type of workload to create (e.g., "FIO").
+            pvc_obj: A valid PVC object.
+            kwargs: Extra arguments like fio_args, etc.
+
+        Returns:
+            Workload instance.
+        """
+        log_msg = f"Initializing resiliency workload: {workload_type}"
+        if kwargs:
+            log_msg += f" with args {kwargs}"
+        logger.info(log_msg)
+
+        # Instantiate the workload class (e.g., FioWorkload)
+        workload_cls = workload_object(workload_type, namespace=pvc_obj.namespace)
+        workload = workload_cls(pvc_obj, **kwargs)
+
+        def finalizer():
+            print(f"Finalizing workload: {workload_type}")
+            workload.cleanup_workload()
+
+        request.addfinalizer(finalizer)
+        return workload
+
+    return factory
+
+
+@pytest.fixture
+def run_platform_stress(request):
+    """Factory fixture to create and run a PlatformStress object.
+
+    Automatically starts stress tests on given node types (default: worker nodes).
+    All stress will stop when the test completes.
+
+    Usage:
+        stress = run_platform_stress()
+        stress = run_platform_stress([constants.WORKER_MACHINE, constants.MASTER_MACHINE])
+
+    Returns:
+        function: Factory function to create PlatformStress instances.
+    """
+    created_instances = []
+
+    def factory(node_types=None):
+        """Creates and starts a PlatformStress instance.
+
+        Args:
+            node_types (list, optional): List of node types to include (e.g., WORKER_MACHINE, MASTER_MACHINE).
+
+        Returns:
+            PlatformStress: Initialized and running PlatformStress instance.
+        """
+        node_types = node_types or [constants.WORKER_MACHINE]
+        valid_types = {constants.WORKER_MACHINE, constants.MASTER_MACHINE}
+        if not set(node_types).issubset(valid_types):
+            unsupported = set(node_types) - valid_types
+            raise ValueError(f"Unsupported node types: {unsupported}")
+
+        nodes = [node for nt in node_types for node in get_nodes(nt)]
+        logger.info(
+            "Creating PlatformStress instance for nodes: %s", [n.name for n in nodes]
+        )
+
+        stress_obj = PlatformStress(nodes)
+        stress_obj.start_random_stress()
+        created_instances.append(stress_obj)
+        logger.info("Started stress testing in background.")
+        return stress_obj
+
+    def finalizer():
+        """Cleanup function to stop all PlatformStress instances."""
+        for stress_obj in created_instances:
+            if stress_obj.run_status:
+                logger.info("Stopping stress for PlatformStress instance...")
+                stress_obj.stop()
+                logger.info("Stress stopped.")
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture
+def vdbench_workload_factory(request, project_factory):
+    """
+    Factory fixture for creating Vdbench workloads with automatic cleanup.
+
+    This fixture returns a factory function that creates VdbenchWorkload instances
+    from either a vdbench config dict or an existing config file, and registers
+    cleanup on test teardown.
+    """
+    created_workloads = []
+
+    def factory(
+        pvc,
+        vdbench_config=None,
+        config_file=None,
+        namespace=None,
+        image=None,
+        pvc_access_mode=constants.ACCESS_MODE_RWO,
+        pvc_volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+        auto_start=False,
+    ):
+        """
+        Create a VdbenchWorkload instance.
+
+        Args:
+            pvc (OCS): PVC object to attach the workload to.
+            vdbench_config (dict, optional): Vdbench config dict in normalized style.
+            config_file (str, optional): Path to an existing Vdbench .cfg file.
+            namespace (str, optional): K8s namespace; defaults to pvc.namespace.
+            image (str, optional): Container image; defaults to constants.VDBENCH_IMAGE if available.
+            pvc_access_mode (str): RWO/RWX/etc (used for validation/logging).
+            pvc_volume_mode (str): constants.VOLUME_MODE_FILESYSTEM or VOLUME_MODE_BLOCK.
+            auto_start (bool): If True, start workload immediately.
+
+        Returns:
+            VdbenchWorkload
+        """
+        # Validate inputs
+        if vdbench_config is None and config_file is None:
+            raise ValueError("Either vdbench_config or config_file must be provided")
+
+        # Resolve namespace
+        ns = (
+            namespace
+            or getattr(pvc, "project_namespace", None)
+            or getattr(pvc, "namespace", None)
+        )
+        if not ns:
+            proj = project_factory()
+            ns = proj.namespace
+
+        # Resolve image default
+        if image is None:
+            image = getattr(constants, "VDBENCH_IMAGE", None)
+
+        # Create temporary config file if dict provided
+        if vdbench_config and not config_file:
+            config_file = create_temp_config_file(vdbench_config)
+
+        # Instantiate workload
+        workload = VdbenchWorkload(
+            pvc=pvc,
+            vdbench_config_file=config_file,
+            namespace=ns,
+            image=image,
+            pvc_access_mode=pvc_access_mode,
+            pvc_volume_mode=pvc_volume_mode,
+        )
+
+        created_workloads.append(workload)
+
+        # Auto-start if requested
+        if auto_start:
+            try:
+                workload.start_workload()
+                logger.info(
+                    "Auto-started Vdbench workload: %s", workload.deployment_name
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Failed to auto-start workload %s: %s",
+                    workload.deployment_name,
+                    exc,
+                )
+                raise
+
+        logger.info(
+            "Created Vdbench workload: %s (ns=%s, mode=%s, access=%s)",
+            workload.deployment_name,
+            ns,
+            pvc_volume_mode,
+            pvc_access_mode,
+        )
+        return workload
+
+    def finalizer():
+        """Clean up all created workloads."""
+        logger.info("Cleaning up %d Vdbench workload(s)...", len(created_workloads))
+        for workload in created_workloads:
+            try:
+                workload.cleanup_workload()
+                logger.info("Cleaned up workload: %s", workload.deployment_name)
+            except AttributeError:
+                logger.warning(
+                    "Workload %s has no cleanup_workload() method.",
+                    getattr(workload, "deployment_name", "<unknown>"),
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Error cleaning up workload %s: %s",
+                    getattr(workload, "deployment_name", "<unknown>"),
+                    exc,
+                )
+        created_workloads.clear()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture
+def vdbench_default_config():
+    """
+    Flexible Vdbench default config factory (direct I/O by default).
+
+    Supports:
+      - Single or multiple WDs (via `patterns`)
+      - Pre-create-only runs (format-only)
+      - Two-phase: precreate then run
+      - Group all WDs in one RD or one RD per WD
+      - Both filesystem and block device support
+    """
+
+    def _factory(
+        # Storage Definition (can be filesystem or block device)
+        lun="/vdbench-data/testfile",
+        size="1g",
+        threads=1,
+        open_flags="o_direct",  # direct I/O default
+        # Optional block device parameters
+        sd_align="",
+        sd_offset="",
+        sd_name="sd1",
+        # Optional filesystem parameters (if using FSD instead of SD)
+        use_filesystem=False,  # True -> use FSD, False -> use SD
+        anchor="/vdbench-data/default-fs",
+        depth=2,
+        width=4,
+        files=10,
+        fsd_name="fsd1",
+        # WD patterns (list of dicts). If None, a simple single pattern is used.
+        patterns=None,  # [{'name':'default_test','rdpct':50,'seekpct':100,'xfersize':'4k'}, ...]
+        default_rdpct=50,
+        default_seekpct=100,
+        default_xfersize="4k",
+        default_skew=0,
+        # RD behaviour
+        elapsed=60,
+        interval=60,
+        iorate="max",
+        group_all_wds_in_one_rd=False,  # True -> single RD with wd=wd1,wd2,...
+        precreate_only=False,  # True -> emit only a short format run
+        precreate_then_run=False,  # True -> add a short format RD before test RDs
+        precreate_elapsed=2,  # seconds for precreate (must be >= 2*interval)
+        precreate_interval=1,  # precreate reporting interval
+        precreate_iorate="max",  # Rate for precreate operations
+    ):
+        # ---------- defaults ----------
+        if patterns is None:
+            if use_filesystem:
+                # Simple filesystem pattern for default config
+                patterns = [
+                    {
+                        "name": "default_fs_test",
+                        "fileio": "random",
+                        "rdpct": 50,
+                        "xfersize": "4k",
+                        "threads": threads,
+                        "skew": 0,
+                    }
+                ]
+            else:
+                # Simple block device pattern for default config
+                patterns = [
+                    {
+                        "name": "default_test",
+                        "rdpct": 50,
+                        "seekpct": 100,
+                        "xfersize": "4k",
+                        "skew": 0,
+                    }
+                ]
+
+        # ---------- build storage definition ----------
+        cfg = {
+            "storage_definitions": [],
+            "workload_definitions": [],
+            "run_definitions": [],
+        }
+
+        if use_filesystem:
+            # Filesystem storage definition (FSD)
+            cfg["storage_definitions"].append(
+                {
+                    "id": fsd_name,
+                    "fsd": True,
+                    "anchor": anchor,
+                    "depth": depth,
+                    "width": width,
+                    "files": files,
+                    "size": size,
+                    "reuse": False,
+                    "open_flags": open_flags,
+                }
+            )
+            storage_id = fsd_name
+            storage_key = "fsd_id"
+        else:
+            # Block device storage definition (SD)
+            cfg["storage_definitions"].append(
+                {
+                    "id": sd_name,
+                    "lun": lun,
+                    "size": size,
+                    "threads": threads,
+                    "open_flags": open_flags,
+                    "align": sd_align,
+                    "offset": sd_offset,
+                }
+            )
+            storage_id = sd_name
+            storage_key = "sd_id"
+
+        # ---------- build WDs from patterns ----------
+        wd_ids = []
+        for i, p in enumerate(patterns, start=1):
+            wd_id = f"wd{i}"
+            wd_ids.append(wd_id)
+
+            workload_def = {
+                "id": wd_id,
+                storage_key: storage_id,
+                "rdpct": p.get("rdpct", default_rdpct),
+                "xfersize": p.get("xfersize", default_xfersize),
+                "skew": p.get("skew", default_skew),
+            }
+
+            # Add filesystem-specific or block-specific parameters
+            if use_filesystem:
+                workload_def["fileio"] = p.get("fileio", "random")
+                workload_def["threads"] = p.get("threads", threads)
+                workload_def["fwdrate"] = p.get("fwdrate", "max")
+            else:
+                workload_def["seekpct"] = p.get("seekpct", default_seekpct)
+
+            cfg["workload_definitions"].append(workload_def)
+
+        # ---------- precreate-only mode ----------
+        if precreate_only:
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_only mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": precreate_interval,
+                    "iorate": precreate_iorate,
+                }
+            )
+            return cfg
+
+        # ---------- optional precreate + test runs ----------
+        if precreate_then_run:
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_then_run mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": precreate_interval,
+                    "iorate": precreate_iorate,
+                }
+            )
+
+        # ---------- validation ----------
+        if not wd_ids:
+            raise ValueError("No WD patterns provided - cannot create run definitions")
+
+        # Test runs: either one RD per WD or a single RD referencing all WDs
+        if group_all_wds_in_one_rd:
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd1",
+                    "wd_id": ",".join(wd_ids),
+                    "format": "no" if precreate_then_run else "yes",
+                    "elapsed": elapsed,
+                    "interval": interval,
+                    "iorate": iorate,
+                }
+            )
+        else:
+            # One RD per WD (typical for default config)
+            for i, wd_id in enumerate(wd_ids, start=1):
+                cfg["run_definitions"].append(
+                    {
+                        "id": f"rd{i}",
+                        "wd_id": wd_id,
+                        "format": "no" if precreate_then_run else "yes",
+                        "elapsed": elapsed,
+                        "interval": interval,
+                        "iorate": iorate,
+                    }
+                )
+
+        return cfg
+
+    return _factory
+
+
+@pytest.fixture
+def vdbench_performance_config():
+    """
+    Flexible Vdbench performance config factory (direct I/O by default).
+
+    Supports:
+      - Multiple performance-oriented WD patterns
+      - Pre-create-only runs (format-only)
+      - Two-phase: precreate then run
+      - Group all WDs in one RD or one RD per WD
+      - Both filesystem and block device support
+      - Performance-specific defaults (larger sizes, more threads, longer runs)
+    """
+
+    def _factory(
+        # Storage Definition (can be filesystem or block device)
+        lun="/vdbench-data/perftest",
+        size="10g",
+        threads=4,
+        open_flags="o_direct",  # direct I/O default
+        # Optional block device parameters
+        sd_align="",
+        sd_offset="",
+        sd_name="sd1",
+        # Optional filesystem parameters (if using FSD instead of SD)
+        use_filesystem=False,  # True -> use FSD, False -> use SD
+        anchor="/vdbench-data/perf-fs",
+        depth=3,
+        width=6,
+        files=50,
+        fsd_name="fsd1",
+        # WD patterns (list of dicts). If None, performance-oriented patterns are used.
+        patterns=None,  # [{'name':'perf_read','rdpct':70,'seekpct':100,'xfersize':'64k'}, ...]
+        default_rdpct=70,
+        default_seekpct=100,
+        default_xfersize="64k",
+        default_skew=0,
+        # RD behaviour - performance defaults
+        elapsed=300,  # 5 minutes for performance tests
+        interval=60,  # 60-second reporting intervals
+        iorate="max",  # max performance by default
+        group_all_wds_in_one_rd=False,  # True -> single RD with wd=wd1,wd2,...
+        precreate_only=False,  # True -> emit only a short format run
+        precreate_then_run=True,  # True -> add a short format RD before test RDs (recommended for perf)
+        precreate_elapsed=30,  # longer precreate for perf tests
+        precreate_interval=1,  # precreate reporting interval
+        precreate_iorate="max",  # Rate for precreate operations
+    ):
+        # ---------- performance-oriented defaults ----------
+        if patterns is None:
+            if use_filesystem:
+                # Performance filesystem patterns
+                patterns = [
+                    {
+                        "name": "seq_read_perf",
+                        "fileio": "sequential",
+                        "xfersize": "1m",
+                        "threads": threads,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "random_read_perf",
+                        "fileio": "random",
+                        "rdpct": 100,
+                        "xfersize": "64k",
+                        "threads": threads,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "mixed_rw_perf",
+                        "fileio": "random",
+                        "rdpct": 70,
+                        "xfersize": "64k",
+                        "threads": threads,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "seq_write_perf",
+                        "fileio": "sequential",
+                        "xfersize": "1m",
+                        "threads": threads,
+                        "skew": 0,
+                    },
+                ]
+            else:
+                # Performance block device patterns
+                patterns = [
+                    {
+                        "name": "seq_read_perf",
+                        "rdpct": 100,
+                        "seekpct": 0,
+                        "xfersize": "1m",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "random_read_perf",
+                        "rdpct": 100,
+                        "seekpct": 100,
+                        "xfersize": "64k",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "mixed_rw_perf",
+                        "rdpct": 70,
+                        "seekpct": 100,
+                        "xfersize": "64k",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "seq_write_perf",
+                        "rdpct": 0,
+                        "seekpct": 0,
+                        "xfersize": "1m",
+                        "skew": 0,
+                    },
+                ]
+
+        # ---------- build storage definition ----------
+        cfg = {
+            "storage_definitions": [],
+            "workload_definitions": [],
+            "run_definitions": [],
+        }
+
+        if use_filesystem:
+            # Filesystem storage definition (FSD)
+            cfg["storage_definitions"].append(
+                {
+                    "id": fsd_name,
+                    "fsd": True,
+                    "anchor": anchor,
+                    "depth": depth,
+                    "width": width,
+                    "files": files,
+                    "size": size,
+                    "reuse": False,
+                    "open_flags": open_flags,
+                }
+            )
+            storage_id = fsd_name
+            storage_key = "fsd_id"
+        else:
+            # Block device storage definition (SD)
+            cfg["storage_definitions"].append(
+                {
+                    "id": sd_name,
+                    "lun": lun,
+                    "size": size,
+                    "threads": threads,
+                    "open_flags": open_flags,
+                    "align": sd_align,
+                    "offset": sd_offset,
+                }
+            )
+            storage_id = sd_name
+            storage_key = "sd_id"
+
+        # ---------- build WDs from patterns ----------
+        wd_ids = []
+        for i, p in enumerate(patterns, start=1):
+            wd_id = f"wd{i}"
+            wd_ids.append(wd_id)
+
+            workload_def = {
+                "id": wd_id,
+                storage_key: storage_id,
+                "rdpct": p.get("rdpct", default_rdpct),
+                "xfersize": p.get("xfersize", default_xfersize),
+                "skew": p.get("skew", default_skew),
+            }
+
+            # Add filesystem-specific or block-specific parameters
+            if use_filesystem:
+                workload_def["fileio"] = p.get("fileio", "random")
+                workload_def["threads"] = p.get("threads", threads)
+                workload_def["fwdrate"] = p.get("fwdrate", "max")
+            else:
+                workload_def["seekpct"] = p.get("seekpct", default_seekpct)
+
+            cfg["workload_definitions"].append(workload_def)
+
+        # ---------- precreate-only mode ----------
+        if precreate_only:
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_only mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": precreate_interval,
+                    "iorate": precreate_iorate,
+                }
+            )
+            return cfg
+
+        # ---------- optional precreate + test runs ----------
+        if precreate_then_run:
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_then_run mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": precreate_interval,
+                    "iorate": precreate_iorate,
+                }
+            )
+
+        # ---------- validation ----------
+        if not wd_ids:
+            raise ValueError("No WD patterns provided - cannot create run definitions")
+
+        # Test runs: either one RD per WD or a single RD referencing all WDs
+        if group_all_wds_in_one_rd:
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd1",
+                    "wd_id": ",".join(wd_ids),
+                    "format": "no" if precreate_then_run else "yes",
+                    "elapsed": elapsed,
+                    "interval": interval,
+                    "iorate": iorate,
+                }
+            )
+        else:
+            # One RD per WD
+            for i, wd_id in enumerate(wd_ids, start=1):
+                cfg["run_definitions"].append(
+                    {
+                        "id": f"rd{i}",
+                        "wd_id": wd_id,
+                        "format": "no" if precreate_then_run else "yes",
+                        "elapsed": elapsed,
+                        "interval": interval,
+                        "iorate": iorate,
+                    }
+                )
+
+        return cfg
+
+    return _factory
+
+
+@pytest.fixture
+def vdbench_block_config():
+    """Factory for block-device-specific Vdbench configuration"""
+
+    def _factory(
+        lun="/dev/vdbench-device",
+        size="1g",
+        threads=2,
+        open_flags="o_direct",
+        sd_align="",
+        sd_offset="",
+        sd_name="sd1",
+        patterns=None,
+        default_rdpct=50,
+        default_seekpct=100,
+        default_xfersize="8k",
+        default_skew=0,
+        elapsed=3600,
+        interval=60,
+        iorate="max",
+        group_all_wds_in_one_rd=False,
+        precreate_only=False,
+        precreate_then_run=False,
+        precreate_elapsed=2,
+        precreate_interval=1,  # precreate reporting interval
+        precreate_iorate="max",
+    ):
+        if patterns is None:
+            patterns = [
+                {
+                    "name": "sequential_read",
+                    "rdpct": 100,
+                    "seekpct": 0,
+                    "xfersize": "1m",
+                    "skew": 0,
+                },
+                {
+                    "name": "random_read",
+                    "rdpct": 100,
+                    "seekpct": 100,
+                    "xfersize": "4k",
+                    "skew": 0,
+                },
+                {
+                    "name": "mixed_rw",
+                    "rdpct": 70,
+                    "seekpct": 100,
+                    "xfersize": "64k",
+                    "skew": 0,
+                },
+                {
+                    "name": "sequential_write",
+                    "rdpct": 0,
+                    "seekpct": 0,
+                    "xfersize": "1m",
+                    "skew": 0,
+                },
+                {
+                    "name": "random_write",  # ✅ new pattern
+                    "rdpct": 0,  # 0% reads → all writes
+                    "seekpct": 100,  # random I/O
+                    "xfersize": "4k",  # small-block random writes
+                    "skew": 0,
+                },
+            ]
+
+        cfg = {
+            "storage_definitions": [
+                {
+                    "id": sd_name,
+                    "lun": lun,
+                    "size": size,
+                    "threads": threads,
+                    "open_flags": open_flags,
+                    "align": sd_align,
+                    "offset": sd_offset,
+                }
+            ],
+            "workload_definitions": [],
+            "run_definitions": [],
+        }
+
+        wd_ids = []
+        for i, p in enumerate(patterns, start=1):
+            wd_id = f"wd{i}"
+            wd_ids.append(wd_id)
+            cfg["workload_definitions"].append(
+                {
+                    "id": wd_id,
+                    "sd_id": sd_name,
+                    "rdpct": p.get("rdpct", default_rdpct),
+                    "seekpct": p.get("seekpct", default_seekpct),
+                    "xfersize": p.get("xfersize", default_xfersize),
+                    "skew": p.get("skew", default_skew),
+                }
+            )
+
+        if not wd_ids:
+            raise ValueError("No WD patterns provided")
+
+        for i, wd_id in enumerate(wd_ids, start=1):
+            cfg["run_definitions"].append(
+                {
+                    "id": f"rd{i}",
+                    "wd_id": wd_id,
+                    "format": "yes",
+                    "elapsed": elapsed,
+                    "interval": interval,
+                    "iorate": iorate,
+                }
+            )
+
+        return cfg
+
+    return _factory
+
+
+@pytest.fixture
+def vdbench_filesystem_config():
+    """
+    Flexible Vdbench filesystem config factory (direct I/O by default).
+
+    Supports:
+      - Single or multiple FWDs (via `patterns`)
+      - Pre-create-only runs (format-only)
+      - Two-phase: precreate then run
+      - Group all FWDs in one RD or one RD per FWD
+    """
+
+    def _factory(
+        # FSD (File System Definition)
+        anchor="/vdbench-data/fs-test",
+        depth=2,
+        width=4,
+        files=10,
+        size="1g",
+        open_flags="o_direct",
+        patterns=None,  # [{'name':'sequential_read','fileio':'sequential','xfersize':'1m'},  ...]
+        default_fileio="random",
+        default_rdpct=50,
+        default_xfersize="8k",
+        default_threads=2,
+        default_skew=0,
+        # RD behaviour
+        elapsed=3600,
+        interval=60,
+        iorate="max",
+        group_all_fwds_in_one_rd=False,  # True -> single RD with fwd=fwd1,fwd2,...
+        precreate_only=False,  # True -> emit only a short format run
+        precreate_then_run=False,  # True -> add a short format RD before test RDs
+        precreate_elapsed=2,  # seconds for precreate (must be >= 2*interval)
+        precreate_interval=1,  # precreate reporting interval
+        precreate_iorate="max",  # Rate for precreate operations
+    ):
+        # ---------- defaults ----------
+        if patterns is None:
+            patterns = [
+                {
+                    "name": "sequential_read",
+                    "fileio": "sequential",
+                    "xfersize": "1m",
+                    "threads": 2,
+                    "skew": 0,
+                },
+                {
+                    "name": "random_read",
+                    "fileio": "random",
+                    "rdpct": 100,
+                    "xfersize": "4k",
+                    "threads": 2,
+                    "skew": 0,
+                },
+                {
+                    "name": "mixed_rw",
+                    "fileio": "random",
+                    "rdpct": 70,
+                    "xfersize": "64k",
+                    "threads": 2,
+                    "skew": 0,
+                },
+                {
+                    "name": "sequential_write",
+                    "fileio": "sequential",
+                    "xfersize": "1m",
+                    "threads": 2,
+                    "skew": 0,
+                },
+                {
+                    "name": "random_write",
+                    "fileio": "random",
+                    "rdpct": 0,
+                    "xfersize": "4k",
+                    "threads": 2,
+                    "skew": 0,
+                },
+            ]
+
+        # ---------- build FSD ----------
+        cfg = {
+            "storage_definitions": [
+                {
+                    "id": "fsd1",
+                    "fsd": True,
+                    "anchor": anchor,
+                    "depth": depth,
+                    "width": width,
+                    "files": files,
+                    "size": size,
+                    "open_flags": open_flags,
+                }
+            ],
+            "workload_definitions": [],
+            "run_definitions": [],
+        }
+
+        # ---------- build FWDs from patterns ----------
+        fwd_ids = []
+        for i, p in enumerate(patterns, start=1):
+            fwd_id = f"fwd{i}"
+            fwd_ids.append(fwd_id)
+            cfg["workload_definitions"].append(
+                {
+                    "id": fwd_id,
+                    "fsd_id": "fsd1",
+                    "fileio": p.get("fileio", default_fileio),
+                    "rdpct": p.get("rdpct", default_rdpct),
+                    "xfersize": p.get("xfersize", default_xfersize),
+                    "threads": p.get("threads", default_threads),
+                    "skew": p.get("skew", default_skew),
+                }
+            )
+
+        # ---------- precreate-only mode ----------
+        if precreate_only:
+            # Fixed: Check if fwd_ids is not empty before accessing first element
+            if not fwd_ids:
+                raise ValueError(
+                    "Cannot run precreate_only mode without any FWD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "fwd_id": fwd_ids[
+                        0
+                    ],  # Use first available fwd instead of hardcoded "fwd1"
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": precreate_interval,
+                    "iorate": precreate_iorate,
+                }
+            )
+            return cfg
+
+        # ---------- optional precreate + test runs ----------
+        if precreate_then_run:
+            # Fixed: Check if fwd_ids is not empty before accessing first element
+            if not fwd_ids:
+                raise ValueError(
+                    "Cannot run precreate_then_run mode without any FWD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "fwd_id": fwd_ids[
+                        0
+                    ],  # Use first available fwd instead of hardcoded "fwd1"
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": precreate_interval,
+                    "iorate": precreate_iorate,
+                }
+            )
+
+        # Fixed: Added validation for empty fwd_ids
+        if not fwd_ids:
+            raise ValueError("No FWD patterns provided - cannot create run definitions")
+
+        # Test runs: either one RD per FWD or a single RD referencing all FWDs
+        if group_all_fwds_in_one_rd:
+            # In .cfg this becomes: rd=rd1,fwd=fwd1,fwd2,...,format=no
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd1",
+                    "fwd_id": ",".join(fwd_ids),
+                    "format": "no" if precreate_then_run else "yes",
+                    "elapsed": elapsed,
+                    "interval": interval,
+                    "iorate": iorate,
+                }
+            )
+        else:
+            # One RD per FWD
+            for i, fwd_id in enumerate(fwd_ids, start=1):
+                cfg["run_definitions"].append(
+                    {
+                        "id": f"rd{i}",
+                        "fwd_id": fwd_id,
+                        "format": "no" if precreate_then_run else "yes",
+                        "elapsed": elapsed,
+                        "interval": interval,
+                        "iorate": iorate,
+                    }
+                )
+
+        return cfg
+
+    return _factory
+
+
+@pytest.fixture
+def vdbench_mixed_workload_config():
+    """
+    Flexible Vdbench mixed workload config factory (direct I/O by default).
+
+    Supports:
+      - Single or multiple WDs (via `patterns`)
+      - Pre-create-only runs (format-only)
+      - Two-phase: precreate then run
+      - Group all WDs in one RD or one RD per WD
+      - Mixed filesystem and block device support
+    """
+
+    def _factory(
+        # Storage Definition (can be filesystem or block device)
+        lun="/vdbench-data/mixed",
+        size="5g",
+        threads=2,
+        open_flags="o_direct",  # direct I/O default
+        # Optional block device parameters
+        sd_align="",  # optional: e.g., "4k"
+        sd_offset="",  # optional: e.g., "0"
+        sd_name="sd1",
+        # Optional filesystem parameters (if using FSD instead of SD)
+        use_filesystem=False,  # True -> use FSD, False -> use SD
+        anchor="/vdbench-data/mixed-fs",
+        depth=2,
+        width=4,
+        files=10,
+        fsd_name="fsd1",
+        # WD patterns (list of dicts). If None, a sensible mixed default is used.
+        patterns=None,  # [{'name':'random_read','rdpct':100,'seekpct':100,'xfersize':'4k','skew':0}, ...]
+        default_rdpct=50,
+        default_seekpct=100,
+        default_xfersize="64k",
+        default_skew=0,
+        # RD behaviour
+        elapsed=300,
+        interval=60,
+        iorate="max",
+        group_all_wds_in_one_rd=False,  # True -> single RD with wd=wd1,wd2,...
+        precreate_only=False,  # True -> emit only a short format run
+        precreate_then_run=False,  # True -> add a short format RD before test RDs
+        precreate_elapsed=2,  # seconds for precreate (must be >= 2*interval)
+        precreate_interval=1,  # precreate reporting interval
+        precreate_iorate="max",  # Rate for precreate operations
+    ):
+        # ---------- defaults ----------
+        if patterns is None:
+            if use_filesystem:
+                # Filesystem-optimized patterns
+                patterns = [
+                    {
+                        "name": "sequential_read",
+                        "fileio": "sequential",
+                        "xfersize": "1m",
+                        "threads": 2,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "random_read",
+                        "fileio": "random",
+                        "rdpct": 100,
+                        "xfersize": "4k",
+                        "threads": 2,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "mixed_rw",
+                        "fileio": "random",
+                        "rdpct": 70,
+                        "xfersize": "64k",
+                        "threads": 2,
+                        "skew": 0,
+                    },
+                    {
+                        "name": "sequential_write",
+                        "fileio": "sequential",
+                        "xfersize": "1m",
+                        "threads": 2,
+                        "skew": 0,
+                    },
+                ]
+            else:
+                # Block device-optimized patterns
+                patterns = [
+                    {
+                        "name": "sequential_read",
+                        "rdpct": 100,
+                        "seekpct": 0,
+                        "xfersize": "1m",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "random_read",
+                        "rdpct": 100,
+                        "seekpct": 100,
+                        "xfersize": "4k",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "mixed_rw",
+                        "rdpct": 70,
+                        "seekpct": 100,
+                        "xfersize": "64k",
+                        "skew": 0,
+                    },
+                    {
+                        "name": "sequential_write",
+                        "rdpct": 0,
+                        "seekpct": 0,
+                        "xfersize": "1m",
+                        "skew": 0,
+                    },
+                ]
+
+        # ---------- build storage definition ----------
+        cfg = {
+            "storage_definitions": [],
+            "workload_definitions": [],
+            "run_definitions": [],
+        }
+
+        if use_filesystem:
+            # Filesystem storage definition (FSD)
+            cfg["storage_definitions"].append(
+                {
+                    "id": fsd_name,
+                    "fsd": True,
+                    "anchor": anchor,
+                    "depth": depth,
+                    "width": width,
+                    "files": files,
+                    "size": size,
+                    "reuse": False,
+                    "open_flags": open_flags,
+                }
+            )
+            storage_id = fsd_name
+            storage_key = "fsd_id"
+        else:
+            # Block device storage definition (SD)
+            cfg["storage_definitions"].append(
+                {
+                    "id": sd_name,
+                    "lun": lun,
+                    "size": size,
+                    "threads": threads,
+                    "open_flags": open_flags,
+                    "align": sd_align,
+                    "offset": sd_offset,
+                }
+            )
+            storage_id = sd_name
+            storage_key = "sd_id"
+
+        # ---------- build WDs from patterns ----------
+        wd_ids = []
+        for i, p in enumerate(patterns, start=1):
+            wd_id = f"wd{i}"
+            wd_ids.append(wd_id)
+
+            workload_def = {
+                "id": wd_id,
+                storage_key: storage_id,
+                "rdpct": p.get("rdpct", default_rdpct),
+                "xfersize": p.get("xfersize", default_xfersize),
+                "skew": p.get("skew", default_skew),
+            }
+
+            # Add filesystem-specific or block-specific parameters
+            if use_filesystem:
+                workload_def["fileio"] = p.get("fileio", "random")
+                workload_def["threads"] = p.get("threads", threads)
+                workload_def["fwdrate"] = p.get("fwdrate", "max")
+            else:
+                workload_def["seekpct"] = p.get("seekpct", default_seekpct)
+
+            cfg["workload_definitions"].append(workload_def)
+
+        # ---------- precreate-only mode ----------
+        if precreate_only:
+            # Fixed: Check if wd_ids is not empty before accessing first element
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_only mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],  # Use first available wd instead of hardcoded
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": precreate_interval,
+                    "iorate": precreate_iorate,
+                }
+            )
+            return cfg
+
+        # ---------- optional precreate + test runs ----------
+        if precreate_then_run:
+            # Fixed: Check if wd_ids is not empty before accessing first element
+            if not wd_ids:
+                raise ValueError(
+                    "Cannot run precreate_then_run mode without any WD patterns"
+                )
+
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd_format",
+                    "wd_id": wd_ids[0],  # Use first available wd instead of hardcoded
+                    "format": "yes",
+                    "elapsed": precreate_elapsed,
+                    "interval": precreate_interval,
+                    "iorate": precreate_iorate,
+                }
+            )
+
+        # Fixed: Added validation for empty wd_ids
+        if not wd_ids:
+            raise ValueError("No WD patterns provided - cannot create run definitions")
+
+        # Test runs: either one RD per WD or a single RD referencing all WDs
+        if group_all_wds_in_one_rd:
+            # In .cfg this becomes: rd=rd1,wd=wd1,wd2,...,format=no
+            cfg["run_definitions"].append(
+                {
+                    "id": "rd1",
+                    "wd_id": ",".join(wd_ids),
+                    "format": "no" if precreate_then_run else "yes",
+                    "elapsed": elapsed,
+                    "interval": interval,
+                    "iorate": iorate,
+                }
+            )
+        else:
+            # One RD per WD
+            for i, wd_id in enumerate(wd_ids, start=1):
+                cfg["run_definitions"].append(
+                    {
+                        "id": f"rd{i}",
+                        "wd_id": wd_id,
+                        "format": "no" if precreate_then_run else "yes",
+                        "elapsed": elapsed,
+                        "interval": interval,
+                        "iorate": iorate,
+                    }
+                )
+
+        return cfg
+
+    return _factory

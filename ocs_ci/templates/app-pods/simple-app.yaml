@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-app
+  namespace: test-project
+  labels:
+    app: simple-app
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 600
+  selector:
+    matchLabels:
+      app: simple-app
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: simple-app
+    spec:
+      containers:
+        - command:
+            - sh
+            - -c
+            - echo Running simple app && sleep 18000
+          image: quay.io/ocsci/scale-cli:latest
+          imagePullPolicy: Always
+          name: simple-app-container
+          resources: { }
+          volumeMounts:
+            - mountPath: /mnt
+              name: simple-pvc
+      securityContext:
+        fsGroupChangePolicy: OnRootMismatch
+      serviceAccountName: test
+      volumes:
+        - name: simple-pvc
+          persistentVolumeClaim:
+            claimName: simple-pvc

@@ -1,0 +1,14 @@
+---
+# This config is suppose to work on most of DCs we have.
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 6
+  master_replicas: 3
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '49152'
+  fio_storageutilization_min_mbps: 10.0

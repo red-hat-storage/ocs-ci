@@ -1,0 +1,7 @@
+---
+# This is example of the config for deployment which allows you to overwrite
+# the default values.
+ENV_DATA:
+  platform: 'aws'
+  worker_replicas: 3  # here you can define diff number of workers
+  master_replicas: 3

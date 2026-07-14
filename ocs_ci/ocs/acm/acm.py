@@ -1,0 +1,1111 @@
+import json
+import logging
+import time
+import os
+import tempfile
+
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import (
+    NoSuchElementException,
+)
+
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
+from ocs_ci.helpers.dr_helpers import get_cluster_set_name
+from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.acm.acm_constants import (
+    ACM_NAMESPACE,
+    ACM_MANAGED_CLUSTERS,
+    ACM_PAGE_TITLE,
+    ACM_2_7_MULTICLUSTER_URL,
+    ACM_PAGE_TITLE_2_7_ABOVE,
+    ACM_PAGE_TITLE_2_7_ABOVE_IBM_CLOUD_MANAGED,
+)
+from ocs_ci.ocs.ocp import OCP, get_ocp_url
+from ocs_ci.framework import config
+from ocs_ci.ocs.resources.pod import (
+    wait_for_pods_to_be_running,
+    wait_for_pods_by_label_count,
+)
+from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.ocs.utils import (
+    get_non_acm_cluster_config,
+    get_primary_cluster_config,
+    get_recovery_cluster_config,
+    get_non_acm_and_non_recovery_cluster_config,
+)
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    get_running_acm_version,
+    string_chunkify,
+    run_cmd,
+    get_client_type_by_name,
+    exec_cmd,
+)
+from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
+from ocs_ci.ocs.ui.base_ui import (
+    login_ui,
+    SeleniumDriver,
+    wait_for_element_to_be_clickable,
+)
+from ocs_ci.utility.version import compare_versions
+from ocs_ci.utility import version
+from ocs_ci.ocs.exceptions import (
+    ACMClusterImportException,
+    UnexpectedDeploymentConfiguration,
+    ResourceNotFoundError,
+    CommandFailed,
+)
+from ocs_ci.utility import templating
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.helpers.helpers import create_project
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+
+log = logging.getLogger(__name__)
+
+
+class AcmAddClusters(AcmPageNavigator):
+    """
+    ACM Page Navigator Class
+
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.page_nav = self.acm_page_nav
+        self.driver = SeleniumDriver()
+
+    def import_cluster_ui(self, cluster_name, kubeconfig_location):
+        """
+
+        Args:
+            cluster_name (str): cluster name to import
+            kubeconfig_location (str): kubeconfig file location of imported cluster
+
+        """
+        # There is a modal dialog box which appears as soon as we login
+        # we need to click on close on that dialog box
+        try:
+            if self.check_element_presence(
+                (
+                    self.acm_page_nav["modal_dialog_close_button"][1],
+                    self.acm_page_nav["modal_dialog_close_button"][0],
+                ),
+                timeout=100,
+            ):
+                self.do_click(
+                    self.acm_page_nav["modal_dialog_close_button"], timeout=100
+                )
+        except Exception as e:
+            log.warning(f"Modal dialog not found: {e}")
+
+        if not self.check_element_presence(
+            (By.XPATH, self.acm_page_nav["Import_cluster"][0]), timeout=600
+        ):
+            raise ACMClusterImportException("Import button not found")
+        self.do_click(self.acm_page_nav["Import_cluster"], timeout=1600)
+        log.info("Clicked on Import cluster")
+        self.wait_for_endswith_url("import", timeout=600)
+
+        self.do_send_keys(
+            self.page_nav["Import_cluster_enter_name"], text=f"{cluster_name}"
+        )
+        self.do_click(self.page_nav["Import_mode"])
+        self.do_click(self.page_nav["choose_kubeconfig"])
+        log.info(f"Copying Kubeconfig {kubeconfig_location}")
+        kubeconfig_to_import = copy_kubeconfig(kubeconfig_location)
+        for line in kubeconfig_to_import:
+            if len(line) > 100:
+                for chunk in string_chunkify(line, 100):
+                    self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{chunk}")
+            else:
+                self.do_send_keys(self.page_nav["Kubeconfig_text"], text=f"{line}")
+            time.sleep(2)
+        # With ACM2.6 there will be 1 more page
+        # 1. Automation
+        # So we have to click 'Next' button
+        acm_version_str = ".".join(get_running_acm_version().split(".")[:2])
+        if compare_versions(f"{acm_version_str} >= 2.6"):
+            for i in range(2):
+                self.do_click(locator=self.page_nav["cc_next_page_button"], timeout=10)
+        log.info(f"Submitting import of {cluster_name}")
+        self.do_click(self.page_nav["Submit_import"], timeout=600)
+
+    def import_cluster(self, cluster_name, kubeconfig_location):
+        """
+        Import cluster using UI
+
+        Args:
+            cluster_name: (str): cluster name to import
+            kubeconfig_location: (str): kubeconfig location
+        Returns:
+            None, but exits if sample object is not None using TimeoutSampler
+
+        """
+
+        self.import_cluster_ui(
+            cluster_name=cluster_name, kubeconfig_location=kubeconfig_location
+        )
+        for sample in TimeoutSampler(
+            timeout=450,
+            sleep=60,
+            func=validate_cluster_import,
+            cluster_name=cluster_name,
+        ):
+            if sample:
+                log.info(f"Cluster: {cluster_name} successfully imported")
+                self.navigate_clusters_page()
+                return
+            else:
+                log.error(f"import of cluster: {cluster_name} failed")
+
+    def install_submariner_ui(self, globalnet=True):
+        """
+        Installs the Submariner on the ACM Hub cluster and expects 2 OCP clusters to be already imported
+        on the Hub Cluster to create a link between them
+
+        Args:
+            globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
+
+        Returns:
+            str: cluster set name created during the function to which managed clusters are tied for Submariner
+            installation
+
+        """
+        ocs_version = version.get_semantic_ocs_version_from_config()
+
+        cluster_env = get_clusters_env()
+        primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            # dr_cluster_relations is a list containing cluster pairs list
+            dr_cluster_names = dr_cluster_relations[0]
+            primary_name = config.get_cluster_name_by_index(primary_index)
+            secondary_index = config.get_cluster_index_by_name(
+                [
+                    cluster_name
+                    for cluster_name in dr_cluster_names
+                    if cluster_name != primary_name
+                ][0]
+            )
+        else:
+            secondary_index = [
+                s.MULTICLUSTER["multicluster_index"]
+                for s in get_non_acm_cluster_config()
+                if s.MULTICLUSTER["multicluster_index"] != primary_index
+            ][0]
+        # submariner catalogsource creation
+        submariner_image = config.ENV_DATA.get("submariner_image")
+        if submariner_image:
+            self.create_submariner_downstream_catalogsource(image=submariner_image)
+
+        cluster_name_a = cluster_env.get(f"cluster_name_{primary_index}")
+        cluster_name_b = cluster_env.get(f"cluster_name_{secondary_index}")
+        if dr_cluster_relations:
+            if is_hosted_cluster(cluster_name_a):
+                cluster_name_a = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name_a}"
+                )
+            if is_hosted_cluster(cluster_name_b):
+                cluster_name_b = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name_b}"
+                )
+        self.navigate_clusters_page()
+        self.page_has_loaded(retries=15, sleep_time=5)
+        self.do_click(locator=self.acm_page_nav["Clusters_page"])
+        log.info("Click on Cluster sets")
+        self.do_click(self.page_nav["cluster-sets"])
+        self.page_has_loaded(retries=15, sleep_time=5)
+        log.info("Click on Create cluster set")
+        self.do_click(self.page_nav["create-cluster-set"])
+        global cluster_set_name
+        cluster_set_name = config.ENV_DATA.get(
+            "cluster_set"
+        ) or create_unique_resource_name("submariner", "clusterset")
+        log.info(f"Send Cluster set name '{cluster_set_name}'")
+        self.do_send_keys(self.page_nav["cluster-set-name"], text=cluster_set_name)
+        log.info("Click on Create")
+        self.do_click(self.page_nav["click-create"], enable_screenshot=True)
+        time.sleep(1)
+        log.info("Click on Manage resource assignments")
+        self.do_click(
+            self.page_nav["click-manage-resource-assignments"], enable_screenshot=True
+        )
+        log.info(f"Search and select cluster '{cluster_name_a}'")
+        self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_a)
+        self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
+        log.info(f"Clear search by clicking on cross mark for cluster {cluster_name_a}")
+        self.do_click(self.page_nav["clear-search"])
+        log.info(f"Search and select cluster '{cluster_name_b}'")
+        self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_b)
+        self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
+        log.info(f"Clear search by clicking on cross mark for cluster {cluster_name_b}")
+        self.do_click(self.page_nav["clear-search"])
+        log.info("Click on 'Review'")
+        self.do_click(self.page_nav["review-btn"], enable_screenshot=True)
+        log.info("Click on 'Save' to confirm the changes")
+        self.do_click(self.page_nav["confirm-btn"], enable_screenshot=True)
+        time.sleep(3)
+        log.info("Click on 'Submariner add-ons' tab")
+        self.do_click(self.page_nav["submariner-tab"])
+        log.info("Click on 'Install Submariner add-ons' button")
+        self.do_click(
+            self.page_nav["install-submariner-btn"],
+            enable_screenshot=True,
+            avoid_stale=True,
+        )
+        log.info("Click on 'Target clusters'")
+        self.do_click(self.page_nav["target-clusters"])
+        log.info(f"Select 1st cluster which is {cluster_name_a}")
+        self.do_click(
+            format_locator(self.page_nav["cluster-name-selection"], cluster_name_a)
+        )
+        log.info(f"Select 2nd cluster which is {cluster_name_b}")
+        self.do_click(
+            format_locator(self.page_nav["cluster-name-selection"], cluster_name_b),
+            enable_screenshot=True,
+        )
+        if ocs_version >= version.VERSION_4_13 and globalnet:
+            log.info(
+                "Enabling globalnet during submariner installation via ACM console"
+            )
+            element = self.find_an_element_by_xpath("//input[@id='globalist-enable']")
+            self.driver.execute_script("arguments[0].click();", element)
+        else:
+            log.info("Globalnet is disabled")
+        log.info("Click on Next button")
+        self.do_click(self.page_nav["next-btn"])
+        acm_version = ".".join(get_running_acm_version().split(".")[:2])
+        increase_gateway = False
+        if compare_versions(f"{acm_version}>=2.12"):
+            increase_gateway = True
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        azure_ipi_clusters_indices = [
+            cluster_index
+            for cluster_index in [primary_index, secondary_index]
+            if config.clusters[cluster_index].ENV_DATA["platform"]
+            == constants.AZURE_PLATFORM
+            and config.clusters[cluster_index].ENV_DATA.get("deployment_type") == "ipi"
+        ]
+
+        increase_gateway_number = 2
+        if ibm_cloud_managed or azure_ipi_clusters_indices:
+            increase_gateway_number = 1
+
+        found_azure_page = False
+        for cluster_nr in range(1, 3):
+            if azure_ipi_clusters_indices:
+                try:
+                    azure_page = self.get_element_text(
+                        self.page_nav["submariner_addon_azure_page"]
+                    )
+                    found_azure_page = True
+                    azure_index = [
+                        cluster_index
+                        for cluster_index in azure_ipi_clusters_indices
+                        if config.clusters[cluster_index].ENV_DATA["cluster_name"]
+                        in azure_page
+                    ][0]
+                    self.enter_azure_details(azure_cluster_index=azure_index)
+                except NoSuchElementException:
+                    if (not found_azure_page) and cluster_nr == 2:
+                        raise
+            if not ibm_cloud_managed:
+                log.info(
+                    f"Click on 'Enable NAT-T' to uncheck it for cluster [{cluster_nr}]"
+                )
+                self.do_click(self.page_nav["nat-t-checkbox"])
+            if increase_gateway:
+                log.info(
+                    f"Increase the gateway count by {increase_gateway_number} clicking"
+                    f" gateway count add button for cluster [{cluster_nr}]"
+                )
+                for _ in range(increase_gateway_number):
+                    self.do_click(self.page_nav["gateway-count-btn"])
+            if submariner_image:
+                self.submariner_downstream_info()
+            self.take_screenshot()
+            log.info("Click on Next button for cluster [{cluster_nr}]")
+            self.do_click(self.page_nav["next-btn"])
+        if ocs_version >= version.VERSION_4_13 and globalnet:
+            check_globalnet = self.get_element_text(self.page_nav["check-globalnet"])
+            assert (
+                check_globalnet == constants.GLOBALNET_STATUS
+            ), "Globalnet was not enabled"
+            log.info("Globalnet is enabled")
+        self.take_screenshot()
+        log.info("Click on 'Install'")
+        self.do_click(self.page_nav["install-btn"])
+
+        # Add loadBalancerEnable: true and hostedCluster: true in the submarinerconfig for kubevirt hcp clusters
+        if dr_cluster_relations:
+            for dr_cluster in [primary_index, secondary_index]:
+                cluster_name = config.get_cluster_name_by_index(dr_cluster)
+                if get_client_type_by_name(cluster_name) == "kubevirt":
+                    cluster_name = (
+                        f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name}"
+                    )
+                    submariner_config = OCP(
+                        kind=constants.SUBMARINERCONFIG,
+                        namespace=cluster_name,
+                        resource_name="submariner",
+                    )
+                    patch_param = (
+                        '[{"op": "replace", "path": "/spec/hostedCluster", "value": true }, '
+                        '{"op": "replace", "path": "/spec/loadBalancerEnable", "value": true }]'
+                    )
+                    submariner_config.patch(params=patch_param, format_type="json")
+        return cluster_set_name
+
+    def submariner_downstream_info(self):
+        log.info("Use custom Submariner subscription ")
+        self.do_click(self.page_nav["submariner-custom-subscription"])
+        log.info("Clear existing Source")
+        self.clear_input_gradually(self.page_nav["submariner-custom-source"])
+        source = self.driver.find_element(
+            By.XPATH, "//input[@placeholder='Enter the catalog source']"
+        )
+        value_of_source = source.get_attribute("value")
+        if value_of_source == "":
+            log.info("Textbox for 'Source' is empty.")
+        else:
+            self.do_clear(self.page_nav["submariner-custom-source"])
+            log.info("Textbox for 'Source' wasn't empty, cleared it in 2nd attempt")
+        log.info("Send submariner-catalogsource as 'Source'")
+        self.do_send_keys(
+            self.page_nav["submariner-custom-source"], "submariner-catalogsource"
+        )
+        submariner_unreleased_channel = (
+            config.ENV_DATA.get("submariner_unreleased_channel")
+            if config.ENV_DATA.get("submariner_unreleased_channel")
+            else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
+        )
+        channel_name = "stable-" + submariner_unreleased_channel
+        log.info("Clear existing Channel (if any)")
+        self.do_clear(self.page_nav["submariner-custom-source"])
+        log.info("Send Channel")
+        self.do_send_keys(
+            self.page_nav["submariner-custom-channel"],
+            channel_name,
+        )
+
+    def submariner_validation_ui(self):
+        """
+        This function validates submariner status on ACM console which connects 2 managed OCP clusters.
+        This is a mandatory pre-check for Regional DR.
+
+        """
+        timeout = 600
+        cluster_set_name = (
+            config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+        )
+        azure_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get(
+            selector=f"cluster.open-cluster-management.io/clusterset={cluster_set_name},cloud=Azure",
+            dont_raise=True,
+        )
+
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if ibm_cloud_managed or azure_clusters:
+            timeout = 2100
+        self.navigate_clusters_page()
+        cluster_sets_page = self.wait_until_expected_text_is_found(
+            locator=self.page_nav["cluster-sets"],
+            expected_text="Cluster sets",
+            timeout=120,
+        )
+        if cluster_sets_page:
+            log.info("Click on Cluster sets")
+            self.do_click(self.page_nav["cluster-sets"])
+        else:
+            log.error("Couldn't navigate to Cluster sets page")
+            raise NoSuchElementException
+        log.info("Click on the cluster set created")
+        self.do_click(
+            format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
+        )
+        log.info("Click on 'Submariner add-ons' tab")
+        self.do_click(self.page_nav["submariner-tab"], enable_screenshot=True)
+        log.info("Checking connection status of both the imported clusters")
+        assert self.wait_until_expected_text_is_found(
+            locator=self.page_nav["connection-status-1"],
+            expected_text="Healthy",
+            timeout=timeout,
+        ), "Connection status 1 is unhealthy for Submariner"
+        assert self.wait_until_expected_text_is_found(
+            locator=self.page_nav["connection-status-2"],
+            expected_text="Healthy",
+            timeout=timeout,
+        ), "Connection status 2 is unhealthy for Submariner"
+        log.info("Checking agent status of both the imported clusters")
+        assert self.wait_until_expected_text_is_found(
+            locator=self.page_nav["agent-status-1"],
+            expected_text="Healthy",
+            timeout=timeout,
+        ), "Agent status 1 is unhealthy for Submariner"
+        assert self.wait_until_expected_text_is_found(
+            locator=self.page_nav["agent-status-2"],
+            expected_text="Healthy",
+            timeout=timeout,
+        ), "Agent status 2 is unhealthy for Submariner"
+        log.info("Checking if nodes of both the imported clusters are labeled or not")
+        assert self.wait_until_expected_text_is_found(
+            locator=self.page_nav["node-label-1"],
+            expected_text="Nodes labeled",
+            timeout=timeout,
+        ), "First gateway node label check did not pass for Submariner"
+        assert self.wait_until_expected_text_is_found(
+            locator=self.page_nav["node-label-2"],
+            expected_text="Nodes labeled",
+            timeout=timeout,
+        ), "Second gateway node label check did not pass for Submariner"
+        self.take_screenshot()
+        log.info("Submariner is healthy, check passed")
+
+    def install_submariner_cli(self, globalnet=True):
+        """
+        Installs the Submariner Via CLI on the ACM Hub cluster and expects 2 OCP clusters to be already imported
+        on the Hub Cluster to create a link between them
+
+        Args:
+            globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
+
+        """
+        submariner_image = config.ENV_DATA.get("submariner_image")
+        if submariner_image:
+            self.create_submariner_downstream_catalogsource(image=submariner_image)
+        submariner_broker_yaml = templating.load_yaml(constants.SUBMARINER_BROKER_YAML)
+        all_documents = []
+        log.info("Creating ManagedClusterSet")
+        global cluster_set_name
+        cluster_set_name = create_unique_resource_name("submariner", "clusterset")
+        log.info(f"Clusterset created with name: {cluster_set_name}")
+        cluster_set_yaml = templating.load_yaml(constants.CLUSTERSET_YAML)
+        cluster_set_yaml["metadata"]["name"] = cluster_set_name
+        clusterset_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="clusterset", delete=False
+        )
+        templating.dump_data_to_temp_yaml(cluster_set_yaml, clusterset_file.name)
+        old_ctx = config.cur_index
+        config.switch_acm_ctx()
+        run_cmd(cmd=f"oc create -f {clusterset_file.name}")
+        managed_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+        # ignore local-cluster here
+        for i in managed_clusters:
+            managed_cluster_name = i["metadata"]["name"]
+            if managed_cluster_name != constants.ACM_LOCAL_CLUSTER:
+                run_cmd(
+                    cmd=f"oc label {constants.ACM_MANAGEDCLUSTER} {managed_cluster_name} "
+                    f"cluster.open-cluster-management.io/clusterset={cluster_set_name} --overwrite"
+                )
+
+        config.switch_ctx(old_ctx)
+
+        for cluster in get_non_acm_cluster_config():
+            submariner_addon_yaml = templating.load_yaml(
+                constants.SUBMARINER_ADDON_YAML
+            )
+            submariner_config_yaml = templating.load_yaml(
+                constants.SUBMARINER_CONFIG_YAML
+            )
+
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+
+            submariner_addon_yaml["metadata"]["namespace"] = cluster.ENV_DATA[
+                "cluster_name"
+            ]
+            submariner_config_yaml["metadata"]["namespace"] = cluster.ENV_DATA[
+                "cluster_name"
+            ]
+            if submariner_image:
+                submariner_channel = (
+                    config.ENV_DATA.get("submariner_channel")
+                    if config.ENV_DATA.get("submariner_channel")
+                    else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
+                )
+
+                channel_name = "stable-" + submariner_channel
+                subscription_config = {
+                    "source": "submariner-catalogsource",
+                    "sourceNamespace": "openshift-marketplace",
+                    "channel": channel_name,
+                    "startingCSV": None,
+                    "installPlanApproval": "automatic",
+                }
+                submariner_config_yaml["spec"][
+                    "subscriptionConfig"
+                ] = subscription_config
+
+            all_documents.append(submariner_addon_yaml)
+            all_documents.append(submariner_config_yaml)
+        if not globalnet:
+            submariner_broker_yaml["spec"]["globalnetEnabled"] = "false"
+        submariner_broker_yaml["metadata"]["namespace"] = cluster_set_name + "-broker"
+        all_documents.append(submariner_broker_yaml)
+
+        # Create the temp file
+        submariner_data_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="submariner_install_data", delete=False
+        )
+
+        # Dump all docs at once to preserve them
+        templating.dump_data_to_temp_yaml(all_documents, submariner_data_file.name)
+
+        log.info(f"YAML written to: {submariner_data_file.name}")
+
+        old_ctx = config.cur_index
+        config.switch_acm_ctx()
+        run_cmd(cmd=f"oc create -f {submariner_data_file.name}")
+
+    def create_submariner_downstream_catalogsource(self, image=None):
+        """
+        Create Catalogsource for installing Downstream Submariner
+
+        Args:
+            image (str): Image path.
+
+        """
+        submariner_downstream_unreleased = templating.load_yaml(
+            constants.SUBMARINER_DOWNSTREAM_UNRELEASED
+        )
+        # Update catalog source
+        submariner_downstream_unreleased["spec"]["image"] = (
+            image if image else config.ENV_DATA.get("submariner_image")
+        )
+        submariner_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="submariner_downstream_unreleased", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            submariner_downstream_unreleased, submariner_data_yaml.name
+        )
+        old_ctx = config.cur_index
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            dr_cluster_names = dr_cluster_relations[0]
+            cluster_configs = [
+                cluster
+                for cluster in config.clusters
+                if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+            ]
+        else:
+            cluster_configs = get_non_acm_cluster_config()
+        for cluster in cluster_configs:
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            run_cmd(f"oc apply -f {submariner_data_yaml.name}", timeout=300)
+        config.switch_ctx(old_ctx)
+
+    def enter_azure_details(self, azure_cluster_index):
+        """
+        Enter Azure details in Submariner install page
+
+        Args:
+            azure_cluster_index (str): The index of the Azure cluster
+
+        """
+        log.info("Enter Azure cluster details")
+        self.do_send_keys(
+            self.page_nav["azure_base_domain_resource_group"],
+            config.clusters[azure_cluster_index].ENV_DATA.get(
+                "azure_base_domain_resource_group_name"
+            ),
+        )
+        self.do_send_keys(
+            self.page_nav["azure_client_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["client_id"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_client_secret"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["client_secret"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_subscription_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["subscription_id"],
+        )
+        self.do_send_keys(
+            self.page_nav["azure_tenent_id"],
+            config.clusters[azure_cluster_index].AUTH["azure_auth"]["tenant_id"],
+        )
+
+
+def copy_kubeconfig(file=None, return_str=False):
+    """
+
+    Args:
+        file: (str): kubeconfig file location
+        return_str: (bool): if True return kubeconfig content as string
+        else return list of lines of kubeconfig content
+
+    Returns:
+        list/str: kubeconfig content
+
+    """
+
+    try:
+        with open(file, "r") as f:
+            if return_str is True:
+                txt = f.read()
+            else:
+                txt = f.readlines()
+            return txt
+
+    except FileNotFoundError as e:
+        log.error(f"file {file} not found")
+        raise e
+
+
+def get_acm_url():
+    """
+    Gets ACM console url
+
+    Returns:
+        str: url of ACM console
+
+    """
+    mch_cmd = OCP(namespace=ACM_NAMESPACE)
+    url = mch_cmd.exec_oc_cmd(
+        "get route -ojsonpath='{.items[].spec.host}'", out_yaml_format=False
+    )
+    log.info(f"ACM console URL: {url}")
+
+    return f"https://{url}"
+
+
+def validate_page_title(title):
+    """
+    Validates Page HTML Title
+    Args:
+        title (str): required title
+    """
+    WebDriverWait(SeleniumDriver(), 60).until(ec.title_is(title))
+    log.info(f"page title: {title}")
+
+
+def login_to_acm():
+    """
+    Login to ACM console and validate by its title
+
+    Returns:
+        driver (Selenium WebDriver)
+
+    """
+
+    acm_version = ".".join(get_running_acm_version().split(".")[:2])
+    if not acm_version:
+        raise UnexpectedDeploymentConfiguration("ACM not found")
+    cmp_str = f"{acm_version}>=2.7"
+    if compare_versions(cmp_str):
+        url = f"{get_ocp_url()}{ACM_2_7_MULTICLUSTER_URL}"
+    else:
+        url = get_acm_url()
+    log.info(f"URL: {url}")
+    driver = login_ui(url)
+    page_nav = AcmPageNavigator()
+    page_nav.page_has_loaded(retries=10, sleep_time=5)
+    locator = ["click-local-cluster", "click-admin-dropdown"]
+    expected_text = ["local-cluster", "Administrator"]
+    for expected_text, locator in zip(expected_text, locator):
+        dropdown_found = page_nav.wait_until_expected_text_is_found(
+            locator=page_nav.acm_page_nav[locator],
+            expected_text=expected_text,
+            timeout=15,
+        )
+        if dropdown_found:
+            log.info(
+                f"'{expected_text}' dropdown found, navigating from OCP to ACM console"
+            )
+            page_nav.navigate_from_ocp_to_acm_cluster_page(locator=locator)
+            break
+        else:
+            log.warning(f"'{expected_text}' dropdown not found")
+    else:
+        log.warning(
+            "Neither 'local-cluster' nor 'Administrator' dropdown found, view is expected to be on the ACM console"
+            "Check if login to OCP console is successful or not"
+        )
+
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if compare_versions(cmp_str):
+        if ibm_cloud_managed:
+            page_title = ACM_PAGE_TITLE_2_7_ABOVE_IBM_CLOUD_MANAGED
+        else:
+            page_title = ACM_PAGE_TITLE_2_7_ABOVE
+    else:
+        page_title = ACM_PAGE_TITLE
+    log.info(f"Validating page title to be: {page_title}")
+    validate_page_title(title=page_title)
+    log.info("Successfully logged into RHACM console")
+    side_navigation_toggle_btn = wait_for_element_to_be_clickable(
+        page_nav.acm_page_nav["side_navigation_toggle"]
+    )
+    side_navigation_toggle = page_nav.is_expanded(
+        locator=page_nav.acm_page_nav["side_navigation_toggle"]
+    )
+    if not side_navigation_toggle:
+        page_nav.driver.execute_script(
+            "arguments[0].click();", side_navigation_toggle_btn
+        )
+        log.info("Successfully expanded side navigation options on the ACM hub console")
+    return driver
+
+
+def verify_running_acm():
+    """
+    Detect ACM and its version on Cluster
+
+    """
+    mch_cmd = OCP(namespace=ACM_NAMESPACE)
+    acm_status = mch_cmd.exec_oc_cmd(
+        "get mch -o jsonpath='{.items[].status.phase}'", out_yaml_format=False
+    )
+    assert acm_status == "Running", f"ACM status is {acm_status}"
+    acm_version = mch_cmd.exec_oc_cmd(
+        "get mch -o jsonpath='{.items[].status.currentVersion}'", out_yaml_format=False
+    )
+    log.info(f"ACM Version Detected: {acm_version}")
+
+
+def validate_cluster_import(cluster_name, switch_ctx=None):
+    """
+    Validate ACM status of managed cluster
+
+    Args:
+        cluster_name: (str): cluster name to validate
+        switch_ctx (int): The cluster index by the cluster name
+
+    Assert:
+        All conditions of selected managed cluster should be "True", Failed otherwise
+
+    Return:
+        True, if not AssertionError
+    """
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_ctx(0)
+    oc_obj = OCP(kind=ACM_MANAGED_CLUSTERS)
+    conditions = oc_obj.exec_oc_cmd(
+        f"get managedclusters {cluster_name} -ojsonpath='{{.status.conditions}}'"
+    )
+    log.debug(conditions)
+
+    for dict_status in conditions:
+        log.info(f"Message: {dict_status.get('message')}")
+        log.info(f"Status: {dict_status.get('status')}")
+        assert (
+            dict_status.get("status") == "True"
+        ), f"Status is not True, but: {dict_status.get('status')}"
+
+    # Return true if Assertion error was not raised:
+    return True
+
+
+@switch_to_orig_index_at_last
+def get_clusters_env():
+    """
+    Stores cluster's kubeconfig location and clusters name, in case of multi-cluster setup.
+
+    Returns:
+        dict: with clusters names, clusters kubeconfig locations
+
+    """
+    clusters_env = {}
+    for index in range(config.nclusters):
+        config.switch_ctx(index=index)
+
+        clusters_env[f"kubeconfig_location_c{index}"] = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+        )
+        clusters_env[f"cluster_name_{index}"] = config.ENV_DATA["cluster_name"]
+
+    return clusters_env
+
+
+def import_clusters_via_cli(clusters):
+    """
+    Import clusters via cli
+
+    Args:
+        clusters (list): list of tuples (cluster name, kubeconfig path)
+
+    Raises:
+        ResourceNotFoundError: If the managed cluster is MCE cluster and applicable KlusterletConfig is not found
+    """
+    for cluster in clusters:
+        log.info("Importing clusters via CLI method")
+        log.info(f"**** clustername={cluster[0]}")
+        log.info(f"**** kubeconfig={cluster[1]}")
+        create_project(cluster[0])
+
+        log.info("Create and apply managed-cluster.yaml")
+        managed_cluster = templating.load_yaml(
+            "ocs_ci/templates/acm-deployment/managed-cluster.yaml"
+        )
+        managed_cluster["metadata"]["name"] = cluster[0]
+
+        # TODO: This check is based on current requirements of RDR in provider mode. Change the condition and add
+        #  additional check to verify whether Multicluster Engine (MCE) is installed in the managedcluster
+        if config.ENV_DATA.get("configure_acm_to_import_mce"):
+            # Find the klusterletconfig to import MCE cluster
+            klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
+            klusterletconfigs = klusterletconfig_obj.get().get("items", [])
+            klusterletconfig_name = ""
+            for klusterletconfig in klusterletconfigs:
+                if (
+                    klusterletconfig.get("spec", {})
+                    .get("installMode", {})
+                    .get("noOperator", {})
+                    .get("postfix")
+                    == "mce-import"
+                ):
+                    klusterletconfig_name = klusterletconfig.get("metadata").get("name")
+                    break
+            if klusterletconfig_name:
+                managed_cluster["metadata"]["annotations"] = {
+                    "agent.open-cluster-management.io/klusterlet-config": klusterletconfig_name
+                }
+            else:
+                raise ResourceNotFoundError(
+                    "No KlusterletConfig found to import MCE clusters"
+                )
+            # Add 'leaseDurationSeconds' obtained from ACM documentation
+            managed_cluster["spec"]["leaseDurationSeconds"] = 60
+
+        managed_cluster_obj = OCS(**managed_cluster)
+        managed_cluster_obj.apply(**managed_cluster)
+
+        log.info("Create and Apply the auto-import-secret.yaml")
+        auto_import_secret = templating.load_yaml(
+            "ocs_ci/templates/acm-deployment/auto-import-secret.yaml"
+        )
+        auto_import_secret["metadata"]["namespace"] = cluster[0]
+        auto_import_secret["stringData"]["kubeconfig"] = cluster[1]
+        auto_import_secret_obj = OCS(**auto_import_secret)
+        try:
+            auto_import_secret_obj.apply(**auto_import_secret)
+        except CommandFailed as ex:
+            if (
+                'Error is Error from server (NotFound): secrets "auto-import-secret" not found'
+                in str(ex)
+            ):
+                pass
+            else:
+                raise
+
+        log.info("Wait managedcluster move to Available state")
+        time.sleep(60)
+        ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
+        ocp_obj.wait_for_resource(
+            timeout=2000,
+            condition="True",
+            column="AVAILABLE",
+            resource_name=cluster[0],
+        )
+        ocp_obj.wait_for_resource(
+            timeout=1200,
+            condition="True",
+            column="JOINED",
+            resource_name=cluster[0],
+        )
+
+        log.info("Creating klusterlet addon configuration")
+        klusterlet_config = templating.load_yaml(constants.ACM_HUB_KLUSTERLET_YAML)
+        klusterlet_config["metadata"]["name"] = cluster[0]
+        klusterlet_config["metadata"]["namespace"] = cluster[0]
+        klusterlet_config_obj = OCS(**klusterlet_config)
+        klusterlet_config_obj.create()
+
+        log.info("Waiting for addon pods to be in running state")
+        config.switch_to_cluster_by_name(cluster[0])
+
+        wait_for_pods_to_be_running(
+            namespace=constants.ACM_ADDONS_NAMESPACE,
+            timeout=300,
+            sleep=15,
+            skip_for_status=[constants.STATUS_COMPLETED],
+        )
+
+        config.switch_acm_ctx()
+        ocp_obj.wait_for_resource(
+            timeout=1200,
+            condition="true",
+            column="HUB ACCEPTED",
+            resource_name=cluster[0],
+        )
+
+
+def import_clusters_with_acm():
+    """
+    Run Procedure of: detecting acm, login to ACM console, import 2 clusters
+
+    """
+    # TODO: Import action should be dynamic per cluster count (Use config.nclusters loop)
+    clusters_env = get_clusters_env()
+    primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
+    secondary_index = [
+        s.MULTICLUSTER["multicluster_index"]
+        for s in get_non_acm_cluster_config()
+        if s.MULTICLUSTER["multicluster_index"] != primary_index
+    ][0]
+    log.info(clusters_env)
+    kubeconfig_a = copy_kubeconfig(
+        file=clusters_env.get(f"kubeconfig_location_c{primary_index}"), return_str=True
+    )
+    kubeconfig_b = copy_kubeconfig(
+        file=clusters_env.get(f"kubeconfig_location_c{secondary_index}"),
+        return_str=True,
+    )
+    cluster_name_a = clusters_env.get(f"cluster_name_{primary_index}")
+    cluster_name_b = clusters_env.get(f"cluster_name_{secondary_index}")
+    clusters = ((cluster_name_a, kubeconfig_a), (cluster_name_b, kubeconfig_b))
+    verify_running_acm()
+    if config.DEPLOYMENT.get("ui_acm_import"):
+        login_to_acm()
+        acm_nav = AcmAddClusters()
+        acm_nav.import_cluster(
+            cluster_name=cluster_name_a,
+            kubeconfig_location=kubeconfig_a,
+        )
+    else:
+        import_clusters_via_cli(clusters)
+
+    if config.ENV_DATA.get("configure_acm_to_import_mce"):
+        discover_hosted_clusters()
+        automate_import_of_hosted_clusters()
+
+
+def discover_hosted_clusters():
+    """
+    After the multicluster engine operator clusters are imported into ACM, enable the hypershift-addon for those managed
+    multicluster engine operator clusters to discover the hosted clusters.
+
+    """
+    addondeploymentconfig = OCP(
+        kind=constants.ADDONDEPLOYMENTCONFIG, namespace=constants.MCE_NAMESPACE
+    )
+    agent_install_namespace = addondeploymentconfig.get(
+        resource_name="addon-ns-config"
+    )["spec"]["agentInstallNamespace"]
+    # Set the agentInstallNamespace namespace of the add-on to open-cluster-management-agent-addon-discovery
+    addondeploymentconfig.patch(
+        resource_name="hypershift-addon-deploy-config",
+        params=f'{{"spec":{{"agentInstallNamespace":"{agent_install_namespace}"}}}}',
+        format_type="merge",
+    )
+    # Disable metrics and HyperShift operator management
+    log.info("Getting existing values")
+    spec_data = addondeploymentconfig.get(
+        resource_name="hypershift-addon-deploy-config"
+    )["spec"]["customizedVariables"]
+
+    discovery_prefix_data_to_add = {
+        "name": "discoveryPrefix",
+        "value": constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX,
+    }
+    spec_data.append(discovery_prefix_data_to_add)
+    addondeploymentconfig.patch(
+        resource_name="hypershift-addon-deploy-config",
+        params=json.dumps({"spec": {"customizedVariables": spec_data}}),
+        format_type="merge",
+    )
+
+    # Find the relevant managedcluster names
+    managed_cluster_names = []
+    managed_clusters_in_config = [
+        cluster_config.ENV_DATA["cluster_name"]
+        for cluster_config in get_non_acm_and_non_recovery_cluster_config()
+    ]
+    managed_clusters_info = (
+        OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+    )
+    for managed_cluster in managed_clusters_info:
+        if (
+            "agent.open-cluster-management.io/klusterlet-config"
+            in managed_cluster["metadata"].get("annotations", [])
+            and managed_cluster["metadata"]["name"] in managed_clusters_in_config
+        ):
+            managed_cluster_names.append(managed_cluster["metadata"]["name"])
+
+    # Install clusteradm
+    install_clusteradm()
+    # Enable the hypershift-addon for multicluster engine operator
+    run_cmd(
+        cmd=f"clusteradm addon enable --names hypershift-addon --clusters {','.join(managed_cluster_names)}"
+    )
+
+    # Verify that the hypershift-addon is installed in the relevant managed clusters
+    for cluster_name in managed_cluster_names:
+        with config.RunWithConfigContext(
+            config.get_cluster_index_by_name(cluster_name)
+        ):
+            wait_for_pods_by_label_count(
+                label="app=hypershift-addon-agent",
+                expected_count=1,
+                namespace=agent_install_namespace,
+                timeout=600,
+                sleep=20,
+            )
+
+
+def install_clusteradm():
+    """
+    Install clusteradm CLI
+
+    """
+    try:
+        run_cmd("clusteradm")
+    except (CommandFailed, FileNotFoundError):
+        # Install/reinstall clusteradm
+        exec_cmd(
+            "bash -c 'curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh "
+            "| bash'",
+            shell=True,
+        )
+
+
+def automate_import_of_hosted_clusters():
+    """
+    Enable automatic import of hosted clusters that are created on the imported multicluster engine clusters
+
+    """
+    policy_mce_hcp_autoimport = create_resource(
+        **templating.load_yaml(constants.POLICY_MCE_HCP_AUTOIMPORT_YAML)
+    )
+    policy_mce_hcp_autoimport_placement = create_resource(
+        **templating.load_yaml(constants.POLICY_MCE_HCP_AUTOIMPORT_PLACEMENT_YAML)
+    )
+    placement_binding_data = templating.load_yaml(
+        constants.POLICY_MCE_HCP_AUTOIMPORT_PLACEMENT_BINDING_YAML
+    )
+    placement_binding_data["placementRef"][
+        "name"
+    ] = policy_mce_hcp_autoimport_placement.name
+    placement_binding_data["subjects"][0]["name"] = policy_mce_hcp_autoimport.name
+    create_resource(**placement_binding_data)
+
+
+def import_recovery_clusters_with_acm():
+    """
+    Run Procedure of: detecting acm, login to ACM console, import recoevry cluster
+
+    """
+    clusters_env = get_clusters_env()
+    recovery_index = get_recovery_cluster_config().MULTICLUSTER["multicluster_index"]
+    log.info(clusters_env)
+    kubeconfig_recovery = copy_kubeconfig(
+        file=clusters_env.get(f"kubeconfig_location_c{recovery_index}"), return_str=True
+    )
+
+    cluster_name_recoevry = clusters_env.get(f"cluster_name_{recovery_index}")
+    clusters = ((cluster_name_recoevry, kubeconfig_recovery),)
+    verify_running_acm()
+
+    import_clusters_via_cli(clusters)
+
+    return cluster_name_recoevry

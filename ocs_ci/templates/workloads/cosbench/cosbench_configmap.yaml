@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cosbench-config
+  namespace: cosbench-project
+data:
+  ip: 127.0.0.1
+  t: both
+  count: '1'
+  u: 'true'
+

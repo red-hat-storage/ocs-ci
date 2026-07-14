@@ -1,0 +1,34 @@
+services:
+ vsphere_vcsa-qe:
+    install_base_domain: {{ base_domain }}
+    connect:
+      host: {{ vsphere_server }}
+      insecure: {{ insecure | default('true') }}
+      user: {{ vsphere_user | default('Administrator@vsphere.local') }}
+      password: {{ vsphere_password }}
+    common:
+      cluster: {{ vsphere_cluster }}
+      datacenter: {{ vsphere_datacenter }}
+      datastore: {{ vsphere_datastore }}
+      CIDR: {{ machine_cidr }}
+      network: {{ vm_network | default('VM Network') }}
+    create_opts:
+      type: {{ create_type | default(':clone') }}
+      clone_opts:
+        from_vm: {{ rhel_template | default('rhel77_ocs4qe') }}
+        target_resource_pool: {{ target_resource_pool | default('null') }}
+    host_connect_opts:
+      user: {{ host_user | default('root') }}
+      ssh_private_key: {{ ssh_key_private }}
+      class: {{ host_class | default('SSHAccessibleHost') }}
+    ipam_server:
+      host: {{ ipam | default('139.178.89.254') }}
+      token: {{ ipam_token }}
+    cloud_type: {{ platform }}
+
+ AWS-CI:
+    # <<: *AWSPriv
+    awscred: {{ aws_creds_path | default('~/.aws') }}
+    config_opts:
+      region: {{ region | default('us-east-2')}}
+    install_base_domain: {{ base_domain }}

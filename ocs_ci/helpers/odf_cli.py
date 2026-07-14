@@ -1,0 +1,570 @@
+import os
+import platform
+import xattr
+from stat import S_IEXEC
+from logging import getLogger
+from typing import Union
+
+from ocs_ci.ocs.exceptions import NotSupportedException
+from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_15
+from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.framework import config
+from ocs_ci.deployment.ocp import download_pull_secret
+from ocs_ci.ocs.constants import (
+    ODF_CLI_DEV_IMAGE,
+    LOW_RECOVERY_OPS,
+    BALANCED,
+    HIGH_RECOVERY_OPS,
+)
+
+
+log = getLogger(__name__)
+
+
+class ODFCLIRetriever:
+    def __init__(self):
+        self.semantic_version = get_semantic_ocs_version_from_config()
+        self.local_cli_path = os.path.join(config.RUN["bin_dir"], "odf")
+        self.version_attribute_name = (
+            "user.version"  # "user." prefix is required on Linux
+        )
+
+    def check_odf_cli_binary(self):
+        """
+        Check if the ODF CLI binary exists, is executable, and matches the cluster version.
+
+        Returns:
+            bool: True if the binary exists, is executable, and matches the cluster version, False otherwise.
+        """
+        path = self.local_cli_path
+
+        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+            log.warning(f"ODF CLI binary is not accessible at {path}")
+            return False
+
+        # Check if the binary's version matches the cluster's in upgrade runs
+        try:
+            binary_version = xattr.getxattr(path, self.version_attribute_name).decode()
+        except OSError:
+            log.warning("ODF CLI binary is not tagged with a version attribute")
+            return False
+
+        if binary_version != str(self.semantic_version):
+            log.warning(
+                f"ODF CLI binary is not tagged with the correct version {self.semantic_version}"
+            )
+            return False
+
+        log.info(
+            f"ODF CLI binary is compatible with the current cluster version {self.semantic_version}"
+        )
+        return True
+
+    def retrieve_odf_cli_binary(self):
+        """
+        Download and set up the ODF-CLI binary.
+
+        Raises:
+            NotSupportedException: If ODF CLI is not supported on the current version or deployment.
+        """
+        self._validate_odf_cli_support()
+
+        if not self.check_odf_cli_binary():
+            image = self._get_odf_cli_image()
+            self._extract_cli_binary(image)
+            self._set_executable_permissions()
+            self.add_cli_to_path()
+
+            # Tag the CLI binary with its version for post-upgrade verification
+            log.info(f"Tagging ODF CLI binary with version {self.semantic_version}")
+            xattr.setxattr(
+                self.local_cli_path,
+                self.version_attribute_name,
+                str(
+                    self.semantic_version
+                ).encode(),  # setxattr expects the value as bytes
+            )
+            log.info(f"Tagged ODF CLI binary with version {self.semantic_version}")
+
+        if not self.check_odf_cli_binary():
+            raise RuntimeError(
+                f"Failed to retrieve and set up ODF CLI binary at {self.local_cli_path}"
+            )
+
+        log.info(f"ODF CLI binary is ready at {self.local_cli_path}")
+
+    def _validate_odf_cli_support(self):
+        if self.semantic_version < VERSION_4_15:
+            raise NotSupportedException(
+                f"ODF CLI tool not supported on ODF {self.semantic_version}"
+            )
+
+    def _get_odf_cli_image(self):
+        return f"{ODF_CLI_DEV_IMAGE}:v{self.semantic_version}"
+
+    def _get_architecture_path(self):
+        """Get architecture-specific path for ODF CLI binary in the container image."""
+        system = platform.system()
+        machine = platform.machine()
+        path = "/usr/share/odf/"
+
+        if system == "Linux":
+            path = os.path.join(path, "linux")
+            if machine == "x86_64":
+                path = os.path.join(path, "odf-amd64")
+            elif machine == "ppc64le":
+                path = os.path.join(path, "odf-ppc64le")
+            elif machine == "s390x":
+                path = os.path.join(path, "odf-s390x")
+        elif system == "Darwin":  # Mac
+            # For ODF CLI 4.20+, Mac has architecture-specific binaries
+            path = os.path.join(path, "macosx")
+            if machine == "arm64" or machine == "aarch64":  # Apple Silicon
+                path = os.path.join(path, "odf-arm64")
+            else:  # Intel Mac (x86_64/amd64)
+                path = os.path.join(path, "odf-amd64")
+
+        return path
+
+    def _extract_cli_binary(self, image):
+        pull_secret_path = download_pull_secret()
+        local_cli_dir = os.path.dirname(self.local_cli_path)
+
+        # Get architecture-specific path for odf-cli
+        remote_path = self._get_architecture_path()
+        remote_cli_basename = os.path.basename(remote_path)
+
+        # Ensure the directory exists
+        os.makedirs(local_cli_dir, exist_ok=True)
+
+        exec_cmd(
+            f"oc image extract --registry-config {pull_secret_path} "
+            f"--filter-by-os=linux/amd64 "
+            f"{image} --confirm "
+            f"--path {remote_path}:{local_cli_dir}"
+        )
+
+        # For ODF CLI 4.20+, Mac binaries need to be renamed from odf-{arch} to odf
+        extracted_path = os.path.join(local_cli_dir, remote_cli_basename)
+        if os.path.exists(extracted_path) and extracted_path != self.local_cli_path:
+            log.info(f"Renaming {extracted_path} to {self.local_cli_path}")
+            os.rename(extracted_path, self.local_cli_path)
+
+        if not os.path.exists(self.local_cli_path):
+            raise FileNotFoundError(
+                f"ODF CLI binary not found at {self.local_cli_path}"
+            )
+
+        log.info(f"Extracted ODF CLI binary to {self.local_cli_path}")
+
+    def _set_executable_permissions(self):
+        if not os.path.exists(self.local_cli_path):
+            raise FileNotFoundError(
+                f"ODF CLI binary not found at {self.local_cli_path}"
+            )
+        current_permissions = os.stat(self.local_cli_path).st_mode
+        os.chmod(self.local_cli_path, current_permissions | S_IEXEC)
+        log.info(f"Set executable permissions for {self.local_cli_path}")
+
+    def _verify_cli_binary(self):
+        if not self.check_odf_cli_binary():
+            raise AssertionError(
+                f"ODF CLI binary not found or not executable at {self.local_cli_path}"
+            )
+
+    def add_cli_to_path(self):
+        """
+        Add the directory containing the ODF CLI binary to the system PATH.
+        """
+        cli_dir = os.path.dirname(os.path.abspath(self.local_cli_path))
+        current_path = os.environ.get("PATH", "")
+        if cli_dir not in current_path:
+            os.environ["PATH"] = f"{cli_dir}:{current_path}"
+        log.info(f"Added {cli_dir} to PATH")
+        log.info(f"Current PATH: {os.environ['PATH']}")
+
+
+class ODFCliRunner:
+    def __init__(self) -> None:
+        self.binary_name = "odf"
+
+    def run_command(self, command_args: Union[str, list]) -> str:
+        # by default Operator namespace is set to 'openshift-storage' in ODF CLI,
+        # when -n <storage_ns> is not passed the command will fail if the namespace is not 'openshift-storage'
+        if isinstance(command_args, str):
+            full_command = str(
+                self.binary_name
+                + f' -n {config.ENV_DATA["cluster_namespace"]} '
+                + command_args
+            )
+        elif isinstance(command_args, list):
+            full_command = " ".join(
+                [self.binary_name, "-n", config.ENV_DATA["cluster_namespace"]]
+                + command_args
+            )
+
+        output = exec_cmd(full_command)
+        return output
+
+    def run_help(self):
+        return self.run_command(" help")
+
+    def run_get_health(self):
+        return self.run_command(" get health")
+
+    def run_get_recovery_profile(self):
+        return self.run_command(" get recovery-profile")
+
+    def run_get_mon_endpoint(self):
+        return self.run_command(" get mon-endpoints")
+
+    def run_rook_restart(self):
+        return self.run_command(" operator rook restart")
+
+    def run_rook_set_log_level(self, log_level: str):
+        assert log_level in (
+            "DEBUG",
+            "INFO",
+            "WARNING",
+            "ERROR",
+        ), f"log level {log_level} is not supported"
+        return self.run_command(f" operator rook set ROOK_LOG_LEVEL {log_level}")
+
+    def run_set_ceph_log_level(self, service: str, log_level: str, subsystem: str):
+        return self.run_command(
+            f" set ceph log-level {service} {subsystem} {log_level}"
+        )
+
+    def get_recovery_profile(self):
+        """
+        Retrieve the current recovery profile using the ODF CLI.
+
+        Returns:
+            str: The name of the current recovery profile (e.g., 'low_recovery_ops',
+            'balanced', 'high_recovery_ops').
+
+        Notes:
+            If the CLI returns no output, the method logs a warning and returns the
+            default profile 'balanced' as a fallback.
+
+        """
+        output = self.run_get_recovery_profile()
+        str_output = output.stdout.decode().strip()
+        if not str_output:
+            log.warning(
+                f"ODF CLI returned no recovery profile; Fall back to the default value {BALANCED}"
+            )
+            return BALANCED
+        return str_output.split()[-1]
+
+    def run_set_recovery_profile(self, profile_name):
+        """
+        Set the recovery profile using the ODF CLI.
+
+        Args:
+            profile_name (str): The name of the recovery profile to apply
+                (e.g., 'low_recovery_ops', 'balanced', 'high_recovery_ops').
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+
+        """
+        self.run_command(f" set recovery-profile {profile_name}")
+
+    def run_set_recovery_profile_low(self):
+        """
+        Set the recovery profile to 'low_recovery_ops'.
+
+        """
+        return self.run_set_recovery_profile(LOW_RECOVERY_OPS)
+
+    def run_set_recovery_profile_balanced(self):
+        """
+        Set the recovery profile to 'balanced'.
+
+        """
+        return self.run_set_recovery_profile(BALANCED)
+
+    def run_set_recovery_profile_high(self):
+        """
+        Set the recovery profile to 'high_recovery_ops'.
+
+        """
+        return self.run_set_recovery_profile(HIGH_RECOVERY_OPS)
+
+    def run_noobaa(
+        self,
+        command_args: Union[str, list],
+        namespace: str = None,
+        use_yes: bool = False,
+        ignore_error: bool = False,
+        **kwargs,
+    ) -> str:
+        """
+        Run noobaa subcommand via odf-cli.
+
+        Args:
+            command_args: NooBaa command arguments (without 'noobaa' prefix)
+                         Can be string or list
+            namespace: Override default namespace (if provided)
+            use_yes: If True, pipe 'yes' to the command for auto-confirmation
+            ignore_error: If True, don't raise exception on non-zero exit
+            **kwargs: Additional arguments to pass to exec_cmd
+
+        Returns:
+            Command output from exec_cmd
+
+        Examples:
+            run_noobaa("status")
+            run_noobaa("obc list")
+            run_noobaa(["bucket", "list"], namespace="my-namespace")
+        """
+        # Build the noobaa command
+        if isinstance(command_args, str):
+            noobaa_cmd = f"noobaa {command_args}"
+        else:
+            noobaa_cmd = " ".join(["noobaa"] + command_args)
+
+        # Add namespace if provided (will override the default one in run_command)
+        if namespace:
+            noobaa_cmd += f" -n {namespace}"
+            # Don't let run_command add its default namespace
+            full_command = f"{self.binary_name} {noobaa_cmd}"
+        else:
+            # Let run_command add the default namespace
+            full_command = f"{self.binary_name} -n {config.ENV_DATA['cluster_namespace']} {noobaa_cmd}"
+
+        # Execute with appropriate method based on use_yes
+        if use_yes:
+            output = exec_cmd(
+                [f"yes | {full_command}"],
+                shell=True,
+                ignore_error=ignore_error,
+                **kwargs,
+            )
+        else:
+            output = exec_cmd(full_command, ignore_error=ignore_error, **kwargs)
+
+        return output
+
+    def run_maintenance_start(self, deployment_name):
+        """
+        This starts the maintenance mode for the deployment.
+
+        Args:
+            deployment_name (str): Name of the deployment that you want
+            it to be in maintenance mode i.e, either Mon or OSD deployments
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+        """
+        return self.run_command(f" maintenance start {deployment_name}")
+
+    def run_maintenance_stop(self, deployment_name):
+        """
+        This stops the maintenance mode for the deployment.
+
+        Args:
+            deployment_name (str): Name of the maintenance mode deployment
+            that you want it to be stopped.
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+        """
+        return self.run_command(f" maintenance stop {deployment_name}")
+
+    def run_object_enable_remote_obc(self):
+        """
+        Enable remote OBC on client cluster.
+
+        This command is used in Provider/Client (HCI) deployments to enable
+        Object Bucket Claims (OBC) on the client cluster.
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+
+        """
+        return self.run_command(" object enable remote-obc")
+
+    def run_object_disable_remote_obc(self):
+        """
+        Disable remote OBC on client cluster.
+
+        This command is used in Provider/Client (HCI) deployments to disable
+        Object Bucket Claims (OBC) on the client cluster.
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+
+        """
+        return self.run_command(" object disable remote-obc")
+
+
+class ODFCLICephfsSnapRunner(ODFCliRunner):
+    """
+    Initializes and returns an instance of ODFCliRunner.
+    ODFCliRunner subclass for `odf cephfs-snap` subcommands.
+
+    Holds instance-level defaults for the global optional flags shared by all
+    cephfs-snap subcommands (--storage-client, --rados-namespace, --svg,
+    --filesystem).  None means "omit the flag and let the CLI use its own
+    default".  The namespace flag is intentionally excluded here because
+    ODFCliRunner.run_command already prepends -n {cluster_namespace}.
+
+    Args:
+        storage_client (str): StorageClient CR name. Defaults to
+            config.ENV_DATA["storage_client_name"] when None.
+        rados_namespace (str): Rados namespace for omap operations.
+        svg (str): Subvolume group name.
+        filesystem (str): CephFS filesystem name.
+    """
+
+    def __init__(
+        self,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+    ):
+        super().__init__()
+        from ocs_ci.ocs.constants import STORAGE_CLIENT_NAME
+
+        self.storage_client = storage_client or config.ENV_DATA.get(
+            "storage_client_name", STORAGE_CLIENT_NAME
+        )
+        self.rados_namespace = rados_namespace
+        self.svg = svg
+        self.filesystem = filesystem
+
+    def run_command(
+        self,
+        command,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+        orphaned=False,
+    ):
+        storage_client = storage_client or self.storage_client
+        rados_namespace = rados_namespace or self.rados_namespace
+        svg = svg or self.svg
+        filesystem = filesystem or self.filesystem
+
+        if storage_client:
+            command += f" --storage-client {storage_client}"
+        if rados_namespace:
+            command += f" --rados-namespace {rados_namespace}"
+        if svg:
+            command += f" --svg {svg}"
+        if filesystem:
+            command += f" --filesystem {filesystem}"
+        if orphaned:
+            command += " --orphaned"
+
+        return super().run_command(command)
+
+    def ls(
+        self,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+        orphaned=False,
+    ):
+        """
+        Run `odf cephfs-snap ls` and return the raw command result.
+
+        Args:
+            orphaned (bool): If True, pass --orphaned to list only orphaned
+                snapshots.
+
+        Returns:
+            CompletedProcess: result from exec_cmd.
+        """
+        return self.run_command(
+            command="cephfs-snap ls",
+            storage_client=storage_client,
+            rados_namespace=rados_namespace,
+            svg=svg,
+            filesystem=filesystem,
+            orphaned=orphaned,
+        )
+
+    def delete(
+        self,
+        subvolume,
+        snapshot,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+    ):
+        """
+        Run `odf cephfs-snap delete <subvolume> <snapshot>`.
+
+        Args:
+            subvolume (str): Subvolume name.
+            snapshot (str): Snapshot name.
+
+        Returns:
+            CompletedProcess: result from exec_cmd.
+        """
+        return self.run_command(
+            command=f"cephfs-snap delete {subvolume} {snapshot}",
+            storage_client=storage_client,
+            rados_namespace=rados_namespace,
+            svg=svg,
+            filesystem=filesystem,
+        )
+
+
+def odf_cli_setup_helper(odf_cli_class=ODFCliRunner, **kwargs):
+    """
+    Initializes and returns an instance of ODFCliRunner (or a subclass).
+    Downloads the ODF CLI binary if it does not exist.
+
+    Args:
+        odf_cli_class: Runner class to instantiate (default: ODFCliRunner).
+        **kwargs: Extra keyword arguments forwarded to the runner constructor.
+
+    Returns:
+        ODFCliRunner: The initialized runner.
+
+    Raises:
+        NotSupportedException: If ODF CLI is not supported on the current version or deployment.
+        RuntimeError: If CLI binary download or ODFCliRunner initialization fails.
+
+    """
+    odf_cli_retriever = ODFCLIRetriever()
+
+    # Check and download ODF CLI binary if needed
+    if not odf_cli_retriever.check_odf_cli_binary():
+        log.warning("ODF CLI binary not found. Attempting to download...")
+        odf_cli_retriever.retrieve_odf_cli_binary()
+        if not odf_cli_retriever.check_odf_cli_binary():
+            raise RuntimeError("Failed to download ODF CLI binary")
+
+    # Check and initialize ODFCliRunner
+    odf_cli_runner = odf_cli_class(**kwargs)
+    if not odf_cli_runner:
+        log.warning("ODFCliRunner not initialized. Attempting to initialize again...")
+        odf_cli_runner = odf_cli_class(**kwargs)
+        if not odf_cli_runner:
+            raise RuntimeError("Failed to initialize ODFCliRunner after retry")
+
+    log.info("ODF CLI binary downloaded and ODFCliRunner initialized successfully")
+    return odf_cli_runner
+
+
+def odf_cli_cephfs_snap_setup_helper(**kwargs):
+    """
+    Initialize and return an ODFCLICephfsSnapRunner with the ODF CLI binary set up.
+
+    Args:
+        **kwargs: Optional constructor arguments forwarded to ODFCLICephfsSnapRunner
+            (storage_client, rados_namespace, svg, filesystem).
+
+    Returns:
+        ODFCLICephfsSnapRunner: The initialized runner.
+    """
+    return odf_cli_setup_helper(odf_cli_class=ODFCLICephfsSnapRunner, **kwargs)

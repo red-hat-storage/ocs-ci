@@ -1,0 +1,5 @@
+# This config file is used to disable the storage cluster version check
+# Its useful when we have a custom builds
+---
+ENV_DATA:
+  disable_storage_cluster_version_check: true

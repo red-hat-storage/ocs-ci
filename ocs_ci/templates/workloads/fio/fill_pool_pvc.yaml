@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fill-pool-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ocs-storagecluster-ceph-rbd
+  resources:
+    requests:
+      storage: 100Gi

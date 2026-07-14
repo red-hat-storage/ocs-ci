@@ -1,0 +1,59 @@
+apiVersion: machine.openshift.io/v1beta1
+kind: MachineSet
+metadata:
+  labels:
+    machine.openshift.io/cluster-api-cluster: clusterID
+  name: clusteID-role-aws-zone
+  namespace: openshift-machine-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      machine.openshift.io/cluster-api-cluster: custerID
+      machine.openshift.io/cluster-api-machineset: clusteID-role-aws-zone
+  template:
+    metadata:
+      labels:
+        machine.openshift.io/cluster-api-cluster: custerID
+        machine.openshift.io/cluster-api-machine-role: role
+        machine.openshift.io/cluster-api-machine-type: role
+        machine.openshift.io/cluster-api-machineset: clusteID-role-aws-zone
+    spec:
+      metadata:
+        labels:
+          node-role.kubernetes.io/app: app-scale
+      providerSpec:
+        value:
+          ami:
+            id: ami-04a79d8d7cfa540cc
+          apiVersion: awsproviderconfig.openshift.io/v1beta1
+          blockDevices:
+            - ebs:
+                iops: 0
+                volumeSize: 120
+                volumeType: gp2
+          credentialsSecret:
+            name: aws-cloud-credentials
+          deviceIndex: 0
+          iamInstanceProfile:
+            id: custerID-worker-profile
+          instanceType: m4.xlarge
+          kind: AWSMachineProviderConfig
+          placement:
+            availabilityZone: availabilityZone
+            region: awsRegion
+          securityGroups:
+            - filters:
+                - name: tag:Name
+                  values:
+                    - custerID-worker-sg
+          subnet:
+            filters:
+              - name: tag:Name
+                values:
+                  - custerID-private-availabilityZone
+          tags:
+            - name: kubernetes.io/cluster/custerID
+              value: owned
+          userDataSecret:
+            name: worker-user-data

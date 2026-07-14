@@ -1,0 +1,11 @@
+---
+# Template from
+# https://github.com/red-hat-storage/ocs-operator/blob/main/config/samples/ocs_v1alpha1_storageclassclaim.yaml
+apiVersion: ocs.openshift.io/v1alpha1
+kind: StorageClassClaim
+metadata:
+  name: storageclassclaim-sample
+spec:
+  # type: blockpool or sharedfilesystem
+  type: <blockpool | sharedfilesystem>
+  # encryptionMethod: <string based on encryption config>

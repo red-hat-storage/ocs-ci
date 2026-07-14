@@ -1,0 +1,15 @@
+DEPLOYMENT:
+  kms_deployment: true
+
+ENV_DATA:
+  encryption_at_rest: true
+  vault_deploy_mode: external
+  vault_hcp: true
+  use_vault_namespace: true
+  KMS_PROVIDER: vault
+  KMS_SERVICE_NAME: vault
+  VAULT_CACERT: "ocs-kms-ca-secret"
+  VAULT_SKIP_VERIFY: false
+  VAULT_BACKEND: "v1"
+  VAULT_AUTH_METHOD: token
+  VAULT_CA_ONLY: true

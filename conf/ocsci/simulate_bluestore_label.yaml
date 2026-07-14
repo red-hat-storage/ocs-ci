@@ -1,0 +1,5 @@
+# This configuration file enables simulation of Ceph OSD BlueStore metadata on OSD disks.
+# It is used to test whether Ceph correctly detects existing BlueStore metadata when deploying a new cluster.
+# This simulation is intended to be used only with LSO (Local Storage Operator) deployments.
+ENV_DATA:
+  simulate_bluestore_label: true

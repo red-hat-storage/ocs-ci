@@ -1,0 +1,7 @@
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: PLACEHOLDER
+  namespace: PLACEHOLDER
+spec:
+  predicates: []

@@ -1,0 +1,3508 @@
+import os
+import logging
+import time
+import boto3
+import random
+import json
+import traceback
+import re
+
+from datetime import datetime, timezone
+from botocore.exceptions import (
+    ClientError,
+    NoCredentialsError,
+    WaiterError,
+    EndpointConnectionError,
+)
+
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import exec_cmd, get_infra_id
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults, exceptions
+from ocs_ci.ocs.parallel import parallel
+from ocs_ci.utility.templating import load_yaml
+from tempfile import NamedTemporaryFile
+
+logger = logging.getLogger(__name__)
+
+TIMEOUT = 90
+SLEEP = 3
+
+
+class AWSTimeoutException(Exception):
+    pass
+
+
+class StackStatusError(Exception):
+    pass
+
+
+class AWS(object):
+    """
+    This is wrapper class for AWS
+    """
+
+    _ec2_client = None
+    _ec2_resource = None
+    _region_name = None
+    _s3_client = None
+    _s3_resource = None
+    _route53_client = None
+    _elb_client = None
+    _iam_client = None
+    _sts_client = None
+    _cloudfront_client = None
+
+    def __init__(self, region_name=None):
+        """
+        Constructor for AWS class
+
+        Args:
+            region_name (str): Name of AWS region (default: us-east-2)
+        """
+        self._region_name = region_name or config.ENV_DATA["region"]
+
+    @property
+    def ec2_client(self):
+        """Property for ec2 client
+
+        Returns:
+            boto3.client: instance of ec2
+        """
+        if not self._ec2_client:
+            self._ec2_client = boto3.client(
+                "ec2",
+                region_name=self._region_name,
+            )
+        return self._ec2_client
+
+    @property
+    def ec2_resource(self):
+        """Property for ec2 resource
+
+        Returns:
+            boto3.resource instance of ec2 resource
+        """
+        if not self._ec2_resource:
+            self._ec2_resource = boto3.resource(
+                "ec2",
+                region_name=self._region_name,
+            )
+        return self._ec2_resource
+
+    @property
+    def s3_resource(self):
+        """
+        Property for s3 resource
+
+        Returns:
+            boto3.resource instance of s3
+
+        """
+        if not self._s3_resource:
+            self._s3_resource = boto3.resource(
+                "s3",
+                region_name=self._region_name,
+            )
+        return self._s3_resource
+
+    @property
+    def s3_client(self):
+        """
+        Property for s3 client
+
+        Returns:
+            boto3.client instance of s3
+
+        """
+        if not self._s3_client:
+            self._s3_client = boto3.client(
+                "s3",
+                region_name=self._region_name,
+            )
+        return self._s3_client
+
+    @property
+    def route53_client(self):
+        """
+        Property for route53 client
+
+        Returns:
+            boto3.client: instance of route53 client
+
+        """
+        if not self._route53_client:
+            self._route53_client = boto3.client(
+                "route53",
+                region_name=self._region_name,
+            )
+        return self._route53_client
+
+    @property
+    def elb_client(self):
+        """
+        Property for elb client
+
+        Returns:
+            boto3.client: instance of elb client
+
+        """
+        if not self._elb_client:
+            self._elb_client = boto3.client(
+                "elb",
+                region_name=self._region_name,
+            )
+        return self._elb_client
+
+    @property
+    def iam_client(self):
+        """
+        Property for iam client
+
+        Returns:
+            boto3.client: instance of iam
+        """
+        if not self._iam_client:
+            self._iam_client = boto3.client(
+                "iam",
+                region_name=self._region_name,
+            )
+        return self._iam_client
+
+    @property
+    def sts_client(self):
+        """
+        Property for sts client
+
+        Returns:
+            boto3.client: instance of sts
+        """
+        if not self._sts_client:
+            self._sts_client = boto3.client(
+                "sts",
+                region_name=self._region_name,
+            )
+        return self._sts_client
+
+    def create_iam_user(self, username):
+        """
+        Create a new IAM user.
+
+        Args:
+            username (str): IAM username to create
+
+        Returns:
+            dict: The CreateUser response
+
+        """
+        response = self.iam_client.create_user(UserName=username)
+        logger.info(f"Created IAM user {username}")
+        return response
+
+    def delete_iam_user(self, username):
+        """
+        Delete an IAM user after removing its inline policies and access keys.
+
+        Args:
+            username (str): IAM username to delete
+
+        """
+        for policy_name in self.iam_client.list_user_policies(UserName=username).get(
+            "PolicyNames", []
+        ):
+            self.iam_client.delete_user_policy(
+                UserName=username, PolicyName=policy_name
+            )
+            logger.info(f"Deleted inline policy {policy_name} from user {username}")
+
+        for key in self.iam_client.list_access_keys(UserName=username).get(
+            "AccessKeyMetadata", []
+        ):
+            self.iam_client.delete_access_key(
+                UserName=username, AccessKeyId=key["AccessKeyId"]
+            )
+            logger.info(f"Deleted access key {key['AccessKeyId']} from user {username}")
+
+        self.iam_client.delete_user(UserName=username)
+        logger.info(f"Deleted IAM user {username}")
+
+    def put_user_policy(self, username, policy_name, policy_document):
+        """
+        Create or update an inline policy on an IAM user.
+
+        Args:
+            username (str): IAM username
+            policy_name (str): Name for the inline policy
+            policy_document (str): JSON policy document
+
+        """
+        self.iam_client.put_user_policy(
+            UserName=username,
+            PolicyName=policy_name,
+            PolicyDocument=policy_document,
+        )
+        logger.info(f"Put inline policy {policy_name} on user {username}")
+
+    def create_access_key(self, username):
+        """
+        Create a new IAM access key for the given user.
+
+        Args:
+            username (str): IAM username
+
+        Returns:
+            dict: The CreateAccessKey response containing AccessKey details
+
+        """
+        response = self.iam_client.create_access_key(UserName=username)
+        logger.info(
+            f"Created IAM access key {response['AccessKey']['AccessKeyId']} "
+            f"for user {username}"
+        )
+        return response
+
+    def update_access_key_status(self, username, access_key_id, active):
+        """
+        Activate or deactivate an IAM access key.
+
+        Args:
+            username (str): IAM username
+            access_key_id (str): The access key ID to update
+            active (bool): True to activate, False to deactivate
+
+        """
+        status = "Active" if active else "Inactive"
+        self.iam_client.update_access_key(
+            UserName=username, AccessKeyId=access_key_id, Status=status
+        )
+        logger.info(f"Set IAM access key {access_key_id} to {status}")
+
+    def delete_access_key(self, username, access_key_id):
+        """
+        Delete an IAM access key.
+
+        Args:
+            username (str): IAM username
+            access_key_id (str): The access key ID to delete
+
+        """
+        self.iam_client.delete_access_key(UserName=username, AccessKeyId=access_key_id)
+        logger.info(f"Deleted IAM access key {access_key_id}")
+
+    @property
+    def cloudfront_client(self):
+        """
+        Property for cloudfront client
+
+        Returns:
+            boto3.client: instance of cloudfront
+        """
+        if not self._cloudfront_client:
+            self._cloudfront_client = boto3.client(
+                "cloudfront",
+                region_name=self._region_name,
+            )
+        return self._cloudfront_client
+
+    def get_ec2_instance(self, instance_id):
+        """
+        Get instance of ec2 Instance
+
+        Args:
+            instance_id (str): The ID of the instance to get
+
+        Returns:
+            boto3.Instance: instance of ec2 instance resource
+
+        """
+        return self.ec2_resource.Instance(instance_id)
+
+    def get_instances_response_by_name_pattern(
+        self, pattern=None, filter_by_cluster_name=True
+    ):
+        """
+        Get the instances by name tag pattern. If not specified it will return
+        all the instances, or will return the instances
+        filtered by the cluster name.
+
+        Args:
+            pattern (str): Pattern of tag name like:
+                pbalogh-testing-cluster-55jx2-worker*
+            filter_by_cluster_name: Will be used only if the 'pattern' param
+                not specified. If True it filters the instances
+                by the cluster name, else if False it returns all instances.
+
+        Returns:
+            list: list of instances dictionaries.
+        """
+        if not pattern:
+            if filter_by_cluster_name:
+                pattern = f"{config.ENV_DATA['cluster_name']}*"
+            else:
+                pattern = "*"
+
+        instances_response = self.ec2_client.describe_instances(
+            Filters=[
+                {
+                    "Name": "tag:Name",
+                    "Values": [pattern],
+                },
+            ],
+        )["Reservations"]
+
+        return instances_response
+
+    def get_instances_by_name_pattern(self, pattern):
+        """Get instances by Name tag pattern
+
+        The instance details do not contain all the values but just those we
+        are consuming.
+
+        Those parameters we are storing for instance are:
+        * id: id of instance
+        * avz: Availability Zone
+        * name: The value of Tag Name if define otherwise None
+        * vpc_id: VPC ID
+        * security_groups: Security groups of the instance
+
+        Args:
+            pattern (str): Pattern of tag name like:
+                pbalogh-testing-cluster-55jx2-worker*
+
+        Returns:
+            list: contains dictionaries with instance details mentioned above
+        """
+        instances_response = self.get_instances_response_by_name_pattern(
+            pattern=pattern
+        )
+        instances = []
+        for instance in instances_response:
+            instance = instance["Instances"][0]
+            id = instance["InstanceId"]
+            avz = instance["Placement"]["AvailabilityZone"]
+            name = None
+            for tag in instance["Tags"]:
+                if tag["Key"] == "Name":
+                    name = tag["Value"]
+                    break
+            instance_data = dict(
+                id=id,
+                avz=avz,
+                name=name,
+                vpc_id=instance.get("VpcId"),
+                security_groups=instance.get("SecurityGroups", []),
+            )
+            instances.append(instance_data)
+        logger.debug("All found instances: %s", instances)
+        return instances
+
+    def get_instances_status_by_id(self, instance_id):
+        """
+        Get instances by ID
+
+        Args:
+            instance_id (str): ID of the instance
+
+        Returns:
+            str: The instance status
+        """
+        return (
+            self.ec2_client.describe_instances(
+                InstanceIds=[instance_id],
+            )
+            .get("Reservations")[0]
+            .get("Instances")[0]
+            .get("State")
+            .get("Code")
+        )
+
+    def get_vpc_id_by_instance_id(self, instance_id):
+        """
+        Fetch vpc id out of ec2 node (EC2.Instances.vpc_id)
+
+        Args:
+            instance_id (str): ID of the instance - to get vpc id info from ec2 node
+
+        Returns:
+            str: vpc_id: The vpc id
+
+        """
+        instance = self.get_ec2_instance(instance_id)
+
+        return instance.vpc_id
+
+    def get_availability_zone_id_by_instance_id(self, instance_id):
+        """
+        Fetch availability zone out of ec2 node (EC2.Instances.placement)
+
+        Args:
+            instance_id (str): ID of the instance - to get availability zone info from ec2 node
+
+        Returns:
+            str: availability_zone: The availability zone name
+
+        """
+        instance = self.get_ec2_instance(instance_id)
+
+        return instance.placement.get("AvailabilityZone")
+
+    def create_volume(
+        self,
+        availability_zone,
+        name,
+        encrypted=False,
+        size=100,
+        timeout=20,
+        volume_type="gp2",
+    ):
+        """
+        Create volume
+
+        Args:
+            availability_zone (str): The availability zone e.g.: us-west-1b
+            name (str): The name of the volume
+            encrypted (boolean): True if encrypted, False otherwise
+                (default: False)
+            size (int): The size in GB (default: 100)
+            timeout (int): The timeout in seconds for volume creation (default: 20)
+            volume_type (str): 'standard'|'io1'|'gp2'|'sc1'|'st1'
+                (default: gp2)
+
+        Returns:
+            Volume: AWS Resource instance of the newly created volume
+
+        """
+        volume_response = self.ec2_client.create_volume(
+            AvailabilityZone=availability_zone,
+            Encrypted=encrypted,
+            Size=size,
+            VolumeType=volume_type,
+            TagSpecifications=[
+                {
+                    "ResourceType": "volume",
+                    "Tags": [
+                        {
+                            "Key": "Name",
+                            "Value": name,
+                        },
+                    ],
+                },
+            ],
+        )
+        logger.debug("Response of volume creation: %s", volume_response)
+        volume = self.ec2_resource.Volume(volume_response["VolumeId"])
+        for x in range(timeout):
+            volume.reload()
+            logger.debug("Volume id: %s has status: %s", volume.volume_id, volume.state)
+            if volume.state == "available":
+                break
+            if x == timeout - 1:
+                raise AWSTimeoutException(
+                    f"Reached timeout {timeout} for volume creation, volume "
+                    f"state is still: {volume.state} for volume ID: "
+                    f"{volume.volume_id}"
+                )
+            time.sleep(1)
+        return volume
+
+    def attach_volume(self, volume, instance_id, device="/dev/sdx"):
+        """
+        Attach volume to an ec2 instance
+
+        Args:
+            volume (Volume): Volume instance
+            instance_id (str): id of instance where to attach the volume
+            device (str): The name of the device where to attach (default: /dev/sdx)
+
+        """
+        logger.info(f"Attaching volume: {volume.volume_id} Instance: {instance_id}")
+        attach_response = volume.attach_to_instance(
+            Device=device,
+            InstanceId=instance_id,
+        )
+        logger.debug("Response of attaching volume: %s", attach_response)
+
+    def create_volume_and_attach(
+        self,
+        availability_zone,
+        instance_id,
+        name,
+        device="/dev/sdx",
+        encrypted=False,
+        size=100,
+        timeout=20,
+        volume_type="gp2",
+    ):
+        """
+        Create volume and attach to instance
+
+        Args:
+            availability_zone (str): The availability zone e.g.: us-west-1b
+            instance_id (str): The id of the instance where to attach the volume
+            name (str): The name of volume
+            device (str): The name of device where to attach (default: /dev/sdx)
+            encrypted (boolean): True if encrypted, False otherwise
+                (default: False)
+            size (int): The size in GB (default: 100)
+            timeout (int): The timeout in seconds for volume creation (default: 20)
+            volume_type (str): 'standard'|'io1'|'gp2'|'sc1'|'st1'
+                (default: gp2)
+
+        """
+        volume = self.create_volume(
+            availability_zone, name, encrypted, size, timeout, volume_type
+        )
+        self.attach_volume(volume, instance_id, device)
+
+    def get_volumes_by_tag_pattern(self, tag, pattern):
+        """
+        Get volumes by tag pattern
+
+        Args:
+            tag (str): Tag name
+            pattern (str): Pattern of tag value (e.g. '*cl-vol-*')
+
+        Returns:
+            list: Volume information like id and attachments
+        """
+        volumes_response = self.ec2_client.describe_volumes(
+            Filters=[
+                {
+                    "Name": f"tag:{tag}",
+                    "Values": [pattern],
+                },
+            ],
+        )
+        volumes = []
+        for volume in volumes_response["Volumes"]:
+            volumes.append(
+                dict(
+                    id=volume["VolumeId"],
+                    attachments=volume["Attachments"],
+                )
+            )
+        return volumes
+
+    def get_volume_data(self, volume_id):
+        """
+        Get volume information
+
+        Args:
+            volume_id(str): ID of the volume
+
+        Returns:
+            dict: complete volume information
+        """
+        volumes_response = self.ec2_client.describe_volumes(
+            VolumeIds=[
+                volume_id,
+            ],
+        )
+        return volumes_response["Volumes"][0]
+
+    def get_volume_tag_value(self, volume_data, tag_name):
+        """
+        Get the value of the volume's tag
+
+        Args:
+            volume_data(dict): complete volume information
+            tag_name(str): name of the tag
+        Returns:
+            str: value of the tag or None if there's no such tag
+        """
+        tags = volume_data["Tags"]
+        for tag in tags:
+            if tag["Key"] == tag_name:
+                return tag["Value"]
+        return None
+
+    def get_volumes_by_name_pattern(self, pattern):
+        """
+        Get volumes by pattern
+
+        Args:
+            pattern (str): Pattern of volume name (e.g. '*cl-vol-*')
+
+        Returns:
+            list: Volume information like id and attachments
+        """
+        return self.get_volumes_by_tag_pattern("Name", pattern)
+
+    def check_volume_attributes(
+        self,
+        volume_id,
+        name_end=None,
+        size=None,
+        iops=None,
+        throughput=None,
+        namespace=None,
+    ):
+        """
+        Verify aws volume attributes
+        Primarily used for faas
+
+        Args:
+            volume_id(str): id of the volume to be checked
+            name_end(str): expected ending of Name tag
+            size(int): expected value of volume's size
+            iops(int): expected value of IOPS
+            throughput(int): expected value of Throughput
+            namespace(str): expected value of kubernetes.io/created-for/pvc/namespace tag
+
+        Raises:
+            ValueError if the actual value differs from the expected one
+        """
+        volume_data = self.get_volume_data(volume_id)
+        volume_name = self.get_volume_tag_value(
+            volume_data,
+            "Name",
+        )
+        logger.info(
+            f"Verifying that volume name {volume_name} starts with cluster name"
+        )
+        if not volume_name.startswith(config.ENV_DATA["cluster_name"]):
+            raise ValueError(
+                f"Volume name should start with cluster name {config.ENV_DATA['cluster_name']}"
+            )
+        if name_end:
+            logger.info(f"Verifying that volume name ends with {name_end}")
+            if not volume_name.endswith(name_end):
+                raise ValueError(f"Volume name should end with {name_end}")
+        if size:
+            logger.info(f"Verifying that volume size is {size}")
+            if volume_data["Size"] != size:
+                raise ValueError(
+                    f"Volume size should be {size} but it's {volume_data['Size']}"
+                )
+        if iops:
+            logger.info(f"Verifying that volume IOPS is {iops}")
+            if volume_data["Iops"] != iops:
+                raise ValueError(
+                    f"Volume IOPS should be {iops} but it's {volume_data['Iops']}"
+                )
+        if throughput:
+            logger.info(f"Verifying that volume throughput is {throughput}")
+            if volume_data["Throughput"] != throughput:
+                raise ValueError(
+                    f"Volume size should be {throughput} but it's {volume_data['Throughput']}"
+                )
+        if namespace:
+            logger.info(f"Verifying that namespace is {namespace}")
+            volume_namespace = self.get_volume_tag_value(
+                volume_data,
+                constants.AWS_VOL_PVC_NAMESPACE,
+            )
+            if volume_namespace != namespace:
+                raise ValueError(
+                    "Namespace in kubernetes.io/created-for/pvc/namespace tag "
+                    f"should be {namespace} but it's {volume_namespace}"
+                )
+
+    def detach_volume(self, volume, timeout=120):
+        """
+        Detach volume if attached
+
+        Args:
+            volume (Volume): The volume to delete
+            timeout (int): Timeout in seconds for API calls
+
+        Returns:
+            Volume: ec2 Volume instance
+
+        """
+        if volume.attachments:
+            attachment = volume.attachments[0]
+            logger.info(
+                "Detaching volume: %s Instance: %s",
+                volume.volume_id,
+                attachment.get("InstanceId"),
+            )
+            response_detach = volume.detach_from_instance(
+                Device=attachment["Device"],
+                InstanceId=attachment["InstanceId"],
+                Force=True,
+            )
+            logger.debug("Detach response: %s", response_detach)
+        for x in range(timeout):
+            volume.reload()
+            logger.debug("Volume id: %s has status: %s", volume.volume_id, volume.state)
+            if volume.state == "available":
+                break
+            if x == timeout - 1:
+                raise AWSTimeoutException(
+                    f"Reached timeout {timeout}s for volume detach/delete for "
+                    f"volume ID: {volume.volume_id}, Volume state: "
+                    f"{volume.state}"
+                )
+            time.sleep(1)
+
+    def delete_volume(self, volume):
+        """
+        Delete an ec2 volume from AWS
+
+        Args:
+            volume (Volume): The volume to delete
+
+        """
+        logger.info("Deleting volume: %s", volume.volume_id)
+        delete_response = volume.delete()
+        logger.debug(
+            "Delete response for volume: %s is: %s", volume.volume_id, delete_response
+        )
+
+    def get_cluster_subnet_ids(self, cluster_name):
+        """
+        Get the cluster's subnet ids of existing cluster
+
+        Args:
+            cluster_name (str): Cluster name
+
+        Returns:
+            list: Subnet IDs str list
+
+        """
+        subnets = self.ec2_client.describe_subnets(
+            Filters=[{"Name": "tag:Name", "Values": [f"{cluster_name}*"]}]
+        )
+        subnet_ids = [subnet["SubnetId"] for subnet in subnets["Subnets"]]
+        return subnet_ids
+
+    def detach_and_delete_volume(self, volume, timeout=120):
+        """
+        Detach volume if attached and then delete it from AWS
+
+        Args:
+            volume (Volume): The volume to delete
+            timeout (int): Timeout in seconds for API calls
+
+        """
+        self.detach_volume(volume, timeout)
+        self.delete_volume(volume)
+
+    def stop_ec2_instances(self, instances, wait=False, force=True):
+        """
+        Stopping an instance
+
+        Args:
+            instances (dict): A dictionary of instance IDs and names to stop
+            wait (bool): True in case wait for status is needed,
+                False otherwise
+            force (bool): True for force instance stop, False otherwise
+
+        """
+        instance_ids, instance_names = zip(*instances.items())
+        logger.info(f"Stopping instances {instance_names} with Force={force}")
+        ret = self.ec2_client.stop_instances(InstanceIds=instance_ids, Force=force)
+        stopping_instances = ret.get("StoppingInstances")
+        for instance in stopping_instances:
+            assert instance.get("CurrentState").get("Code") in [
+                constants.INSTANCE_STOPPED,
+                constants.INSTANCE_STOPPING,
+                constants.INSTANCE_SHUTTING_DOWN,
+            ], (
+                f"Instance {instance.get('InstanceId')} status "
+                f"is {instance.get('CurrentState').get('Code')}"
+            )
+        if wait:
+            for instance_id, instance_name in instances.items():
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status stopped"
+                )
+                instance = self.get_ec2_instance(instance_id)
+                instance.wait_until_stopped()
+
+    def start_ec2_instances(self, instances, wait=False):
+        """
+        Starting an instance
+
+        Args:
+            instances (dict): A dictionary of instance IDs and names to start
+            wait (bool): True in case wait for status is needed,
+                False otherwise
+
+        """
+        instance_ids, instance_names = zip(*instances.items())
+        logger.info(f"Starting instances {instance_names}")
+        ret = self.ec2_client.start_instances(InstanceIds=instance_ids)
+        starting_instances = ret.get("StartingInstances")
+        for instance in starting_instances:
+            assert instance.get("CurrentState").get("Code") in [
+                constants.INSTANCE_RUNNING,
+                constants.INSTANCE_PENDING,
+            ], (
+                f"Instance {instance.get('InstanceId')} status "
+                f"is {instance.get('CurrentState').get('Code')}"
+            )
+        if wait:
+            for instance_id, instance_name in instances.items():
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status running"
+                )
+                instance = self.get_ec2_instance(instance_id)
+                instance.wait_until_running()
+
+    def restart_ec2_instances_by_stop_and_start(
+        self, instances, wait=False, force=True
+    ):
+        """
+        Restart EC2 instances by stop and start
+
+        Args:
+            instances (dict): A dictionary of instance IDs and names to stop
+                & start
+            wait (bool): True in case wait for status is needed,
+                False otherwise
+            force (bool): True for force instance stop, False otherwise
+
+        """
+        logger.info(f"Restarting instances {list(instances.values())} by stop & start")
+        self.stop_ec2_instances(instances=instances, wait=wait, force=force)
+        self.start_ec2_instances(instances=instances, wait=wait)
+
+    def restart_ec2_instances(self, instances):
+        """
+        Restart ec2 instances
+
+        Args:
+            instances (dict): A dictionary of instance IDs and names to restart
+
+        """
+        instance_ids, instance_names = zip(*instances.items())
+        logger.info(f"Rebooting instances {instance_names}")
+        self.ec2_client.reboot_instances(InstanceIds=instance_ids)
+
+    def terminate_ec2_instances(self, instances, wait=True):
+        """
+        Terminate an instance
+
+        Args:
+            instances (dict): A dictionary of instance IDs and names
+            wait (bool): True in case wait for status is needed,
+                False otherwise
+
+        """
+        instance_ids, instance_names = zip(*instances.items())
+        logger.info(f"Terminating instances {list(instances.values())}")
+        ret = self.ec2_client.terminate_instances(InstanceIds=instance_ids)
+        terminating_instances = ret.get("TerminatingInstances")
+        for instance in terminating_instances:
+            assert instance.get("CurrentState").get("Code") in [
+                constants.INSTANCE_SHUTTING_DOWN,
+                constants.INSTANCE_TERMINATED,
+            ], (
+                f"Instance {instance.get('InstanceId')} status "
+                f"is {instance.get('CurrentState').get('Code')}"
+            )
+        if wait:
+            for instance_id, instance_name in instances.items():
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status "
+                    f"terminated"
+                )
+                instance = self.get_ec2_instance(instance_id)
+                instance.wait_until_terminated()
+
+    def get_ec2_instance_volumes(self, instance_id):
+        """
+        Get all volumes attached to an ec2 instance
+
+        Args:
+            instance_id (str): The ec2 instance ID
+
+        Returns:
+            list: ec2 Volume instances
+
+        """
+        instance = self.get_ec2_instance(instance_id)
+        volumes = instance.volumes.all()
+        return [vol for vol in volumes]
+
+    def get_all_security_groups(self):
+        """
+        Get all security groups in AWS region
+
+        Returns:
+            list: All security groups
+
+        """
+        all_security_groups = list()
+
+        security_groups_dict = self.ec2_client.describe_security_groups()
+        security_groups = security_groups_dict["SecurityGroups"]
+        for group_object in security_groups:
+            all_security_groups.append(group_object["GroupId"])
+
+        return all_security_groups
+
+    def get_security_groups_by_instance_id(self, instance_id):
+        """
+        Get all attached security groups of ec2 instance
+
+        Args:
+            instance_id (str): Required instance to get security groups from it
+
+        Returns:
+            list: all_sg_ids: all attached security groups id.
+
+        """
+        ec2_instance = self.get_ec2_instance(instance_id)
+        all_sg_ids = [sg.get("GroupId") for sg in ec2_instance.security_groups]
+
+        return all_sg_ids
+
+    def create_security_group(self, group_name, dict_permissions, vpc_id):
+        """
+        Create security group with predefined group name and permissions
+
+        Args:
+            group_name (str): Group name (aws tag: "Group Name")
+            dict_permissions (dict): The security group's inbound/outbound permissions
+            vpc_id(str): For group to be attached
+
+        Returns:
+            str: newly created security group id
+
+        """
+        instance_response = self.ec2_client.create_security_group(
+            GroupName=group_name,
+            Description="This group created by method:aws.create_security_group",
+            VpcId=vpc_id,
+        )
+
+        security_group_id = instance_response["GroupId"]
+        logger.info(f"Security Group Created {security_group_id} in vpc {vpc_id}")
+
+        data = self.ec2_client.authorize_security_group_ingress(
+            GroupId=security_group_id, IpPermissions=[dict_permissions]
+        )
+        logger.info(f"Ingress Successfully Set {data}")
+        return security_group_id
+
+    def append_security_group(self, security_group_id, instance_id):
+        """
+        Append security group to selected ec2 nodes
+
+        Args:
+            instance_id (str): Instances to attach security group
+            security_group_id(str): Security group to attach
+
+            print out: security group <id> added to selected nodes
+
+        """
+        ec2_instance = self.get_ec2_instance(instance_id)
+        logger.info(f"ec2_instance id is: {ec2_instance.id}")
+        all_sg_ids = [sg.get("GroupId") for sg in ec2_instance.security_groups]
+        if security_group_id not in all_sg_ids:
+            all_sg_ids.append(security_group_id)
+            ec2_instance.modify_attribute(Groups=all_sg_ids)
+
+        logger.info(f"Security Group {security_group_id} added to selected node")
+
+    def remove_security_group(self, security_group_id, instance_id):
+        """
+        Remove security group from selected ec2 instance (by instance id)
+        print out: security group <id> removed from selected nodes
+
+        Args:
+            security_group_id (str): Security group to be removed
+            instance_id (str): Instance attached with selected security group
+
+        """
+        ec2_instance = self.get_ec2_instance(instance_id)
+        logger.info(f"ec2_instance id is: {ec2_instance.id}")
+        all_sg_ids = self.get_security_groups_by_instance_id(instance_id)
+        for sg in all_sg_ids:
+            if sg == security_group_id:
+                all_sg_ids.remove(security_group_id)
+                ec2_instance.modify_attribute(Groups=all_sg_ids)
+                logger.info(
+                    f"Security Group {security_group_id} removed from selected node"
+                )
+
+    def delete_security_group(self, security_group_id):
+        """
+        Delete selected security group
+        print out: Security group <id> deleted
+
+        Args:
+            security_group_id (str): Id of selected security group
+
+        """
+        self.ec2_client.delete_security_group(GroupId=security_group_id)
+        logger.info(f"Security group {security_group_id} deleted")
+
+    def store_security_groups_for_instances(self, instances_id):
+        """
+        Stored all security groups attached to selected ec2 instances
+
+        Args:
+            instances_id (list): ec2 instance_id
+
+        Returns:
+            dict: security_group_dict: keys: blocked instances: ec2_instances ids
+                values: list of original security groups of each instance
+
+        """
+        sg_list = list()
+        for instance in instances_id:
+            sg_list.append(self.get_security_groups_by_instance_id(instance))
+
+        return dict(zip(instances_id, sg_list))
+
+    def block_instances_access(self, security_group_id, instances_id):
+        """
+        Block ec2 instances by:
+
+        - Append security group without access permissions
+        - Remove original security groups
+
+        Args:
+            security_group_id (str): security group without access permissions
+            instances_id (list): list of ec2 instances ids
+
+        """
+
+        for instance in instances_id:
+            original_sgs = self.get_security_groups_by_instance_id(instance)
+            self.append_security_group(security_group_id, instance)
+            for sg_grp in original_sgs:
+                self.remove_security_group(sg_grp, instance)
+
+    def restore_instances_access(
+        self, security_group_id_to_remove, original_security_group_dict
+    ):
+        """
+        Restore access to instances by removing blocking security group and
+        append original security group.
+
+        Args:
+            security_group_id_to_remove (str): id of the security group
+            original_security_group_dict (dict): dict with:
+                keys: blocked instances: ec2 instances id
+                values: list of original security groups
+
+
+        """
+        for instance in original_security_group_dict.keys():
+            org_sg_grp_of_instance = list(original_security_group_dict.get(instance))
+            for sg in org_sg_grp_of_instance:
+                self.append_security_group(sg, instance)
+                self.remove_security_group(security_group_id_to_remove, instance)
+
+    @property
+    def cf_client(self):
+        """
+        Property for cloudformation client
+
+        Returns:
+            boto3.client: instance of cloudformation
+
+        """
+        return boto3.client("cloudformation", region_name=self._region_name)
+
+    def get_cloudformation_stacks(self, pattern):
+        """
+        Get cloudformation stacks
+
+        Args:
+            pattern (str): The pattern of the stack name
+
+        """
+        result = self.cf_client.describe_stacks(StackName=pattern)
+        return result["Stacks"]
+
+    def delete_cloudformation_stacks(self, stack_names):
+        """
+        Delete cloudformation stacks
+
+        Args:
+            stack_names (list): List of cloudformation stacks
+
+        """
+
+        @retry(StackStatusError, tries=20, delay=30, backoff=1)
+        def verify_stack_deleted(stack_name):
+            try:
+                stacks = self.get_cloudformation_stacks(stack_name)
+                for stack in stacks:
+                    status = stack["StackStatus"]
+                    raise StackStatusError(
+                        f"{stack_name} not deleted yet, current status: {status}."
+                    )
+            except ClientError as e:
+                assert f"Stack with id {stack_name} does not exist" in str(e)
+                logger.info("Received expected ClientError, stack successfully deleted")
+
+        for stack_name in stack_names:
+            logger.info("Destroying stack: %s", stack_name)
+            self.cf_client.delete_stack(StackName=stack_name)
+        for stack_name in stack_names:
+            verify_stack_deleted(stack_name)
+
+    def upload_file_to_s3_bucket(self, bucket_name, object_key, file_path):
+        """
+        Upload objects to s3 bucket
+
+        Args:
+            bucket_name (str): Name of a valid s3 bucket
+            object_key (str): the key for the s3 object
+            file_path (str): path for the file to be uploaded
+
+        """
+        self.s3_resource.meta.client.upload_file(
+            file_path, bucket_name, object_key, ExtraArgs={"ACL": "public-read"}
+        )
+
+    def delete_s3_object(self, bucket_name, object_key):
+        """
+        Delete an object from s3 bucket
+
+        Args:
+            bucket_name (str): name of a valid s3 bucket
+            object_key (str): the key for s3 object
+
+        """
+        self.s3_resource.meta.client.delete_object(Bucket=bucket_name, Key=object_key)
+
+    def get_s3_bucket_object_url(self, bucket_name, object_key):
+        """
+        Get s3 bucket object url
+
+        Args:
+            bucket_name (str): Name of a valid s3 bucket
+            object_key (str): Name of the key for s3 object
+
+        Returns:
+            s3_url (str): An s3 url
+
+        """
+        s3_url = os.path.join(
+            f"https://s3.{self._region_name}.amazonaws.com/{bucket_name}",
+            f"{object_key}",
+        )
+        return s3_url
+
+    def get_stack_instance_id(self, stack_name, logical_id):
+        """
+        Get the instance id associated with the cloudformation stack
+
+        Args:
+            stack_name (str): Name of the cloudformation stack
+            logical_id (str):  LogicalResourceId of the resource
+                ex: "Worker0"
+
+        Returns:
+            instance_id (str): Id of the instance
+
+        """
+        resource = self.cf_client.describe_stack_resource(
+            StackName=stack_name, LogicalResourceId=logical_id
+        )
+        return resource.get("StackResourceDetail").get("PhysicalResourceId")
+
+    def get_stack_params(self, stack_name, param_name):
+        """
+        Get value of a particular param
+
+        Args:
+            stack_name (str): AWS cloudformation stack name
+            param_name (str): Stack parameter name
+
+        Returns:
+            str: Parameter value
+
+        """
+        stack_description = self.cf_client.describe_stacks(StackName=stack_name)
+        params = stack_description.get("Stacks")[0].get("Parameters")
+        for param_dict in params:
+            if param_dict.get("ParameterKey") == param_name:
+                return param_dict.get("ParameterValue")
+
+    def get_worker_ignition_location(self, stack_name):
+        """
+        Get the ignition location from given stack
+
+        Args:
+            stack_name (str): AWS cloudformation stack name
+
+        Returns:
+            ignition_location (str): An AWS URL ignition location
+
+        """
+        param_name = "IgnitionLocation"
+        ignition_loction = self.get_stack_params(stack_name, param_name)
+        return ignition_loction
+
+    def get_worker_instance_profile_name(self, stack_name):
+        """
+        Get the worker instance profile name
+
+        Args:
+            stack_name (str): AWS cloudformation stack name
+
+        Returns:
+            worker_instance_profile_name (str): instance profile name
+
+        """
+        param_name = "WorkerInstanceProfileName"
+        worker_instance_profile_name = self.get_stack_params(stack_name, param_name)
+        return worker_instance_profile_name
+
+    def get_worker_stacks(self):
+        """
+        Get the cloudformation stacks only for workers of this cluster
+
+        Returns:
+            list : of worker stacks
+
+        """
+        worker_pattern = r"{}-no[0-9]+".format(config.ENV_DATA["cluster_name"])
+        return self.get_matching_stacks(worker_pattern)
+
+    def get_matching_stacks(self, pattern):
+        """
+        Get only the stacks which matches the pattern
+
+        Args:
+            pattern (str): A raw string which is re compliant
+
+        Returns:
+            list : of strings which are matching stack name
+
+        """
+        all_stacks = self.get_all_stacks()
+        matching_stacks = []
+        for stack in all_stacks:
+            matching = re.match(pattern, stack)
+            if matching:
+                matching_stacks.append(matching.group())
+        return matching_stacks
+
+    def get_all_stacks(self):
+        """
+        Get all the cloudformation stacks
+
+        Returns:
+            list : of all cloudformation stacks
+
+        """
+        all_stacks = []
+        stack_description = self.cf_client.describe_stacks()
+        for stack in stack_description["Stacks"]:
+            all_stacks.append(stack["StackName"])
+        return all_stacks
+
+    def create_stack(self, s3_url, index, params_list, capabilities):
+        """
+        Create a new cloudformation stack for worker creation
+
+        Args:
+            s3_url (str): An aws url for accessing s3 object
+            index (int): Integer index for stack name
+            params_list (list): of parameters (k,v) for create_stack
+            capabilities (list): of valid AWS capabilities like
+                CAPABILITY_NAMED_IAM etc
+
+        Returns:
+            tuple : of (stack_name, stack_id)
+
+        """
+        stack_name = f"{config.ENV_DATA['cluster_name']}-no{index}"
+        response = self.cf_client.create_stack(
+            StackName=stack_name,
+            TemplateURL=s3_url,
+            Parameters=params_list,
+            Capabilities=capabilities,
+        )
+        self.cf_client.get_waiter("stack_create_complete").wait(StackName=stack_name)
+        logger.info(f"Stack {stack_name} created successfuly")
+        stack_id = response["StackId"]
+        logger.info(f"Stackid = {stack_id}")
+        return stack_name, stack_id
+
+    def delete_apps_record_set(self, cluster_name=None, from_base_domain=False):
+        """
+        Delete apps record set that sometimes blocks sg stack deletion.
+            https://github.com/red-hat-storage/ocs-ci/issues/2549
+
+        Args:
+            cluster_name (str): Name of the cluster
+            from_base_domain (bool): Delete apps record set from base domain
+                created by Flexy
+
+        """
+        cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+        base_domain = config.ENV_DATA["base_domain"]
+        if from_base_domain:
+            hosted_zone_name = f"{base_domain}."
+        else:
+            hosted_zone_name = f"{cluster_name}.{base_domain}."
+        record_set_name = f"\\052.apps.{cluster_name}.{base_domain}."
+
+        hosted_zones = self.route53_client.list_hosted_zones_by_name(
+            DNSName=hosted_zone_name, MaxItems="1"
+        )["HostedZones"]
+        hosted_zone_ids = [
+            zone["Id"] for zone in hosted_zones if zone["Name"] == hosted_zone_name
+        ]
+        if hosted_zone_ids:
+            hosted_zone_id = hosted_zone_ids[0]
+        else:
+            logger.info(f"hosted zone {hosted_zone_name} not found")
+            return
+        record_sets = self.route53_client.list_resource_record_sets(
+            HostedZoneId=hosted_zone_id
+        )["ResourceRecordSets"]
+        apps_record_sets = [
+            record_set
+            for record_set in record_sets
+            if record_set["Name"] == record_set_name
+        ]
+        if apps_record_sets:
+            apps_record_set = apps_record_sets[0]
+        else:
+            logger.info(f"app record set not found for record {record_set_name}")
+            return
+        logger.info(f"Deleting hosted zone: {record_set_name}")
+        self.route53_client.change_resource_record_sets(
+            HostedZoneId=hosted_zone_id,
+            ChangeBatch={
+                "Changes": [
+                    {
+                        "Action": "DELETE",
+                        "ResourceRecordSet": {
+                            "Name": record_set_name,
+                            "Type": apps_record_set["Type"],
+                            "AliasTarget": apps_record_set["AliasTarget"],
+                        },
+                    }
+                ]
+            },
+        )
+
+    def get_instance_id_from_private_dns_name(self, private_dns_name):
+        """
+        Get the instance id from the private dns name of the instance
+
+        Args:
+            private_dns_name (str): The private DNS name of the instance
+
+        Returns:
+            str: The instance id associated to the private DNS name.
+                 If not found returns None
+        """
+        instances_response = self.get_instances_response_by_name_pattern()
+        for instance in instances_response:
+            instance_dict = instance["Instances"][0]
+            if instance_dict["PrivateDnsName"] == private_dns_name:
+                return instance_dict["InstanceId"]
+
+        return None
+
+    def get_stack_name_by_instance_id(self, instance_id):
+        """
+        Get the stack name by the instance id
+
+        Args:
+            instance_id (str): The instance id
+
+        Returns:
+            str: The stack name associated to the instance id.
+                 If not found returns None
+        """
+        stack_name = None
+        instances_response = self.get_instances_response_by_name_pattern()
+        for instance in instances_response:
+            instance_dict = instance["Instances"][0]
+            if instance_dict["InstanceId"] == instance_id:
+                stack_name = get_stack_name_from_instance_dict(instance_dict)
+
+        return stack_name
+
+    @retry(StackStatusError, tries=3, delay=10, backoff=2)
+    def delete_cf_stack_including_dependencies(self, cfs_name):
+        """
+        Delete cloudformation stack including dependencies.
+
+        Some of the depending resources are not deletable, so related errors
+        are ignored and only logged.
+        Thsi method is mainly used as a WORKAROUND for folowing Flexy issue:
+        https://issues.redhat.com/browse/OCPQE-1521
+
+        Args:
+            cfs_name (str): CloudFormation stack name to cleanup
+
+        """
+        # get all VPCs related to the CloudFormation Stack
+        vpcs = self.ec2_client.describe_vpcs(
+            Filters=[
+                {
+                    "Name": "tag:aws:cloudformation:stack-name",
+                    "Values": [f"{cfs_name}"],
+                }
+            ]
+        )["Vpcs"]
+
+        for vpc in vpcs:
+            # get all NetworkInterfaces related to the particular VPC
+            nis = self.ec2_client.describe_network_interfaces(
+                Filters=[
+                    {
+                        "Name": "vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["NetworkInterfaces"]
+            for ni in nis:
+                # delete LoadBalancer related to the NetworkInterface
+                if ni["Description"].split(" ")[0] == "ELB":
+                    elb = ni["Description"].split(" ")[1]
+                    logger.info(f"Deleting LoadBalancer: {elb}")
+                    try:
+                        self.elb_client.delete_load_balancer(LoadBalancerName=elb)
+                    except ClientError as err:
+                        logger.warning(err)
+
+                logger.info(f"Deleting NetworkInterface: {ni['NetworkInterfaceId']}")
+                try:
+                    self.ec2_client.delete_network_interface(
+                        NetworkInterfaceId=ni["NetworkInterfaceId"]
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all InternetGateways related to the particular VPC
+            igs = self.ec2_client.describe_internet_gateways(
+                Filters=[
+                    {
+                        "Name": "attachment.vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["InternetGateways"]
+            for ig in igs:
+                logger.info(f"Deleting InternetGateway: {ig['InternetGatewayId']}")
+                try:
+                    self.ec2_client.delete_internet_gateway(
+                        InternetGatewayId=ig["InternetGatewayId"]
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all Subnets related to the particular VPC
+            subnets = self.ec2_client.describe_subnets(
+                Filters=[
+                    {
+                        "Name": "vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["Subnets"]
+            for subnet in subnets:
+                logger.info(f"Deleting Subnet: {subnet['SubnetId']}")
+                try:
+                    self.ec2_client.delete_subnet(SubnetId=subnet["SubnetId"])
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all RouteTables related to the particular VPC
+            rts = self.ec2_client.describe_route_tables(
+                Filters=[
+                    {
+                        "Name": "vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["RouteTables"]
+            for rt in rts:
+                logger.info(f"Deleting RouteTable: {rt['RouteTableId']}")
+                try:
+                    self.ec2_client.delete_route_table(RouteTableId=rt["RouteTableId"])
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all NetworkAcls related to the particular VPC
+            nas = self.ec2_client.describe_network_acls(
+                Filters=[
+                    {
+                        "Name": "vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["NetworkAcls"]
+            for na in nas:
+                logger.info(f"Deleting NetworkAcl: {na['NetworkAclId']}")
+                try:
+                    self.ec2_client.delete_network_acl(NetworkAclId=na["NetworkAclId"])
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpcPeeringConnections related to the particular VPC
+            vpc_pcs = self.ec2_client.describe_vpc_peering_connections(
+                Filters=[
+                    {
+                        "Name": "requester-vpc-info.vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["VpcPeeringConnections"]
+            for vpc_pc in vpc_pcs:
+                logger.info(
+                    f"Deleting VpcPeeringConnection: {vpc_pc['VpcPeeringConnectionId']}"
+                )
+                try:
+                    self.ec2_client.delete_vpc_peering_connections(
+                        VpcPeeringConnectionId=vpc_pc["VpcPeeringConnectionId"]
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpcEndpoints related to the particular VPC
+            vpc_es = self.ec2_client.describe_vpc_endpoints(
+                Filters=[
+                    {
+                        "Name": "vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["VpcEndpoints"]
+            for vpc_e in vpc_es:
+                logger.info(f"Deleting VpcEndpoint: {vpc_e['VpcEndpointId']}")
+                try:
+                    self.ec2_client.delete_vpc_endpoints(
+                        VpcEndpointIds=[vpc_e["VpcEndpointId"]]
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all NatGateways related to the particular VPC
+            ngs = self.ec2_client.describe_nat_gateways(
+                Filters=[
+                    {
+                        "Name": "vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["NatGateways"]
+            for ng in ngs:
+                logger.info(f"Deleting NatGateway: {ng['NatGatewayId']}")
+                try:
+                    self.ec2_client.delete_nat_gateways(NatGatewayId=ng["NatGatewayId"])
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpnConnections related to the particular VPC
+            vcs = self.ec2_client.describe_vpn_connections(
+                Filters=[
+                    {
+                        "Name": "attachment.vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["VpnConnections"]
+            for vc in vcs:
+                logger.info(f"Deleting VpnConnection: {vc['VpnConnectionId']}")
+                try:
+                    self.ec2_client.delete_vpn_connection(
+                        VpnConnectionId=vc["VpnConnectionId"]
+                    )
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all VpnGateways related to the particular VPC
+            vgs = self.ec2_client.describe_vpn_gateways(
+                Filters=[
+                    {
+                        "Name": "vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["VpnGateways"]
+            for vg in vgs:
+                logger.info(f"Deleting VpnGateway: {vg['VpnGatewayId']}")
+                try:
+                    self.ec2_client.delete_vpn_gateway(VpnGatewayId=vg["VpnGatewayId"])
+                except ClientError as err:
+                    logger.warning(err)
+
+            # get all SecurityGroups related to the particular VPC
+            sgs = self.ec2_client.describe_security_groups(
+                Filters=[
+                    {
+                        "Name": "vpc-id",
+                        "Values": [vpc["VpcId"]],
+                    }
+                ]
+            )["SecurityGroups"]
+            for sg in sgs:
+                logger.info(f"Deleting SecurityGroup: {sg['GroupId']}")
+                try:
+                    self.ec2_client.delete_security_group(GroupId=sg["GroupId"])
+                except ClientError as err:
+                    logger.warning(err)
+
+            logger.info(f"Deleting VPC: {vpc['VpcId']}")
+            try:
+                self.ec2_client.delete_vpc(VpcId=vpc["VpcId"], DryRun=False)
+            except ClientError as err:
+                logger.warning(err)
+
+        logger.info(f"Deleting CloudFormation Stack: {cfs_name}")
+        self.delete_cloudformation_stacks([cfs_name])
+
+    def delete_hosted_zone(
+        self, cluster_name, delete_zone=True, delete_from_base_domain=False
+    ):
+        """
+        Deletes the hosted zone
+
+        Args:
+            cluster_name (str): Name of the cluster
+            delete_zone (bool): Whether to delete complete zone
+            delete_from_base_domain (bool): Whether to delete record from base domain
+
+        """
+        cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+        base_domain = config.ENV_DATA["base_domain"]
+        hosted_zone_name = f"{cluster_name}.{base_domain}."
+
+        hosted_zones = self.route53_client.list_hosted_zones_by_name(
+            DNSName=hosted_zone_name, MaxItems="50"
+        )["HostedZones"]
+        hosted_zone_ids = [
+            zone["Id"] for zone in hosted_zones if zone["Name"] == hosted_zone_name
+        ]
+
+        if hosted_zone_ids:
+            for hosted_zone_id in hosted_zone_ids:
+                logger.info(
+                    f"Deleting domain name {hosted_zone_name} with "
+                    f"hosted zone ID {hosted_zone_id}"
+                )
+                self.delete_all_record_sets(hosted_zone_id)
+                if delete_zone:
+                    self.route53_client.delete_hosted_zone(Id=hosted_zone_id)
+                if delete_from_base_domain:
+                    self.delete_record_from_base_domain(
+                        cluster_name=cluster_name, base_domain=base_domain
+                    )
+
+        else:
+            logger.info(f"hosted zone {hosted_zone_name} not found")
+            return
+
+    def delete_all_record_sets(self, hosted_zone_id):
+        """
+        Deletes all record sets in a hosted zone
+
+        Args:
+            hosted_zone_id (str): Hosted Zone ID
+                example: /hostedzone/Z91022921MMOZDVPPC8D6
+
+        """
+        record_types_exclude = ["NS", "SOA"]
+        record_sets = self.route53_client.list_resource_record_sets(
+            HostedZoneId=hosted_zone_id
+        )["ResourceRecordSets"]
+
+        for each_record in record_sets:
+            record_set_type = each_record["Type"]
+            if record_set_type not in record_types_exclude:
+                self.delete_record(each_record, hosted_zone_id)
+        logger.info("Successfully deleted all record sets")
+
+    def delete_record_from_base_domain(self, cluster_name, base_domain=None):
+        """
+        Deletes the record for cluster name in base domain
+
+        Args:
+            cluster_name (str): Name of the cluster
+            base_domain (str): Base domain name
+
+        """
+        base_domain = base_domain or config.ENV_DATA["base_domain"]
+        record_name = f"{cluster_name}.{base_domain}."
+        hosted_zone_id = self.get_hosted_zone_id_for_domain(domain=base_domain)
+        record_sets_in_base_domain = self.get_record_sets(domain=base_domain)
+
+        for record in record_sets_in_base_domain:
+            if record["Name"] == record_name:
+                logger.info(f"Deleting record {record_name} from {base_domain}")
+                self.delete_record(record, hosted_zone_id)
+                # breaking here since we will have single record in
+                # base domain and deleting is destructive action
+                break
+
+    def get_record_sets(self, domain=None):
+        """
+        Get all the record sets in domain
+
+        Args:
+            domain (str): Domain name to fetch the records
+
+        Returns:
+            list: list of record sets
+
+        """
+        domain = domain or config.ENV_DATA["base_domain"]
+        hosted_zone_id = self.get_hosted_zone_id_for_domain(domain=domain)
+        record_sets = []
+        record_sets_data = self.route53_client.list_resource_record_sets(
+            HostedZoneId=hosted_zone_id
+        )
+        record_sets.extend(record_sets_data["ResourceRecordSets"])
+        # If a ListResourceRecordSets command returns more than one page of results,
+        # the value of IsTruncated is true. To display the next page of results,
+        # get the values of NextRecordName, NextRecordType, and NextRecordIdentifier (if any)
+        # from the response.
+        # Then submit another ListResourceRecordSets request, and specify those values for StartRecordName,
+        # StartRecordType, and StartRecordIdentifier.
+        is_truncated = record_sets_data["IsTruncated"]
+        while is_truncated:
+            start_record_name = record_sets_data["NextRecordName"]
+            start_record_type = record_sets_data["NextRecordType"]
+
+            record_sets_data = self.route53_client.list_resource_record_sets(
+                HostedZoneId=hosted_zone_id,
+                StartRecordName=start_record_name,
+                StartRecordType=start_record_type,
+            )
+            record_sets.extend(record_sets_data["ResourceRecordSets"])
+            is_truncated = record_sets_data["IsTruncated"]
+
+        return record_sets
+
+    def delete_record(self, record, hosted_zone_id):
+        """
+        Deletes the record from Hosted Zone
+
+        Args:
+            record (dict): record details to delete
+                e.g:{
+                'Name': 'vavuthu-eco1.qe.rh-ocs.com.',
+                'Type': 'NS',
+                'TTL': 300,
+                'ResourceRecords':[
+                {'Value': 'ns-1389.awsdns-45.org'},
+                {'Value': 'ns-639.awsdns-15.net'},
+                {'Value': 'ns-1656.awsdns-15.co.uk'},
+                {'Value': 'ns-183.awsdns-22.com'}
+                ]
+                }
+            hosted_zone_id (str): Hosted Zone ID
+                example: /hostedzone/Z91022921MMOZDVPPC8D6
+
+        """
+        record_set_name = record["Name"]
+        record_set_type = record["Type"]
+        record_set_ttl = record["TTL"]
+        record_set_resource_records = record["ResourceRecords"]
+        logger.info(f"deleting record set: {record_set_name}")
+        resource_record_set = {
+            "Name": record_set_name,
+            "Type": record_set_type,
+            "TTL": record_set_ttl,
+            "ResourceRecords": record_set_resource_records,
+        }
+        # Weight and SetIdentifier is needed for
+        # deleting api-int.cls-vavuthu-eco1.qe.rh-ocs.com. and
+        # api.cls-vavuthu-eco1.qe.rh-ocs.com.
+        if record.get("Weight"):
+            resource_record_set["Weight"] = record.get("Weight")
+            resource_record_set["SetIdentifier"] = record.get("SetIdentifier")
+        self.route53_client.change_resource_record_sets(
+            HostedZoneId=hosted_zone_id,
+            ChangeBatch={
+                "Changes": [
+                    {
+                        "Action": "DELETE",
+                        "ResourceRecordSet": resource_record_set,
+                    }
+                ]
+            },
+        )
+
+    def get_hosted_zone_id(self, cluster_name):
+        """
+        Get Zone id from given cluster_name
+
+        Args:
+            cluster_name (str): Name of cluster
+
+        Returns:
+            str: Zone id
+        """
+        cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+        base_domain = config.ENV_DATA["base_domain"]
+        hosted_zone_name = f"{cluster_name}.{base_domain}."
+        hosted_zones_output = self.route53_client.list_hosted_zones_by_name(
+            DNSName=hosted_zone_name
+        )
+        full_hosted_zone_id = hosted_zones_output["HostedZones"][0]["Id"]
+        return full_hosted_zone_id.strip("/hostedzone/")
+
+    def update_hosted_zone_record(
+        self, zone_id, record_name, data, type, operation_type, ttl=60, raw_data=None
+    ):
+        """
+        Update Route53 DNS record
+
+        Args:
+            zone_id (str): Zone id of DNS record
+            record_name (str): Record Name without domain
+                eg: api.apps.ocp-baremetal-auto
+            data (str): Data to be added for DNS Record
+            type (str): DNS record type
+            operation_type (str): Operation Type (Allowed Values:- Add, Delete)
+            ttl (int): Default set to 60 sec
+            raw_data (list): Data to be added as a record
+
+        Returns:
+            dict: The response from change_resource_record_sets
+        """
+        base_domain = config.ENV_DATA["base_domain"]
+        record_name = f"{record_name}.{base_domain}."
+        if "*" in record_name:
+            trim_record_name = record_name.strip("*.")
+        else:
+            trim_record_name = record_name
+        old_resource_record_list = []
+        res = self.route53_client.list_resource_record_sets(HostedZoneId=zone_id)
+        for records in res.get("ResourceRecordSets"):
+            if trim_record_name in records.get("Name"):
+                old_resource_record_list = records.get("ResourceRecords")
+
+        if operation_type == "Add":
+            old_resource_record_list.append({"Value": data})
+        elif operation_type == "Delete":
+            old_resource_record_list.remove({"Value": data})
+        if raw_data:
+            old_resource_record_list = data
+        response = self.route53_client.change_resource_record_sets(
+            HostedZoneId=zone_id,
+            ChangeBatch={
+                "Changes": [
+                    {
+                        "Action": "UPSERT",
+                        "ResourceRecordSet": {
+                            "Name": record_name,
+                            "Type": type,
+                            "TTL": ttl,
+                            "ResourceRecords": old_resource_record_list,
+                        },
+                    }
+                ],
+            },
+        )
+        logger.debug(f"Record Created with {record_name} for {data}")
+        return response
+
+    def wait_for_record_set(self, response_list, max_attempts=10):
+        """
+        Wait for Record to be created
+
+        Args:
+            max_attempts (int): Max Attempt's for Waiting
+            response_list (list): List of response
+
+        """
+
+        waiter = self.route53_client.get_waiter("resource_record_sets_changed")
+        for response in response_list:
+            logger.debug(f"Waiting for Response {response['ChangeInfo']['Id']}")
+            waiter.wait(
+                Id=response["ChangeInfo"]["Id"],
+                WaiterConfig={"MaxAttempts": max_attempts},
+            )
+
+    def get_hosted_zone_id_for_domain(self, domain=None):
+        """
+        Get Zone id for domain
+
+        Args:
+            domain (str): Name of the domain.
+
+        Returns:
+            str: Zone id
+
+        """
+        domain = domain or config.ENV_DATA["base_domain"]
+        hosted_zones = self.route53_client.list_hosted_zones_by_name(
+            DNSName=domain, MaxItems="1"
+        )["HostedZones"]
+        hosted_zone_ids = [
+            zone["Id"] for zone in hosted_zones if zone["Name"] == f"{domain}."
+        ]
+        return hosted_zone_ids[0]
+
+    def create_hosted_zone(self, cluster_name):
+        """
+        Create Hosted Zone
+
+        Args:
+            cluster_name (str): Name of cluster
+
+        Returns:
+            str: Hosted Zone id
+
+        """
+        ts = time.time()
+        domain = config.ENV_DATA["base_domain"]
+        full_cluster_name = f"{cluster_name}.{domain}."
+        response = self.route53_client.create_hosted_zone(
+            Name=full_cluster_name, CallerReference=str(ts)
+        )
+
+        full_hosted_zone_id = response["HostedZone"]["Id"]
+        hosted_zone_id = full_hosted_zone_id.strip("/hostedzone/")
+        logger.info(
+            f"Hosted zone Created with id {hosted_zone_id} and name is {response['HostedZone']['Name']}"
+        )
+        return hosted_zone_id
+
+    def get_hosted_zone_details(self, zone_id):
+        """
+        Get Hosted zone Details
+
+        Args:
+            zone_id (str): Zone Id of cluster_name
+
+        Returns:
+            dict: Response
+
+        """
+        return self.route53_client.get_hosted_zone(Id=zone_id)
+
+    def get_ns_for_hosted_zone(self, zone_id):
+        """
+        Get NameServers Details from Hosted Zone
+
+        Args:
+            zone_id (str): Zone Id of cluster_name
+
+        Returns:
+            list: NameServers
+
+        """
+        return self.get_hosted_zone_details(zone_id)["DelegationSet"]["NameServers"]
+
+    def wait_for_instances_to_stop(self, instances):
+        """
+        Wait for the instances to reach status stopped
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected status stopped
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(f"Waiting for instance {instance_name} to reach status stopped")
+            instance = self.get_ec2_instance(instance_id)
+            instance.wait_until_stopped()
+
+    def wait_for_instances_to_terminate(self, instances):
+        """
+        Wait for the instances to reach status terminated
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected status terminated
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(
+                f"Waiting for instance {instance_name} to reach status terminated"
+            )
+            instance = self.get_ec2_instance(instance_id)
+            instance.wait_until_terminated()
+
+    def wait_for_instances_to_stop_or_terminate(self, instances):
+        """
+        Wait for the instances to reach statuses stopped or terminated
+
+        Args:
+            instances: A dictionary of instance IDs and names
+
+        Raises:
+            botocore.exceptions.WaiterError: If it failed to reach the expected statuses stopped or terminated
+
+        """
+        for instance_id, instance_name in instances.items():
+            logger.info(
+                f"Waiting for instance {instance_name} to reach status stopped or terminated"
+            )
+            instance = self.get_ec2_instance(instance_id)
+            try:
+                instance.wait_until_stopped()
+            except WaiterError as e:
+                logger.warning(
+                    f"Failed to reach the status stopped due to the error {str(e)}"
+                )
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status terminated"
+                )
+                instance.wait_until_terminated()
+
+    def list_buckets(self):
+        """
+        List the buckets
+
+        Returns:
+            list: List of dictionaries which contains bucket name and creation date as keys
+               e.g: [
+               {'Name': '214qpg-oidc', 'CreationDate': datetime.datetime(2023, 1, 9, 11, 27, 48, tzinfo=tzutc())},
+               {'Name': '214rmh4-oidc', 'CreationDate': datetime.datetime(2023, 1, 9, 12, 32, 8, tzinfo=tzutc())}
+               ]
+
+        """
+        return self.s3_client.list_buckets()["Buckets"]
+
+    def get_buckets_to_delete(self, bucket_prefix, hours):
+        """
+        Get the bucket with prefix which are older than given hours
+
+        Args:
+            bucket_prefix (str): prefix for the buckets to fetch
+            hours (int): fetch buckets that are older than to the specified number of hours
+
+        """
+        buckets_to_delete = []
+        # Get the current date in UTC
+        current_date = datetime.now(timezone.utc)
+        all_buckets = self.list_buckets()
+        for bucket in all_buckets:
+            bucket_name = bucket["Name"]
+
+            bucket_delete_time = self.get_bucket_time_based_rules(
+                bucket_prefix, bucket_name, hours
+            )
+            # Get the creation date of the bucket in UTC
+            bucket_creation_date = bucket["CreationDate"].replace(tzinfo=timezone.utc)
+
+            # Calculate the age of the bucket
+            age_of_bucket = current_date - bucket_creation_date
+
+            # Check if the bucket is older than given hours
+            if (age_of_bucket.days) * 24 >= bucket_delete_time:
+                logger.info(
+                    f"{bucket_name} (Created on {bucket_creation_date} and age is {age_of_bucket}) can be deleted"
+                )
+                buckets_to_delete.append(bucket_name)
+        return buckets_to_delete
+
+    def get_bucket_time_based_rules(self, bucket_prefixes, bucket_name, hours):
+        """
+        Get the time bucket based prefix and hours
+
+        Args:
+            bucket_prefixes (dict): The rules according to them determine the number of hours the bucket can exist
+            bucket_name (str): bucket name
+            hours (int): The number of hours bucket can exist if there is no compliance with one of the rules
+
+        Returns:
+            int: The number of hours bucket can exist
+
+        """
+        for bucket_prefix in bucket_prefixes:
+            if bool(re.match(bucket_prefix, bucket_name, re.I)):
+                return bucket_prefixes[bucket_prefix]
+        return hours
+
+    def delete_objects_in_bucket(self, bucket):
+        """
+        Delete objects in a bucket
+
+        Args:
+            bucket (str): Name of the bucket to delete objects
+
+        """
+        # List all objects within the bucket
+        response = self.s3_client.list_objects_v2(Bucket=bucket)
+
+        # Delete each object within the bucket
+        if "Contents" in response:
+            for obj in response["Contents"]:
+                object_key = obj["Key"]
+                self.s3_client.delete_object(Bucket=bucket, Key=object_key)
+                logger.info(f"Deleted object: {object_key}")
+        else:
+            logger.info(f"No objects found in bucket {bucket}")
+
+    def delete_bucket(self, bucket):
+        """
+        Delete the bucket
+
+        Args:
+            bucket (str): Name of the bucket to delete
+
+        """
+        logger.info(f"Deleting bucket {bucket}")
+        self.delete_objects_in_bucket(bucket=bucket)
+
+        # Delete the empty bucket
+        self.s3_client.delete_bucket(Bucket=bucket)
+        logger.info(f"Deleted bucket {bucket}")
+
+    def delete_buckets(self, buckets):
+        """
+        Delete the buckets
+
+        Args:
+            buckets (list): List of buckets to delete
+
+        """
+        for each_bucket in buckets:
+            self.delete_bucket(bucket=each_bucket)
+
+    def create_iam_role(self, role_name, description, document):
+        """
+        Create IAM role if it doesn't exist, or return existing role.
+
+        Args:
+            role_name (str): Name of the role
+            description (str): Description of the role
+            document (str): JSON string representing the role policy to assume
+
+        Returns:
+            dict: Created or existing role data
+
+        """
+        # Check if role already exists
+        try:
+            existing_role = self.iam_client.get_role(RoleName=role_name)
+            logger.info("IAM role '%s' already exists, reusing it", role_name)
+            return existing_role
+        except self.iam_client.exceptions.NoSuchEntityException:
+            pass
+
+        logger.info("Creating IAM role: %s", role_name)
+        return self.iam_client.create_role(
+            RoleName=role_name,
+            Description=description,
+            AssumeRolePolicyDocument=document,
+        )
+
+    def get_iam_roles(self, base_name):
+        """
+        Retrieve a list of IAM roles that start with the base_name.
+
+        Args:
+            base_name (str): Base of the role name
+
+        Returns:
+            list: List of IAM roles that match the base_name
+
+        """
+        logger.info("Retrieving IAM roles that begin with %s", base_name)
+        iam_roles = []
+        paginator = self.iam_client.get_paginator("list_roles")
+        for resp in paginator.paginate():
+            role_names = [
+                role for role in resp["Roles"] if base_name in role.get("RoleName")
+            ]
+            iam_roles.extend(role_names)
+        logger.info(
+            "Found the following roles: %s",
+            [role.get("RoleName") for role in iam_roles],
+        )
+        return iam_roles
+
+    def delete_iam_role(self, role_name):
+        """
+        Delete the specified IAM role.
+
+        Args:
+            role_name (str): Name of the role to delete
+
+        """
+        logger.info("Deleting IAM role: %s", role_name)
+        self.iam_client.delete_role(RoleName=role_name)
+
+    def get_instance_profiles_for_role(self, role_name):
+        """
+        Get instance profiles for the specified role.
+
+        Args:
+            role_name (str): Name of the role to find instance profiles for
+
+        Returns:
+            list: Instance Profiles for the role
+
+        """
+        resp = self.iam_client.list_instance_profiles_for_role(RoleName=role_name)
+        return resp["InstanceProfiles"]
+
+    def remove_role_from_instance_profile(self, role_name, instance_profile_name):
+        """
+        Remove role from instance profile.
+
+        Args:
+            role_name (str): Name of the role to remove from the instance profile
+            instance_profile_name (str): Name of the instance profile to remove the role from
+
+        """
+        logger.info(
+            "Removing role %s from instance profile %s",
+            role_name,
+            instance_profile_name,
+        )
+        self.iam_client.remove_role_from_instance_profile(
+            InstanceProfileName=instance_profile_name, RoleName=role_name
+        )
+
+    def attach_role_policy(self, role_name, policy_arn):
+        """
+        Attach role-policy.
+
+        Args:
+            role_name (str): Name of the role to attach the policy to
+            policy_arn (str): ARN of the policy to attach to the role
+
+        """
+        logger.info("Attaching role-policy %s to role %s", policy_arn, role_name)
+        self.iam_client.attach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
+
+    def get_role_policies(self, role_name):
+        """
+        Get policies embedded in the role.
+
+        Args:
+            role_name (str): Name of the role
+
+        Return:
+            list: Role policies
+
+        """
+        logger.info("Getting policies for the role: %s", role_name)
+        paginator = self.iam_client.get_paginator("list_role_policies")
+        role_policies = []
+        for resp in paginator.paginate(RoleName=role_name):
+            logger.info("Found policies: %s", resp.get("PolicyNames"))
+            role_policies.extend(resp.get("PolicyNames"))
+        return role_policies
+
+    def get_attached_role_policies(self, role_name):
+        """
+        Get policies attached to a role.
+
+        Args:
+            role_name (str): Name of the role to fetch attached policies
+
+        Return:
+            list: Attached role policies
+
+        """
+        logger.info("Getting policies attached to role: %s", role_name)
+        paginator = self.iam_client.get_paginator("list_attached_role_policies")
+        role_policies = []
+        for resp in paginator.paginate(RoleName=role_name):
+            logger.info("Found attached policies: %s", resp.get("AttachedPolicies"))
+            role_policies.extend(resp.get("AttachedPolicies"))
+        return role_policies
+
+    def detach_role_policy(self, role_name, policy_arn):
+        """
+        Detach role policy from IAM role.
+
+        Args:
+            role_name (str): Name of the role to detach the policy from
+            policy_arn (str): ARN for the policy to detach from the role
+
+        """
+        logger.info("Detatching policy %s from role %s", policy_arn, role_name)
+        self.iam_client.detach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
+
+    def delete_role_policy(self, role_name, policy_name):
+        """
+        Delete role policy.
+
+        Args:
+            role_name (str): Name of the role
+            policy_name (str): Name of the policy to delete
+
+        """
+        logger.info("Deleting role %s policy: %s", role_name, policy_name)
+        self.iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
+
+    def delete_oidc_provider(self, provider_name):
+        """
+        Deletes the OIDC provider
+
+        Args:
+            provider_name (str): OIDC provider name
+                e.g: d3gcnqtx1lgapn.cloudfront.net
+
+        """
+        account_id = self.get_caller_identity()
+        oidc_provider_arn = f"arn:aws:iam::{account_id}:oidc-provider/{provider_name}"
+        try:
+            self.iam_client.delete_open_id_connect_provider(
+                OpenIDConnectProviderArn=oidc_provider_arn
+            )
+            logger.info(f"Deleted OIDC provider: {oidc_provider_arn}")
+        except Exception as e:
+            if "NoSuchEntity" in str(e):
+                logger.warning(
+                    f"OIDC provider {oidc_provider_arn} not found — "
+                    "likely already deleted by rosa delete oidc-config"
+                )
+            else:
+                logger.error(f"Error deleting OIDC provider: {e}")
+
+    def cleanup_oidc_providers_by_prefix(self, url_prefix):
+        """
+        Delete all OIDC providers whose URL starts with the given prefix.
+
+        AWS has a hard limit of 100 OpenID Connect providers per account.
+        When HCP cluster deployments fail or are aborted without proper
+        cleanup, their OIDC providers remain and accumulate until the limit
+        is hit, blocking all new deployments.
+
+        This method lists all OIDC providers in the account and deletes
+        those whose issuer URL starts with the given prefix (typically
+        the cluster's OIDC bucket name). This safely scopes the cleanup
+        to a single cluster's providers without affecting other clusters.
+
+        Args:
+            url_prefix (str): URL prefix to match, e.g.
+                ``"mycluster-oidc-bucket.s3.us-west-2.amazonaws.com"``
+
+        Returns:
+            int: Number of OIDC providers deleted.
+        """
+        try:
+            response = self.iam_client.list_open_id_connect_providers()
+        except Exception as e:
+            logger.error(f"Failed to list OIDC providers: {e}")
+            return 0
+
+        providers = response.get("OpenIDConnectProviderList", [])
+        deleted_count = 0
+        for provider in providers:
+            arn = provider["Arn"]
+            url = (
+                arn.split(":oidc-provider/", 1)[-1] if ":oidc-provider/" in arn else ""
+            )
+            if not url.startswith(url_prefix):
+                continue
+
+            logger.info(f"Deleting OIDC provider matching prefix '{url_prefix}': {arn}")
+            try:
+                self.iam_client.delete_open_id_connect_provider(
+                    OpenIDConnectProviderArn=arn
+                )
+                deleted_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete OIDC provider {arn}: {e}")
+
+        if deleted_count:
+            logger.info(
+                f"Deleted {deleted_count} OIDC provider(s) "
+                f"matching prefix '{url_prefix}'"
+            )
+        return deleted_count
+
+    def get_caller_identity(self):
+        """
+        Get STS Caller Identity Account ID
+
+        Returns:
+            str: Account ID
+
+        """
+        logger.info("Retrieving STS Caller Identity")
+        resp = self.sts_client.get_caller_identity()
+        return resp["Account"]
+
+    def get_caller_identity_arn(self):
+        """
+        Get STS Caller Identity ARN.
+
+        Equivalent to: aws sts get-caller-identity --query "Arn" --output text
+
+        Returns:
+            str: The ARN of the caller identity
+
+        """
+        logger.info("Retrieving STS Caller Identity ARN")
+        resp = self.sts_client.get_caller_identity()
+        arn = resp["Arn"]
+        logger.info(f"Caller Identity ARN: {arn}")
+        return arn
+
+    def get_session_token(self, duration_seconds=7200, output_file=None):
+        """
+        Retrieve AWS STS session token and save it to a file.
+
+        Equivalent to::
+
+            aws sts get-session-token --duration-seconds 7200 > sts-creds.json
+
+        Args:
+            duration_seconds (int): Duration of the session token in seconds.
+                Default is 7200 (2 hours). Valid range: 900 (15 min) to 129600 (36 hours).
+            output_file (str): Path to the file where credentials will be saved.
+                If not provided, creates a temp file in the system temp directory.
+
+        Returns:
+            dict: Dictionary containing:
+
+                - ``credentials`` (dict): AWS credentials with keys:
+
+                  - ``AccessKeyId`` (str): AWS access key ID
+                  - ``SecretAccessKey`` (str): AWS secret access key
+                  - ``SessionToken`` (str): AWS session token
+                  - ``Expiration`` (str): Expiration time in ISO format
+
+                - ``credentials_file`` (str): Path to the saved file
+
+        Raises:
+            ClientError: If the STS call fails
+
+        """
+        logger.info(
+            f"Retrieving STS session token with duration {duration_seconds} seconds"
+        )
+
+        try:
+            response = self.sts_client.get_session_token(
+                DurationSeconds=duration_seconds
+            )
+        except ClientError as e:
+            logger.error(f"Failed to get session token: {e}")
+            raise
+
+        credentials = response["Credentials"]
+
+        creds_dict = {
+            "Credentials": {
+                "AccessKeyId": credentials["AccessKeyId"],
+                "SecretAccessKey": credentials["SecretAccessKey"],
+                "SessionToken": credentials["SessionToken"],
+                "Expiration": credentials["Expiration"].isoformat(),
+            }
+        }
+
+        if not output_file:
+            output_file = NamedTemporaryFile(
+                mode="w",
+                prefix="sts-creds-",
+                suffix=".json",
+                delete=False,
+            ).name
+
+        logger.info(f"Saving session token to file: {output_file}")
+
+        # Create file with restrictive permissions (owner read/write only)
+        # Use os.open with explicit mode to set permissions atomically
+        fd = os.open(output_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(creds_dict, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to write credentials to file: {e}")
+            raise
+
+        logger.info(
+            f"Session token saved successfully. "
+            f"Expires at: {creds_dict['Credentials']['Expiration']}"
+        )
+
+        return {
+            "credentials": creds_dict["Credentials"],
+            "credentials_file": output_file,
+        }
+
+    def get_cloudfront_origin_access_identies(self):
+        """
+        Get CloudFront Origin Access Identities
+
+        Returns:
+            list: List of CloudFront Origin Access Identies
+
+        """
+        logger.info("Retrieving CloudFront Origin Access Identities")
+        resp = self.cloudfront_client.list_cloud_front_origin_access_identities()
+        return resp["CloudFrontOriginAccessIdentityList"]["Items"]
+
+    def get_cloudfront_origin_access_identity(self, identity_id):
+        """
+        Get CloudFront Origin Access Identity
+
+        Returns:
+            dict: CloudFront Origin Access Identity Data
+
+        """
+        resp = self.cloudfront_client.get_cloud_front_origin_access_identity(
+            Id=identity_id
+        )
+        return resp
+
+    def delete_cloudfront_origin_access_identity(self, identity_id, etag):
+        """
+        Delete CloudFront Origin Access Identity
+
+        Args:
+            identity_id (str): ID of Origin Access Identity
+            etag (str): ETag header
+
+        """
+        logger.info(f"Deleting CloudFront Origin Access Identity: {identity_id}")
+        try:
+            self.cloudfront_client.delete_cloud_front_origin_access_identity(
+                Id=identity_id, IfMatch=etag
+            )
+            logger.info(f"Deleted CloudFront Origin Access Identity: {identity_id}")
+        except Exception as e:
+            logger.error(f"Error deleting CloudFront Origin Access Identity: {e}")
+
+    def get_cloudfront_distribution(self, dist_id):
+        """
+        Get CloudFront Distribusions.
+
+        Args:
+            dist_id (str): ID of Distribution
+
+        Returns:
+            dict: CloudFront Distribution
+
+        """
+        logger.info(f"Retrieving CloudFront Distribution: {dist_id}")
+        resp = self.cloudfront_client.get_distribution(Id=dist_id)
+        return resp
+
+    def get_cloudfront_distributions(self):
+        """
+        Get CloudFront Distribusions.
+
+        Returns:
+            list: List of CloudFront Distributions
+
+        """
+        logger.info("Retrieving CloudFront Distributions")
+        resp = self.cloudfront_client.list_distributions()
+        return resp["DistributionList"]["Items"]
+
+    def get_cloudfront_distribution_config(self, dist_id):
+        """
+        Get CloudFront Distribution config.
+
+        Args:
+            dist_id (str): ID of Distribution
+            query (str): Query to provide. Optional.
+
+        Returns:
+            dict: Distribution config
+
+        """
+        logger.info(f"Retrieving CloudFront Distribution Config for {dist_id}")
+        resp = self.cloudfront_client.get_distribution_config(Id=dist_id)
+        return resp
+
+    def update_cloudfront_distribution(self, dist_id, etag, dist_config):
+        """
+        Update CloudFront Distribution
+
+        Args:
+            dist_id (str): ID of Distribution
+            etag (str): ETag header
+            dist_config (dict): Distribution config data
+
+        """
+        logger.info(f"Updating CloudFront Distribution Config for {dist_id}")
+        self.cloudfront_client.update_distribution(
+            Id=dist_id, IfMatch=etag, DistributionConfig=dist_config
+        )
+
+    def disable_cloudfront_distribution(self, dist_id):
+        """
+        Disable CloudFront Distribution
+
+        Args:
+            dist_id (str): ID of Distribution
+
+        """
+        logger.info(f"Disabling CloudFront Distribution: {dist_id}")
+        full_config = self.get_cloudfront_distribution_config(dist_id)
+        etag = full_config["ETag"]
+        edited_config = full_config["DistributionConfig"]
+        edited_config["Enabled"] = False
+        self.update_cloudfront_distribution(dist_id, etag, edited_config)
+
+    def delete_cloudfront_distribution(self, dist_id, etag):
+        """
+        Delete CloudFront Distribution
+
+        Args:
+            dist_id (str): ID of Distribution
+            etag (str): ETag header
+
+        """
+        logger.info(f"Deleting CloudFront Distribution: {dist_id}")
+        try:
+            self.cloudfront_client.delete_distribution(Id=dist_id, IfMatch=etag)
+            logger.info(f"Deleted CloudFront Distribution: {dist_id}")
+        except Exception as e:
+            logger.error(f"Error deleting CloudFront Distribution: {e}")
+
+    @property
+    def region_name(self):
+        return self._region_name
+
+
+def get_instances_ids_and_names(instances):
+    """
+    Get the instances IDs and names according to nodes dictionary
+
+    Args:
+        instances (list): Nodes dictionaries, returned by 'oc get node -o yaml'
+
+    Returns:
+        dict: The ID keys and the name values of the instances
+
+    """
+    return {
+        "i-"
+        + instance.get()
+        .get("spec")
+        .get("providerID")
+        .partition("i-")[-1]: instance.get()
+        .get("metadata")
+        .get("name")
+        for instance in instances
+    }
+
+
+def get_data_volumes(deviceset_pvs):
+    """
+    Get the instance data volumes (which doesn't include root FS)
+
+    Args:
+        deviceset_pvs (list): PVC objects of the deviceset PVs
+
+    Returns:
+        list: ec2 Volume instances
+
+    """
+    aws = AWS()
+
+    volume_ids = [
+        pv.get().get("spec").get("csi").get("volumeHandle") for pv in deviceset_pvs
+    ]
+    return [aws.ec2_resource.Volume(vol_id) for vol_id in volume_ids]
+
+
+def get_vpc_id_by_node_obj(aws_obj, instances):
+    """
+    This function getting vpc id by randomly selecting instances out of user aws deployment
+
+    Args:
+        aws_obj (obj): AWS() object
+        instances (dict): cluster ec2 instances objects
+
+    Returns:
+        str: vpc_id: The vpc id
+
+    """
+
+    instance_id = random.choice(list(instances.keys()))
+    vpc_id = aws_obj.get_vpc_id_by_instance_id(instance_id)
+
+    return vpc_id
+
+
+def get_rhel_worker_instances(cluster_path):
+    """
+    Get list of rhel worker instance IDs
+
+    Args:
+        cluster_path (str): The cluster path
+
+    Returns:
+        list: list of instance IDs of rhel workers
+
+    """
+    aws = AWS()
+    rhel_workers = []
+    worker_pattern = get_infra_id(cluster_path) + "*rhel-worker*"
+    worker_filter = [{"Name": "tag:Name", "Values": [worker_pattern]}]
+
+    response = aws.ec2_client.describe_instances(Filters=worker_filter)
+    if not response["Reservations"]:
+        return
+    for worker in response["Reservations"]:
+        rhel_workers.append(worker["Instances"][0]["InstanceId"])
+    return rhel_workers
+
+
+def terminate_rhel_workers(worker_list):
+    """
+    Terminate the RHEL worker EC2 instances
+
+    Args:
+        worker_list (list): Instance IDs of rhel workers
+
+    Raises:
+        exceptions.FailedToDeleteInstance: if failed to terminate
+
+    """
+    aws = AWS()
+    if not worker_list:
+        logger.info("No workers in list, skipping termination of RHEL workers")
+        return
+
+    logger.info(f"Terminating RHEL workers {worker_list}")
+    # Do a dry run of instance termination
+    try:
+        aws.ec2_client.terminate_instances(InstanceIds=worker_list, DryRun=True)
+    except aws.ec2_client.exceptions.ClientError as err:
+        if "DryRunOperation" in str(err):
+            logger.info("Instances can be deleted")
+        else:
+            logger.error("Some of the Instances can't be deleted")
+            raise exceptions.FailedToDeleteInstance()
+    # Actual termination call here
+    aws.ec2_client.terminate_instances(InstanceIds=worker_list, DryRun=False)
+    try:
+        waiter = aws.ec2_client.get_waiter("instance_terminated")
+        waiter.wait(InstanceIds=worker_list)
+        logger.info("Instances are terminated")
+    except aws.ec2_client.exceptions.WaiterError as ex:
+        logger.error(f"Failed to terminate instances {ex}")
+        raise exceptions.FailedToDeleteInstance()
+
+
+def destroy_volumes(cluster_name):
+    """
+    Destroy cluster volumes
+
+    Args:
+        cluster_name (str): The name of the cluster
+
+    """
+    aws = AWS()
+    try:
+        volume_pattern = f"{cluster_name}*"
+        logger.debug(f"Finding volumes with pattern: {volume_pattern}")
+        volumes = aws.get_volumes_by_name_pattern(volume_pattern)
+        logger.debug(f"Found volumes: \n {volumes}")
+        for volume in volumes:
+            # skip root devices for deletion
+            # EBS root device volumes are automatically deleted when
+            # the instance terminates
+            if not check_root_volume(volume):
+                aws.detach_and_delete_volume(aws.ec2_resource.Volume(volume["id"]))
+    except Exception:
+        logger.error(traceback.format_exc())
+
+
+def check_root_volume(volume):
+    """
+    Checks whether given EBS volume is root device or not
+
+    Args:
+         volume (dict): EBS volume dictionary
+
+    Returns:
+        bool: True if EBS volume is root device, False otherwise
+
+    """
+    return True if volume["attachments"][0]["DeleteOnTermination"] else False
+
+
+def update_config_from_s3(
+    bucket_name=constants.OCSCI_DATA_BUCKET, filename=constants.AUTHYAML
+):
+    """
+    Get the config file that has secrets/configs from the S3 and update the config
+
+    Args:
+        bucket_name (string): name of the bucket
+        filename (string): name of the file in bucket
+
+    Returns:
+        dict: returns the updated file contents as python dict
+        None: In case the private bucket could not be accessed
+
+    """
+    try:
+        logger.info("Fetching authentication credentials from ocs-ci-data")
+        s3 = boto3.resource("s3")
+        with NamedTemporaryFile(mode="w", prefix="config", delete=True) as auth:
+            s3.meta.client.download_file(bucket_name, filename, auth.name)
+            config_yaml = load_yaml(auth.name)
+        config.update(config_yaml)
+        return config_yaml
+    except NoCredentialsError:
+        logger.warning("Failed to fetch auth.yaml from ocs-ci-data")
+        return None
+    except ClientError:
+        logger.warning(f"Permission denied to access bucket {bucket_name}")
+        return None
+    except EndpointConnectionError:
+        logger.warning("Failed to fetch auth.yaml from ocs-ci-data")
+        return None
+
+
+def delete_cluster_buckets(cluster_name):
+    """
+    Delete s3 buckets corresponding to a particular OCS cluster
+
+    Args:
+        cluster_name (str): name of the cluster the buckets belong to
+
+    """
+    region = config.ENV_DATA["region"]
+    base_domain = config.ENV_DATA["base_domain"]
+    s3_client = boto3.client("s3", region_name=region)
+    buckets = s3_client.list_buckets()["Buckets"]
+    bucket_names = [bucket["Name"] for bucket in buckets]
+    logger.debug("Found buckets: %s", bucket_names)
+
+    # patterns for mcg target bucket, image-registry buckets and bucket created
+    # durring installation via Flexy (for installation files)
+    patterns = [
+        f"nb.(\\d+).apps.{cluster_name}.{base_domain}",
+        f"{cluster_name}-(\\w+)-image-registry-{region}-(\\w+)",
+        f"{cluster_name}-(\\d{{4}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})-(\\d{{2}})",
+        f"{cluster_name}-(\\w+)-oidc",
+        f"{cluster_name}-(\\d{{8}})",
+    ]
+    for pattern in patterns:
+        r = re.compile(pattern)
+        filtered_buckets = list(filter(r.search, bucket_names))
+        logger.info(f"Found buckets: {filtered_buckets}")
+        s3_resource = boto3.resource("s3", region_name=region)
+        for bucket_name in filtered_buckets:
+            logger.info("Deleting all files in bucket %s", bucket_name)
+            try:
+                bucket = s3_resource.Bucket(bucket_name)
+                bucket.objects.delete()
+                logger.info("Deleting bucket %s", bucket_name)
+                bucket.delete()
+            except ClientError as e:
+                logger.error(e)
+
+
+def get_stack_name_from_instance_dict(instance_dict):
+    """
+    Get the stack name by the given instance dictionary from AWS
+
+    Args:
+        instance_dict (dict): The instance dictionary from AWS
+
+    Returns:
+        str: The stack name of the given instance dictionary from AWS.
+             If not found returns None
+    """
+    tags = instance_dict.get("Tags", [])
+    stack_name = None
+
+    for tag in tags:
+        if tag.get("Key") == constants.AWS_CLOUDFORMATION_TAG:
+            stack_name = tag.get("Value")
+
+    return stack_name
+
+
+def create_and_attach_ebs_volumes(
+    worker_pattern, size=100, count=1, device_names=("sdx",)
+):
+    """
+    Create volumes on workers
+
+    Args:
+        worker_pattern (string): Worker name pattern e.g.:
+            cluster-55jx2-worker*
+        size (int): Size in GB (default: 100)
+        count (int): number of EBS volumes to attach to worker node, if it's
+        device_names (list): list of the devices like ["sda", "sdb"]. Length of list needs
+            to match count!
+
+    Raises:
+        UnexpectedInput: In case the device_names length doesn't match count.
+
+    """
+    region = config.ENV_DATA["region"]
+    if len(device_names) != count:
+        raise exceptions.UnexpectedInput(
+            "The device_names doesn't contain the same number of devices as the "
+            f"count, which is: {count}! If count is 2, the device_names should be for example ['sdc', 'sdx']!"
+        )
+    aws = AWS(region)
+    worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
+    with parallel() as p:
+        for worker in worker_instances:
+            for number in range(1, count + 1):
+                logger.info(
+                    f"Creating and attaching {number}. {size} GB volume to {worker['name']}"
+                )
+                p.spawn(
+                    aws.create_volume_and_attach,
+                    availability_zone=worker["avz"],
+                    instance_id=worker["id"],
+                    name=f"{worker['name']}_extra_volume_{number}",
+                    size=size,
+                    device=f"/dev/{device_names[number - 1]}",
+                )
+
+
+def create_and_attach_volume_for_all_workers(
+    device_size=None,
+    worker_suffix="worker",
+    count=1,
+    device_letters="ghijklmnopxyz",
+):
+    """
+    Create volumes on workers
+
+    Args:
+        device_size (int): Size in GB, if not specified value from:
+            config.ENV_DATA["device_size"] will be used
+        worker_suffix (str): Worker name suffix (default: worker)
+        count (int): number of EBS volumes to attach to worker node
+        device_letters (str): device letters from which generate device names.
+            e.g. for "abc" and if count=2 it will generate ["sda", "sdb"]
+
+    """
+    device_size = device_size or int(
+        config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
+    )
+    device_letters = "ghijklmnopxyz"
+    device_names = [f"sd{letter}" for letter in device_letters[:count]]
+    infra_id = get_infra_id(config.ENV_DATA["cluster_path"])
+    create_and_attach_ebs_volumes(
+        f"{infra_id}-{worker_suffix}*",
+        device_size,
+        count,
+        device_names,
+    )
+
+
+def create_and_attach_sts_role():
+    """
+    Create IAM role to support STS deployments.
+
+    Returns:
+        dict: Created role data
+
+    """
+    logger.info("Creating STS role in AWS IAM")
+    aws = AWS()
+    namespace = config.ENV_DATA.get("cluster_namespace")
+    service_account_name_1 = "noobaa"
+    service_account_name_2 = "noobaa-endpoint"
+    service_account_name_3 = "noobaa-core"
+    aws_account_id = aws.get_caller_identity()
+    resp = exec_cmd("oc get authentication cluster -ojson")
+    auth_cluster_dict = json.loads(resp.stdout)
+    oidc_provider = auth_cluster_dict["spec"]["serviceAccountIssuer"].replace(
+        "https://", ""
+    )
+    policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+
+    trust_data = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Federated": f"arn:aws:iam::{aws_account_id}:oidc-provider/{oidc_provider}"
+                },
+                "Action": "sts:AssumeRoleWithWebIdentity",
+                "Condition": {
+                    "StringEquals": {
+                        f"{oidc_provider}:sub": [
+                            f"system:serviceaccount:{namespace}:{service_account_name_1}",
+                            f"system:serviceaccount:{namespace}:{service_account_name_2}",
+                            f"system:serviceaccount:{namespace}:{service_account_name_3}",
+                        ]
+                    }
+                },
+            }
+        ],
+    }
+    logger.info("Trust Data: \n%s", trust_data)
+    cluster_path = config.ENV_DATA["cluster_path"]
+    if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+        role_name = f"{config.ENV_DATA['cluster_name']}"
+    else:
+        role_name = get_infra_id(cluster_path)
+    description = f"Role created for {role_name} to support STS"
+    role_data = aws.create_iam_role(role_name, description, json.dumps(trust_data))
+    aws.attach_role_policy(role_name, policy_arn)
+    return role_data
+
+
+def delete_sts_iam_roles(oidc_endpoint_url=None):
+    """
+    Delete IAM roles for the cluster.
+
+    Args:
+        oidc_endpoint_url (str): Optional OIDC endpoint URL (serviceAccountIssuer)
+            pre-fetched while the cluster API was still reachable. When provided,
+            the cluster API is not contacted. When None, the function attempts to
+            retrieve the URL from the live cluster; if the cluster is already
+            unreachable the OIDC provider deletion is skipped with a warning.
+    """
+    logger.info("Deleting STS IAM Roles")
+    cluster_path = config.ENV_DATA["cluster_path"]
+    aws = AWS()
+    if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+        role_name = f"{config.ENV_DATA['cluster_name']}"
+        roles = aws.get_iam_roles(role_name)
+    else:
+        infra_id = get_infra_id(cluster_path)
+        roles = aws.get_iam_roles(infra_id)
+
+    for role in roles:
+        role_name = role["RoleName"]
+        attached_policies = aws.get_attached_role_policies(role_name)
+        for policy in attached_policies:
+            aws.detach_role_policy(role_name, policy["PolicyArn"])
+        policies = aws.get_role_policies(role_name)
+        for policy in policies:
+            aws.delete_role_policy(role_name, policy)
+        instance_profiles = aws.get_instance_profiles_for_role(role_name)
+        for instance_profile in instance_profiles:
+            aws.remove_role_from_instance_profile(
+                role_name, instance_profile["InstanceProfileName"]
+            )
+        aws.delete_iam_role(role_name)
+
+    if oidc_endpoint_url is None:
+        auth_cluster = exec_cmd(
+            "oc get authentication cluster -o json", ignore_error=True
+        )
+        if auth_cluster.returncode != 0:
+            logger.warning(
+                "Could not retrieve authentication cluster info — cluster API is "
+                "unreachable and no oidc_endpoint_url was pre-fetched. "
+                "Skipping OIDC provider deletion."
+            )
+            return
+        auth_cluster_dict = json.loads(auth_cluster.stdout)
+        oidc_endpoint_url = auth_cluster_dict["spec"]["serviceAccountIssuer"]
+
+    oidc_provider_name = oidc_endpoint_url.replace("https://", "")
+    aws.delete_oidc_provider(provider_name=oidc_provider_name)
+
+
+def delete_subnet_tags(tag, *subnet_ids):
+    """
+    Delete tag from subnet(s)
+    Default AWS account limitation is 50 tags per subnet
+
+    Args:
+        tag (str): Tag to delete
+        subnet_ids (str): One or more subnet IDs from which to delete the tag.
+    """
+    subnet_ids = [subnet_ids] if isinstance(subnet_ids, str) else list(subnet_ids)
+    logger.info(f"Deleting tag {tag} from subnet(s) {subnet_ids}")
+    aws = AWS()
+    aws.ec2_client.delete_tags(Resources=subnet_ids, Tags=[{"Key": tag}])
+
+
+def delete_cloudfront_origin_access_identities():
+    """
+    Delete CloudFront Origin Access Identities for the cluster.
+    """
+    logger.info("Deleting CloudFront Origin Access Identities")
+    cluster_path = config.ENV_DATA["cluster_path"]
+    aws = AWS()
+    infra_id = get_infra_id(cluster_path)
+    identity_id = None
+    dist_id = None
+
+    identities = aws.get_cloudfront_origin_access_identies()
+    for identity in identities:
+        if infra_id in identity["Comment"]:
+            identity_id = identity["Id"]
+            logger.info(f"Found identity: {identity_id}")
+
+    distributions = aws.get_cloudfront_distributions()
+    for dist in distributions:
+        origin_access_identity = dist["Origins"]["Items"][0]["Id"]
+        if infra_id in origin_access_identity:
+            dist_id = dist["Id"]
+            logger.info(f"Found distribution: {dist_id}")
+
+    if dist_id:
+        aws.disable_cloudfront_distribution(dist_id)
+        logger.info("Waiting for Distribution to be `Deployed`")
+        wait_for_distribution_status_deployed(dist_id)
+        logger.info("Retrieving Distribution ETag")
+        dist_etag = aws.get_cloudfront_distribution(dist_id)["ETag"]
+        aws.delete_cloudfront_distribution(dist_id, dist_etag)
+
+    logger.info("Retrieving identity ETag")
+    identity_etag = aws.get_cloudfront_origin_access_identity(identity_id)["ETag"]
+    aws.delete_cloudfront_origin_access_identity(identity_id, identity_etag)
+
+
+@retry(exceptions.DistributionStatusError, tries=20, delay=60, backoff=1)
+def wait_for_distribution_status_deployed(dist_id):
+    """
+    Wait for the Distribution to reach the `Deployed` status.
+
+    Args:
+        dist_id (str): ID of Distribution
+
+    Raises:
+        exceptions.DistributionStatusError: Raised if status is not `Deployed`
+
+    """
+    aws = AWS()
+    dist = aws.get_cloudfront_distribution(dist_id)
+    status = dist["Distribution"]["Status"]
+    if status != "Deployed":
+        raise exceptions.DistributionStatusError(
+            f"Distribution Status is {status}, waiting for `Deployed`"
+        )
+
+
+def create_s3_bucket_for_hypershift_oidc(
+    bucket_name, region, aws_credentials_path=None, namespace="local-cluster"
+):
+    """
+    Create an S3 bucket for HyperShift OIDC provider with public read policy
+    and create Kubernetes secret with bucket credentials.
+
+    This function:
+
+    1. Creates an S3 bucket in the specified region
+    2. Disables Block Public Access settings
+    3. Applies a public read policy to allow OIDC discovery
+    4. Creates a Kubernetes secret with AWS credentials and bucket info
+
+    Args:
+        bucket_name (str): Name of the S3 bucket to create
+        region (str): AWS region where the bucket should be created
+        aws_credentials_path (str): Path to AWS credentials file
+        namespace (str): Kubernetes namespace for the secret
+            (default: "local-cluster")
+
+    Returns:
+        dict: Dictionary with bucket details:
+
+            - ``bucket_name`` (str): Name of the bucket
+            - ``region`` (str): AWS region of the bucket
+            - ``bucket_arn`` (str): ARN of the bucket
+            - ``location`` (str): URL location of the bucket
+            - ``secret_name`` (str): Name of the Kubernetes secret
+            - ``namespace`` (str): Kubernetes namespace of the secret
+
+    Raises:
+        ClientError: If bucket creation or policy application fails
+
+    """
+    logger.info(
+        f"Creating S3 bucket '{bucket_name}' for HyperShift OIDC provider in region '{region}'"
+    )
+
+    # Initialize AWS client for the specified region
+    aws = AWS(region_name=region)
+
+    if aws_credentials_path and not os.path.exists(aws_credentials_path):
+        logger.warning(
+            f"AWS credentials file not found at {aws_credentials_path}. "
+            "Assuming credentials are available via environment or IAM role."
+        )
+        aws_credentials_path = None
+
+    # Check if bucket already exists
+    try:
+        existing_buckets = aws.list_buckets()
+        if any(bucket["Name"] == bucket_name for bucket in existing_buckets):
+            logger.info(f"Bucket '{bucket_name}' already exists, skipping creation")
+            bucket_location = f"http://{bucket_name}.s3.amazonaws.com/"
+            bucket_arn = f"arn:aws:s3:::{bucket_name}"
+        else:
+            # Create the S3 bucket
+            logger.info(f"Creating S3 bucket '{bucket_name}' in region '{region}'")
+            try:
+                if region == "us-east-1":
+                    # us-east-1 doesn't require LocationConstraint
+                    create_response = aws.s3_client.create_bucket(Bucket=bucket_name)
+                else:
+                    create_response = aws.s3_client.create_bucket(
+                        Bucket=bucket_name,
+                        CreateBucketConfiguration={"LocationConstraint": region},
+                    )
+
+                bucket_location = create_response.get("Location")
+                bucket_arn = f"arn:aws:s3:::{bucket_name}"
+                logger.info(
+                    f"Bucket created successfully. Location: {bucket_location}, ARN: {bucket_arn}"
+                )
+
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code == "BucketAlreadyOwnedByYou":
+                    logger.info(f"Bucket '{bucket_name}' already owned by you")
+                    bucket_location = f"http://{bucket_name}.s3.amazonaws.com/"
+                    bucket_arn = f"arn:aws:s3:::{bucket_name}"
+                else:
+                    logger.error(f"Failed to create bucket: {e}")
+                    raise
+
+    except ClientError as e:
+        logger.error(f"Error checking/creating bucket: {e}")
+        raise
+
+    # Define the public read policy for the bucket
+    bucket_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": "s3:GetObject",
+                "Resource": f"{bucket_arn}/*",
+            }
+        ],
+    }
+
+    # Disable Block Public Access settings to allow public policy
+    try:
+        logger.info(
+            f"Disabling Block Public Access settings for bucket '{bucket_name}' "
+            "to allow public OIDC discovery"
+        )
+        aws.s3_client.put_public_access_block(
+            Bucket=bucket_name,
+            PublicAccessBlockConfiguration={
+                "BlockPublicAcls": False,
+                "IgnorePublicAcls": False,
+                "BlockPublicPolicy": False,
+                "RestrictPublicBuckets": False,
+            },
+        )
+        logger.info("Block Public Access settings disabled successfully")
+    except ClientError as e:
+        logger.warning(f"Could not disable Block Public Access settings: {e}")
+
+    # Apply the bucket policy
+    try:
+        logger.info(f"Applying public read policy to bucket '{bucket_name}'")
+        aws.s3_client.put_bucket_policy(
+            Bucket=bucket_name, Policy=json.dumps(bucket_policy)
+        )
+        logger.info("Bucket policy applied successfully")
+    except ClientError as e:
+        logger.error(f"Failed to apply bucket policy: {e}")
+        raise
+
+    # Create the Kubernetes secret
+    secret_name = "hypershift-operator-oidc-provider-s3-credentials"
+    logger.info(
+        f"Creating Kubernetes secret '{secret_name}' in namespace '{namespace}'"
+    )
+
+    try:
+        if aws_credentials_path:
+            cmd = (
+                f"oc create secret generic {secret_name} "
+                f"--from-file=credentials={aws_credentials_path} "
+                f"--from-literal=bucket={bucket_name} "
+                f"--from-literal=region={region} "
+                f"-n {namespace}"
+            )
+        else:
+            cmd = (
+                f"oc create secret generic {secret_name} "
+                f"--from-literal=bucket={bucket_name} "
+                f"--from-literal=region={region} "
+                f"-n {namespace}"
+            )
+
+        exec_cmd(cmd, shell=True)
+        logger.info(f"Kubernetes secret '{secret_name}' created successfully")
+
+    except exceptions.CommandFailed as e:
+        if "already exists" in str(e).lower():
+            logger.info(f"Secret '{secret_name}' already exists, skipping creation")
+        else:
+            logger.error(f"Failed to create Kubernetes secret: {e}")
+            raise
+
+    result = {
+        "bucket_name": bucket_name,
+        "region": region,
+        "bucket_arn": bucket_arn,
+        "location": bucket_location,
+        "secret_name": secret_name,
+        "namespace": namespace,
+    }
+
+    logger.info(
+        f"HyperShift OIDC S3 bucket setup completed successfully:\n{json.dumps(result, indent=2)}"
+    )
+    return result
+
+
+def get_cluster_region():
+    """
+    Get the AWS region of the current cluster from the Infrastructure CR.
+
+    Returns:
+        str: AWS region name (e.g. 'us-westa-2')
+
+    Raises:
+        CommandFailed: If the oc command fails.
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    ocp_obj = OCP()
+    region = ocp_obj.exec_oc_cmd(
+        "get -o jsonpath='{.status.platformStatus.aws.region}' "
+        "infrastructure cluster"
+    )
+    logger.info(f"Cluster region: {region}")
+    return region
+
+
+def get_cluster_vpc_cidr(region_name=None):
+    """
+    Get VPC CIDR block for the current OpenShift cluster.
+
+    This function retrieves the VPC CIDR block by:
+    1. Getting the infrastructure name from OpenShift cluster (oc get infrastructure cluster)
+    2. Querying AWS EC2 to find the VPC with the kubernetes.io/cluster/<infra-name> tag
+    3. Returning the VPC CIDR block
+
+    Args:
+        region_name (str): AWS region name. If not provided, uses the region from config.ENV_DATA
+
+    Returns:
+        str: VPC CIDR block (e.g., "10.0.0.0/16") or None if not found
+
+    Raises:
+        Exception: If unable to get infrastructure name from OpenShift or AWS query fails
+
+    """
+
+    from ocs_ci.ocs.ocp import OCP
+
+    try:
+        logger.info("Retrieving infrastructure name from OpenShift cluster")
+        ocp_obj = OCP()
+        infrastructure_name = ocp_obj.exec_oc_cmd(
+            "get -o jsonpath='{.status.infrastructureName}' infrastructure cluster"
+        )
+        logger.info(f"Infrastructure name: {infrastructure_name}")
+    except exceptions.CommandFailed as e:
+        logger.error(f"Failed to execute oc command to get infrastructure name: {e}")
+        raise
+
+    if not infrastructure_name:
+        logger.error("Infrastructure name is empty")
+        return None
+
+    aws = AWS(region_name=region_name)
+    logger.info(
+        f"Querying AWS for VPC with tag kubernetes.io/cluster/{infrastructure_name}=owned"
+    )
+
+    try:
+        response = aws.ec2_client.describe_vpcs(
+            Filters=[
+                {
+                    "Name": f"tag:kubernetes.io/cluster/{infrastructure_name}",
+                    "Values": ["owned"],
+                }
+            ]
+        )
+    except ClientError as e:
+        logger.error(f"AWS API error while querying VPC: {e}")
+        raise
+    except NoCredentialsError as e:
+        logger.error(f"AWS credentials not found: {e}")
+        raise
+    except EndpointConnectionError as e:
+        logger.error(f"Failed to connect to AWS endpoint: {e}")
+        raise
+
+    vpcs = response.get("Vpcs", [])
+
+    if not vpcs:
+        logger.warning(
+            f"No VPC found with tag kubernetes.io/cluster/{infrastructure_name}=owned"
+        )
+        return None
+
+    if len(vpcs) > 1:
+        logger.warning(
+            f"Multiple VPCs found with tag kubernetes.io/cluster/{infrastructure_name}=owned. "
+            f"Using the first one."
+        )
+
+    vpc_cidr = vpcs[0].get("CidrBlock")
+    logger.info(f"Retrieved VPC CIDR: {vpc_cidr}")
+
+    return vpc_cidr
+
+
+def get_unused_vpc_cidr(region_name=None, base_cidr="10.0.0.0", prefix_length=16):
+    """
+    Find an unused VPC CIDR block in the specified AWS region.
+
+    Args:
+        region_name (str): AWS region name. If not provided, uses the region from config.ENV_DATA
+        base_cidr (str): Base CIDR to start searching from. Default is "10.0.0.0"
+        prefix_length (int): CIDR prefix length. Default is 16
+
+    Returns:
+        str: An unused VPC CIDR block
+
+    Raises:
+        ClientError: If AWS API returns an error
+        NoCredentialsError: If AWS credentials are not configured
+        EndpointConnectionError: If cannot connect to AWS endpoint
+        RuntimeError: If cannot find an unused CIDR after checking 254 candidates
+
+    """
+    aws = AWS(region_name=region_name)
+    logger.info(f"Finding unused VPC CIDR in region {aws.region_name}")
+
+    try:
+        response = aws.ec2_client.describe_vpcs()
+    except ClientError as e:
+        logger.error(f"AWS API error while querying VPCs: {e}")
+        raise
+    except NoCredentialsError as e:
+        logger.error(f"AWS credentials not found: {e}")
+        raise
+    except EndpointConnectionError as e:
+        logger.error(f"Failed to connect to AWS endpoint: {e}")
+        raise
+
+    existing_cidrs = set()
+    for vpc in response.get("Vpcs", []):
+        vpc_cidr = vpc.get("CidrBlock")
+        if vpc_cidr:
+            existing_cidrs.add(vpc_cidr)
+            logger.debug(f"Found existing VPC CIDR: {vpc_cidr}")
+
+    logger.info(f"Found {len(existing_cidrs)} existing VPC CIDRs in the region")
+
+    base_octets = list(map(int, base_cidr.split(".")))
+
+    for second_octet in range(1, 255):
+        candidate_cidr = f"{base_octets[0]}.{second_octet}.0.0/{prefix_length}"
+
+        if candidate_cidr not in existing_cidrs:
+            logger.info(f"Found unused VPC CIDR: {candidate_cidr}")
+            return candidate_cidr
+
+    error_msg = (
+        f"Could not find an unused VPC CIDR in region {aws.region_name}. "
+        f"Checked 254 candidates starting from {base_cidr}/{prefix_length}"
+    )
+    logger.error(error_msg)
+    raise RuntimeError(error_msg)

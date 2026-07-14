@@ -1,0 +1,4 @@
+---
+# Use this config for MCG only deployment
+ENV_DATA:
+  mcg_only_deployment: true

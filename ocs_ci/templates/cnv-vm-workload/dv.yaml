@@ -1,0 +1,16 @@
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: sample-vm-dv
+  namespace: default
+spec:
+  storage:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: ocs-storagecluster-ceph-rbd-virtualization
+    resources:
+      requests:
+        storage: 30Gi
+  source:
+    registry:
+      url: "docker://quay.io/kubevirt/centos8-container-disk-images"

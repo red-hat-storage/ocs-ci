@@ -1,0 +1,5 @@
+---
+# This config is for vSphere deployment with eagerzeroedthick storageclass provisioning
+DEPLOYMENT:
+  thick_sc: True
+  eager_zeroed_thick_sc: True

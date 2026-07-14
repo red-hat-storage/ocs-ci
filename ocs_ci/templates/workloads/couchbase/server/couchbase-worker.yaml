@@ -1,0 +1,59 @@
+kind: CouchbaseCluster
+apiVersion: couchbase.com/v2
+metadata:
+  name: cb-example
+  namespace: couchbase-operator-namespace
+spec:
+  image: >-
+    registry.connect.redhat.com/couchbase/server@sha256:c94326da3435265666a4e332c6c5e78ddf74777cb64e1e8728d237c6b5008c15
+  authSecret: cb-example-auth
+  exposeAdminConsole: true
+  adminConsoleServices:
+    - data
+  cluster:
+    clusterName: cb-example
+    dataServiceMemoryQuota: 256Mi
+    indexServiceMemoryQuota: 256Mi
+    searchServiceMemoryQuota: 256Mi
+    eventingServiceMemoryQuota: 256Mi
+    analyticsServiceMemoryQuota: 1Gi
+    indexStorageSetting: memory_optimized
+    autoFailoverTimeout: 120s
+    autoFailoverMaxCount: 3
+    autoFailoverOnDataDiskIssues: true
+    autoFailoverOnDataDiskIssuesTimePeriod: 120s
+    autoFailoverServerGroup: false
+  security:
+    adminSecret: cb-example-auth
+  networking:
+    exposeAdminConsole: true
+    adminConsoleServices:
+    - data
+  buckets:
+    managed: true
+  servers:
+    - name: all_services
+      pod:
+        metadata: {}
+        spec: {}
+      resources: {}
+      services:
+        - data
+        - index
+        - query
+        - search
+        - eventing
+        - analytics
+      size: 3
+      volumeMounts:
+        data: couchbase
+        default: couchbase
+        index: couchbase
+  volumeClaimTemplates:
+    - metadata:
+        name: couchbase
+      spec:
+        storageClassName: ocs-storagecluster-ceph-rbd
+        resources:
+          requests:
+            storage: 10Gi

@@ -1,0 +1,7 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: addon-ns-config
+  namespace: multicluster-engine
+spec:
+  agentInstallNamespace: open-cluster-management-agent-addon-discovery

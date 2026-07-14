@@ -1,0 +1,11 @@
+apiVersion: v1
+data:
+  KMS_PROVIDER: kmip
+  KMS_SERVICE_NAME: ciphertrust
+  KMIP_ENDPOINT: ""
+  KMIP_SECRET_NAME: thales-kmip-ocs
+  TLS_SERVER_NAME: ""
+kind: ConfigMap
+metadata:
+  name: ocs-kms-connection-details
+  namespace: openshift-storage

@@ -1,0 +1,39 @@
+apiVersion: operator.openshift.io/v1alpha1
+kind: ImageContentSourcePolicy
+metadata:
+  name: client-operator-icsp
+spec:
+  repositoryDigestMirrors:
+  - mirrors:
+    - quay.io/rhceph-dev/openshift-ose-csi-external-provisioner
+    source: registry.redhat.io/openshift4/ose-csi-external-provisioner
+  - mirrors:
+    - quay.io/rhceph-dev/openshift-ose-csi-external-attacher
+    source: registry.redhat.io/openshift4/ose-csi-external-attacher
+  - mirrors:
+    - quay.io/rhceph-dev/openshift-ose-csi-external-attacher
+    source: registry.redhat.io/openshift4/ose-csi-external-attacher-rhel8
+  - mirrors:
+    - quay.io/rhceph-dev/openshift-ose-csi-external-resizer
+    source: registry.redhat.io/openshift4/ose-csi-external-resizer
+  - mirrors:
+    - quay.io/rhceph-dev/openshift-ose-csi-external-snapshotter
+    source: registry.redhat.io/openshift4/ose-csi-external-snapshotter
+  - mirrors:
+    - quay.io/rhceph-dev/openshift-ose-csi-external-snapshotter
+    source: registry.redhat.io/openshift4/ose-csi-external-snapshotter-rhel8
+  - mirrors:
+    - quay.io/rhceph-dev/openshift-ose-csi-node-driver-registrar
+    source: registry.redhat.io/openshift4/ose-csi-node-driver-registrar
+  - mirrors:
+    - quay.io/rhceph-dev/odf4-cephcsi-rhel8
+    source: registry.redhat.io/odf4/cephcsi-rhel8
+  - mirrors:
+    - quay.io/rhceph-dev/odf4-cephcsi-rhel9
+    source: registry.redhat.io/odf4/cephcsi-rhel9
+  - mirrors:
+    - quay.io/rhceph-dev/odf4-odf-csi-addons-sidecar-rhel8
+    source: registry.redhat.io/odf4/odf-csi-addons-sidecar-rhel8
+  - mirrors:
+    - quay.io/rhceph-dev/odf4-odf-csi-addons-sidecar-rhel9
+    source: registry.redhat.io/odf4/odf-csi-addons-sidecar-rhel9

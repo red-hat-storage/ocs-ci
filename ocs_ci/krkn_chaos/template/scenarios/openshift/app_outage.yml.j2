@@ -1,0 +1,15 @@
+application_outage:                                  # Scenario to create an outage of an application by blocking traffic
+  duration: {{ duration }}                           # Duration in seconds after which the routes will be accessible
+  namespace: "{{ namespace }}"                         # Namespace to target - all application routes will go inaccessible if pod selector is empty
+{%- if pod_selectors is defined and pod_selectors|length > 0 %}
+  pod_selectors:                                     # Multiple pod selectors for grouped targeting
+{%- for selector in pod_selectors %}
+    - {{ selector }}
+{%- endfor %}
+{%- else %}
+  pod_selector: {{ pod_selector }}                   # Single pod selector (backward compatibility)
+{%- endif %}
+  block:                                             # It can be Ingress or Egress or Ingress, Egress
+{%- for policy_type in block %}
+    - {{ policy_type }}
+{%- endfor %}

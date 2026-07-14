@@ -1,0 +1,27 @@
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  sts_enabled: true
+  force_download_ocm_cli: true
+  force_download_rosa_cli: true
+  live_deployment: true
+  customized_deployment_storage_class: 'gp3-csi'
+RUN:
+  username: "cluster-admin"
+ENV_DATA:
+  platform: 'rosa_hcp'
+  deployment_type: 'managed_cp'
+  rosa_mode: "auto"
+  region: 'us-west-2'
+  worker_availability_zones:
+    - 'us-west-2a'
+  master_replicas: 0
+  worker_replicas: 3
+  machine_pool: "workers"
+  worker_instance_type: 'm5.12xlarge'
+  cluster_namespace: "odf-storage"
+  private_link: false
+  machine_cidr: "10.0.0.0/16"
+  ms_env_type: "staging"
+  addon_name: "ocs-converged"
+  persistent-monitoring: false
+  node_labels: cluster.ocs.openshift.io/openshift-storage=""

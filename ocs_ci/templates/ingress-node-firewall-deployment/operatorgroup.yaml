@@ -1,0 +1,5 @@
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: ingress-node-firewall-operators
+  namespace: openshift-ingress-node-firewall

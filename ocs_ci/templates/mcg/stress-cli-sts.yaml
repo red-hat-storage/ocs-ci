@@ -1,0 +1,38 @@
+
+# This stateful-set uses the quay.io/ocsci/nb-stress-cli:latest image
+# to create a IO pod which has aws cli tool pre-installed and also
+# has about a million objects with deep directory structure. This can be
+# used in stress testing for IO purposes
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: openshift-storage
+  name: nb-stress-cli
+spec:
+  selector:
+    matchLabels:
+      app: stress-cli
+  replicas: 2
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: OrderedReady
+  volumeClaimTemplates: []
+  template:
+    metadata:
+      labels:
+        app: stress-cli
+    spec:
+      volumes:
+        - name: service-ca
+          configMap:
+            name: stress-cli-service-ca
+      containers:
+        - name: stress-cli
+          image: quay.io/ocsci/nb-stress-cli:latest
+          command: ['/bin/sh']
+          stdin: true
+          tty: true
+          volumeMounts:
+            - name: service-ca
+              mountPath: /cert/service-ca.crt
+              subPath: service-ca.crt

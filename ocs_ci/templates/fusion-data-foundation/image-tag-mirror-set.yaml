@@ -1,0 +1,12 @@
+apiVersion: config.openshift.io/v1
+kind: ImageTagMirrorSet
+metadata:
+  name: isf-fdf
+spec:
+  imageTagMirrors:
+  - mirrors:
+    - preprod.icr.io/cp/df/isf-data-foundation-catalog
+    - cp.stg.icr.io/cp/df/isf-data-foundation-catalog
+    source: icr.io/cpopen/isf-data-foundation-catalog
+  mirrorSourcePolicy:
+    AllowContactingSource 0

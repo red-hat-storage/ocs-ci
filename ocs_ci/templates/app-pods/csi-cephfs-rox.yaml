@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: csicephfs-rox-demo-pod
+spec:
+  securityContext:
+    fsGroup: 1000
+    runAsUser: 1000
+    runAsGroup: 1000
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: web-server
+      image: quay.io/ocsci/perf:latest
+      command: ["/bin/sleep", "infinity"]
+      volumeMounts:
+        - name: mypvc
+          mountPath: /mnt
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+  volumes:
+    - name: mypvc
+      persistentVolumeClaim:
+        claimName: cephfs-pvc
+        readOnly: false

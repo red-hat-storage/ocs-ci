@@ -1,0 +1,7 @@
+# This configuration file is to enable rotational disk devices for LSO
+# deployment
+---
+DEPLOYMENT:
+  local_storage: true
+ENV_DATA:
+  local_storage_allow_rotational_disks: true

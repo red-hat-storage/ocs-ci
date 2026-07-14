@@ -1,0 +1,10 @@
+---
+apiVersion: noobaa.io/v1alpha1
+kind: NamespaceStore
+metadata:
+  name: namespace-store
+  namespace: openshift-storage
+  labels:
+    app: noobaa
+  finalizers:
+    - noobaa.io/finalizer

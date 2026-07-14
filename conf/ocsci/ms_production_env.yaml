@@ -1,0 +1,5 @@
+ENV_DATA:
+  # Default type of managed service environment is stage
+  # to enable actions on  production environment use this
+  # as an additional config
+  ms_env_type : 'production'

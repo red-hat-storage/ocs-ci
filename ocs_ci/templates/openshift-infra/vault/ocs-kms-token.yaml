@@ -1,0 +1,8 @@
+apiVersion: v1
+data:
+  token: PLACEHOLDER 
+kind: Secret
+metadata:
+  name: ocs-kms-token
+  namespace: openshift-storage
+type: Opaque

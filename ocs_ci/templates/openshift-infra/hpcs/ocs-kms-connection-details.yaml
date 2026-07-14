@@ -1,0 +1,12 @@
+apiVersion: v1
+data:
+  IBM_KP_BASE_URL: ""
+  IBM_KP_SECRET_NAME: ""
+  IBM_KP_SERVICE_INSTANCE_ID: ""
+  IBM_KP_TOKEN_URL: ""
+  KMS_PROVIDER: ibmkeyprotect
+  KMS_SERVICE_NAME: 1-hpcs
+kind: ConfigMap
+metadata:
+  name: ocs-kms-connection-details
+  namespace: openshift-storage

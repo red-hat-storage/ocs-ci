@@ -1,0 +1,6 @@
+---
+apiVersion: multicluster.x-k8s.io/v1alpha1
+kind: ServiceExport
+metadata:
+  name: ocs-provider-server
+  namespace: openshift-storage

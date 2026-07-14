@@ -1,0 +1,16 @@
+apiVersion: csiaddons.openshift.io/v1alpha1
+kind: ReclaimSpaceCronJob
+metadata:
+  name: reclaim-space-cron-job-sample
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backOffLimit: 6
+      retryDeadlineSeconds: 600
+      target:
+        persistentVolumeClaim: data-pvc
+  schedule: '@weekly'
+  successfulJobsHistoryLimit: 3
+

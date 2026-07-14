@@ -1,0 +1,4 @@
+---
+ENV_DATA:
+  acm_version: "2.7"
+  acm_hub_channel: release-2.7

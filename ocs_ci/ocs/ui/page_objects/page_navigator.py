@@ -1,0 +1,539 @@
+from selenium.common.exceptions import (
+    NoSuchElementException,
+)
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import get_ocp_url
+from ocs_ci.ocs.ui.base_ui import BaseUI, logger, wait_for_element_to_be_clickable
+from ocs_ci.ocs.ui.views import ODF_OPERATOR, OCS_OPERATOR
+from ocs_ci.utility import version
+
+
+class PageNavigator(BaseUI):
+    """
+    Page Navigator Class
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        self.operator_name = (
+            ODF_OPERATOR
+            if self.ocs_version_semantic >= version.VERSION_4_9
+            else OCS_OPERATOR
+        )
+        if config.DEPLOYMENT.get("local_storage", False):
+            self.storage_class = "localblock_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            if self.ocs_version_semantic >= version.VERSION_4_13:
+                self.storage_class = "thin-csi_sc"
+            else:
+                self.storage_class = "thin_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            aws_sc = config.DEPLOYMENT.get("customized_deployment_storage_class")
+            if aws_sc == "gp3-csi":
+                self.storage_class = "gp3-csi_sc"
+            elif aws_sc == "gp2-csi":
+                self.storage_class = "gp2-csi_sc"
+            else:
+                if self.running_ocp_semantic_version >= version.VERSION_4_12:
+                    self.storage_class = "gp2-csi_sc"
+                else:
+                    self.storage_class = "gp2_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.AZURE_PLATFORM:
+            if self.ocp_version_semantic >= version.VERSION_4_11:
+                self.storage_class = "managed-csi_sc"
+            else:
+                self.storage_class = "managed-premium_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.GCP_PLATFORM:
+            if self.ocs_version_semantic < version.VERSION_4_12:
+                self.storage_class = "standard_sc"
+            else:
+                self.storage_class = "standard_csi_sc"
+        elif config.ENV_DATA["platform"].lower() == constants.IBMCLOUD_PLATFORM:
+            self.storage_class = "ibmc-vpc-block-10iops-tier"
+        self.page_has_loaded(30, 2, self.page_nav["page_navigator_sidebar"])
+
+    def navigate_OCP_home_page(self):
+        """
+        Navigate to Home Page
+        """
+        logger.info("Navigate to OCP Home Page")
+        self.driver.get(get_ocp_url())
+        self.page_has_loaded(retries=10, sleep_time=1)
+
+    def navigate_storage(self):
+        logger.info("Navigate to ODF tab under Storage section")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+
+        from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
+            DataFoundationDefaultTab,
+        )
+
+        return DataFoundationDefaultTab()
+
+    def navigate_cluster_overview_page(self):
+        """
+        Navigate to Cluster Overview Page
+
+        """
+        logger.info("Navigate to Cluster Overview Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["overview_page"])
+
+    def nav_storage_data_foundation_overview_page(self):
+        """
+        Navigate to OpenShift Data Foundation Overview page
+
+        Returns:
+            DataFoundationOverview: StorageCluster page object
+        """
+        self.navigate_storage()
+        self.do_click(locator=self.page_nav["odf_tab_new"], timeout=90)
+
+        from ocs_ci.ocs.ui.page_objects.df_overview import DataFoundationOverview
+
+        return DataFoundationOverview()
+
+    def nav_storage_cluster_default_page(self):
+        """
+        Navigate to OpenShift Data Foundation default page
+        Default Data foundation page is Overview at ODF 4.13
+        """
+
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["storage_cluster"], timeout=90)
+        self.page_has_loaded(retries=15)
+        logger.info(f"Default page is {self.driver.title}")
+
+        logger.info("Successfully navigated to ODF tab under Storage section")
+
+        from ocs_ci.ocs.ui.page_objects.storage_cluster import StorageClusterPage
+
+        return StorageClusterPage()
+
+    def nav_object_storage_page(self):
+        """
+        Navigate to Object Storage page
+
+        """
+
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["object_storage_page"], timeout=90)
+        self.page_has_loaded(retries=15)
+        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
+
+        return ObjectStorage()
+
+    def nav_buckets_page(self):
+        """
+        Navigate to Buckets page
+
+        """
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["buckets_tab"], timeout=90)
+        self.page_has_loaded(retries=15)
+        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
+
+        return ObjectStorage()
+
+    def navigate_quickstarts_page(self):
+        """
+        Navigate to Quickstarts Page
+
+        """
+        self.navigate_cluster_overview_page()
+        logger.info("Navigate to Quickstarts Page")
+        self.do_click(locator=self.page_nav["quickstarts"], enable_screenshot=True)
+
+    def navigate_projects_page(self):
+        """
+        Navigate to Projects Page
+
+        """
+        logger.info("Navigate to Projects Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["projects_page"], enable_screenshot=False)
+
+    def navigate_search_page(self):
+        """
+        Navigate to Search Page
+
+        """
+        logger.info("Navigate to Projects Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["search_page"], enable_screenshot=False)
+
+    def navigate_explore_page(self):
+        """
+        Navigate to Explore Page
+
+        """
+        logger.info("Navigate to Explore Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["explore_page"], enable_screenshot=False)
+
+    def navigate_events_page(self):
+        """
+        Navigate to Events Page
+
+        """
+        logger.info("Navigate to Events Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Home"])
+        self.do_click(locator=self.page_nav["events_page"], enable_screenshot=False)
+
+    def navigate_operatorhub_page(self):
+        """
+        Navigate to OperatorHub Page, renamed to Software Catalog in version 4.20
+
+        """
+        logger.info("Navigate to OperatorHub Page or Software Catalog")
+        self.choose_expanded_mode(
+            mode=True, locator=self.page_nav["operators_or_ecosystem"]
+        )
+        if self.ocp_version_semantic <= version.VERSION_4_19:
+            self.do_click(
+                locator=self.page_nav["operatorhub_page"], enable_screenshot=False
+            )
+        else:
+            self.do_click(
+                locator=self.page_nav["software_catalog"], enable_screenshot=True
+            )
+            logger.info("Navigated to Software Catalog")
+
+    def navigate_installed_operators_page(self):
+        """
+        Navigate to Installed Operators Page
+
+        """
+        logger.info("Navigate to Installed Operators Page")
+        self.choose_expanded_mode(
+            mode=True, locator=self.page_nav["operators_or_ecosystem"]
+        )
+        self.page_has_loaded(retries=25, sleep_time=1)
+        logger.info("Click on Installed Operators Page")
+        self.do_click(
+            self.page_nav["installed_operators_page"],
+            enable_screenshot=True,
+            avoid_stale=True,
+        )
+        self.page_has_loaded(retries=25, sleep_time=1)
+        if self.ocp_version_full >= version.VERSION_4_9:
+            self.do_click(self.page_nav["drop_down_projects"])
+            self.do_click(self.page_nav["choose_all_projects"])
+        logger.info("Successfully navigated to Installed Operators Page")
+
+    def navigate_to_ocs_operator_page(self):
+        """
+        Navigate to the OCS Operator management page
+        """
+        self.navigate_installed_operators_page()
+        logger.info("Select 'openshift-storage' project")
+        self.select_namespace(config.ENV_DATA["cluster_namespace"])
+
+        logger.info("Enter the OCS operator page")
+        self.do_click(self.generic_locators["ocs_operator"], enable_screenshot=False)
+
+    def navigate_to_mco_operator_page(self):
+        """
+        Navigate to the ODF Multicluster Orchestrator Operator page
+
+        """
+        self.navigate_installed_operators_page()
+        logger.info("Select 'ODF Multicluster Orchestrator' project")
+        self.select_namespace("openshift-operators")
+        logger.info("Enter the MCO operator page")
+        self.do_click(
+            self.generic_locators["openshift-operators"], enable_screenshot=False
+        )
+
+    def navigate_persistentvolumes_page(self):
+        """
+        Navigate to Persistent Volumes Page
+
+        """
+        logger.info("Navigate to Persistent Volumes Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["persistentvolumes_page"], enable_screenshot=False
+        )
+
+    def navigate_persistentvolumeclaims_page(self):
+        """
+        Navigate to Persistent Volume Claims Page
+
+        """
+        logger.info("Navigate to Persistent Volume Claims Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["persistentvolumeclaims_page"],
+            enable_screenshot=True,
+        )
+
+    def navigate_storageclasses_page(self):
+        """
+        Navigate to Storage Classes Page
+
+        """
+        logger.info("Navigate to Storage Classes Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["storageclasses_page"], enable_screenshot=False
+        )
+
+    def navigate_volumesnapshots_page(self):
+        """
+        Navigate to Storage Volume Snapshots Page
+
+        """
+        logger.info("Navigate to Storage Volume Snapshots Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["volumesnapshots_page"], enable_screenshot=False
+        )
+
+    def navigate_volumesnapshotclasses_page(self):
+        """
+        Navigate to Volume Snapshot Classes Page
+
+        """
+        logger.info("Navigate to Volume Snapshot Classes Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["volumesnapshotclasses_page"], enable_screenshot=False
+        )
+
+    def navigate_volumesnapshotcontents_page(self):
+        """
+        Navigate to Volume Snapshot Contents Page
+
+        """
+        logger.info("Navigate to Volume Snapshot Contents Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["volumesnapshotcontents_page"],
+            enable_screenshot=False,
+        )
+
+    def navigate_buckets_page(self):
+        """
+        Navigate to Object Buckets Page
+
+        """
+
+        return self.nav_object_storage_page().nav_buckets_tab()
+
+    def navigate_object_bucket_claims_page(self):
+        """
+        Navigate to Object Bucket Claims Page
+
+        """
+
+        return self.nav_object_storage_page().nav_object_buckets_claims_tab()
+
+    def navigate_alerting_page(self):
+        """
+        Navigate to Alerting Page
+
+        """
+        logger.info("Navigate to Alerting Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["observe"])
+        self.do_click(locator=self.page_nav["alerting_page"], enable_screenshot=False)
+
+        from ocs_ci.ocs.ui.page_objects.alerting import Alerts
+
+        return Alerts()
+
+    def navigate_metrics_page(self):
+        """
+        Navigate to Metrics Page
+
+        """
+        logger.info("Navigate to Metrics Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["observe"])
+        self.do_click(locator=self.page_nav["metrics_page"], enable_screenshot=False)
+
+    def navigate_dashboards_page(self):
+        """
+        Navigate to Dashboards Page
+
+        """
+        logger.info("Navigate to Dashboards Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.do_click(locator=self.page_nav["dashboards_page"], enable_screenshot=False)
+
+    def navigate_pods_page(self):
+        """
+        Navigate to Pods Page
+
+        """
+        logger.info("Navigate to Pods Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
+        self.do_click(locator=self.page_nav["Pods"], enable_screenshot=False)
+
+    def navigate_storage_pools_page(self):
+        """
+        Navigate to storage pools tab of Storage cluster page
+
+        """
+        logger.info("Navigate to block pools tab")
+
+        return self.nav_storage_cluster_default_page().nav_storage_pools_tab()
+
+    def navigate_object_tab(self):
+        """
+        Navigate to Object tab of Storage cluster page
+
+        """
+        logger.info("Navigate to Object tab of Storage Cluster page")
+
+        return self.nav_storage_cluster_default_page().nav_object_tab()
+
+    def select_namespace(self, project_name):
+        """
+        This function selects the namespace on UI.
+        The timeout is hard-coded to 10 seconds in the below function call which is more than sufficient.
+
+        Args:
+            project_name (str): Name of the project to be selected
+
+        Returns:
+            bool: True if the project is found, raises NoSuchElementException otherwise with a log message
+        """
+
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
+        self.do_click(self.generic_locators["project_selector"])
+
+        # if project is already selected, skip and proceed further
+        if self.get_elements(
+            format_locator(self.generic_locators["project_selected"], project_name)
+        ):
+            self.take_screenshot("namespace_selected")
+            logger.info("Project already selected")
+
+            self.do_click(self.generic_locators["project_selector"])
+            return True
+
+        default_projects_is_checked = self.wait_for_element_to_be_present(
+            self.generic_locators["show_default_projects_toggle"]
+        )
+        if default_projects_is_checked.get_attribute("data-checked-state") == "false":
+            logger.info("Show default projects")
+            self.do_click(self.page_nav["show-default-projects"])
+
+        logger.info(f"Wait and select namespace {project_name}")
+        wait_for_project = self.wait_until_expected_text_is_found(
+            locator=format_locator(
+                self.generic_locators["test-project-link"], project_name, project_name
+            ),
+            expected_text=f"{project_name}",
+            timeout=10,
+        )
+        if wait_for_project:
+            self.do_click(
+                format_locator(
+                    self.generic_locators["test-project-link"],
+                    project_name,
+                    project_name,
+                )
+            )
+            logger.info(f"Namespace {project_name} selected")
+            return True
+        else:
+            raise NoSuchElementException(f"Namespace {project_name} not found on UI")
+
+    def verify_current_page_resource_status(self, status_to_check, timeout=30):
+        """
+        Compares a given status string to the one shown in the resource's UI page
+
+        Args:
+            status_to_check (str): The status that will be compared with the one in the UI
+            timeout (int): How long should the check run before moving on
+
+        Returns:
+            bool: True if the resource was found, False otherwise
+        """
+
+        logger.info(
+            f"Verifying that the resource has reached a {status_to_check} status"
+        )
+        return self.wait_until_expected_text_is_found(
+            self.generic_locators["resource_status"], status_to_check, timeout
+        )
+
+    def select_administrator_user(self):
+        """
+        Select the administrator user role from the dropdown
+        """
+        logger.info("Select the OCP administrator user role from the dropdown")
+        if self.get_elements(self.generic_locators["developer_selected"]):
+            logger.info("Changing role from Developer to Administrator")
+            self.do_click(self.validation_loc["developer_dropdown"], timeout=5)
+            admin_el = wait_for_element_to_be_clickable(
+                self.validation_loc["select_administrator"]
+            )
+            admin_el.click()
+            logger.info("Administrator user is selected")
+        elif self.get_elements(self.generic_locators["administrator_selected"]):
+            logger.info("Administrator user was already selected")
+        else:
+            logger.error("Unknown user role selected by default")
+
+    def nav_to_storageclients_page(self):
+        """
+        Navigate to Storage Clients Page
+
+        Returns:
+            StorageClients: Storage Clients page object
+        """
+        from ocs_ci.ocs.ui.page_objects.storage_clients import StorageClients
+
+        logger.info("Navigate to Storage Client Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.page_has_loaded(retries=120)
+        self.do_click(
+            locator=self.page_nav["storageclients_page"], enable_screenshot=False
+        )
+        return StorageClients()
+
+    def nav_external_systems_page(self):
+        """
+        Navigate to External Storage Systems Page
+
+        Returns:
+            ExternalStorageSystems: External Storage Systems page object
+        """
+        from ocs_ci.ocs.ui.page_objects.external_storage_systems import (
+            ExternalSystems,
+        )
+
+        logger.info("Navigate to External Storage Systems Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.page_has_loaded(retries=20)
+        self.do_click(
+            locator=self.page_nav["external_systems_page"],
+            enable_screenshot=False,
+        )
+        self.page_has_loaded(retries=30)
+        return ExternalSystems()
+
+    def nav_to_attach_storage_page(self):
+        """
+        Navigate to Attach Storage Page
+
+        Returns:
+            AttachStorage: Attach Storage page object
+
+        """
+        from ocs_ci.ocs.ui.attach_storage import AttachStorage
+
+        logger.info("Navigate to Attach Storage Page")
+        storage_cluster = PageNavigator().nav_storage_cluster_default_page()
+        storage_cluster.wait_for_element_to_be_visible(
+            self.attach_storage_loc["storage_cluster_actions"]
+        )
+        storage_cluster.do_click(self.attach_storage_loc["storage_cluster_actions"])
+        storage_cluster.do_click(self.attach_storage_loc["attach_storage_button"])
+        return AttachStorage()

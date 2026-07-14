@@ -1,0 +1,11 @@
+apiVersion: misf.ibm.com/v1alpha1
+kind: ManagedFusionOffering
+metadata:
+  name: managedfusionoffering-sample
+  namespace: {{ namespace }}
+spec:
+  kind: DFC
+  release: "{{ ocp_version }}"
+  config: |
+    onboardingTicket: {{ onboarding_ticket }}
+    providerEndpoint: {{ storage_provider_endpoint }}

@@ -1,0 +1,18 @@
+DEPLOYMENT:
+  kms_deployment: true
+
+ENV_DATA:
+  encryption_at_rest: true
+  vault_deploy_mode: internal 
+  KMS_PROVIDER: vault 
+  KMS_SERVICE_NAME: vault
+  VAULT_ADDR: ""
+  PORT: ""
+  VAULT_NAMESPACE: ""
+  VAULT_CACERT: ""
+  VAULT_CLIENT_CERT: ""
+  VAULT_CLIENT_KEY: ""
+  VAULT_SKIP_VERIFY: false
+  VAULT_TLS_SERVER_NAME: ""
+  VAULT_BACKEND_PATH: ""
+  VAULT_POLICY: ""

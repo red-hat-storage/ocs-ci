@@ -1,0 +1,5 @@
+---
+ENV_DATA:
+  deployment_type: 'upi'
+  worker_instance_type: 'm5.4xlarge'
+  rhel_workers: false

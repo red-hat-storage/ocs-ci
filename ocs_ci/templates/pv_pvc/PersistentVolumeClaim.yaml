@@ -1,0 +1,13 @@
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: ocs-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+  storageClassName: rook-ceph-block

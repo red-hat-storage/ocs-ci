@@ -1,0 +1,35 @@
+[openshift]
+name=RHopenshift
+baseurl=https://mirror.openshift.com/enterprise/reposync/4.13/rhel-8-server-ose-rpms/
+enabled=1
+gpgcheck=0
+username=$mirror_openshift_user
+password=$mirror_openshift_password
+module_hotfixes = 1
+
+[rhel-8-baseos]
+name=rhel8-baseos
+baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-8-baseos-rpms/
+enabled=1
+gpgcheck=0
+username=$mirror_openshift_user
+password=$mirror_openshift_password
+module_hotfixes = 1
+
+[rhel-8-appstream]
+name=rhel8-appstream
+baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-8-appstream-rpms/
+enabled=1
+gpgcheck=0
+username=$mirror_openshift_user
+password=$mirror_openshift_password
+module_hotfixes = 1
+
+[rhel-fast]
+name=RHfast
+baseurl=https://mirror.openshift.com/enterprise/reposync/4.13/rhel-8-fast-datapath-rpms/
+enabled=1
+gpgcheck=0
+username=$mirror_openshift_user
+password=$mirror_openshift_password
+module_hotfixes = 1

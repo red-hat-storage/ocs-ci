@@ -1,0 +1,42 @@
+apiVersion: machine.openshift.io/v1beta1
+kind: MachineSet
+metadata:
+  labels:
+    machine.openshift.io/cluster-api-cluster: clusterID
+  name: clusteID-role-zone
+  namespace: openshift-machine-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      machine.openshift.io/cluster-api-cluster: clusterID
+      machine.openshift.io/cluster-api-machineset: clusterID-role-zone
+  template:
+    metadata:
+      labels:
+        machine.openshift.io/cluster-api-cluster: clusterID
+        machine.openshift.io/cluster-api-machine-role: role
+        machine.openshift.io/cluster-api-machine-type: role
+        machine.openshift.io/cluster-api-machineset: clusterID-role-zone
+    spec:
+      metadata:
+        labels:
+          node-role.kubernetes.io/app: app-scale
+      providerSpec:
+        value:
+          apiVersion: ovirtproviderconfig.machine.openshift.io/v1beta1
+          cluster_id: clusterUUID
+          template_name: ovirt-template-name
+          cpu:
+            sockets: 2
+            cores: 16
+            threads: 1
+          memory_mb: 65536
+          os_disk:
+            size_gb: 120
+          credentialsSecret:
+            name: ovirt-credentials
+          kind: OvirtMachineProviderSpec
+          type: server
+          userDataSecret:
+            name: worker-user-data

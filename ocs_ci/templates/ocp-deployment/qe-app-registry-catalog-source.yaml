@@ -1,0 +1,13 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: qe-app-registry
+  namespace: openshift-marketplace
+spec:
+  displayName: Production Operators
+  publisher: OpenShift QE
+  sourceType: grpc
+  updateStrategy:
+    registryPoll:
+      interval: 15m
+  image: quay.io/openshift-qe-optional-operators/aosqe-index:v{}

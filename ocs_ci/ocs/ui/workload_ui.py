@@ -1,0 +1,545 @@
+import copy
+import logging
+import random
+import tempfile
+import time
+import yaml
+
+from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import wait_for_pv_delete, get_pv_names
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    UnableUpgradeConnectionException,
+    TimeoutExpiredError,
+)
+from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.deployment import Deployment
+from ocs_ci.ocs.resources.pod import Pod
+from ocs_ci.ocs.resources.pv import get_pv_status
+from ocs_ci.ocs.resources.pvc import PVC
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    update_container_with_mirrored_image,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class SingletonMeta(type):
+    """
+    Singleton class to ensure only one instance of WorkloadUi is created.
+    """
+
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super().__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+
+class WorkloadUi(metaclass=SingletonMeta):
+    """Class to handle workload UI related operations"""
+
+    deployment_list = list()
+
+    def __init__(self, app: str = "ubi8"):
+        """
+        Initialize the WorkloadUi class.
+
+        Args:
+            app (str): The application to be deployed. Defaults to "ubi8".
+        """
+        if hasattr(self, "app"):
+            return
+
+        self.app = app
+
+        if self.app == "ubi8":
+            app_path = constants.UBI8_TEMPLATE
+        elif self.app == "busybox":
+            app_path = constants.BUSYBOX_TEMPLATE
+        else:
+            raise ValueError(f"Unsupported app {app}")
+
+        with open(app_path) as file_stream:
+            self.depl_cr = yaml.safe_load(file_stream)
+
+        # for disconnected deployments, mirror the used image and update deployment cr
+        update_container_with_mirrored_image(self.depl_cr)
+
+    def deploy_app(
+        self,
+        node: str = None,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        depl_name="ui-test-app",
+        pvc_name: str = None,
+    ) -> tuple:
+        """
+        Deploys a testing app container to a randomly selected worker node.
+
+        node (str): Name of the node where the app container is to be deployed.
+        If not specified, a random worker node is selected.
+        namespace (str): Namespace where deployment is to be deployed.
+        depl_name (str): Name of the deployment to be created. Defaults to None.
+        pvc_name (str): Name of the PVC to be attached by the test app container. Defaults to None.
+
+        Returns:
+            tuple: The name of the node where the container is deployed, and a deployment name if deployed,
+            otherwise None.
+        """
+        if not node:
+            node = random.choice(get_worker_nodes())
+            logger.info(f"selected node {node} for deployment")
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=True
+        ) as temp_file:
+
+            depl_dict = copy.deepcopy(self.depl_cr)
+
+            depl_dict["spec"]["template"]["spec"]["nodeName"] = node
+            depl_dict["metadata"]["namespace"] = namespace
+            if depl_name:
+                depl_dict["metadata"]["name"] = depl_name
+            if pvc_name:
+                depl_dict["spec"]["template"]["spec"].setdefault("volumes", [])
+                depl_dict["spec"]["template"]["spec"]["volumes"].append(
+                    {
+                        "name": "unique-pvc",
+                        "persistentVolumeClaim": {"claimName": pvc_name},
+                    }
+                )
+
+                depl_dict["spec"]["template"]["spec"].setdefault("containers", [{}])
+                if not depl_dict["spec"]["template"]["spec"]["containers"]:
+                    depl_dict["spec"]["template"]["spec"]["containers"].append({})
+
+                depl_dict["spec"]["template"]["spec"]["containers"][0].setdefault(
+                    "volumeMounts", []
+                )
+                depl_dict["spec"]["template"]["spec"]["containers"][0][
+                    "volumeMounts"
+                ].append({"name": "unique-pvc", "mountPath": "/tmp"})
+
+            if not namespace:
+                namespace = config.ENV_DATA["cluster_namespace"]
+
+            yaml_string = yaml.dump(depl_dict, default_flow_style=False, indent=2)
+            logger.info(f"Deploying app with yaml:\n{yaml_string}")
+
+            yaml.dump(depl_dict, temp_file, default_flow_style=False)
+            temp_file.flush()
+            occli = OCP()
+
+            occli.apply(temp_file.name)
+
+        app_scaled_up = self.wait_app_scaled_up(60, depl_name, namespace)
+        deployment = Deployment(
+            **OCP(
+                kind="deployment",
+                namespace=namespace,
+                resource_name=depl_name,
+            ).get()
+        )
+        self.deployment_list.append(deployment)
+        return node, deployment if app_scaled_up else None
+
+    def wait_app_scaled_up(self, timeout: int, depl_name: str, namespace: str) -> bool:
+        """
+        Waits for the 'busybox' or 'ubi8' or other test deployment to be scaled up within the specified timeout.
+
+        Args:
+            timeout (int): The maximum time to wait for the deployment to be scaled up, in seconds.
+            depl_name (str): Name of the deployment to be scaled up.
+            namespace (str): Namespace where the deployment is located.
+        Returns:
+            bool: True if the deployment is successfully scaled up within the timeout, False otherwise.
+
+        """
+        test_app_ocp_inst = OCP(
+            kind="deployment",
+            namespace=namespace,
+            resource_name=depl_name,
+        )
+
+        try:
+            sample = TimeoutSampler(
+                timeout=timeout, sleep=1, func=test_app_ocp_inst.get
+            )
+            for test_app_data in sample:
+                if test_app_data.get("spec").get("replicas") > 0:
+                    logger.info(f"deployment '{depl_name}' " f"successfully deployed")
+                    return True
+        except TimeoutExpiredError:
+            logger.error(
+                f"deployment '{depl_name}' failed to deploy and scale up after {timeout} seconds"
+            )
+            return False
+
+    def delete_depl(self, depl_name: str, force: bool = False):
+        """
+        Deletes deployment from cluster.
+
+        Args:
+            force (bool, optional): If True, force deletion even if the deployment is not found. Defaults to False.
+            depl_name ( str): Name of the deployment to be deleted. Defaults to None.
+        Returns:
+            dict: The deletion result if deployment exists and is successfully deleted.
+                  Returns None otherwise.
+        """
+
+        for depl_obj in self.deployment_list:
+            if depl_name == depl_obj.name:
+                the_depl = depl_obj
+                break
+        else:
+            logger.error(f"no deployment with the given name {depl_name} found")
+            return None
+        res = the_depl.delete(wait=True, force=force)
+        self.deployment_list.remove(the_depl)
+        return res
+
+    def delete_all_deployments(self):
+        """
+        Deletes all test deployments from cluster created for ui tests.
+        """
+        for depl in WorkloadUi().deployment_list:
+            self.delete_depl(depl.name, force=True)
+
+
+class PvcCapacityDeployment:
+    """
+    Class to store PVC capacity and deployment name to avoid unnecessary queries to a cluster
+    and speed-up the test
+    """
+
+    def __init__(self, pvc_obj: PVC, capacity_float: float, deployment: str = None):
+        self.pvc_obj = pvc_obj
+        self.capacity_size = capacity_float
+        self.deployment = deployment
+
+    def __str__(self):
+        return f"pvc_obj: {self.pvc_obj}, capacity_size: {self.capacity_size}, deployment: {self.deployment}"
+
+
+class PvcCapacityDeploymentList(list, metaclass=SingletonMeta):
+    """
+    Subclass of list to store a list of PvcCapacityDeployment objects and provide additional methods.
+    """
+
+    def add_instance(self, pvc_obj: PVC, capacity_float: float, deployment: str = None):
+        """
+        Add a PvcCapacityDeployment object to the list.
+
+        Args:
+            pvc_obj (PVC): The PVC object.
+            capacity_float (float): The capacity in float.
+            deployment (str, optional): The deployment name. Defaults to None.
+        """
+        pvc_capacity_deployment = PvcCapacityDeployment(
+            pvc_obj, capacity_float, deployment
+        )
+        self.append(pvc_capacity_deployment)
+
+    def get_pvc_capacity_deployment(self, index: int) -> PvcCapacityDeployment:
+        """
+        Get the PvcCapacityDeployment object at the specified index.
+
+        Args:
+            index (int): The index of the PvcCapacityDeployment object to retrieve.
+
+        Returns:
+            PvcCapacityDeployment: The PvcCapacityDeployment object at the specified index.
+        """
+        return self[index]
+
+    def set_pvc_capacity_deployment(
+        self, index: int, pvc_obj: PVC, capacity_float: float, deployment: str = None
+    ):
+        """
+        Set the PvcCapacityDeployment object at the specified index.
+
+        Args:
+            index (int): The index of the PvcCapacityDeployment object to set.
+            pvc_obj (PVC): The PVC object.
+            capacity_float (float): The capacity in float.
+            deployment (str, optional): The deployment name. Defaults to None.
+        """
+        pvc_capacity_deployment = PvcCapacityDeployment(
+            pvc_obj, capacity_float, deployment
+        )
+        self[index] = pvc_capacity_deployment
+
+    def get_pvc_capacity_deployment_by_deployment(self, deployment: str):
+        """
+        Get the PvcCapacityDeployment object by deployment.
+
+        Args:
+            deployment (str): The deployment name.
+
+        Returns:
+            PvcCapacityDeployment: The PvcCapacityDeployment object that matches the pvc_obj and deployment.
+        """
+        for pvc_capacity_deployment in self:
+            if pvc_capacity_deployment.deployment.name == deployment:
+                return pvc_capacity_deployment
+        raise ValueError(
+            f"PvcCapacityDeployment with deployment {deployment} not found."
+        )
+
+    def get_deployment_names_list(self):
+        """
+        Get the list of deployments.
+
+        Returns:
+            list: The list of deployments.
+        """
+        return [
+            pvc_capacity_deployment.deployment.name for pvc_capacity_deployment in self
+        ]
+
+    def get_pvc_names_list(self):
+        """
+        Get the list of pvcs.
+
+        Returns:
+            list: The list of pvcs.
+        """
+        return [
+            pvc_capacity_deployment.pvc_obj.name for pvc_capacity_deployment in self
+        ]
+
+    def _delete_pvc_capacity_deployment_from_list(self, deployment_name: str):
+        """
+        Delete the PvcCapacityDeployment object by deployment name.
+        ! deletes deployment only from the list, not from the cluster !
+
+
+        Args:
+            deployment_name (str): The deployment name.
+        """
+        pvc_capacity_deployment = self.get_pvc_capacity_deployment_by_deployment(
+            deployment_name
+        )
+        self.remove(pvc_capacity_deployment)
+        logger.info(f"Deleted entry {str(pvc_capacity_deployment)} from the list")
+
+    def delete_deployment(self, deployment: Deployment):
+        """
+        Deletes the deployment from the cluster and from the list.
+        :param deployment:
+        """
+        logger.info(f"Delete deployment {deployment.name}")
+        for pvc_capacity_deployment in self:
+            if pvc_capacity_deployment.deployment == deployment:
+                pvc_capacity_deployment.deployment.delete(True, False)
+                self._delete_pvc_capacity_deployment_from_list(deployment.name)
+                break
+        else:
+            raise ValueError(
+                f"PvcCapacityDeployment with deployment {deployment.name} not found."
+            )
+
+    def delete_pvc(self, pvc: PVC):
+        """
+        Delete the PVC with or without data
+        and remove the PvcCapacityDeployment object from list,
+        make sure that PV is deleted as well.
+
+        It is designed to delete mounted PVC with mounted PV as we want to test the behavior of management-console
+        :param pvc: PVC object
+        """
+        logger.info(f"Delete pvc {pvc.name}")
+        ocp = OCP()
+        for pvc_capacity_deployment in self:
+            if pvc_capacity_deployment.pvc_obj == pvc:
+
+                pv_obj = pvc.backed_pv_obj
+                # pvc will stack in terminating state because it is mounted
+                pvc.delete(wait=False, force=True)
+                # remove finalizers from the pvc to be able to delete mounted pvc
+                params = '{"metadata": {"finalizers":null}}'
+                try:
+                    ocp.exec_oc_cmd(
+                        f"patch pvc {pvc.name} -p '{params}' -n {pvc.namespace}"
+                    )
+                    logger.info(
+                        "sleep 2 min to allow pvc to be deleted after patching finalizers"
+                    )
+                    time.sleep(60 * 2)
+                except CommandFailed as ex:
+                    if "not found" in str(ex):
+                        logger.info(f"pvc '{pvc.name}' already deleted")
+
+                pv_names = get_pv_names()
+                if pv_obj.name in pv_names:
+                    pv_status = get_pv_status(pv_obj.get())
+                    logger.info(
+                        f"PVC deletion did not delete PV {pv_obj.name} on cluster. PV status {pv_status}"
+                    )
+                    logger.info(f"Patching finalizers of {pv_obj.name}")
+                    ocp.exec_oc_cmd(
+                        f"patch pv {pv_obj.name} -p '{params}' -n {pvc.namespace}"
+                    )
+                    pv_obj.delete(wait=False, force=True)
+                    wait_for_pv_delete([pv_obj], timeout=240)
+                else:
+                    logger.info(f"PV {pv_obj.name} is already deleted")
+
+                self._delete_pvc_capacity_deployment_from_list(
+                    pvc_capacity_deployment.deployment.name
+                )
+                break
+        else:
+            raise ValueError(f"PVC with name {pvc.name} not found.")
+
+
+def compare_mem_usage(
+    mem_float: float, mem_str: str, deviation_accepted: int = 10
+) -> bool:
+    """
+    Compare memory usage in bytes and in string format
+    :param mem_float: memory in float format
+    :param mem_str: memory in string format such as "1.5 GiB" or "1.5 GB"
+    :param deviation_accepted: deviation accepted in percentage
+
+    :return: True if the deviation is within the acceptable range, False otherwise
+    """
+
+    def string_to_bytes(s):
+        size_units = {
+            "B": 1,
+            "KB": 1024,
+            "MB": 1024**2,
+            "GB": 1024**3,
+            "TB": 1024**4,
+            "KiB": 1024,
+            "MiB": 1024**2,
+            "GiB": 1024**3,
+            "TiB": 1024**4,
+        }
+        size, unit = s.split()
+        return float(size) * size_units[unit]
+
+    # Convert string b to bytes and calculate the deviation as a percentage
+    float_value = string_to_bytes(mem_str)
+    float_value_a = string_to_bytes(f"{mem_float} GiB")
+
+    deviation = abs(float_value / float_value_a - 1) * 100
+    # Check if the deviation is within the acceptable range (10%)
+    return deviation <= deviation_accepted
+
+
+def wait_for_container_status_ready(pod: Pod, timeout=300, interval=5):
+    """
+    Wait for all containers of the pod to move to ready state.
+
+    :param pod: a pod object of the pod whose containers are to be checked
+    :param timeout: overall timeout in seconds
+    :param interval: polling interval in seconds
+    :return: True if all containers are ready within timeout, False otherwise
+    """
+    logger.info(f"Wait for all containers of the pod {pod.name} to be ready")
+
+    def do_wait_for_container_status_ready(
+        pod_obj: Pod, wait_timeout=timeout, wait_interval=interval
+    ):
+        logger.info(
+            f"Waiting for all containers in pod {pod_obj.name} to be ready for {wait_timeout}s"
+        )
+        start_time = time.time()
+        all_ready = False
+        while not all_ready and (time.time() - start_time < wait_timeout):
+            pod_data = pod_obj.get()
+            pod_status = pod_data["status"] if isinstance(pod_data, dict) else {}
+            container_statuses = pod_status.get("containerStatuses") or []
+            if not container_statuses:
+                logger.info("No container statuses yet, waiting...")
+                time.sleep(wait_interval)
+                continue
+            container_names = [cs.get("name", "?") for cs in container_statuses]
+            all_ready = all(cs.get("ready", False) for cs in container_statuses)
+            if all_ready:
+                logger.info(
+                    f"All container(s) in pod {pod_obj.name} are ready: {container_names}"
+                )
+                return True
+            not_ready = [
+                cs.get("name", "?")
+                for cs in container_statuses
+                if not cs.get("ready", False)
+            ]
+            logger.info(
+                f"Waiting for container(s) to be ready in pod {pod_obj.name}: {not_ready}"
+            )
+            time.sleep(wait_interval)
+        return False
+
+    retry(
+        CommandFailed,
+        text_in_exception="can't read container state of deployment",
+    )(
+        do_wait_for_container_status_ready
+    )(pod)
+
+
+@retry(UnableUpgradeConnectionException, tries=3, delay=10, backoff=1)
+def fill_attached_pv(data_struct: PvcCapacityDeployment, pod: Pod) -> bool:
+    """
+    Fill the attached PV with data until it is full or disc quota is exceeded.
+    A PvcCapacityDeployment object will be updated with capacity of copied data if the disc quota is exceeded.
+
+    :param data_struct: a PvcCapacityDeployment object consisting of a PVC and a capacity and a Deployment
+    :param pod: a Pod object to fill the PV attached to it
+
+    :return: True if the PV is filled, False otherwise
+    """
+    logger.info(f"Run IO on pod {pod.name}")
+    chunk_size = 64
+    count = data_struct.capacity_size * 1024 // chunk_size
+
+    try:
+        pod.exec_cmd_on_pod(
+            f"dd if=/dev/urandom of=/tmp/testfile bs={chunk_size}M count={count}"
+        )
+        return True
+    except CommandFailed as ex:
+        if "No space left on device" in str(ex):
+            logger.info("dd failed as expected. No space left on device")
+            return True
+        elif "Disk quota exceeded" in str(ex):
+            # get the size that was copied from the Error message
+            size_copied = str(ex).partition("(")[2].partition(")")[0]
+            # extract a number from the string like 2.6 from "2.6GiB"
+            data_struct.capacity_size = float(
+                "".join(filter(lambda x: x.isdigit() or x == ".", size_copied))
+            )
+            logger.info(
+                f"dd failure is acceptable. Disk quota exceeded. Copied {size_copied}"
+            )
+            return True
+        elif "error: unable to upgrade connection: container not found" in str(ex):
+            logger.info("Container not found")
+            raise UnableUpgradeConnectionException
+        else:
+            raise
+
+
+def divide_capacity(total, num):
+    """
+    Get n random numbers that sum up to a total. For example:  10 = 3 + 4 + 3
+
+    :param total: number to divide
+    :param num: number of parts
+    :return: list of numbers
+    """
+    numbers = []
+    for _ in range(num - 1):
+        number = random.randint(1, total - sum(numbers) - (num - len(numbers) - 1))
+        numbers.append(number)
+    numbers.append(total - sum(numbers))
+    return numbers

@@ -1,0 +1,2 @@
+MULTICLUSTER:
+  recovery_cluster: True

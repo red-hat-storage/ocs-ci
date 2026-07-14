@@ -1,0 +1,47 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  mon_type: 'hostpath'
+  osd_type: 'nvme'
+  is_multus_enabled: true
+
+  # VLAN Configuration
+  # Set to true to use VLAN-based multus instead of shim interfaces
+  multus_use_vlan: true
+
+  # Public Network Configuration
+  multus_create_public_net: true
+  multus_public_net_interface: 'enp1s0f1'  # Base physical interface
+  multus_public_net_namespace: 'openshift-storage'
+  multus_public_net_type: 'macvlan'
+  multus_public_net_mode: 'bridge'
+
+  # Public Network VLAN Settings
+  multus_public_net_vlan_id: 201  # VLAN ID for public network
+  multus_public_net_ip_range: '192.168.20.0/24'
+
+  # Public Network Shim Settings (for host-to-pod communication)
+  multus_public_net_shim_name: 'odf-pub-shim'
+  multus_public_net_shim_network: '192.168.252.0/24'   # Shim network
+  # Note: Shim IPs are auto-assigned: .5 for first node, .6 for second, .7 for third
+
+  # Cluster Network Configuration
+  multus_create_cluster_net: true
+  multus_cluster_net_interface: 'enp1s0f1'  # Base physical interface
+  multus_cluster_net_namespace: 'openshift-storage'
+  multus_cluster_net_type: 'macvlan'
+  multus_cluster_net_mode: 'bridge'
+
+  # Cluster Network VLAN Settings
+  multus_cluster_net_vlan_id: 202  # VLAN ID for cluster network
+  multus_cluster_net_ip_range: '192.168.30.0/24'
+
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2510'

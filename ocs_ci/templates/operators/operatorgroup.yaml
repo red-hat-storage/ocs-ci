@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  # TODO: Add this only for NMSTATE operator
+  annotations:
+    olm.providedAPIs: NMState.v1.nmstate.io
+  name: NAME_PLACEHOLDER
+  namespace: NAMESPACE_PLACEHOLDER
+spec:
+  targetNamespaces:
+  - NAMESPACE_PLACEHOLDER

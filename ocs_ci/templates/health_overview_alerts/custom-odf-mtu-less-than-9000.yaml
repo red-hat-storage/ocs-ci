@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: custom-odf-mtu-less-than-9000
+  namespace: openshift-storage
+  labels:
+    role: alert-rules
+    app: custom-odf
+spec:
+  groups:
+  - name: odf_healthchecks.rules.override
+    rules:
+    - alert: ODFNodeMTULessThan9000   # SAME ALERT NAME
+      annotations:
+        description: At least one node in the cluster has a network interface (excluding virtual interfaces) with MTU less than 9000. ODF recommends MTU >= 9000 for the storage network.
+        runbook_url: https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator/ODFNodeMTULessThan9000.md
+        summary: One or more ODF node network interface MTU < 9000
+      expr: count(node_network_mtu_bytes{device!~"^(veth|docker|flannel|cali|tun|tap).*"} < 9000) > 0
+      for: 1m
+      labels:
+        component: odf
+        severity: info

@@ -1,0 +1,6 @@
+# This configuration is meant to enable StorageClass encryption.
+# It's a must to also pass another configuration file for KMS deployment like
+# Vault or Thales Cyphertrust
+---
+DEPLOYMENT:
+  sc_encryption: true

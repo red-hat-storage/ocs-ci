@@ -1,0 +1,6 @@
+---
+ENV_DATA:
+  # disable persistent monitoring (reconfiguration of OCP Prometheus and alert
+  # manager to use OCS backed PVs) but make sure monitoring is enabled
+  monitoring_enabled: true
+  persistent-monitoring: false

@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=../plugin.schema.json
+- id: network_chaos
+  config:
+{%- if node_interface_name %}
+    node_interface_name:
+{%- for node, ifaces in node_interface_name.items() %}
+      {{ node }}:
+{%- for iface in ifaces %}
+        - {{ iface }}
+{%- endfor %}
+{%- endfor %}
+{%- endif %}
+{%- if label_selector is not none %}
+    label_selector: "{{ label_selector }}"
+{%- endif %}
+    instance_count: {{ instance_count }}
+{%- if kubeconfig_path %}
+    kubeconfig_path: {{ kubeconfig_path }}
+{%- endif %}
+    execution_type: "{{ execution_type }}"
+    network_params:
+{%- if network_params.get('latency') is not none %}
+      latency: {{ network_params['latency'] }}
+{%- endif %}
+{%- if network_params.get('loss') is not none %}
+      loss: {{ network_params['loss'] }}
+{%- endif %}
+{%- if network_params.get('bandwidth') is not none %}
+      bandwidth: {{ network_params['bandwidth'] }}
+{%- endif %}
+    wait_duration: {{ wait_duration }}
+    test_duration: {{ test_duration }}
+{%- if kraken_config %}
+    kraken_config: {{ kraken_config }}
+{%- endif %}

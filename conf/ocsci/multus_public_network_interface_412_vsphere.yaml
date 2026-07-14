@@ -1,0 +1,5 @@
+---
+# Use this config for enabling multus deployment on vsphere for OCP 4.12
+ENV_DATA:
+  is_multus_enabled: true
+  multus_public_net_interface: 'br-ex'

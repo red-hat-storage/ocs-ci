@@ -1,0 +1,18 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  enable_nested_virtualization: true
+  host_network: true
+ENV_DATA:
+  platform: 'hci_baremetal'
+  cluster_type: 'provider'
+  cluster_namespace: "openshift-storage"
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  mon_type: 'hostpath'
+  osd_type: 'nvme'
+  region: 'us-east'
+REPORTING:
+  ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"

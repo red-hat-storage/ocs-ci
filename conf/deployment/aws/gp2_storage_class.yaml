@@ -1,0 +1,4 @@
+---
+# This config is for AWS deployment with gp2 storage class provisioning
+DEPLOYMENT:
+  customized_deployment_storage_class: 'gp2'

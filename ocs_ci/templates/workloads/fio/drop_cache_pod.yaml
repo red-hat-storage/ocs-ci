@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rook-ceph-osd-cache-drop
+  namespace: openshift-storage
+spec:
+  containers:
+  - name: rook-ceph-osd-cache-drop
+    image: quay.io/ocsci/osd_cache_drop:latest-4.8
+    imagePullPolicy: Always
+    command: [/bin/sh, -c]
+    args:
+      - cd /opt/bohica/ceph-cache-dropper; python3 ./osd-cache-drop-websvc.py
+    env:
+      - name: ROOK_CEPH_USERNAME
+        valueFrom:
+          secretKeyRef:
+            name: rook-ceph-mon
+            key: ceph-username
+      - name: ROOK_CEPH_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: rook-ceph-mon
+            key: ceph-secret
+    securityContext:
+      privileged: true
+    volumeMounts:
+      - mountPath: /dev
+        name: dev
+      - mountPath: /sys/bus
+        name: sysbus
+      - mountPath: /lib/modules
+        name: libmodules
+      - mountPath: /etc/rook
+        name: mon-endpoint-volume
+  hostNetwork: true
+  volumes:
+  - hostPath:
+      path: /dev
+    name: dev
+  - hostPath:
+      path: /sys/bus
+    name: sysbus
+  - hostPath:
+      path: /lib/modules
+    name: libmodules
+  - configMap:
+      items:
+      - key: data
+        path: mon-endpoints
+      name: rook-ceph-mon-endpoints
+    name: mon-endpoint-volume

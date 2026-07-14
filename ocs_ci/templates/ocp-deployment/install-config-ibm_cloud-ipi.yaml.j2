@@ -1,0 +1,77 @@
+apiVersion: {{ api_version | default('v1') }}
+baseDomain: {{ base_domain | default('ibmcloud2.qe.rh-ocs.com') }}
+credentialsMode: Manual
+compute:
+- architecture: amd64
+  hyperthreading: Enabled
+  name: worker
+  platform:
+    ibmcloud:
+      type: {{ worker_instance_type | default('bx2-16x64') }}
+{% if worker_availability_zones %}
+      zones:
+{% for zone in worker_availability_zones %}
+      - {{ zone }}
+{% endfor %}
+{% endif %}
+  replicas: {{ worker_replicas | default(3) }}
+controlPlane:
+  architecture: amd64
+  hyperthreading: Enabled
+  name: master
+  platform:
+    ibmcloud:
+      type: {{ master_instance_type | default('bx2-4x16') }}
+{% if master_availability_zones %}
+      zones:
+{% for zone in master_availability_zones %}
+      - {{ zone }}
+{% endfor %}
+{% endif %}
+  replicas: {{ master_replicas | default(3) }}
+metadata:
+  creationTimestamp: null
+  name: '{{ cluster_name }}'
+networking:
+  clusterNetwork:
+  - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
+    hostPrefix: {{ cluster_host_prefix | default(23) }}
+  machineNetwork:
+  - cidr: 10.0.0.0/16
+  networkType: {{ network_type | default('OVNKubernetes') }}
+  serviceNetwork:
+  - {{ service_network_cidr | default('172.30.0.0/16') }}
+{% if fips %}
+fips: {{ fips }}
+{% endif %}
+platform:
+  ibmcloud:
+    region: {{ region | default('us-south') }}
+{% if custom_vpc %}
+    resourceGroupName: {{ cluster_name }}-{{ cluster_id }}
+    networkResourceGroupName: {{ cluster_name }}-{{ cluster_id }}
+    vpcName: {{ cluster_name }}-{{ cluster_id }}-vpc
+    controlPlaneSubnets:
+{% for control_plane_subnet in control_plane_subnets %}
+      - {{ control_plane_subnet }}
+{% endfor %}
+    computeSubnets:
+{% for compute_subnet in compute_subnets %}
+      - {{ compute_subnet }}
+{% endfor %}
+{% endif %}
+{% if existing_vpc %}
+    resourceGroupName: {{ resource_group_name }}
+    networkResourceGroupName: {{ network_resource_group_name }}
+    vpcName: {{ vpc_name }}
+    controlPlaneSubnets:
+{% for control_plane_subnet in control_plane_subnets %}
+      - {{ control_plane_subnet }}
+{% endfor %}
+    computeSubnets:
+{% for compute_subnet in compute_subnets %}
+      - {{ compute_subnet }}
+{% endfor %}
+{% endif %}
+publish: External
+pullSecret: ''

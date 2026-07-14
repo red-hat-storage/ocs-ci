@@ -1,0 +1,29 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: custom-odf-disk-utilization-high
+  namespace: openshift-storage
+  labels:
+    role: alert-rules
+    app: custom-odf
+spec:
+  groups:
+  - name: odf_healthchecks.rules.override
+    rules:
+    - alert: ODFDiskUtilizationHigh   # SAME ALERT NAME
+      annotations:
+        description: Node {{ $labels.instance }} disk {{ $labels.device }} is {{ printf "%.2f" $value }}% busy. High disk utilization may degrade Ceph performance.
+        runbook_url: https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator/ODFDiskUtilizationHigh.md
+        summary: ODF disk utilization > 90%
+      expr: |
+        100 * rate(
+          node_disk_io_time_seconds_total{
+            job="node-exporter",
+            device=~"sd[a-z]|hd[a-z]|vd[a-z]"
+          }[3m]
+        )
+        > 0
+      for: 2m
+      labels:
+        component: odf
+        severity: warning

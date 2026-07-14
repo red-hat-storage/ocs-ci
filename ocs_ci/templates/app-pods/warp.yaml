@@ -1,0 +1,40 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: warppod
+  labels:
+    app: warppod
+spec:
+  selector:
+    matchLabels:
+      app: warppod
+  template:
+    metadata:
+      labels:
+        app: warppod
+    spec:
+      securityContext:
+        fsGroup: 2000
+      serviceAccountName: admin
+      restartPolicy: Always
+      volumes:
+      - name: warp-vol
+        persistentVolumeClaim:
+          claimName: warp-s3
+      containers:
+      - name: warp
+        image: quay.io/ocsci/warp:latest
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "100m"
+          limits:
+            # Mixed/long-duration Warp runs can spike during analysis; chaos + S3 stress
+            # often needs more than 4Gi on busy clusters.
+            memory: "8Gi"
+            cpu: "2000m"
+        command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /mnt
+          name: warp-vol

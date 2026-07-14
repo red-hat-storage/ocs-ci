@@ -1,0 +1,21 @@
+apiVersion: operator.openshift.io/v1alpha1
+kind: ImageContentSourcePolicy
+metadata:
+ name: image-policy-brew
+spec:
+  repositoryDigestMirrors:
+  - mirrors:
+    - brew.registry.redhat.io/rh-osbs/rhacm2
+    source: registry.redhat.io/rhacm2
+  - mirrors:
+    - brew.registry.redhat.io/rh-osbs
+    source: registry-proxy.engineering.redhat.com/rh-osbs
+  - mirrors:
+    - brew.registry.redhat.io/rh-osbs/multicluster-engine
+    source: registry.redhat.io/multicluster-engine
+  - mirrors:
+    - registry.redhat.io/rhacm2
+    source: registry.stage.redhat.io/rhacm2
+  - mirrors:
+    - registry.redhat.io/multicluster-engine
+    source: registry.stage.redhat.io/multicluster-engine

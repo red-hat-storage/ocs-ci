@@ -1,0 +1,5 @@
+kind: HyperConverged
+apiVersion: hco.kubevirt.io/v1beta1
+metadata:
+  name: kubevirt-hyperconverged
+  namespace: kubevirt-hyperconverged

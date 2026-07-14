@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Benchmark
+metadata:
+  name: osd-scaling
+  namespace: elastic-system
+spec:
+  clustername: place-holder
+  elasticsearch:
+    # v This is debug server v
+    # server: 10.0.144.103
+    server: 10.0.78.167
+    port: 9200
+    scheme: http
+  es_index: osd-scaling

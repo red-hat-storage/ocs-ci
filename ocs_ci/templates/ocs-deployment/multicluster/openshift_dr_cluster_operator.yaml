@@ -1,0 +1,14 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  labels:
+    operators.coreos.com/odr-cluster-operator.openshift-dr-system: ""
+  name: odr-cluster-operator
+  namespace: openshift-dr-system
+spec:
+  channel: stable-4.9
+  installPlanApproval: Automatic
+  name: odr-cluster-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  startingCSV: odr-cluster-operator.v4.9.1

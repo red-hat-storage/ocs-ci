@@ -1,0 +1,6 @@
+---
+# This configuration file is used to enable the automatic wiping of devices
+# with old Ceph metadata during OCS deployment. This prevents conflicts when
+# reusing disks that were previously part of a different Ceph cluster.
+ENV_DATA:
+  wipe_devices_from_other_clusters: true

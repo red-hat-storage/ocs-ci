@@ -1,0 +1,3528 @@
+"""
+Helper functions specific for DR
+"""
+
+import json
+import logging
+import os
+import tempfile
+import time
+from datetime import datetime
+from time import sleep
+
+from novaclient.exceptions import ResourceNotFound
+
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
+
+import yaml
+
+from ocs_ci.deployment.fusion_data_foundation import FusionDataFoundationDeployment
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.cluster import is_hci_cluster
+from ocs_ci.ocs.defaults import RBD_NAME
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+    NotFoundError,
+    UnexpectedDeploymentConfiguration,
+    ResourceWrongStatusException,
+)
+from ocs_ci.ocs.managedservice import get_provider_service_type
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.drpc import DRPC
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods,
+    get_ceph_tools_pod,
+    get_odf_external_snapshotter_leader,
+    wait_for_matching_pattern_in_pod_logs,
+)
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.ocs.node import (
+    gracefully_reboot_nodes,
+    get_node_objs,
+    get_node_internal_ip,
+    get_worker_nodes,
+)
+from ocs_ci.ocs.resources.storage_cluster import StorageCluster, validate_serviceexport
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.utils import (
+    enable_literal_block_style,
+    get_non_acm_cluster_config,
+    get_active_acm_index,
+    get_primary_cluster_config,
+    get_passive_acm_index,
+    enable_mco_console_plugin,
+    is_hostnetwork_enabled,
+    set_recovery_as_primary,
+    get_all_acm_indexes,
+    get_non_acm_cluster_and_non_provider_cluster_config,
+    get_non_acm_cluster_indexes,
+)
+from ocs_ci.utility import version, templating
+from ocs_ci.utility.retry import retry
+
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    CommandFailed,
+    clone_repo,
+    run_cmd,
+    exec_cmd,
+    is_cluster_y_version_upgraded,
+    wait_for_machineconfigpool_status,
+)
+from ocs_ci.helpers.helpers import (
+    run_cmd_verify_cli_output,
+    find_cephblockpoolradosnamespace,
+    find_cephfilesystemsubvolumegroup,
+    create_unique_resource_name,
+    find_radosnamespace,
+)
+from ocs_ci.helpers import helpers
+
+logger = logging.getLogger(__name__)
+
+
+def get_current_primary_cluster_name(
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    discovered_apps=False,
+    resource_name=None,
+):
+    """
+    Get current primary cluster name based on workload namespace
+
+    Args:
+        namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+        resource_name (str): DRPC NAME Only Used for discovered apps
+
+    Returns:
+        str: Current primary cluster name
+
+    """
+    restore_index = config.cur_index
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+    if discovered_apps:
+        if not resource_name:
+            raise ValueError("Resource name is expected")
+        namespace = constants.DR_OPS_NAMESPACE
+        drpc_data = DRPC(namespace=namespace, resource_name=resource_name).get()
+    else:
+        drpc_data = DRPC(namespace=namespace).get()
+    if drpc_data.get("spec").get("action") == constants.ACTION_FAILOVER:
+        cluster_name = drpc_data["spec"]["failoverCluster"]
+    else:
+        cluster_name = drpc_data["spec"]["preferredCluster"]
+    config.switch_ctx(restore_index)
+    return cluster_name
+
+
+def get_current_secondary_cluster_name(
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    discovered_apps=False,
+    resource_name=None,
+):
+    """
+    Get current secondary cluster name based on workload namespace
+
+    Args:
+        namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+        resource_name (str): DRPC NAME Only Used for discovered apps
+
+
+    Returns:
+        str: Current secondary cluster name
+
+    """
+    restore_index = config.cur_index
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+    if discovered_apps:
+        namespace = constants.DR_OPS_NAMESPACE
+        primary_cluster_name = get_current_primary_cluster_name(
+            namespace=namespace,
+            resource_name=resource_name,
+            discovered_apps=discovered_apps,
+        )
+        drpolicy_data = DRPC(
+            namespace=namespace, resource_name=resource_name
+        ).drpolicy_obj.get()
+    else:
+        primary_cluster_name = get_current_primary_cluster_name(namespace)
+        drpolicy_data = DRPC(namespace=namespace).drpolicy_obj.get()
+    config.switch_ctx(restore_index)
+    for cluster_name in drpolicy_data["spec"]["drClusters"]:
+        if not cluster_name == primary_cluster_name:
+            return cluster_name
+
+
+def set_current_primary_cluster_context(
+    namespace, workload_type=constants.SUBSCRIPTION
+):
+    """
+    Set current primary cluster context based on workload namespace
+
+    Args:
+        namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+
+    """
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+    cluster_name = get_current_primary_cluster_name(namespace)
+    config.switch_to_cluster_by_name(cluster_name)
+
+
+def set_current_secondary_cluster_context(
+    namespace, workload_type=constants.SUBSCRIPTION
+):
+    """
+    Set secondary cluster context based on workload namespace
+
+    Args:
+        namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+
+    """
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+    cluster_name = get_current_secondary_cluster_name(namespace)
+    config.switch_to_cluster_by_name(cluster_name)
+
+
+def get_scheduling_interval(
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    discovered_apps=False,
+    resource_name=None,
+):
+    """
+    Get scheduling interval for the workload in the given namespace
+
+    Args:
+        namespace (str): Name of the namespace
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+
+    Returns:
+        int: scheduling interval value from DRPolicy
+
+    """
+    restore_index = config.cur_index
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+    if discovered_apps:
+        if not resource_name:
+            raise ValueError("Resource name is expected")
+        namespace = constants.DR_OPS_NAMESPACE
+        drpolicy_obj = DRPC(
+            namespace=namespace, resource_name=resource_name
+        ).drpolicy_obj
+    else:
+        drpolicy_obj = DRPC(namespace=namespace).drpolicy_obj
+    interval_value = int(drpolicy_obj.get()["spec"]["schedulingInterval"][:-1])
+    config.switch_ctx(restore_index)
+    return interval_value
+
+
+def failover(
+    failover_cluster,
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    workload_placement_name=None,
+    switch_ctx=None,
+    discovered_apps=False,
+    old_primary=None,
+):
+    """
+    Initiates Failover action to the specified cluster
+
+    Args:
+        failover_cluster (str): Cluster name to which the workload should be failed over
+        namespace (str): Namespace where workload is running
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_placement_name (str): Placement name
+        switch_ctx (int): The cluster index by the cluster name
+        discovered_apps (bool): True when cluster is failing over DiscoveredApps
+        old_primary (str): Name of cluster where workload were running
+
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    failover_params = f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}","failoverCluster":"{failover_cluster}"}}}}'
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace,
+            resource_name=f"{workload_placement_name}-drpc",
+            switch_ctx=switch_ctx,
+        )
+    elif discovered_apps:
+        failover_params = (
+            f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}",'
+            f'"failoverCluster":"{failover_cluster}",'
+            f'"preferredCluster":"{old_primary}"}}}}'
+        )
+        namespace = constants.DR_OPS_NAMESPACE
+        drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
+    else:
+        drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
+    drpc_obj.wait_for_peer_ready_status()
+    logger.info(f"Initiating Failover action with failoverCluster:{failover_cluster}")
+    assert drpc_obj.patch(
+        params=failover_params, format_type="merge"
+    ), f"Failed to patch {constants.DRPC}: {drpc_obj.resource_name}"
+
+    logger.info(
+        f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
+    )
+
+    drpc_obj.wait_for_phase(
+        constants.STATUS_FAILEDOVER,
+        timeout=360,
+    )
+    config.switch_ctx(restore_index)
+
+
+def relocate(
+    preferred_cluster,
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    workload_placement_name=None,
+    switch_ctx=None,
+    discovered_apps=False,
+    old_primary=None,
+    workload_instance=None,
+    multi_ns=False,
+    workload_instances_shared=None,
+    vm_auto_cleanup=False,
+):
+    """
+    Initiates Relocate action to the specified cluster
+
+    Args:
+        preferred_cluster (str): Cluster name to which the workload should be relocated
+        namespace (str): Namespace where workload is running
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        workload_placement_name (str): Placement name
+        switch_ctx (int): The cluster index by the cluster name
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+        old_primary (str): Name of cluster where workload were running
+        workload_instance (object): Discovered App instance to get namespace and dir location
+        multi_ns (bool): Multi Namespace
+        workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
+        vm_auto_cleanup (bool): If true, cleanup will not be initiated after relocate action, False otherwise.
+
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    relocate_params = f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}","preferredCluster":"{preferred_cluster}"}}}}'
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace,
+            resource_name=f"{workload_placement_name}-drpc",
+            switch_ctx=switch_ctx,
+        )
+    elif discovered_apps:
+        relocate_params = (
+            f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}",'
+            f'"failoverCluster":"{old_primary}",'
+            f'"preferredCluster":"{preferred_cluster}"}}}}'
+        )
+        namespace = constants.DR_OPS_NAMESPACE
+        drpc_obj = DRPC(namespace=namespace, resource_name=f"{workload_placement_name}")
+    else:
+        drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
+    drpc_obj.wait_for_peer_ready_status()
+    logger.info(f"Initiating Relocate action with preferredCluster:{preferred_cluster}")
+    assert drpc_obj.patch(
+        params=relocate_params, format_type="merge"
+    ), f"Failed to patch {constants.DRPC}: {drpc_obj.resource_name}"
+
+    logger.info(
+        f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_RELOCATED} phase"
+    )
+    relocate_condition = constants.STATUS_RELOCATED
+    if discovered_apps:
+        relocate_condition = constants.STATUS_RELOCATING
+    drpc_obj.wait_for_phase(relocate_condition)
+
+    if multi_ns:
+        logger.info("Doing Cleanup Operations")
+        do_discovered_apps_cleanup_multi_ns(
+            old_primary=old_primary, workload_instance=workload_instance
+        )
+    else:
+        if (
+            discovered_apps
+            and workload_instance
+            and not workload_instances_shared
+            and not vm_auto_cleanup
+        ):
+            logger.info("Doing Cleanup Operations")
+            do_discovered_apps_cleanup(
+                drpc_name=workload_placement_name,
+                old_primary=old_primary,
+                workload_namespace=workload_instance.workload_namespace,
+                workload_dir=workload_instance.workload_dir,
+                vrg_name=workload_instance.discovered_apps_placement_name,
+            )
+        elif (
+            discovered_apps
+            and workload_instance
+            and workload_instances_shared
+            and not vm_auto_cleanup
+        ):
+            logger.info("Doing Cleanup Operations for relocate operation of Shared VMs")
+            for cnv_wl in workload_instances_shared:
+                do_discovered_apps_cleanup(
+                    drpc_name=workload_placement_name,
+                    old_primary=old_primary,
+                    workload_namespace=workload_instances_shared[0].workload_namespace,
+                    workload_dir=cnv_wl.workload_dir,
+                    vrg_name=workload_instances_shared[
+                        0
+                    ].discovered_apps_placement_name,
+                    skip_resource_deletion_verification=True,
+                )
+
+    config.switch_ctx(restore_index)
+
+
+def check_rbd_mirror_running(namespace=None):
+    """
+    Check if the rbd-mirror daemon deployment is running with at least one ready replica.
+    Ceph HEALTH_OK does not reflect rbd-mirror daemon absence, so this explicit
+    check is needed to catch silent failures before tests run.
+
+    Args:
+        namespace (str): Namespace to check in.
+            Defaults to config.ENV_DATA['cluster_namespace'].
+
+    Returns:
+        bool: True if rbd-mirror deployment has ready replicas
+
+    Raises:
+        UnexpectedDeploymentConfiguration: If the rbd-mirror deployment is
+            not found or not running
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    dep_ocp = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    try:
+        dep_data = dep_ocp.get(resource_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT)
+    except CommandFailed:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} deployment not found in {namespace}"
+        )
+    spec_replicas = dep_data.get("spec", {}).get("replicas") or 0
+    ready_replicas = dep_data.get("status", {}).get("readyReplicas") or 0
+    if spec_replicas < 1 or ready_replicas < 1:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is not running: "
+            f"spec.replicas={spec_replicas}, status.readyReplicas={ready_replicas}"
+        )
+    logger.info(
+        f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is running: "
+        f"replicas={spec_replicas}, readyReplicas={ready_replicas}"
+    )
+    return True
+
+
+def check_mirroring_status_ok(
+    replaying_images=None,
+    replaying_groups=None,
+    cephblockpoolradosns=None,
+    storageclient_uid=None,
+):
+    """
+    Check if mirroring status has health OK and expected number of replaying images and groups.
+
+    Args:
+        replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
+        cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
+        storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
+            Applicable for provider - client configuration.
+
+    Returns:
+        bool: True if status contains expected health and states values, False otherwise
+
+    Raises:
+        NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
+            is not obtained
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if is_hci_cluster():
+        logger.info("Get the cephblockpoolradosnamespace associated with storageclient")
+        cephbpradosns = (
+            cephblockpoolradosns
+            or config.ENV_DATA.get("radosnamespace_name", None)
+            or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
+        )
+
+        if not cephbpradosns:
+            raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
+
+        if (
+            "ocs-storagecluster-cephblockpool" not in cephbpradosns
+            and "replicated-metadata-pool" not in cephbpradosns
+        ):
+            cephblockpool_rns_names = [
+                cephbprns_data["metadata"]["name"]
+                for cephbprns_data in ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).get()["items"]
+            ]
+            cephbpradosns = list(
+                filter(lambda x: f"-{cephbpradosns}" in x, cephblockpool_rns_names)
+            )[0]
+
+        logger.info(f"Got cephblockpoolradosnamespace {cephbpradosns}")
+
+        cbp_obj = ocp.OCP(
+            kind=constants.CEPHBLOCKPOOLRADOSNS,
+            namespace=config.clusters[config.get_provider_index()].ENV_DATA[
+                "cluster_namespace"
+            ],
+            resource_name=cephbpradosns,
+        )
+    else:
+        if ocs_version >= version.VERSION_4_19:
+            # The name of builtin-implicit cephblockpoolradosnamespace is different in EC cluster and non EC cluster
+            cephblockpool_rns_names = [
+                cephbprns_data["metadata"]["name"]
+                for cephbprns_data in ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).get()["items"]
+            ]
+            cephbpradosns = list(
+                filter(lambda x: "-builtin-implicit" in x, cephblockpool_rns_names)
+            )[0]
+            cbp_obj = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=cephbpradosns,
+            )
+        else:
+            cbp_obj = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOL,
+                resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+
+    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
+    logger.info(f"Mirroring status: {mirroring_status}")
+
+    health_keys = ["daemon_health", "health", "image_health"]
+    if ocs_version >= version.VERSION_4_19:
+        health_keys.append("group_health")
+
+    for key in health_keys:
+        expected_value = "OK"
+        current_value = mirroring_status.get(key)
+        if current_value not in expected_value:
+            logger.warning(
+                f"Unexpected {key}. Current status is {current_value} but expected {expected_value}"
+            )
+            return False
+
+    if replaying_images:
+        # Replaying images count can be higher due to presence of dummy images
+        # This does not apply for clusters with ODF 4.12 and above.
+        # See https://bugzilla.redhat.com/show_bug.cgi?id=2132359
+        if ocs_version >= version.VERSION_4_12:
+            expected_value = [replaying_images]
+        else:
+            expected_value = range(replaying_images, replaying_images + 3)
+
+        current_value = mirroring_status.get("states").get("replaying")
+
+        if current_value not in expected_value:
+            logger.warning(
+                f"Unexpected states. Current replaying count is {current_value} but expected {expected_value}"
+            )
+            # Continue test if the bug https://issues.redhat.com/browse/DFBUGS-1525 is hit
+            current_stopped_value = mirroring_status.get("states").get("stopped")
+
+            if current_stopped_value in expected_value:
+                logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
+                return True
+            # Fail fast if count exceeds expected range - indicates leftover resources
+            if current_value > max(expected_value):
+                raise UnexpectedBehaviour(
+                    f"Replaying count ({current_value}) exceeds expected ({max(expected_value)}). "
+                    f"Clean up leftover DRPCs and namespaces before retrying."
+                )
+            return False
+
+    if is_cg_enabled():
+        if replaying_groups is not None:
+            current_replaying_groups = mirroring_status.get("group_states", {}).get(
+                "replaying"
+            )
+            if current_replaying_groups != replaying_groups:
+                logger.warning(
+                    f"Unexpected replaying groups. Current: {current_replaying_groups}, "
+                    f"expected: {replaying_groups}"
+                )
+                return False
+
+    return True
+
+
+def wait_for_mirroring_status_ok(
+    replaying_images=None, replaying_groups=None, timeout=900
+):
+    """
+    Wait for mirroring status to reach health OK and expected number of replaying
+    images and groups for each of the ODF cluster.
+
+    Args:
+        replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
+        timeout (int): time in seconds to wait for mirroring status reach OK
+
+    Returns:
+        bool: True if status contains expected health and states values
+
+    Raises:
+        TimeoutExpiredError: In case of unexpected mirroring status
+
+    """
+    restore_index = config.cur_index
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        non_acm_cluster_config = get_non_acm_cluster_and_non_provider_cluster_config()
+    else:
+        non_acm_cluster_config = get_non_acm_cluster_config()
+    for cluster in non_acm_cluster_config:
+        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        logger.info(
+            f"Validating mirroring status on cluster {cluster.ENV_DATA['cluster_name']}"
+        )
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=check_mirroring_status_ok,
+            replaying_images=replaying_images,
+            replaying_groups=replaying_groups,
+        )
+        if not sample.wait_for_func_status(result=True):
+            error_msg = (
+                "The mirroring status does not have expected values within the time"
+                f" limit on cluster {cluster.ENV_DATA['cluster_name']}"
+            )
+            logger.error(error_msg)
+            raise TimeoutExpiredError(error_msg)
+
+    config.switch_ctx(restore_index)
+    return True
+
+
+@retry(ValueError, tries=10)
+def check_mirroring_status_for_custom_pool(
+    pool_name, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE, min_replaying=1
+):
+    """
+    Check the health and mirroring status of a custom CephBlockPoolRadosNamespace resource.
+    Refer For OCSQE-2294 or RHSTOR-5129 in ODF 4.19 for details
+
+    This function verifies that:
+    - At least two such resources exist in the given namespace
+    - The specified pool has all health fields set to 'OK'
+    - The replaying count in both 'image_states' and 'states' meets the minimum threshold
+
+    Args:
+        pool_name (str): Base name of the Ceph block pool (without '-builtin-implicit' suffix) whose
+        mirroring status has to be validated.
+        namespace (str): Namespace to look for the resource. Default is 'openshift-storage'.
+        min_replaying (int): Minimum expected value for replaying count. Default is 1.
+
+    Returns:
+        bool: True if all checks pass, otherwise False.
+
+    Raises:
+        ValueError: If custom Pool is missing, insufficient Pool count, or summary is not found.
+    """
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        logger.info("Checking count of CephBlockPoolRadosNamespace resource")
+        custom_pool_name = f"{pool_name}-builtin-implicit"
+        ocp = OCP(kind="CephBlockPoolRadosNamespace", namespace=namespace)
+        items = ocp.get().get("items", [])
+
+        if len(items) < 2:
+            raise ValueError(
+                f"Expected at least 2 resources, found {len(items)} in {namespace}"
+            )
+
+        for obj in items:
+            if obj.get("metadata", {}).get("name") != custom_pool_name:
+                continue
+            logger.info("Validate if mirroring status summary is present or not")
+            summary = obj.get("status", {}).get("mirroringStatus", {}).get("summary")
+            if not summary:
+                raise ValueError(f"No summary found for {custom_pool_name}")
+            logger.info("Validate health")
+            for key in ("health", "daemon_health", "group_health", "image_health"):
+                val = summary.get(key)
+                logger.info(f"{custom_pool_name} - {key}: {val}")
+                if val != "OK":
+                    logger.error(f"{key} is not OK: {val}")
+                    raise ValueError(
+                        f"Health check for {key} is not OK: {val} for pool {custom_pool_name}"
+                    )
+
+            img = summary.get("image_states", {}).get("replaying", 0)
+            state = summary.get("states", {}).get("replaying", 0)
+            logger.info(
+                f"{custom_pool_name} - replaying counts: image_states={img}, states={state}"
+            )
+
+            if img < min_replaying or state < min_replaying:
+                logger.error(
+                    f"Replaying count too low: image_states={img}, states={state}"
+                )
+                raise ValueError(
+                    f"Replaying count too low: image_states={img}, states={state} for pool {custom_pool_name}"
+                )
+
+    config.switch_ctx(restore_index)
+    return True
+
+
+def verify_custom_pool_image_isolation(pool_name):
+    """
+    Verify that RBD images in a custom pool are isolated from the
+    default pool on both managed clusters.
+
+    Checks on each managed cluster that:
+    - The custom pool contains at least one RBD image
+    - No images are shared between the custom pool and the default pool
+
+    Args:
+        pool_name (str): Name of the custom CephBlockPool to verify
+
+    Returns:
+        bool: True if isolation checks pass on both clusters
+
+    Raises:
+        AssertionError: If no images found in custom pool or if
+            images overlap between pools
+
+    """
+    from ocs_ci.ocs.resources.pod import list_ceph_images
+
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        cluster_name = config.ENV_DATA.get("cluster_name")
+
+        custom_images = list_ceph_images(pool_name=pool_name)
+        default_images = list_ceph_images(pool_name=constants.DEFAULT_CEPHBLOCKPOOL)
+        logger.info(
+            f"Cluster {cluster_name}: custom pool {pool_name}"
+            f" images={custom_images},"
+            f" default pool images={default_images}"
+        )
+        assert custom_images, (
+            f"No RBD images found in custom pool {pool_name}" f" on {cluster_name}"
+        )
+        overlap = set(custom_images) & set(default_images)
+        assert not overlap, (
+            f"Pool isolation violated on {cluster_name}:"
+            f" images {overlap} found in both"
+            f" {pool_name} and {constants.DEFAULT_CEPHBLOCKPOOL}"
+        )
+        logger.info(
+            f"Pool isolation verified on {cluster_name}:"
+            f" {len(custom_images)} images in {pool_name},"
+            f" no overlap with default pool"
+        )
+
+    config.switch_ctx(restore_index)
+    return True
+
+
+def is_cg_enabled():
+    """
+    Check if Consistency Group feature is enabled via environment variable
+
+    Returns:
+        bool: True if CG is enabled, False otherwise
+
+    Note:
+        CG can be enabled/disabled via cg_enabled in dr_workload.yaml config.
+
+    """
+    # CG is applicable for Regional-DR mode only
+    if config.MULTICLUSTER["multicluster_mode"] != constants.RDR_MODE:
+        return False
+
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version >= version.VERSION_4_21:
+        return config.ENV_DATA.get("cg_enabled", True)
+    else:
+        return False
+
+
+def get_resource_count(kind, namespace=None):
+    """
+    Gets resource count in given namespace for specified resource kind
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.REPLICATION_SOURCE, etc.)
+        namespace (str): the namespace of the resources
+
+    Returns:
+        int: Resource count
+
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+    resource_items = resource_obj.get().get("items", [])
+
+    # Special handling for PV resources - filter by namespace
+    if kind == constants.PV and namespace:
+        resource_items = [
+            item
+            for item in resource_items
+            if item.get("spec", {}).get("claimRef", {}).get("namespace") == namespace
+        ]
+
+    return len(resource_items)
+
+
+def check_resource_existence(kind, namespace, resource_name=""):
+    """
+    Check if resource exists in the given namespace
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION_GROUP, constants.VOLUME_GROUP_REPLICATION)
+        namespace (str): the namespace of the resource
+        resource_name (str): Name of resource
+
+    Returns:
+        bool: True if resource exists, False otherwise
+
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+
+    try:
+        if resource_name:
+            return resource_obj.is_exist(resource_name=resource_name)
+        else:
+            resource_items = resource_obj.get().get("items", [])
+            return len(resource_items) > 0
+    except Exception as e:
+        if "Error from server (NotFound)" in str(e):
+            logger.info(f"{kind} {resource_name} not found in namespace {namespace}.")
+        else:
+            logger.warning(f"Exception raised when fetching {kind}: {e}")
+        return False
+
+
+def check_replication_resource_state(kind, state, namespace, resource_name=""):
+    """
+    Check if replication resources in the given namespace are in expected state
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_REPLICATION_GROUP, etc.)
+        state (str): The resource state to check for (e.g. 'primary', 'secondary')
+        namespace (str): the namespace of the resources
+        resource_name (str): Name of specific resource
+
+    Returns:
+        bool: True if resources are in expected state or were deleted, False otherwise
+
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+
+    if resource_name:
+        resource_data = resource_obj.get(resource_name=resource_name)
+        resource_list = [resource_data] if resource_data else []
+    else:
+        resource_list = resource_obj.get().get("items")
+
+    # Handle deletion case
+    if len(resource_list) == 0 and state.lower() == "secondary":
+        if kind == constants.VOLUME_REPLICATION_GROUP:
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if ocs_version <= version.VERSION_4_17:
+                logger.info(f"{kind} resource not found, skipping state check")
+                return True
+            else:
+                logger.info(f"{kind} resource not found")
+                return False
+        else:
+            logger.info(f"{kind} resource not found, skipping state check")
+            return True
+
+    if kind == constants.VOLUME_REPLICATION and len(resource_list) > 1:
+        # Handle multiple VR resources
+        state_mismatch = []
+        for resource in resource_list:
+            resource_name = resource["metadata"]["name"]
+            desired_state = resource["spec"]["replicationState"]
+            current_state = resource["status"]["state"]
+            logger.info(
+                f"{kind}: {resource_name} desired state is {desired_state}, current state is {current_state}"
+            )
+
+            if not (
+                state.lower() == desired_state.lower()
+                and state.lower() == current_state.lower()
+            ):
+                state_mismatch.append(resource_name)
+
+        if not state_mismatch:
+            logger.info(
+                f"All {len(resource_list)} {kind} are in expected state {state}"
+            )
+            return True
+        else:
+            logger.warning(
+                f"Following {len(state_mismatch)} {kind} are not in expected state {state}: {state_mismatch}"
+            )
+            return False
+    else:
+        resource = resource_list[0]
+        resource_name = resource["metadata"]["name"]
+        desired_state = resource["spec"]["replicationState"]
+        current_state = resource["status"]["state"]
+        logger.info(
+            f"{kind}: {resource_name} desired state is {desired_state}, current state is {current_state}"
+        )
+
+        if (
+            state.lower() == desired_state.lower()
+            and state.lower() == current_state.lower()
+        ):
+            return True
+        else:
+            logger.warning(f"{kind} is not in expected state {state}")
+            return False
+
+
+def wait_for_resource_existence(
+    kind, namespace, resource_name="", timeout=900, should_exist=True
+):
+    """
+    Wait for resources to exist or not exist
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION_GROUP, constants.VOLUME_GROUP_REPLICATION)
+        namespace (str): the namespace of the resource
+        resource_name (str): Name of resource
+        timeout (int): Time in seconds to wait
+        should_exist (bool): True to wait for existence, False to wait for deletion
+
+    Raises:
+        TimeoutExpiredError: If expected resource state not reached
+
+    """
+    if should_exist:
+        logger.info(f"Waiting for {kind} {resource_name} to exist")
+        expected_result = True
+        error_msg = f"{kind} {resource_name} not created within the time limit."
+    else:
+        logger.info(f"Waiting for {kind} {resource_name} to be deleted")
+        expected_result = False
+        error_msg = f"{kind} {resource_name} not deleted within the time limit."
+
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=check_resource_existence,
+        kind=kind,
+        namespace=namespace,
+        resource_name=resource_name,
+    )
+    if not sample.wait_for_func_status(result=expected_result):
+        logger.error(error_msg)
+        raise TimeoutExpiredError(error_msg)
+
+
+def wait_for_resource_count(kind, namespace, expected_count=1, timeout=900):
+    """
+    Wait for resources to reach expected count
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.REPLICATION_SOURCE, etc.)
+        namespace (str): The namespace of the resources
+        expected_count (int): Expected number of resources
+        timeout (int): Time in seconds to wait
+
+    Raises:
+        TimeoutExpiredError: If expected number of resources not reached
+
+    """
+    if expected_count == 0:
+        logger.info(f"Waiting for all {kind} to be deleted")
+    else:
+        logger.info(f"Waiting for {expected_count} {kind} to be created")
+
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=get_resource_count,
+        kind=kind,
+        namespace=namespace,
+    )
+    sample.wait_for_func_value(expected_count)
+
+
+def wait_for_resource_state(kind, state, namespace, resource_name="", timeout=900):
+    """
+    Wait for resources to reach expected count
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VOLUME_REPLICATION, constants.VOLUME_REPLICATION_GROUP, etc.)
+        state (str): The resource state to check for (e.g. 'primary', 'secondary')
+        namespace (str): the namespace of the resources
+        resource_name (str): Name of specific resource
+        timeout (int): Time in seconds to wait
+
+    Raises:
+        TimeoutExpiredError: If expected number of resources not reached
+
+    """
+    logger.info(f"Waiting for {kind} {resource_name} to reach {state} state")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=check_replication_resource_state,
+        kind=kind,
+        state=state,
+        namespace=namespace,
+        resource_name=resource_name,
+    )
+    if not sample.wait_for_func_status(result=True):
+        error_msg = f"{kind} {resource_name} did not reach expected {state} state within the time limit."
+        logger.error(error_msg)
+        raise TimeoutExpiredError(error_msg)
+
+
+def wait_for_replication_resources_creation(
+    count,
+    namespace,
+    timeout,
+    discovered_apps=False,
+    vrg_name="",
+    skip_vrg_check=False,
+    performed_dr_action=False,
+):
+    """
+    Wait for replication resources to be created
+
+    Args:
+        count (int): Expected number of VR resources or ReplicationSource count
+        namespace (str): the namespace of the VR or ReplicationSource resources
+        timeout (int): time in seconds to wait for VR or ReplicationSource resources to be created
+            or reach expected state
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+        vrg_name (str): Name of VRG
+        skip_vrg_check (bool): If true vrg check will be skipped
+
+    Raises:
+        TimeoutExpiredError: In case replication resources not created
+
+    """
+
+    vrg_namespace = constants.DR_OPS_NAMESPACE if discovered_apps else namespace
+
+    wait_for_resource_existence(
+        kind=constants.VOLUME_REPLICATION_GROUP,
+        namespace=vrg_namespace,
+        resource_name=vrg_name,
+        timeout=timeout,
+        should_exist=True,
+    )
+
+    # TODO: Improve the parameter for condition
+    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+        # TODO: Improve the parameter for condition
+        if "cephfs" in namespace:
+            wait_for_resource_count(
+                kind=constants.REPLICATION_SOURCE,
+                namespace=namespace,
+                expected_count=count,
+                timeout=timeout,
+            )
+            cg_enabled = is_cg_cephfs_enabled()
+            if cg_enabled:
+                # Validating the creation of ReplicationGroupSource
+                wait_for_resource_existence(
+                    kind=constants.REPLICATION_GROUP_SOURCE,
+                    namespace=namespace,
+                    timeout=timeout,
+                    should_exist=True,
+                )
+                # Validating the creation of VolumeGroupSnapshot
+                validate_volumegroupsnapshot(namespace)
+
+                # Validate VolumeSnapshots
+                if performed_dr_action:
+                    count *= 2
+                wait_for_resource_count(
+                    kind=constants.VOLUMESNAPSHOT,
+                    namespace=namespace,
+                    expected_count=count,
+                    timeout=timeout,
+                )
+
+        else:
+            cg_enabled = is_cg_enabled()
+            if cg_enabled:
+                wait_for_resource_existence(
+                    kind=constants.VOLUME_GROUP_REPLICATION,
+                    namespace=namespace,
+                    timeout=timeout,
+                    should_exist=True,
+                )
+
+            wait_for_resource_count(
+                kind=constants.VOLUME_REPLICATION,
+                namespace=namespace,
+                expected_count=(
+                    1 if cg_enabled else count
+                ),  # Only 1 VolumeReplication resource is expected per workload when CG is enabled.
+                timeout=timeout,
+            )
+
+            wait_for_resource_state(
+                kind=constants.VOLUME_REPLICATION,
+                state="primary",
+                namespace=namespace,
+                timeout=timeout,
+            )
+
+            if cg_enabled:
+                wait_for_resource_state(
+                    kind=constants.VOLUME_GROUP_REPLICATION,
+                    state="primary",
+                    namespace=namespace,
+                    timeout=timeout,
+                )
+
+    if not skip_vrg_check:
+        wait_for_resource_state(
+            kind=constants.VOLUME_REPLICATION_GROUP,
+            state="primary",
+            namespace=vrg_namespace,
+            resource_name=vrg_name,
+            timeout=timeout,
+        )
+
+
+def wait_for_replication_resources_deletion(
+    namespace,
+    timeout,
+    check_state=True,
+    discovered_apps=False,
+    vrg_name="",
+    skip_vrg_check=False,
+):
+    """
+    Wait for replication resources to be deleted
+
+    Args:
+        namespace (str): the namespace of the resources'
+        timeout (int): time in seconds to wait for resources to reach expected
+            state or deleted
+        check_state (bool): True for checking resources state before deletion, False otherwise
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+        vrg_name (str): Name of VRG
+        skip_vrg_check (bool): If true vrg check will be skipped
+
+    Raises:
+        TimeoutExpiredError: In case replication resources not deleted
+
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    vrg_namespace = constants.DR_OPS_NAMESPACE if discovered_apps else namespace
+    # TODO: Improve the parameter for condition
+    if "cephfs" in namespace:
+        resource_kind = constants.REPLICATION_SOURCE
+    else:
+        resource_kind = constants.VOLUME_REPLICATION
+
+    if check_state:
+        if resource_kind == constants.VOLUME_REPLICATION:
+            wait_for_resource_state(
+                kind=resource_kind,
+                state="secondary",
+                namespace=namespace,
+                timeout=timeout,
+            )
+
+            if is_cg_enabled():
+                wait_for_resource_state(
+                    kind=constants.VOLUME_GROUP_REPLICATION,
+                    state="secondary",
+                    namespace=namespace,
+                    timeout=timeout,
+                )
+
+        if not skip_vrg_check:
+            wait_for_resource_state(
+                kind=constants.VOLUME_REPLICATION_GROUP,
+                state="secondary",
+                namespace=vrg_namespace,
+                resource_name=vrg_name,
+                timeout=timeout,
+            )
+
+    if (
+        not check_state
+        or (ocs_version <= version.VERSION_4_17 and "cephfs" not in namespace)
+        and not skip_vrg_check
+    ):
+        wait_for_resource_existence(
+            kind=constants.VOLUME_REPLICATION_GROUP,
+            namespace=vrg_namespace,
+            resource_name=vrg_name,
+            timeout=timeout,
+            should_exist=False,
+        )
+
+    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr" and not skip_vrg_check:
+        wait_for_resource_count(
+            kind=resource_kind,
+            namespace=namespace,
+            expected_count=0,
+            timeout=timeout,
+        )
+
+        if is_cg_enabled():
+            wait_for_resource_existence(
+                kind=constants.VOLUME_GROUP_REPLICATION,
+                namespace=namespace,
+                timeout=timeout,
+                should_exist=False,
+            )
+
+        if is_cg_cephfs_enabled():
+            wait_for_resource_count(
+                kind=constants.REPLICATION_GROUP_SOURCE,
+                namespace=namespace,
+                expected_count=0,
+                timeout=timeout,
+            )
+
+
+def wait_for_all_resources_creation(
+    pvc_count,
+    pod_count,
+    namespace,
+    timeout=900,
+    skip_replication_resources=False,
+    discovered_apps=False,
+    vrg_name="",
+    skip_vrg_check=False,
+    performed_dr_action=False,
+):
+    """
+    Wait for workload and replication resources to be created
+
+    Args:
+        pvc_count (int): Expected number of PVCs
+        pod_count (int): Expected number of Pods
+        namespace (str): the namespace of the workload
+        timeout (int): time in seconds to wait for resource creation
+        skip_replication_resources (bool): if true vr status wont't be check
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+        vrg_name (str): Name of VRG
+        skip_vrg_check (bool): If true vrg check will be skipped
+        performed_dr_action(bool): It true, VolumeSnapshot count will be validate for CG-CephFS
+
+
+    """
+    logger.info(f"Waiting for {pvc_count} PVCs to reach {constants.STATUS_BOUND} state")
+    ocp.OCP(kind=constants.PVC, namespace=namespace).wait_for_resource(
+        condition=constants.STATUS_BOUND,
+        resource_count=pvc_count,
+        timeout=timeout,
+        sleep=5,
+    )
+    logger.info(
+        f"Waiting for {pod_count} pods to reach {constants.STATUS_RUNNING} state"
+    )
+    ocp.OCP(kind=constants.POD, namespace=namespace).wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        resource_count=pod_count,
+        timeout=timeout,
+        sleep=5,
+    )
+
+    if not skip_replication_resources:
+        wait_for_replication_resources_creation(
+            pvc_count,
+            namespace,
+            timeout,
+            discovered_apps,
+            vrg_name,
+            skip_vrg_check,
+            performed_dr_action,
+        )
+
+
+def wait_for_all_resources_deletion(
+    namespace,
+    timeout=1000,
+    discovered_apps=False,
+    workload_cleanup=False,
+    vrg_name="",
+    skip_vrg_check=False,
+):
+    """
+    Wait for workload and replication resources to be deleted
+
+    Args:
+        namespace (str): the namespace of the workload
+        timeout (int): time in seconds to wait for resource deletion
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+        workload_cleanup (bool): Set to True when performing final workload cleanup.
+            If True:
+            - PVC and PV deletion will always be checked
+            - Replication resources state check will be skipped.
+        vrg_name (str): Name of VRG
+        skip_vrg_check (bool): If true vrg check will be skipped
+
+
+    """
+    logger.info("Waiting for all pods to be deleted")
+    all_pods = get_all_pods(namespace=namespace)
+
+    # Bug https://redhat.atlassian.net/browse/DFBUGS-6048
+    for pod_obj in all_pods:
+        if "volsync-pvc-mount" in pod_obj.name:
+            # Wait for some time for all finalsync pods to schedule
+            logger.info("Wait for 90 seconds for all finalsync pods to schedule")
+            sleep(90)
+            break
+
+    for pod_obj in all_pods:
+        if "volsync-rsync-tls-dst" not in pod_obj.name:
+            if "volsync-pvc-mount" in pod_obj.name:
+                try:
+                    helpers.wait_for_resource_state(
+                        resource=pod_obj, state=constants.STATUS_COMPLETED, timeout=60
+                    )
+                except (ResourceWrongStatusException, CommandFailed, ResourceNotFound):
+                    # If the pod is deleted automatically
+                    pod_obj.ocp.wait_for_delete(
+                        resource_name=pod_obj.name, timeout=timeout, sleep=5
+                    )
+                    continue
+                pod_obj.delete()
+            pod_obj.ocp.wait_for_delete(
+                resource_name=pod_obj.name, timeout=timeout, sleep=5
+            )
+
+    check_state = not workload_cleanup
+    wait_for_replication_resources_deletion(
+        namespace, timeout, check_state, discovered_apps, vrg_name, skip_vrg_check
+    )
+
+    if workload_cleanup or "cephfs" not in namespace:
+        logger.info("Waiting for all PVCs to be deleted")
+        all_pvcs = get_all_pvc_objs(namespace=namespace)
+
+        for pvc_obj in all_pvcs:
+            pvc_obj.ocp.wait_for_delete(
+                resource_name=pvc_obj.name, timeout=timeout, sleep=5
+            )
+
+    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+        if workload_cleanup or "cephfs" not in namespace:
+            logger.info("Waiting for all PVs to be deleted")
+            wait_for_resource_count(
+                kind=constants.PV,
+                namespace=namespace,
+                expected_count=0,
+                timeout=timeout,
+            )
+
+
+def wait_for_cnv_workload(
+    vm_name, namespace, phase=constants.STATUS_RUNNING, timeout=600
+):
+    """
+    Wait for VM to reach a phase
+
+    Args:
+        vm_name (str): Name of the VM
+        namespace (str): Namespace of the vm workload
+        phase (str): Phase of the vm resource to wait for. example: Running, Stopped
+        timeout (int): time in seconds to wait for resource deletion
+
+    """
+    logger.info(f"Wait for VM: {vm_name} to reach {phase} state")
+    vm_obj = ocp.OCP(
+        kind=constants.VIRTUAL_MACHINE_INSTANCES,
+        resource_name=vm_name,
+        namespace=namespace,
+    )
+    vm_obj._has_phase = True
+    vm_obj.wait_for_phase(phase=constants.STATUS_RUNNING, timeout=timeout)
+
+
+def wait_for_replication_destinations_creation(rep_dest_count, namespace, timeout=900):
+    """
+    Wait for ReplicationDestination resources to be created
+
+    Args:
+        rep_dest_count (int): Expected number of ReplicationDestination resource
+        namespace (str): The namespace of the ReplicationDestination resources
+        timeout (int): Time in seconds to wait for ReplicationDestination resources to be created
+
+    Raises:
+        TimeoutExpiredError: If expected number of ReplicationDestination resources not created
+
+    """
+    wait_for_resource_count(
+        kind=constants.REPLICATIONDESTINATION,
+        namespace=namespace,
+        expected_count=rep_dest_count,
+        timeout=timeout,
+    )
+
+
+def wait_for_replication_destinations_deletion(namespace, timeout=900):
+    """
+    Wait for ReplicationDestination resources to be deleted
+
+    Args:
+        namespace (str): The namespace of the ReplicationDestination resources
+        timeout (int): Time in seconds to wait for ReplicationDestination resources to be deleted
+
+    Raises:
+        TimeoutExpiredError: If expected number of ReplicationDestination resources not deleted
+
+    """
+    wait_for_resource_count(
+        kind=constants.REPLICATIONDESTINATION,
+        namespace=namespace,
+        expected_count=0,
+        timeout=timeout,
+    )
+
+
+def get_backend_volumes_for_pvcs(namespace):
+    """
+    Gets list of RBD images or CephFS subvolumes associated with the PVCs in the given namespace
+
+    Args:
+        namespace (str): The namespace of the PVC resources
+
+    Returns:
+        list: List of RBD images or CephFS subvolumes
+
+    """
+    backend_volumes = []
+    for cluster in get_non_acm_cluster_config():
+        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        logger.info(f"Fetching backend volume names for PVCs in namespace: {namespace}")
+        all_pvcs = get_all_pvc_objs(namespace=namespace)
+        for pvc_obj in all_pvcs:
+            # Skip volsync related PVCs
+            if pvc_obj.name.startswith("volsync") or pvc_obj.name.startswith("vs-"):
+                continue
+
+            if pvc_obj.backed_sc in [
+                constants.DEFAULT_STORAGECLASS_RBD,
+                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD,
+                constants.DEFAULT_CNV_CEPH_RBD_SC,
+            ]:
+                backend_volume = pvc_obj.get_rbd_image_name
+            elif pvc_obj.backed_sc in [
+                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS,
+            ]:
+                backend_volume = pvc_obj.get_cephfs_subvolume_name
+
+            backend_volumes.append(backend_volume)
+
+    backend_volumes = list(set(backend_volumes))
+    logger.info(f"Found {len(backend_volumes)} backend volumes: {backend_volumes}")
+    return backend_volumes
+
+
+def verify_backend_volume_deletion(
+    backend_volumes,
+    cephblockpoolradosns=None,
+    cephfssubvolumegroup=None,
+    storageclient_uid=None,
+):
+    """
+    Check whether RBD images/CephFS subvolumes are deleted in the backend.
+
+    Args:
+        backend_volumes (list): List of RBD images or CephFS subvolumes
+        cephblockpoolradosns (str): The name of the cephblockpoolradosnamespace
+        cephfssubvolumegroup (str): The name of the cephfilesystemsubvolumegroup
+        storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
+            Applicable for provider - client configuration.
+
+    Returns:
+        bool: True if volumes are deleted and False if volumes are not deleted
+
+    Raises:
+        NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
+            is not obtained
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
+    ct_pod = get_ceph_tools_pod()
+    rbd_pool_name = (
+        (config.ENV_DATA.get("rbd_name") or RBD_NAME)
+        if config.DEPLOYMENT["external_mode"]
+        else constants.DEFAULT_CEPHBLOCKPOOL
+    )
+
+    # TODO: Condition is valid if both is_hci_cluster() and "upgraded cluster from 4.18"
+    # Condition is not valid if fresh installed 4.19 and then upgraded
+    if is_hci_cluster() and (
+        (ocs_version == version.VERSION_4_18)
+        or (config.ENV_DATA["cluster_type"] == constants.HCI_CLIENT)
+        or is_cluster_y_version_upgraded()
+    ):
+        cephbpradosns = (
+            cephblockpoolradosns
+            or config.ENV_DATA.get("radosnamespace_name", None)
+            or find_radosnamespace(storageclient_uid=storageclient_uid)
+        )
+
+        if not cephbpradosns:
+            raise NotFoundError("Could not identify the cephblockpoolradosnamespace")
+        namespace_param = f"--namespace {cephbpradosns}"
+
+        subvolumegroup = (
+            config.ENV_DATA.get("subvolumegroup_name", False) or cephfssubvolumegroup
+        )
+        if not subvolumegroup:
+            subvolumegroup = find_cephfilesystemsubvolumegroup(
+                storageclient_uid=storageclient_uid
+            )
+
+        if not subvolumegroup:
+            raise NotFoundError("Couldn't identify the cephfilesystemsubvolumegroup")
+    else:
+        namespace_param = ""
+        subvolumegroup = "csi"
+
+    rbd_images = ct_pod.exec_cmd_on_pod(
+        f"rbd ls {rbd_pool_name} {namespace_param} --format json"
+    )
+
+    fs_name = ct_pod.exec_ceph_cmd("ceph fs ls")[0]["name"]
+    cephfs_cmd_output = ct_pod.exec_cmd_on_pod(
+        f"ceph fs subvolume ls {fs_name} --group_name {subvolumegroup}"
+    )
+    cephfs_subvolumes = [subvolume["name"] for subvolume in cephfs_cmd_output]
+
+    ceph_volumes = rbd_images + cephfs_subvolumes
+    logger.info(f"All backend volumes present in the cluster: {ceph_volumes}")
+    not_deleted_volumes = []
+    for backend_volume in backend_volumes:
+        if backend_volume in ceph_volumes:
+            not_deleted_volumes.append(backend_volume)
+    if not_deleted_volumes:
+        logger.info(
+            f"The following backend volumes were not deleted: {not_deleted_volumes}"
+        )
+
+    return len(not_deleted_volumes) == 0
+
+
+def wait_for_backend_volume_deletion(backend_volumes, timeout=600):
+    """
+    Verify that RBD image/CephFS subvolume are deleted in the backend.
+
+    Args:
+        backend_volumes (list): List of RBD images or CephFS subvolumes
+        timeout (int): time in seconds to wait
+
+    Raises:
+        TimeoutExpiredError: In case backend volumes are not deleted
+    """
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=verify_backend_volume_deletion,
+        backend_volumes=backend_volumes,
+    )
+    if not sample.wait_for_func_status(result=True):
+        error_msg = "Backend RBD images or CephFS subvolumes were not deleted"
+        logger.error(error_msg)
+        raise TimeoutExpiredError(error_msg)
+
+
+def get_all_drpolicy():
+    """
+    Gets all DRPolicy from hub cluster
+
+    Returns:
+        list: List of all DRPolicy
+
+    """
+    config.switch_acm_ctx()
+    return_drpolicy_list = []
+    current_managed_clusters_list = []
+    with config.RunWithAcmConfigContext():
+        drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
+        drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
+    # Build list of managed clusters for DR
+    # Include clusters with rbd_dr_scenario (RDR) or in metro-dr mode (MDR)
+    # Exclude all ACM hubs (both active and passive) as they are not managed clusters
+    multicluster_mode = config.MULTICLUSTER.get("multicluster_mode")
+    acm_indexes = get_all_acm_indexes()
+
+    for cluster_name in config.clusters:
+        cluster_index = cluster_name.MULTICLUSTER.get("multicluster_index")
+        # Skip ACM hub clusters
+        if cluster_index in acm_indexes:
+            continue
+
+        if (
+            cluster_name.ENV_DATA.get("rbd_dr_scenario")
+            or multicluster_mode == constants.MDR_MODE
+        ):
+            current_managed_clusters_list.append(
+                cluster_name.ENV_DATA.get("cluster_name")
+            )
+
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        current_managed_clusters_list = [
+            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+            for item in dr_cluster_relations[0]
+            if is_hosted_cluster(cluster_name=item)
+        ]
+
+    for drpolicy in drpolicy_list:
+
+        if all(
+            mngcls in drpolicy["spec"]["drClusters"]
+            for mngcls in current_managed_clusters_list
+        ):
+            return_drpolicy_list.append(drpolicy)
+    return return_drpolicy_list
+
+
+@retry(UnexpectedBehaviour, tries=5, delay=10, backoff=2)
+def validate_drpolicy_grouping(drpolicy_name=None):
+    """
+    Validate DRPolicy configuration for CG behavior.
+
+    This function validates that DRPolicy has grouping=true for every storageClass
+    in status.async.peerClasses in ODF version >= 4.21
+
+    Args:
+        drpolicy_name (str, optional): Name of specific DRPolicy to validate.
+            If None, validates all DRPolicies.
+
+    Returns:
+        bool: True if DRPolicy grouping validation passes
+
+    Raises:
+        UnexpectedBehaviour: If peerClasses are not found or grouping validation fails
+
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version < version.VERSION_4_21:
+        logger.info("ODF version < 4.21, skipping DRPolicy grouping validation")
+        return True
+
+    logger.info(
+        "Validating DRPolicy grouping for ODF version >= 4.21 to ensure CG behavior is properly configured."
+    )
+
+    # Get DRPolicy resources
+    config.switch_acm_ctx()
+    if drpolicy_name:
+        drpolicy_obj = ocp.OCP(
+            kind=constants.DRPOLICY,
+            resource_name=drpolicy_name,
+            namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+        )
+        drpolicy_data = drpolicy_obj.get()
+        drpolicies = [drpolicy_data]
+        logger.info(f"Validating DRPolicy: {drpolicy_name}")
+    else:
+        drpolicies = get_all_drpolicy()
+        logger.info(f"Validating all {len(drpolicies)} DRPolicy resources")
+
+    for drp in drpolicies:
+        drp_name = drp.get("metadata").get("name")
+        peer_classes = drp.get("status").get("async").get("peerClasses")
+
+        if not peer_classes:
+            error_msg = f"PeerClasses not found in DRPolicy: {drp_name}"
+            logger.error(error_msg)
+            raise UnexpectedBehaviour(error_msg)
+
+        # Validate grouping is true for every storageClass in peerClasses
+        logger.info(f"Check grouping for storageClasses in DRPolicy: {drp_name}")
+        sc_with_grouping = [
+            pc.get("storageClassName")
+            for pc in peer_classes
+            if pc.get("grouping", False)
+        ]
+        logger.info(f"Grouping is true for storageClasses: {sc_with_grouping}")
+
+        sc_without_grouping = [
+            pc.get("storageClassName")
+            for pc in peer_classes
+            if not pc.get("grouping", False)
+        ]
+
+        if sc_without_grouping:
+            error_msg = f"Grouping is not true for storageClasses: {sc_without_grouping} in DRPolicy: {drp_name}"
+            logger.error(error_msg)
+            raise UnexpectedBehaviour(error_msg)
+
+        logger.info(
+            f"Verified grouping is true for every storageClass in DRPolicy: {drp_name}"
+        )
+
+    logger.info("DRPolicy grouping validation completed successfully")
+    return True
+
+
+def validate_drpolicy_replication_ids(drpolicy_name, sc_names):
+    """
+    Validate groupreplicationID values in DRPolicy peerClasses against
+    StorageClass labels.
+
+    Checks:
+        1. Each SC's ramendr.openshift.io/groupreplicationid label matches
+           the groupreplicationID in the corresponding DRPolicy peerClass.
+        2. SCs backed by different pools have different groupreplicationID
+           values in peerClasses.
+
+    Args:
+        drpolicy_name (str): Name of the DRPolicy to validate.
+        sc_names (list): List of StorageClass names to validate
+            (e.g. [default_sc, custom_sc]).
+
+    Returns:
+        bool: True if validation passes.
+
+    Raises:
+        UnexpectedBehaviour: If replication IDs don't match or aren't
+            unique across different pools.
+
+    """
+    restore_index = config.cur_index
+    try:
+        config.switch_acm_ctx()
+        drpolicy_ocp = ocp.OCP(
+            kind=constants.DRPOLICY,
+            resource_name=drpolicy_name,
+        )
+        drpolicy_data = drpolicy_ocp.get()
+        peer_classes = (
+            drpolicy_data.get("status", {}).get("async", {}).get("peerClasses", [])
+        )
+        pc_by_sc = {
+            pc["storageClassName"]: pc
+            for pc in peer_classes
+            if pc.get("storageClassName") in sc_names
+        }
+
+        missing = set(sc_names) - set(pc_by_sc.keys())
+        if missing:
+            raise UnexpectedBehaviour(
+                f"StorageClasses {missing} not found in DRPolicy"
+                f" {drpolicy_name} peerClasses"
+            )
+
+        # Switch to a managed cluster to read SC labels
+        managed_clusters = get_non_acm_cluster_config()
+        config.switch_ctx(managed_clusters[0].MULTICLUSTER["multicluster_index"])
+
+        group_rep_ids = {}
+        for sc_name in sc_names:
+            pc = pc_by_sc[sc_name]
+            pc_group_rep_id = pc.get("groupreplicationID")
+            if not pc_group_rep_id:
+                logger.info(
+                    f"No groupreplicationID in peerClass for SC" f" {sc_name}, skipping"
+                )
+                continue
+
+            sc_ocp = ocp.OCP(kind=constants.STORAGECLASS)
+            sc_data = sc_ocp.get(resource_name=sc_name)
+            sc_labels = sc_data.get("metadata", {}).get("labels", {})
+            sc_group_rep_id = sc_labels.get(constants.RAMEN_GROUP_REPLICATION_ID_LABEL)
+
+            if sc_group_rep_id != pc_group_rep_id:
+                raise UnexpectedBehaviour(
+                    f"SC {sc_name} label groupreplicationid"
+                    f" ({sc_group_rep_id}) does not match DRPolicy"
+                    f" peerClass value ({pc_group_rep_id})"
+                )
+            logger.info(
+                f"SC {sc_name} groupreplicationID matches DRPolicy"
+                f" peerClass: {pc_group_rep_id}"
+            )
+            group_rep_ids[sc_name] = pc_group_rep_id
+
+        if len(group_rep_ids) >= 2:
+            unique_ids = set(group_rep_ids.values())
+            if len(unique_ids) < len(group_rep_ids):
+                raise UnexpectedBehaviour(
+                    f"SCs from different pools share the same"
+                    f" groupreplicationID: {group_rep_ids}"
+                )
+            logger.info(
+                f"Verified SCs have unique groupreplicationID"
+                f" values: {group_rep_ids}"
+            )
+    finally:
+        config.switch_ctx(restore_index)
+
+    return True
+
+
+def validate_vgrc_count():
+    """
+    Validate VGRC count on each managed cluster per unique scheduling interval.
+
+    This function collects all unique scheduling intervals from all DRPolicies
+    and validates that the VGRC count matches the number of unique intervals.
+
+    Returns:
+        bool: True if VGRC count validation passes, False otherwise
+
+    Raises:
+        AssertionError: If VGRC count validation fails
+
+    """
+    logger.info("Validating VGRC count based on DRPolicy scheduling intervals")
+
+    drpolicies = get_all_drpolicy()
+
+    scheduling_intervals = []
+
+    for drp in drpolicies:
+        scheduling_interval = drp.get("spec").get("schedulingInterval")
+        scheduling_intervals.append(scheduling_interval)
+
+    scheduling_intervals = list(set(scheduling_intervals))
+    logger.info(f"Unique Scheduling Intervals: {scheduling_intervals}")
+
+    for cluster in get_non_acm_cluster_config():
+        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        vgrc_count = get_resource_count(kind=constants.VOLUME_GROUP_REPLICATION_CLASS)
+        logger.info(
+            f"{constants.VOLUME_GROUP_REPLICATION_CLASS} count in {cluster.ENV_DATA['cluster_name']}= {vgrc_count}"
+        )
+
+        if vgrc_count != len(scheduling_intervals):
+            error_msg = (
+                f"VGRC count mismatch in {cluster.ENV_DATA['cluster_name']}: "
+                f"expected {len(scheduling_intervals)}, got {vgrc_count}"
+            )
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
+
+    logger.info("VGRC count validation completed successfully")
+    return True
+
+
+def verify_last_group_sync_time(
+    drpc_obj,
+    scheduling_interval,
+    initial_last_group_sync_time=None,
+):
+    """
+    Verifies that the lastGroupSyncTime for a given DRPC object is within the expected range.
+
+    Args:
+        drpc_obj (obj): DRPC object
+        scheduling_interval (int): The scheduling interval in minutes
+        initial_last_group_sync_time (str): Previous lastGroupSyncTime value (optional).
+
+    Returns:
+        str: Current lastGroupSyncTime
+
+    Raises:
+        AssertionError: If the lastGroupSyncTime is outside the expected range
+            (greater than or equal to three times the scheduling interval)
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    if initial_last_group_sync_time:
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                if last_group_sync_time != initial_last_group_sync_time:
+                    logger.info(
+                        f"Verified: Current lastGroupSyncTime {last_group_sync_time} is different from "
+                        f"previous value {initial_last_group_sync_time}"
+                    )
+                    break
+            logger.info(
+                "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
+            )
+    else:
+        logger.info("Waiting for lastGroupSyncTime to be set")
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
+                break
+            logger.info("lastGroupSyncTime not yet set, retrying...")
+
+    # Verify lastGroupSyncTime
+    time_format = "%Y-%m-%dT%H:%M:%SZ"
+    last_group_sync_time_formatted = datetime.strptime(
+        last_group_sync_time, time_format
+    )
+    current_time = datetime.strptime(
+        datetime.utcnow().strftime(time_format), time_format
+    )
+    time_since_last_sync = (
+        current_time - last_group_sync_time_formatted
+    ).total_seconds() / 60
+    logger.info(f"Time in minutes since the last sync {time_since_last_sync}")
+    assert (
+        time_since_last_sync < 3 * scheduling_interval
+    ), "The syncing of volumes is exceeding three times the scheduled snapshot interval"
+    logger.info("Verified lastGroupSyncTime value within expected range")
+    config.switch_ctx(restore_index)
+    return last_group_sync_time
+
+
+def get_all_drclusters():
+    """
+    Get all DRClusters
+
+    Returns:
+        list: List of all DRClusters
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    drclusters_obj = ocp.OCP(kind=constants.DRCLUSTER)
+    drclusters = []
+    for cluster in drclusters_obj.get().get("items"):
+        drclusters.append(cluster.get("metadata").get("name"))
+    logger.info(f"The DRClusters are {drclusters}")
+    config.switch_ctx(restore_index)
+    return drclusters
+
+
+def get_managed_cluster_node_ips():
+    """
+    Gets worker node IPs of individual managed clusters for enabling fencing on MDR DRCluster configuration
+
+    Returns:
+        list: [[managed_cluster_name, multicluster_index, [cidr, ...]], ...]
+
+    """
+    restore_index = config.cur_index
+    primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
+    secondary_index = [
+        s.MULTICLUSTER["multicluster_index"]
+        for s in get_non_acm_cluster_config()
+        if s.MULTICLUSTER["multicluster_index"] != primary_index
+    ][0]
+    cluster_name_primary = config.clusters[primary_index].ENV_DATA["cluster_name"]
+    cluster_name_secondary = config.clusters[secondary_index].ENV_DATA["cluster_name"]
+    cluster_data = [
+        [cluster_name_primary, primary_index],
+        [cluster_name_secondary, secondary_index],
+    ]
+    try:
+        for cluster in cluster_data:
+            config.switch_ctx(cluster[1])
+            logger.info(f"Getting worker node IPs on managed cluster: {cluster[0]}")
+            node_obj = ocp.OCP(kind=constants.NODE).get()
+            external_ips = []
+            for node in node_obj.get("items", []):
+                # Check if node has worker role
+                labels = node.get("metadata", {}).get("labels", {})
+                if "node-role.kubernetes.io/worker" in labels:
+                    addresses = node.get("status", {}).get("addresses", [])
+                    for address in addresses:
+                        if address.get("type") == "ExternalIP" and address.get(
+                            "address"
+                        ):
+                            external_ips.append(address["address"])
+            external_ips_with_cidr = [f"{ip}/32" for ip in dict.fromkeys(external_ips)]
+            if not external_ips_with_cidr:
+                raise UnexpectedBehaviour(
+                    f"No worker ExternalIP addresses found on managed cluster {cluster[0]}"
+                )
+            cluster.append(external_ips_with_cidr)
+    finally:
+        config.switch_ctx(restore_index)
+    return cluster_data
+
+
+def enable_fence(drcluster_name, switch_ctx=None):
+    """
+    Once the managed cluster is fenced, all communication
+    from applications to the ODF external storage cluster will fail
+
+    Args:
+        drcluster_name (str): Name of the DRcluster which needs to be fenced
+        switch_ctx (int): The cluster index by the cluster name
+
+    """
+
+    logger.info(
+        f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
+    )
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    fence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_FENCE}"}}}}'
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    if not drcluster_obj.patch(params=fence_params, format_type="merge"):
+        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
+    logger.info(f"Successfully fenced {constants.DRCLUSTER}: {drcluster_name}")
+    config.switch_ctx(restore_index)
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
+def verify_drcluster_validated_on_hub(drcluster_name, switch_ctx=None):
+    """
+    Wait until hub DRCluster reports a successful validation condition.
+
+    Ramen surfaces hub reconciliation via status.conditions (reason/type
+    Validated or legacy Succeeded).
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    dr_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    data = dr_obj.get()
+    conditions = (data.get("status") or {}).get("conditions") or []
+    for cond in conditions:
+        if cond.get("status") != "True":
+            continue
+        reason = cond.get("reason") or ""
+        ctype = cond.get("type") or ""
+        if reason in constants.DRPOLICY_SUCCESS_REASONS:
+            logger.info(f"DRCluster {drcluster_name} validation OK ({reason or ctype})")
+            config.switch_ctx(restore_index)
+            return True
+        if ctype.lower() == "validated":
+            logger.info(f"DRCluster {drcluster_name} validation OK (type={ctype})")
+            config.switch_ctx(restore_index)
+            return True
+    config.switch_ctx(restore_index)
+    raise UnexpectedBehaviour(
+        f"DRCluster {drcluster_name} not validated yet; conditions={conditions}"
+    )
+
+
+def configure_drcluster_for_fencing():
+    """
+    Configures DRClusters for enabling fencing
+
+    """
+    old_ctx = config.cur_index
+    cluster_rows = get_managed_cluster_node_ips()
+    config.switch_acm_ctx()
+    for cluster in cluster_rows:
+        drcluster_name = cluster[0]
+        fence_ip_data = json.dumps({"spec": {"cidrs": cluster[2]}})
+        fence_ip_cmd = (
+            f"oc patch drcluster {drcluster_name} --type merge -p '{fence_ip_data}'"
+        )
+        logger.info(
+            f"Patching hub DRCluster {drcluster_name} with CIDRs from worker node IPs"
+        )
+        run_cmd(fence_ip_cmd)
+
+    verify_drpolicy_cli()
+    for cluster in cluster_rows:
+        verify_drcluster_validated_on_hub(cluster[0])
+
+    config.switch_ctx(old_ctx)
+
+
+def enable_unfence(drcluster_name, switch_ctx=None):
+    """
+    The OpenShift cluster to be Unfenced is the one where applications
+    are not currently running and the cluster that was Fenced earlier.
+
+    Args:
+        drcluster_name (str): Name of the DRcluster which needs to be fenced
+        switch_ctx (int): The cluster index by the cluster name
+
+    """
+
+    logger.info(
+        f"Edit the DRCluster resource for {drcluster_name} cluster on the Hub cluster"
+    )
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    unfence_params = f'{{"spec":{{"clusterFence":"{constants.ACTION_UNFENCE}"}}}}'
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    if not drcluster_obj.patch(params=unfence_params, format_type="merge"):
+        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
+    logger.info(f"Successfully unfenced {constants.DRCLUSTER}: {drcluster_name}")
+    config.switch_ctx(restore_index)
+
+
+def fence_state(drcluster_name, fence_state, switch_ctx=None):
+    """
+    Sets the specified clusterFence state
+
+    Args:
+       drcluster_name (str): Name of the DRcluster which needs to be fenced
+       fence_state (str): Specify the clusterfence state either constants.ACTION_UNFENCE and ACTION_FENCE
+       switch_ctx (int): The cluster index by the cluster name
+
+    """
+
+    logger.info(
+        f"Edit the DRCluster {drcluster_name} cluster clusterfence state {fence_state}  "
+    )
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    params = f'{{"spec":{{"clusterFence":"{fence_state}"}}}}'
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    if not drcluster_obj.patch(params=params, format_type="merge"):
+        raise CommandFailed(f"Failed to patch {constants.DRCLUSTER}: {drcluster_name}")
+    logger.info(
+        f"Successfully changed clusterfence state to {fence_state} {constants.DRCLUSTER}: {drcluster_name}"
+    )
+    config.switch_ctx(restore_index)
+
+
+def get_fence_state(drcluster_name, switch_ctx=None):
+    """
+    Returns the clusterfence state of given drcluster
+
+    Args:
+        drcluster_name (str): Name of the DRcluster
+        switch_ctx (int): The cluster index by the cluster name
+
+    Returns:
+        state (str): If drcluster are fenced: Fenced or Unfenced, else None if not defined
+
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    drcluster_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    state = drcluster_obj.get().get("status").get("phase")
+    config.switch_ctx(restore_index)
+    return state
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=5, backoff=5)
+def verify_fence_state(drcluster_name, state, switch_ctx=None):
+    """
+    Verify the specified drcluster is in expected state
+
+    Args:
+        drcluster_name (str): Name of the DRcluster
+        state (str): The fence state it is either constants.ACTION_FENCE or constants.ACTION_UNFENCE
+        switch_ctx (int): The cluster index by the cluster name
+
+    Returns:
+        True (bool) if the drcluster is in expected state
+
+    Raises:
+        Raises exception Unexpected-behaviour if the specified drcluster is not in the given state condition
+    """
+    sample = get_fence_state(drcluster_name=drcluster_name, switch_ctx=switch_ctx)
+    if sample == state:
+        logger.info(f"DR cluster {drcluster_name} reached {state} state")
+        return True
+    else:
+        logger.error(f"DR cluster {drcluster_name} not reached {state} state")
+        raise UnexpectedBehaviour(
+            f"DR cluster {drcluster_name} not reached {state} state"
+        )
+
+
+def create_backup_schedule():
+    """
+    Create backupschedule resource only on active hub
+
+    """
+    old_ctx = config.cur_index
+    config.switch_ctx(get_active_acm_index())
+    backup_schedule = templating.load_yaml(constants.BACKUP_SCHEDULE_YAML)
+    backup_schedule_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="bkp", delete=False
+    )
+    templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
+    run_cmd(f"oc create -f {backup_schedule_yaml.name}")
+    config.switch_ctx(old_ctx)
+
+
+def gracefully_reboot_ocp_nodes(drcluster_name, disable_eviction=False):
+    """
+    Gracefully reboot OpenShift Container Platform
+    nodes which was fenced before
+
+    Args:
+        drcluster_name (str): Name of the drcluster which needs to be rebooted
+        disable_eviction (bool): On True will delete pod that is protected by PDB, False by default
+
+    """
+    config.switch_to_cluster_by_name(drcluster_name)
+    gracefully_reboot_nodes(disable_eviction=disable_eviction)
+
+
+def restore_backup():
+    """
+    Restores the backup in new hub and make it as active
+
+    """
+
+    restore_index = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    restore_schedule = templating.load_yaml(constants.DR_RESTORE_YAML)
+    restore_schedule["metadata"]["name"] = create_unique_resource_name(
+        resource_description="acm", resource_type="restore"
+    )
+    restore_schedule_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="restore", delete=False
+    )
+    templating.dump_data_to_temp_yaml(restore_schedule, restore_schedule_yaml.name)
+    run_cmd(f"oc create -f {restore_schedule_yaml.name}")
+    config.switch_ctx(restore_index)
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=5, backoff=5)
+def verify_restore_is_completed():
+    """
+    Function to verify restore is completed or finished
+
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    restore_obj = ocp.OCP(
+        kind=constants.ACM_HUB_RESTORE, namespace=constants.ACM_HUB_BACKUP_NAMESPACE
+    )
+    cmd_output = restore_obj.exec_oc_cmd(command="get restore -oyaml")
+    status = cmd_output["items"][0]["status"]["phase"]
+    if status == "Finished":
+        logger.info("Restore completed successfully")
+    else:
+        logger.error(f"Restore failed with some errors: {cmd_output}")
+        raise UnexpectedBehaviour("Restore failed with some errors")
+    config.switch_ctx(restore_index)
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=5, backoff=2)
+def verify_drpolicy_cli(switch_ctx=None):
+    """
+    Function to verify DRPolicy status
+
+    Returns:
+        bool: True if the status is in succeed state, else raise exception
+        switch_ctx (int): The cluster index by the cluster name
+
+    """
+
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
+    drpolicy_items = drpolicy_obj.get().get("items") or []
+    if not drpolicy_items:
+        config.switch_ctx(restore_index)
+        raise UnexpectedBehaviour("No DRPolicy resources found on hub")
+    conditions = drpolicy_items[0].get("status", {}).get("conditions") or []
+    for cond in conditions:
+        if cond.get("status") != "True":
+            continue
+        reason = cond.get("reason") or ""
+        if reason in constants.DRPOLICY_SUCCESS_REASONS:
+            logger.info(f"DRPolicy validation succeeded (reason={reason})")
+            config.switch_ctx(restore_index)
+            return True
+    logger.warning(
+        f"DRPolicy is not in succeeded or validated state; conditions={conditions}"
+    )
+    config.switch_ctx(restore_index)
+    raise UnexpectedBehaviour(
+        "DRPolicy is not in succeeded or validated state "
+        f"(expected reason in {sorted(constants.DRPOLICY_SUCCESS_REASONS)})"
+    )
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=5, backoff=5)
+def verify_backup_is_taken():
+    """
+    Function to verify backup is taken
+
+    """
+    backup_index = config.cur_index
+    config.switch_ctx(get_active_acm_index())
+    backup_obj = ocp.OCP(
+        kind=constants.ACM_BACKUP_SCHEDULE, namespace=constants.ACM_HUB_BACKUP_NAMESPACE
+    )
+    cmd_output = backup_obj.exec_oc_cmd(command="get BackupSchedule -oyaml")
+    status = cmd_output["items"][0]["status"]["phase"]
+    if status == "Enabled":
+        logger.info("Backup enabled successfully")
+    else:
+        logger.error(f"Backup failed with some errors: {cmd_output}")
+        raise UnexpectedBehaviour("Backup failed with some errors")
+    config.switch_ctx(backup_index)
+
+
+def get_nodes_from_active_zone(namespace):
+    """
+    Get the nodes list and index from active zone
+
+    Args:
+        namespace (str): Namespace of the app workload
+
+    Returns:
+        tuple: contains index and the node_objs list of the cluster
+            active_hub_index (int): Index of the active hub cluster
+            active_hub_cluster_node_objs (list): Node list of the active hub nodes
+            managed_cluster_index (int): Index of the active zone managed cluster
+            managed_cluster_node_objs (list): Node list of the active zone managed cluster
+            ceph_node_ips (list): Ceph node list which are running in active zone
+
+    """
+
+    # Get nodes from zone where active hub running
+    config.switch_ctx(get_active_acm_index())
+    active_hub_index = config.cur_index
+    zone = config.ENV_DATA.get("zone")
+    active_hub_cluster_node_objs = get_node_objs()
+    set_current_primary_cluster_context(namespace)
+    if config.ENV_DATA.get("zone") == zone:
+        managed_cluster_index = config.cur_index
+        managed_cluster_node_objs = get_node_objs()
+    else:
+        set_current_secondary_cluster_context(namespace)
+        managed_cluster_index = config.cur_index
+        managed_cluster_node_objs = get_node_objs()
+    external_cluster_node_roles = config.EXTERNAL_MODE.get(
+        "external_cluster_node_roles"
+    )
+    zone = "zone-b" if zone == "b" else "zone-c"
+    ceph_node_ips = []
+    for ceph_node in external_cluster_node_roles:
+        if (
+            external_cluster_node_roles[ceph_node].get("location").get("datacenter")
+            != zone
+        ):
+            continue
+        else:
+            ceph_node_ips.append(
+                external_cluster_node_roles[ceph_node].get("ip_address")
+            )
+
+    return (
+        active_hub_index,
+        active_hub_cluster_node_objs,
+        managed_cluster_index,
+        managed_cluster_node_objs,
+        ceph_node_ips,
+    )
+
+
+def create_klusterlet_config():
+    """
+    Create klusterletconfig after hub recovery to avoid eviction
+    of resources by adding "AppliedManifestWork" eviction grace period
+
+    """
+    old_ctx = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    klusterlet_config = templating.load_yaml(constants.KLUSTERLET_CONFIG_YAML)
+    klusterlet_config_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="klusterlet_config", delete=False
+    )
+    templating.dump_data_to_temp_yaml(klusterlet_config, klusterlet_config_yaml.name)
+    run_cmd(f"oc create -f {klusterlet_config_yaml.name}")
+    logger.info("Klusterletconfig is successfully created on the passive hub")
+    config.switch_ctx(old_ctx)
+
+
+def remove_parameter_klusterlet_config():
+    """
+    Edit the global KlusterletConfig on the new hub and
+    remove the parameter appliedManifestWorkEvictionGracePeriod and its value
+
+    """
+    old_ctx = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    klusterlet_config_obj = ocp.OCP(kind=constants.KLUSTERLET_CONFIG)
+    name = klusterlet_config_obj.get().get("items")[0].get("metadata").get("name")
+    remove_op = [{"op": "remove", "path": "/spec"}]
+    klusterlet_config_obj.patch(
+        resource_name=name, params=json.dumps(remove_op), format_type="json"
+    )
+    logger.info(
+        "appliedManifestWorkEvictionGracePeriod and it's value is successfully removed from KlusterletConfig"
+    )
+    config.switch_ctx(old_ctx)
+
+
+def add_label_to_appsub(workloads, label="test", value="test1"):
+    """
+    Function to add new label with any value to the AppSub on the hub.
+    This is needed as WA for sub app pods to show up after failover in ACM 2.11 post hub recovery (bz: 2295782)
+
+    Args:
+        workloads (list): List of workloads created
+        label (str): Name of label to be added
+        value (str): Value to be added
+
+    """
+    old_ctx = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    for wl in workloads:
+        if wl.workload_type == constants.SUBSCRIPTION:
+            sub_obj = ocp.OCP(
+                kind=constants.SUBSCRIPTION, namespace=wl.workload_namespace
+            )
+            name = sub_obj.get().get("items")[0].get("metadata").get("name")
+            run_cmd(
+                f"oc label appsub -n {wl.workload_namespace} {name} {label}={value}"
+            )
+    config.switch_ctx(old_ctx)
+
+
+def disable_dr_from_app(secondary_cluster_name):
+    """
+    Function to disable DR from app
+
+    Args:
+        secondary_cluster_name(str): cluster where application is running
+
+    """
+    old_ctx = config.cur_index
+    config.switch_acm_ctx()
+
+    # get all placement and replace value with surviving cluster
+    placement_obj = ocp.OCP(kind=constants.PLACEMENT)
+    placements = placement_obj.get(all_namespaces=True).get("items")
+    for placement in placements:
+        name = placement["metadata"]["name"]
+        if (name != "all-openshift-clusters") and (name != "global"):
+            namespace = placement["metadata"]["namespace"]
+            params = (
+                f"""[{{"op": "replace", "path": "{constants.CLUSTERSELECTORPATH}","""
+                f""""value": "{secondary_cluster_name}"}}]"""
+            )
+            cmd = f"oc patch placement {name} -n {namespace}  -p '{params}' --type=json"
+            run_cmd(cmd)
+
+    # Delete all drpc
+    run_cmd("oc delete drpc --all -A")
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=run_cmd_verify_cli_output,
+        cmd="oc get drpc -A",
+        expected_output_lst="No resources found",
+    )
+    if not sample.wait_for_func_status(result=False):
+        raise Exception("All drpcs are not deleted")
+
+    time.sleep(10)
+
+    # Remove annotation from placements
+    for placement in placements:
+        name = placement["metadata"]["name"]
+        if (name != "all-openshift-clusters") and (name != "global"):
+            namespace = placement["metadata"]["namespace"]
+            params = f"""[{{"op": "remove", "path": "{constants.EXPERIMENTAL_ANNOTATION_PATH}"}}]"""
+            cmd = f"oc patch {constants.PLACEMENT} {name} -n {namespace} -p '{params}' --type=json"
+            run_cmd(cmd)
+
+    config.switch_ctx(old_ctx)
+
+
+def apply_drpolicy_to_workload(workload, drcluster_name):
+    """
+    Function for applying drpolicy to indiviusual workload
+
+    Args:
+        workload(List): List of workload objects
+        drcluster_name(str): Name of the DRcluster on which workloads belongs
+
+    """
+    for wl in workload:
+        drpc_yaml_data = templating.load_yaml(wl.drcp_data_yaml.name)
+        logger.info(drpc_yaml_data)
+        if wl.workload_type == constants.SUBSCRIPTION:
+            drpc_yaml_data["metadata"]["namespace"] = wl.workload_namespace
+        drpc_yaml_data["spec"]["preferredCluster"] = drcluster_name
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, wl.drcp_data_yaml.name)
+        config.switch_acm_ctx()
+        wl.add_annotation_to_placement()
+        run_cmd(f"oc create -f {wl.drcp_data_yaml.name}")
+
+
+def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
+    """
+    Function to do core replace cluster task
+
+    Args:
+        workload(List): List of workload objects
+        primary_cluster_name (str): Name of the primary DRcluster
+        secondary_cluster_name(str): Name of the secondary DRcluster
+
+    """
+
+    # Delete dr cluster
+    config.switch_acm_ctx()
+    run_cmd(cmd=f"oc delete drcluster {primary_cluster_name} --wait=false")
+
+    # Disable DR on hub for each app
+    disable_dr_from_app(secondary_cluster_name)
+    logger.info("DR configuration is successfully disabled on each app")
+
+    # Remove DR configuration from hub and surviving cluster
+    logger.info("Running Remove DR configuration script..")
+    run_cmd(cmd=f"chmod +x {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
+    run_cmd(cmd=f"sh {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
+
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=run_cmd_verify_cli_output,
+        cmd="oc get namespace openshift-operators",
+        expected_output_lst={"openshift-operators", "Active"},
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Namespace openshift-operators is not created")
+
+    # add label to openshift-opeartors namespace
+    ocp_obj = ocp.OCP(kind="Namespace")
+    label = "openshift.io/cluster-monitoring='true'"
+    ocp_obj.add_label(resource_name=constants.OPENSHIFT_OPERATORS, label=label)
+
+    # Detach old primary
+    run_cmd(cmd=f"oc delete managedcluster {primary_cluster_name}")
+
+    # Verify old primary cluster is dettached
+    expected_output = primary_cluster_name
+    out = run_cmd(cmd="oc get managedcluster")
+    if expected_output in out:
+        raise Exception("Old primary cluster is not dettached.")
+    else:
+        logger.info("Old primary cluster is dettached")
+
+    # Import Recovery cluster
+    from ocs_ci.ocs.acm.acm import (
+        import_recovery_clusters_with_acm,
+        validate_cluster_import,
+    )
+
+    cluster_name_recoevry = import_recovery_clusters_with_acm()
+
+    # Verify recovery cluster is imported
+    validate_cluster_import(cluster_name_recoevry)
+
+    # Set recovery cluster as primary context wise
+    set_recovery_as_primary()
+
+    config.switch_acm_ctx()
+
+    # Install MCO on active hub again
+    from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
+
+    dr_conf = dict()
+    dep_mco = MultiClusterDROperatorsDeploy(dr_conf)
+    dep_mco.deploy()
+    # Enable MCO console plugin
+    enable_mco_console_plugin()
+    config.switch_acm_ctx()
+
+    # Configure mirror peer
+    dep_mco.configure_mirror_peer()
+
+    # Create DR policy
+    dep_mco.deploy_dr_policy()
+
+    # Validate drpolicy
+    verify_drpolicy_cli(switch_ctx=get_active_acm_index())
+
+    # Apply dr policy on all app on secondary cluster
+    apply_drpolicy_to_workload(workload, secondary_cluster_name)
+
+    # Configure DRClusters for fencing automation
+    configure_drcluster_for_fencing()
+
+
+def do_discovered_apps_cleanup(
+    drpc_name,
+    old_primary,
+    workload_namespace,
+    workload_dir,
+    vrg_name,
+    skip_resource_deletion_verification=False,
+    ignore_resource_not_found=False,
+):
+    """
+    Function to clean up Resources
+
+    Args:
+        drpc_name (str): Name of DRPC
+        old_primary (str): Name of old primary where cleanup will happen
+        workload_namespace (str): Workload namespace
+        workload_dir (str): Dir location of workload
+        vrg_name (str): Name of VRG
+        skip_resource_deletion_verification (bool): False by default and runs always, else resource verification is
+                                                    handled separately in the test when Shared protection type is used
+                                                    for DR protection via ACM UI
+
+        ignore_resource_not_found (bool): False by default, resource not found is ignored when the workload which was
+                                        DR protected via ACM UI is deleted, refer DFBUGS-3706
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESPACE, resource_name=drpc_name)
+    drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
+    time.sleep(90)
+    assert drpc_obj.get_progression_status(
+        status_to_check=constants.STATUS_WAITFORUSERTOCLEANUP
+    )
+    logger.info(
+        f'Progression status after 90 seconds is {drpc_obj.get()["status"]["progression"]}'
+    )
+    config.switch_to_cluster_by_name(old_primary)
+    workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
+    if not ignore_resource_not_found:
+
+        # --ignore-not-found is needed to avoid https://issues.redhat.com/browse/DFBUGS-3706
+        logger.info("Using '--ignore-not-found' during workload deletion")
+        run_cmd(
+            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --ignore-not-found --force "
+        )
+    else:
+        run_cmd(
+            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
+        )
+    if not skip_resource_deletion_verification:
+        wait_for_all_resources_deletion(
+            namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
+        )
+        config.switch_acm_ctx()
+        drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+    config.switch_ctx(restore_index)
+
+
+def do_discovered_apps_cleanup_multi_ns(
+    old_primary, workload_instance, vrg_state="secondary"
+):
+    """
+    Function to clean up Resources
+
+    Args:
+        old_primary (str): Name of old primary where cleanup will happen
+        workload_instance (list): Workload instance
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+
+    drpc_obj = DRPC(
+        namespace=constants.DR_OPS_NAMESPACE,
+        resource_name=workload_instance[0].discovered_apps_placement_name,
+    )
+    drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
+    config.switch_to_cluster_by_name(old_primary)
+    vrg_name = workload_instance[0].discovered_apps_placement_name
+    for workload_instance_index in workload_instance:
+        workload_dir = workload_instance_index.workload_dir
+        workload_namespace = workload_instance_index.workload_namespace
+        workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
+        run_cmd(
+            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
+        )
+    for workload_instance_index in workload_instance:
+        workload_namespace = workload_instance_index.workload_namespace
+        wait_for_all_resources_deletion(
+            namespace=workload_namespace,
+            discovered_apps=True,
+            vrg_name=vrg_name,
+            skip_vrg_check=True,
+        )
+
+    wait_for_vrg_state(
+        vrg_state=vrg_state,
+        vrg_namespace=constants.DR_OPS_NAMESPACE,
+        resource_name=vrg_name,
+    )
+    config.switch_acm_ctx()
+    drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+    config.switch_ctx(restore_index)
+
+
+def generate_kubeobject_capture_interval():
+    """
+    Generate KubeObject Capture Interval
+
+    Returns:
+        int: capture interval value to be used
+
+    """
+    capture_interval = int(get_all_drpolicy()[0]["spec"]["schedulingInterval"][:-1])
+
+    if capture_interval <= 5 and capture_interval != 1:
+        return capture_interval - 1
+    elif capture_interval > 6:
+        return 5
+    else:
+        return capture_interval
+
+
+def disable_dr_rdr(discovered_apps=False):
+    """
+    Disable DR for the applications
+    """
+    config.switch_acm_ctx()
+
+    # Delete the placement under openshift-dr-ops namespace
+    if discovered_apps:
+        run_cmd(f"oc delete drpc --all -n {constants.DR_OPS_NAMESPACE}")
+        run_cmd(f"oc delete placement --all -n {constants.DR_OPS_NAMESPACE}")
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=verify_drpc_placement_deletion,
+        cmd=f"oc get placement -n '{constants.DR_OPS_NAMESPACE}'",
+        expected_output_lst="No resources found",
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("All placements are not deleted")
+
+    # Edit drpc to add annotation
+    drpc_obj = ocp.OCP(kind=constants.DRPC)
+    drpcs = drpc_obj.get(all_namespaces=True).get("items")
+    for drpc in drpcs:
+        namespace = drpc["metadata"]["namespace"]
+        name = drpc["metadata"]["name"]
+        logger.info(f"Adding annotation to drpc - {name}")
+        annotation_data = (
+            '{"metadata": {"annotations": {'
+            '"drplacementcontrol.ramendr.openshift.io/do-not-delete-pvc": "true"}}}'
+        )
+        cmd = f"oc patch {constants.DRPC} {name} -n {namespace} --type=merge -p '{annotation_data}'"
+        run_cmd(cmd)
+
+    # Delete all drpc
+    logger.info("Deleting the drpc...")
+    run_cmd("oc delete drpc --all -A")
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=verify_drpc_placement_deletion,
+        cmd="oc get drpc -A",
+        expected_output_lst="No resources found",
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("All drpcs are not deleted")
+
+
+@retry(CommandFailed, tries=10, delay=30, backoff=1)
+def verify_drpc_placement_deletion(cmd, expected_output_lst):
+    """
+    Function to validate drpc deletion
+
+    Args:
+        cmd(str): cli command
+        expected_output_lst(set): A set of strings that need to be included in the command output.
+
+    Returns:
+        bool: True, if all strings are included in the command output, False otherwise.
+
+    """
+    drpc_out = exec_cmd(cmd)
+    for expected_output in expected_output_lst:
+        if expected_output not in drpc_out.stderr.decode():
+            return False
+    return True
+
+
+def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
+    """
+    Verifies that the lastKubeObjectProtectionTime for a given DRPC object is within the expected range.
+
+    Args:
+        drpc_obj (obj): DRPC object
+        kubeobject_sync_interval (int): The KubeObject sync interval in minutes
+
+    Returns:
+        str: Current lastKubeObjectProtectionTime
+
+    Raises:
+        AssertionError: If the lastKubeObjectProtectionTime is outside the expected range
+            (greater than or equal to two times the scheduling interval)
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    last_kubeobject_protection_time = drpc_obj.get_last_kubeobject_protection_time()
+    if not last_kubeobject_protection_time:
+        assert last_kubeobject_protection_time, (
+            "There is no lastKubeObjectProtectionTime. "
+            "Verify that certificates are included correctly in the Ramen Hub configuration map."
+        )
+    # Verify lastKubeObjectProtectionTime
+    time_format = "%Y-%m-%dT%H:%M:%SZ"
+    last_kubeobject_protection_time_formatted = datetime.strptime(
+        last_kubeobject_protection_time, time_format
+    )
+    current_time = datetime.strptime(
+        datetime.utcnow().strftime(time_format), time_format
+    )
+    time_since_last_sync = (
+        current_time - last_kubeobject_protection_time_formatted
+    ).total_seconds() / 60
+    logger.info(
+        f"Time in minutes since the last Kube Object sync {time_since_last_sync}"
+    )
+    assert (
+        time_since_last_sync < 2 * kubeobject_sync_interval
+    ), "The syncing of Kube Resources is exceeding three times the Kube object sync interval"
+    logger.info("Verified lastKubeObjectProtectionTime value within expected range")
+    config.switch_ctx(restore_index)
+    return last_kubeobject_protection_time
+
+
+def configure_rdr_hub_recovery():
+    """
+    RDR helper function to create backup schedule on the active hub cluster needed for hub recovery
+    using backup and restore.
+
+    This function ensures all pre-reqs are verified before hub recovery is performed.
+
+    """
+    # Create backup-schedule on active hub
+    config.switch_acm_ctx()
+    logger.info("Create backup schedule on the active hub cluster")
+    create_backup_schedule()
+    wait_time = 420
+    logger.info(f"Wait {wait_time} seconds until backup is taken ")
+    time.sleep(wait_time)
+    logger.info(
+        "Check pre-reqs on both the hub clusters before performing hub recovery"
+    )
+    acm_indexes = get_all_acm_indexes()
+    for _ in acm_indexes:
+        config.switch_ctx(_)
+        verify_backup_is_taken()
+        # To avoid circular import
+        from ocs_ci.deployment.deployment import (
+            Deployment,
+            get_multicluster_dr_deployment,
+        )
+
+        dr_conf = Deployment().get_rdr_conf()
+        rdrclass_obj = get_multicluster_dr_deployment()(dr_conf)
+        rdrclass_obj.validate_dpa()
+        assert rdrclass_obj.validate_policy_compliance_status(
+            resource_name="backup-restore-enabled",
+            resource_namespace="open-cluster-management-backup",
+            compliance_state="Compliant",
+        )
+    config.switch_ctx(get_passive_acm_index())
+    logger.info(
+        "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelay alert on the Hub cluster"
+    )
+    exec_cmd(
+        "oc label namespace openshift-operators openshift.io/cluster-monitoring='true'"
+    )
+    logger.info("All pre-reqs verified for performing hub recovery")
+    return True
+
+
+def get_cluster_set_name(switch_ctx=None):
+    """
+    Get Cluster set name from managedcluster
+
+    Returns:
+        list: List of uniq cluster set name
+    """
+    cluster_set = []
+    current_managed_clusters_list = []
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+    for cluster_name in config.clusters:
+        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+            current_managed_clusters_list.append(
+                cluster_name.ENV_DATA.get("cluster_name")
+            )
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        current_managed_clusters_list = [
+            (
+                f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+                if is_hosted_cluster(cluster_name=item)
+                else item
+            )
+            for item in dr_cluster_relations[0]
+        ]
+
+    # The list current_managed_clusters_list is required for RDR, not mandatory for MDR
+    current_managed_clusters_list = current_managed_clusters_list or [
+        mng_cluster["metadata"]["name"] for mng_cluster in managed_clusters
+    ]
+
+    # ignore local-cluster here
+    for i in managed_clusters:
+        if (
+            i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER
+            and i["metadata"]["name"] in current_managed_clusters_list
+        ):
+            cluster_set.append(i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL])
+    if all(x == cluster_set[0] for x in cluster_set):
+        logger.info(f"Found the unique clusterset {cluster_set[0]}")
+    else:
+        raise UnexpectedDeploymentConfiguration(
+            "There are more then one clusterset added to the managed clusters"
+        )
+
+    config.switch_ctx(restore_index)
+    return cluster_set
+
+
+def wait_for_vrg_state(vrg_state, vrg_namespace, resource_name, timeout=900):
+    """
+    Wait for VRG state
+
+    Args:
+        vrg_state (str): VRG expected state
+        vrg_namespace (str): VRG resource namespace
+        resource_name (str): VRG resource name
+        timeout (int): Timeout for wait
+
+    """
+    wait_for_resource_state(
+        kind=constants.VOLUME_REPLICATION_GROUP,
+        state=vrg_state,
+        namespace=vrg_namespace,
+        resource_name=resource_name,
+        timeout=timeout,
+    )
+
+
+def validate_storage_cluster_peer_state():
+    """
+    Validate Storage cluster peer state
+
+    Raises:
+        TimeoutExpiredError: incase storage cluster peer state is not reached 'Peered' state.
+
+    """
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        if cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT:
+            with config.RunWithConfigContext(
+                cluster.MULTICLUSTER["multicluster_index"]
+            ):
+                index = config.get_provider_index()
+        else:
+            index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        logger.info("Validating Storage Cluster Peer status")
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=5,
+            func=check_storage_cluster_peer_state,
+        )
+        if not sample.wait_for_func_status(result=True):
+            error_msg = (
+                "Storage cluster peer status does not have expected values within the time "
+                f"limit on cluster {cluster.ENV_DATA['cluster_name']}"
+            )
+            logger.error(error_msg)
+            raise TimeoutExpiredError(error_msg)
+    config.switch_ctx(restore_index)
+
+
+def check_storage_cluster_peer_state():
+    """
+    Checks Storage cluster peer state
+
+    Returns:
+        bool: True if storage cluster peer state is 'Peered'. otherwise False
+
+    """
+    storage_cluster_peer = ocp.OCP(
+        kind=constants.STORAGECLUSTERPEER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    storage_cluster_peer_data = storage_cluster_peer.get()
+    storage_cluster_peer_status = storage_cluster_peer_data["items"][0]["status"].get(
+        "state"
+    )
+    if storage_cluster_peer_status == constants.STATUS_PEERED:
+        return True
+    else:
+        logger.warning(f"storage cluster peer state is {storage_cluster_peer_status}")
+        return False
+
+
+def create_service_exporter(annotate=True):
+    """
+    Create Service exporter
+
+    Args:
+        annotate (bool): If True - annotate the service exporter
+
+    """
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+
+        if not (
+            cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
+            and get_provider_service_type() == "NodePort"
+            or is_hostnetwork_enabled()
+        ):
+            logger.info("Checking if multiClusterService exists")
+            create_multiclusterservice_dr()
+        else:
+            logger.info("Skipping multiClusterService creation for multiclient cluster")
+        logger.info("Creating Service exporter")
+        run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+
+        if annotate:
+            cluster_type = cluster.ENV_DATA.get("cluster_type", "").lower()
+            if (
+                config.ENV_DATA.get("odf_provider_mode_deployment")
+                or cluster_type == constants.HCI_PROVIDER
+                or get_provider_service_type() == "NodePort"
+            ):
+                cluster_address = get_node_internal_ip(
+                    get_node_objs(get_worker_nodes()[0])[0]
+                )
+                cluster_address_port = "31659"
+                cluster_service_export_provider_server = ""
+
+            else:
+                cluster_address = config.ENV_DATA["cluster_name"]
+                cluster_address_port = "50051"
+                cluster_service_export_provider_server = (
+                    ".ocs-provider-server.openshift-storage.svc.clusterset.local"
+                )
+
+            run_cmd(
+                "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
+                f" ocs.openshift.io/api-server-exported-address={cluster_address}"
+                f"{cluster_service_export_provider_server}:{cluster_address_port}"
+            )
+    config.switch_ctx(restore_index)
+
+
+def verify_volsync():
+    """
+    Verify volsync pod is created in volsync-system namespace
+    """
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        logger.info(
+            f"Verifying volsync pod in namespace {constants.VOLSYNC_SYSTEM_NAMESPACE}"
+        )
+        pod = ocp.OCP(kind=constants.POD, namespace=constants.VOLSYNC_SYSTEM_NAMESPACE)
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=constants.VOLSYNC_LABEL,
+            resource_count=1,
+            timeout=600,
+        )
+    config.switch_ctx(restore_index)
+
+
+def verify_cluster_data_protected_status(
+    workload_type, namespace, workload_placement_name=None
+):
+    """
+    Verify that the cluster dataProtected is True
+
+    Args:
+        workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        namespace (str): the namespace of the drpc resources
+        workload_placement_name (str): Placement name
+    """
+
+    if workload_type == constants.APPLICATION_SET:
+        namespace = constants.GITOPS_CLUSTER_NAMESPACE
+        drpc_obj = DRPC(
+            namespace=namespace,
+            resource_name=f"{workload_placement_name}-drpc",
+        )
+    else:
+        drpc_obj = DRPC(namespace=namespace)
+    drpc_obj.wait_for_clusterdataprotected_status()
+
+
+def mdr_post_failover_check(namespace, timeout=1200):
+    """
+    Post the failover verify that Pod is been deleted
+    from primary cluster and PVCs are in terminating state
+
+    Args:
+        namespace (str): Namespace of the application
+        timeout (int): time in seconds to wait for resource deletion
+
+    """
+    logger.info("Waiting for all pods to be deleted")
+    all_pods = get_all_pods(namespace=namespace)
+    for pod_obj in all_pods:
+        pod_obj.ocp.wait_for_delete(
+            resource_name=pod_obj.name, timeout=timeout, sleep=5
+        )
+
+    logger.info("Waiting for all PVCs to be deleted")
+    all_pvcs = get_all_pvc_objs(namespace=namespace)
+    for pvc_obj in all_pvcs:
+        helpers.wait_for_resource_state(
+            resource=pvc_obj, state=constants.STATUS_TERMINATING, timeout=timeout
+        )
+
+
+def get_vgs_name(vgs_namespace):
+    """
+    Fetches the name of Volume Group Snapshot from Replication Group Source
+
+    Args:
+        namespace (str): the namespace of the Volume Group Snapshot
+
+    """
+    rgs_obj = ocp.OCP(kind=constants.REPLICATION_GROUP_SOURCE, namespace=vgs_namespace)
+    vgs_dict = rgs_obj.get().get("items")[0]
+    vgs_name = vgs_dict["metadata"]["name"]
+    return vgs_name
+
+
+def validate_volumegroupsnapshot(vgs_namespace):
+    """
+    Validates Volume Group Snapshot resource creation from odf external snapshotter
+
+    Args:
+        vgs_namespace (str): the namespace of the Volume Group snapshot resources
+
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+    odf_external_snapshotter_leader = get_odf_external_snapshotter_leader(namespace)
+    vgs_name = get_vgs_name(vgs_namespace)
+    expected_output_lst = (
+        f"{vgs_name} was successfully created by the CSI driver",
+        f"{vgs_name} is ready to use",
+    )
+    try:
+        for expected_val in expected_output_lst:
+            wait_for_matching_pattern_in_pod_logs(
+                pod_name=odf_external_snapshotter_leader.name,
+                pattern=expected_val,
+                namespace=namespace,
+                timeout=300,
+                sleep=5,
+            )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
+        )
+
+
+def is_cg_cephfs_enabled():
+    """
+    Validate if consistency group is enabled
+
+    Returns: True, if volume group snapshot class exists. False otherwise
+    """
+
+    resource_name = constants.DEFAULT_VOLUMEGROUPSNAPSHOTCLASS
+    vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
+
+    return vgsc.is_exist(resource_name=resource_name)
+
+
+def create_ingress_cert_dr(
+    cert_name="user-ca-bundle",
+    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+    patch_proxy=True,
+):
+
+    non_acm_indexes = get_non_acm_cluster_indexes()
+    ingress_data = templating.load_yaml(constants.OC_INGRESS_CERT_YAML)
+    LiteralString = enable_literal_block_style()
+    ssl_data = []
+
+    # Save original context to restore later
+    original_index = config.cur_index
+
+    for non_acm_index in non_acm_indexes:
+        config.switch_ctx(non_acm_index)
+        default_ingress_cert = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=constants.DEFAULT_INGRESS_CRT_OPENSHIFT,
+            namespace=constants.OPENSHIFT_CONFIG_MANAGED_NAMESPACE,
+        )
+
+        ssl_data.append(
+            default_ingress_cert.get()["data"]["ca-bundle.crt"].strip() + "\n"
+        )
+        ingress_data["data"]["ca-bundle.crt"] = LiteralString("".join(ssl_data))
+        ingress_data["metadata"]["name"] = cert_name
+        ingress_data["metadata"]["namespace"] = namespace
+        ingress_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="ingress_cert_", delete=False
+        )
+        templating.dump_data_to_temp_yaml(ingress_data, ingress_file.name)
+
+    # Restore original context
+    config.switch_ctx(original_index)
+
+    for cluster in config.clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+        is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+
+        if not is_hosted:
+            with config.RunWithConfigContext(index):
+                # Skip proxy patches and MachineConfigPool waits for hosted (HCP) clusters
+                is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+
+                logger.info(f"[{cluster_name}] Creating Ingress cert")
+                run_cmd(cmd=f"oc apply -f {ingress_file.name}")
+
+                if patch_proxy and not is_hosted:
+                    logger.info(f"[{cluster_name}] Proxy patch")
+                    cmd = (
+                        f"oc patch proxy/cluster --type=merge "
+                        f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{cert_name}"}}}}}}\''
+                    )
+                    run_cmd(cmd=cmd)
+
+    for cluster in config.clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+        is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+
+        if not is_hosted:
+            with config.RunWithConfigContext(index):
+                logger.info(
+                    f"[{cluster_name}] Waiting for MachineConfigPool to be updated"
+                )
+                wait_for_machineconfigpool_status(node_type="all")
+
+
+def create_multiclusterservice_dr():
+    """
+    This function is used to create multiClusterService used for RDR
+
+    Returns:
+        bool: true when multiClusterService already exists
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    try:
+        if (
+            storage_cluster.data.get("spec")
+            .get("network")
+            .get("multiClusterService")
+            .get("enabled")
+        ):
+            logger.info("Found multiClusterService skipping creation")
+            return
+    except AttributeError:
+        logger.info("multiClusterService not found creating now")
+    ptch = (
+        f'\'{{"spec": {{"network": {{"multiClusterService": '
+        f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
+        f'"enabled": true}}}}}}}}\''
+    )
+    ptch_cmd = (
+        f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+        f"-n openshift-storage  --type merge --patch {ptch}"
+    )
+    run_cmd(ptch_cmd)
+    storage_cluster.reload_data()
+    assert (
+        storage_cluster.data.get("spec")
+        .get("network")
+        .get("multiClusterService")
+        .get("enabled")
+    ), "Failed to update StorageCluster globalnet"
+    validate_serviceexport()
+
+
+def setup_fdf_catsrc_for_hub():
+    """
+    This function creates fdf catalogsource on hub
+
+    """
+    logger.info("Creating FDF specific resource")
+
+    fdf = FusionDataFoundationDeployment()
+    fdf.create_image_tag_mirror_set()
+    fdf.create_image_digest_mirror_set()
+    logger.info("Creating FDF Catsrc from Primary")
+    isf_data_foundation_catsrc = templating.load_yaml(constants.FDF_CATSRC_CR)
+    isf_data_foundation_catsrc["spec"]["image"] = (
+        constants.FDF_CATSRC_IMAGE_PATH + ":" + config.DEPLOYMENT.get("fdf_image_tag")
+    )
+    isf_data_foundation_catsrc_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="isf_df_catsrc", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        isf_data_foundation_catsrc, isf_data_foundation_catsrc_yaml.name
+    )
+
+    wait_for_machineconfigpool_status("all", timeout=1800)
+    run_cmd(f"oc apply -f {isf_data_foundation_catsrc_yaml.name}")
+    fdf_catalog_source = CatalogSource(
+        resource_name=constants.FDF_CATALOG_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+
+    logger.info("Waiting for CatalogSource to be READY")
+    fdf_catalog_source.wait_for_state("READY")
+
+
+def validate_protection_label(kind, namespace, protection_name=None):
+    """
+    Gets the yaml file for specified resource kind in the given namespace
+
+    Args:
+        kind (str): Kind of resource (e.g., constants.VM, constants.PVC, etc.)
+        namespace (str): the namespace of the specified resource
+        protection_name (str) : name of protection in UI
+
+    Raises:
+        AssertionError: If the protection label is not found on any of the resources of the
+        specified kind in the given namespace
+
+
+    """
+    resource_obj = ocp.OCP(kind=kind, namespace=namespace)
+    resource_items = resource_obj.get().get("items", [])
+
+    label_to_validate = constants.RDR_VM_PROTECTION_LABEL
+    label_validation_failed = False
+    for item in resource_items:
+        protection_name_in_yaml = (
+            item.get("metadata", {}).get("labels", {}).get(label_to_validate, " ")
+        )
+
+        if protection_name_in_yaml != protection_name:
+            logger.info(f"Label is not added to {kind} {item}")
+            label_validation_failed = True
+
+    assert not label_validation_failed, f"Label is not added to one or more {kind}"
+
+    logger.info(
+        f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
+    )
+
+
+def generate_rdr_mirror_images():
+    """
+    Extract and return list of container images from RDR workload repository.
+
+    Returns:
+        list: List of container image strings for mirroring in disconnected environments
+    """
+    # Check whether deployment is disconnected
+    if config.DEPLOYMENT.get("disconnected"):
+
+        workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
+        logger.info(f"Repo used: {workload_repo_url}")
+        workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
+        clone_repo(
+            url=workload_repo_url,
+            location="/tmp/ocs-workload-repo",
+            branch=workload_repo_branch,
+        )
+
+        # List all Kubernetes container images under rdr/ folder
+        rdr_path = "/tmp/ocs-workload-repo/rdr"
+        if os.path.exists(rdr_path):
+            logger.info(f"Extracting Kubernetes container images from {rdr_path}:")
+            images_found = set()
+
+            for root, dirs, files in os.walk(rdr_path):
+                for file in files:
+                    # Process YAML files
+                    if file.lower().endswith((".yaml", ".yml")):
+                        yaml_file_path = os.path.join(root, file)
+                        relative_path = os.path.relpath(yaml_file_path, rdr_path)
+
+                        try:
+                            with open(yaml_file_path, "r") as f:
+                                yaml_content = yaml.safe_load_all(f)
+
+                                for doc in yaml_content:
+                                    if doc:
+                                        # Extract images from the YAML document
+                                        images = extract_images_from_yaml(doc)
+                                        for image in images:
+                                            if image not in images_found:
+                                                images_found.add(image)
+                                                logger.info(
+                                                    f"  - {image} (from {relative_path})"
+                                                )
+                        except Exception as e:
+                            logger.warning(f"Failed to parse {relative_path}: {e}")
+
+            # Convert set to sorted list for consistent ordering
+            image_list = sorted(list(images_found))
+
+            if image_list:
+                logger.info(f"Total unique container images found: {len(image_list)}")
+                logger.info("Images ready for mirroring in disconnected environment")
+            else:
+                logger.warning("No container images found in YAML files")
+            logger.info(image_list)
+            return image_list
+        else:
+            logger.warning(f"RDR path does not exist: {rdr_path}")
+            return []
+
+    return []
+
+
+def apply_itms_to_managed_clusters(itms_file_path):
+    """
+    Apply itms configuration to all managed clusters and wait for MCP to complete.
+
+    Args:
+        itms_file_path (str): Path to the itms-oc-mirror.yaml file
+    """
+    logger.info("Applying itms to managed clusters")
+
+    # Get all managed cluster configs
+    managed_clusters = get_non_acm_cluster_config()
+
+    if not managed_clusters:
+        logger.warning("No managed clusters found")
+        return
+
+    # Store original context to restore later
+    original_ctx = config.cur_index
+
+    try:
+        for cluster_config in managed_clusters:
+            cluster_name = cluster_config.ENV_DATA.get("cluster_name", "unknown")
+            logger.info(f"Applying itms to managed cluster: {cluster_name}")
+
+            # Switch to the managed cluster context
+            cluster_index = cluster_config.MULTICLUSTER.get("multicluster_index")
+            if cluster_index is not None:
+                config.switch_ctx(cluster_index)
+
+                try:
+                    # Apply the itms file
+                    run_cmd(f"oc apply -f {itms_file_path}")
+                    logger.info(f"Successfully applied itms to {cluster_name}")
+
+                    # Wait for MachineConfigPool to complete
+                    logger.info(
+                        f"Waiting for MachineConfigPool to complete on {cluster_name}"
+                    )
+                    wait_for_machineconfigpool_status("all", timeout=1800)
+                    logger.info(f"MachineConfigPool update completed on {cluster_name}")
+
+                except CommandFailed as e:
+                    logger.error(f"Failed to apply itms to {cluster_name}: {e}")
+                    raise
+                except Exception as e:
+                    logger.error(
+                        f"Error during itms application to {cluster_name}: {e}"
+                    )
+                    raise
+            else:
+                logger.warning(f"Could not find cluster index for {cluster_name}")
+
+    finally:
+        # Restore original context
+        config.switch_ctx(original_ctx)
+        logger.info("Restored original cluster context")
+
+
+def extract_images_from_yaml(obj, images=None):
+    """
+    Recursively extract container image references from a YAML object.
+    Extracts values from 'image', 'url', and 'value' keys that contain image references.
+
+    Args:
+        obj: YAML object (dict, list, or primitive)
+        images: Set to collect images (created if None)
+
+    Returns:
+        set: Set of container image strings
+    """
+    if images is None:
+        images = set()
+
+    if isinstance(obj, dict):
+        # Check for 'image', 'url', and 'value' keys that contain image references
+        for key in ["image", "url", "value"]:
+            if key in obj and isinstance(obj[key], str):
+                # Only add if it looks like a container image reference
+                # (contains registry path or common image patterns)
+                value = obj[key].strip()
+                if value and ("/" in value or ":" in value):
+                    # Skip obvious non-image schemes (URLs, git refs, file paths)
+                    if any(
+                        value.startswith(scheme)
+                        for scheme in ["http://", "https://", "git://", "git@"]
+                    ):
+                        continue
+                    if "://" in value and not value.startswith("docker://"):
+                        continue
+                    # Require either a registry-like domain (contains '.' or ':' before first '/')
+                    # or typical image pattern (path segments with optional :tag or @sha256:)
+                    first_slash = value.find("/")
+                    if first_slash > 0:
+                        # Check if there's a domain-like prefix before the first slash
+                        prefix = value[:first_slash]
+                        if "." in prefix or ":" in prefix:
+                            images.add(value)
+                    elif ":" in value and not value.startswith("/"):
+                        # Simple image:tag format without registry
+                        images.add(value)
+
+        # Recursively process all values
+        for value in obj.values():
+            extract_images_from_yaml(value, images)
+
+    elif isinstance(obj, list):
+        # Recursively process all items
+        for item in obj:
+            extract_images_from_yaml(item, images)
+
+    return images

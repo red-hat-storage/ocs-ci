@@ -1,0 +1,12 @@
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'upi'
+  flexy_deployment: true
+  flexy_template: 'upi-on-aws/versioned-installer-disconnected'
+  skip_ntp_configuration: true
+
+# Override flexy params here
+FLEXY:
+
+DEPLOYMENT:
+  disconnected: true

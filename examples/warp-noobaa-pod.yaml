@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: warp-noobaa
+  namespace: openshift-storage
+spec:
+  restartPolicy: Always
+  containers:
+  - name: warp
+    image: quay.io/ocsci/warp:latest
+    command: ["./warp"]
+    args:
+      - mixed
+      - --host=s3.openshift-storage.svc:443
+      - --tls
+      - --insecure
+      - --access-key
+      - $(AWS_ACCESS_KEY_ID)
+      - --secret-key
+      - $(AWS_SECRET_ACCESS_KEY)
+      - --bucket=warp-test
+      - --concurrent=1
+      - --objects=1000
+      - --obj.size=1MiB
+    env:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: noobaa-admin
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: noobaa-admin
+          key: AWS_SECRET_ACCESS_KEY

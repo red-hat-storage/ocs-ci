@@ -1,0 +1,11 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: ocs-operator
+  namespace: openshift-storage
+spec:
+  channel: CHANNEL_PLACEHOLDER
+  name: ocs-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

@@ -1,0 +1,13 @@
+---
+# This configuration file is for defining update strategy for CEPHFS CSI Plugin
+# Part of Epic RHSTOR-5280- Reduce the time required to upgrade ODF
+# This is supported from 4.18 and above version .
+# Config Specifically for test scenario OCS-6719 and OCS-6720
+
+REPORTING:
+  polarion:
+    upgrade_id: 'OCS-6274'
+UPGRADE:
+  # 20% is recommended default configuration
+  csi_cephfs_plugin_update_strategy_max_unavailable: 20%
+  csi_rbd_plugin_update_strategy_max_unavailable: 20%

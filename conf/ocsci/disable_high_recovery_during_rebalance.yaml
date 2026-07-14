@@ -1,0 +1,4 @@
+# Use this file to disable the ceph high recovery performance during the rebalance
+---
+ENV_DATA:
+  enable_high_recovery_during_rebalance: false

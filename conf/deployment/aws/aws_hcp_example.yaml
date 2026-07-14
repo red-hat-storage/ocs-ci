@@ -1,0 +1,63 @@
+# Example configuration for deploying AWS HCP (Hosted Control Plane) clusters
+# Control plane runs on management cluster, worker nodes run as EC2 instances in AWS
+
+---
+ENV_DATA:
+  platform: "hci_baremetal"  # Or use existing platform identifier
+  deploy_acm_hub_cluster: false  # Set to true if ACM is not already installed
+
+  clusters:
+    # Example AWS HCP cluster configuration
+    aws-hcp-client-1:
+      cluster_type: "hci_client"  # Reuse existing cluster type for hosted clusters
+      hosted_cluster_platform: "aws"  # REQUIRED: Identifies this as AWS HCP deployment
+
+      # OCP and ODF versions
+      ocp_version: "4.18"  # Can be X.Y or X.Y.Z format
+      hosted_odf_version: "4.18.5-8"  # ODF catalog source image tag
+      hosted_odf_registry: "quay.io/rhceph-dev/ocs-registry"
+      setup_storage_client: true  # Set to true to connect to ODF provider
+
+      # Control plane and infrastructure configuration
+      nodepool_replicas: 3  # Number of worker nodes (EC2 instances)
+      cp_availability_policy: "SingleReplica"  # or "HighlyAvailable". Default is "SingleReplica". HighlyAvailable requires nodes on multiple zones.
+      infra_availability_policy: "SingleReplica"  # or "HighlyAvailable". Default is "SingleReplica". HighlyAvailable requires nodes on multiple zones.
+      disable_default_sources: true  # Disable default operator sources
+
+      # AWS-specific configuration
+      region: "us-west-2"  # AWS region for EC2 workers
+      worker_instance_type: "m5.xlarge"  # EC2 instance type for workers
+      base_domain: "qe.rh-ocs.com"  # REQUIRED: Base DNS domain for the cluster. Usually same as MGMT cluster base domain
+
+      oidc_secret_namespace: "local-cluster" # Namespace on management cluster where OIDC secret will be created. Default is "local-cluster"
+
+    # Example: Deploy multiple AWS HCP clusters
+    aws-hcp-client-2:
+      cluster_type: "hci_client"
+      hosted_cluster_platform: "aws"
+      cluster_path: "~/aws-hcp-clusters/aws-hcp-client-2"
+      ocp_version: "4.18"
+      hosted_odf_version: "4.18.5-8"
+      hosted_odf_registry: "quay.io/rhceph-dev/ocs-registry"
+      setup_storage_client: true
+      nodepool_replicas: 2
+      region: "us-west-2"  # Different region
+      worker_instance_type: "m5.large"
+      base_domain: "example.com"
+      cp_availability_policy: "SingleReplica"  # For testing/dev
+      infra_availability_policy: "SingleReplica"
+
+DEPLOYMENT:
+  # Deploy MCE if not using ACM
+  deploy_mce: true
+
+  # CNV and MetalLB are not needed for AWS HCP clusters
+  # Workers run as EC2 instances, not VMs on management cluster
+  cnv_deployment: false
+
+  # HCP version to use (optional, will use latest supported if not specified)
+  # hcp_version: "4.18"
+
+# Optional: AWS credentials can be provided via environment variables
+# AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+# Or create a secret manually on the management cluster before deployment

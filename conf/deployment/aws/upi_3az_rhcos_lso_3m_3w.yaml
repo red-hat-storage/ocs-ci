@@ -1,0 +1,15 @@
+---
+DEPLOYMENT:
+  local_storage: true
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'upi'
+  region: 'us-east-2'
+  worker_replicas: 3
+  master_replicas: 3
+  availability_zone_count: 3
+  worker_instance_type: 'i3en.2xlarge'
+  device_size: 2328
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2199'

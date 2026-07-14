@@ -1,0 +1,4 @@
+---
+# This config file will enable to use OCS workers for scaling app pods
+RUN:
+  use_ocs_worker_for_scale: True

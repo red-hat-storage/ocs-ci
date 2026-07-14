@@ -1,0 +1,7 @@
+---
+# This config file set upstream must-gather image.
+# This is useful as a W/A for IBM Cloud, as there is an issue to use internal
+# image for must gather and till the GA of 4.6 there is no live 4.6 image.
+REPORTING:
+  ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
+  ocs_must_gather_latest_tag: 'latest'

@@ -1,0 +1,10 @@
+apiVersion: ingressnodefirewall.openshift.io/v1alpha1
+kind: IngressNodeFirewall
+metadata:
+  name: ingressnodefirewall
+spec:
+  interfaces:
+  - br-ex
+  nodeSelector:
+    matchLabels: {}
+  ingress: {}

@@ -1,0 +1,28 @@
+---
+#  This configuration file is used for Metro DR Arbiter cluster deployment
+#  TODO: Add polarion ID
+DEPLOYMENT:
+  arbiter_deployment: true
+  allow_lower_instance_requirements: false
+  type: 'EBS'
+  local_storage: true
+  ocs_operator_nodes_to_label: 6
+  arbiter_zone: 'us-east-2c'
+  arbiter_autodetect: false
+  local_storage_storagedeviceset_count: 3
+  network_split_setup: true
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'ipi'
+  region: 'us-east-2'
+  worker_availability_zones:
+    - 'us-east-2a'
+    - 'us-east-2b'
+  master_availability_zones:
+    - 'us-east-2a'
+    - 'us-east-2b'
+    - 'us-east-2c'
+  worker_replicas: 6
+  master_replicas: 3
+  worker_instance_type: 'm5.4xlarge'
+  extra_disks: 2

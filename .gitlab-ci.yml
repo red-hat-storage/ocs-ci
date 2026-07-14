@@ -1,0 +1,17 @@
+image: python:3.8
+
+before_script:
+   - pip install tox
+
+stages:
+   - lint and unit test
+
+lint:
+  stage: lint and unit test
+  script:
+    - tox -e flake8
+
+unit tests:
+  stage: lint and unit test
+  script:
+    - tox -e py38

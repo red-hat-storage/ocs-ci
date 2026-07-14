@@ -1,0 +1,32 @@
+---
+ENV_DATA:
+  platform: 'rosa'
+  deployment_type: 'managed'
+  # MS-provider cluster via rosa _addons
+  # or via rosa_service i.e appliance mode
+  appliance_mode: True
+  cluster_type: 'provider'
+  multi_availability_zones: False
+  worker_replicas: 3
+  master_replicas: 3
+  worker_instance_type: 'm5.2xlarge'
+  configs: 'aws,stage'
+  addon_name: "ocs-provider-dev"
+  region: 'us-east-2'
+  # Storage Cluster Size
+  size: '4'
+DEPLOYMENT:
+  force_download_ocm_cli: True
+  ocm_cli_version: '0.1.60'
+  force_download_rosa_cli: True
+  force_download_installer: True
+  force_download_client: True
+  host_network: true
+REPORTING:
+  # This is useful as a W/A for Openshift Dedicated, as there is an issue
+  # to use internal image for must gather
+  ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
+  ocs_must_gather_latest_tag: 'latest'
+  # notification_email_0: MAIL USED FOR SENDGRID
+  # notification_email_1: MAIL USED FOR SENDGRID
+  # notification_email_2: MAIL USED FOR SENDGRID

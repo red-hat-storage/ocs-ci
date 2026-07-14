@@ -1,0 +1,21 @@
+---
+# Config to cover deployment with external postgresql for noobaa
+# https://issues.redhat.com/browse/RHSTOR-4749
+# This config is suppose to work on DC where we have credentials set for
+# external pgsql, currently DC-CP and DC-ECO but in future can be more.
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  compute_memory: '65536'
+  fio_storageutilization_min_mbps: 10.0
+  noobaa_external_pgsql: True
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-5467'

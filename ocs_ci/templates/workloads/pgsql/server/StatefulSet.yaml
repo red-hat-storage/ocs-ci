@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: benchmark-operator
+spec:
+  serviceName: "postgres"
+  selector:
+    matchLabels:
+      app: postgres
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        role: postgres
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: quay.io/ocsci/postgres:10.4
+          imagePullPolicy: "IfNotPresent"
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: postgres-config
+          volumeMounts:
+            - name: postgres-persistent-storage
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-persistent-storage
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: ocs-storagecluster-ceph-rbd
+        resources:
+          requests:
+            storage: 10Gi

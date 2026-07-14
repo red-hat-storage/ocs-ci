@@ -1,0 +1,24 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: perf-pod
+  namespace: default
+spec:
+  containers:
+   - name: performance
+     image: quay.io/ocsci/perf:latest
+     imagePullPolicy: IfNotPresent
+     securityContext:
+       capabilities: {}
+     command: ['/bin/sh']
+     stdin: true
+     tty: true
+     volumeDevices:
+       - name: mypvc
+         devicePath: /dev/rbdblock
+  volumes:
+   - name: mypvc
+     persistentVolumeClaim:
+       claimName: pvc
+       readOnly: false

@@ -1,0 +1,6 @@
+# For testing EPIC: https://issues.redhat.com/browse/RHSTOR-5758
+# Expose upgrade reliability settings in StorageCluster CR
+ENV_DATA:
+  skip_upgrade_checks: true
+  continue_upgrade_after_checks_even_if_not_healthy: true
+  upgrade_osd_requires_healthy_pgs: false

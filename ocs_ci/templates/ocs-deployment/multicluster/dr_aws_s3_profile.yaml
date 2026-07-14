@@ -1,0 +1,15 @@
+s3StoreProfiles:
+- s3ProfileName: odr-s3secret-east
+  s3CompatibleEndpoint: https://s3.us-east-2.amazonaws.com:443
+  s3Region: us-east-2
+  s3Bucket: pratik-workloads
+  s3SecretRef:
+    name: odr-s3secret-east
+    namespace: openshift-dr-system
+- s3ProfileName: odr-s3secret-west
+  s3CompatibleEndpoint: https://s3.us-east-2.amazonaws.com:443
+  s3Region: us-east-2
+  s3Bucket: pratik-workloads
+  s3SecretRef:
+    name: odr-s3secret-west
+    namespace: openshift-dr-system

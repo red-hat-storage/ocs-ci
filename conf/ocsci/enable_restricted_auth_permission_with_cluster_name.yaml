@@ -1,0 +1,4 @@
+---
+ENV_DATA:
+  restricted-auth-permission: true
+  use_k8s_cluster_name: false

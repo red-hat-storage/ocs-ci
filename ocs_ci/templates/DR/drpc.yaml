@@ -1,0 +1,32 @@
+apiVersion: ramendr.openshift.io/v1alpha1
+kind: DRPlacementControl
+metadata:
+  name: PLACEHOLDER
+  namespace: openshift-gitops
+spec:
+  drPolicyRef:
+    apiVersion: ramendr.openshift.io/v1alpha1
+    kind: DRPolicy
+    name: PLACEHOLDER
+  placementRef:
+    apiVersion: cluster.open-cluster-management.io/v1beta1
+    kind: Placement
+    name: PLACEHOLDER
+    namespace: openshift-gitops
+  preferredCluster: PLACEHOLDER
+  kubeObjectProtection:
+    captureInterval: PLACEHOLDER
+    kubeObjectSelector:
+      matchExpressions:
+        - key: PLACEHOLDER
+          operator: In
+          values:
+            - PLACEHOLDER
+  pvcSelector:
+    matchLabels:
+      PLACEHOLDER
+    matchExpressions:
+      - key: PLACEHOLDER
+        operator: In
+        values:
+          - PLACEHOLDER

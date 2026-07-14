@@ -1,0 +1,7 @@
+---
+DEPLOYMENT:
+  local_storage: true
+  type: 'RDM'
+
+ENV_DATA:
+  platform: 'vsphere'

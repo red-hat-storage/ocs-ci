@@ -1,0 +1,411 @@
+import os
+import logging
+import shutil
+import tempfile
+import re
+import tarfile
+from pathlib import Path
+
+from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import storagecluster_independent_check
+from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.utils import collect_ocs_logs
+from ocs_ci.ocs.must_gather.const_must_gather import (
+    GATHER_COMMANDS_VERSION,
+    GATHER_COMMANDS_LOG,
+)
+from ocs_ci.utility import version
+from ocs_ci.ocs.constants import MANAGED_SERVICE_PLATFORMS
+
+
+logger = logging.getLogger(__name__)
+
+
+class MustGather(object):
+    """
+    MustGather Class
+
+    """
+
+    def __init__(self):
+        self.type_log = None
+        self.root = None
+        self.files_path = dict()
+        self.empty_files = list()
+        self.files_not_exist = list()
+        self.files_content_issue = list()
+        self.ocs_version = version.get_semantic_ocs_version_from_config()
+        self.full_paths = list()
+
+    @property
+    def log_type(self):
+        return self.type_log
+
+    @log_type.setter
+    def log_type(self, type_log):
+        if not isinstance(type_log, str):
+            raise ValueError("log type arg must be a string")
+        self.type_log = type_log
+
+    def collect_must_gather(self, ocs_flags=None, mg_options=None):
+        """
+        Collect ocs_must_gather and copy the logs to a temporary folder.
+
+        Args:
+            ocs_flags (str): ocs flags to must gather command for example ["-- /usr/bin/gather -cs"]
+            mg_options (str): Options of must gather command For example "--host_network=True"
+
+        """
+        temp_folder = tempfile.mkdtemp()
+        collect_ocs_logs(
+            dir_name=temp_folder, ocp=False, ocs_flags=ocs_flags, mg_options=mg_options
+        )
+        self.root = temp_folder + "_ocs_logs"
+
+    def search_file_path(self):
+        """
+        Search File Path
+
+        In post-upgrade scenarios, uses config.UPGRADE["upgrade_ocs_version"]
+        to ensure correct version-specific file expectations.
+        """
+        upgrade_version = config.UPGRADE.get("upgrade_ocs_version")
+        if upgrade_version:
+            ocs_version = float(upgrade_version)
+            logger.debug(
+                f"Using upgrade version for must-gather validation: {ocs_version}"
+            )
+        else:
+            ocs_version = float(
+                f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
+            )
+            logger.debug(f"Using CSV version for must-gather validation: {ocs_version}")
+        if ocs_version not in GATHER_COMMANDS_VERSION:
+            candidates = [v for v in GATHER_COMMANDS_VERSION if v <= ocs_version]
+            if not candidates:
+                raise ValueError(
+                    f"No must-gather data for OCS {ocs_version}; "
+                    f"available versions: {sorted(GATHER_COMMANDS_VERSION)}"
+                )
+            fallback = max(candidates)
+            logger.warning(
+                f"No must-gather data for {ocs_version}, falling back to {fallback}"
+            )
+            ocs_version = fallback
+        if (
+            self.type_log == "OTHERS"
+            and config.ENV_DATA["platform"] in MANAGED_SERVICE_PLATFORMS
+        ):
+            files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_MANAGED_SERVICES"]
+        elif self.type_log == "OTHERS" and storagecluster_independent_check():
+            files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_EXTERNAL"]
+        else:
+            files = GATHER_COMMANDS_VERSION[ocs_version][self.type_log]
+        self.get_all_paths()
+        for file in files:
+            self.files_not_exist.append(file)
+            for full_path in self.full_paths:
+                if os.path.basename(full_path) == file:
+                    self.files_path[file] = full_path
+                    self.files_not_exist.remove(file)
+                    break
+
+    def validate_file_size(self):
+        """
+        Validate the file is not empty
+
+        """
+        if self.type_log != "OTHERS":
+            return
+        for path, subdirs, files in os.walk(self.root):
+            for file in files:
+                file_path = os.path.join(path, file)
+                if (
+                    Path(file_path).stat().st_size == 0
+                    and "noobaa-db-pg-0-init.log" not in file_path
+                ):
+                    logger.error(f"log file {file} empty!")
+                    self.empty_files.append(file)
+
+    def validate_expected_files(self):
+        """
+        Make sure all the relevant files exist
+
+        """
+        self.search_file_path()
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2125204
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2049204
+        # self.verify_ceph_file_content()
+        for file, file_path in self.files_path.items():
+            if not os.path.isabs(file_path):
+                continue
+            if not Path(file_path).is_file():
+                self.files_not_exist.append(file)
+            elif re.search(r"\.yaml$", file):
+                with open(file_path, "r") as f:
+                    if "kind" not in f.read().lower():
+                        self.files_content_issue.append(file)
+
+    def verify_ceph_file_content(self):
+        """
+        Verify ceph command does not return an error
+        https://bugzilla.redhat.com/show_bug.cgi?id=2014849
+        https://bugzilla.redhat.com/show_bug.cgi?id=2021427
+
+        """
+        if self.type_log != "CEPH" or self.ocs_version < version.VERSION_4_9:
+            return
+        pattern = re.compile("exit code [1-9]+")
+        for root, dirs, files in os.walk(self.root):
+            for file in files:
+                try:
+                    with open(os.path.join(root, file), "r") as f:
+                        data_file = f.read()
+                    exit_code_error = pattern.findall(data_file.lower())
+                    if len(exit_code_error) > 0 and "gather-debug" not in file:
+                        self.files_content_issue.append(os.path.join(root, file))
+                except Exception as e:
+                    logger.error(f"There is no option to read {file}, error: {e}")
+
+    def print_must_gather_debug(self) -> None:
+        try:
+            with open(os.path.join(self.root, GATHER_COMMANDS_LOG), "r") as f:
+                logger.info("Printing must-gather internal log file")
+                logger.info(f.readlines())
+        except FileNotFoundError:
+            logger.error("must-gather internal log file not found")
+
+    def compare_running_pods(self):
+        """
+        Compare running pods list to "/pods" subdirectories
+
+        """
+        if self.type_log != "OTHERS":
+            return
+        pod_objs = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
+        pod_names = []
+        logger.info("Get pod names on openshift-storage project")
+        for pod in pod_objs:
+            pattern = self.check_pod_name_pattern(pod.name)
+            if pattern is False:
+                pod_names.append(pod.name)
+
+        pod_path = None
+        for dir_name, subdir_list, files_list in os.walk(self.root):
+            if re.search("openshift-storage/pods$", dir_name):
+                pod_path = dir_name
+                break
+
+        pod_files = []
+        logger.info("Get pod names on openshift-storage/pods directory")
+        if pod_path:
+            for pod_file in os.listdir(pod_path):
+                pattern = self.check_pod_name_pattern(pod_file)
+                if pattern is False:
+                    pod_files.append(pod_file)
+        else:
+            pods_pattern = re.compile(r"openshift-storage/pods/([^/]+)")
+            seen = set()
+            for full_path in self.full_paths:
+                match = pods_pattern.search(full_path)
+                if match and match.group(1) not in seen:
+                    seen.add(match.group(1))
+                    pattern = self.check_pod_name_pattern(match.group(1))
+                    if pattern is False:
+                        pod_files.append(match.group(1))
+
+        diff = list(set(pod_files) - set(pod_names)) + list(
+            set(pod_names) - set(pod_files)
+        )
+        assert set(sorted(pod_files)) == set(sorted(pod_names)), (
+            f"List of openshift-storage pods are not equal to list of logs\n"
+            f"directories list of pods: {pod_names} list of log directories: {pod_files}\n"
+            f"The difference between pod files and actual pods is: {diff}\n"
+        )
+
+    def check_pod_name_pattern(self, pod_name):
+        """
+        check Pod Name Pattern
+
+        Args:
+            pod_name (str): pod name
+
+        return:
+            bool: True if match pattern, False otherwise
+
+        """
+        regular_ex_list = [
+            "must-gather-.*.-helper",
+            r"^compute-*",
+            r"^ip-*",
+            r"^j-*",
+            r"^argo-*",
+            r"^vmware-*",
+            "^must-gather",
+            r"-debug$",
+            r"-debug-",
+            r"status-reporter",
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2245246
+            r"^csi-addons-controller-manager*",
+        ]
+        for regular_ex in regular_ex_list:
+            if re.search(regular_ex, pod_name) is not None:
+                return True
+        return False
+
+    def print_invalid_files(self):
+        """
+        Print Invalid Files
+
+        """
+        if any([self.empty_files, self.files_not_exist, self.files_content_issue]):
+            error = (
+                f"Files don't exist:\n{self.files_not_exist}\n"
+                f"Empty files:\n{self.empty_files}\n"
+                f"Content issues:\n{self.files_content_issue}"
+            )
+            self.empty_files = list()
+            self.files_not_exist = list()
+            self.files_content_issue = list()
+            raise Exception(error)
+
+    def verify_noobaa_diagnostics(self):
+        """
+        Verify noobaa diagnostics folder exist
+
+        """
+        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+        if self.type_log == "OTHERS" and ocs_version >= version.VERSION_4_6:
+            flag = False
+            logger.info("Verify noobaa_diagnostics folder exist")
+            self.get_all_paths()
+            for full_path in self.full_paths:
+                if re.search(
+                    r"noobaa_diagnostics_.*.tar.gz", os.path.basename(full_path)
+                ):
+                    flag = True
+                    if os.path.isabs(full_path):
+                        logger.info(f"Extract noobaa_diagnostics: {full_path}")
+                        with tarfile.open(full_path) as f:
+                            f.extractall(os.path.dirname(full_path))
+                    else:
+                        logger.info(f"Found noobaa_diagnostics in tarball: {full_path}")
+                    break
+            if not flag:
+                logger.error("noobaa_diagnostics.tar.gz does not exist")
+                self.files_not_exist.append("noobaa_diagnostics.tar.gz")
+
+    def _get_paths_from_tarball(self, tarball_path):
+        """
+        Collect all member paths from a must-gather tar.gz archive.
+
+        Args:
+            tarball_path (str): path to the .tar.gz file
+
+        Returns:
+            list: paths of all members (files and dirs) in the archive
+
+        """
+        paths = []
+        try:
+            with tarfile.open(tarball_path, "r:*") as tar:
+                for member in tar.getmembers():
+                    # Add the member path (files and dirs)
+                    paths.append(member.name)
+                    # Ensure parent directory paths are included for substring
+                    # matching in verify_paths_in_dir / verify_paths_not_in_dir
+                    parts = member.name.replace("\\", "/").split("/")
+                    for i in range(1, len(parts)):
+                        parent = "/".join(parts[:i])
+                        if parent and parent not in paths:
+                            paths.append(parent)
+        except (tarfile.TarError, OSError) as e:
+            logger.warning(f"Could not read tarball {tarball_path}: {e}")
+        return paths
+
+    def get_all_paths(self):
+        """
+        Get all paths in must gather dir (directory and/or tar.gz archives).
+
+        When REPORTING["tarball_mg_logs"] is used, must-gather may be packed
+        into a .tar.gz; this method collects paths from both directory trees
+        and from inside such tarballs.
+
+        """
+        self.full_paths = []
+
+        for root_dir, dirs, files in os.walk(self.root):
+            for name in files + dirs:
+                full_path = os.path.join(root_dir, name)
+                self.full_paths.append(full_path)
+            # Collect paths from must-gather tarballs found under root
+            for name in files:
+                if name.endswith(".tar.gz"):
+                    tarball_path = os.path.join(root_dir, name)
+                    self.full_paths.extend(self._get_paths_from_tarball(tarball_path))
+
+    def verify_paths_in_dir(self, paths):
+        """
+        Verify paths exist in must gather directory
+
+        Args:
+            paths (list): list of paths in mg directory
+                for example ``/ceph_logs/journal_`` exist in ``/mg_dir/a/b/ceph/ceph_logs/journal_compute-1/log.log``
+
+        Returns:
+            list: the paths do not exist in mg dir
+
+        """
+        paths_exist = []
+        for path in paths:
+            status = False
+            for full_path in self.full_paths:
+                if path in full_path:
+                    status = True
+            if not status:
+                paths_exist.append(path)
+        return paths_exist
+
+    def verify_paths_not_in_dir(self, paths):
+        """
+        Verify paths do not exist in must gather directory
+
+        Args:
+            paths (list): list of paths in mg directory
+              for example ``/ceph_logs/journal_`` exist in ``/mg_dir/a/b/ceph/ceph_logs/journal_compute-1/log.log``
+
+        Returns:
+            list: the paths exist in mg dir
+
+        """
+        paths_not_exist = []
+        for path in paths:
+            status = True
+            for full_path in self.full_paths:
+                if path in full_path:
+                    status = False
+            if not status:
+                paths_not_exist.append(path)
+        return paths_not_exist
+
+    def validate_must_gather(self):
+        """
+        Validate must-gather
+
+        """
+        if config.ENV_DATA["platform"] not in MANAGED_SERVICE_PLATFORMS:
+            self.verify_noobaa_diagnostics()
+        self.validate_file_size()
+        self.validate_expected_files()
+        self.print_invalid_files()
+        self.compare_running_pods()
+        self.print_must_gather_debug()
+
+    def cleanup(self):
+        """
+        Delete temporary folder.
+
+        """
+        logger.info(f"Delete must gather folder {self.root}")
+        if re.search("_ocs_logs$", self.root):
+            shutil.rmtree(path=self.root, ignore_errors=False, onerror=None)

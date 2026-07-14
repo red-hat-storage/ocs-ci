@@ -1,0 +1,6 @@
+# This configuration file is to enable vsphere upi ipv6 single stack
+DEPLOYMENT:
+  ipv6: true
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-6253'

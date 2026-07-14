@@ -1,0 +1,15 @@
+---
+DEPLOYMENT:
+  # TODO: Change to latest-stable-4.21 once we have stable build
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-stable-4.21"
+  default_latest_tag: 'latest-stable-4.21'
+  ocs_csv_channel: "stable-4.21"
+  default_ocp_version: '4.21'
+  konflux_build: true
+ENV_DATA:
+  ocs_version: '4.21'
+REPORTING:
+  default_ocs_must_gather_latest_tag: 'v4.21'
+  default_ocs_must_gather_image: "quay.io/rhceph-dev/odf4-odf-must-gather-rhel9"
+UPGRADE:
+  default_latest_stable_upgrade_tag: 'latest-stable-upgrade-4.21'

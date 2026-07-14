@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: couchbase-enterprise-certified
+  namespace: couchbase-operator-namespace
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: couchbase-enterprise-certified
+  source: certified-operators
+  sourceNamespace: openshift-marketplace

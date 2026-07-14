@@ -1,0 +1,13 @@
+apiVersion: ocs.openshift.io/v1
+kind: StorageAutoScaler
+metadata:
+  name: ocs-storagecluster-ssd
+  namespace: openshift-storage
+spec:
+  storageCluster:
+    name: ocs-storagecluster
+  deviceClass: ssd
+  storageCapacityLimit: 4Ti            # Max allowed capacity before scaling stops
+  storageScalingThresholdPercent: 70   # Trigger scaling at 70% usage
+  maxOsdSize: 8Ti                       # Size of each new OSD added
+  timeoutSeconds: 1800                 # Timeout for scaling attempt (in seconds)

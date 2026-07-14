@@ -1,0 +1,16 @@
+apiVersion: multicluster.odf.openshift.io/v1alpha1
+kind: MirrorPeer
+metadata:
+  name: mirrorpeer-sample
+  labels:
+    cluster.open-cluster-management.io/backup: resource
+spec:
+  items:
+  - clusterName: PLACE_HOLDER
+    storageClusterRef:
+      name: ocs-storagecluster
+  - clusterName: PLACE_HOLDER
+    storageClusterRef:
+      name: ocs-storagecluster
+  manageS3: true
+  type: async

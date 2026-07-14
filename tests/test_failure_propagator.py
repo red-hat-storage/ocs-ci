@@ -1,0 +1,158 @@
+import logging
+import pytest
+
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import (
+    acceptance,
+    ignore_owner,
+    tier1,
+    tier2,
+    tier3,
+    tier4a,
+    tier4b,
+    tier4c,
+    pre_upgrade,
+    post_upgrade,
+    pre_ocs_upgrade,
+    pre_ocp_upgrade,
+    post_ocp_upgrade,
+    post_ocs_upgrade,
+    workloads,
+    performance,
+    scale,
+    ocs_ci_utility,
+)
+
+log = logging.getLogger(__name__)
+
+
+@ignore_owner
+@tier1
+@acceptance
+@tier2
+@tier3
+@tier4a
+@tier4b
+@tier4c
+@pre_upgrade
+@post_upgrade
+@pre_ocs_upgrade
+@pre_ocp_upgrade
+@post_ocp_upgrade
+@post_ocs_upgrade
+@workloads
+@performance
+@scale
+@ocs_ci_utility
+class TestFailurePropagator:
+    """
+    Test class for failure propagator test case
+    """
+
+    @pytest.mark.order("second_to_last")
+    def test_report_skip_triggering_test(self, request):
+        """
+        This test runs second to last and examines the skipped test cases of the execution.
+        In case of high rate of skipped tests due to Ceph health not OK, which indicates something went wrong
+        with the cluster during the execution, it will fail and report the potential test case that caused
+        this problematic state
+        """
+        number_of_eligible_tests = config.RUN.get("number_of_tests") - 2
+
+        # for acceptance suite, the value of config.RUN["skipped_on_ceph_health_threshold"] would be set to 0
+        # so any skip on Ceph health during an acceptance suite execution would cause
+        # test_report_skip_triggering_test to fail
+        if "acceptance" in config.RUN.get("cli_params").get("-m", ""):
+            config.RUN["skipped_on_ceph_health_threshold"] = 0
+
+        log.info(f"number_of_eligible_tests: {number_of_eligible_tests}")
+        log.info(
+            f"skipped_on_ceph_health_threshold: {config.RUN.get('skipped_on_ceph_health_threshold')}"
+        )
+        log.info(f"skip_reason_test_found: {config.RUN.get('skip_reason_test_found')}")
+        log.info(
+            f"skipped_tests_ceph_health: {config.RUN.get('skipped_tests_ceph_health')}"
+        )
+
+        noobaa_failure = config.RUN.get("noobaa_health_failure_source")
+        skipped_noobaa = config.RUN.get("skipped_tests_noobaa_health", 0)
+        noobaa_summary = ""
+        if noobaa_failure or skipped_noobaa:
+            parts = []
+            if skipped_noobaa:
+                parts.append(
+                    f"{skipped_noobaa} MCG tests skipped due to NooBaa not Ready"
+                )
+            if noobaa_failure:
+                parts.append(
+                    f"NooBaa became unhealthy (phase: {noobaa_failure['phase']})"
+                    f" first detected at test: {noobaa_failure['test_name']}"
+                )
+            noobaa_summary = ". ".join(parts) + "."
+            log.warning(noobaa_summary)
+
+        sc_mismatch = config.RUN.get("sc_ceph_health_mismatch")
+        sc_mismatch_summary = ""
+        if sc_mismatch:
+            sc_mismatch_summary = (
+                f"StorageCluster reported Ready but Ceph health failed"
+                f" (first detected at test: {sc_mismatch['test_name']})."
+            )
+            log.warning(sc_mismatch_summary)
+
+        if number_of_eligible_tests > 0:
+            config.RUN["skipped_on_ceph_health_ratio"] = round(
+                (
+                    config.RUN.get("skipped_tests_ceph_health")
+                    / number_of_eligible_tests
+                ),
+                3,
+            )
+            log.info(
+                f"skipped_on_ceph_health_ratio: {config.RUN.get('skipped_on_ceph_health_ratio')}"
+            )
+            message = (
+                f"This run had {config.RUN['skipped_on_ceph_health_ratio'] * 100}% of the "
+                f"tests skipped due to Ceph health not OK."
+            )
+            if (
+                config.RUN["skipped_on_ceph_health_ratio"]
+                > config.RUN["skipped_on_ceph_health_threshold"]
+            ):
+                if config.RUN.get("skip_reason_test_found"):
+                    test_name = config.RUN.get("skip_reason_test_found").get(
+                        "test_name"
+                    )
+                    message = (
+                        message
+                        + f" The test that is likely to cause this is {test_name}"
+                    )
+                    squad = config.RUN.get("skip_reason_test_found").get("squad")
+                    if squad:
+                        message = message + f" which is under {squad}'s responsibility"
+                        request.node.add_marker(squad)
+
+                else:
+                    message = (
+                        message + " Couldn't identify the test case that caused this"
+                    )
+                if noobaa_summary:
+                    message = message + f". {noobaa_summary}"
+                if sc_mismatch_summary:
+                    message = message + f". {sc_mismatch_summary}"
+                config.RUN["display_skipped_msg_in_email"] = message
+                pytest.fail(message)
+
+        health_summary = " ".join(
+            part for part in (noobaa_summary, sc_mismatch_summary) if part
+        )
+        if health_summary and not config.RUN.get("display_skipped_msg_in_email"):
+            config.RUN["display_skipped_msg_in_email"] = health_summary
+
+    @pytest.mark.order("last")
+    def test_failure_propagator(self):
+        """
+        This test intention is to run last and propagate teardown failures caught during the test execution,
+        so regular test cases won't false negatively fail
+        """
+        pass

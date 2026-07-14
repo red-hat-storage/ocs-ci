@@ -1,0 +1,35 @@
+kind: "BuildConfig"
+apiVersion: "build.openshift.io/v1"
+metadata:
+  name: "jax-rs-build"
+spec:
+  successfulBuildsHistoryLimit: 500
+  failedBuildsHistoryLimit: 500
+  strategy:
+    type: JenkinsPipeline
+    jenkinsPipelineStrategy:
+      jenkinsfile: |-
+        podTemplate(label: 'maven-build-pod',
+                    cloud: 'openshift',
+                    containers: [
+                    containerTemplate(
+                        name: 'jnlp', image: 'quay.io/ocsci/jenkins-agent-maven:latest'
+                    )
+                    ],
+                    volumes: [persistentVolumeClaim(mountPath: '/home/jenkins/.m2', claimName: 'dependencies', readOnly: false) ]
+              ) {
+          node("maven-build-pod") {
+            stage('Source Checkout') {
+              git url: "https://github.com/red-hat-storage/ocs-workloads.git"
+              script {
+                def pom = readMavenPom file: 'jenkins/maven01/pom.xml'
+                def version = pom.version
+              }
+            }
+            // Using Maven build the war file
+            stage('Build JAX-RS') {
+              echo "Building war file"
+              sh "mvn -f jenkins/maven01/pom.xml clean package"
+            }
+          }
+        }

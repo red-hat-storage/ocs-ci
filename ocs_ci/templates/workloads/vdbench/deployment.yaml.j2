@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ deployment_name }}
+  namespace: {{ namespace }}
+  labels:
+    app: {{ deployment_name }}
+    workload-type: vdbench
+spec:
+  replicas: {{ replicas }}
+  selector:
+    matchLabels:
+      app: {{ deployment_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ deployment_name }}
+        workload-type: vdbench
+    spec:
+      containers:
+      - name: vdbench-container
+        image: {{ image }}
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          # Loop to run Vdbench multiple times
+          RUN_COUNT=0
+          MAX_RUNS={{ workload_runs | default(1) }}
+
+          while [ $RUN_COUNT -lt $MAX_RUNS ]; do
+            RUN_COUNT=$((RUN_COUNT + 1))
+            echo "========================================"
+            echo "Vdbench workload run #${RUN_COUNT}"
+            echo "========================================"
+
+            echo "Configuration file:"
+            cat /config/vdbench.conf || { echo "Missing config"; exit 1; }
+            cp /config/vdbench.conf /tmp/vdbench.conf
+
+            mkdir -p /tmp/vdbench-work
+            cd /tmp/vdbench-work
+
+{% if volume_mode == "Block" %}
+            echo "Block device information:"
+            ls -la {{ device_path }}
+            lsblk {{ device_path }} || true
+{% else %}
+            echo "Filesystem path:"
+            ls -la {{ mount_path }}
+{% endif %}
+
+            echo "Running Vdbench..."
+{% if enable_verification | default(false) %}
+            /vdbench/vdbench -f /tmp/vdbench.conf -v
+{% else %}
+            /vdbench/vdbench -f /tmp/vdbench.conf
+{% endif %}
+            EXIT_CODE=$?
+
+            if [ $EXIT_CODE -eq 0 ]; then
+              echo "✅ Vdbench run #${RUN_COUNT} completed successfully"
+            else
+              echo "❌ Vdbench run #${RUN_COUNT} failed with exit code $EXIT_CODE"
+            fi
+
+            # Wait before restarting (avoid rapid restart loops)
+            if [ $RUN_COUNT -lt $MAX_RUNS ]; then
+              echo "Waiting 10 seconds before next run..."
+              sleep 10
+            fi
+          done
+
+          echo "Maximum runs ($MAX_RUNS) reached. Sleeping indefinitely..."
+          sleep infinity
+
+{% if volume_mode == "Block" %}
+        volumeDevices:
+        - name: vdbench-storage
+          devicePath: {{ device_path }}
+        volumeMounts:
+        - name: vdbench-config
+          mountPath: /config
+{% else %}
+        volumeMounts:
+        - name: vdbench-storage
+          mountPath: {{ mount_path }}
+        - name: vdbench-config
+          mountPath: /config
+{% endif %}
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        env:
+        - name: VDBENCH_OPTS
+          value: "-Xmx1g"
+        terminationMessagePolicy: FallbackToLogsOnError
+      restartPolicy: Always
+      volumes:
+      - name: vdbench-storage
+        persistentVolumeClaim:
+          claimName: {{ pvc_name }}
+      - name: vdbench-config
+        configMap:
+          name: {{ deployment_name }}-config

@@ -1,0 +1,40 @@
+# SmallFile workload using https://github.com/distributed-system-analysis/smallfile
+# smallfile is a python-based distributed POSIX workload generator which can be
+# used to quickly measure performance for a variety of metadata-intensive
+# workloads
+apiVersion: ripsaw.cloudbulldozer.io/v1alpha1
+kind: Benchmark
+metadata:
+  name: smallfile-benchmark
+  namespace: benchmark-operator
+spec:
+  test_user: homer_simpson
+  clustername: place-holder
+  elasticsearch:
+    # v This is debug server v
+    # server: 10.0.144.103
+    server: 10.0.78.167
+    port: 9200
+    scheme: http
+  es_index: ripsaw-smallfile
+  metadata_collection: true
+  index_data: true
+  workload:
+    name: smallfile
+    args:
+      clients: 1
+      samples: 1
+      pause: 50
+      operation: ["cleanup","create","read","append", "delete"]
+      threads: 4
+      file_size: 64
+      files: 50000
+      storageclass: ocs-storageclass-ceph-rbd
+      storagesize: 100Gi
+      job_timeout: 18000
+      response-times: true
+      stonewall: false
+      finish: true
+      # Un comments the next line when the drop-cache-kernel will support multi-arch
+      #drop_cache_kernel: true
+      #drop_cache_rook_ceph: true

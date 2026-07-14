@@ -1,0 +1,3 @@
+---
+ENV_DATA:
+  skip_ocp_deployment: true

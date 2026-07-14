@@ -1,0 +1,5 @@
+---
+# Use this config for dynamic switching of region in IBM cloud
+# This is mainly due to current limitation 50 load balancers per region
+ENV_DATA:
+  enable_region_dynamic_switching: true

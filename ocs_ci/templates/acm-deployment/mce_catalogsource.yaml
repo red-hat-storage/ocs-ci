@@ -1,0 +1,12 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: mce-dev-catalog
+  namespace: openshift-marketplace
+spec:
+  image: PLACEHOLDER
+  publisher: grpc
+  sourceType: grpc
+  updateStrategy:
+    registryPoll:
+      interval: 10m

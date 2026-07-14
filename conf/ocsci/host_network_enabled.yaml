@@ -1,0 +1,7 @@
+---
+# This config file will enable hostNetwork in StorageCluster CR and will
+# prepare all the rules needed in AWS for host network during the OCP
+# deployment.
+# NOTE: For now only AWS is covered!
+DEPLOYMENT:
+  host_network: true

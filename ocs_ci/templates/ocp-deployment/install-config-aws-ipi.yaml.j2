@@ -1,0 +1,50 @@
+apiVersion: {{ api_version | default('v1') }}
+baseDomain: {{ base_domain | default('qe.rh-ocs.com') }}
+compute:
+  - name: worker
+{% if worker_instance_arch | default(None) %}
+    architecture: {{ worker_instance_arch }}
+{% endif %}
+    platform:
+      aws:
+        type: {{ worker_instance_type | default('m5.4xlarge') }}
+{% if worker_availability_zones %}
+        zones:
+{% for zone in worker_availability_zones %}
+        - {{ zone }}
+{% endfor %}
+{% endif %}
+    replicas: {{ worker_replicas | default(3) }}
+controlPlane:
+  name: master
+{% if master_instance_arch | default(None) %}
+  architecture: {{ master_instance_arch }}
+{% endif %}
+  platform:
+    aws:
+      type: {{ master_instance_type | default('m6i.xlarge') }}
+{% if master_availability_zones %}
+      zones:
+{% for zone in master_availability_zones %}
+      - {{ zone }}
+{% endfor %}
+{% endif %}
+  replicas: {{ master_replicas | default(3) }}
+metadata:
+  creationTimestamp: null
+  name: '{{ cluster_name }}'
+networking:
+  clusterNetwork:
+    - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
+      hostPrefix: {{ cluster_host_prefix | default(23) }}
+  machineCIDR: 10.0.0.0/16
+  networkType: {{ network_type | default('OVNKubernetes') }}
+  serviceNetwork:
+    - {{ service_network_cidr | default('172.30.0.0/16') }}
+{% if fips %}
+fips: {{ fips }}
+{% endif %}
+platform:
+  aws:
+    region: {{ region | default('us-east-2') }}
+pullSecret: ''

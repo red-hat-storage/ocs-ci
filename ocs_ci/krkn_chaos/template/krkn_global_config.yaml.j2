@@ -1,0 +1,123 @@
+kraken:
+    kubeconfig_path: {{ kubeconfig_path | default('~/.kube/config') }}
+    exit_on_failure: {{ exit_on_failure | default(False) }}
+    publish_kraken_status: {{ publish_kraken_status | default(True) }}
+    signal_state: {{ signal_state | default('RUN') }}
+    signal_address: {{ signal_address | default('0.0.0.0') }}
+    port: {{ port | default(8081) }}
+    chaos_scenarios:
+    {%- for scenario_dict in scenarios %}
+        {%- for scenario_type, scenario_files in scenario_dict.items() %}
+        - {{ scenario_type }}:
+            {%- for scenario_file in scenario_files %}
+            - {{ scenario_file }}
+            {%- endfor %}
+        {%- endfor %}
+    {%- endfor %}
+cerberus:
+    cerberus_enabled: {{ cerberus_enabled | default(False) }}
+    {%- if cerberus_url %}
+    cerberus_url: {{ cerberus_url }}
+    {%- endif %}
+    check_applicaton_routes: {{ check_applicaton_routes | default(False) }}
+
+performance_monitoring:
+    deploy_dashboards: {{ deploy_dashboards | default(False) }}
+    repo: {{ performance_repo | default('"https://github.com/cloud-bulldozer/performance-dashboards.git"') }}
+    {%- if prometheus_url %}
+    prometheus_url: '{{ prometheus_url }}'
+    {%- else %}
+    prometheus_url: ''
+    {%- endif %}
+    {%- if prometheus_bearer_token %}
+    prometheus_bearer_token: {{ prometheus_bearer_token }}
+    {%- endif %}
+    {%- if uuid %}
+    uuid: {{ uuid }}
+    {%- endif %}
+    enable_alerts: {{ enable_alerts | default(False) }}
+    enable_metrics: {{ enable_metrics | default(False) }}
+    alert_profile: {{ alert_profile | default('config/alerts.yaml') }}
+    metrics_profile: {{ metrics_profile | default('config/metrics-report.yaml') }}
+    check_critical_alerts: {{ check_critical_alerts | default(False) }}
+
+elastic:
+    enable_elastic: {{ enable_elastic | default(False) }}
+    verify_certs: {{ verify_certs | default(False) }}
+    elastic_url: "{{ elastic_url | default('') }}"
+    elastic_port: {{ elastic_port | default(32766) }}
+    username: "{{ elastic_username | default('elastic') }}"
+    password: "{{ elastic_password | default('test') }}"
+    metrics_index: "{{ metrics_index | default('krkn-metrics') }}"
+    alerts_index: "{{ alerts_index | default('krkn-alerts') }}"
+    telemetry_index: "{{ telemetry_index | default('krkn-telemetry') }}"
+
+tunings:
+    wait_duration: {{ wait_duration | default(60) }}
+    iterations: {{ iterations | default(1) }}
+    daemon_mode: {{ daemon_mode | default(False) }}
+
+telemetry:
+    enabled: {{ telemetry_enabled | default(False) }}
+    api_url: {{ telemetry_api_url | default('https://ulnmf9xv7j.execute-api.us-west-2.amazonaws.com/production') }}
+    username: {{ telemetry_username | default('username') }}
+    password: {{ telemetry_password | default('password') }}
+    prometheus_backup: {{ prometheus_backup | default(True) }}
+    {%- if prometheus_namespace %}
+    prometheus_namespace: "{{ prometheus_namespace }}"
+    {%- else %}
+    prometheus_namespace: ""
+    {%- endif %}
+    {%- if prometheus_container_name %}
+    prometheus_container_name: "{{ prometheus_container_name }}"
+    {%- else %}
+    prometheus_container_name: ""
+    {%- endif %}
+    {%- if prometheus_pod_name %}
+    prometheus_pod_name: "{{ prometheus_pod_name }}"
+    {%- else %}
+    prometheus_pod_name: ""
+    {%- endif %}
+    full_prometheus_backup: {{ full_prometheus_backup | default(False) }}
+    backup_threads: {{ backup_threads | default(5) }}
+    archive_path: {{ archive_path | default('/tmp') }}
+    max_retries: {{ max_retries | default(0) }}
+    {%- if run_tag %}
+    run_tag: '{{ run_tag }}'
+    {%- else %}
+    run_tag: ''
+    {%- endif %}
+    archive_size: {{ archive_size | default(500000) }}
+    {%- if telemetry_group %}
+    telemetry_group: '{{ telemetry_group }}'
+    {%- else %}
+    telemetry_group: ''
+    {%- endif %}
+    logs_backup: {{ logs_backup | default(True) }}
+    logs_filter_patterns:
+        {%- for pattern in logs_filter_patterns | default([
+            '"(\\\\w{3}\\\\s\\\\d{1,2}\\\\s\\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d+).+"',
+            '"kinit (\\\\d+/\\\\d+/\\\\d+\\\\s\\\\d{2}:\\\\d{2}:\\\\d{2})\\\\s+"',
+            '"(\\\\d{4}-\\\\d{2}-\\\\d{2}T\\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d+Z).+"'
+        ]) %}
+        - {{ pattern }}
+        {%- endfor %}
+    oc_cli_path: {{ oc_cli_path | default('/usr/bin/oc') }}
+    events_backup: {{ events_backup | default(True) }}
+
+health_checks:
+  interval: {{ health_checks.interval | default(60) }}
+  config:
+    {%- for check in health_checks.config | default([{}]) %}
+    - url: {{ check.url | default('') }}
+      bearer_token: {{ check.bearer_token | default('') }}
+      auth: {{ check.auth | default('') }}
+      exit_on_failure: {{ check.exit_on_failure | default(False) }}
+    {%- endfor %}
+
+kubevirt_checks:
+  interval: {{ kubevirt_checks.interval | default(2) }}
+  namespace: {{ kubevirt_checks.namespace | default('') }}
+  name: {{ kubevirt_checks.name | default('') }}
+  only_failures: {{ kubevirt_checks.only_failures | default(False) }}
+  disconnected: {{ kubevirt_checks.disconnected | default(False) }}

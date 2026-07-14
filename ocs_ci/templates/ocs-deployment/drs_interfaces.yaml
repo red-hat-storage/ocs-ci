@@ -1,0 +1,22 @@
+interfaces:
+  - name: br-storage
+    type: linux-bridge
+    state: up
+    bridge:
+      options:
+        stp:
+          enabled: false
+      port:
+        - name: PLACEHOLDER
+    ipv4:
+      enabled: true
+      dhcp: true
+    ipv6:
+      enabled: false
+  - name: PLACEHOLDER
+    type: ethernet
+    state: up
+    ipv4:
+      enabled: false
+    ipv6:
+      enabled: false

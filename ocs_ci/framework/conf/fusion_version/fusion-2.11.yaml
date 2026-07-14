@@ -1,0 +1,6 @@
+---
+DEPLOYMENT:
+  fusion_channel: v2.0
+  fusion_pre_release_sds_version: 2.11.0
+  fusion_pre_release_image: 2.11.0-46157438
+  fusion_pre_release: true

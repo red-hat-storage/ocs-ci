@@ -1,0 +1,9 @@
+apiVersion: ocs.openshift.io/v1alpha1
+kind: StorageClient
+metadata:
+  name: ocs-storagecluster
+  namespace: openshift-storage
+spec:
+  storageProviderEndpoint: PLACEHOLDER1
+  onboardingTicket: >-
+    PLACEHOLDER2

@@ -1,0 +1,10 @@
+---
+# This configuration file is for AWS UPI deployment
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'upi'
+  region: 'us-east-2'
+  worker_instance_type: 'm4.2xlarge'
+  rhel_workers: false

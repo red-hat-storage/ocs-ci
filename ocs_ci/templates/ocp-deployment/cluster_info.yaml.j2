@@ -1,0 +1,26 @@
+{
+  "TEMPLATE_VARS": {{ template_vars | default('PLACEHOLDER') }},
+  "GENERAL": {
+    "PLATFORM": {{ platform | default('vsphere') }},
+    "PLATFORM_NAME": {{ platform_name | default('vsphere_vcsa-qe') }},
+    "NETWORK_TYPE": {{ network_type | default('normal') }},
+    "CUSTOMER_VPC_ENABLE": {{ vpc_enable | default('no') }}
+  },
+  "INSTALLER": {
+    "KUBECONFIG_URL": {{ kubeconfig_url }},
+    "METADATA": {
+      "clusterName": {{ cluster_name }},
+      "clusterID": {{ cluster_id }},
+      "infraID": {{ infra_id }},
+      "vsphere": {
+        "vCenter": {{ vsphere_server }},
+        "username": {{ vsphere_user | default('Administrator@vsphere.local') }},
+        "password": {{ vsphere_password }}
+      }
+    },
+    "VERSION": {{ installer_version }},
+    "VER_X": {{ ocp_version_x }},
+    "VER_Y": {{ ocp_version_y }},
+    "INFRA_ID": {{ infra_id }}
+  }
+}

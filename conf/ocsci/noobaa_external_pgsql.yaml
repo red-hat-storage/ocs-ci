@@ -1,0 +1,13 @@
+# Config file for using external PostgreSQL database for Noobaa.
+---
+ENV_DATA:
+  noobaa_external_pgsql: True
+# Please make sure you create custom config file or update data/auth.yaml
+# file with following configuration values:
+#
+# AUTH:
+#   pgsql:
+#     host: my.pgsql.server
+#     username: pgsql_user  # Needs to have permission for create/delete DB.
+#     password: password_of_user
+#     port: 5432

@@ -1,0 +1,49 @@
+apiVersion: machine.openshift.io/v1beta1
+kind: MachineSet
+metadata:
+  labels:
+    machine.openshift.io/cluster-api-cluster: clusterID
+  name: clusteID-role
+  namespace: openshift-machine-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      machine.openshift.io/cluster-api-cluster: clusterID
+      machine.openshift.io/cluster-api-machineset: clusteID-role
+  template:
+    metadata:
+      labels:
+        machine.openshift.io/cluster-api-cluster: clusterID
+        machine.openshift.io/cluster-api-machine-role: role
+        machine.openshift.io/cluster-api-machine-type: role
+        machine.openshift.io/cluster-api-machineset: clusteID-role
+    spec:
+      metadata:
+        labels:
+          node-role.kubernetes.io/app: app-scale
+      providerSpec:
+        value:
+          apiVersion: vsphereprovider.openshift.io/v1beta1
+          credentialsSecret:
+            name: vsphere-cloud-credentials
+          diskGiB: 120
+          kind: VSphereMachineProviderSpec
+          memoryMiB: 65536
+          metadata:
+            creationTimestamp: null
+          network:
+            devices:
+            - networkName: vm-network
+          numCPUs: 16
+          numCoresPerSocket: 2
+          snapshot: ""
+          template: vm-temlate-name
+          userDataSecret:
+            name: worker-user-data
+          workspace:
+            datacenter: vcenter_datacenter_name
+            datastore: vcenter_datastore_name
+            folder: vcenter_vm_folder_path
+            resourcepool: vsphere_resource_pool
+            server: vcenter_server_ip

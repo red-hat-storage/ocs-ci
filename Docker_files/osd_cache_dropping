@@ -1,0 +1,7 @@
+ARG ARCH=
+FROM ${ARCH}quay.io/rhceph-dev/rook-ceph:latest-4.8
+
+USER root
+RUN yum install -y git
+RUN mkdir -p /opt/bohica/
+RUN cd /opt/bohica ; git clone https://github.com/cloud-bulldozer/bohica.git .

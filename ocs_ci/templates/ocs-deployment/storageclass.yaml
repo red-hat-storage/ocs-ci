@@ -1,0 +1,12 @@
+---
+apiVersion: {{ k8s_api_version }}
+kind: StorageClass
+metadata:
+   name: {{ storageclass_name | default('ocsci-storageclass') }}
+provisioner: ceph.rook.io/block
+allowVolumeExpansion: {{ volume_expansion | default('True') }}
+reclaimPolicy: {{ reclaimPolicy | default('Delete') }}
+parameters:
+  blockPool: {{ blockPool }}
+  clusterNamespace: {{ clusterNamespace | default('openshift-storage') }}
+  fstype: {{ fstype | default('xfs') }}

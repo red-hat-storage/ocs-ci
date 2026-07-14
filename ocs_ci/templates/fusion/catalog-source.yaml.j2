@@ -1,0 +1,13 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: isf-catalog
+  namespace: openshift-marketplace
+spec:
+  displayName: isf-catalog
+  publisher: IBM
+  sourceType: grpc
+  image: docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/sds-{{ sds_version }}/isf-operator-software-catalog:{{ image_tag }}
+  updateStrategy:
+    registryPoll:
+      interval: 15m

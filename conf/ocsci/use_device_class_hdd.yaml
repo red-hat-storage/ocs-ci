@@ -1,0 +1,4 @@
+---
+# This configuration file is used to set deviceClass as hdd
+ENV_DATA:
+  device_class: "hdd"

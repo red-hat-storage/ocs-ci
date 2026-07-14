@@ -1,0 +1,2 @@
+DEPLOYMENT:
+  stage_rh_osbs: true

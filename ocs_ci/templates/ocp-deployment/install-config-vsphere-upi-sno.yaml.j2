@@ -1,0 +1,27 @@
+apiVersion: {{ api_version | default('v1') }}
+baseDomain: {{ base_domain | default('qe.rh-ocs.com') }}
+metadata:
+  name: '{{ cluster_name }}'
+compute:
+- name: worker
+  replicas: 0 
+controlPlane:
+  name: master
+  replicas: 1 
+networking:
+  clusterNetwork:
+    - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
+      hostPrefix: {{ cluster_host_prefix | default(23) }}
+  machineCIDR: '{{ machine_cidr }}'
+  serviceNetwork:
+    - {{ service_network_cidr | default('172.30.0.0/16') }}
+bootstrapInPlace:
+  installationDisk: /dev/sda
+{% if fips %}
+fips: {{ fips }}
+{% endif %}
+platform:
+   none: {}
+pullSecret: ''
+sshKey: |
+  ''

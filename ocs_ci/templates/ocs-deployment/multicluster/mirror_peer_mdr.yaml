@@ -1,0 +1,22 @@
+apiVersion: multicluster.odf.openshift.io/v1alpha1
+kind: MirrorPeer
+metadata:
+  labels:
+    cluster.open-cluster-management.io/backup: resource
+    control-plane: odfmo-controller-manager
+  name: mirrorpeer-sample
+spec:
+  items:
+  - clusterName: PLACE_HOLDER
+    storageClusterRef:
+      name: ocs-external-storagecluster
+      namespace: openshift-storage
+  - clusterName: PLACE_HOLDER
+    storageClusterRef:
+      name: ocs-external-storagecluster
+      namespace: openshift-storage
+  manageS3: true
+  overlappingCIDR: false
+  schedulingIntervals:
+  - 0m
+  type: sync

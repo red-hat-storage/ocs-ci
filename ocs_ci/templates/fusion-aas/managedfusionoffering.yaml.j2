@@ -1,0 +1,11 @@
+apiVersion: misf.ibm.com/v1alpha1
+kind: ManagedFusionOffering
+metadata:
+  name: managedfusionoffering-sample
+  namespace: {{ namespace }}
+spec:
+  kind: DF
+  release: "{{ ocp_version }}"
+  config: |
+    usableCapacityInTiB: {{ size }}
+    onboardingValidationKey: {{ onboarding_validation_key }}

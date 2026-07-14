@@ -1,0 +1,30 @@
+---
+# NooBaa DB Backup Configuration
+# This configuration enables automatic backup of NooBaa database using CNPG operator
+# 
+# Usage:
+#   run-ci tests/... --ocsci-conf conf/ocsci/noobaa_db_backup.yaml
+#
+# The backup configuration will be added to the StorageCluster CR during deployment
+
+ENV_DATA:
+  # Enable NooBaa DB backup feature
+  noobaa_db_backup_enabled: True
+
+  # Backup schedule in cron format
+  # Default: daily
+  # Acceptable Formats:
+  #   daily
+  #   weekly
+  #   monthly
+  noobaa_db_backup_schedule: "daily"
+
+  # Maximum number of backup snapshots to retain
+  # Default: 5
+  # Older backups will be automatically deleted when this limit is reached
+  noobaa_db_backup_max_snapshots: 5
+
+  # Volume snapshot class to use for backups
+  # Default: ocs-storagecluster-rbdplugin-snapclass for ceph based deployments
+  # This should match your cluster's RBD snapshot class
+  noobaa_db_backup_snapshot_class: "ocs-storagecluster-rbdplugin-snapclass"

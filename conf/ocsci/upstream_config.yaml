@@ -1,0 +1,18 @@
+---
+ENV_DATA:
+  # --------------------------------------------------------------------------
+  # Following parameters are not used when deploy via operator and will removed
+  # soon as part of cleanup: https://projects.engineering.redhat.com/browse/OCSQE-73
+  ceph_image: 'ceph/ceph:v14.2.3-20190904'
+  rook_image: 'rook/ceph:master'
+  # End of the unused parameters for operator deployment
+  # --------------------------------------------------------------------------
+  cluster_namespace: 'openshift-storage'
+REPORTING:
+  # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
+  us_ds: 'US'
+  ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
+DEPLOYMENT:
+  # you can overwrite the image for ocs operator catalog source by following parameter:
+  # ocs_registry_image: "quay.io/ocs-dev/ocs-registry:latest"
+  default_ocs_registry_image: "quay.io/ocs-dev/ocs-registry:latest"

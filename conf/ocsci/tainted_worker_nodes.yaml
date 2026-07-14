@@ -1,0 +1,14 @@
+---
+# This config will provide you the environment with:
+#  * 3 master nodes
+#  * 6 worker nodes where:
+#    * 3 worker nodes used for OCS
+#    * 3 worker nodes used for workload
+#
+ENV_DATA:
+  master_replicas: 3
+  worker_replicas: 6
+
+DEPLOYMENT:
+  infra_nodes: True
+  ocs_operator_nodes_to_taint: 3

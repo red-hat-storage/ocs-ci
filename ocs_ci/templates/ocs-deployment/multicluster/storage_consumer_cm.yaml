@@ -1,0 +1,24 @@
+---
+# this is schema that we can use to create the ConfigMap for the StorageConsumer.
+# Created by cluster admin on storage consumer clusters or automatically for storage clusters
+data:
+  cephfs-subvolumegroup: {}
+  cephfs-subvolumegroup-rados-ns: {}
+  csi-cephfs-node-secret: {}
+  csi-cephfs-provisioner-secret: {}
+  csi-rbd-node-secret: {}
+  csi-rbd-provisioner-secret: {}
+  csiop-cephfs-client-profile: {}
+  csiop-rbd-client-profile: {}
+  rbd-rados-ns: {}
+kind: ConfigMap
+metadata:
+  name: {}
+  namespace: {}
+#  ownerReferences:
+#  - apiVersion: ocs.openshift.io/v1alpha1
+#    blockOwnerDeletion: true
+#    controller: true
+#    kind: StorageConsumer
+#    name: {}
+#    uid: {}

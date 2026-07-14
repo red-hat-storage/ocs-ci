@@ -1,0 +1,6 @@
+---
+# This configuration file is for upgrade purpose in current OCS source.
+# Mainly upgrade from live content to live content like 4.2 to 4.3
+# or from stage to stage content between different channels.
+UPGRADE:
+  upgrade_in_current_source: True
