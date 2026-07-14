@@ -1,10 +1,8 @@
 ---
-# Pipeline 3: vSphere CLI deployment with LSO, ODF, EC 2+2, 6 OSD nodes (4+2 redundancy),
-#              FIPS, Multus, lean profile
+# Pipeline 3: vSphere CLI deployment with LSO, ODF, EC 2+2, 5 OSD nodes,
+#              FIPS, Multus
 # Covers: Req #4 (CLI + FIPS + ODF), Req #5 (2+2 EC with +2 redundancy),
-#         Req #7 (Multus + EC), Req #8 (EC + lower perf mode)
-# Masters are schedulable and labeled as storage nodes (3m + 3w = 6 OSD nodes)
-# Master specs match worker specs since they run storage workloads
+#         Req #7 (Multus + EC)
 DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
@@ -18,13 +16,12 @@ ENV_DATA:
   platform: 'vsphere'
   deployment_type: 'upi'
   worker_replicas: 3
-  master_replicas: 3
+  master_replicas: 5
   worker_num_cpus: '16'
   master_num_cpus: '16'
   master_memory: '65536'
   compute_memory: '65536'
   fio_storageutilization_min_mbps: 10.0
-  mark_masters_schedulable: true
   fips: 'true'
   is_multus_enabled: true
   multus_public_net_interface: 'ens224'
