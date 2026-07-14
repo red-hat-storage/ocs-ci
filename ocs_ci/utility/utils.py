@@ -452,6 +452,8 @@ def mask_secrets(plaintext, secrets):
     """
     if secrets:
         for secret in secrets:
+            if secret is None:
+                continue
             if isinstance(plaintext, list):
                 plaintext = [string.replace(secret, "*" * 5) for string in plaintext]
             else:
