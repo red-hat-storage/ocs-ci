@@ -5,7 +5,6 @@ This module provides a base test class with common functionality for NFS tests
 that need to connect to an external NFS client VM for testing NFS exports.
 """
 
-import ipaddress
 import logging
 import socket
 import time
@@ -143,41 +142,20 @@ class NFSClientTestBase(ManageTest):
         mount_cmd = f"mount -t nfs {options} {export_path} {mount_dir}".strip()
 
         for attempt in range(retries):
-            try:
-                self.con.exec_cmd(mount_cmd)
+            retcode, stdout, stderr = self.con.exec_cmd(mount_cmd)
+            if retcode == 0:
                 log.info(f"Successfully mounted NFS export on attempt {attempt + 1}")
                 return
-            except CommandFailed as ex:
-                if attempt == retries - 1:
-                    raise
 
-                log.warning(
-                    f"Mount attempt {attempt + 1} failed: {ex}. "
-                    f"Retrying in 10 seconds..."
-                )
+            msg = (
+                f"Mount attempt {attempt + 1} failed (rc={retcode}): {stderr or stdout}"
+            )
+            if attempt == retries - 1:
+                raise CommandFailed(msg)
 
-                try:
-                    self.con.exec_cmd(f"umount -f {mount_dir}", timeout=30)
-                except CommandFailed:
-                    pass
-
-                time.sleep(10)
-
-    def _is_ip_address(self, value):
-        """
-        Check if the provided value is a valid IP address.
-
-        Args:
-            value (str): Value to check
-
-        Returns:
-            bool: True if value is a valid IP address, False otherwise
-        """
-        try:
-            ipaddress.ip_address(value)
-            return True
-        except ValueError:
-            return False
+            log.warning(f"{msg}. Retrying in 10 seconds...")
+            self.con.exec_cmd(f"umount -f {mount_dir}")
+            time.sleep(10)
 
 
 # Made with Bob

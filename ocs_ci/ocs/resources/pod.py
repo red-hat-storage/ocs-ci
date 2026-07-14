@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import logging
 import os
 import re
+import shlex
 import yaml
 import tempfile
 import time
@@ -1377,7 +1378,7 @@ def check_file_existence(pod_obj, file_path):
     """
     try:
         ret = pod_obj.exec_cmd_on_pod(
-            f'bash -c "ls {file_path}"', out_yaml_format=False
+            f"bash -c 'ls {shlex.quote(file_path)}'", out_yaml_format=False
         )
         if file_path in ret:
             return True

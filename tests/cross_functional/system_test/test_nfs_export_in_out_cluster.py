@@ -44,8 +44,6 @@ from ocs_ci.utility import version as version_module
 from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
-# Error message to look in a command output
-ERRMSG = "Error in command"
 
 
 @skipif_rosa_hcp
@@ -360,73 +358,6 @@ class TestNfsExport(NFSClientTestBase):
         log.info(f"NFS share for PVC {pvc_name}: {share_details}")
 
         return {"volume_name": vol_name, "share_details": share_details}
-
-    def log_nfs_loadbalancer_details(self, stage=""):
-        """
-        Log NFS LoadBalancer service details including endpoint, hostname, and IP address.
-
-        Args:
-            stage (str): Description of when this is being called (e.g., "BEFORE shutdown", "AFTER recovery")
-        """
-        log.info("=" * 80)
-        log.info(f"NFS LoadBalancer details {stage}:")
-        try:
-            lb_svc = ocp.OCP(
-                kind=constants.SERVICE,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name="rook-ceph-nfs-my-nfs-load-balancer",
-            )
-            lb_data = lb_svc.get()
-
-            # Get LoadBalancer ingress details
-            lb_ingress = (
-                lb_data.get("status", {}).get("loadBalancer", {}).get("ingress", [])
-            )
-
-            if lb_ingress:
-                # Extract both hostname and IP if available
-                lb_hostname = lb_ingress[0].get("hostname", "N/A")
-                lb_ip = lb_ingress[0].get("ip", "N/A")
-                lb_endpoint = lb_hostname if lb_hostname != "N/A" else lb_ip
-
-                log.info(f"  LoadBalancer Hostname: {lb_hostname}")
-                log.info(f"  LoadBalancer IP: {lb_ip}")
-                log.info(f"  LoadBalancer Endpoint (used for mount): {lb_endpoint}")
-                log.info(
-                    f"  Expected hostname (self.hostname_add): {self.hostname_add}"
-                )
-
-                # Check if endpoint changed
-                if lb_endpoint != self.hostname_add:
-                    log.warning(
-                        f"  ⚠ LoadBalancer endpoint changed! Expected: {self.hostname_add}, Got: {lb_endpoint}"
-                    )
-                else:
-                    log.info("  ✓ LoadBalancer endpoint matches expected value")
-
-                # Get service ports
-                ports = lb_data.get("spec", {}).get("ports", [])
-                if ports:
-                    log.info("  Service Ports:")
-                    for port in ports:
-                        log.info(
-                            f"    - {port.get('name', 'unnamed')}: "
-                            f"{port.get('port', 'N/A')}/{port.get('protocol', 'N/A')}"
-                        )
-
-                # Get external traffic policy
-                external_policy = lb_data.get("spec", {}).get(
-                    "externalTrafficPolicy", "N/A"
-                )
-                log.info(f"  External Traffic Policy: {external_policy}")
-
-            else:
-                log.warning("  ⚠ No LoadBalancer ingress found")
-                log.info("  Service may still be provisioning or there's an issue")
-
-        except Exception as e:
-            log.warning(f"  ⚠ Failed to get LoadBalancer details: {e}")
-        log.info("=" * 80)
 
     def mount_nfs_export(self, con, share_details, mount_point):
         """
@@ -846,10 +777,7 @@ class TestNfsExport(NFSClientTestBase):
 
                 # Get initial file checksum
                 previous_checksum = get_file_checksum_from_nfs(con, test_file)
-                if previous_checksum:
-                    log.info(f"File initialized with checksum: {previous_checksum}")
-                else:
-                    log.warning("Failed to get initial checksum")
+                log.info(f"File initialized with checksum: {previous_checksum}")
 
                 while not io_stop_event.is_set():
                     iteration += 1
@@ -867,12 +795,6 @@ class TestNfsExport(NFSClientTestBase):
 
                     # Calculate current file checksum
                     current_checksum = get_file_checksum_from_nfs(con, test_file)
-                    if not current_checksum:
-                        io_errors.append(
-                            f"Checksum calculation failed at iteration {iteration}"
-                        )
-                        log.error(f"Checksum error at iteration {iteration}")
-                        continue
 
                     # Verify checksum changed after write (data was actually written)
                     if current_checksum == previous_checksum:
@@ -923,15 +845,11 @@ class TestNfsExport(NFSClientTestBase):
 
                 # Final file statistics
                 try:
-                    # Final file statistics
                     line_count = get_file_line_count_from_nfs(con, test_file)
-                    if line_count:
-                        log.info(f"Final file statistics: {line_count} lines written")
+                    log.info(f"Final file statistics: {line_count} lines written")
 
-                    # Final checksum
                     final_checksum = get_file_checksum_from_nfs(con, test_file)
-                    if final_checksum:
-                        log.info(f"Final file checksum: {final_checksum}")
+                    log.info(f"Final file checksum: {final_checksum}")
                 except Exception as stat_error:
                     log.warning(f"Failed to get final file statistics: {stat_error}")
 
@@ -1876,9 +1794,6 @@ class TestNfsExport(NFSClientTestBase):
             node_instances = nodes.get_ec2_instances(nodes=node_objs)
             log.info(f"Retrieved EC2 instances for {len(node_instances)} nodes")
 
-        # Log NFS LoadBalancer details before shutdown
-        self.log_nfs_loadbalancer_details(stage="BEFORE cluster shutdown")
-
         # Perform NON-GRACEFUL shutdown (force=True simulates power failure)
         log.info(
             "Initiating NON-GRACEFUL shutdown of all cluster nodes (force=True)..."
@@ -1919,9 +1834,6 @@ class TestNfsExport(NFSClientTestBase):
         # Wait for NFS services to be fully operational
         time.sleep(180)
         log.info("Waiting for NFS services to stabilize after non-graceful recovery...")
-
-        # Log NFS LoadBalancer details after recovery
-        self.log_nfs_loadbalancer_details(stage="AFTER cluster recovery")
 
         # Verify all mount points are accessible after recovery
         log.info("Verifying all mount points are accessible after recovery")

@@ -875,13 +875,17 @@ def get_file_checksum_from_nfs(con, file_path):
         file_path (str): Full path to the file on NFS mount
 
     Returns:
-        str: MD5 checksum or None if failed
+        str: MD5 checksum of the file
+
+    Raises:
+        CommandFailed: If the md5sum command fails
     """
     checksum_cmd = f"md5sum {file_path}"
     retcode, stdout, stderr = con.exec_cmd(checksum_cmd)
     if retcode != 0:
-        log.error(f"Failed to calculate checksum for {file_path}: {stderr}")
-        return None
+        raise CommandFailed(
+            f"Failed to calculate checksum for {file_path}: {stderr or stdout}"
+        )
     return stdout.split()[0]
 
 
@@ -894,56 +898,18 @@ def get_file_line_count_from_nfs(con, file_path):
         file_path (str): Full path to the file on NFS mount
 
     Returns:
-        int: Line count or 0 if failed
+        int: Line count of the file
+
+    Raises:
+        CommandFailed: If the wc -l command fails
     """
     line_cmd = f"wc -l {file_path}"
     retcode, stdout, stderr = con.exec_cmd(line_cmd)
     if retcode != 0:
-        log.error(f"Failed to get line count for {file_path}: {stderr}")
-        return 0
-    return int(stdout.split()[0])
-
-
-def get_file_checksum_from_pod(pod_obj, file_path_in_pod):
-    """
-    Get MD5 checksum for a file from within the pod (in-cluster).
-
-    Args:
-        pod_obj: Pod object
-        file_path_in_pod (str): Path to file inside pod (e.g., /mnt/filename)
-
-    Returns:
-        str: MD5 checksum or None if failed
-    """
-    checksum_cmd = f"md5sum {file_path_in_pod}"
-    try:
-        pod_output = pod_obj.exec_cmd_on_pod(
-            command=checksum_cmd, out_yaml_format=False
+        raise CommandFailed(
+            f"Failed to get line count for {file_path}: {stderr or stdout}"
         )
-        return pod_output.split()[0]
-    except Exception as e:
-        log.error(f"Failed to get checksum from pod for {file_path_in_pod}: {str(e)}")
-        return None
-
-
-def get_file_line_count_from_pod(pod_obj, file_path_in_pod):
-    """
-    Get line count for a file from within the pod (in-cluster).
-
-    Args:
-        pod_obj: Pod object
-        file_path_in_pod (str): Path to file inside pod (e.g., /mnt/filename)
-
-    Returns:
-        int: Line count or 0 if failed
-    """
-    line_cmd = f"wc -l {file_path_in_pod}"
-    try:
-        pod_output = pod_obj.exec_cmd_on_pod(command=line_cmd, out_yaml_format=False)
-        return int(pod_output.split()[0])
-    except Exception as e:
-        log.error(f"Failed to get line count from pod for {file_path_in_pod}: {str(e)}")
-        return 0
+    return int(stdout.split()[0])
 
 
 def configure_deployment_for_nfs(deployment_name, pvc_name):
