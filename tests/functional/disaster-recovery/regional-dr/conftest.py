@@ -275,7 +275,7 @@ def cnv_custom_storage_class(
             )
             if pool_ocp.is_exist(resource_name=pool_name):
                 log.warning(
-                    f"CephBlockPool {pool_name} already exists on the cluster{cluster_name}. "
+                    f"CephBlockPool {pool_name} already exists on the cluster {cluster_name}. "
                     f"CephBlockPool configuration is not validated"
                 )
             else:
