@@ -5,8 +5,6 @@ import logging
 from ocs_ci.ocs.constants import (
     MASTER_MACHINE,
     WORKER_MACHINE,
-    NODE_READY_TIMEOUT_MASTER,
-    NODE_READY_TIMEOUT_WORKER,
 )
 from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.ocs.registry import (
@@ -84,14 +82,7 @@ class TestRegistryRebootNode(E2ETest):
             backoff=1,
         )(wait_for_cluster_connectivity)(tries=400)
 
-        # Master (control-plane) nodes take longer to recover than workers:
-        # they must re-establish etcd quorum and restart kube-apiserver before
-        # the kubelet re-registers, so allow 30 min instead of 15 min.
-        node_ready_timeout = (
-            NODE_READY_TIMEOUT_MASTER
-            if node_type == MASTER_MACHINE
-            else NODE_READY_TIMEOUT_WORKER
-        )
+        node_ready_timeout = 1800 if node_type == MASTER_MACHINE else 900
         wait_for_nodes_status(timeout=node_ready_timeout)
 
         # Validate cluster health ok and all pods are running

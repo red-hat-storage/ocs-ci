@@ -1592,12 +1592,6 @@ NODE_NOT_READY = "NotReady"
 NODE_READY_SCHEDULING_DISABLED = "Ready,SchedulingDisabled"
 NODE_NOT_READY_SCHEDULING_DISABLED = "NotReady,SchedulingDisabled"
 
-# Node ready wait timeouts — master (control-plane) nodes take longer to
-# recover after a reboot because etcd quorum and kube-apiserver must restart
-# before the kubelet can re-register with the API server.
-NODE_READY_TIMEOUT_MASTER = 1800  # 30 minutes
-NODE_READY_TIMEOUT_WORKER = 900  # 15 minutes
-
 # Volume modes
 VOLUME_MODE_BLOCK = "Block"
 VOLUME_MODE_FILESYSTEM = "Filesystem"
