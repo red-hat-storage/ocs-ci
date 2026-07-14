@@ -18,6 +18,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     polarion_id,
     magenta_squad,
+    jira,
 )
 from ocs_ci.helpers import sanity_helpers
 
@@ -204,6 +205,7 @@ class TestFullClusterHealth(PASTest):
 
     @system_test
     @polarion_id("OCS-2749")
+    @jira("DFBUGS-5769")
     def test_full_cluster_health(
         self,
         nodes,
