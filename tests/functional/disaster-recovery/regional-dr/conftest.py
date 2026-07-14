@@ -514,7 +514,7 @@ def cephfs_custom_storage_class(request, storageclass_factory):
         callable: factory(replica, compression) that creates the custom SC
     """
 
-    def factory(replica, compression, erasure_coded=False):
+    def factory(replica=None, compression=None, erasure_coded=False):
         """
         Create the custom CephFS storage class and data pool on all clusters.
 
@@ -531,7 +531,9 @@ def cephfs_custom_storage_class(request, storageclass_factory):
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             # Create or verify existing SC in all clusters
             existing_sc_list = get_all_storageclass()
-            if cephfs_sc_name in existing_sc_list:
+            if cephfs_sc_name in [
+                sc_info["metadata"]["name"] for sc_info in existing_sc_list
+            ]:
                 log.info(f"Storage class {cephfs_sc_name} already exists")
             else:
                 try:
@@ -556,6 +558,7 @@ def cephfs_custom_storage_class(request, storageclass_factory):
 
                 except Exception as e:
                     log.error(f"Error creating SC '{cephfs_sc_name}': {e}")
+                    config.reset_ctx()
                     raise
         config.reset_ctx()
 

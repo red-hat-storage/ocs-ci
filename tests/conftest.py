@@ -8038,7 +8038,7 @@ def create_workload_factory():
 
         for index in range(num_of_appset):
             if pvc_interface == constants.CEPHFILESYSTEM and custom_sc:
-                workload_key = "dr_workload_appset_with_custom_pool_cephfs"
+                workload_key = "dr_workload_appset_with_custom_pool"
             else:
                 workload_key = "dr_workload_appset"
             if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
