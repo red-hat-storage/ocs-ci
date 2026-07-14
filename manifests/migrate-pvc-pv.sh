@@ -73,8 +73,6 @@ provision_dynamic_local_storage() {
     echo "--------------------------------------------------"
     echo "[Local-PV] Ensuring StorageClass '$LOCAL_SC' exists on $KUBECONFIG_C2..."
 
-    kubectl --kubeconfig="$KUBECONFIG_C2" delete sc "$LOCAL_SC" --ignore-not-found=true
-
     cat <<EOF | kubectl --kubeconfig="$KUBECONFIG_C2" apply -f -
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
