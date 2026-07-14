@@ -765,6 +765,9 @@ class BusyBox_AppSet(DRWorkload):
 
         self.appset_pvc_selector = kwargs.get("workload_pvc_selector")
         self.appset_model = kwargs.get("appset_model")
+        self.agnostic_dr = any(
+            c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters
+        )
 
     def deploy_workload(self, skip_replication_resources=False):
         """
@@ -1019,6 +1022,10 @@ class BusyBox_AppSet(DRWorkload):
             ResourceNotDeleted: In case workload resources not deleted properly
 
         """
+        if self.agnostic_dr:
+            self._delete_workload_agnostic_dr(switch_ctx)
+            return
+
         backend_volumes = dr_helpers.get_backend_volumes_for_pvcs(
             self.workload_namespace
         )
@@ -1049,6 +1056,52 @@ class BusyBox_AppSet(DRWorkload):
             err_msg = (
                 f"Failed to delete the workload: {self.workload_name}, namespace: {self.workload_namespace}, "
                 f"Exception: {ex}"
+            )
+            log.exception(err_msg)
+            raise ResourceNotDeleted(err_msg)
+
+    def _delete_workload_agnostic_dr(self, switch_ctx=None):
+        """
+        Delete agnostic DR workload (LSO + VolSync, no Ceph).
+
+        1. Delete the ApplicationSet from hub.
+        2. Remove VGR finalizers and delete workload namespace on managed clusters.
+        3. Clean up Released local PVs so they can be reused.
+
+        Args:
+            switch_ctx (int): The cluster index by the cluster name
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        """
+        from ocs_ci.helpers.storage_agnostic_dr_helpers import (
+            cleanup_agnostic_dr_workload,
+            cleanup_local_pvs,
+        )
+
+        try:
+            config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+            log.info(
+                f"Deleting ApplicationSet for agnostic DR workload"
+                f" '{self.workload_namespace}'"
+            )
+            run_cmd(  # IgnoreDeprecation
+                cmd=f"oc delete -f {self.appset_yaml_file}", timeout=900
+            )
+
+            cleanup_agnostic_dr_workload(self.workload_namespace)
+            cleanup_local_pvs()
+
+        except (
+            TimeoutExpired,
+            TimeoutExpiredError,
+            TimeoutError,
+        ) as ex:
+            err_msg = (
+                f"Failed to delete the workload: {self.workload_name},"
+                f" namespace: {self.workload_namespace},"
+                f" Exception: {ex}"
             )
             log.exception(err_msg)
             raise ResourceNotDeleted(err_msg)

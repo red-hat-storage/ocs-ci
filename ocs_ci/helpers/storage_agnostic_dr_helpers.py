@@ -966,3 +966,95 @@ def cleanup_agnostic_dr_workload(workload_namespace):
             f"Namespace '{workload_namespace}' deleted on cluster '{cluster_name}'"
         )
     config.switch_ctx(restore_index)
+
+
+def cleanup_local_pvs():
+    """
+    Clean up Released/Failed local PVs across all managed clusters.
+
+    For each PV in Released or Failed phase:
+      1. Unmount stale kubelet mounts on the node.
+      2. Wipe the disk filesystem (wipefs + mkfs.ext4).
+      3. Remove the claimRef so the PV returns to Available.
+
+    This allows local PVs to be reused by subsequent test runs.
+    """
+    import shlex
+
+    restore_index = config.cur_index
+    for cluster in get_non_acm_cluster_config():
+        cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(cluster_index)
+        cluster_name = cluster.ENV_DATA.get("cluster_name", f"cluster-{cluster_index}")
+        pv_obj = ocp.OCP(kind=constants.PV)
+        pv_list = pv_obj.get(dont_raise=True) or {}
+        for pv in pv_list.get("items", []):
+            pv_name = pv["metadata"]["name"]
+            pv_phase = pv.get("status", {}).get("phase", "")
+            if pv_phase not in ("Released", "Failed"):
+                continue
+
+            disk_path = pv.get("spec", {}).get("local", {}).get("path", "")
+            node_name = (
+                pv.get("spec", {})
+                .get("nodeAffinity", {})
+                .get("required", {})
+                .get("nodeSelectorTerms", [{}])[0]
+                .get("matchExpressions", [{}])[0]
+                .get("values", [""])[0]
+            )
+
+            if not disk_path or not node_name:
+                logger.warning(
+                    "Skipping PV '%s' — missing disk_path or node_name",
+                    pv_name,
+                )
+                continue
+
+            logger.info(
+                "Wiping disk '%s' on node '%s' for PV '%s' on cluster '%s'",
+                disk_path,
+                node_name,
+                pv_name,
+                cluster_name,
+            )
+            wipe_ok = True
+            try:
+                mount_path = (
+                    "/var/lib/kubelet/plugins/kubernetes.io"
+                    f"/local-volume/mounts/{shlex.quote(pv_name)}"
+                )
+                run_cmd(  # IgnoreDeprecation
+                    f"oc debug node/{shlex.quote(node_name)} -- chroot /host"
+                    f" bash -c '"
+                    f"umount {mount_path} 2>/dev/null;"
+                    f" rm -rf {mount_path};"
+                    f" wipefs -a {shlex.quote(disk_path)};"
+                    f" mkfs.ext4 -F {shlex.quote(disk_path)}'",
+                    timeout=300,
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to wipe disk for PV '%s', skipping recovery",
+                    pv_name,
+                )
+                wipe_ok = False
+
+            if wipe_ok:
+                logger.info(
+                    "Recovering PV '%s' (%s) on cluster '%s'",
+                    pv_name,
+                    pv_phase,
+                    cluster_name,
+                )
+                pv_obj.patch(
+                    resource_name=pv_name,
+                    params='{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}',
+                    format_type="merge",
+                )
+                pv_obj.patch(
+                    resource_name=pv_name,
+                    params='[{"op": "remove", "path": "/spec/claimRef"}]',
+                    format_type="json",
+                )
+    config.switch_ctx(restore_index)
