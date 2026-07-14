@@ -131,7 +131,13 @@ class Sanity:
             )
 
             if not is_hci_client_cluster():
-                self.ceph_cluster.wait_for_noobaa_health_ok()
+                # Give the health check the same order-of-magnitude grace
+                # period as bucket_creation_timeout, without regressing the
+                # default budget for callers that don't extend it.
+                noobaa_health_check_tries = max(120, bucket_creation_timeout // 5)
+                self.ceph_cluster.wait_for_noobaa_health_ok(
+                    tries=noobaa_health_check_tries
+                )
 
     def delete_resources(self):
         """

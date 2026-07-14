@@ -68,6 +68,8 @@ to the pytest.
     is passed, the version is parsed from the registry image name but only
     if no version is passed via --ocs-version parameter.
 * `--upgrade-ocs-registry-image` - ocs registry image to be used for upgrade (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)
+* `--fdf-upgrade-registry` - FDF upgrade registry for pre-release catalog image (e.g. cp.stg.icr.io/cp/df)
+* `--fdf-upgrade-image-tag` - FDF upgrade image tag for pre-release catalog (e.g. v4.22)
 * `--ocsci-conf` - with this configuration parameter you can overwrite the
     default OCS-CI config parameters defined in
     [default config](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml).

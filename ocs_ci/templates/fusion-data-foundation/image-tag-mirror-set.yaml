@@ -5,6 +5,7 @@ metadata:
 spec:
   imageTagMirrors:
   - mirrors:
+    - preprod.icr.io/cp/df/isf-data-foundation-catalog
     - cp.stg.icr.io/cp/df/isf-data-foundation-catalog
     source: icr.io/cpopen/isf-data-foundation-catalog
   mirrorSourcePolicy:

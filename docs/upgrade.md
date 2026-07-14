@@ -121,3 +121,28 @@ keep in stage content.
 > Or manually passing: `conf/ocsci/manual_subscription_plan_approval.yaml`
 > The cluster needs to be installed before push to the stage.
 > There is no way to install previous Z-stream version once content is pushed to the stage!
+
+## FDF (Fusion Data Foundation) upgrade
+
+For upgrading IBM Fusion Data Foundation (FDF) pre-release builds, you can specify
+the upgrade registry and image tag using CLI parameters:
+
+```bash
+run-ci tests/
+    --cluster-name kerberos_ID-fdf-deployment \
+    --cluster-path /home/my_user/my-fdf-dir \
+    -m 'pre_upgrade or fdf_upgrade or post_upgrade' \
+    --fdf-upgrade-registry cp.stg.icr.io/cp/df \
+    --fdf-upgrade-image-tag v4.22
+```
+
+Alternatively, you can specify these values in a configuration file:
+
+```yaml
+DEPLOYMENT:
+  fdf_upgrade_registry: "cp.stg.icr.io/cp/df"
+  fdf_upgrade_image_tag: "v4.22"
+```
+
+These parameters configure the registry and image tag used for the FDF upgrade catalog,
+similar to how `--upgrade-ocs-registry-image` works for OCS/ODF upgrades.

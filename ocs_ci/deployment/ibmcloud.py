@@ -1198,7 +1198,10 @@ class IBMCloudIPI(CloudDeploymentBase):
             proc = exec_cmd(cmd)
             load_balancers = json.loads(proc.stdout)
             lb_list = [
-                lb for lb in load_balancers if lb.get("name", "").startswith(prefix)
+                lb
+                for lb in load_balancers
+                if lb.get("name", "").startswith(prefix)
+                or lb.get("name", "").startswith(f"kube-{prefix}")
             ]
             count = len(lb_list)
 

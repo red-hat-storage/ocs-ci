@@ -179,6 +179,9 @@ version.
 * `fdf_image_tag`: FDF image tag, used to retrieve fdf_pre_release_image_digest.
 * `fdf_pre_release_registry`: Registry where the pre-release image of FDF is hosted.
 * `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
+* `fdf_upgrade_registry`: Registry URL for the FDF upgrade catalog image (Default: cp.stg.icr.io/cp/df). If not specified during upgrade, falls back to fdf_pre_release_registry.
+* `fdf_upgrade_image_tag`: Image tag for the FDF upgrade catalog (e.g., v4.22). If not specified during upgrade, falls back to fdf_image_tag.
+* `fdf_upgrade_image_digest`: sha256 of the pre-release image for FDF upgrade. If not provided, automatically retrieved using skopeo.
 * `storage_cluster_override` - Dictionary with data which will allow you to dynamically override data in storageCluster CR.
 * `konflux_build` - Set to True if build is made by Konflux build system.
 * `enable_data_replication_separation` - Set to True to label worker nodes with `network.rook.io/mon-ip: <IPAddress>` and enable data replication separation.

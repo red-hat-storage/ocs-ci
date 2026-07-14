@@ -475,7 +475,7 @@ def _is_base64_block(text_block: str, min_length: int = 100) -> bool:
         return False
 
     # Base64 alphabet: A-Z, a-z, 0-9, +, /, = (padding)
-    # Using string module to avoid detect-secrets false positive
+    # Using string module to avoid secret scanner false positive
     base64_chars = set(string.ascii_letters + string.digits + "+/=")
     non_whitespace = (
         text_block.replace("\n", "")
