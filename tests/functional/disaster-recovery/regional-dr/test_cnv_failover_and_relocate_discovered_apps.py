@@ -71,11 +71,11 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             ),
             pytest.param(
                 True,
-                3,
+                0,
                 None,
-                False,
+                True,
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
-                id="custom_pool_replica3_without_compression",
+                id="custom_pool_erasure_coding_without_compression",
             ),
             # TODO: ADD Polarion ID for Custom SC test
         ],
