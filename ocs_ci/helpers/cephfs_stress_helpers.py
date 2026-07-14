@@ -332,7 +332,7 @@ class CephFSStressTestManager:
         try:
             baseline = {}
             for pod_obj in get_filtered_pods():
-                pod_data = pod_obj.get(retry=3, wait=3)
+                pod_data = pod_obj.ocp.get(resource_name=pod_obj.name, retry=3, wait=3)
                 if not pod_data:
                     continue
                 pod_name = pod_data.get("metadata", {}).get("name")
@@ -784,7 +784,7 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
 
         try:
             for pod_obj in pod_objs:
-                pod_data = pod_obj.get(retry=3, wait=3)
+                pod_data = pod_obj.ocp.get(resource_name=pod_obj.name, retry=3, wait=3)
                 if not pod_data:
                     continue
                 pod_name = pod_data.get("metadata", {}).get("name")
