@@ -33,6 +33,7 @@ def cephfs_ec_pool_and_sc(request):
         pool_name=EC_POOL_NAME,
         data_chunks=EC_DATA_CHUNKS,
         coding_chunks=EC_CODING_CHUNKS,
+        erasure_coded=True,
     )
 
     secret_obj = helpers.create_secret(interface_type=constants.CEPHFILESYSTEM)

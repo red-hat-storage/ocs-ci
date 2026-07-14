@@ -92,7 +92,7 @@ class TestFailoverAndRelocate:
             False,  # via_ui = True
             True,
             True,
-            marks=pytest.mark.polarion_id("OCS-6859"),
+            # TODO: marks=pytest.mark.polarion_id("OCS-*"),
             id="primary_down-cephfs-cli-custom_sc-ec",
         ),
     ]
