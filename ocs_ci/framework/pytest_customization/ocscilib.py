@@ -968,6 +968,11 @@ def pytest_runtest_makereport(item, call):
         )
         return
 
+    # Attach must-gather URLs stored during deployment
+    if rep.failed and ocsci_config.RUN.get("deployment_mg_report_urls"):
+        for url in ocsci_config.RUN.pop("deployment_mg_report_urls"):
+            item.user_properties.append((MUST_GATHER_ANALYSIS_URL_PROPERTY, url))
+
     # we only look at actual failing test calls, not setup/teardown
     # Don't collect must-gather for deployment here since its already
     # handled in deployment
