@@ -325,14 +325,11 @@ class ODFCliRunner:
         else:
             noobaa_cmd = " ".join(["noobaa"] + command_args)
 
-        # Add namespace if provided (will override the default one in run_command)
-        if namespace:
-            noobaa_cmd += f" -n {namespace}"
-            # Don't let run_command add its default namespace
-            full_command = f"{self.binary_name} {noobaa_cmd}"
-        else:
-            # Let run_command add the default namespace
-            full_command = f"{self.binary_name} -n {config.ENV_DATA['cluster_namespace']} {noobaa_cmd}"
+        ns = namespace or config.ENV_DATA["cluster_namespace"]
+        # -n is required on both the odf binary (to avoid defaulting to
+        # openshift-storage) and the noobaa subcommand itself.
+        noobaa_cmd += f" -n {ns}"
+        full_command = f"{self.binary_name} -n {ns} {noobaa_cmd}"
 
         # Execute with appropriate method based on use_yes
         if use_yes:
