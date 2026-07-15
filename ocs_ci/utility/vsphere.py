@@ -17,6 +17,7 @@ from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     ResourcePoolNotFound,
+    TimeoutExpiredError,
     VMMaxDisksReachedException,
     VSLMNotFoundException,
 )
@@ -401,7 +402,13 @@ class VSPHERE(object):
             self.start_vms(vms=[vm])
 
     def add_disks_with_same_size(
-        self, num_disks, vm, size, disk_type="thin", ssd=False
+        self,
+        num_disks,
+        vm,
+        size,
+        disk_type="thin",
+        ssd=False,
+        is_control_plane=False,
     ):
         """
         Adds multiple disks to the VM with the same size
@@ -412,12 +419,17 @@ class VSPHERE(object):
             size (int) : size of disk in GB
             disk_type (str) : disk type
             ssd (bool): if True, mark disk as SSD
+            is_control_plane (bool): if True, this VM is a control-plane node
+                and extra stabilization waits are applied after restart to
+                ensure etcd quorum is preserved
 
         """
         disk_sizes = [size] * num_disks
-        self.add_disks(vm, disk_sizes, disk_type, ssd)
+        self.add_disks(vm, disk_sizes, disk_type, ssd, is_control_plane)
 
-    def add_disks(self, vm, disk_sizes, disk_type="thin", ssd=False):
+    def add_disks(
+        self, vm, disk_sizes, disk_type="thin", ssd=False, is_control_plane=False
+    ):
         """
         Adds multiple disks to the VM
 
@@ -426,6 +438,9 @@ class VSPHERE(object):
             disk_sizes (list) : List of the disk sizes in GB
             disk_type (str) : disk type
             ssd (bool): if True, mark disk as SSD
+            is_control_plane (bool): if True, this VM is a control-plane node
+                and extra stabilization waits are applied after restart to
+                ensure etcd quorum is preserved
 
         """
         if ssd:
@@ -435,21 +450,151 @@ class VSPHERE(object):
             self._configure_disk_for_vm(vm, size, disk_type, ssd)
 
         if ssd:
-            self.start_vms(vms=[vm])
-        # Importing here to avoid circular dependencies
+            self._start_vm_with_retry(vm)
+
         from ocs_ci.ocs.node import get_compute_node_names, wait_for_nodes_status
 
-        compute_nodes = get_compute_node_names()
+        if is_control_plane:
+            self._wait_for_control_plane_stable(vm.name)
+        else:
+            compute_nodes = get_compute_node_names()
+            try:
+                wait_for_nodes_status(compute_nodes, NODE_READY)
+            except ResourceWrongStatusException as ex:
+                logger.warning(
+                    f"At least one of the compute node is not in READY state: {ex}"
+                )
+                logger.warning(f"Trying to restart the node vm {vm.name} once again.")
+                self.stop_vms(vms=[vm])
+                self._start_vm_with_retry(vm)
+                wait_for_nodes_status(compute_nodes, NODE_READY)
+
+    def _start_vm_with_retry(self, vm, max_retries=2):
+        """
+        Start a VM and wait for it to obtain an IP address. If the VM
+        fails to get an IP within the timeout, power-cycle it and retry.
+
+        This handles transient vSphere networking issues where a VM boots
+        but never obtains network connectivity.
+
+        Args:
+            vm (vim.VirtualMachine): VM to start
+            max_retries (int): Maximum number of power-cycle retries
+
+        Raises:
+            TimeoutExpiredError: If the VM fails to obtain an IP after
+                all retries are exhausted
+
+        """
+        for attempt in range(1, max_retries + 1):
+            try:
+                self.start_vms(vms=[vm])
+                return
+            except TimeoutExpiredError:
+                if attempt >= max_retries:
+                    logger.error(
+                        "VM %s failed to obtain an IP after %d attempt(s). "
+                        "Giving up.",
+                        vm.name,
+                        max_retries,
+                    )
+                    raise
+                logger.warning(
+                    "VM %s did not obtain an IP within the timeout "
+                    "(attempt %d/%d). Retrying power cycle.",
+                    vm.name,
+                    attempt,
+                    max_retries,
+                )
+                self.stop_vms(vms=[vm])
+
+    def _wait_for_control_plane_stable(self, vm_name, timeout=600):
+        """
+        Wait for a control-plane node to fully rejoin the cluster after
+        a restart. Verifies the node reaches Ready status and then waits
+        for the API server to be responsive, ensuring etcd quorum is
+        restored before the next control-plane node can be restarted.
+
+        Handles transient API server timeouts gracefully -- the API may be
+        temporarily unavailable while the restarted etcd member rejoins.
+
+        Args:
+            vm_name (str): Name of the control-plane VM that was restarted
+            timeout (int): Maximum seconds to wait for stabilization
+
+        Raises:
+            ResourceWrongStatusException: If the node does not reach Ready
+                within the timeout
+
+        """
+        logger.info(
+            "Waiting for control-plane node %s to reach Ready status "
+            "and etcd to stabilize (timeout=%ds)",
+            vm_name,
+            timeout,
+        )
+
         try:
-            wait_for_nodes_status(compute_nodes, NODE_READY)
-        except ResourceWrongStatusException as ex:
-            logger.warning(
-                f"At least one of the compute node is not in  READY state: {ex}"
+            for attempt in TimeoutSampler(timeout, 15, self._is_node_ready, vm_name):
+                if attempt:
+                    logger.info(
+                        "Control-plane node %s is Ready",
+                        vm_name,
+                    )
+                    break
+        except TimeoutExpiredError:
+            raise ResourceWrongStatusException(
+                f"Control-plane node {vm_name} did not reach Ready status "
+                f"within {timeout}s after disk attachment"
             )
-            logger.warning(f"Trying to restart the node vm {vm.name} once again.")
-            self.stop_vms(vms=[vm])
-            self.start_vms(vms=[vm])
-            wait_for_nodes_status(compute_nodes, NODE_READY)
+
+        grace = 30
+        logger.info(
+            "Allowing %ds grace period for etcd cluster stabilization "
+            "after %s rejoined",
+            grace,
+            vm_name,
+        )
+        time.sleep(grace)
+
+    @staticmethod
+    def _is_node_ready(node_name):
+        """
+        Check whether a single node has reached Ready status.
+
+        Returns True if the node is Ready, False otherwise. Catches API
+        errors (timeouts, connection issues) and returns False so the
+        caller can retry.
+
+        Args:
+            node_name (str): The node name to check
+
+        Returns:
+            bool: True if the node is Ready
+
+        """
+        from ocs_ci.ocs.node import wait_for_nodes_status
+        from ocs_ci.ocs.exceptions import CommandFailed
+
+        try:
+            wait_for_nodes_status(
+                node_names=[node_name],
+                status=NODE_READY,
+                timeout=10,
+            )
+            return True
+        except (
+            ResourceWrongStatusException,
+            CommandFailed,
+            TimeoutExpiredError,
+            AssertionError,
+        ) as ex:
+            logger.debug(
+                "Node %s not yet Ready or API unavailable: %s",
+                node_name,
+                ex,
+            )
+            return False
 
     def add_rdm_disk(self, vm, device_name, disk_mode=None, compatibility_mode=None):
         """

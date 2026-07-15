@@ -48,10 +48,24 @@ def setup_local_storage(storageclass, add_new_disks=True):
         add_new_disks (bool): whether to add new disks to nodes after LSO installation
 
     """
-    # Get the worker nodes
+    # Get the storage node names -- workers plus masters when EC with
+    # schedulable masters or provider mode requires all nodes as OSD hosts.
     workers = get_nodes(node_type="worker")
     worker_names = [worker.name for worker in workers]
     logger.debug("Workers: %s", worker_names)
+
+    include_masters = config.ENV_DATA.get("mark_masters_schedulable", False) and (
+        config.ENV_DATA.get("odf_provider_mode_deployment", False)
+        or config.DEPLOYMENT.get("ec_default_pools", False)
+    )
+    storage_node_names = get_compute_node_names(no_replace=True)
+    if include_masters:
+        master_names = get_master_nodes()
+        existing = set(storage_node_names)
+        for name in master_names:
+            if name not in existing:
+                storage_node_names.append(name)
+    logger.info("Storage node names for LSO: %s", storage_node_names)
 
     ocp_version = version.get_semantic_ocp_version_from_config()
     ocs_version = version.get_semantic_ocs_version_from_config()
@@ -72,16 +86,9 @@ def setup_local_storage(storageclass, add_new_disks=True):
         # Set local-volume-discovery namespace
         lvd_data["metadata"]["namespace"] = lso_operator.namespace
 
-        storage_node_names = get_compute_node_names(no_replace=True)
-
-        if config.ENV_DATA.get(
-            "odf_provider_mode_deployment", False
-        ) and config.ENV_DATA.get("mark_masters_schedulable", True):
-            storage_node_names.extend(get_master_nodes())
-
-        # Update local volume discovery data with Worker node Names
+        # Update local volume discovery data with storage node names
         logger.info(
-            "Updating LocalVolumeDiscovery CR data with worker nodes Name: %s",
+            "Updating LocalVolumeDiscovery CR data with storage nodes: %s",
             storage_node_names,
         )
         lvd_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
@@ -155,7 +162,7 @@ def setup_local_storage(storageclass, add_new_disks=True):
         storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
         if config.DEPLOYMENT.get("deploy_multiple_device_classes"):
             storage_class_device_count *= 2
-    expected_pvs = len(worker_names) * storage_class_device_count
+    expected_pvs = len(storage_node_names) * storage_class_device_count
     if platform in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
         verify_pvs_created(expected_pvs, storageclass, False)
         if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):

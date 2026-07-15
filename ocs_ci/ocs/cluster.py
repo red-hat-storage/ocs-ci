@@ -1434,6 +1434,24 @@ def validate_pdb_creation():
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
 
+    # EC with host failure domain: Rook creates per-host OSD PDBs
+    # (rook-ceph-osd-host-<node>) instead of a single rook-ceph-osd PDB.
+    # Discover them from the cluster to get the correct count and names.
+    ec_host_fd = (
+        config.DEPLOYMENT.get("ec_default_pools")
+        and config.DEPLOYMENT.get("ec_failure_domain", "host") == "host"
+    )
+    if ec_host_fd:
+        osd_pdb_names = [
+            item["metadata"]["name"]
+            for item in item_list
+            if item["metadata"]["name"].startswith("rook-ceph-osd-host-")
+        ]
+        if osd_pdb_names:
+            pdb_required.remove(constants.OSD_PDB)
+            pdb_required.extend(osd_pdb_names)
+            pdb_count += len(osd_pdb_names) - 1
+
     if odf_running_version >= version.VERSION_4_19 and not config.COMPONENTS.get(
         "disable_noobaa", False
     ):
