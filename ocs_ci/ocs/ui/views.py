@@ -1032,6 +1032,100 @@ page_nav_4_20 = {
     "external_systems_page": ("External systems", By.LINK_TEXT),
 }
 
+# FDF SAN UI Locators
+FDF_SAN_LOCATORS = {
+    # Connect to external storage button on External Systems page
+    "connect_external_storage_button": (
+        "//button[@data-test='configure-external-systems' or contains(text(), 'Connect external systems')]",
+        By.XPATH,
+    ),
+    # Storage Area Network card clickable button (radio input is hidden behind the card)
+    "san_radio_button": ("//button[@id='san-storage']", By.XPATH),
+    # Next button in wizard
+    "next_button": (
+        "//button[contains(text(), 'Next') or .//span[contains(text(), 'Next')]]",
+        By.XPATH,
+    ),
+    # Image registry URL input field
+    "image_registry_url_input": (
+        "//input["
+        "@id='imageRegistryURL' or @name='imageRegistryURL'"
+        " or @aria-label='Image registry URL'"
+        " or @data-test='image-registry-url']",
+        By.XPATH,
+    ),
+    # Image repository name input field
+    "image_repository_name_input": (
+        "//input["
+        "@id='imageRepositoryName' or @name='imageRepositoryName'"
+        " or @aria-label='Image repository name'"
+        " or @data-test='image-repository-name']",
+        By.XPATH,
+    ),
+    # Secret key dropdown toggle button
+    "secret_key_dropdown": (
+        "//button[@data-test='secret-key-dropdown']",
+        By.XPATH,
+    ),
+    # All enabled options inside the Secret key dropdown.
+    "secret_key_dropdown_options": (
+        "//ul[@role='listbox' or @role='menu']"
+        "//li[not(@aria-disabled='true')]"
+        "//button",
+        By.XPATH,
+    ),
+    # All nodes radio button
+    "all_nodes_radio": ("//input[@id='use-all-nodes']", By.XPATH),
+    # LUN table checkbox for row i — use @aria-label to anchor the table,
+    "lun_table_checkbox": (
+        "//table[@aria-label='LUNs table']//tbody//tr[{i}]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    # LUN table second column (WWID) for row i
+    "lun_table_row_id": (
+        "//table[@aria-label='LUNs table']//tbody//tr[{i}]//td[2]",
+        By.XPATH,
+    ),
+    # LUN group name input field
+    "lun_group_name_input": (
+        "//input[@id='lunGroupName' or @name='lunGroupName' or @placeholder='Enter LUN group name']",
+        By.XPATH,
+    ),
+    # Connect and create button
+    "connect_and_create_button": (
+        "//button[@data-test='connect-and-create-san-system' "
+        "or contains(text(), 'Connect and create') "
+        "or contains(text(), 'Connect and Create')]",
+        By.XPATH,
+    ),
+    # SAN storage page
+    "san_storage_link": (
+        "//a[normalize-space(text())='SAN_Storage' "
+        "and contains(@href, '/odf/external-systems/scale.spectrum.ibm.com')]",
+        By.XPATH,
+    ),
+}
+
+SCALE_DASHBOARD_LOCATORS = {
+    "scale_connection_green": (
+        "//*[@data-test='Connection-health-item-icon']//*[@data-test='success-icon']",
+        By.XPATH,
+    ),
+    # Row locator for a specific LUN group — anchored on td[1] (name column)
+    "lun_group_row_by_name": (
+        "//table//tbody//tr[contains(td[1], '{lun_group_name}')]",
+        By.XPATH,
+    ),
+    # Status cell locator for a specific LUN group row.
+    "lun_group_status_ok_by_name": (
+        "//tr[contains(td[1], '{lun_group_name}')]"
+        "//td[@data-label='Status' or position()=2]"
+        "[text()='Healthy' or text()='OK' or text()='Connected'"
+        " or .//*[text()='Healthy' or text()='OK' or text()='Connected']]",
+        By.XPATH,
+    ),
+}
+
 acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
