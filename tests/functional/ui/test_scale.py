@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     fdf_required,
     runs_on_provider,
+    cnsa_remote_mount,
 )
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import black_squad
@@ -23,6 +24,7 @@ FILESYSTEM_2 = "fs2"
 
 @fdf_required
 @runs_on_provider
+@cnsa_remote_mount
 class TestScaleConnection(object):
     """
     Test connecting Scale cluster

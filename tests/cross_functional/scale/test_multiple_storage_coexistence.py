@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     orange_squad,
     fdf_required,
     skipif_ocs_version,
+    cnsa_remote_mount,
 )
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants, exceptions
@@ -52,8 +53,8 @@ def create_custom_secret(name, namespace, data_dict, secret_type="Opaque"):
 @orange_squad
 @fdf_required
 @skipif_ocs_version("<4.21")
+@cnsa_remote_mount
 class TestMultiStorageCoexistence(ManageTest):
-
     @pytest.fixture(autouse=True)
     def setup_scale_infrastructure(self, request):
         """

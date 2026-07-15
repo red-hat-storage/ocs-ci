@@ -438,10 +438,13 @@ ms_provider_and_consumer_required = pytest.mark.skipif(
     ),
     reason="Test runs ONLY on Managed service with provider and consumer clusters",
 )
+
 fdf_required = pytest.mark.skipif(
     not config.DEPLOYMENT.get("fdf_cluster"),
     reason="Test runs ONLY on FDF cluster",
 )
+
+cnsa_remote_mount = pytest.mark.cnsa_remote_mount
 
 
 # when run_on_all_clients marker is used, there needs to be added cluster_index
