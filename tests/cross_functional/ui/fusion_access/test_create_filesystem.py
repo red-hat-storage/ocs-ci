@@ -5,12 +5,10 @@ from time import sleep
 
 from ocs_ci.ocs.ui.page_objects.fusion_access_ui import FusionAccessUI
 from ocs_ci.framework.testlib import (
-    tier1,
     ui,
     ManageTest,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    green_squad,
     fusion_access_required,
     ignore_leftovers,
 )
@@ -24,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 
 @ui
-@green_squad
 @fusion_access_required
 @ignore_leftovers
 class TestFDFSANConnection(ManageTest):
@@ -87,7 +84,6 @@ class TestFDFSANConnection(ManageTest):
         """
         self.setup_ui_class_factory = setup_ui_class_factory
 
-    @tier1
     @pytest.mark.polarion_id("OCS-5500")
     def test_connect_san_storage_and_create_filesystem(
         self,
