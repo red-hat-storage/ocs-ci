@@ -6466,7 +6466,7 @@ def is_cluster_y_version_upgraded():
     return is_upgraded
 
 
-def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_primary_nb_db_pod(namespace=None):
     """
     Get the NooBaa DB pod that has been assigned the
     primary role by the CNPG operator.
@@ -6477,10 +6477,11 @@ def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     Raises:
         ResourceNotFoundError: If no NooBaa DB pod is found
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     return get_nb_db_pod_by_cnpg_label(constants.NB_DB_PRIMARY_POD_LABEL, namespace)
 
 
-def get_secondary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_secondary_nb_db_pod(namespace=None):
     """
     Get the NooBaa DB pod that has been assigned the
     secondary role by the CNPG operator.
@@ -6491,13 +6492,12 @@ def get_secondary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     Raises:
         ResourceNotFoundError: If no NooBaa DB pod is found
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     return get_nb_db_pod_by_cnpg_label(constants.NB_DB_SECONDARY_POD_LABEL, namespace)
 
 
 @config.run_with_provider_context_if_available
-def get_nb_db_pod_by_cnpg_label(
-    cnpg_label, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def get_nb_db_pod_by_cnpg_label(cnpg_label, namespace=None):
     """
     Get one of the NooBaa DB CNPG pods
 
@@ -6511,6 +6511,8 @@ def get_nb_db_pod_by_cnpg_label(
     Raises:
         ResourceNotFoundError: If no NooBaa DB pod is found
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
     # importing here to avoid circular imports
     from ocs_ci.ocs.resources import pod
 
