@@ -314,6 +314,13 @@ def cnv_custom_storage_class(
                 namespace=namespace,
                 resource_name=radosns_name,
             )
+            radosns_created = radosns_ocp.check_resource_existence(
+                should_exist=True, timeout=120, resource_name=radosns_name
+            )
+            if not radosns_created:
+                raise ResourceNotFoundError(
+                    f"CephBlockPoolRadosNamespace {radosns_name} is not created."
+                )
             radosns_data = radosns_ocp.get()
             radosns_phase = (
                 radosns_data.get("status", {}).get("phase") if radosns_data else None
