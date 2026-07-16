@@ -116,7 +116,6 @@ class TestErrorMessageImprovements(ManageTest):
         namespace_store_tab.check_error_messages()
 
     @polarion_id("OCS-4873")
-    @skipif_hci_provider_or_client
     def test_blocking_pool_creation_rules(self, cephblockpool_factory_ui_class):
         """
         Test to verify
