@@ -811,7 +811,10 @@ class Deployment(object):
         The deployment is intentionally placed after OCS/ODF so that any
         prerequisite storage infrastructure is already present.
         """
-        if config.DEPLOYMENT.get("fusion_access_deployment"):
+        if (
+            config.DEPLOYMENT.get("fusion_access_deployment")
+            and config.ENV_DATA["skip_ocs_deployment"]
+        ):
             from ocs_ci.deployment.fusion_access import FusionAccessOperator
 
             FusionAccessOperator().deploy()
