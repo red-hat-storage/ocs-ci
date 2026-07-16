@@ -26,10 +26,12 @@ from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import get_ec_metadata_pool_name, is_ec_pool_supported
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.node import get_osd_running_nodes
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +238,13 @@ class TestECPoolCreation(ManageTest):
     def skip_if_ec_not_supported(self):
         if not is_ec_pool_supported():
             pytest.skip("EC pools not supported on this cluster")
+        num_osd_hosts = len(get_osd_running_nodes())
+        min_k_plus_m = min(p["k"] + p["m"] for p in constants.EC_SUPPORTED_PROFILES)
+        if num_osd_hosts < min_k_plus_m:
+            pytest.skip(
+                f"Cluster has {num_osd_hosts} OSD hosts but smallest EC "
+                f"profile requires {min_k_plus_m}"
+            )
 
     @pytest.fixture()
     def ec_pool_teardown(self, request):
@@ -265,7 +274,7 @@ class TestECPoolCreation(ManageTest):
                 try:
                     obj.delete()
                     obj.ocp.wait_for_delete(obj.name, timeout=60)
-                except CommandFailed:
+                except (CommandFailed, TimeoutExpiredError):
                     logger.warning(f"Failed to delete {obj.kind}/{obj.name}")
 
         request.addfinalizer(finalizer)
@@ -444,6 +453,14 @@ class TestECPoolCreation(ManageTest):
             full_pool_name
         ), f"Failed to delete pool {full_pool_name} via UI"
 
+        ct_pod = pod.get_ceph_tools_pod()
+        logger.info(f"Waiting for Ceph pool '{full_pool_name}' to be removed")
+        for pools in TimeoutSampler(180, 10, ct_pod.exec_ceph_cmd, "ceph osd pool ls"):
+            if full_pool_name not in pools:
+                logger.info(f"Ceph pool '{full_pool_name}' removed successfully")
+                break
+
+        storage_pools_page = PageNavigator().navigate_storage_pools_page()
         storage_pools_page.page_has_loaded()
         assert not storage_pools_page.is_block_pool_exist(
             full_pool_name

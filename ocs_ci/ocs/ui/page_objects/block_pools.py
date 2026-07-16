@@ -298,7 +298,12 @@ class StoragePools(CreateResourceForm, EditLabelForm, ResourceList):
         if ec_scheme is None:
             schemes = self.get_available_ec_schemes()
             recommended = [s["scheme"] for s in schemes if s["recommended"]]
-            ec_scheme = recommended[0] if recommended else schemes[0]["scheme"]
+            if not recommended:
+                raise ValueError(
+                    "No recommended EC scheme found and ec_scheme not specified. "
+                    f"Available schemes: {[s['scheme'] for s in schemes]}"
+                )
+            ec_scheme = recommended[0]
         self.select_ec_scheme(ec_scheme)
 
         if compression:
