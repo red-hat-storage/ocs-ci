@@ -15,25 +15,25 @@ Deployment flow:
 """
 
 import logging
-import tempfile
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
-from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from ocs_ci.utility import templating
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+from ocs_ci.utility.operators import Operator
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
 
-class FusionAccessDeployment:
+class FusionAccessOperator(Operator):
     """
-    Handles the end-to-end deployment of the IBM Fusion Access Operator for SAN.
+    Handles the end-to-end deployment of the IBM Fusion Access Operator for SAN
+    by extending the shared :class:`~ocs_ci.utility.operators.Operator` base class.
+
+    The operator is installed from the ``certified-operators`` CatalogSource which
+    is pre-installed on every OCP cluster, so no custom CatalogSource is created.
 
     All required configuration keys are read from the OCS-CI config at runtime:
 
@@ -42,212 +42,111 @@ class FusionAccessDeployment:
             Defaults to ``"stable-v1"``.
         fusion_access_skip_cr (bool): When True, skip FusionAccess CR creation
             (useful when the CR is managed externally). Default False.
-
-    ENV_DATA section:
-        kubeconfig (via ``config.RUN["kubeconfig"]``): Path to the kubeconfig file.
     """
 
+    name = defaults.FUSION_ACCESS_OPERATOR_NAME
+    catalog_name = constants.FUSION_ACCESS_CATALOG_SOURCE_NAME
+    namespace = defaults.FUSION_ACCESS_NAMESPACE
+
     def __init__(self):
-        self.operator_name = defaults.FUSION_ACCESS_OPERATOR_NAME
-        self.namespace = defaults.FUSION_ACCESS_NAMESPACE
-        self.kubeconfig = config.RUN["kubeconfig"]
-        self.channel = config.DEPLOYMENT.get("fusion_access_channel", "stable-v1")
+        # Do not pass create_catalog=True — certified-operators is always present.
+        super().__init__(create_catalog=False)
 
-    def deploy(self):
+    # ------------------------------------------------------------------
+    # Channel resolution
+    # ------------------------------------------------------------------
+
+    def get_channel(self):
         """
-        Run the full IBM Fusion Access Operator for SAN deployment sequence.
+        Return the subscription channel for Fusion Access.
+
+        Uses ``config.DEPLOYMENT["fusion_access_channel"]`` when set,
+        otherwise falls back to ``"stable-v1"``.
         """
-        logger.test_step("Deploy IBM Fusion Access Operator for SAN")
-        logger.info("Starting IBM Fusion Access Operator deployment")
+        return config.DEPLOYMENT.get("fusion_access_channel", "stable-v1")
 
-        self.create_catalog_source()
-        self.create_namespace_and_operator_group()
-        self.create_subscription()
-        self.verify_operator()
+    # ------------------------------------------------------------------
+    # OperatorGroup customisation — AllNamespaces mode
+    # ------------------------------------------------------------------
 
-        if not config.DEPLOYMENT.get("fusion_access_skip_cr", False):
-            self.create_fusion_access_cr()
-        else:
+    def _customize_operatorgroup(self, operatorgroup_data: dict):
+        """
+        Configure the OperatorGroup for AllNamespaces install mode.
+
+        The Fusion Access CSV only supports ``AllNamespaces``, so
+        ``spec.targetNamespaces`` must be empty and the NMState annotation
+        inherited from the base template must be removed.
+        """
+        operatorgroup_data["metadata"].pop("annotations", None)
+        operatorgroup_data["spec"]["targetNamespaces"] = []
+
+    # ------------------------------------------------------------------
+    # Namespace customisation — cluster-monitoring label
+    # ------------------------------------------------------------------
+
+    def _customize_namespace(self, namespace_data: dict):
+        """
+        Add the ``openshift.io/cluster-monitoring`` label to the namespace.
+        """
+        namespace_data.setdefault("metadata", {}).setdefault("labels", {})[
+            "openshift.io/cluster-monitoring"
+        ] = "true"
+
+    # ------------------------------------------------------------------
+    # Post-deployment: wait for CSV Succeeded
+    # ------------------------------------------------------------------
+
+    def _customize_post_deployment_steps(self):
+        """
+        Wait for the Fusion Access operator CSV to reach the Succeeded phase.
+        """
+        logger.info("Waiting for Fusion Access operator CSV to reach Succeeded phase")
+        for csv in TimeoutSampler(
+            timeout=900,
+            sleep=15,
+            func=get_csvs_start_with_prefix,
+            csv_prefix=self.name,
+            namespace=self.namespace,
+        ):
+            if csv:
+                break
+        csv_name = csv[0]["metadata"]["name"]
+        logger.info(f"Found CSV '{csv_name}' — waiting for Succeeded phase")
+        csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
+        csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
+        logger.info(f"CSV '{csv_name}' reached Succeeded phase")
+
+    # ------------------------------------------------------------------
+    # Deployment verification: FusionAccess CR
+    # ------------------------------------------------------------------
+
+    def _deployment_verification(self):
+        """
+        Create the FusionAccess CR and wait for it to reach the Ready phase.
+
+        Skipped when ``config.DEPLOYMENT["fusion_access_skip_cr"]`` is True.
+        """
+        if config.DEPLOYMENT.get("fusion_access_skip_cr", False):
             logger.info(
                 "fusion_access_skip_cr is set — skipping FusionAccess CR creation"
             )
-
-        logger.info("IBM Fusion Access Operator for SAN deployed successfully")
-
-    # ------------------------------------------------------------------
-    # Step 1: CatalogSource
-    # ------------------------------------------------------------------
-
-    def create_catalog_source(self):
-        """
-        Verify the certified-operators CatalogSource is present and READY.
-
-        The certified-operators catalog is pre-installed on every OCP cluster so
-        no creation is necessary.  This step only asserts its presence to surface
-        a clear error early when the environment is misconfigured.
-        """
-        catalog_source_name = constants.FUSION_ACCESS_CATALOG_SOURCE_NAME
-        certified_catalog_source = CatalogSource(
-            resource_name=catalog_source_name,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-
-        if certified_catalog_source.check_state("READY"):
-            logger.info(f"CatalogSource '{catalog_source_name}' is present and READY")
             return
 
-        raise AssertionError(
-            f"CatalogSource '{catalog_source_name}' is not READY in "
-            f"'{constants.MARKETPLACE_NAMESPACE}'. "
-            "Ensure the cluster has a functional certified-operators catalog."
-        )
-
-    # ------------------------------------------------------------------
-    # Step 2: Namespace + OperatorGroup
-    # ------------------------------------------------------------------
-
-    def create_namespace_and_operator_group(self):
-        """
-        Create the ibm-fusion-access Namespace and OperatorGroup.
-
-        Uses ``oc apply`` so both objects are always reconciled to the desired
-        state, even on re-runs.  In particular this ensures that an OperatorGroup
-        created by a previous (broken) run with ``targetNamespaces`` set is
-        patched to ``spec: {}`` (AllNamespaces mode), which is required by the
-        Fusion Access operator and its KMM dependency.
-        """
-        logger.info(
-            f"Applying Namespace '{self.namespace}' and OperatorGroup "
-            "(AllNamespaces mode)"
-        )
-        exec_cmd(
-            f"oc --kubeconfig {self.kubeconfig} apply -f "
-            f"{constants.FUSION_ACCESS_NS_YAML}"
-        )
-        logger.info(f"Namespace '{self.namespace}' and OperatorGroup applied")
-
-    # ------------------------------------------------------------------
-    # Step 3: Subscription
-    # ------------------------------------------------------------------
-
-    def create_subscription(self):
-        """
-        Create the openshift-fusion-access-operator Subscription in certified-operators.
-
-        If a Subscription with the same name already exists the step is skipped.
-        The channel can be overridden via ``config.DEPLOYMENT["fusion_access_channel"]``.
-        """
-        sub_ocp = OCP(kind=constants.SUBSCRIPTION_COREOS, namespace=self.namespace)
-        if sub_ocp.is_exist(resource_name=self.operator_name):
-            logger.info(
-                f"Subscription '{self.operator_name}' already exists, skipping creation"
-            )
-            return
-
-        logger.info(
-            f"Creating Subscription '{self.operator_name}' on channel '{self.channel}'"
-        )
-        subscription_data = templating.load_yaml(
-            constants.FUSION_ACCESS_SUBSCRIPTION_YAML
-        )
-        subscription_data["spec"]["channel"] = self.channel
-
-        subscription_manifest = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="fusion_access_subscription", delete=False
-        )
-        templating.dump_data_to_temp_yaml(subscription_data, subscription_manifest.name)
-        exec_cmd(
-            f"oc --kubeconfig {self.kubeconfig} apply -f {subscription_manifest.name}"
-        )
-        logger.info(f"Subscription '{self.operator_name}' created")
-
-    # ------------------------------------------------------------------
-    # Step 4: Verify operator (CSV Succeeded)
-    # ------------------------------------------------------------------
-
-    def verify_operator(self, sleep: int = 30):
-        """
-        Wait for the Fusion Access operator CSV to reach the Succeeded phase.
-
-        Args:
-            sleep (int): Seconds to pause after the Subscription is found before
-                polling the CSV phase. Defaults to 30.
-        """
-        logger.info("Verifying IBM Fusion Access Operator installation")
-        logger.info("Waiting for Subscription and CSV to appear")
-        _wait_for_subscription(self.operator_name, self.namespace)
-
-        if sleep:
-            logger.info(
-                f"Sleeping {sleep}s after Subscription '{self.operator_name}' appeared"
-            )
-            time.sleep(sleep)
-
-        package_manifest = PackageManifest(resource_name=self.operator_name)
-        package_manifest.wait_for_resource(timeout=120)
-        csv_name = package_manifest.get_current_csv()
-        logger.info(f"Found CSV '{csv_name}' — waiting for Succeeded phase")
-
-        csv = CSV(resource_name=csv_name, namespace=self.namespace)
-        csv.wait_for_phase("Succeeded", timeout=600, sleep=10)
-        logger.info(
-            f"IBM Fusion Access Operator CSV '{csv_name}' reached Succeeded phase"
-        )
-
-    # ------------------------------------------------------------------
-    # Step 5: FusionAccess CR
-    # ------------------------------------------------------------------
-
-    def create_fusion_access_cr(self):
-        """
-        Create the FusionAccess custom resource to configure the SAN storage layer.
-
-        If a FusionAccess CR named 'fusionaccess-object' already exists the step
-        is skipped and a health check is performed instead.
-        """
         cr_ocp = OCP(kind="FusionAccess", namespace=self.namespace)
         if cr_ocp.is_exist(resource_name="fusionaccess-object"):
-            logger.info("FusionAccess CR already exists, skipping creation")
-            fusion_access_status_check()
-            return
+            logger.info("FusionAccess CR already exists, verifying status")
+        else:
+            logger.info("Creating FusionAccess CR")
+            cr_ocp.apply(yaml_file=constants.FUSION_ACCESS_CR_YAML)
+            logger.info("FusionAccess CR created")
 
-        logger.info("Creating FusionAccess CR")
-        exec_cmd(
-            f"oc --kubeconfig {self.kubeconfig} apply -f "
-            f"{constants.FUSION_ACCESS_CR_YAML}"
-        )
         fusion_access_status_check()
-        logger.info("FusionAccess CR created and reached Ready state")
+        logger.info("FusionAccess CR is in Ready state")
 
 
 # ---------------------------------------------------------------------------
 # Module-level helpers
 # ---------------------------------------------------------------------------
-
-
-def _wait_for_subscription(subscription_name: str, namespace: str) -> None:
-    """
-    Poll until the named Subscription appears in *namespace*.
-
-    Args:
-        subscription_name (str): Name (or name prefix) of the Subscription to wait for.
-        namespace (str): Namespace where the Subscription is expected.
-
-    Raises:
-        TimeoutExpiredError: If the Subscription does not appear within 300 s.
-    """
-    logger.info(
-        f"Waiting for Subscription '{subscription_name}' in namespace '{namespace}'"
-    )
-    for sample in TimeoutSampler(
-        300, 10, OCP, kind=constants.SUBSCRIPTION_COREOS, namespace=namespace
-    ):
-        for subscription in sample.get().get("items", []):
-            found_name = subscription.get("metadata", {}).get("name", "")
-            if subscription_name in found_name:
-                logger.info(f"Subscription found: {found_name}")
-                return
-            logger.debug(f"Still waiting for Subscription '{subscription_name}'")
 
 
 @retry((AssertionError, KeyError), tries=20, delay=30, backoff=1)
@@ -267,7 +166,7 @@ def fusion_access_status_check() -> None:
         namespace=defaults.FUSION_ACCESS_NAMESPACE,
     )
     cr_data = cr.get(resource_name="fusionaccess-object")
-    status = cr_data["status"]["status"]
-    logger.debug(f"FusionAccess status.phase = '{status}'")
-    assert status == "Ready", f"FusionAccess is not Ready (current phase: '{status}')"
+    phase = cr_data["status"]["phase"]
+    logger.debug(f"FusionAccess status.phase = '{phase}'")
+    assert phase == "Ready", f"FusionAccess is not Ready (current phase: '{phase}')"
     logger.info("FusionAccess is in Ready state")
