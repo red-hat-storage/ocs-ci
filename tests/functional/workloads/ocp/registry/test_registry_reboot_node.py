@@ -79,12 +79,11 @@ class TestRegistryRebootNode(E2ETest):
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=28,
             delay=15,
+            backoff=1,
         )(wait_for_cluster_connectivity)(tries=400)
-        retry(
-            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=28,
-            delay=15,
-        )(wait_for_nodes_status)(timeout=900)
+
+        node_ready_timeout = 1800 if node_type == MASTER_MACHINE else 900
+        wait_for_nodes_status(timeout=node_ready_timeout)
 
         # Validate cluster health ok and all pods are running
         self.sanity_helpers.health_check(tries=40)
