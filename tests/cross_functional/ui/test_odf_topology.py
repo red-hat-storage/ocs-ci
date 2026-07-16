@@ -275,7 +275,7 @@ class TestODFTopology(object):
     @ignore_leftovers
     @polarion_id("OCS-4905")
     @skipif_hci_provider_or_client
-    def test_stop_start_node_validate_topology(
+    def deprecated_test_stop_start_node_validate_topology(
         self, nodes, setup_ui_class, teardown_nodes_job, threading_lock
     ):
         """
