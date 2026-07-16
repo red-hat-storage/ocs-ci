@@ -44,7 +44,7 @@ class TestMustGather(ManageTest):
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
-                ]
+                ],
             ),
             pytest.param(
                 *["JSON"],
@@ -54,7 +54,7 @@ class TestMustGather(ManageTest):
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
-                ]
+                ],
             ),
             pytest.param(
                 *["OTHERS"], marks=[tier2, pytest.mark.polarion_id("OCS-1583")]
