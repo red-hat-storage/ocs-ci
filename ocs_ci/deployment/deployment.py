@@ -805,11 +805,8 @@ class Deployment(object):
 
     def do_deploy_fusion_access(self):
         """
-        Deploy IBM Fusion Access Operator for SAN after OCP deployment.
-
+        Enable IBM Fusion Access for SAN operator deployment after OCP is deployed.
         Triggered when ``config.DEPLOYMENT["fusion_access_deployment"]`` is True.
-        The deployment is intentionally placed after OCS/ODF so that any
-        prerequisite storage infrastructure is already present.
         """
         if (
             config.DEPLOYMENT.get("fusion_access_deployment")
