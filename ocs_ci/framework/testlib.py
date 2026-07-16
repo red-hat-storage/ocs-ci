@@ -5,6 +5,7 @@ from ocs_ci.ocs.constants import (
     MCG_TESTS_MIN_NB_ENDPOINT_COUNT,
     MAX_NB_ENDPOINT_COUNT,
     NOOBAA_CNPG_POD_LABEL,
+    NOOBAA_DB_LABEL_419_AND_ABOVE,
     NOOBAA_ENDPOINT_POD_LABEL,
 )
 
@@ -48,8 +49,11 @@ class EcosystemTest(BaseTest):
     pass
 
 
-# nb endpoint and cnpg-controller-manager pods might change during MCG tests
-@ignore_leftover_label(NOOBAA_ENDPOINT_POD_LABEL, NOOBAA_CNPG_POD_LABEL)  # noqa: F405
+# nb endpoint and cnpg-controller-manager pods might change during MCG tests;
+# cnpg scheduled backup VolumeSnapshots may appear between pre/post checks
+@ignore_leftover_label(  # noqa: F405
+    NOOBAA_ENDPOINT_POD_LABEL, NOOBAA_CNPG_POD_LABEL, NOOBAA_DB_LABEL_419_AND_ABOVE
+)
 @pytest.mark.usefixtures("nb_ensure_endpoint_count")
 class MCGTest(ManageTest):
     MIN_ENDPOINT_COUNT = MCG_TESTS_MIN_NB_ENDPOINT_COUNT
