@@ -146,7 +146,7 @@ class TestSecondaryDbOptimization(MCGTest):
                 pod_name=db_pod.name,
                 namespace=config.ENV_DATA["cluster_namespace"],
                 since="5m",
-                grep="nbcore.*statement.*SELECT",
+                grep="nbcore.*(statement|execute).*SELECT",
                 regex=True,
                 first_match_only=False,
             ).split("\n")
