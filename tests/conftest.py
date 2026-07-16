@@ -7205,6 +7205,7 @@ def revert_noobaa_endpoint_scc_class(request):
     return revert_noobaa_endpoint_scc_fixture(request)
 
 
+@config.run_with_provider_context_if_available
 def revert_noobaa_endpoint_scc_fixture(request):
     """
     This fixture reverts the noobaa-endpoint SCC back to the way it was before ODF 4.12.
@@ -7223,6 +7224,7 @@ def revert_noobaa_endpoint_scc_fixture(request):
     if scc_dict["seLinuxContext"]["type"] == "MustRunAs" or scc_dict["users"]:
         return
 
+    @config.run_with_provider_context_if_available
     def revert_endpoint_scc_implementation():
         """
         1. Modify the noobaa-endpoint scc via oc patch
@@ -7250,6 +7252,7 @@ def revert_noobaa_endpoint_scc_fixture(request):
             constants.NOOBAA_ENDPOINT_SERVICE_ACCOUNT in scc_dict["users"]
         ), "The noobaa-endpoint SA wasn't added to the noobaa-endpoint SCC"
 
+    @config.run_with_provider_context_if_available
     def finalizer():
         """
         1. Restore the noobaa-endpoint SCC back to its default values
