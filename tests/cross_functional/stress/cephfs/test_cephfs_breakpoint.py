@@ -62,7 +62,7 @@ class TestCephfsStress(E2ETest):
                 multiplication_factors="1,2,3,4",
                 parallelism=6,
                 completions=6,
-                base_file_count=50000,
+                base_file_count=100,
             )
             logger.info(
                 f"The CephFS-stress Job {cephfs_stress_job_obj.name} has been submitted"

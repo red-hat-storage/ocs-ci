@@ -34,8 +34,10 @@ from ocs_ci.helpers.helpers import (
     create_project,
     create_pvc,
     wait_for_resource_state,
+    wait_for_pv_delete,
     get_current_test_name,
 )
+from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.resources.pod import (
     check_pods_in_running_state,
     get_all_pods,
@@ -607,12 +609,32 @@ class CephFSStressTestManager:
             for f in self.verification_failures:
                 logger.error(f"Failure: {f}")
 
+        pv_objs_to_wait = []
+        for resource in self.created_resources:
+            if isinstance(resource, PVC):
+                try:
+                    pv_objs_to_wait.append(resource.backed_pv_obj)
+                except Exception as e:
+                    logger.warning(
+                        f"Could not capture backing PV for PVC {resource.name}: {e}"
+                    )
+
         logger.info(f"Cleaning up {len(self.created_resources)} resources...")
         for resource in reversed(self.created_resources):
             try:
                 resource.delete()
             except Exception as e:
                 logger.warning(f"Failed to delete {resource.name}: {e}")
+
+        if pv_objs_to_wait:
+            logger.info(
+                f"Waiting for {len(pv_objs_to_wait)} backing PV(s) to be fully deleted..."
+            )
+            try:
+                wait_for_pv_delete(pv_objs_to_wait)
+                logger.info("All backing PVs deleted.")
+            except Exception as e:
+                logger.warning(f"Timed out waiting for backing PV deletion: {e}")
 
 
 def check_ceph_health(stress_manager=None):
@@ -814,7 +836,7 @@ def verify_openshift_storage_ns_pods_health(stress_manager=None):
                         # restartCount went backwards — the pod was recreated with the
                         # same name and its counter reset to 0.
                         delta = restart_count
-                        new_baseline[key] = 0
+                        new_baseline[key] = restart_count
                         logger.warning(
                             f"Pod {pod_name} container {container_name}: restartCount "
                             f"dropped from baseline {baseline_count} to {restart_count} "
