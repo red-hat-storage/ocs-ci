@@ -42,7 +42,7 @@ class TestMustGather(ManageTest):
                     pytest.mark.polarion_id("OCS-1583"),
                     skipif_external_mode,
                     skipif_ms_consumer,
-                ]
+                ],
             ),
             pytest.param(
                 *["JSON"],
@@ -51,7 +51,7 @@ class TestMustGather(ManageTest):
                     pytest.mark.polarion_id("OCS-1583"),
                     skipif_external_mode,
                     skipif_ms_consumer,
-                ]
+                ],
             ),
             pytest.param(
                 *["OTHERS"], marks=[tier2, pytest.mark.polarion_id("OCS-1583")]
