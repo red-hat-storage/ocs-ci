@@ -6594,6 +6594,11 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
                     f"Could not delete block pool {instance.name} from UI."
                     " Deleted from CLI"
                 )
+            cbp_ocp = OCP(
+                kind=constants.CEPHBLOCKPOOL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            cbp_ocp.wait_for_delete(resource_name=instance.name, timeout=300)
 
     request.addfinalizer(finalizer)
     return factory
