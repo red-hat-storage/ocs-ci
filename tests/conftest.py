@@ -198,6 +198,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check,
     get_default_if_keyval_empty,
     get_ocs_build_number,
+    get_ocs_version_from_image,
     get_openshift_client,
     get_random_str,
     get_testrun_name,
@@ -2089,7 +2090,9 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
 @pytest.fixture(scope="session", autouse=True)
 def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     """
-    Configures additional custom testsuite properties for junit xml
+    Configures additional custom testsuite properties for junit xml.
+    After all tests complete, updates version-related properties to reflect
+    post-upgrade values if an upgrade was performed.
     """
     # add logs url
     logs_url = ocsci_config.RUN.get("logs_url")
@@ -2124,6 +2127,102 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     dr_operator_versions = utils.get_dr_operator_versions()
     for dr_operator_name, dr_operator_version in dr_operator_versions.items():
         record_testsuite_property(f"rp_{dr_operator_name}", dr_operator_version)
+
+    yield
+
+    _update_testsuite_properties_after_upgrade(pytestconfig)
+
+
+def _update_testsuite_properties_after_upgrade(pytestconfig):
+    """
+    After all tests complete, update JUnit XML testsuite properties to reflect
+    post-upgrade versions. Without this, upgrade runs (e.g. 4.21 -> 4.22) report
+    the source version in the XML, causing the Regression Analysis app to file
+    results under the wrong release tab.
+
+    Updates: rp_ocs_version, rp_ocp_version, rp_ocs_build, rp_launch_name,
+    and polarion-testrun-id.
+    """
+    from _pytest.junitxml import xml_key, bin_xml_escape
+
+    upgrade_ocs_registry_image = ocsci_config.UPGRADE.get("upgrade_ocs_registry_image")
+    upgrade_ocs_version = ocsci_config.UPGRADE.get("upgrade_ocs_version")
+    if not upgrade_ocs_registry_image and not upgrade_ocs_version:
+        return
+
+    xml = pytestconfig._store.get(xml_key, None)
+    if xml is None:
+        return
+
+    if upgrade_ocs_registry_image:
+        try:
+            new_ocs_version = get_ocs_version_from_image(upgrade_ocs_registry_image)
+        except ValueError:
+            log.warning(
+                "Failed to parse OCS version from upgrade registry image: "
+                f"{upgrade_ocs_registry_image}"
+            )
+            new_ocs_version = upgrade_ocs_version
+    else:
+        new_ocs_version = upgrade_ocs_version
+
+    try:
+        from ocs_ci.ocs.version import get_ocp_version
+
+        new_ocp_version = get_ocp_version()
+    except Exception:
+        log.warning(
+            "Failed to get post-upgrade OCP version from cluster, "
+            "keeping original value"
+        )
+        new_ocp_version = None
+
+    try:
+        new_ocs_build = get_ocs_build_number()
+    except Exception:
+        log.warning(
+            "Failed to get post-upgrade OCS build number, " "keeping original value"
+        )
+        new_ocs_build = None
+
+    updates = {}
+    if new_ocs_version:
+        updates["rp_ocs_version"] = new_ocs_version
+    if new_ocp_version:
+        updates["rp_ocp_version"] = new_ocp_version
+    if new_ocs_build:
+        updates["rp_ocs_build"] = str(new_ocs_build)
+
+    if new_ocs_version or new_ocp_version:
+        if new_ocs_version:
+            ocsci_config.ENV_DATA["ocs_version"] = new_ocs_version
+        if new_ocp_version:
+            ocsci_config.DEPLOYMENT["installer_version"] = new_ocp_version
+        updates["rp_launch_name"] = reporting.get_rp_launch_name()
+        updates["polarion-testrun-id"] = get_testrun_name()
+
+    if not updates:
+        return
+
+    log.info(
+        "Updating JUnit XML testsuite properties with post-upgrade versions: "
+        f"{updates}"
+    )
+
+    for i, (name, value) in enumerate(xml.global_properties):
+        str_name = str(name)
+        if str_name in updates:
+            new_value = bin_xml_escape(updates[str_name])
+            log.info(
+                f"Updated testsuite property '{str_name}': "
+                f"'{value}' -> '{new_value}'"
+            )
+            xml.global_properties[i] = (name, new_value)
+            del updates[str_name]
+
+    for name, value in updates.items():
+        xml.global_properties.append((name, bin_xml_escape(value)))
+        log.info(f"Added testsuite property '{name}': '{value}'")
 
 
 @pytest.fixture(scope="session")
