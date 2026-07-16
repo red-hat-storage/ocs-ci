@@ -278,9 +278,10 @@ class HsBench(object):
 
         """
         eval_data = {}
-        with open(f"{self.hsbench_dir}/{result}", "r") as file, open(
-            f"{self.hsbench_dir}/summary.csv", "w"
-        ) as out:
+        with (
+            open(f"{self.hsbench_dir}/{result}", "r") as file,
+            open(f"{self.hsbench_dir}/summary.csv", "w") as out,
+        ):
             writer = csv.writer(out)
             for row in csv.reader(file):
                 if row[1] == "TOTAL":
