@@ -4066,12 +4066,6 @@ TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS = os.path.join(TEMPLATE_DIR, "fusion-acces
 FUSION_ACCESS_NAMESPACE = "ibm-fusion-access"
 FUSION_ACCESS_CATALOG_SOURCE_NAME = "certified-operators"
 FUSION_ACCESS_OPERATOR_NAME = "openshift-fusion-access-operator"
-FUSION_ACCESS_SUBSCRIPTION_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "subscription.yaml"
-)
-FUSION_ACCESS_NS_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "namespace.yaml"
-)
 FUSION_ACCESS_CR_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "fusion-access-san.yaml"
 )

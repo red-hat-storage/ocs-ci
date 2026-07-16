@@ -874,9 +874,9 @@ class Deployment(object):
         prerequisite storage infrastructure is already present.
         """
         if config.DEPLOYMENT.get("fusion_access_deployment"):
-            from ocs_ci.deployment.fusion_access import FusionAccessDeployment
+            from ocs_ci.deployment.fusion_access import FusionAccessOperator
 
-            FusionAccessDeployment().deploy()
+            FusionAccessOperator().deploy()
 
     def do_deploy_hosted_spoke_clusters(self):
         """
