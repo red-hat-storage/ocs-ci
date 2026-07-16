@@ -1935,6 +1935,39 @@ block_pool = {
     ),
 }
 
+block_pool_4_22 = {
+    "pool_type_filesystem": ("type-filesystem", By.ID),
+    "pool_name_input": ("pool-name", By.ID),
+    "policy_replication": ("policy-replication", By.ID),
+    "policy_erasure_coding": ("policy-erasure-coding", By.ID),
+    "ec_scheme_table_rows": (
+        "//table[@aria-label='Erasure coding scheme selection']//tbody/tr",
+        By.XPATH,
+    ),
+    "ec_scheme_radio": (
+        "//tr[.//td[@data-label='Scheme (k+m)' and "
+        "starts-with(normalize-space(.), '{}')]]"
+        "//input[@name='radioGroup']",
+        By.XPATH,
+    ),
+    "ec_row_scheme_cell": (
+        ".//td[@data-label='Scheme (k+m)']",
+        By.XPATH,
+    ),
+    "ec_row_overhead_cell": (
+        ".//td[@data-label='Storage overhead']",
+        By.XPATH,
+    ),
+    "ec_recommended_badge": (
+        ".//span[contains(@class, 'c-badge')]",
+        By.XPATH,
+    ),
+    "pool_replicas_in_list": (
+        'span[data-test="{}-replicas"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
 storageclass = {
     "create_storageclass_button": ("Create StorageClass", By.LINK_TEXT),
     "input_storageclass_name": ('input[id="storage-class-name"]', By.CSS_SELECTOR),
@@ -3797,7 +3830,12 @@ locators = {
             **validation_4_21,
             **validation_4_22,
         },
-        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "block_pool": {
+            **block_pool,
+            **block_pool_4_12,
+            **block_pool_4_13,
+            **block_pool_4_22,
+        },
         "storageclass": {**storageclass, **storageclass_4_9},
         "bucketclass": bucketclass,
         "topology": topology,
