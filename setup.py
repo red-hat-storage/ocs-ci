@@ -128,6 +128,7 @@ setup(
             "rosa-ocp-version=ocs_ci.utility.rosa:rosa_ocp_version_endpoint",
             "deploy-fusion=ocs_ci.framework.fusion.main:main",
             "deploy-fdf=ocs_ci.framework.fusion_data_foundation.main:main",
+            "deploy-mirror=ocs_ci.framework.fdf_mirror.main:main",
         ],
     },
     zip_safe=True,
