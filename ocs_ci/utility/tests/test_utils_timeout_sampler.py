@@ -1,5 +1,6 @@
 # -*- coding: utf8 -*-
 
+import functools
 import logging
 import time
 
@@ -138,7 +139,12 @@ def test_ts_func_exception(caplog):
     ]
     assert len(info_exception_records) >= 1
     for rec in info_exception_records:
-        assert "for function 'func' failed" in rec.getMessage()
+        msg = rec.getMessage()
+        assert "for function 'func' failed" in msg
+        # the rate-limited INFO message names the exception type but not its
+        # (possibly sensitive) message text, which stays at DEBUG level
+        assert "failed with Exception" in msg
+        assert "oh no" not in msg
 
 
 def test_ti_func_values():
@@ -212,3 +218,137 @@ def test_ts_wait_for_value_negative(caplog):
         assert "function <lambda> failed" in log_msg
         assert "failed to return expected value 2" in log_msg
         assert "during 3 second timeout" in log_msg
+        assert "last sampled value: 1" in log_msg
+
+
+def test_ts_func_without_name():
+    """
+    Check that TimeoutSampler handles func objects without __name__ attribute
+    (e.g. functools.partial): the timeout message is still assembled and
+    failing attempts are logged instead of crashing with AttributeError
+    inside the exception handler.
+    """
+
+    def func(a):
+        raise ValueError("nope")
+
+    ts = TimeoutSampler(1, 1, functools.partial(func, 1))
+    # the call string (and so the timeout message) was built despite the
+    # missing __name__ attribute
+    assert len(ts.timeout_exc_args) == 2
+    with pytest.raises(TimeoutExpiredError):
+        for _ in ts:
+            pass
+
+
+def test_ts_timeout_chained_to_last_exception():
+    """
+    When sampling times out and the most recent attempt raised an exception,
+    the TimeoutExpiredError is chained to it (__cause__), so the root cause
+    shows up directly in the resulting traceback.
+    """
+
+    def func():
+        raise ValueError("persistent failure")
+
+    with pytest.raises(TimeoutExpiredError) as excinfo:
+        for _ in TimeoutSampler(1, 1, func):
+            pass
+    assert isinstance(excinfo.value.__cause__, ValueError)
+    assert str(excinfo.value.__cause__) == "persistent failure"
+
+
+def test_ts_timeout_not_chained_without_func_exception():
+    """
+    When func never raised, the TimeoutExpiredError has no __cause__.
+    """
+    func = lambda: 1  # noqa: E731
+    with pytest.raises(TimeoutExpiredError) as excinfo:
+        for _ in TimeoutSampler(1, 1, func):
+            pass
+    assert excinfo.value.__cause__ is None
+
+
+def test_ts_post_mortem_attributes_last_attempt_ok():
+    """
+    attempt/last_result/last_exception attributes are available for
+    post-mortem inspection: when the most recent attempt succeeded,
+    last_exception is None and last_result holds its return value.
+    """
+    func_state = []
+
+    def func():
+        func_state.append(0)
+        if len(func_state) == 1:
+            raise ValueError("transient")
+        return len(func_state)
+
+    ts = TimeoutSampler(2, 1, func)
+    with pytest.raises(TimeoutExpiredError):
+        for _ in ts:
+            pass
+    assert ts.attempt == 2
+    assert ts.last_result == 2
+    assert ts.last_exception is None
+
+
+def test_ts_post_mortem_attributes_last_attempt_failed():
+    """
+    When the most recent attempt raised, last_exception holds the exception
+    while last_result still holds the value of the last successful attempt,
+    and the timeout exception is chained to last_exception.
+    """
+    outcomes = [1, ValueError("boom")]
+
+    def func():
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    ts = TimeoutSampler(2, 1, func)
+    with pytest.raises(TimeoutExpiredError) as excinfo:
+        for _ in ts:
+            pass
+    assert ts.attempt == 2
+    assert ts.last_result == 1
+    assert isinstance(ts.last_exception, ValueError)
+    assert excinfo.value.__cause__ is ts.last_exception
+
+
+def test_ts_wait_for_value_negative_complex_value(caplog):
+    """
+    Complex sampled values (e.g. dicts) are reported in the error log only by
+    their type, so large or potentially sensitive content is not dumped into
+    the log.
+    """
+    func = lambda: {"password": "secret123"}  # noqa: E731  # pragma: allowlist secret
+    ts = TimeoutSampler(1, 1, func)
+    caplog.set_level(logging.ERROR)
+    with pytest.raises(TimeoutExpiredError):
+        ts.wait_for_func_value(True)
+    assert len(caplog.records) == 1
+    log_msg = caplog.records[0].getMessage()
+    assert "last sampled value: <dict>" in log_msg
+    assert "secret123" not in log_msg
+
+
+def test_ts_wait_for_value_negative_never_succeeded(caplog):
+    """
+    When func never returns a value (every attempt raises), the error log
+    reports "<no successful sample>" instead of the ambiguous "None", so a
+    func that never ran to completion is distinguishable from one that
+    genuinely returned None.
+    """
+
+    def func():
+        raise ValueError("always fails")
+
+    ts = TimeoutSampler(1, 1, func)
+    caplog.set_level(logging.ERROR)
+    with pytest.raises(TimeoutExpiredError):
+        ts.wait_for_func_value(1)
+    log_msg = caplog.records[0].getMessage()
+    assert "last sampled value: <no successful sample>" in log_msg
+    # the terminal ERROR log still surfaces the last failure reason
+    assert "last attempt raised ValueError: always fails" in log_msg

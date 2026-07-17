@@ -2235,6 +2235,10 @@ class TimeoutSampler(object):
 
     Feel free to set the instance variables.
 
+    Once iteration starts, the following attributes are available for
+    inspection: `attempt` (number of samples so far), `last_result` (most
+    recent value returned by func) and `last_exception` (the exception raised
+    by the most recent sample, None if that sample succeeded).
 
     Args:
         timeout (int): Timeout in seconds
@@ -2268,6 +2272,16 @@ class TimeoutSampler(object):
         self.last_sample_time = None
         # Timestamp of the last INFO-level exception log (for rate limiting)
         self.last_exception_info_log_time = None
+        # Number of sampling attempts made so far
+        self.attempt = 0
+        # Outcome of recent sampling attempts: the value func
+        # returned last time it succeeded, and the exception it raised on the
+        # most recent attempt (None if that attempt succeeded)
+        self.last_result = None
+        # Whether func has returned at least once, so a genuine None result is
+        # distinguishable from "func never succeeded"
+        self._has_result = False
+        self.last_exception = None
         # The exception to raise
         self.timeout_exc_cls = TimeoutExpiredError
         # Arguments that will be passed to the exception
@@ -2277,9 +2291,65 @@ class TimeoutSampler(object):
                 f"Timed out after {timeout}s running {self._build_call_string()}"
             )
         except Exception:
-            log.exception(
-                "Failed to assemble call string. Not necessarily a test failure."
+            log.debug(
+                "Failed to assemble call string. Not necessarily a test failure.",
+                exc_info=True,
             )
+
+    def _get_func_name(self):
+        """
+        Returns:
+            str: Name of the sampled function, or its repr when it has no
+                __name__ attribute (e.g. functools.partial objects)
+
+        """
+        return getattr(self.func, "__name__", repr(self.func))
+
+    @staticmethod
+    def _describe_exception(exc):
+        """
+        Args:
+            exc (Exception): Exception to summarize
+
+        Returns:
+            str: One-line summary of the exception: its type and the first
+                line of its message, truncated to keep log entries short
+
+        """
+        try:
+            message_lines = str(exc).splitlines()
+            first_line = message_lines[0] if message_lines else ""
+        except Exception:
+            first_line = "<unprintable exception>"
+        return f"{type(exc).__name__}: {first_line[:150]}"
+
+    def _describe_last_result(self):
+        """
+        Render last_result for logging: simple scalar values are shown
+        verbatim, other objects only as their type, to keep error logs short
+        and avoid dumping potentially sensitive content into them.
+
+        Returns:
+            str: Safe short representation of the last sampled value
+
+        """
+        if not self._has_result:
+            return "<no successful sample>"
+        if isinstance(self.last_result, (bool, int, float, type(None))):
+            return repr(self.last_result)
+        if isinstance(self.last_result, str) and len(self.last_result) <= 80:
+            return repr(self.last_result)
+        return f"<{type(self.last_result).__name__}>"
+
+    def _raise_timeout(self):
+        """
+        Raise the configured timeout exception. When func raised an exception
+        on the most recent attempt, chain to it so the root cause is visible
+        directly in the resulting traceback.
+        """
+        if self.last_exception is not None:
+            raise self.timeout_exc_cls(*self.timeout_exc_args) from self.last_exception
+        raise self.timeout_exc_cls(*self.timeout_exc_args)
 
     def _build_call_string(self):
         def stringify(value):
@@ -2290,37 +2360,46 @@ class TimeoutSampler(object):
         args = list(map(stringify, self.func_args))
         kwargs = [f"{stringify(k)}={stringify(v)}" for k, v in self.func_kwargs.items()]
         all_args_string = ", ".join(args + kwargs)
-        return f"{self.func.__name__}({all_args_string})"
+        return f"{self._get_func_name()}({all_args_string})"
 
     def __iter__(self):
         if self.start_time is None:
             self.start_time = time.time()
-        attempt = 0
         while True:
             self.last_sample_time = time.time()
             if self.timeout <= (self.last_sample_time - self.start_time):
-                raise self.timeout_exc_cls(*self.timeout_exc_args)
-            attempt += 1
+                self._raise_timeout()
+            self.attempt += 1
             try:
-                yield self.func(*self.func_args, **self.func_kwargs)
-            except Exception:
+                result = self.func(*self.func_args, **self.func_kwargs)
+                self.last_result = result
+                self._has_result = True
+                self.last_exception = None
+                yield result
+            except Exception as exc:
+                self.last_exception = exc
                 # Rate-limit INFO logging to once per minute to reduce log noise
                 current_time = time.time()
                 if (
                     self.last_exception_info_log_time is None
                     or (current_time - self.last_exception_info_log_time) >= 60
                 ):
+                    # Surface only the exception type here: this line is
+                    # emitted at INFO, so keep it free of the (possibly
+                    # sensitive) exception message. The full message and
+                    # traceback are logged at DEBUG below.
                     log.info(
-                        f"TimeoutSampler attempt {attempt} for function '{self.func.__name__}' failed, "
-                        "see debug level logs for details"
+                        f"TimeoutSampler attempt {self.attempt} for function "
+                        f"'{self._get_func_name()}' failed with "
+                        f"{type(exc).__name__}, see debug level logs for details"
                     )
                     self.last_exception_info_log_time = current_time
                 log.debug(
-                    f"Exception raised during iteration attempt {attempt}:",
+                    f"Exception raised during iteration attempt {self.attempt}:",
                     exc_info=True,
                 )
             if self.timeout <= (time.time() - self.start_time):
-                raise self.timeout_exc_cls(*self.timeout_exc_args)
+                self._raise_timeout()
             log.info("Going to sleep for %d seconds before next iteration", self.sleep)
             time.sleep(self.sleep)
 
@@ -2337,12 +2416,19 @@ class TimeoutSampler(object):
                 if i_value == value:
                     break
         except self.timeout_exc_cls:
+            last_attempt_info = f"last sampled value: {self._describe_last_result()}"
+            if self.last_exception is not None:
+                last_attempt_info += (
+                    ", last attempt raised "
+                    f"{self._describe_exception(self.last_exception)}"
+                )
             log.error(
                 "function %s failed to return expected value %s "
-                "after multiple retries during %d second timeout",
-                self.func.__name__,
+                "after multiple retries during %d second timeout (%s)",
+                self._get_func_name(),
                 value,
                 self.timeout,
+                last_attempt_info,
             )
             raise
 
