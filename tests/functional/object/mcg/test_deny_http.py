@@ -16,6 +16,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     mcg,
+    post_upgrade,
     red_squad,
     runs_on_provider,
     skipif_external_mode,
@@ -204,6 +205,7 @@ class TestDenyHTTP:
             return True
 
     @tier2
+    @post_upgrade
     @skipif_external_mode
     @skipif_ocs_version("<4.22")
     def test_deny_http_noobaa(self, mcg_obj, bucket_factory, revert_deny_http):
