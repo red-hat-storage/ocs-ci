@@ -3,6 +3,8 @@ import logging
 from ocs_ci.framework.testlib import tier1, ignore_leftovers, ManageTest
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.framework.pytest_customization.marks import (
+import pytest
+
     skipif_flexy_deployment,
     skipif_ibm_flash,
     skipif_managed_service,
@@ -26,6 +28,7 @@ class TestAddNode(ManageTest):
     Automates adding worker nodes to the cluster while IOs
     """
 
+    @pytest.mark.zstream_4_16_13
     def test_add_ocs_node(self, add_nodes):
         """
         Test to add ocs nodes and wait till rebalance is completed
