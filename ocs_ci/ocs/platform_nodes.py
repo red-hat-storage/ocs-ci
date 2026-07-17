@@ -365,18 +365,21 @@ class VMWareNodes(NodesBase):
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         self.vsphere.stop_vms(vms, force=force, wait=wait)
 
-    def start_nodes(self, nodes, wait=True):
+    def start_nodes(self, nodes, wait=True, wait_time=240):
         """
         Start vSphere VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
             wait (bool): Wait for the VMs to start
+            wait_time (int): Timeout in seconds to wait for VMs to obtain a
+                network IP after power-on. Overrides vsphere_vm_start_timeout
+                from config if set. Defaults to 240s.
 
         """
         vms = self.get_vms(nodes)
         assert vms, f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
-        self.vsphere.start_vms(vms, wait=wait)
+        self.vsphere.start_vms(vms, wait=wait, wait_time=wait_time)
 
     def restart_nodes(self, nodes, force=True, timeout=300, wait=True):
         """

@@ -611,7 +611,7 @@ class VSPHERE(object):
                         logger.info("All VMs reached poweredOff off status")
                         break
 
-    def start_vms(self, vms, wait=True):
+    def start_vms(self, vms, wait=True, wait_time=240):
         """
         Start VMs
 
@@ -625,7 +625,7 @@ class VSPHERE(object):
         WaitForTasks(tasks, self._si)
 
         if wait:
-            wait_time = config.DEPLOYMENT.get("vsphere_vm_start_timeout", 240)
+            wait_time = config.DEPLOYMENT.get("vsphere_vm_start_timeout", wait_time)
             for ips in TimeoutSampler(wait_time, 3, self.get_vms_ips, vms):
                 logger.info(
                     f"Waiting for VMs {[vm.name for vm in vms]} to power on "
