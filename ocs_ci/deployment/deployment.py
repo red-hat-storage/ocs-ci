@@ -400,18 +400,12 @@ class Deployment(object):
         else:
             run_cmd(f"oc apply -f {constants.GITOPS_SUBSCRIPTION_YAML}")
 
-        self.wait_for_subscription(
+        gitops_csv_name = self.wait_for_subscription(
             constants.GITOPS_OPERATOR_NAME,
             namespace=constants.GITOPS_NAMESPACE,
         )
         logger.info("Sleeping for 120 seconds after subscribing to GitOps Operator")
         time.sleep(120)
-        subscriptions = ocp.OCP(
-            kind=constants.SUBSCRIPTION_WITH_ACM,
-            resource_name=constants.GITOPS_OPERATOR_NAME,
-            namespace=constants.GITOPS_NAMESPACE,
-        ).get()
-        gitops_csv_name = subscriptions["status"]["currentCSV"]
         csv = CSV(resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE)
         csv.wait_for_phase("Succeeded", timeout=720)
         logger.info("GitOps Operator Deployment Succeeded")
@@ -1334,17 +1328,28 @@ class Deployment(object):
 
     def wait_for_subscription(self, subscription_name, namespace=None):
         """
-        Wait for the subscription to appear
+        Wait for the subscription to appear and resolve to a CSV.
+
+        Polls until the subscription resource exists, then waits for
+        status.currentCSV to be populated. If a bundle unpack failure is
+        detected during the wait, performs one automatic recovery attempt
+        (delete failed jobs + recreate subscription).
 
         Args:
             subscription_name (str): Subscription name pattern
-            namespace (str): Namespace name for checking subscription if None then default from ENV_DATA
+            namespace (str): Namespace for the subscription;
+                defaults to self.namespace
+
+        Returns:
+            str or None: The currentCSV name once the subscription resolves,
+                or None if currentCSV was not yet available when the
+                subscription was found (preserves old behavior for callers
+                that don't use the return value).
 
         """
         if not namespace:
             namespace = self.namespace
 
-        ocp.OCP(kind=constants.SUBSCRIPTION_COREOS, namespace=namespace)
         for sample in TimeoutSampler(
             300,
             10,
@@ -1359,8 +1364,51 @@ class Deployment(object):
                 )
                 if subscription_name in found_subscription_name:
                     logger.info(f"Subscription found: {found_subscription_name}")
-                    return
-                logger.debug(f"Still waiting for the subscription: {subscription_name}")
+                    break
+            else:
+                logger.debug(
+                    "Still waiting for the subscription: " f"{subscription_name}"
+                )
+                continue
+            break
+
+        bundle_unpack_recovery_attempted = False
+        for sample in TimeoutSampler(
+            900,
+            30,
+            ocp.OCP,
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            resource_name=subscription_name,
+            namespace=namespace,
+        ):
+            try:
+                sub_data = sample.get()
+            except CommandFailed:
+                continue
+
+            current_csv = sub_data.get("status", {}).get("currentCSV")
+            if current_csv:
+                logger.info(
+                    f"Subscription {subscription_name} resolved to "
+                    f"CSV: {current_csv}"
+                )
+                return current_csv
+
+            if not bundle_unpack_recovery_attempted:
+                conditions = sub_data.get("status", {}).get("conditions", [])
+                for condition in conditions:
+                    message = condition.get("message", "")
+                    if "bundle unpacking failed" in message.lower():
+                        logger.warning(
+                            "Bundle unpack failure detected for "
+                            f"{subscription_name}: {message}"
+                        )
+                        recovered = self._check_and_recover_bundle_unpack_failure(
+                            subscription_name, namespace
+                        )
+                        if recovered:
+                            bundle_unpack_recovery_attempted = True
+                        break
 
     def wait_for_csv(self, csv_name, namespace=None):
         """
@@ -1381,6 +1429,122 @@ class Deployment(object):
                     logger.info(f"CSV found: {found_csv_name}")
                     return
                 logger.debug(f"Still waiting for the CSV: {csv_name}")
+
+    def _check_and_recover_bundle_unpack_failure(self, subscription_name, namespace):
+        """
+        Detect and recover from a failed OLM bundle unpack.
+
+        When a bundle unpack job fails (e.g. due to a transient registry 503),
+        OLM does not auto-recover. This method finds the failed jobs, captures
+        diagnostics, deletes them, and recreates the subscription to force OLM
+        to generate a fresh InstallPlan and unpack job.
+
+        Args:
+            subscription_name (str): Subscription resource name
+            namespace (str): Namespace where the subscription lives
+
+        Returns:
+            bool: True if recovery was performed, False if no failure detected
+
+        """
+        sub_ocp = ocp.OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            resource_name=subscription_name,
+            namespace=namespace,
+        )
+        try:
+            sub_data = sub_ocp.get()
+        except CommandFailed:
+            return False
+
+        conditions = sub_data.get("status", {}).get("conditions", [])
+        bundle_unpack_failed = False
+        for condition in conditions:
+            message = condition.get("message", "")
+            if "bundle unpacking failed" in message.lower():
+                bundle_unpack_failed = True
+                logger.warning(
+                    "Bundle unpack failure detected for subscription "
+                    f"{subscription_name} in {namespace}: {message}"
+                )
+                break
+
+        if not bundle_unpack_failed:
+            return False
+
+        job_ocp = ocp.OCP(
+            kind=constants.JOB,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        try:
+            jobs = job_ocp.get(selector="olm.managed=true").get("items", [])
+        except CommandFailed:
+            jobs = []
+
+        failed_jobs = []
+        for job in jobs:
+            job_conditions = job.get("status", {}).get("conditions", [])
+            for cond in job_conditions:
+                if (
+                    cond.get("type") == "Failed"
+                    and cond.get("reason") == "DeadlineExceeded"
+                ):
+                    failed_jobs.append(job)
+                    break
+
+        for job in failed_jobs:
+            job_name = job["metadata"]["name"]
+            logger.warning(
+                "Failed bundle unpack job YAML:\n"
+                f"{yaml.dump(job, default_flow_style=False)}"
+            )
+            try:
+                events_proc = exec_cmd(
+                    "oc get events "
+                    f"-n {constants.MARKETPLACE_NAMESPACE} "
+                    f"--field-selector involvedObject.name={job_name} "
+                    "-o yaml",
+                    ignore_error=True,
+                )
+                events = events_proc.stdout.decode()
+                logger.warning(f"Events for failed job {job_name}:\n{events}")
+            except Exception:
+                logger.warning(f"Could not retrieve events for job {job_name}")
+
+        for job in failed_jobs:
+            job_name = job["metadata"]["name"]
+            logger.info(f"Deleting failed bundle unpack job: {job_name}")
+            job_ocp.delete(resource_name=job_name)
+
+        saved_spec = sub_data["spec"]
+        sub_metadata = {
+            "name": sub_data["metadata"]["name"],
+            "namespace": sub_data["metadata"]["namespace"],
+        }
+        if "labels" in sub_data["metadata"]:
+            sub_metadata["labels"] = sub_data["metadata"]["labels"]
+
+        logger.info(f"Deleting subscription {subscription_name} in {namespace}")
+        sub_ocp.delete(resource_name=subscription_name)
+        sub_ocp.wait_for_delete(resource_name=subscription_name, timeout=120)
+
+        new_sub = {
+            "apiVersion": "operators.coreos.com/v1alpha1",
+            "kind": "Subscription",
+            "metadata": sub_metadata,
+            "spec": saved_spec,
+        }
+        sub_yaml_file = tempfile.NamedTemporaryFile(
+            mode="w+",
+            prefix="subscription_recovery_",
+            suffix=".yaml",
+            delete=False,
+        )
+        templating.dump_data_to_temp_yaml(new_sub, sub_yaml_file.name)
+        logger.info(f"Recreating subscription {subscription_name} in {namespace}")
+        exec_cmd(f"oc apply -f {sub_yaml_file.name}")
+
+        return True
 
     def deploy_ocs_via_operator(self, image=None):
         """
