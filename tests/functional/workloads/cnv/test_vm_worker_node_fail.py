@@ -11,7 +11,7 @@ from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -60,13 +60,13 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
         new_csum = {}
         node_vm_count = {}
 
+        logger.test_step("Deploy VMs and write initial test data")
         proj_obj = project_factory()
         vm_objs_def, vm_objs_aggr, sc_objs_def, sc_objs_aggr = multi_cnv_workload(
             namespace=proj_obj.namespace
         )
         vm_list = vm_objs_def + vm_objs_aggr
-
-        log.info(f"Total VMs to process: {len(vm_list)}")
+        logger.info(f"Created {len(vm_list)} VMs")
 
         for vm_obj in vm_list:
             source_csum[vm_obj.name] = run_dd_io(
@@ -89,22 +89,22 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
             k: v for k, v in node_vm_count.items() if k in worker_nodes
         }
 
+        logger.test_step("Identify target node and simulate failure")
         if valid_node_vm_count:
             max_vm_node = max(valid_node_vm_count, key=valid_node_vm_count.get)
-            log.info(
-                f"Node with the maximum number of VMs: {max_vm_node} with {valid_node_vm_count[max_vm_node]} VMs"
+            logger.info(
+                f"Target node '{max_vm_node}' hosts {valid_node_vm_count[max_vm_node]} VMs"
             )
             node_name = max_vm_node
         else:
-            log.error("No valid worker nodes found in node_vm_count.")
+            logger.error("No valid worker nodes found in node_vm_count")
             node_name = None
 
-        log.info(f"Attempting to restart node: {node_name}")
+        logger.info(f"Restarting node '{node_name}'")
         node_obj = node.get_node_objs([node_name])
         nodes.restart_nodes_by_stop_and_start(node_obj)
 
-        log.info("Performing post-failure health checks for ODF and CNV namespaces")
-
+        logger.test_step("Perform post-failure health checks")
         ceph_health_check(tries=80)
 
         sample = TimeoutSampler(
@@ -113,9 +113,10 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
             func=wait_for_pods_to_be_running,
             namespace=odf_namespace,
         )
+        logger.assertion(f"All pods running in '{odf_namespace}' after node recovery")
         assert sample.wait_for_func_status(
             result=True
-        ), f"Not all pods are running in {odf_namespace} after node failure and recovery"
+        ), f"Not all pods are running in '{odf_namespace}' after node failure and recovery"
 
         sample = TimeoutSampler(
             timeout=600,
@@ -123,37 +124,54 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
             func=wait_for_pods_to_be_running,
             namespace=cnv_namespace,
         )
+        logger.assertion(f"All pods running in '{cnv_namespace}' after node recovery")
         assert sample.wait_for_func_status(
             result=True
-        ), f"Not all pods are running in {cnv_namespace} after node failure and recovery"
+        ), f"Not all pods are running in '{cnv_namespace}' after node failure and recovery"
 
+        logger.test_step("Verify VM state preservation and rescheduling")
         final_vm_states = {
             vm_obj.name: [vm_obj.printableStatus(), vm_obj.get_vmi_instance().node()]
             for vm_obj in vm_objs_def + vm_objs_aggr
         }
-        log.info(f"Final VM states: {final_vm_states}")
+        logger.debug(f"Final VM states: {final_vm_states}")
 
         for vm_name in initial_vm_states:
+            logger.assertion(
+                f"VM state preserved: vm='{vm_name}', "
+                f"expected='{initial_vm_states[vm_name][0]}', "
+                f"actual='{final_vm_states[vm_name][0]}'"
+            )
             assert initial_vm_states[vm_name][0] == final_vm_states[vm_name][0], (
-                f"VM {vm_name}: State mismatch. Initial: {initial_vm_states[vm_name][0]}, "
-                f"Final: {final_vm_states[vm_name][0]}"
+                f"VM '{vm_name}' state mismatch: initial='{initial_vm_states[vm_name][0]}', "
+                f"final='{final_vm_states[vm_name][0]}'"
             )
             if initial_vm_states[vm_name][1] == node_name:
-                assert initial_vm_states[vm_name][1] != final_vm_states[vm_name][1], (
-                    f"VM {vm_name}: Rescheduling failed. Initially, VM is scheduled"
-                    f" on node {node_name}, still on the same node"
+                logger.assertion(
+                    f"VM rescheduled: vm='{vm_name}', "
+                    f"original_node='{initial_vm_states[vm_name][1]}', "
+                    f"current_node='{final_vm_states[vm_name][1]}'"
                 )
+                assert (
+                    initial_vm_states[vm_name][1] != final_vm_states[vm_name][1]
+                ), f"VM '{vm_name}' not rescheduled from failed node '{node_name}'"
 
+        logger.test_step("Verify data integrity and run I/O on recovered VMs")
         for vm_obj in vm_list:
             vm_obj.wait_for_ssh_connectivity()
             new_csum[vm_obj.name] = cal_md5sum_vm(
                 vm_obj=vm_obj, file_path=file_paths[0]
             )
 
+            logger.assertion(
+                f"Data integrity after node failure: vm='{vm_obj.name}', "
+                f"expected='{source_csum[vm_obj.name]}', "
+                f"actual='{new_csum[vm_obj.name]}', "
+                f"match={source_csum[vm_obj.name] == new_csum[vm_obj.name]}"
+            )
             assert source_csum[vm_obj.name] == new_csum[vm_obj.name], (
-                f"Failed: MD5 comparison failed in VM {vm_obj.name} before "
-                f"{source_csum[vm_obj.name]}"
-                f"and after {new_csum[vm_obj.name]} worker node failure"
+                f"MD5 mismatch for VM '{vm_obj.name}' after worker node failure: "
+                f"before='{source_csum[vm_obj.name]}', after='{new_csum[vm_obj.name]}'"
             )
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
-        log.info("Successfully completed I/O on all VMs after worker node failure")
+        logger.info("All VMs passed data integrity check after worker node failure")
