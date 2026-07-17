@@ -83,9 +83,7 @@ class TestRegistryRebootNode(E2ETest):
         )(wait_for_cluster_connectivity)(tries=400)
 
         node_ready_timeout = 1800 if node_type == MASTER_MACHINE else 900
-        logger.info(
-            f"Waiting for nodes to be ready (timeout: {node_ready_timeout}s)"
-        )
+        logger.info(f"Waiting for nodes to be ready (timeout: {node_ready_timeout}s)")
         wait_for_nodes_status(timeout=node_ready_timeout)
 
         logger.test_step("Validate cluster health and storage pods")
@@ -121,9 +119,7 @@ class TestRegistryRebootNode(E2ETest):
 
         logger.test_step(f"Rolling reboot of {len(node_list)} {node_type} nodes")
         for i, node in enumerate(node_list, 1):
-            logger.info(
-                f"Rebooting node {i}/{len(node_list)}: {node.name}"
-            )
+            logger.info(f"Rebooting node {i}/{len(node_list)}: {node.name}")
             nodes.restart_nodes([node], wait=False)
 
             waiting_time = 40
@@ -160,7 +156,9 @@ class TestRegistryRebootNode(E2ETest):
         self.sanity_helpers.health_check(tries=40)
         wait_for_storage_pods()
 
-        logger.test_step("Validate registry pods and image persistence after rolling reboot")
+        logger.test_step(
+            "Validate registry pods and image persistence after rolling reboot"
+        )
         validate_registry_pod_status()
         validate_image_exists()
         logger.info("Registry image persisted after rolling node reboot")

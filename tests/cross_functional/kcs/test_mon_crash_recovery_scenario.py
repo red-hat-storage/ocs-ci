@@ -91,14 +91,14 @@ class TestMonCrashRecoveryScenario:
         pod_obj = pod_factory(interface=CEPHBLOCKPOOL)
         run_io_in_bg(pod_obj)
 
-        logger.test_step("Scale down operators and corrupted mon deployment to 0 replicas")
+        logger.test_step(
+            "Scale down operators and corrupted mon deployment to 0 replicas"
+        )
         deployment_list = [OCS_OPERATOR_NAME, ROOK_CEPH_OPERATOR, mon_name]
         logger.info(f"Scaling down deployments: {', '.join(deployment_list)}")
         for deployment in deployment_list:
             scaled = modify_deployment_replica_count(deployment, 0)
-            logger.assertion(
-                f"Scale down {deployment}: expected=True, actual={scaled}"
-            )
+            logger.assertion(f"Scale down {deployment}: expected=True, actual={scaled}")
             assert scaled, f"Fail to scale {deployment} to replica count: 0"
 
         logger.test_step(f"Delete mon deployment {mon_name}")
@@ -108,7 +108,9 @@ class TestMonCrashRecoveryScenario:
         )
         assert mon_obj.is_deleted, f"Mon Deployment {mon_name} is not deleted."
 
-        logger.test_step(f"Delete PVC {mon_pvc_obj.name} associated with mon {mon_name}")
+        logger.test_step(
+            f"Delete PVC {mon_pvc_obj.name} associated with mon {mon_name}"
+        )
         mon_pvc_obj.delete()
         pvc_deleted = mon_pvc_obj.ocp.wait_for_delete(mon_pvc_obj.name)
         logger.assertion(
@@ -119,9 +121,7 @@ class TestMonCrashRecoveryScenario:
         logger.test_step("Scale up operator deployments to 1 replica")
         for dep in [OCS_OPERATOR_NAME, ROOK_CEPH_OPERATOR]:
             scaled = modify_deployment_replica_count(dep, 1)
-            logger.assertion(
-                f"Scale up {dep}: expected=True, actual={scaled}"
-            )
+            logger.assertion(f"Scale up {dep}: expected=True, actual={scaled}")
             assert scaled, f"Failed to scale deployment {dep} to replicas: 1"
 
         logger.test_step("Verify recovered mon appears in 'ceph mon dump'")
@@ -165,9 +165,9 @@ class TestMonCrashRecoveryScenario:
         logger.assertion(
             f"Mon pods running: expected={initial_mon_count}, all_running={ret}"
         )
-        assert ret, (
-            f"Not all {initial_mon_count} mon pods are in running state after 10 minutes"
-        )
+        assert (
+            ret
+        ), f"Not all {initial_mon_count} mon pods are in running state after 10 minutes"
         logger.info(f"All {initial_mon_count} mon pods are up and running")
 
         logger.test_step("Monitor and archive ceph crashes for 10 minutes")
