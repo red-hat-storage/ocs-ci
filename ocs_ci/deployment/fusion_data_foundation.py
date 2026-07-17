@@ -298,7 +298,7 @@ class FusionDataFoundationDeployment:
         # Storage configuration method changed in Fusion 2.11
         if (
             fusion_version < version.VERSION_2_11
-            or config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL
+            or config.ENV_DATA.get("platform").lower() == constants.IBM_HCI_PLATFORM
         ):
             self.create_odfcluster()
             # Mute MON_NETSPLIT for arbiter deployments to avoid:
