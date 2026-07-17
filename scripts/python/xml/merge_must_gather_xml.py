@@ -133,8 +133,9 @@ def merge_must_gather_into_junit(junit_xml_path):
         for testcase in suite:
             # Find must-gather-analysis-url property
             mg_url = None
-            if hasattr(testcase, "properties") and testcase.properties:
-                for prop in testcase.properties():
+            props = testcase.child(Properties)
+            if props:
+                for prop in props:
                     if prop.name == "must-gather-analysis-url":
                         mg_url = prop.value
                         break
@@ -165,14 +166,13 @@ def merge_must_gather_into_junit(junit_xml_path):
             # Extract metrics and add as properties
             metrics = extract_must_gather_metrics(xml_content)
             if metrics:
-                # Ensure properties exist
-                if not hasattr(testcase, "properties") or testcase.properties is None:
-                    testcase.properties = Properties()
+                if not props:
+                    props = Properties()
+                    testcase.append(props)
 
-                # Add each metric as a property
                 for key, value in metrics.items():
                     prop = Property(name=key, value=value)
-                    testcase.properties.add_property(prop)
+                    props.add_property(prop)
                     logger.debug(f"Added property: {key}={value}")
 
             # Embed full XML in system-out
