@@ -121,11 +121,10 @@ class TestAMQPodRespin(E2ETest):
                     kafka_namespace=constants.AMQ_NAMESPACE, pod_pattern=pod_pattern
                 )
         else:
-            logger.test_step(f"Respin Ceph {pod_name} pod")
+            logger.info(f"Respin Ceph pod {pod_name}")
             disruption = Disruptions()
             disruption.set_resource(resource=f"{pod_name}")
             disruption.delete_resource()
-            logger.info(f"Ceph {pod_name} pod respun successfully")
 
         logger.test_step("Validate AMQ message processing completed")
         for thread in self.threads:

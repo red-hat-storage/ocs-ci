@@ -58,7 +58,6 @@ class TestMaintenancePod(E2ETest):
         logger.test_step(
             "Verify original OSD deployment scaled down and maintenance pod running"
         )
-        logger.info("Checking original deployment is scaled down")
         osd_deployments = get_osd_deployments()
         for deployment in osd_deployments:
             if deployment.name == original_deployment:
@@ -173,7 +172,6 @@ class TestMaintenancePod(E2ETest):
         )
 
         logger.test_step("Verify Ceph cluster health after maintenance")
-        logger.info("Running Ceph health check (max 10 retries)")
         ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=10)
         logger.info("Ceph cluster health check passed")
 
@@ -199,7 +197,6 @@ class TestMaintenancePod(E2ETest):
         logger.test_step(
             "Verify original Mon deployment scaled down and maintenance pod running"
         )
-        logger.info("Checking original deployment is scaled down")
         mon_deployments = get_mon_deployments()
         for deployment in mon_deployments:
             if deployment.name == original_deployment:
@@ -234,7 +231,6 @@ class TestMaintenancePod(E2ETest):
         logger.test_step("Run Mon Store Tool (MOT) operations")
         logger.info("Waiting 5 seconds before running MOT operations")
         time.sleep(5)
-        logger.info(f"Running MOT get_monmap command on {original_deployment}")
         monmap = Mot_obj.run_mot_get_monmap(original_deployment)
         logger.info(f"MOT get_monmap completed for {original_deployment}")
         logger.debug(f"Monmap result: {monmap}")
@@ -277,7 +273,6 @@ class TestMaintenancePod(E2ETest):
         )
 
         logger.test_step("Stop maintenance mode and verify Mon deployment recovery")
-        logger.info(f"Stopping maintenance mode for {original_deployment}")
         self.odf_cli_runner.run_maintenance_stop(original_deployment)
 
         logger.info(f"Verifying maintenance deployment removed (label: {label})")
@@ -313,6 +308,5 @@ class TestMaintenancePod(E2ETest):
         )
 
         logger.test_step("Verify Ceph cluster health after maintenance")
-        logger.info("Running Ceph health check (max 10 retries)")
         ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"], tries=10)
         logger.info("Ceph cluster health check passed")

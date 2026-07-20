@@ -322,9 +322,6 @@ class TestSelinuxrelabel(E2ETest):
         logger.info(f"Pod restart time BEFORE fix: {pod_restart_time_before_fix}s")
 
         logger.test_step("Apply SELinux relabel fix for existing PVC")
-        logger.info(
-            f"Applying SELinux relabel solution to existing PVC: {self.pvc_obj.name}"
-        )
         self.apply_selinux_solution_on_existing_pvc(self.pvc_obj)
         logger.info("SELinux relabel solution applied successfully")
 
@@ -452,9 +449,6 @@ class TestSelinuxrelabel(E2ETest):
 
         logger.test_step("Calculate md5sum for random files before fix")
         random_files = self.get_random_files(self.pod_obj)
-        logger.info(
-            f"Selected {len(random_files)} random files for md5sum verification"
-        )
         initial_md5sum = []
         for idx, file_path in enumerate(random_files, 1):
             logger.debug(

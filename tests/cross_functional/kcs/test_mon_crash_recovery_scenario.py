@@ -45,7 +45,7 @@ class TestMonCrashRecoveryScenario:
             """Teardown function to scale deployments back to 1 replica."""
             logger.test_step("Restore operator deployments to 1 replica")
             for dep in [OCS_OPERATOR_NAME, ROOK_CEPH_OPERATOR]:
-                logger.info(f"Scaling up {dep} to replica=1")
+                logger.info(f"Teardown: Scaling up {dep} to replica=1")
                 modify_deployment_replica_count(dep, 1)
 
         request.addfinalizer(scale_up_deployments)

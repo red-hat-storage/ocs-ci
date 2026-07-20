@@ -82,7 +82,6 @@ class TestRegistryByIncreasingNumPods(E2ETest):
         logger.info("Validated PVC is mounted on all registry pods")
 
         logger.test_step("Pull and push images to registry")
-        logger.info(f"Pulling and pushing images to project: {self.project_name}")
         image_pull_and_push(project_name=self.project_name)
 
         logger.test_step("Validate images exist in registry")

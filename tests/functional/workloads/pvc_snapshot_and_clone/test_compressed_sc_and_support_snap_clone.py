@@ -99,9 +99,6 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
 
         logger.test_step(f"Resize restored PVCs to {pvc_size_new}Gi")
         for idx, pvc_obj in enumerate(restored_pvc_objs, 1):
-            logger.info(
-                f"Resizing restored PVC {idx}/{len(restored_pvc_objs)}: {pvc_obj.name} to {pvc_size_new}Gi"
-            )
             pvc_obj.resize_pvc(pvc_size_new, True)
         logger.info(
             f"All {len(restored_pvc_objs)} restored PVC(s) resized successfully"
@@ -197,7 +194,6 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
         )
 
         logger.test_step("Deploy PostgreSQL workload")
-        logger.info(f"Deploying pgsql workload with storage class: {sc_obj.name}")
         pgsql = pgsql_factory_fixture(replicas=1, sc_name=sc_obj.name)
         logger.info("PostgreSQL workload deployed successfully")
 
@@ -254,12 +250,8 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
         """
         pgsql_teardown
 
-        logger.test_step(f"Setup KMS encryption with Vault KV version: {kv_version}")
-        logger.info("Setting up csi-kms-connection-details configmap")
+        logger.test_step("Setup csi-kms-connection-details configmap")
         self.vault = pv_encryption_kms_setup_factory(kv_version)
-        logger.info(
-            f"csi-kms-connection-details setup successful, KMS ID: {self.vault.kmsid}"
-        )
 
         logger.test_step(
             f"Create encrypted storage class with compression: {compression}, replica: {replica}"
@@ -282,9 +274,6 @@ class TestCompressedSCAndSupportSnapClone(E2ETest):
         logger.info(f"Created Vault CSI KMS token in namespace: {BMO_NAME}")
 
         logger.test_step("Deploy PostgreSQL workload with encrypted storage")
-        logger.info(
-            f"Deploying pgsql workload with encrypted storage class: {sc_obj.name}"
-        )
         pgsql = pgsql_factory_fixture(replicas=1, sc_name=sc_obj.name)
         logger.info("PostgreSQL workload deployed successfully with encryption")
 

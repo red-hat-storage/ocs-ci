@@ -68,19 +68,14 @@ class TestNoobaaBackupAndRecovery(E2ETest):
 
         """
         logger.test_step("Backup and restore NooBaa DB using snapshot")
-        logger.info("Starting NooBaa DB backup and recovery procedure via snapshot")
         noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
         logger.info("NooBaa DB backup and recovery completed successfully")
 
         logger.test_step("Verify all storage pods are running")
-        logger.info("Waiting for all storage pods to reach Running state")
         wait_for_storage_pods()
         logger.info("All storage pods are running")
 
         logger.test_step("Create and delete resources to verify MCG functionality")
-        logger.info(
-            "Creating resources using sanity helpers (PVCs, pods, buckets, RGW buckets)"
-        )
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
@@ -90,7 +85,6 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         logger.info("Resources deleted successfully")
 
         logger.test_step("Verify cluster health after recovery")
-        logger.info("Running cluster health check (max 120 retries)")
         self.sanity_helpers.health_check(tries=120)
         logger.info("Cluster health check passed - NooBaa DB recovery verified")
 
@@ -142,13 +136,11 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         Run multi client warp benchamrking to verify bug https://bugzilla.redhat.com/show_bug.cgi?id=2141035
 
         """
-        logger.test_step("Create bucket for warp benchmarking")
-        logger.info("Creating bucket for warp S3 benchmarking")
+        logger.test_step("Create bucket for warp S3 benchmarking")
         bucket_name = bucket_factory()[0].name
         logger.info(f"Bucket created for warp: {bucket_name}")
 
         logger.test_step("Backup and restore NooBaa DB locally")
-        logger.info("Starting NooBaa DB backup and recovery procedure (local backup)")
         noobaa_db_backup_and_recovery_locally()
         logger.info("NooBaa DB local backup and recovery completed successfully")
 

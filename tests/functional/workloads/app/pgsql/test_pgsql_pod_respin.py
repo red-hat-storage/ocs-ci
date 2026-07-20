@@ -41,7 +41,6 @@ class TestPgSQLPodRespin(E2ETest):
             "Setting up PostgreSQL environment with pod respin test configuration"
         )
         pgsql.setup_postgresql(replicas=1)
-        logger.info("PostgreSQL deployed with 1 replica")
 
         self.sanity_helpers = Sanity()
 
@@ -79,17 +78,14 @@ class TestPgSQLPodRespin(E2ETest):
         if pod_name == "postgres":
             logger.info("Respinning PostgreSQL application pod")
             pgsql.respin_pgsql_app_pod()
-            logger.info("PostgreSQL pod respun successfully")
         else:
             logger.info(f"Respinning Ceph {pod_name} pod")
             disruption = disruption_helpers.Disruptions()
             disruption.set_resource(resource=f"{pod_name}")
             disruption.delete_resource()
-            logger.info(f"Ceph {pod_name} pod respun successfully")
 
         logger.test_step("Wait for pgbench to complete")
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
-        logger.info(f"pgbench reached status: {constants.STATUS_COMPLETED}")
 
         end_time = datetime.now()
         diff_time = end_time - start_time

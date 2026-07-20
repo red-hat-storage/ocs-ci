@@ -62,7 +62,6 @@ class TestJenkinsPodRespin(E2ETest):
             f"Configure Jenkins: {num_projects} projects, {num_of_builds} builds/project"
         )
         jenkins.number_projects = num_projects
-        logger.info(f"Number of projects: {num_projects}")
 
         logger.test_step("Create Jenkins application resources")
         jenkins.create_app_jenkins()
@@ -84,7 +83,6 @@ class TestJenkinsPodRespin(E2ETest):
         logger.info(f"Started builds for {num_projects} projects")
 
         logger.test_step(f"Respin Ceph {pod_name} pod during build execution")
-        logger.info(f"Respinning Ceph {pod_name} pod")
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=f"{pod_name}")
         disruption.delete_resource()

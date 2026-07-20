@@ -53,7 +53,6 @@ class TestBaseOperationNodeDrain(E2ETest):
 
         """
         logger.test_step("Start background IO operations")
-        logger.info("Initializing background workloads")
         project = project_factory()
         bg_handler = flowtest.BackgroundOps()
         executor_run_bg_ios_ops = ThreadPoolExecutor(max_workers=3)
@@ -169,7 +168,6 @@ class TestBaseOperationNodeDrain(E2ETest):
         logger.info("Operation 4 completed: Node Network Failure recovery successful")
 
         logger.test_step("Wait for all background operations to complete")
-        logger.info("Waiting for final iteration of background operations to complete")
         bg_ops = [pvc_create_delete, obc_ios, pgsql_workload]
         bg_handler.wait_for_bg_operations(bg_ops, timeout=600)
         logger.info("All background operations completed successfully")

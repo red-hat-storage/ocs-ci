@@ -101,8 +101,8 @@ class TestQuayWorkload(E2ETest):
         Test quay operations with Noobaa core failure
 
         1. Creates quay operator and registry on ODF.
-        2. Initializes Quay super user to access the API's.
-        3. Gets the super user token.
+        2. Initializes Quay super-user to access the API's.
+        3. Gets the super-user token.
         4. Creates a new repo
         5. Creates a new org
         6. Pushes the image to the new repo
@@ -124,7 +124,6 @@ class TestQuayWorkload(E2ETest):
         logger.info(f"Quay endpoint: {endpoint}")
 
         logger.test_step("Setup Quay authentication and validate super user")
-        logger.info(f"Pulling test image: {constants.COSBENCH_IMAGE}")
         _exec_cmd(f"podman pull {constants.COSBENCH_IMAGE}")
 
         token = get_super_user_token(endpoint)
@@ -134,7 +133,6 @@ class TestQuayWorkload(E2ETest):
         logger.info("Super user validated successfully")
 
         podman_url = endpoint.replace("https://", "")
-        logger.info(f"Logging into quay endpoint: {podman_url}")
         quay_super_user_login(podman_url)
 
         logger.test_step("Create Quay repository and organization")
@@ -157,7 +155,6 @@ class TestQuayWorkload(E2ETest):
         _exec_cmd(f"podman push {podman_url}/{test_image} --tls-verify=false")
 
         logger.test_step("Verify image can be pulled from Quay")
-        logger.info(f"Pulling image from repository: {repo_name}")
         _exec_cmd(f"podman pull {podman_url}/{test_image} --tls-verify=false")
 
         logger.test_step("Trigger Noobaa core pod restart and verify recovery")
@@ -182,7 +179,6 @@ class TestQuayWorkload(E2ETest):
         assert pod_recovered, "Noobaa core pod did not recover"
 
         logger.test_step("Verify image pull after Noobaa core failure")
-        logger.info("Pulling image again post Noobaa core restart")
         _exec_cmd(f"podman pull {podman_url}/{test_image} --tls-verify=false")
         logger.info("Image pull successful after Noobaa core recovery")
 

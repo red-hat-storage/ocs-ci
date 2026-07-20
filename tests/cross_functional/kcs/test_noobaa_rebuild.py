@@ -74,10 +74,6 @@ class TestNoobaaRebuild(E2ETest):
                     f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=1"
                 )
                 logger.info("Teardown completed: NooBaa operator scaled to 1 replica")
-            else:
-                logger.info(
-                    "Teardown: NooBaa operator already at 1 replica, no action needed"
-                )
 
         request.addfinalizer(finalizer)
 
@@ -107,7 +103,6 @@ class TestNoobaaRebuild(E2ETest):
         logger.info("NooBaa cleanup policy set to allowNoobaaDeletion=true")
 
         logger.test_step("Delete NooBaa resources to trigger rebuild")
-        logger.info("Deleting all NooBaa resources (noobaas.noobaa.io)")
         try:
             noobaa_obj.exec_oc_cmd("delete noobaas.noobaa.io  --all")
             logger.info("NooBaa resources deleted successfully")
@@ -124,7 +119,6 @@ class TestNoobaaRebuild(E2ETest):
             "Waiting 60s for deletion and automatic recreation of all NooBaa resources"
         )
         time.sleep(60)
-        logger.info("Wait period completed, verifying NooBaa rebuild")
         logger.test_step("Verify NooBaa DB PVCs are recreated and bound")
         pvc_obj = OCP(
             kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
@@ -146,7 +140,6 @@ class TestNoobaaRebuild(E2ETest):
                 timeout=600,
                 sleep=120,
             )
-            logger.info(f"PVC {pvc_name} is now Bound")
         logger.info("All NooBaa DB PVCs are in Bound state")
 
         logger.test_step("Verify NooBaa pods are recreated and running")
@@ -165,8 +158,7 @@ class TestNoobaaRebuild(E2ETest):
         )
         logger.info(f"All {len(noobaa_pods)} NooBaa pod(s) are running")
 
-        logger.test_step("Verify NooBaa statefulset is recreated")
-        logger.info("Checking for noobaa-core statefulset (timeout: 500s)")
+        logger.test_step("Verify noobaa-core statefulset is recreated")
         sample = TimeoutSampler(
             timeout=500,
             sleep=30,
@@ -182,21 +174,15 @@ class TestNoobaaRebuild(E2ETest):
         logger.info("Statefulset noobaa-core is recreated and ready (1/1)")
 
         logger.test_step("Verify cluster health after NooBaa rebuild")
-        logger.info("Running cluster health check (max 120 retries)")
         self.sanity_helpers.health_check(tries=120)
         logger.info("Cluster health check passed")
 
         logger.test_step("Update S3 credentials after rebuild")
-        logger.info(
-            "Updating S3 credentials in MCG session (noobaa-admin secret changed)"
-        )
         mcg_obj_session.update_s3_creds()
         logger.info("S3 credentials updated successfully")
 
         logger.test_step("Verify default backingstore is recreated")
-        logger.info(
-            "Checking for default backingstore: noobaa-default-backing-store (timeout: 1200s)"
-        )
+
         sample = TimeoutSampler(
             timeout=1200,
             sleep=30,
@@ -216,7 +202,6 @@ class TestNoobaaRebuild(E2ETest):
         logger.info("Default backingstore noobaa-default-backing-store is recreated")
 
         logger.test_step("Verify default bucketclass is ready")
-        logger.info(f"Getting default bucketclass: {DEFAULT_NOOBAA_BUCKETCLASS}")
         default_bc = OCP(
             kind=constants.BUCKETCLASS, namespace=config.ENV_DATA["cluster_namespace"]
         ).get(resource_name=DEFAULT_NOOBAA_BUCKETCLASS)
@@ -231,6 +216,5 @@ class TestNoobaaRebuild(E2ETest):
         logger.info("Default bucketclass is in Ready state")
 
         logger.test_step("Create OBCs to verify MCG functionality after rebuild")
-        logger.info("Creating 3 OBCs using OC interface with health verification")
         bucket_factory_session(amount=3, interface="OC", verify_health=True)
-        logger.info("3 OBCs created successfully - NooBaa rebuild verified")
+        logger.info("OBCs created successfully - NooBaa rebuild verified")

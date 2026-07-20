@@ -113,7 +113,6 @@ class TestPvcSnapshotOfWorkloads(E2ETest):
         pgsql_teardown
 
         logger.test_step("Deploy PostgreSQL workload")
-        logger.info("Deploying PostgreSQL workload with 1 replica")
         pgsql = pgsql_factory_fixture(replicas=1)
         logger.info("PostgreSQL workload deployed successfully")
 

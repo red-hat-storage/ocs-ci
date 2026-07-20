@@ -103,7 +103,6 @@ class TestRGWAndKafkaNotifications(E2ETest):
         """
         logger.test_step("Setup AMQ cluster with storage class")
         sc = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
-        logger.info(f"Using storage class: {sc.name}")
 
         self.amq.setup_amq_cluster(sc.name)
         logger.info("AMQ cluster deployed successfully")
@@ -198,10 +197,8 @@ class TestRGWAndKafkaNotifications(E2ETest):
             kafkadrop_host=kafkadrop_host, kafka_topic_name=self.kafka_topic.name
         )
 
-        logger.test_step("Validate event timestamps (OCS 4.8+)")
+        logger.test_step("Validate the timestamps event")
         ocs_version = config.ENV_DATA["ocs_version"]
-        logger.info(f"Current OCS version: {ocs_version}")
-
         if Version.coerce(ocs_version) >= Version.coerce("4.8"):
             cmd = (
                 f"bin/kafka-console-consumer.sh --bootstrap-server {constants.KAFKA_ENDPOINT} "

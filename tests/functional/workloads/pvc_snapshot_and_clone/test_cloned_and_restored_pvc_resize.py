@@ -67,7 +67,6 @@ class TestPvcResizeOfClonedAndRestoredPVC(E2ETest):
         self.pgsql_obj_list = []
 
         logger.test_step("Deploy PostgreSQL workload")
-        logger.info("Deploying pgsql workload with 1 replica")
         pgsql = pgsql_factory_fixture(replicas=1)
         logger.info("PostgreSQL workload deployed successfully")
 

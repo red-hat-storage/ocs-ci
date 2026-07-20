@@ -45,7 +45,6 @@ class TestJenkinsWorkload(E2ETest):
         """
         logger.test_step(f"Configure Jenkins with {num_projects} projects")
         jenkins.number_projects = num_projects
-        logger.info(f"Number of projects set to: {num_projects}")
 
         logger.test_step("Create Jenkins application resources")
         jenkins.create_app_jenkins()

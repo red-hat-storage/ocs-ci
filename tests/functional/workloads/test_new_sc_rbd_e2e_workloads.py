@@ -108,9 +108,6 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
         logger.info(f"AMQ workload deployed with storage class: {sc_obj.name}")
 
         logger.test_step("Deploy PostgreSQL workload in background")
-        logger.info(
-            "Starting PostgreSQL workload: replicas=1, clients=1, transactions=100"
-        )
         pgsql_workload = executor_run_bg_ios_ops.submit(
             bg_handler.handler,
             pgsql_factory_fixture,
@@ -129,7 +126,6 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
         logger.info("PostgreSQL workload completed successfully")
 
         logger.test_step("Validate AMQ message processing")
-        logger.info("Validating AMQ message threads completed")
         for idx, thread in enumerate(self.threads, 1):
             logger.debug(f"Waiting for AMQ thread {idx}/{len(self.threads)}")
             thread.result(timeout=1800)

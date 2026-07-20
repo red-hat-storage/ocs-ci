@@ -197,12 +197,8 @@ class TestPvcCloneOfWorkloads(E2ETest):
         """
         pgsql_teardown
 
-        logger.test_step(f"Setup KMS encryption with Vault KV version: {kv_version}")
-        logger.info("Setting up csi-kms-connection-details configmap")
+        logger.test_step("Setup csi-kms-connection-details configmap")
         self.vault = pv_encryption_kms_setup_factory(kv_version)
-        logger.info(
-            f"csi-kms-connection-details setup successful, KMS ID: {self.vault.kmsid}"
-        )
 
         logger.test_step("Create encrypted storage class for RBD")
         self.sc_obj = storageclass_factory(
@@ -218,9 +214,6 @@ class TestPvcCloneOfWorkloads(E2ETest):
         logger.info(f"Created Vault CSI KMS token in namespace: {BMO_NAME}")
 
         logger.test_step("Deploy PostgreSQL workload with encrypted storage")
-        logger.info(
-            f"Deploying PostgreSQL workload with encrypted storage class: {self.sc_obj.name}"
-        )
         pgsql = pgsql_factory_fixture(replicas=1, sc_name=self.sc_obj.name)
         logger.info("PostgreSQL workload deployed successfully with encryption")
 
@@ -244,9 +237,6 @@ class TestPvcCloneOfWorkloads(E2ETest):
         )
 
         logger.test_step("Verify encryption keys for cloned PVCs in Vault")
-        logger.info(
-            f"Verifying Vault encryption keys for {len(cloned_pvcs) if cloned_pvcs else 0} cloned PVC(s)"
-        )
         logger.assertion(
             f"Expected at least one cloned PVC before Vault key verification, "
             f"actual count: {len(cloned_pvcs) if cloned_pvcs else 0}"

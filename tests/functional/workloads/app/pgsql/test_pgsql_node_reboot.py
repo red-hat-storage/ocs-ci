@@ -45,7 +45,6 @@ class TestPgSQLNodeReboot(E2ETest):
             "Setting up PostgreSQL environment with node reboot test configuration"
         )
         pgsql.setup_postgresql(replicas=1)
-        logger.info("PostgreSQL deployed with 1 replica")
 
         self.sanity_helpers = Sanity()
 
@@ -87,7 +86,6 @@ class TestPgSQLNodeReboot(E2ETest):
         get_node_resource_utilization_from_adm_top(node_type="worker", print_table=True)
 
         logger.test_step("Reboot OSD node during pgbench execution")
-        logger.info(f"Rebooting node: {[n.name for n in node_1]}")
         nodes.restart_nodes(node_1)
         logger.info("Node reboot completed")
 

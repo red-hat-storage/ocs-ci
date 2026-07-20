@@ -59,7 +59,6 @@ class TestCreateScalePodsAndPvcsUsingKubeJob(ManageTest):
         Test create scale pods and PVCs using a kube job
         """
         logger.test_step("Create scale pods and PVCs using kube job")
-        logger.info("Starting resource creation using kube job")
         create_scale_pods_and_pvcs_using_kube_job()
         logger.info("Kube job initiated successfully")
 

@@ -73,7 +73,6 @@ class TestJenkinsNodeReboot(E2ETest):
             f"Configure Jenkins: {num_projects} projects, {num_of_builds} builds/project"
         )
         jenkins.number_projects = num_projects
-        logger.info(f"Number of projects: {num_projects}")
 
         logger.test_step("Create Jenkins application resources")
         jenkins.create_app_jenkins()
@@ -102,9 +101,6 @@ class TestJenkinsNodeReboot(E2ETest):
 
         if len(nodes_reboot) > 0:
             logger.test_step(f"Reboot {node_type} node during build execution")
-            logger.info(
-                f"Rebooting {len(nodes_reboot)} node(s): {nodes_reboot if nodes_reboot else 'None'}"
-            )
             nodes.restart_nodes(get_node_objs(nodes_reboot))
             logger.info("Node reboot completed")
         else:
@@ -116,7 +112,6 @@ class TestJenkinsNodeReboot(E2ETest):
 
         logger.test_step("Display build results")
         jenkins.print_completed_builds_results()
-        logger.info("Build results displayed")
 
         logger.test_step("Verify cluster and Ceph health")
         self.sanity_helpers.health_check(tries=40)

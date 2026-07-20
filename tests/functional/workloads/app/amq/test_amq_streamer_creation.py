@@ -46,7 +46,6 @@ class TestAMQBasics(E2ETest):
         """
         logger.test_step("Get default storage class")
         sc = default_storage_class(interface_type=interface)
-        logger.info(f"Using storage class: {sc.name}, interface: {interface}")
 
         logger.test_step("Deploy AMQ cluster")
         test_fixture_amq.setup_amq_cluster(sc.name)

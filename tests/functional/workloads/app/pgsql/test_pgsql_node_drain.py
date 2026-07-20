@@ -43,7 +43,6 @@ class TestPgSQLNodeReboot(E2ETest):
             "Setting up PostgreSQL environment with node drain test configuration"
         )
         pgsql.setup_postgresql(replicas=1)
-        logger.info("PostgreSQL deployed with 1 replica")
 
         self.sanity_helpers = Sanity()
 
@@ -54,14 +53,12 @@ class TestPgSQLNodeReboot(E2ETest):
         """
         logger.test_step("Create pgbench benchmark: 1 replica, 600 transactions")
         pgsql.create_pgbench_benchmark(replicas=1, transactions=600)
-        logger.info("pgbench benchmark created")
 
         start_time = datetime.now()
         logger.info(f"Benchmark start time: {start_time}")
 
         logger.test_step("Wait for pgbench to reach running state")
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
-        logger.info(f"pgbench reached status: {constants.STATUS_RUNNING}")
 
         logger.test_step("Check worker node resource utilization")
         get_node_resource_utilization_from_adm_top(node_type="worker", print_table=True)
@@ -77,7 +74,6 @@ class TestPgSQLNodeReboot(E2ETest):
         logger.info(f"Selected node for drain operation: {typed_node_name}")
 
         logger.test_step(f"Drain {node_type} node during pgbench execution")
-        logger.info(f"Draining node: {typed_node_name}")
         node.drain_nodes([typed_node_name])
         logger.info("Node drain completed")
 
@@ -91,7 +87,6 @@ class TestPgSQLNodeReboot(E2ETest):
 
         logger.test_step("Wait for pgbench to complete")
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
-        logger.info(f"pgbench reached status: {constants.STATUS_COMPLETED}")
 
         end_time = datetime.now()
         diff_time = end_time - start_time

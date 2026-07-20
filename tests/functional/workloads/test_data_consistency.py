@@ -269,7 +269,6 @@ def test_log_reader_writer_parallel(project, tmp_path):
         logger.exception(error_msg)
 
     logger.test_step("Verify logreader job completed successfully")
-    logger.info("Checking the result of data validation job")
     logger.debug(job_file.describe())
     ocp_job = ocp.OCP(
         kind="Job",

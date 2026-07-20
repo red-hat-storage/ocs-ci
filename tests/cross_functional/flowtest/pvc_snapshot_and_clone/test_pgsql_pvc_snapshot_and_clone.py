@@ -84,11 +84,7 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
         """
         logger.test_step(f"Setup KMS encryption with Vault KV version: {kv_version}")
-        logger.info("Setting up csi-kms-connection-details configmap")
         self.vault = pv_encryption_kms_setup_factory(kv_version)
-        logger.info(
-            f"csi-kms-connection-details setup successful, KMS ID: {self.vault.kmsid}"
-        )
 
         logger.test_step("Create encrypted storage class for RBD")
         self.sc_obj = storageclass_factory(
@@ -103,18 +99,14 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
         self.vault.create_vault_csi_kms_token(namespace=BMO_NAME)
         logger.info(f"Created Vault CSI KMS token in namespace: {BMO_NAME}")
 
-        logger.test_step("Deploy PostgreSQL workload with encrypted storage")
-        logger.info(
-            f"Deploying PostgreSQL workload with encrypted storage class: {self.sc_obj.name}"
+        logger.test_step(
+            f"Deploy PostgreSQL workload with encrypted storage class: {self.sc_obj.name}"
         )
         pgsql = pgsql_factory_fixture(replicas=1, sc_name=self.sc_obj.name)
         logger.info("PostgreSQL workload deployed successfully with encryption")
 
         logger.test_step(
             "Execute snapshot/clone/restore/resize workflow with encrypted PVCs"
-        )
-        logger.info(
-            "Starting multiple snapshot and clone operations on encrypted PostgreSQL PVC (target size: 25Gi)"
         )
         multiple_snapshot_and_clone_of_postgres_pvc_factory(
             pvc_size_new=25, pgsql=pgsql, sc_name=self.sc_obj.name

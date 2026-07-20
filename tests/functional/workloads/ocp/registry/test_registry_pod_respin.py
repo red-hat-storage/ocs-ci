@@ -67,14 +67,12 @@ class TestRegistryPodRespin(E2ETest):
         Test registry workload when backed by OCS respin of ceph pods
         """
         logger.test_step(f"Respin Ceph {pod_name} pod")
-        logger.info(f"Respinning Ceph {pod_name} pod")
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=f"{pod_name}")
         disruption.delete_resource()
         logger.info(f"Ceph {pod_name} pod respun successfully")
 
         logger.test_step("Pull and push images to registry")
-        logger.info(f"Pulling and pushing images to project: {self.project_name}")
         image_pull_and_push(project_name=self.project_name)
         logger.info("Images pulled and pushed successfully")
 

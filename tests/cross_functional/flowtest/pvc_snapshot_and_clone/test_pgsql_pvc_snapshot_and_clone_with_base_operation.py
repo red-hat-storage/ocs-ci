@@ -31,10 +31,7 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
     def run_in_bg(
         self, nodes, multiple_snapshot_and_clone_of_postgres_pvc_factory, sc_name=None
     ):
-        logger.test_step("Start background snapshot/clone operations")
-        logger.info(
-            "Starting multiple creation & clone of postgres PVC in background (target size: 25Gi)"
-        )
+        logger.test_step("Start background snapshot/clone operations of postgres PVC")
         bg_handler = flowtest.BackgroundOps()
         executor_run_bg_ops = ThreadPoolExecutor(max_workers=1)
         pgsql_snapshot_and_clone = executor_run_bg_ops.submit(
@@ -99,9 +96,6 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
         logger.info("Operation 3 completed: Node Drain successful")
 
         logger.test_step("Wait for all background operations to complete")
-        logger.info(
-            "Waiting for background snapshot/clone operations to complete (timeout: 600s)"
-        )
         bg_handler.wait_for_bg_operations([pgsql_snapshot_and_clone], timeout=600)
         logger.info("All background operations completed successfully")
 
@@ -120,15 +114,14 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
         3. Create a new PVC out of that snapshot or restore snapshot
         4. Create a clone of restored snapshot
         5. Attach a new pgsql pod to it.
-         5. Resize cloned pvc
+        6. Resize cloned pvc
         7. Create snapshots of cloned pvc and restore those snapshots
         8. Attach a new pgsql pod to it and Resize the new restored pvc
         9. Repeat the above steps in bg when performing base operation:
             restart pods, worker node reboot, node drain, device replacement
 
         """
-        logger.test_step("Deploy PostgreSQL workload")
-        logger.info("Deploying PostgreSQL workload with 1 replica")
+        logger.test_step("Deploy PostgreSQL workload with 1 replica")
         self.pgsql = pgsql_factory_fixture(replicas=1)
         logger.info("PostgreSQL workload deployed successfully")
 
@@ -158,11 +151,11 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
     ):
         """
         1. Deploy PGSQL workload using encrypted sc
-        2. Take a encrypted snapshot of the pgsql PVC.
+        2. Take an encrypted snapshot of the pgsql PVC.
         3. Create a new PVC out of that snapshot or restore snapshot
-        4. Create a encrypted clone of restored snapshot
+        4. Create an encrypted clone of restored snapshot
         5. Attach a new pgsql pod to it.
-         5. Resize cloned pvc
+        6. Resize cloned pvc
         7. Create snapshots of cloned pvc and restore those snapshots
         8. Attach a new pgsql pod to it and Resize the new restored pvc
         9. Repeat the above steps in bg when performing base operation:
@@ -170,11 +163,7 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
         """
         logger.test_step(f"Setup KMS encryption with Vault KV version: {kv_version}")
-        logger.info("Setting up csi-kms-connection-details configmap")
         self.vault = pv_encryption_kms_setup_factory(kv_version)
-        logger.info(
-            f"csi-kms-connection-details setup successful, KMS ID: {self.vault.kmsid}"
-        )
 
         logger.test_step("Create encrypted storage class for RBD")
         self.sc_obj = storageclass_factory(
@@ -186,13 +175,11 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
         logger.test_step(f"Create Vault CSI KMS token in namespace: {BMO_NAME}")
         self.vault.vault_path_token = self.vault.generate_vault_token()
-        logger.info(f"Generated Vault token: {self.vault.vault_path_token[:20]}...")
         self.vault.create_vault_csi_kms_token(namespace=BMO_NAME)
         logger.info(f"Created Vault CSI KMS token in namespace: {BMO_NAME}")
 
-        logger.test_step("Deploy PostgreSQL workload with encrypted storage")
-        logger.info(
-            f"Deploying PostgreSQL workload with encrypted storage class: {self.sc_obj.name}"
+        logger.test_step(
+            f"Deploy PostgreSQL workload with encrypted storage class: {self.sc_obj.name}"
         )
         self.pgsql = pgsql_factory_fixture(replicas=1, sc_name=self.sc_obj.name)
         logger.info("PostgreSQL workload deployed successfully with encryption")
