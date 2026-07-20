@@ -33,6 +33,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.resources.drpc import DRPC
 
 from ocs_ci.ocs.utils import (
     get_primary_cluster_config,
@@ -658,13 +659,17 @@ class BusyBox(DRWorkload):
                     self.managed_clusterset_binding_file,
                 )
             if not config.ENV_DATA.get("deploy_via_cli"):
-                run_cmd(
-                    f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
+                run_cmd(  # IgnoreDeprecation
+                    f"oc delete --wait=false -k {self.workload_subscription_dir}/{self.workload_name}"
                 )
             else:
-                run_cmd(
-                    f"oc delete -f {self.deploy_subscription_workload_yaml_file.name}"
+                run_cmd(  # IgnoreDeprecation
+                    f"oc delete --wait=false -f {self.deploy_subscription_workload_yaml_file.name}"
                 )
+
+            DRPC(namespace=self.workload_namespace).wait_for_progression_status(
+                constants.STATUS_DELETING, success_if_deleted=True
+            )
 
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -682,6 +687,7 @@ class BusyBox(DRWorkload):
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
+            AssertionError,
         ) as ex:
             err_msg = (
                 f"Failed to delete the workload: {self.workload_name}, namespace: {self.workload_namespace}, "
@@ -1002,7 +1008,16 @@ class BusyBox_AppSet(DRWorkload):
         )
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-            run_cmd(cmd=f"oc delete -f {self.appset_yaml_file}", timeout=900)
+            run_cmd(  # IgnoreDeprecation
+                f"oc delete --wait=false -f {self.appset_yaml_file}"
+            )
+
+            DRPC(
+                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                resource_name=f"{self.appset_placement_name}-drpc",
+            ).wait_for_progression_status(
+                constants.STATUS_DELETING, success_if_deleted=True
+            )
 
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -1020,6 +1035,7 @@ class BusyBox_AppSet(DRWorkload):
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
+            AssertionError,
         ) as ex:
             err_msg = (
                 f"Failed to delete the workload: {self.workload_name}, namespace: {self.workload_namespace}, "
@@ -1317,9 +1333,22 @@ class CnvWorkload(DRWorkload):
         """
         try:
             config.switch_acm_ctx()
-            run_cmd(cmd=f"oc delete -f {self.cnv_workload_yaml_file}", timeout=900)
-            if self.workload_type == constants.SUBSCRIPTION:
-                run_cmd(f"oc delete -f {self.channel_yaml_file}")
+            run_cmd(  # IgnoreDeprecation
+                f"oc delete --wait=false -f {self.cnv_workload_yaml_file}"
+            )
+
+            if self.workload_type == constants.APPLICATION_SET:
+                DRPC(
+                    namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                    resource_name=f"{self.cnv_workload_placement_name}-drpc",
+                ).wait_for_progression_status(
+                    constants.STATUS_DELETING, success_if_deleted=True
+                )
+            else:
+                DRPC(namespace=self.workload_namespace).wait_for_progression_status(
+                    constants.STATUS_DELETING, success_if_deleted=True
+                )
+
             for cluster, secret_obj in zip(
                 get_non_acm_cluster_config(), self.vm_secret_obj
             ):
@@ -1337,10 +1366,15 @@ class CnvWorkload(DRWorkload):
                 )
                 vm_obj.wait_for_delete(timeout=300)
 
+            if self.workload_type == constants.SUBSCRIPTION:
+                config.switch_acm_ctx()
+                run_cmd(f"oc delete -f {self.channel_yaml_file}")  # IgnoreDeprecation
+
         except (
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
+            AssertionError,
             UnexpectedBehaviour,
         ) as ex:
             err_msg = f"Failed to delete the workload: {ex}"
