@@ -271,10 +271,7 @@ def failover(
         f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
     )
 
-    drpc_obj.wait_for_phase(
-        constants.STATUS_FAILEDOVER,
-        timeout=360,
-    )
+    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=360, sleep=10)
     config.switch_ctx(restore_index)
 
 
@@ -340,7 +337,7 @@ def relocate(
     relocate_condition = constants.STATUS_RELOCATED
     if discovered_apps:
         relocate_condition = constants.STATUS_RELOCATING
-    drpc_obj.wait_for_phase(relocate_condition)
+    drpc_obj.wait_for_phase(relocate_condition, timeout=1200, sleep=15)
 
     if multi_ns:
         logger.info("Doing Cleanup Operations")
@@ -1049,6 +1046,7 @@ def wait_for_replication_resources_deletion(
     discovered_apps=False,
     vrg_name="",
     skip_vrg_check=False,
+    workload_cleanup=False,
 ):
     """
     Wait for replication resources to be deleted
@@ -1061,6 +1059,8 @@ def wait_for_replication_resources_deletion(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
+        workload_cleanup (bool): Set to True during final workload teardown.
+            For CephFS workloads, wait for all VolumeSnapshots to be deleted.
 
     Raises:
         TimeoutExpiredError: In case replication resources not deleted
@@ -1137,6 +1137,14 @@ def wait_for_replication_resources_deletion(
                 timeout=timeout,
             )
 
+        if "cephfs" in namespace and workload_cleanup:
+            wait_for_resource_count(
+                kind=constants.VOLUMESNAPSHOT,
+                namespace=namespace,
+                expected_count=0,
+                timeout=timeout,
+            )
+
 
 def wait_for_all_resources_creation(
     pvc_count,
@@ -1196,7 +1204,7 @@ def wait_for_all_resources_creation(
 
 def wait_for_all_resources_deletion(
     namespace,
-    timeout=1000,
+    timeout=1500,
     discovered_apps=False,
     workload_cleanup=False,
     vrg_name="",
@@ -1209,10 +1217,10 @@ def wait_for_all_resources_deletion(
         namespace (str): the namespace of the workload
         timeout (int): time in seconds to wait for resource deletion
         discovered_apps (bool): If true then deployed workload is discovered_apps
-        workload_cleanup (bool): Set to True when performing final workload cleanup.
-            If True:
-            - PVC and PV deletion will always be checked
-            - Replication resources state check will be skipped.
+        workload_cleanup (bool): Set to True when performing final workload
+            cleanup. When True, waits for PVC and PV deletion, skips
+            replication resource state checks, and for CephFS workloads
+            waits for all VolumeSnapshots to be deleted.
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
 
@@ -1249,7 +1257,13 @@ def wait_for_all_resources_deletion(
 
     check_state = not workload_cleanup
     wait_for_replication_resources_deletion(
-        namespace, timeout, check_state, discovered_apps, vrg_name, skip_vrg_check
+        namespace,
+        timeout,
+        check_state,
+        discovered_apps,
+        vrg_name,
+        skip_vrg_check,
+        workload_cleanup=workload_cleanup,
     )
 
     if workload_cleanup or "cephfs" not in namespace:
