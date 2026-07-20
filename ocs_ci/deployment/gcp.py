@@ -5,13 +5,10 @@ on Google Cloud Platform (aka GCP).
 """
 
 import logging
-import os
 
-import yaml
 from libcloud.compute.types import NodeState
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
-from ocs_ci.framework import config
 from ocs_ci.utility.gcp import GoogleCloudUtil
 
 
@@ -74,21 +71,7 @@ class GCPIPI(GCPBase):
     A class to handle GCP IPI specific deployment
     """
 
-    class OCPDeployment(IPIOCPDeployment):
-        def deploy_prereq(self):
-            super().deploy_prereq()
-            # TODO: Remove after ~2026-07-18 when GCP finishes purging deleted
-            # custom IAM roles from the odf-dev-test project. Until then, mint
-            # mode fails with FailedPrecondition because the role IDs are locked.
-            install_config = os.path.join(
-                config.ENV_DATA["cluster_path"], "install-config.yaml"
-            )
-            with open(install_config) as f:
-                install_config_data = yaml.safe_load(f)
-            install_config_data["credentialsMode"] = "Passthrough"
-            with open(install_config, "w") as f:
-                yaml.dump(install_config_data, f)
-            logger.info("Set credentialsMode to Passthrough (GCP workaround)")
+    OCPDeployment = IPIOCPDeployment
 
     def __init__(self):
         self.name = self.__class__.__name__
