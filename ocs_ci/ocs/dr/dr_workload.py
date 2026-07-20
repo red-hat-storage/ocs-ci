@@ -765,10 +765,17 @@ class BusyBox_AppSet(DRWorkload):
 
         self.appset_pvc_selector = kwargs.get("workload_pvc_selector")
         self.appset_model = kwargs.get("appset_model")
+        self.agnostic_dr = any(
+            c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters
+        )
 
-    def deploy_workload(self):
+    def deploy_workload(self, skip_replication_resources=False):
         """
         Deployment specific to busybox workload
+
+        Args:
+            skip_replication_resources (bool): If True, skip VGR/VR
+                checks during workload deployment verification.
 
         """
 
@@ -780,9 +787,19 @@ class BusyBox_AppSet(DRWorkload):
                 pvc_type = constants.RBD_INTERFACE
             elif self.pvc_interface == constants.CEPHFILESYSTEM:
                 pvc_type = constants.CEPHFS_INTERFACE
-            self.workload_namespace = (
-                create_unique_resource_name("workload", "appset")[:25] + "-" + pvc_type
+            agnostic_dr = any(
+                c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters
             )
+            if agnostic_dr:
+                self.workload_namespace = create_unique_resource_name(
+                    "workload-offload", "appset"
+                )[:25]
+            else:
+                self.workload_namespace = (
+                    create_unique_resource_name("workload", "appset")[:25]
+                    + "-"
+                    + pvc_type
+                )
         # load drpc.yaml
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["metadata"]["name"] = f"{self.appset_placement_name}-drpc"
@@ -869,7 +886,9 @@ class BusyBox_AppSet(DRWorkload):
         self.check_pod_pvc_status(skip_replication_resources=True)
         self.add_annotation_to_placement()
         run_cmd(f"oc create -f {self.drcp_data_yaml.name}")
-        self.verify_workload_deployment()
+        self.verify_workload_deployment(
+            skip_replication_resources=skip_replication_resources
+        )
 
     def _deploy_prereqs(self):
         """
@@ -926,13 +945,19 @@ class BusyBox_AppSet(DRWorkload):
             if _app_set["kind"] == constants.APPLICATION_SET:
                 return _app_set["metadata"]["name"]
 
-    def verify_workload_deployment(self):
+    def verify_workload_deployment(self, skip_replication_resources=False):
         """
         Verify busybox workload
 
-        """
+        Args:
+            skip_replication_resources (bool): If True, skip VGR/VR checks.
 
-        self.check_pod_pvc_status(skip_replication_resources=False)
+        """
+        self.check_pod_pvc_status(skip_replication_resources=skip_replication_resources)
+        config.switch_acm_ctx()
+        appset_resource_name = (
+            self._get_applicationset_name() + "-" + self.preferred_primary_cluster
+        )
 
         if self.appset_model == "pull":
             config.switch_to_cluster_by_name(self.preferred_primary_cluster)
@@ -997,6 +1022,10 @@ class BusyBox_AppSet(DRWorkload):
             ResourceNotDeleted: In case workload resources not deleted properly
 
         """
+        if self.agnostic_dr:
+            self._delete_workload_agnostic_dr(switch_ctx)
+            return
+
         backend_volumes = dr_helpers.get_backend_volumes_for_pvcs(
             self.workload_namespace
         )
@@ -1011,10 +1040,13 @@ class BusyBox_AppSet(DRWorkload):
                     workload_cleanup=True,
                 )
 
-            log.info("Verify backend images or subvolumes are deleted")
-            for cluster in get_non_acm_cluster_config():
-                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                dr_helpers.wait_for_backend_volume_deletion(backend_volumes)
+            if backend_volumes:
+                log.info("Verify backend images or subvolumes are deleted")
+                for cluster in get_non_acm_cluster_config():
+                    config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                    dr_helpers.wait_for_backend_volume_deletion(backend_volumes)
+            else:
+                log.info("No Ceph backend volumes to verify deletion for")
 
         except (
             TimeoutExpired,
@@ -1024,6 +1056,52 @@ class BusyBox_AppSet(DRWorkload):
             err_msg = (
                 f"Failed to delete the workload: {self.workload_name}, namespace: {self.workload_namespace}, "
                 f"Exception: {ex}"
+            )
+            log.exception(err_msg)
+            raise ResourceNotDeleted(err_msg)
+
+    def _delete_workload_agnostic_dr(self, switch_ctx=None):
+        """
+        Delete agnostic DR workload (LSO + VolSync, no Ceph).
+
+        1. Delete the ApplicationSet from hub.
+        2. Remove VGR finalizers and delete workload namespace on managed clusters.
+        3. Clean up Released local PVs so they can be reused.
+
+        Args:
+            switch_ctx (int): The cluster index by the cluster name
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        """
+        from ocs_ci.helpers.storage_agnostic_dr_helpers import (
+            cleanup_agnostic_dr_workload,
+            cleanup_local_pvs,
+        )
+
+        try:
+            config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+            log.info(
+                f"Deleting ApplicationSet for agnostic DR workload"
+                f" '{self.workload_namespace}'"
+            )
+            run_cmd(  # IgnoreDeprecation
+                cmd=f"oc delete -f {self.appset_yaml_file}", timeout=900
+            )
+
+            cleanup_agnostic_dr_workload(self.workload_namespace)
+            cleanup_local_pvs()
+
+        except (
+            TimeoutExpired,
+            TimeoutExpiredError,
+            TimeoutError,
+        ) as ex:
+            err_msg = (
+                f"Failed to delete the workload: {self.workload_name},"
+                f" namespace: {self.workload_namespace},"
+                f" Exception: {ex}"
             )
             log.exception(err_msg)
             raise ResourceNotDeleted(err_msg)
@@ -1284,7 +1362,8 @@ class CnvWorkload(DRWorkload):
         Verify cnv workload deployment
 
         """
-        self.check_pod_pvc_status(skip_replication_resources=False)
+        agnostic_dr = any(c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters)
+        self.check_pod_pvc_status(skip_replication_resources=agnostic_dr)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
@@ -1567,6 +1646,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             vrg_name (str): Name of vrg
 
         """
+        agnostic_dr = any(c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count,
@@ -1574,6 +1654,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.workload_namespace,
             discovered_apps=True,
             vrg_name=vrg_name or self.discovered_apps_placement_name,
+            skip_replication_resources=agnostic_dr,
         )
 
     def create_recipe_with_checkhooks(self):
@@ -2122,7 +2203,8 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         Verify cnv workload deployment
 
         """
-        self.check_pod_pvc_status(skip_replication_resources=False)
+        agnostic_dr = any(c.ENV_DATA.get("agnostic_dr", False) for c in config.clusters)
+        self.check_pod_pvc_status(skip_replication_resources=agnostic_dr)
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """

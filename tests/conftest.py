@@ -7954,6 +7954,7 @@ def create_workload_factory():
         appset_model=None,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
+        skip_replication_resources=False,
     ):
         """
         Args:
@@ -7964,6 +7965,9 @@ def create_workload_factory():
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             switch_ctx (int): The cluster index by the cluster name
+            skip_replication_resources (bool): If True, skip VGR/VR checks during
+                workload deployment verification. Required for agnostic DR where
+                replication resources are created after the migration script.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8005,9 +8009,15 @@ def create_workload_factory():
             workload.deploy_workload()
 
         for index in range(num_of_appset):
-            workload_key = "dr_workload_appset"
-            if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
-                workload_key += f"_{interface}"
+            agnostic_dr = any(
+                c.ENV_DATA.get("agnostic_dr", False) for c in ocsci_config.clusters
+            )
+            if agnostic_dr:
+                workload_key = "dr_workload_appset_agnostic_dr"
+            elif ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+                workload_key = f"dr_workload_appset_{interface}"
+            else:
+                workload_key = "dr_workload_appset"
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox_AppSet(
                 workload_dir=workload_details["workload_dir"],
@@ -8025,10 +8035,16 @@ def create_workload_factory():
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+            workload.deploy_workload(
+                skip_replication_resources=skip_replication_resources
+            )
+        agnostic_dr_mode = any(
+            c.ENV_DATA.get("agnostic_dr", False) for c in ocsci_config.clusters
+        )
         if (
             ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
             and pvc_interface == constants.CEPHBLOCKPOOL
+            and not agnostic_dr_mode
         ):
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances
@@ -8052,9 +8068,15 @@ def create_workload_factory():
         appset_model=None,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
+        skip_replication_resources=False,
     ):
         return _create_resources(
-            num_of_subscription, num_of_appset, appset_model, pvc_interface, switch_ctx
+            num_of_subscription,
+            num_of_appset,
+            appset_model,
+            pvc_interface,
+            switch_ctx,
+            skip_replication_resources,
         )
 
     return factory, _teardown
@@ -8225,6 +8247,9 @@ def cnv_dr_workload(request):
 
         """
         total_pvc_count = 0
+        agnostic_dr = any(
+            c.ENV_DATA.get("agnostic_dr", False) for c in ocsci_config.clusters
+        )
         workload_types = {
             constants.VM_VOLUME_PVC: [
                 (constants.SUBSCRIPTION, "dr_cnv_workload_sub", num_of_vm_subscription),
@@ -8235,7 +8260,11 @@ def cnv_dr_workload(request):
                 ),
                 (
                     constants.APPLICATION_SET,
-                    "dr_cnv_workload_appset_pull",
+                    (
+                        "dr_cnv_workload_appset_agnostic_dr"
+                        if agnostic_dr
+                        else "dr_cnv_workload_appset_pull"
+                    ),
                     num_of_vm_appset_pull,
                 ),
             ],
@@ -8278,6 +8307,10 @@ def cnv_dr_workload(request):
         for workload_type, data_key, num_of_vm in workload_types[vm_type]:
             for index in range(num_of_vm):
                 workload_details = ocsci_config.ENV_DATA[data_key][index]
+                placement_name = workload_details["dr_workload_app_placement_name"]
+                if agnostic_dr:
+                    run_id = str(ocsci_config.RUN["run_id"])[-6:]
+                    placement_name = f"{placement_name}-{run_id}"
                 workload = CnvWorkload(
                     workload_type=workload_type,
                     workload_dir=workload_details["workload_dir"],
@@ -8287,9 +8320,7 @@ def cnv_dr_workload(request):
                     workload_name=workload_details["name"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
-                    workload_placement_name=workload_details[
-                        "dr_workload_app_placement_name"
-                    ],
+                    workload_placement_name=placement_name,
                     workload_pvc_selector=workload_details[
                         "dr_workload_app_pvc_selector"
                     ],
@@ -8303,12 +8334,21 @@ def cnv_dr_workload(request):
                 total_pvc_count += workload_details["pvc_count"]
                 workload.deploy_workload()
 
-        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+        if (
+            ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
+            and not agnostic_dr
+        ):
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
 
         return instances
 
     def teardown():
+        agnostic_dr_skip = any(
+            c.ENV_DATA.get("agnostic_dr", False) for c in ocsci_config.clusters
+        )
+        if agnostic_dr_skip:
+            log.info("Skipping CNV workload teardown for agnostic DR")
+            return
         for instance in instances:
             try:
                 instance.delete_workload()
