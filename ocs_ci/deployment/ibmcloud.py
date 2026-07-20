@@ -225,7 +225,7 @@ class IBMCloudIPI(CloudDeploymentBase):
             super(IBMCloudIPI, self).destroy_cluster(log_level)
             self.destroy_cluster_from_existing_vpc(prefix)
             logger.info("IBM Cloud cluster destroyed successfully")
-            ibmcloud.delete_dns_records(prefix)
+            ibmcloud.delete_dns_records(self.cluster_name)
             logger.info("DNS records deleted successfully")
         else:
             resource_group = self.get_resource_group()
