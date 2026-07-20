@@ -7720,7 +7720,17 @@ def genereate_cred_file_rack():
         json.dump(rack_dict, f, indent=2)
     log.info(f"Rack details saved to {file_path} with restrictive permissions (0o600)")
 
-    # Also save a timestamped backup copy in home directory
+    # Verify BMC connectivity for every node via ping from the MGem.
+    # Any rackIP corrections discovered are applied to rack_dict and persisted
+    # back to the primary JSON file before the backup is written, so the backup
+    # always reflects the final corrected rackIP values.
+    rack_dict = _verify_bmc_connectivity_rack(
+        rack_dict=rack_dict,
+        file_path=str(file_path),
+    )
+
+    # Save a timestamped backup copy in home directory — written after ping
+    # verification so the backup contains any corrected rackIP values.
     try:
         home_dir = Path.home()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -7746,6 +7756,158 @@ def genereate_cred_file_rack():
         f"File location: {file_path}"
     )
 
+    return rack_dict
+
+
+def _verify_bmc_connectivity_rack(rack_dict, file_path):
+    """
+    Ping every node BMC IP (IPv6 then IPv4) from its rack's MGem (SSH hop host)
+    and verify reachability.  Any rackIP corrections are applied in-place and
+    persisted back to ``file_path``.
+
+    Multi-AZ clusters have one MGem (rackIP) per rack.  If a node's BMC is not
+    reachable from its own rack's MGem, every other rack's MGem is tried.  The
+    first MGem that responds is recorded as the working rackIP for that rack
+    (and propagated to every other rack that shared the same broken rackIP).
+
+    Args:
+        rack_dict (dict): Rack details as returned by genereate_cred_file_rack.
+        file_path (str): Path to the JSON file — rackIP corrections are written
+            back here so the on-disk file stays consistent.
+
+    Returns:
+        dict: rack_dict with any rackIP corrections applied.
+
+    Raises:
+        NodeBMCUnreachableError: If any node has no reachable BMC IP from any MGem.
+    """
+    import ipaddress
+    from paramiko import SSHClient, AutoAddPolicy
+    from ocs_ci.framework import config
+
+    rack_ssh_username = config.AUTH.get("ibm_hci", {}).get("rack_ssh_username")
+    rack_ssh_password = config.AUTH.get("ibm_hci", {}).get("rack_ssh_password")
+
+    def _ssh_ping(rack_ip, node_ip):
+        """Return True if node_ip responds to a ping executed on rack_ip via SSH."""
+        if not node_ip:
+            return False
+        try:
+            addr = ipaddress.ip_address(node_ip)
+        except ValueError:
+            log.debug(f"_ssh_ping: invalid IP '{node_ip}', skipping")
+            return False
+        cmd = (
+            f"ping -6 -c 1 -W 5 {node_ip}"
+            if addr.version == 6
+            else f"ping -c 1 -W 5 {node_ip}"
+        )
+        ssh = SSHClient()
+        ssh.set_missing_host_key_policy(AutoAddPolicy())
+        try:
+            ssh.connect(
+                rack_ip,
+                username=rack_ssh_username,
+                password=rack_ssh_password,
+                timeout=30,
+            )
+            _, stdout, _ = ssh.exec_command(cmd)
+            return stdout.channel.recv_exit_status() == 0
+        except Exception as e:
+            log.debug(f"SSH ping from MGem {rack_ip} to {node_ip} failed: {e}")
+            return False
+        finally:
+            ssh.close()
+
+    # Collect all rackIP values available across all racks
+    all_rack_ips = {
+        serial: data.get("rackInfo", {}).get("rackIP")
+        for serial, data in rack_dict.items()
+        if data.get("rackInfo", {}).get("rackIP")
+    }
+
+    unreachable = []
+    rackip_fixes = {}
+
+    for rack_serial, rack_data in rack_dict.items():
+        rack_ip = rack_data.get("rackInfo", {}).get("rackIP")
+        if not rack_ip:
+            log.warning(f"Rack {rack_serial} has no rackIP, skipping BMC ping check")
+            continue
+
+        for node_role, node_info in rack_data.get("nodes", {}).items():
+            ipv6 = node_info.get("ipv6")
+            ipv4 = node_info.get("ipv4")
+            node_label = f"{node_role}.{rack_serial}"
+
+            if not ipv6 and not ipv4:
+                log.warning(f"No BMC IP configured for {node_label}, skipping ping")
+                continue
+
+            bmc_ips = [(t, ip) for t, ip in [("IPv6", ipv6), ("IPv4", ipv4)] if ip]
+            mgem_candidates = [rack_ip] + [
+                ip
+                for s, ip in all_rack_ips.items()
+                if s != rack_serial and ip != rack_ip
+            ]
+
+            log.info(
+                f"Verifying BMC connectivity for {node_label} "
+                f"(trying {len(mgem_candidates)} MGem(s))"
+            )
+
+            working_mgem = None
+            for mgem_ip in mgem_candidates:
+                for ip_type, bmc_ip in bmc_ips:
+                    log.info(
+                        f"Pinging BMC {ip_type} ({bmc_ip}) for {node_label} from MGem {mgem_ip}"
+                    )
+                    if _ssh_ping(mgem_ip, bmc_ip):
+                        log.info(
+                            f"BMC {ip_type} ({bmc_ip}) reachable for {node_label} via MGem {mgem_ip}"
+                        )
+                        working_mgem = mgem_ip
+                        break
+                    else:
+                        log.warning(
+                            f"BMC {ip_type} ({bmc_ip}) not reachable for {node_label} from MGem {mgem_ip}"
+                        )
+                if working_mgem:
+                    break
+
+            if working_mgem is None:
+                unreachable.append(node_label)
+                continue
+
+            if working_mgem != rack_ip:
+                log.warning(
+                    f"rack {rack_serial} rackIP {rack_ip} could not reach "
+                    f"{node_label}; updating to working MGem {working_mgem}"
+                )
+                rackip_fixes[rack_ip] = working_mgem
+
+    # Apply rackIP corrections and persist to disk
+    if rackip_fixes:
+        for serial, rack_data in rack_dict.items():
+            current_ip = rack_data.get("rackInfo", {}).get("rackIP")
+            if current_ip in rackip_fixes:
+                new_ip = rackip_fixes[current_ip]
+                rack_data["rackInfo"]["rackIP"] = new_ip
+                log.info(f"Updated rackIP for rack {serial}: {current_ip} -> {new_ip}")
+        fd = os.open(file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(rack_dict, f, indent=2)
+        log.info(f"Persisted rackIP corrections to {file_path}")
+
+    if unreachable:
+        from ocs_ci.ocs.exceptions import NodeBMCUnreachableError
+
+        raise NodeBMCUnreachableError(
+            f"BMC unreachable for the following nodes (tried all MGems, "
+            f"no IPv6 or IPv4 responded to ping): {unreachable}"
+        )
+
+    log.info("BMC connectivity verified for all nodes")
     return rack_dict
 
 

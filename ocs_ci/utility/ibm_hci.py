@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+import shlex
 from pathlib import Path
 from paramiko import SSHClient, AutoAddPolicy
 
@@ -40,6 +42,16 @@ class IBMHCI(object):
         # Load rack details
         self.rack_details = self._load_rack_details()
 
+        # Backfill any missing rackIP entries from previously saved backups.
+        # This is needed when the cached file was generated while the GitHub
+        # rack-IP fetch failed (e.g. token missing at generation time).
+        if self._any_rack_missing_ip():
+            log.warning(
+                "One or more racks are missing rackIP in cached file. "
+                "Attempting to recover from backup files..."
+            )
+            self._patch_rack_ips()
+
     def _load_rack_details(self):
         """
         Load rack details from cluster-specific JSON file
@@ -61,6 +73,158 @@ class IBMHCI(object):
         except Exception as e:
             log.error(f"Failed to load rack details: {e}")
             return {}
+
+    def _any_rack_missing_ip(self):
+        """Return True if any rack in rack_details is missing a rackIP."""
+        for rack_data in self.rack_details.values():
+            if not rack_data.get("rackInfo", {}).get("rackIP"):
+                return True
+        return False
+
+    def _patch_rack_ips(self):
+        """
+        Backfill missing rackIP values in self.rack_details by scanning
+        previously saved backup files (newest first).
+
+        genereate_cred_file_rack() writes two backup locations on every run:
+          - IBM_HCI_RACK_DIR/<cluster_name>_backup_<timestamp>.json
+          - ~/<cluster_name>_rack_backup_<timestamp>.json
+
+        A backup from a run where the GitHub fetch succeeded will contain
+        rackIP.  We scan both locations, pick the most-recent file that has
+        rackIP for each missing rack, and patch self.rack_details in memory.
+        The primary file is then updated so future runs don't need this step.
+        """
+        from ocs_ci.framework import config
+
+        cluster_name = config.ENV_DATA.get("cluster_name", "")
+
+        if not cluster_name:
+            log.warning(
+                "cluster_name is empty; cannot construct backup glob patterns. "
+                "Rack IP backfill skipped."
+            )
+            return
+
+        # Collect all candidate backup files from both locations, newest first
+        candidates = []
+
+        rack_dir = Path(constants.IBM_HCI_RACK_DIR)
+        for p in rack_dir.glob(f"{cluster_name}_backup_*.json"):
+            candidates.append(p)
+
+        home_dir = Path.home()
+        for p in home_dir.glob(f"{cluster_name}_rack_backup_*.json"):
+            candidates.append(p)
+
+        # Sort newest-first by modification time
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+
+        if not candidates:
+            log.warning(
+                "No backup files found to recover rackIP from. "
+                "Rack IP backfill skipped."
+            )
+            return
+
+        patched = False
+        still_missing = []
+        for backup_path in candidates:
+            try:
+                with open(backup_path, "r") as f:
+                    backup_data = json.load(f)
+            except Exception as e:
+                log.warning(f"Could not read backup {backup_path}: {e}")
+                continue
+
+            if not isinstance(backup_data, dict):
+                log.warning(
+                    f"Backup {backup_path.name} contains unexpected JSON type "
+                    f"({type(backup_data).__name__}); skipping"
+                )
+                continue
+
+            for rack_serial, rack_data in self.rack_details.items():
+                rack_info = rack_data.setdefault("rackInfo", {})
+                if rack_info.get("rackIP"):
+                    continue  # already have it
+
+                backup_rack = backup_data.get(rack_serial, {})
+                ip = backup_rack.get("rackInfo", {}).get("rackIP")
+                if ip:
+                    rack_info["rackIP"] = ip
+                    log.info(
+                        f"Recovered rackIP {ip} for rack {rack_serial} "
+                        f"from backup {backup_path.name}"
+                    )
+                    patched = True
+
+            # Stop scanning once every rack has an IP
+            if not self._any_rack_missing_ip():
+                break
+
+        still_missing = [
+            serial
+            for serial, data in self.rack_details.items()
+            if not data.get("rackInfo", {}).get("rackIP")
+        ]
+
+        if patched:
+            # Persist so future runs don't need to scan backups again
+            fd = os.open(
+                self.rack_file_path,
+                os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                0o600,
+            )
+            with os.fdopen(fd, "w") as f:
+                json.dump(self.rack_details, f, indent=2)
+            os.chmod(self.rack_file_path, 0o600)
+            log.info(
+                f"Updated primary rack file with recovered rackIP(s): "
+                f"{self.rack_file_path}"
+            )
+            if still_missing:
+                log.warning(
+                    f"Recovery partial — rackIP still missing for racks: "
+                    f"{still_missing}"
+                )
+        else:
+            log.error(
+                f"Could not recover rackIP for any rack from backup files. "
+                f"Racks still missing rackIP: {still_missing}. "
+                f"Power operations may fail."
+            )
+
+    def _apply_rackip_fixes(self, rackip_fixes):
+        """
+        Apply rackIP corrections to self.rack_details and persist to disk.
+
+        For every rack whose current rackIP appears in rackip_fixes, replace it
+        with the working IP found by _verify_bmc_connectivity and write the
+        updated rack_details back to the primary JSON file.
+
+        Args:
+            rackip_fixes (dict): Mapping of broken_rackIP -> working_rackIP
+        """
+        if not rackip_fixes:
+            return
+
+        for serial, rack_data in self.rack_details.items():
+            current_ip = rack_data.get("rackInfo", {}).get("rackIP")
+            if current_ip in rackip_fixes:
+                new_ip = rackip_fixes[current_ip]
+                rack_data["rackInfo"]["rackIP"] = new_ip
+                log.info(f"Updated rackIP for rack {serial}: {current_ip} -> {new_ip}")
+
+        fd = os.open(
+            self.rack_file_path,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o600,
+        )
+        with os.fdopen(fd, "w") as f:
+            json.dump(self.rack_details, f, indent=2)
+        os.chmod(self.rack_file_path, 0o600)
+        log.info(f"Persisted rackIP corrections to {self.rack_file_path}")
 
     def _get_node_details_by_name(self, node_name):
         """
@@ -281,7 +445,12 @@ class IBMHCI(object):
             return False
 
         ipmi_cmd = ipmi_ops[operation]
-        command = f"ipmitool -I lanplus -H {formatted_ip} -U {node_username} -P {node_password} {ipmi_cmd}"
+        command = (
+            f"ipmitool -I lanplus -H {formatted_ip} "
+            f"-U {shlex.quote(node_username)} "
+            f"-P {shlex.quote(node_password)} "
+            f"{ipmi_cmd}"
+        )
 
         log.info(f"Executing IPMI command via SSH for {operation} on node {node_ip}")
         log.info(
@@ -374,7 +543,11 @@ class IBMHCI(object):
 
         # First, discover the Systems URI
         log.info(f"Discovering Redfish Systems URI for node {node_ip}")
-        discover_cmd = f"curl -k -sS -f -u {node_username}:{node_password} https://{formatted_ip}/redfish/v1/Systems"
+        discover_cmd = (
+            f"curl -k -sS -f -u "
+            f"{shlex.quote(node_username)}:{shlex.quote(node_password)} "
+            f"https://{formatted_ip}/redfish/v1/Systems"
+        )
         log.info(
             f"Redfish Discovery Command: curl -k -sS -f -u <REDACTED>:<REDACTED> "
             f"https://{formatted_ip}/redfish/v1/Systems"
@@ -416,7 +589,8 @@ class IBMHCI(object):
             if operation == "status":
                 # Get power status
                 command = (
-                    f"curl -k -sS -f -u {node_username}:{node_password} "
+                    f"curl -k -sS -f "
+                    f"-u {shlex.quote(node_username)}:{shlex.quote(node_password)} "
                     f"https://{formatted_ip}{system_uri} | grep -i powerstate"
                 )
                 redacted_command = (
@@ -426,7 +600,9 @@ class IBMHCI(object):
             else:
                 reset_type = redfish_ops[operation]
                 command = (
-                    f"curl -k -sS -f -u {node_username}:{node_password} -X POST "
+                    f"curl -k -sS -f "
+                    f"-u {shlex.quote(node_username)}:{shlex.quote(node_password)} "
+                    f"-X POST "
                     f"https://{formatted_ip}{system_uri}/Actions/ComputerSystem.Reset "
                     f"-H 'Content-Type: application/json' "
                     f'-d \'{{"ResetType": "{reset_type}"}}\''

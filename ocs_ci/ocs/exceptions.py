@@ -842,3 +842,13 @@ class UnexpectedCatalogBuildException(Exception):
     """
 
     pass
+
+
+class NodeBMCUnreachableError(Exception):
+    """
+    Raised when a node's BMC is unreachable from any MGem during IBMHCI init.
+    Indicates that neither IPv6 nor IPv4 responded to ping from any available
+    rack management host (MGem / rackIP) for the given node.
+    """
+
+    pass

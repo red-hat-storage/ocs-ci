@@ -4111,11 +4111,12 @@ class IBMHCINode(object):
 
     def restart_nodes_by_stop_and_start_teardown(self):
         """
-        Teardown method to ensure all nodes are powered on and cluster is accessible
+        Teardown method to ensure all nodes are powered on and cluster is accessible.
 
-        This method is designed to recover the cluster even when the API is down.
-        It powers on all nodes directly via IPMI/Redfish and waits for cluster recovery.
-        Includes automatic re-login if authentication is lost.
+        First checks whether the cluster API is reachable and all nodes are Ready.
+        If so, there is nothing to do (nodes were never stopped).
+        Only falls back to powering on all nodes via IPMI/Redfish when the API is
+        unreachable, which indicates the nodes were actually powered off.
         """
         from ocs_ci.helpers.helpers import refresh_oc_login_connection
 
@@ -4124,7 +4125,25 @@ class IBMHCINode(object):
         )
 
         try:
-            # Power on all nodes (works even if API is down)
+            # Re-authenticate first so the API check uses a fresh token.
+            try:
+                refresh_oc_login_connection()
+                logger.info("Successfully re-authenticated to cluster")
+            except Exception as login_error:
+                logger.warning(f"Could not re-authenticate: {login_error}")
+
+            # Check whether all nodes are already Ready.
+            try:
+                wait_for_nodes_status(timeout=60, status=constants.NODE_READY)
+                logger.info("All nodes are already Ready - no power-on action needed")
+                return
+            except Exception as check_error:
+                logger.warning(
+                    f"Node status check failed ({check_error}); "
+                    "assuming nodes are down - proceeding with power-on"
+                )
+
+            # Nodes appear to be down: power them all on via IPMI/Redfish.
             powered_on_nodes = self.power_on_all_nodes()
             logger.info(f"Powered on {len(powered_on_nodes)} nodes")
 
@@ -4132,54 +4151,38 @@ class IBMHCINode(object):
             logger.info("Waiting 30 seconds for nodes to start booting...")
             time.sleep(30)
 
-            # Try to verify nodes are ready (may fail if API still down)
+            # Wait for nodes to become Ready, retrying if the API is still coming up.
             max_retries = 5
             for attempt in range(max_retries):
+                logger.info(
+                    f"Attempting to verify node status via API "
+                    f"(attempt {attempt + 1}/{max_retries})..."
+                )
                 try:
-                    logger.info(
-                        f"Attempting to verify node status via API (attempt {attempt + 1}/{max_retries})..."
-                    )
-
-                    # Try to re-login if we lost authentication
                     try:
                         refresh_oc_login_connection()
                         logger.info("Successfully re-authenticated to cluster")
                     except Exception as login_error:
-                        if self._is_api_unavailable_error(login_error):
-                            logger.warning(
-                                f"API unavailable (attempt {attempt + 1}): {str(login_error)[:100]}"
-                            )
-                        else:
-                            logger.warning(
-                                f"Could not re-authenticate (attempt {attempt + 1}): {login_error}"
-                            )
+                        logger.warning(
+                            f"Could not re-authenticate (attempt {attempt + 1}): {login_error}"
+                        )
                         if attempt < max_retries - 1:
                             logger.info("Waiting 30 seconds before retry...")
                             time.sleep(30)
                             continue
 
-                    # Try to check node status
                     wait_for_nodes_status(timeout=900, status=constants.NODE_READY)
                     logger.info("All nodes are ready - cluster is accessible")
-                    break
+                    return
 
                 except Exception as e:
-                    if self._is_api_unavailable_error(e):
-                        logger.warning(
-                            f"API unavailable (attempt {attempt + 1}): {str(e)[:100]}"
-                        )
-                    else:
-                        logger.warning(
-                            f"Could not verify node status (attempt {attempt + 1}): {e}"
-                        )
+                    logger.warning(
+                        f"Could not verify node status (attempt {attempt + 1}): {e}"
+                    )
                     if attempt < max_retries - 1:
                         logger.info("Waiting 30 seconds before retry...")
                         time.sleep(30)
                     else:
-                        logger.error(
-                            "Could not verify cluster status via API after all retries. "
-                            "Nodes have been powered on but cluster may not be fully recovered."
-                        )
                         raise RuntimeError(
                             f"Failed to verify cluster status after {max_retries} attempts. "
                             "Nodes are powered on but API verification failed."
@@ -4187,7 +4190,6 @@ class IBMHCINode(object):
 
         except Exception as e:
             logger.error(f"Critical error during teardown: {e}")
-            # Re-raise to propagate failure to test harness
             raise
 
     def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
