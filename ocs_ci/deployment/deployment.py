@@ -2326,10 +2326,15 @@ class Deployment(object):
                 resource_count=mgr_count,
                 timeout=600,
             )
+            osd_count = get_osd_count()
+            logger.info(
+                "Waiting for %d OSD pods (from StorageCluster deviceSets)",
+                osd_count,
+            )
             assert pod.wait_for_resource(
                 condition="Running",
                 selector="app=rook-ceph-osd",
-                resource_count=3,
+                resource_count=osd_count,
                 timeout=600,
             )
 
