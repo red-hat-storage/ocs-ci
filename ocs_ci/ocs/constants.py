@@ -3600,6 +3600,16 @@ UI_INPUT_RULES_BLOCKING_POOL = {
     "rule4": UI_INPUT_RULES_GENERAL["rule3"],
 }
 
+EC_SUPPORTED_PROFILES = [
+    {"scheme": "2+2", "k": 2, "m": 2},
+    {"scheme": "4+2", "k": 4, "m": 2},
+    {"scheme": "5+2", "k": 5, "m": 2},
+    {"scheme": "6+2", "k": 6, "m": 2},
+    {"scheme": "8+3", "k": 8, "m": 3},
+    {"scheme": "8+4", "k": 8, "m": 4},
+    {"scheme": "8+6", "k": 8, "m": 6},
+]
+
 UI_INPUT_RULES_STORAGE_SYSTEM = {
     "rule1": UI_INPUT_RULES_GENERAL["rule4"],
     "rule2": UI_INPUT_RULES_GENERAL["rule1"],
