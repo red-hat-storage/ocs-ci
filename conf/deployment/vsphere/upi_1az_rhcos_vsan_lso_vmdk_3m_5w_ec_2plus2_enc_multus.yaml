@@ -1,0 +1,40 @@
+---
+# Pipeline 3: vSphere CLI deployment with LSO, ODF, EC 2+2, 5 OSD nodes,
+#              FIPS, Multus
+# Covers: Req #4 (CLI + FIPS + ODF), Req #5 (2+2 EC with +2 redundancy),
+#         Req #7 (Multus + EC)
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  type: 'VMDK'
+  provision_type: 'thick'
+  ec_default_pools: true
+  ec_data_chunks: 2
+  ec_coding_chunks: 2
+  ec_failure_domain: host
+  ocs_operator_nodes_to_label: 5
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  master_replicas: 3
+  worker_replicas: 5
+  worker_num_cpus: '16'
+  compute_memory: '65536'
+  master_num_cpus: '4'
+  master_memory: '16384'
+  fio_storageutilization_min_mbps: 10.0
+  fips: 'true'
+  is_multus_enabled: true
+  multus_public_net_interface: 'ens224'
+  multus_cluster_net_interface: 'ens224'
+  multus_create_public_net: true
+  multus_create_cluster_net: true
+  multus_public_net_namespace: 'default'
+  multus_cluster_net_namespace: 'default'
+  multus_public_net_type: 'macvlan'
+  multus_public_net_mode: 'bridge'
+  multus_cluster_net_type: 'macvlan'
+  multus_cluster_net_mode: 'bridge'
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-8028'
