@@ -612,6 +612,11 @@ class TestHealthOverview(ManageTest):
             self.restart_pod()
             logger.info("Waiting for 120 sec for pod to restart")
             time.sleep(120)
+            api = PrometheusAPI(threading_lock=threading_lock)
+            api.refresh_connection()
+            alerts = api.wait_for_alert(name=alert_name, state="firing", sleep=60)
+            assert len(alerts) > 0, f"Alert {alert_name} is not in firing state"
+            logger.info(f"Alert {alert_name} confirmed in firing state")
         self.update_alert_map(threading_lock)
         logger.info("Silence all pre-existing alerts")
         df_overview = PageNavigator().nav_storage_data_foundation_overview_page()
@@ -657,7 +662,9 @@ class TestHealthOverview(ManageTest):
             api = PrometheusAPI(threading_lock=threading_lock)
             api.refresh_connection()
             alerts = api.wait_for_alert(name=alert_name, state="firing", sleep=60)
-            logger.info(f"Alert {alerts} triggered")
+            assert (
+                len(alerts) > 0
+            ), f"Alert {alert_name} was not triggered after applying mock alert rule"
             PageNavigator().take_screenshot(f"triggered_alert_{alert_name}")
             logger.info(
                 "Waiting for 120 sec to update health score after alert is triggered"

@@ -12,16 +12,23 @@ spec:
     rules:
     - alert: ODFNodeLatencyHighOnOSDNodes   # SAME NAME
       annotations:
-        description: Node {{ $labels.instance }} has max ICMP RTT latency > 1ms over the last 1min. This may impact Ceph performance.
+        description: Node {{ $labels.instance }} has max ICMP RTT latency > 5ms over the last 1min. This may impact Ceph performance.
         runbook_url: https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator/ODFNodeLatencyHighOnOSDNodes.md
-        summary: High ICMP latency (>1ms) detected on ODF OSD node(s)
+        summary: High ICMP latency (>5ms) detected on ODF OSD node(s)
       expr: |
-        max_over_time(
-        probe_icmp_duration_seconds{
-          phase="rtt",
-          job="odf-blackbox-exporter",
-          daemon_type="osd"}[24h: ]
-        ) > 0.005
+        count(
+             max_over_time(
+               probe_icmp_duration_seconds{phase="rtt",
+               job=~"probe/.*/odf-blackbox-exporter",
+               daemon_type="osd"
+               }[24h:]
+             ) > 0.005
+             and on(instance, job, daemon_type, namespace)
+             probe_success{
+               job=~"probe/.*/odf-blackbox-exporter",
+               daemon_type="osd"
+             } == 1
+            ) > 0
       for: 1m
       labels:
         component: odf
