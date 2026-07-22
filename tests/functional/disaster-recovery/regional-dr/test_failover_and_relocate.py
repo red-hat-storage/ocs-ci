@@ -135,23 +135,18 @@ class TestFailoverAndRelocate:
                 cephfs_custom_storage_class(erasure_coded=erasure_coding)
             # TODO: Test case for custom storageclass RBD
 
-        # TODO: Update ocs-workloads repo to support custom SC for subscription app and add num_of_subscription=1
-        num_of_subscription = int(not custom_sc)
         workloads = dr_workload(
-            num_of_subscription=num_of_subscription,
+            num_of_subscription=1,
             num_of_appset=1,
             pvc_interface=pvc_interface,
             custom_sc=custom_sc,
         )
-        if num_of_subscription:
-            drpc_subscription = DRPC(namespace=workloads[0].workload_namespace)
+        drpc_subscription = DRPC(namespace=workloads[0].workload_namespace)
         drpc_appset = DRPC(
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-            resource_name=f"{workloads[num_of_subscription * 1].appset_placement_name}-drpc",
+            resource_name=f"{workloads[1].appset_placement_name}-drpc",
         )
-        drpc_objs = [drpc_appset]
-        if num_of_subscription:
-            drpc_objs.append(drpc_subscription)
+        drpc_objs = [drpc_subscription, drpc_appset]
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             workloads[0].workload_namespace
