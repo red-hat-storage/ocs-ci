@@ -76,6 +76,11 @@ class FusionDataFoundationDeployment:
         """
 
         logger.info("Installing IBM Fusion Data Foundation")
+        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
+            from ocs_ci.deployment.deployment import enable_wildcard_routes
+
+            enable_wildcard_routes()
+
         if self.pre_release and not self.live_deployment:
             self.create_image_tag_mirror_set()
             self.create_image_digest_mirror_set()
