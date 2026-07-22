@@ -136,7 +136,7 @@ class TestFailoverAndRelocate:
             # TODO: Test case for custom storageclass RBD
 
         workloads = dr_workload(
-            num_of_subscription=1,
+            num_of_subscription=int(not custom_sc),
             num_of_appset=1,
             pvc_interface=pvc_interface,
             custom_sc=custom_sc,
