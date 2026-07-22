@@ -147,7 +147,7 @@ class TestFailoverAndRelocate:
             drpc_subscription = DRPC(namespace=workloads[0].workload_namespace)
         drpc_appset = DRPC(
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-            resource_name=f"{workloads[1].appset_placement_name}-drpc",
+            resource_name=f"{workloads[num_of_subscription * 1].appset_placement_name}-drpc",
         )
         drpc_objs = [drpc_appset]
         if num_of_subscription:
