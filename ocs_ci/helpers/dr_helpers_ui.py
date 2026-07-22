@@ -164,6 +164,7 @@ def verify_df_cluster_listing_on_topology_view(
             if acm_obj.check_element_presence(
                 format_locator(cluster_name_locator, cluster_name)[::-1],
                 timeout=5,
+                use_fallback=False,
             )
         ]
         assert not unexpected_clusters, (
@@ -402,7 +403,9 @@ def select_dr_topology_filter(acm_obj, filter_option, timeout=30):
     selected_filter_locator = format_locator(
         acm_loc["dr-topology-filter-selected"], filter_option
     )
-    if acm_obj.check_element_presence(selected_filter_locator[::-1], timeout=3):
+    if acm_obj.check_element_presence(
+        selected_filter_locator[::-1], timeout=3, use_fallback=False
+    ):
         log.info(f"DR Topology filter '{filter_option}' is already selected")
         return
 
@@ -475,6 +478,7 @@ def verify_dr_topology_cluster_name_search_filter(
                 name,
             )[::-1],
             timeout=5,
+            use_fallback=False,
         )
     ]
     assert not hidden_clusters, (
