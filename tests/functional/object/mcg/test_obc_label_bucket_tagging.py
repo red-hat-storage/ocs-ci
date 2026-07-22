@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.bucket_utils import (
     get_bucket_tagging,
     get_noobaa_bucket_tagging_metric_results,
+    tag_set_to_dict,
     verify_bucket_tagging_matches_labels,
     verify_noobaa_bucket_tagging_metric,
 )
@@ -39,7 +40,9 @@ class TestOBCLabelBucketTagging:
     NooBaa bucket tagging metrics.
     """
 
-    def test_obc_labels_sync_to_bucket_tags(self, bucket_factory, threading_lock):
+    def test_obc_labels_sync_to_bucket_tags(
+        self, bucket_factory, mcg_obj, threading_lock
+    ):
         """
         1. Create a new OBC
         2. Verify the bucket has no tags before labeling the OBC
@@ -58,7 +61,7 @@ class TestOBCLabelBucketTagging:
 
         logger.test_step("Verify bucket has no tags before labeling OBC")
         with pytest.raises(boto3exception.ClientError) as exc:
-            get_bucket_tagging(obc_obj.s3_client, bucket_name)
+            get_bucket_tagging(mcg_obj, bucket_name)
         logger.assertion(
             f"Bucket tagging error: expected='NoSuchTagSet', "
             f"actual='{exc.value.response['Error']['Code']}'"
@@ -113,11 +116,12 @@ class TestOBCLabelBucketTagging:
         ), f"OBC {obc_name} labels {obc_labels} missing {expected_labels}"
 
         logger.test_step("Verify bucket S3 tags match OBC labels")
-        bucket_tags = verify_bucket_tagging_matches_labels(
-            obc_obj.s3_client,
+        response = verify_bucket_tagging_matches_labels(
+            mcg_obj,
             bucket_name,
             expected_labels,
         )
+        bucket_tags = tag_set_to_dict(response.get("TagSet", []))
         logger.assertion(
             f"S3 tags verification: expected_subset={expected_labels}, actual={bucket_tags} "
         )
