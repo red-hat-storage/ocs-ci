@@ -3948,22 +3948,22 @@ def assert_store_phase_and_mode(
         raise
 
 
-def get_bucket_tagging(s3_client, bucket_name):
+def get_bucket_tagging(s3_obj, bucket_name):
     """
     Get S3 bucket tagging via the S3 API.
 
     Args:
-        s3_client: boto3 S3 client with credentials for the bucket
+        s3_obj (obj): MCG or OBC object
         bucket_name (str): Name of the S3 bucket
 
     Returns:
-        list: TagSet from get_bucket_tagging response
+        dict: Full get_bucket_tagging response
 
     Raises:
         botocore.exceptions.ClientError: When tagging is not set (NoSuchTagSet)
     """
-    response = s3_client.get_bucket_tagging(Bucket=bucket_name)
-    return response.get("TagSet", [])
+    response = s3_obj.s3_client.get_bucket_tagging(Bucket=bucket_name)
+    return response
 
 
 def tag_set_to_dict(tag_set):
@@ -3980,35 +3980,42 @@ def tag_set_to_dict(tag_set):
 
 
 def verify_bucket_tagging_matches_labels(
-    s3_client, bucket_name, expected_labels, timeout=180, sleep=10
+    s3_obj, bucket_name, expected_labels, timeout=180, sleep=10
 ):
     """
     Wait until bucket S3 tags include the expected label key-value pairs.
 
     Args:
-        s3_client: boto3 S3 client with credentials for the bucket
+        s3_obj (obj): MCG or OBC object
         bucket_name (str): Name of the S3 bucket
         expected_labels (dict): Labels that should appear as bucket tags
         timeout (int): Timeout in seconds
         sleep (int): Sleep interval between checks
 
+    Returns:
+        dict: Full get_bucket_tagging response once expected labels are present
+
     Raises:
         TimeoutExpiredError: If tags do not match within the timeout
     """
-    for tag_set in TimeoutSampler(
+    for response in TimeoutSampler(
         timeout=timeout,
         sleep=sleep,
         func=get_bucket_tagging,
-        s3_client=s3_client,
+        s3_obj=s3_obj,
         bucket_name=bucket_name,
     ):
-        bucket_tags = tag_set_to_dict(tag_set)
+        bucket_tags = tag_set_to_dict(response.get("TagSet", []))
         if all(bucket_tags.get(key) == value for key, value in expected_labels.items()):
             logger.info(
                 f"Bucket {bucket_name} tags {bucket_tags} match expected labels "
                 f"{expected_labels}"
             )
-            return bucket_tags
+            return response
+    raise TimeoutExpiredError(
+        f"Bucket {bucket_name} tags did not match expected labels {expected_labels} "
+        f"within {timeout}s"
+    )
 
 
 def get_noobaa_bucket_tagging_metric_results(
