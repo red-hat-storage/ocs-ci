@@ -90,7 +90,6 @@ class TestMaintenancePod(E2ETest):
         logger.info(f"Maintenance deployment is up & running: {maintenance_pod_name}")
 
         logger.test_step("Run Ceph ObjectStore Tool (COT) operations")
-        logger.info("Waiting 5 seconds before running COT operations")
         time.sleep(5)
         logger.info(f"Running COT list_pgs command on {original_deployment}")
         pgs = Cot_obj.run_cot_list_pgs(original_deployment)
@@ -115,7 +114,6 @@ class TestMaintenancePod(E2ETest):
             f"Waiting for new operator pod to be running: {new_operator_pod_name}"
         )
         wait_for_pods_to_be_running(pod_names=[new_operator_pod_name])
-        logger.info("Waiting 5 seconds for operator to stabilize")
         time.sleep(5)
         logger.info(
             "Verifying original OSD deployment remains scaled down after operator restart"
@@ -229,7 +227,6 @@ class TestMaintenancePod(E2ETest):
         logger.info(f"Maintenance deployment is up & running: {maintenance_pod_name}")
 
         logger.test_step("Run Mon Store Tool (MOT) operations")
-        logger.info("Waiting 5 seconds before running MOT operations")
         time.sleep(5)
         monmap = Mot_obj.run_mot_get_monmap(original_deployment)
         logger.info(f"MOT get_monmap completed for {original_deployment}")
@@ -252,11 +249,10 @@ class TestMaintenancePod(E2ETest):
         )
         wait_for_pods_to_be_running(pod_names=[new_operator_pod_name])
 
-        logger.info("Waiting 5 seconds for operator to stabilize")
-        time.sleep(5)
         logger.info(
             "Verifying original Mon deployment remains scaled down after operator restart"
         )
+        time.sleep(5)
         mon_deployments = get_mon_deployments()
         for deployment in mon_deployments:
             if deployment.name == original_deployment:

@@ -41,14 +41,10 @@ class TestPvcSnapshotAndCloneWithBaseOperation(E2ETest):
 
         """
         logger.test_step("Deploy PostgreSQL workload")
-        logger.info("Deploying PostgreSQL workload with 1 replica")
         pgsql = pgsql_factory_fixture(replicas=1)
         logger.info("PostgreSQL workload deployed successfully")
 
         logger.test_step("Execute snapshot/clone/restore/resize workflow")
-        logger.info(
-            "Starting multiple snapshot and clone operations on PostgreSQL PVC (target size: 25Gi)"
-        )
         multiple_snapshot_and_clone_of_postgres_pvc_factory(
             pvc_size_new=25, pgsql=pgsql
         )

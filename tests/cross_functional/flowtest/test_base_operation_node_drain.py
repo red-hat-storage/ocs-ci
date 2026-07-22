@@ -96,7 +96,6 @@ class TestBaseOperationNodeDrain(E2ETest):
         logger.info("PVC create/delete operations started in background")
 
         logger.test_step("Operation 1: Node Drain")
-        logger.info("Selecting worker node for drain operation")
         node_name = flow_ops.node_operations_entry_criteria(
             node_type="worker", number_of_nodes=1, operation_name="Node Drain"
         )
@@ -111,7 +110,6 @@ class TestBaseOperationNodeDrain(E2ETest):
         logger.info("Operation 1 completed: Node Drain successful")
 
         logger.test_step("Operation 2: Add Capacity")
-        logger.info("Capturing pre-add capacity state")
         osd_pods_before, restart_count_before = flow_ops.add_capacity_entry_criteria()
         osd_size = storage_cluster.get_osd_size()
         logger.info(f"Adding capacity with OSD size: {osd_size}")
@@ -135,7 +133,6 @@ class TestBaseOperationNodeDrain(E2ETest):
         logger.info("Operation 2 completed: Add Capacity successful")
 
         logger.test_step("Operation 3: Node Restart")
-        logger.info("Selecting worker node for restart operation")
         node_name = flow_ops.node_operations_entry_criteria(
             node_type="worker", number_of_nodes=1, operation_name="Node Restart"
         )
@@ -148,7 +145,6 @@ class TestBaseOperationNodeDrain(E2ETest):
         logger.info("Operation 3 completed: Node Restart successful")
 
         logger.test_step("Operation 4: Node Network Failure")
-        logger.info("Selecting worker node for network failure operation")
         node_name, nw_fail_time = flow_ops.node_operations_entry_criteria(
             node_type="worker",
             number_of_nodes=1,

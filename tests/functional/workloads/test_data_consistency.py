@@ -213,9 +213,8 @@ def test_log_reader_writer_parallel(project, tmp_path):
     )
     logger.debug(f"Number of ignored rsync failures: {number_of_failures}")
 
-    logger.test_step("Run logreader job to validate checksums in log files")
-    logger.info(
-        "No corruption detected in initial checks, running full checksum validation"
+    logger.test_step(
+        "Initial corruption checks passed; running logreader job to validate log file checksums"
     )
     with open(constants.LOGWRITER_CEPHFS_READER, "r") as job_file:
         job_dict = yaml.safe_load(job_file.read())
