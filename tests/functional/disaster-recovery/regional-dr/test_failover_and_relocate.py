@@ -87,13 +87,13 @@ class TestFailoverAndRelocate:
             id="primary_down-cephfs-ui",
         ),
         pytest.param(
-            True,  # primary_cluster_down = True
+            False,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
             False,  # via_ui = True
             True,
             True,
             # TODO: marks=pytest.mark.polarion_id("OCS-*"),
-            id="primary_down-cephfs-cli-custom_sc-ec",
+            id="primary_up-cephfs-cli-custom_sc-ec",
         ),
     ]
 
