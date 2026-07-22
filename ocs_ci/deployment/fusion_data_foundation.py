@@ -144,6 +144,7 @@ class FusionDataFoundationDeployment:
                 constants.VSPHERE_PLATFORM,
                 constants.BAREMETAL_PLATFORM,
                 constants.HCI_BAREMETAL,
+                constants.IBM_HCI_PLATFORM,
             ]
             if platform in local_platforms:
                 backing_storage_type = "Local"
