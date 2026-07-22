@@ -135,6 +135,7 @@ class TestFailoverAndRelocate:
                 cephfs_custom_storage_class(erasure_coded=erasure_coding)
             # TODO: Test case for custom storageclass RBD
 
+        # TODO: Update ocs-workloads repo to support custom SC for subscription app and add num_of_subscription=1
         workloads = dr_workload(
             num_of_subscription=int(not custom_sc),
             num_of_appset=1,
