@@ -6,6 +6,8 @@ Requires ODF 4.22+ (Ceph 9.0) for subvolume-level MDS metrics.
 
 import logging
 
+import pytest
+
 from ocs_ci.framework.testlib import (
     ManageTest,
     polarion_id,
@@ -17,10 +19,12 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers.cephfs_stress_helpers import create_cephfs_subvolume_workloads
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
+    runs_on_provider,
     skipif_external_mode,
     skipif_mcg_only,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.ui.page_objects.cephfs_subvolume_metrics import (
     CephFSSubvolumeMetricsCard,
@@ -31,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 @green_squad
+@runs_on_provider
 @skipif_ocs_version("<4.22")
 @skipif_mcg_only
 @skipif_external_mode
@@ -124,6 +129,7 @@ class TestCephFSSubvolumeMetricsSectionReachable(ManageTest):
 
 
 @green_squad
+@runs_on_provider
 @skipif_ocs_version("<4.22")
 @skipif_mcg_only
 @skipif_external_mode
@@ -223,6 +229,7 @@ class TestCephFSSubvolumeMetricsLoadWithActiveWorkload(ManageTest):
 
 
 @green_squad
+@runs_on_provider
 @skipif_ocs_version("<4.22")
 @skipif_mcg_only
 @skipif_external_mode
@@ -293,3 +300,166 @@ class TestCephFSSubvolumeMetricUnitsAndLabels(ManageTest):
                 f"Expected unit '{expected_unit}' in value "
                 f"'{first_value}' for metric '{metric}'"
             )
+
+
+@green_squad
+@runs_on_provider
+@skipif_ocs_version("<4.22")
+@skipif_mcg_only
+@skipif_external_mode
+class TestCephFSSubvolumeTop10Ranking(ManageTest):
+    """
+    TC — Verify the CephFS subvolume metrics card shows at most 10
+    subvolume rows and each row carries a correctly-formatted metric
+    value when more than 10 CephFS PVCs exist.
+
+    Testcase: Top 10 Ranking — IOPS, Latency, Throughput
+    """
+
+    @pytest.fixture(autouse=True, scope="class")
+    def setup_top10_workloads(self, request, setup_ui_class):
+        """
+        Create 12 CephFS subvolume workloads once for the class, navigate
+        to the Block and File tab, and wait until the table is fully
+        populated (shows exactly 10 rows, the UI cap).
+        """
+        logger.test_step(
+            "Create %d CephFS subvolume workloads",
+            constants.CEPHFS_SUBVOLUME_TOP_10_WORKLOAD_COUNT,
+        )
+        workloads = create_cephfs_subvolume_workloads(
+            count=constants.CEPHFS_SUBVOLUME_TOP_10_WORKLOAD_COUNT,
+            project_name_prefix="cephfs-top10-test",
+            pvc_size="1Gi",
+            fio_size="1GB",
+            fio_runtime=900,
+        )
+        projects = [project_obj for project_obj, _, _ in workloads]
+
+        def finalizer():
+            for project_obj in projects:
+                try:
+                    logger.info("Deleting project %s", project_obj.namespace)
+                    project_obj.delete(resource_name=project_obj.namespace)
+                    project_obj.wait_for_delete(project_obj.namespace, timeout=180)
+                except (CommandFailed, Exception):
+                    logger.warning(
+                        "Failed to delete project %s",
+                        project_obj.namespace,
+                        exc_info=True,
+                    )
+
+        request.addfinalizer(finalizer)
+
+        logger.test_step("Navigate to Storage Cluster > Block and File tab")
+        storage_cluster_page = PageNavigator().nav_storage_cluster_default_page()
+        storage_cluster_page.validate_block_and_file_tab_active()
+
+        subvolume_metrics_card = CephFSSubvolumeMetricsCard()
+
+        logger.test_step("Verify CephFS subvolume metrics card is visible")
+        assert (
+            subvolume_metrics_card.verify_cephfs_subvolume_section_visible()
+        ), "CephFS subvolume metrics card not visible"
+
+        logger.test_step(
+            "Wait for table to show %d rows (max 6 minutes)",
+            constants.CEPHFS_SUBVOLUME_MAX_TOP_10_ROWS,
+        )
+        subvolume_metrics_card.wait_for_row_count(
+            expected_count=constants.CEPHFS_SUBVOLUME_MAX_TOP_10_ROWS,
+            timeout=360,
+            sleep=20,
+        )
+
+    @tier2
+    @ui
+    @pytest.mark.parametrize(
+        argnames=["metric"],
+        argvalues=[
+            pytest.param(
+                constants.CEPHFS_SUBVOLUME_DEFAULT_METRIC,
+                marks=pytest.mark.polarion_id("OCS-8053"),
+            ),
+            pytest.param(
+                constants.CEPHFS_SUBVOLUME_METRIC_LATENCY,
+                marks=pytest.mark.polarion_id("OCS-8054"),
+            ),
+            pytest.param(
+                constants.CEPHFS_SUBVOLUME_METRIC_THROUGHPUT,
+                marks=pytest.mark.polarion_id("OCS-8055"),
+            ),
+        ],
+    )
+    def test_cephfs_subvolume_top_10_ranking(self, metric, threading_lock):
+        """
+        Switch to the given metric and verify the table shows at most
+        10 rows with correctly-formatted values that match Prometheus.
+
+        Steps (class-scoped setup, runs once for all parametrized cases):
+        1. Create 12 CephFS subvolume workloads (namespace + PVC + FIO
+           each) so the cluster has more subvolumes than the UI
+           cap of 10 rows.
+        2. Navigate to Storage Cluster > Block and File tab.
+        3. Verify CephFS subvolume metrics card is visible.
+        4. Wait for the table to show exactly 10 rows (max 6 minutes).
+
+        Steps (per parametrized metric):
+        5. Switch to the parametrized metric (Total IOPS / Total Latency
+           / Total Throughput).
+        6. Verify at most 10 rows are displayed.
+        7. Verify every displayed row carries a non-empty value with the
+           expected unit suffix for the selected metric.
+        8. Query Prometheus for the same metric and verify UI values
+           match CLI values (positional comparison, sorted descending).
+        """
+        subvolume_metrics_card = CephFSSubvolumeMetricsCard()
+
+        logger.test_step("Switch to metric '%s'", metric)
+        subvolume_metrics_card.switch_cephfs_subvolume_metric(metric)
+
+        row_count = subvolume_metrics_card.get_cephfs_subvolume_row_count(timeout=60)
+        assert row_count > 0, f"No subvolume rows visible for metric '{metric}'"
+
+        logger.test_step(
+            "Verify at most %d rows are displayed " "(cluster has %d subvolumes)",
+            constants.CEPHFS_SUBVOLUME_MAX_TOP_10_ROWS,
+            constants.CEPHFS_SUBVOLUME_TOP_10_WORKLOAD_COUNT,
+        )
+        assert row_count <= constants.CEPHFS_SUBVOLUME_MAX_TOP_10_ROWS, (
+            f"Expected at most "
+            f"{constants.CEPHFS_SUBVOLUME_MAX_TOP_10_ROWS} rows, "
+            f"got {row_count}"
+        )
+        logger.info(
+            "Row count: %d (max %d)",
+            row_count,
+            constants.CEPHFS_SUBVOLUME_MAX_TOP_10_ROWS,
+        )
+
+        expected_unit = constants.CEPHFS_SUBVOLUME_METRIC_EXPECTED_UNITS[metric]
+        logger.test_step(
+            "Verify all %d rows carry unit '%s'",
+            row_count,
+            expected_unit,
+        )
+        all_values = subvolume_metrics_card.get_cephfs_subvolume_all_row_values(
+            expected_count=row_count,
+        )
+        for idx, value in enumerate(all_values):
+            assert value, f"Row {idx} has an empty value for metric '{metric}'"
+            assert expected_unit in value, (
+                f"Row {idx} value '{value}' does not contain "
+                f"expected unit '{expected_unit}' "
+                f"for metric '{metric}'"
+            )
+
+        logger.test_step(
+            "Verify UI values match Prometheus for metric '%s'",
+            metric,
+        )
+        subvolume_metrics_card.verify_ui_values_match_prometheus(
+            metric=metric,
+            ui_values=all_values,
+            threading_lock=threading_lock,
+        )

@@ -1,13 +1,33 @@
 import logging
+import math
 import re
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
+from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
+
+
+_PROMQL_TEMPLATE = (
+    "sort_desc("
+    "sum by (pv_name,pvc_namespace,subvolume)"
+    "(odf_cephfs_subvolume_read_{m}_with_pv"
+    " or odf_cephfs_subvolume_write_{m}_with_pv))"
+)
+
+METRIC_PROMQL = {
+    constants.CEPHFS_SUBVOLUME_DEFAULT_METRIC: (_PROMQL_TEMPLATE.format(m="iops")),
+    constants.CEPHFS_SUBVOLUME_METRIC_LATENCY: (
+        _PROMQL_TEMPLATE.format(m="latency_msec")
+    ),
+    constants.CEPHFS_SUBVOLUME_METRIC_THROUGHPUT: (
+        _PROMQL_TEMPLATE.format(m="throughput_bps")
+    ),
+}
 
 
 class CephFSSubvolumeMetricsCard(BlockAndFile):
@@ -47,6 +67,7 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         self.value_by_namespace_loc = self.validation_loc[
             "cephfs_subvolume_value_by_namespace"
         ]
+        self.all_row_values_loc = self.validation_loc["cephfs_subvolume_all_row_values"]
 
     def navigate_to_cephfs_subvolume_section(self):
         """Scroll the Block and File tab to bring the CephFS subvolume card into view."""
@@ -80,10 +101,10 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
     def switch_cephfs_subvolume_metric(self, metric_label, timeout=15):
         """
         Select a metric from the CephFS subvolume dropdown and wait until
-        the toggle reflects the new selection before returning.
+        the toggle and column header both reflect the new selection.
 
-        Waiting for the toggle text to update ensures the table has begun
-        re-rendering with the new metric data before callers read cell values.
+        Waiting for the column header ensures the table has fully
+        re-rendered with the new metric data before callers read values.
 
         Args:
             metric_label (str): One of 'Total IOPS', 'Total Latency',
@@ -96,6 +117,24 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         self.wait_until_expected_text_is_found(
             self.metric_toggle_loc, metric_label, timeout=timeout
         )
+        self._wait_for_metric_column_header(metric_label, timeout=timeout)
+
+    def _wait_for_metric_column_header(self, metric_label, timeout=30, sleep=3):
+        """
+        Poll until the last column header matches ``metric_label``.
+
+        Args:
+            metric_label (str): Expected header text.
+            timeout (int): Maximum seconds to wait.
+            sleep (int): Seconds between polls.
+        """
+        for headers in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=self.get_cephfs_subvolume_column_headers,
+        ):
+            if headers and headers[-1] == metric_label:
+                return
 
     def click_cephfs_subvolume_help_button(self):
         """Click the help (?) button next to the CephFS subvolume card title."""
@@ -155,6 +194,39 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         self.wait_for_element_to_be_present(loc, timeout=timeout)
         return self.get_element_text(loc).strip()
 
+    def get_cephfs_subvolume_all_row_values(self, expected_count=1, timeout=30):
+        """
+        Return the metric value text from every row in the subvolume table.
+
+        Reads the currently active metric from the dropdown toggle and
+        collects the corresponding ``td[@data-label]`` cell text for each
+        table row.
+
+        Args:
+            expected_count (int): Minimum number of value cells to wait
+                for before reading (default 1). Guards against reading
+                a partially rendered table after a metric switch.
+            timeout (int): Maximum seconds to wait for the value cells.
+
+        Returns:
+            list[str]: Metric value strings, e.g.
+                ``['13 IOPS', '7 IOPS', '2 IOPS']``.
+        """
+        metric = self.get_cephfs_subvolume_metric_toggle_text()
+        loc = format_locator(self.all_row_values_loc, metric)
+        for elements in TimeoutSampler(
+            timeout=timeout,
+            sleep=2,
+            func=self.get_elements,
+            locator=loc,
+        ):
+            if len(elements) >= expected_count:
+                break
+        elements = self.get_elements(loc)
+        values = [el.text.strip() for el in elements]
+        logger.info("All row values for metric '%s': %s", metric, values)
+        return values
+
     def get_cephfs_subvolume_row_count(self, timeout=30):
         """
         Return the number of rows currently displayed in the subvolume table.
@@ -172,6 +244,33 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         rows = self.get_elements(self.table_rows_loc)
         logger.info("CephFS subvolume table row count: %d", len(rows))
         return len(rows)
+
+    def wait_for_row_count(self, expected_count, timeout=360, sleep=20):
+        """
+        Wait until the subvolume table displays at least ``expected_count`` rows.
+
+        Args:
+            expected_count (int): Target row count.
+            timeout (int): Maximum seconds to wait (default 360).
+            sleep (int): Seconds between polls (default 20).
+
+        Raises:
+            TimeoutExpiredError: If the row count does not reach
+                ``expected_count`` within ``timeout``.
+        """
+        logger.info(
+            "Waiting up to %ds for subvolume table to show %d rows",
+            timeout,
+            expected_count,
+        )
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=self.get_cephfs_subvolume_row_count,
+        ):
+            logger.info("Current row count: %d / %d", sample, expected_count)
+            if sample >= expected_count:
+                return
 
     def click_cephfs_subvolume_first_row_name(self):
         """
@@ -364,3 +463,139 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         """
         self.wait_for_element_to_be_present(self.view_all_link_loc, timeout=timeout)
         return len(self.get_elements(self.view_all_link_loc)) > 0
+
+    @staticmethod
+    def _parse_ui_metric_value(value_str):
+        """
+        Parse a UI metric string to a raw float.
+
+        Handles comma-separated thousands and SI-prefixed throughput
+        units (KBps, MBps, GBps).
+
+        Args:
+            value_str (str): e.g. '13 IOPS', '12,000 ms',
+                '4.87 KBps', '0 Bps'.
+
+        Returns:
+            float: Raw numeric value in base units.
+        """
+        multipliers = {
+            "ms": 1e-3,
+            "KBps": 1e3,
+            "MBps": 1e6,
+            "GBps": 1e9,
+        }
+        cleaned = value_str.replace(",", "").strip()
+        parts = cleaned.split()
+        number = float(parts[0])
+        if len(parts) > 1:
+            unit = parts[1]
+            number *= multipliers.get(unit, 1)
+        return number
+
+    @staticmethod
+    def _get_prometheus_top_values(metric, threading_lock):
+        """
+        Query Prometheus and return the top N values sorted descending.
+
+        Args:
+            metric (str): Metric label used to look up the PromQL
+                expression in ``METRIC_PROMQL``.
+            threading_lock: Threading lock for PrometheusAPI.
+
+        Returns:
+            list[float]: Top values, capped at
+                ``constants.CEPHFS_SUBVOLUME_MAX_TOP_10_ROWS``.
+        """
+        promql = METRIC_PROMQL[metric]
+        api = PrometheusAPI(threading_lock=threading_lock)
+        results = api.query(promql)
+        values = sorted(
+            [float(r["value"][1]) for r in results],
+            reverse=True,
+        )
+        return values[: constants.CEPHFS_SUBVOLUME_MAX_TOP_10_ROWS]
+
+    def _wait_for_nonzero_prometheus_values(
+        self,
+        metric,
+        threading_lock,
+        expected_count,
+        timeout=360,
+        sleep=30,
+    ):
+        """
+        Poll Prometheus until all top values for ``metric`` are > 0.
+
+        Args:
+            metric (str): Metric label.
+            threading_lock: Threading lock for PrometheusAPI.
+            expected_count (int): Number of values expected.
+            timeout (int): Maximum seconds to wait.
+            sleep (int): Seconds between polls.
+
+        Returns:
+            list[float]: Prometheus values once all are non-zero.
+
+        Raises:
+            TimeoutExpiredError: If values do not become non-zero
+                within ``timeout``.
+        """
+        result = None
+        for values in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=self._get_prometheus_top_values,
+            metric=metric,
+            threading_lock=threading_lock,
+        ):
+            if len(values) >= expected_count and all(
+                v > 0 for v in values[:expected_count]
+            ):
+                result = values[:expected_count]
+                break
+        return result
+
+    def verify_ui_values_match_prometheus(self, metric, ui_values, threading_lock):
+        """
+        Compare UI table values against Prometheus for the given metric.
+
+        Polls Prometheus until all values are > 0, then re-reads the
+        UI table so both snapshots are fresh before comparing.
+
+        Args:
+            metric (str): Active metric label, e.g.
+                ``constants.CEPHFS_SUBVOLUME_DEFAULT_METRIC``.
+            ui_values (list[str]): Values collected from the UI table,
+                e.g. ``['13 IOPS', '7 IOPS']``.
+            threading_lock: Session-scoped threading lock for
+                PrometheusAPI.
+
+        Raises:
+            AssertionError: If a UI value does not match its
+                Prometheus counterpart within the allowed tolerance.
+        """
+        prom_values = self._wait_for_nonzero_prometheus_values(
+            metric,
+            threading_lock,
+            expected_count=len(ui_values),
+        )
+
+        logger.info("Prometheus values for '%s': %s", metric, prom_values)
+
+        ui_values = self.get_cephfs_subvolume_all_row_values(
+            expected_count=len(prom_values),
+        )
+
+        assert len(ui_values) == len(prom_values), (
+            f"Row count mismatch for '{metric}': "
+            f"UI has {len(ui_values)}, "
+            f"Prometheus has {len(prom_values)}"
+        )
+
+        for idx, (ui_str, prom_val) in enumerate(zip(ui_values, prom_values)):
+            ui_val = self._parse_ui_metric_value(ui_str)
+            assert math.isclose(ui_val, prom_val, rel_tol=0.05, abs_tol=1.0), (
+                f"Row {idx} '{metric}' mismatch: "
+                f"UI={ui_str} ({ui_val}), Prometheus={prom_val}"
+            )
