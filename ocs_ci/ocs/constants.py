@@ -368,6 +368,19 @@ SERVICE_ACCOUNT = "Serviceaccount"
 SCC = "SecurityContextConstraints"
 PRIVILEGED = "privileged"
 ANYUID = "anyuid"
+
+# SCC annotation keys (RHSTOR-8757)
+SCC_REQUIRED_ANNOTATION = "openshift.io/required-scc"
+SCC_ADMISSION_ANNOTATION = "openshift.io/scc"
+
+# SCC names used by ODF components
+SCC_RESTRICTED_V2 = "restricted-v2"
+SCC_ROOK_CEPH = "rook-ceph"
+SCC_NOOBAA_CORE = "noobaa-core"
+SCC_NOOBAA_ENDPOINT = "noobaa-endpoint"
+SCC_CEPH_CSI_OP = "ceph-csi-op-scc"
+SCC_ODF_BLACKBOX = "odf-blackbox-scc"
+
 OCSINITIALIZATION = "OCSInitialization"
 OCSINIT = "ocsinit"
 SUBSCRIPTION_WITH_ACM = "Subscription.operators.coreos.com"
@@ -827,6 +840,7 @@ NOOBAA_DB_LABEL_419_AND_ABOVE = "cnpg.io/cluster=noobaa-db-pg-cluster"
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 NOOBAA_DEFAULT_BACKINGSTORE_LABEL = "pool=noobaa-default-backing-store"
 NOOBAA_CNPG_POD_LABEL = "app.kubernetes.io/name=cloudnative-pg"
+NOOBAA_PROMETHEUS_ADAPTER_LABEL = "app.kubernetes.io/name=prometheus-adapter"
 ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-version"
 VOLSYNC_LABEL = "app.kubernetes.io/name=volsync"
