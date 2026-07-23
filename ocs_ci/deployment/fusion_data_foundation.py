@@ -140,7 +140,12 @@ class FusionDataFoundationDeployment:
 
         if not backing_storage_type:
             platform = config.ENV_DATA.get("platform", "").lower()
-            local_platforms = [constants.VSPHERE_PLATFORM, constants.BAREMETAL_PLATFORM]
+            local_platforms = [
+                constants.VSPHERE_PLATFORM,
+                constants.BAREMETAL_PLATFORM,
+                constants.HCI_BAREMETAL,
+                constants.IBM_HCI_PLATFORM,
+            ]
             if platform in local_platforms:
                 backing_storage_type = "Local"
 
@@ -282,14 +287,21 @@ class FusionDataFoundationDeployment:
             resource_name=storage_namespace,
             label="openshift.io/cluster-monitoring=true",
         )
-        if self.lso_enabled:
+        lso_already_deployed = self.lso_enabled and OCP(
+            kind=constants.STORAGECLASS
+        ).is_exist(resource_name=constants.DEFAULT_STORAGECLASS_LSO)
+        if self.lso_enabled and not lso_already_deployed:
             self.ensure_lso_installed()
-            # Perform disk cleanup after LSO is installed but before any disk operations
             if config.ENV_DATA.get("skip_disks_cleanup", False):
                 logger.info("Skipping disks cleanup")
             else:
                 logger.info("Performing disk cleanup for LSO")
                 cleanup_nodes_for_lso_install()
+        elif lso_already_deployed:
+            logger.info(
+                "LSO already deployed (StorageClass %s exists), skipping installation",
+                constants.DEFAULT_STORAGECLASS_LSO,
+            )
         self.patch_catalogsource()
 
         fusion_version = config.ENV_DATA["fusion_version"].replace("v", "")
@@ -308,7 +320,7 @@ class FusionDataFoundationDeployment:
             odfcluster_status_check()
         else:
             logger.info("Storage configuration for Fusion 2.11 or greater")
-            if self.lso_enabled:
+            if self.lso_enabled and not lso_already_deployed:
                 add_disks_lso()
             # Ensure storage class is resolved and stored in config before
             # StorageCluster creation. The property setter populates
@@ -317,7 +329,7 @@ class FusionDataFoundationDeployment:
             sc = self.storage_class
             logger.info(f"Resolved storage class for StorageCluster: {sc}")
             clustersetup = StorageClusterSetup()
-            if self.lso_enabled:
+            if self.lso_enabled and not lso_already_deployed:
                 create_lvs_resource(self.storage_class, self.storage_class)
             if config.ENV_DATA.get("mark_masters_schedulable", False):
                 node.mark_masters_schedulable()
