@@ -90,6 +90,46 @@ class GCPIPI(GCPBase):
         self.name = self.__class__.__name__
         super(GCPIPI, self).__init__()
 
+    @staticmethod
+    def _get_gcp_project():
+        """
+        Set GCP authentication and return the project ID.
+
+        Returns:
+            str: GCP project ID
+
+        """
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT_KEY_FILEPATH
+        sa_dict = load_service_account_key_dict()
+        return config.ENV_DATA.get("gcp_project_id") or sa_dict["project_id"]
+
+    @staticmethod
+    def _ensure_ccoctl_and_credentials_requests(credentials_requests_dir):
+        """
+        Ensure the ccoctl binary and CredentialsRequest manifests are
+        available. Both are extracted from the OCP release image if missing.
+
+        Args:
+            credentials_requests_dir (str): Path to the CredentialsRequest
+                directory. If this directory does not exist, the manifests
+                are re-extracted.
+
+        """
+        cluster_path = config.ENV_DATA["cluster_path"]
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        release_image = get_ocp_release_image_from_installer()
+        cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
+        cco.extract_ccoctl_binary(cco_image, pull_secret_path)
+        if not os.path.isdir(credentials_requests_dir):
+            logger.info("Credentials requests directory not found, re-extracting")
+            install_config = os.path.join(cluster_path, "install-config.yaml")
+            cco.extract_credentials_requests(
+                release_image,
+                install_config,
+                pull_secret_path,
+                credentials_requests_dir,
+            )
+
     class OCPDeployment(IPIOCPDeployment):
         """
         GCP-specific OCP deployment that adds Workload Identity
@@ -111,40 +151,28 @@ class GCPIPI(GCPBase):
 
             Steps:
                 1. Set GCP authentication for ccoctl
-                2. Extract ccoctl binary from the release image
-                3. Extract CredentialsRequest manifests
-                4. Configure manual credentials mode
-                5. Generate install manifests
-                6. Run ccoctl gcp create-all to create WIF resources
-                7. Copy generated manifests and TLS into the cluster dir
+                2. Extract ccoctl binary and CredentialsRequest manifests
+                3. Configure manual credentials mode
+                4. Generate install manifests
+                5. Run ccoctl gcp create-all to create WIF resources
+                6. Copy generated manifests and TLS into the cluster dir
             """
             cluster_path = config.ENV_DATA["cluster_path"]
             output_dir = os.path.join(cluster_path, "output-dir")
-            pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
             credentials_requests_dir = os.path.join(cluster_path, "creds_reqs")
             install_config = os.path.join(cluster_path, "install-config.yaml")
 
             # 1. Set GCP authentication
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT_KEY_FILEPATH
-            sa_dict = load_service_account_key_dict()
-            gcp_project = config.ENV_DATA.get("gcp_project_id") or sa_dict["project_id"]
+            gcp_project = GCPIPI._get_gcp_project()
 
-            # 2-3. Extract ccoctl binary and CredentialsRequest manifests
-            release_image = get_ocp_release_image_from_installer()
-            cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
-            cco.extract_ccoctl_binary(cco_image, pull_secret_path)
-            cco.extract_credentials_requests(
-                release_image,
-                install_config,
-                pull_secret_path,
-                credentials_requests_dir,
-            )
+            # 2. Extract ccoctl binary and CredentialsRequest manifests
+            GCPIPI._ensure_ccoctl_and_credentials_requests(credentials_requests_dir)
 
-            # 4-5. Configure manual credentials mode and generate manifests
+            # 3-4. Configure manual credentials mode and generate manifests
             cco.set_credentials_mode_manual(install_config)
             cco.create_manifests(self.installer, cluster_path)
 
-            # 6. Run ccoctl gcp create-all
+            # 5. Run ccoctl gcp create-all
             infra_id = get_infra_id_from_openshift_install_state(cluster_path)
             cco.process_credentials_requests_gcp(
                 infra_id,
@@ -154,7 +182,7 @@ class GCPIPI(GCPBase):
                 output_dir,
             )
 
-            # 7. Copy generated manifests and TLS into the cluster dir
+            # 6. Copy generated manifests and TLS into the cluster dir
             manifests_source_dir = os.path.join(output_dir, "manifests")
             manifests_target_dir = os.path.join(cluster_path, "manifests")
             file_names = os.listdir(manifests_source_dir)
@@ -181,37 +209,16 @@ class GCPIPI(GCPBase):
         if config.DEPLOYMENT.get("sts_enabled"):
             try:
                 # 1. Set GCP authentication
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = (
-                    SERVICE_ACCOUNT_KEY_FILEPATH
-                )
-                sa_dict = load_service_account_key_dict()
-                gcp_project = (
-                    config.ENV_DATA.get("gcp_project_id") or sa_dict["project_id"]
-                )
+                gcp_project = self._get_gcp_project()
 
-                # 2. Ensure ccoctl binary is available (may be missing if
-                # teardown runs on a different agent than the one that deployed)
+                # 2. Ensure ccoctl binary and CredentialsRequest manifests
+                # are available (may be missing if teardown runs on a
+                # different agent than the one that deployed)
                 cluster_path = config.ENV_DATA["cluster_path"]
-                pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-                release_image = get_ocp_release_image_from_installer()
-                cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
-                cco.extract_ccoctl_binary(cco_image, pull_secret_path)
-
-                # 3. Re-extract CredentialsRequest manifests if missing
                 credentials_requests_dir = os.path.join(cluster_path, "creds_reqs")
-                if not os.path.isdir(credentials_requests_dir):
-                    logger.info(
-                        "Credentials requests directory not found, re-extracting"
-                    )
-                    install_config = os.path.join(cluster_path, "install-config.yaml")
-                    cco.extract_credentials_requests(
-                        release_image,
-                        install_config,
-                        pull_secret_path,
-                        credentials_requests_dir,
-                    )
+                self._ensure_ccoctl_and_credentials_requests(credentials_requests_dir)
 
-                # 4. Run ccoctl gcp delete to remove WIF resources
+                # 3. Run ccoctl gcp delete to remove WIF resources
                 infra_id = get_infra_id_from_openshift_install_state(cluster_path)
                 cco.delete_gcp_sts_resources(
                     infra_id,
