@@ -1183,6 +1183,42 @@ acm_page_nav_420 = {
     ),
 }
 
+acm_page_nav_421 = {
+    "modal_dialog_close_button": (
+        "//div[@role='dialog']//button[@aria-label='Close']",
+        By.XPATH,
+    ),
+    "all-clusters": (
+        "//li[@role='treeitem']//button[text()='All clusters']",
+        By.XPATH,
+    ),
+    "managed-cluster-name": (
+        "//li[@role='treeitem']//button[text()='{}']",
+        By.XPATH,
+    ),
+    "cnv-workload-namespace": (
+        "//li[@role='treeitem']//button[text()='{}']",
+        By.XPATH,
+    ),
+    # ACM 2.16.1 removed the cluster-dropdown-toggle button; the All Clusters
+    # nav link is the direct replacement for both the toggle and the view.
+    "click-local-cluster": (
+        "//a[@data-test='nav' and @href='/multicloud/infrastructure/clusters']",
+        By.XPATH,
+    ),
+    "all-clusters-view": (
+        "//a[@data-test='nav' and @href='/multicloud/infrastructure/clusters']",
+        By.XPATH,
+    ),
+    # ACM 2.16 nightly renamed the perspective from "Fleet Virtualization" to
+    # "Fleet Management". Match either to keep older nightlies working.
+    "fleet-virtual": (
+        "//h2[normalize-space()='Fleet Virtualization' "
+        "or normalize-space()='Fleet Management']",
+        By.XPATH,
+    ),
+}
+
 acm_configuration = {
     "cluster-sets": (
         "//a[normalize-space()='Cluster sets'] | //button[.//span[normalize-space()='Cluster sets']]",
@@ -1791,6 +1827,19 @@ acm_configuration_4_19 = {
     "close-page": ("button[aria-label='Close']", By.CSS_SELECTOR),
     "select-shared": ("#shared-vm-protection", By.CSS_SELECTOR),
     "select-drpc": ("input[name='radioGroup']", By.CSS_SELECTOR),
+    # Locators for removing DR protection from an enrolled VM via UI
+    "remove-vm-protection": (
+        "//button[@id='disable-dr-action']",
+        By.XPATH,
+    ),
+    "confirm-remove-protection": (
+        "//button[@id='confirm-disable-dr-action']",
+        By.XPATH,
+    ),
+    "remove-protection-conf-msg": (
+        "//h4[contains(text(),'Protection removed')]",
+        By.XPATH,
+    ),
 }
 
 acm_configuration_4_20 = {
@@ -1811,7 +1860,7 @@ acm_configuration_4_20 = {
         "//button[@data-test-id='perspective-switcher-toggle']",
         By.XPATH,
     ),
-    "fleet-virtual": ("//h2[text()='Fleet Virtualization']", By.XPATH),
+    "fleet-virtual": ("//h2[normalize-space()='Fleet Virtualization']", By.XPATH),
     "nav-bar-vms-page": ("//a[@data-test-id='virtualmachines-nav-item']", By.XPATH),
     "all-clusters": ("//button[text()='All clusters']", By.XPATH),
     "managed-cluster-name": ("//button[text()='{}']", By.XPATH),
@@ -1862,6 +1911,35 @@ acm_configuration_4_22 = {
         "//h2[normalize-space()='Core platform']",
         By.XPATH,
     ),
+    "switch-perspective": (
+        "//button[@data-test-id='perspective-switcher-toggle'] | "
+        "//*[contains(@class, 'perspective-switcher')]//button | "
+        "//*[normalize-space()='Fleet management']/parent::button | "
+        "//*[normalize-space()='Fleet management']/ancestor::button[1]",
+        By.XPATH,
+    ),
+    "fleet-virtual": (
+        "//*[normalize-space()='Fleet virtualization'"
+        " or normalize-space()='Fleet Virtualization']",
+        By.XPATH,
+    ),
+    "nav-bar-vms-page": (
+        "//a[@data-test-id='virtualmachines-nav-item'] | "
+        "//*[normalize-space()='VirtualMachines']",
+        By.XPATH,
+    ),
+    "vm-page-next-btn": (
+        "//button[normalize-space()='Next']",
+        By.XPATH,
+    ),
+    "assign": (
+        "//button[normalize-space()='Assign']",
+        By.XPATH,
+    ),
+    "all-clusters": ("//li[@role='treeitem']//*[text()='All clusters']", By.XPATH),
+    "managed-cluster-name": ("//li[@role='treeitem']//*[text()='{}']", By.XPATH),
+    "cnv-workload-namespace": ("//li[@role='treeitem']//*[text()='{}']", By.XPATH),
+    "vm-status": ("//*[normalize-space()='Running']", By.XPATH),
 }
 
 add_capacity = {
@@ -4102,6 +4180,7 @@ locators = {
             **acm_page_nav_420,
             **acm_configuration_4_20,
             **acm_configuration_4_21,
+            **acm_page_nav_421,
             **acm_configuration_4_22,
         },
         "validation": {
@@ -4181,6 +4260,7 @@ locators = {
             **acm_page_nav_420,
             **acm_configuration_4_20,
             **acm_configuration_4_21,
+            **acm_page_nav_421,
         },
         "validation": {
             **validation,
