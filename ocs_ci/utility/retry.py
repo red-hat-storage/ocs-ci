@@ -79,10 +79,16 @@ def retry(
                     return f(*args, **kwargs)
                 except exception_to_check as e:
                     if text_in_exception:
-                        if text_in_exception in str(e):
-                            logger.debug(
-                                f"Text: {text_in_exception} found in exception: {e}"
-                            )
+                        exception_text = str(e)
+                        retry_texts = (
+                            text_in_exception
+                            if isinstance(text_in_exception, (list, tuple))
+                            else [text_in_exception]
+                        )
+                        if any(
+                            retry_text in exception_text for retry_text in retry_texts
+                        ):
+                            logger.debug(f"Retry text matched in exception: {e}")
                         else:
                             raise
                     exception_summary.add(repr(e))
