@@ -168,16 +168,12 @@ class TNF(TNFBASE):
                 "Set 'tnf.monitor_disk_node_0' and 'tnf.monitor_disk_node_1'"
             )
 
-        # Get optional custom DRBD image
-        drbd_image = self.tnf_config.get("drbd_utils_image")
-
-        # Configure DRBD
+        # Configure DRBD using ODF operator's script
         configure_drbd(
             self.node_info[0],
             self.node_info[1],
             monitor_disk_node_0,
             monitor_disk_node_1,
-            drbd_image=drbd_image,
         )
 
         # Verify DRBD configuration

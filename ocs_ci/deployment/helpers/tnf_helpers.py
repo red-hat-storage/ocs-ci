@@ -6,7 +6,7 @@ import logging
 import tempfile
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.utils import exec_cmd
@@ -54,7 +54,7 @@ def get_tnf_node_info():
             [{'name': str, 'ip': str, 'role': str}, ...]
 
     Raises:
-        ResourceNotFoundError: If nodes cannot be retrieved
+        CommandFailed: If nodes cannot be retrieved
     """
     logger.info("Getting TNF node information...")
     ocp_node = OCP(kind=constants.NODE)
@@ -169,18 +169,20 @@ def create_persistent_volumes(device_mappings):
     return created_pvs
 
 
-def configure_drbd(
-    node_0_info, node_1_info, monitor_disk_node_0, monitor_disk_node_1, drbd_image=None
-):
+def configure_drbd(node_0_info, node_1_info, monitor_disk_node_0, monitor_disk_node_1):
     """
-    Configure DRBD for the floating monitor.
+    Configure DRBD for the floating monitor using ODF operator's script.
+
+    This function follows the Red Hat ODF 4.22 documentation:
+    https://docs.redhat.com/en/documentation/red_hat_openshift_data_foundation/4.22/html-single/deploying_openshift_data_foundation_on_two-node_clusters/index
+
+    The DRBD setup script is provided by the ODF operator in a ConfigMap.
 
     Args:
         node_0_info (dict): Node 0 information {'name': str, 'ip': str}
         node_1_info (dict): Node 1 information {'name': str, 'ip': str}
         monitor_disk_node_0 (str): Device path for monitor disk on node 0
         monitor_disk_node_1 (str): Device path for monitor disk on node 1
-        drbd_image (str, optional): DRBD utilities image. Defaults to TNF_DRBD_UTILS_IMAGE
 
     Returns:
         bool: True if successful
@@ -189,10 +191,6 @@ def configure_drbd(
         CommandFailed: If DRBD configuration fails
     """
     logger.info("Configuring DRBD for floating monitor...")
-
-    # Use provided image or default from constants
-    if drbd_image is None:
-        drbd_image = constants.TNF_DRBD_UTILS_IMAGE
 
     # First, ensure openshift-storage namespace exists
     try:
@@ -205,46 +203,44 @@ def configure_drbd(
         else:
             raise
 
-    # Check if DRBD setup script ConfigMap exists
+    # Get DRBD setup script from ConfigMap (provided by ODF operator)
     try:
-        ocp_cm = OCP(
-            kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-        ocp_cm.get(resource_name=constants.TNF_DRBD_SETUP_SCRIPT_CM)
-        logger.info("DRBD setup script ConfigMap found")
+        logger.info("Retrieving DRBD setup script from ODF operator ConfigMap...")
 
-        # Render the DRBD setup script with parameters
-        drbd_script = Templating.render_template(
-            "tnf-deployment/drbd-setup.sh.j2",
-            {
-                "node_0_name": node_0_info["name"],
-                "node_0_ip": node_0_info["ip"],
-                "node_1_name": node_1_info["name"],
-                "node_1_ip": node_1_info["ip"],
-                "disk_by_id_node_0": monitor_disk_node_0,
-                "disk_by_id_node_1": monitor_disk_node_1,
-                "namespace": constants.OPENSHIFT_STORAGE_NAMESPACE,
-                "drbd_utils_image": drbd_image,
-            },
+        # Extract script from ConfigMap as per ODF documentation
+        script_cmd = (
+            f"oc get configmap {constants.TNF_DRBD_SETUP_SCRIPT_CM} "
+            f"-n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"-o jsonpath='{{.data.script}}' | base64 -d"
         )
+        drbd_script = exec_cmd(script_cmd, shell=True)
 
-        # Write script to temporary file and execute
+        # Write script to temporary file
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".sh", delete=False
         ) as temp_file:
             temp_file.write(drbd_script)
             temp_file_path = temp_file.name
 
+        # Make script executable
         exec_cmd(f"chmod +x {temp_file_path}")
-        exec_cmd(f"bash {temp_file_path}")
+
+        # Execute DRBD setup script with required parameters
+        logger.info("Executing DRBD setup script...")
+        exec_cmd(
+            f"{temp_file_path} "
+            f"{node_0_info['name']} {node_0_info['ip']} {monitor_disk_node_0} "
+            f"{node_1_info['name']} {node_1_info['ip']} {monitor_disk_node_1}"
+        )
 
         logger.info("DRBD configuration completed successfully")
         return True
 
-    except ResourceNotFoundError:
+    except CommandFailed as e:
         logger.error(
-            f"DRBD setup script ConfigMap '{constants.TNF_DRBD_SETUP_SCRIPT_CM}' "
-            f"not found. Ensure ODF operator is installed."
+            f"Failed to retrieve or execute DRBD setup script. "
+            f"Ensure ODF operator is installed and ConfigMap "
+            f"'{constants.TNF_DRBD_SETUP_SCRIPT_CM}' exists: {e}"
         )
         raise
 
@@ -257,7 +253,7 @@ def verify_drbd_configuration():
         bool: True if DRBD is configured correctly
 
     Raises:
-        ResourceNotFoundError: If DRBD ConfigMap not found
+        CommandFailed: If DRBD ConfigMap not found
     """
     logger.info("Verifying DRBD configuration...")
     try:
