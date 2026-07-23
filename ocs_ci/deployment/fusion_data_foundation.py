@@ -86,7 +86,10 @@ class FusionDataFoundationDeployment:
         self.ensure_install_plan_approval()
         if not self.fdf_skip_storage_setup:
             wait_for_storageclusters_crd()
-            self.setup_storage()
+            if config.DEPLOYMENT.get("ui_deployment"):
+                self.setup_storage_with_ui()
+            else:
+                self.setup_storage()
 
     def ensure_lso_installed(self):
         """
@@ -273,6 +276,40 @@ class FusionDataFoundationDeployment:
         config.ENV_DATA["fdf_version"] = version
         logger.info(f"Installed FDF version: {version}")
         return version
+
+    def setup_storage_with_ui(self):
+        """
+        Setup storage via OpenShift Console UI.
+
+        Performs CLI prep (namespace labeling, LSO catalog, disk attachment,
+        catalogsource patching), then opens the browser for storage cluster
+        configuration via the UI wizard.
+        """
+        from ocs_ci.ocs.ui.base_ui import close_browser, login_ui
+        from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
+
+        storage_namespace = config.ENV_DATA.get(
+            "cluster_namespace", constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        logger.info(f"Adding cluster-monitoring label to namespace {storage_namespace}")
+        OCP(kind="namespace").add_label(
+            resource_name=storage_namespace,
+            label="openshift.io/cluster-monitoring=true",
+        )
+        if self.lso_enabled:
+            self.ensure_lso_installed()
+            if not config.ENV_DATA.get("skip_disks_cleanup", False):
+                logger.info("Performing disk cleanup for LSO")
+                cleanup_nodes_for_lso_install()
+        self.patch_catalogsource()
+
+        if self.lso_enabled:
+            add_disks_lso()
+
+        login_ui()
+        deployment_obj = DeploymentUI()
+        deployment_obj.install_storage_cluster()
+        close_browser()
 
     def setup_storage(self):
         """
