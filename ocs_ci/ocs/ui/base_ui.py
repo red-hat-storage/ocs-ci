@@ -797,7 +797,9 @@ class BaseUI:
         element.send_keys(Keys.CONTROL, "a")
         element.send_keys(Keys.DELETE)
 
-    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=60):
+    def wait_until_expected_text_is_found(
+        self, locator, expected_text, timeout=60, use_fallback=True
+    ):
         """
         Method to wait for a expected text to appear on the UI (use of explicit wait type),
         this method is helpful in working with elements which appear on completion of certain action and
@@ -807,6 +809,10 @@ class BaseUI:
             locator (tuple): (GUI element needs to operate on (str), type (By))
             expected_text (str): Text which needs to be searched on UI
             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+            use_fallback (bool): If True, attempt AI locator fallback on TimeoutException.
+                Set to False when this method is used as a probe/detection call where a
+                timeout is the expected "not found" outcome — avoids spurious fallback
+                activation noise in the logs.
 
         Returns:
             bool: Returns True if the expected element text is found, False otherwise
@@ -829,32 +835,36 @@ class BaseUI:
             logger.warning(
                 f"Locator {locator[1]} {locator[0]} did not find text {expected_text}"
             )
-            new_locator = self.locator_fallback.attempt_fallback(
-                locator, "wait_text", stack_trace=traceback.format_exc()
-            )
-            if new_locator:
-                try:
-                    WebDriverWait(self.driver, min(timeout, 10)).until(
-                        ec.text_to_be_present_in_element(
-                            (new_locator[1], new_locator[0]), expected_text
+            if use_fallback:
+                new_locator = self.locator_fallback.attempt_fallback(
+                    locator, "wait_text", stack_trace=traceback.format_exc()
+                )
+                if new_locator:
+                    try:
+                        WebDriverWait(self.driver, min(timeout, 10)).until(
+                            ec.text_to_be_present_in_element(
+                                (new_locator[1], new_locator[0]), expected_text
+                            )
                         )
-                    )
-                    return True
-                except TimeoutException:
-                    pass
+                        return True
+                    except TimeoutException:
+                        pass
             return False
 
     def check_element_presence(self, locator, timeout=5, use_fallback=True):
         """
         Check if an web element is present on the web console or not.
 
-
         Args:
              locator (tuple): (GUI element needs to operate on (str), type (By))
              timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
-             use_fallback (bool): if True, attempt AI locator fallback when element is not found
+             use_fallback (bool): When False, skip the AI locator fallback entirely.
+                 Set to False when this method is used as an optional probe (e.g. checking
+                 whether an optional modal is present) — the element is not expected to
+                 always exist and firing the AI fallback on every miss wastes minutes.
+
         Returns:
-            bool: True if the element is found, returns False otherwise and raises NoSuchElementException
+            bool: True if the element is found, returns False otherwise
 
         """
         try:
@@ -873,44 +883,42 @@ class BaseUI:
         except (NoSuchElementException, StaleElementReferenceException):
             logger.error("Expected element not found on UI")
             self.take_screenshot()
-            if use_fallback:
-                # locator here is (By, value) — reverse for fallback which expects (value, By)
-                new_locator = self.locator_fallback.attempt_fallback(
-                    (locator[1], locator[0]),
-                    "check_presence",
-                    stack_trace=traceback.format_exc(),
-                )
-                if new_locator:
-                    try:
-                        WebDriverWait(self.driver, min(timeout, 10)).until(
-                            ec.presence_of_element_located(
-                                (new_locator[1], new_locator[0])
-                            )
-                        )
-                        return True
-                    except (TimeoutException, NoSuchElementException):
-                        pass
+            if not use_fallback:
+                return False
+            # locator here is (By, value) — reverse for fallback which expects (value, By)
+            new_locator = self.locator_fallback.attempt_fallback(
+                (locator[1], locator[0]),
+                "check_presence",
+                stack_trace=traceback.format_exc(),
+            )
+            if new_locator:
+                try:
+                    WebDriverWait(self.driver, min(timeout, 10)).until(
+                        ec.presence_of_element_located((new_locator[1], new_locator[0]))
+                    )
+                    return True
+                except (TimeoutException, NoSuchElementException):
+                    pass
             return False
         except TimeoutException:
             logger.error(f"Timedout while waiting for element with {locator}")
             self.take_screenshot()
-            if use_fallback:
-                # locator here is (By, value) — reverse for fallback which expects (value, By)
-                new_locator = self.locator_fallback.attempt_fallback(
-                    (locator[1], locator[0]),
-                    "check_presence",
-                    stack_trace=traceback.format_exc(),
-                )
-                if new_locator:
-                    try:
-                        WebDriverWait(self.driver, min(timeout, 10)).until(
-                            ec.presence_of_element_located(
-                                (new_locator[1], new_locator[0])
-                            )
-                        )
-                        return True
-                    except (TimeoutException, NoSuchElementException):
-                        pass
+            if not use_fallback:
+                return False
+            # locator here is (By, value) — reverse for fallback which expects (value, By)
+            new_locator = self.locator_fallback.attempt_fallback(
+                (locator[1], locator[0]),
+                "check_presence",
+                stack_trace=traceback.format_exc(),
+            )
+            if new_locator:
+                try:
+                    WebDriverWait(self.driver, min(timeout, 10)).until(
+                        ec.presence_of_element_located((new_locator[1], new_locator[0]))
+                    )
+                    return True
+                except (TimeoutException, NoSuchElementException):
+                    pass
             return False
 
     def wait_for_endswith_url(self, endswith, timeout=60):
@@ -1584,12 +1592,18 @@ def navigate_to_local_cluster(**kwargs):
         acm_dropdown = wait_for_element_to_be_visible(all_clusters_dropdown, timeout)
         acm_dropdown.click()
         local_cluster_item = wait_for_element_to_be_visible(
-            acm_page_loc["local-cluster_dropdown_item"]
+            acm_page_loc["local-cluster_dropdown_item"], timeout
         )
         logger.info("Navigate to Local Cluster page. Click local cluster item")
         local_cluster_item.click()
     except TimeoutException:
-        wait_for_element_to_be_visible(acm_page_loc["local-cluster_dropdown"])
+        current_url = SeleniumDriver().current_url
+        logger.warning(
+            f"'All Clusters' dropdown not found within {timeout}s "
+            f"(current URL: {current_url}). "
+            "Checking whether local-cluster page is already loaded."
+        )
+        wait_for_element_to_be_visible(acm_page_loc["local-cluster_dropdown"], timeout)
 
 
 def navigate_to_all_clusters(**kwargs):

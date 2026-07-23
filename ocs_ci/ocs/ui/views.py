@@ -1740,6 +1740,7 @@ acm_configuration_4_18 = {
         "(//span[@class='mco-status-card__alert-item-header'])[2]",
         By.XPATH,
     ),
+    "disconnected-checkbox": ("//input[@id='isAirGappedDeployment']", By.XPATH),
 }
 
 acm_configuration_4_19 = {
@@ -1853,13 +1854,93 @@ acm_configuration_4_21 = {
 }
 
 acm_configuration_4_22 = {
-    # OCP 4.22 uses PF6 UI: local cluster view shows "Core platform" h2 in the sidebar nav
+    "all-clusters_dropdown": (
+        "//button[@data-test-id='perspective-switcher-toggle']",
+        By.XPATH,
+    ),
+    "local-cluster_dropdown_item": (
+        "//button[@data-test-id='perspective-switcher-toggle']//*[normalize-space()='local-cluster']",
+        By.XPATH,
+    ),
     "local-cluster_dropdown": (
-        "//h2[text()='local-cluster'] | "
-        "//span[contains(@class, 'c-menu-toggle__text') "
-        "and text()='local-cluster']/.. | "
-        "//h2[normalize-space()='Fleet Management'] | "
-        "//h2[normalize-space()='Core platform']",
+        "//h2[normalize-space()='Administrator']",
+        By.XPATH,
+    ),
+    "click-local-cluster": (
+        '//td[@data-label="Name"]//span[text()="local-cluster"]',
+        By.XPATH,
+    ),
+    "all-clusters-view": (
+        "//nav[@aria-label='Breadcrumb']//a[contains(@href,'/multicloud/infrastructure/clusters')]",
+        By.XPATH,
+    ),
+    "cluster-set-name": (
+        "//input[@id='clusterSetName']",
+        By.XPATH,
+    ),
+    "next-btn": (
+        "//button[span[normalize-space()='Next']]",
+        By.XPATH,
+    ),
+    "install-btn": (
+        "//button[normalize-space()='Install']",
+        By.XPATH,
+    ),
+    "cluster-set-status": (
+        "//div[@role='dialog']//h2[normalize-space()]",
+        By.XPATH,
+    ),
+    "click-manage-resource-assignments": (
+        "//button[.//*[normalize-space()='Manage resource assignments']]",
+        By.XPATH,
+    ),
+    "search-cluster": (
+        "//input[@aria-label='Search input']",
+        By.XPATH,
+    ),
+    "clear-search": ("//button[@aria-label='Reset']", By.XPATH),
+    "submariner-tab": (
+        "//button[.//*[normalize-space()='Submariner add-ons']]",
+        By.XPATH,
+    ),
+    "target-clusters": (
+        "//input[@placeholder='Select clusters']",
+        By.XPATH,
+    ),
+    "select-cluster-checkbox": (
+        "//tr[.//td[@data-label='Name']//*[normalize-space()='{0}']]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "cluster-name-selection": (
+        "//button[.//*[normalize-space()='{0}']]",
+        By.XPATH,
+    ),
+    "gateway-count-btn": (
+        "//div[@id='gateways']//button[@aria-label='Plus']",
+        By.XPATH,
+    ),
+    "connection-status-1": (
+        "(//button[@type='button'][.//*[normalize-space()='Healthy']])[1]",
+        By.XPATH,
+    ),
+    "connection-status-2": (
+        "(//button[@type='button'][.//*[normalize-space()='Healthy']])[3]",
+        By.XPATH,
+    ),
+    "agent-status-1": (
+        "(//button[@type='button'][.//*[normalize-space()='Healthy']])[2]",
+        By.XPATH,
+    ),
+    "agent-status-2": (
+        "(//button[@type='button'][.//*[normalize-space()='Healthy']])[4]",
+        By.XPATH,
+    ),
+    "node-label-1": (
+        "(//button[@type='button'][.//*[normalize-space()='Nodes labeled']])[1]",
+        By.XPATH,
+    ),
+    "node-label-2": (
+        "(//button[@type='button'][.//*[normalize-space()='Nodes labeled']])[2]",
         By.XPATH,
     ),
 }
@@ -2294,8 +2375,6 @@ validation = {
         'button[data-test-id="perspective-switcher-toggle"]',
         By.CSS_SELECTOR,
     ),
-    # Starting from 4.18 webelement become hard to locate.
-    # Header of the dropdown element by attributes is very similar to the dropdown item itself.
     "select_administrator": (
         "//h2[@data-test-id='perspective-switcher-menu-option' and normalize-space()='Administrator']/ancestor"
         "::button[@role='option'] | //h2[.='Administrator']/ancestor::button[contains(@class, 'c-menu__item')]",
@@ -2785,8 +2864,6 @@ validation_4_21 = {
 }
 
 validation_4_22 = {
-    # OCP 4.22 uses PF6 UI. The "Requested capacity" dropdown button changed
-    # from a div with c-select to a button with c-menu-toggle.
     "req_capacity_dropdown_selected": (
         "//div[@id='breakdown-card-title']/following-sibling::*//*[contains(@class, 'c-select__toggle-text')] | "
         "//button[contains(@class, 'ceph-capacity-breakdown-card-header__dropdown')]"
@@ -2847,43 +2924,33 @@ validation_4_22 = {
         "/following::table[1]/tbody/tr[1]/td[@data-label='{0}']",
         By.XPATH,
     ),
-    # Name cell uses <button aria-label="Show related pods">, not an <a> tag.
-    # Clicking it opens the "Related pods" popover.
     "cephfs_subvolume_first_row_name_button": (
         f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
         "/following::table[1]/tbody/tr[1]//button[@aria-label='Show related pods']",
         By.XPATH,
     ),
-    # "Related pods" popover: anchored by role=dialog + header text.
-    # The help popover carries aria-label='Help'; this one uses aria-labelledby.
     "cephfs_subvolume_name_popover": (
         "//div[@role='dialog'" " and .//header[normalize-space(.)='Related pods']]",
         By.XPATH,
     ),
-    # <header> inside the name popover; text content is "Related pods".
     "cephfs_subvolume_related_pods_header": (
         "//div[@role='dialog'"
         " and .//header[normalize-space(.)='Related pods']]"
         "//header[normalize-space(.)='Related pods']",
         By.XPATH,
     ),
-    # Pod <a> links inside the popover body ul > li > span > a.
-    # Scoped to the specific popover; excludes the "View all" link.
     "cephfs_subvolume_related_pods_links": (
         "//div[@role='dialog'"
         " and .//header[normalize-space(.)='Related pods']]"
         "//a[normalize-space(.) and not(normalize-space(.)='View all')]",
         By.XPATH,
     ),
-    # "View all" <a> inside <div class="pf-v6-u-mt-sm"> at the popover bottom.
     "cephfs_subvolume_view_all_link": (
         "//div[@role='dialog'"
         " and .//header[normalize-space(.)='Related pods']]"
         "//a[normalize-space(.)='View all']",
         By.XPATH,
     ),
-    # Table row whose Namespace cell matches the given namespace (format arg).
-    # The Namespace td carries data-label='Namespace' and contains an <a>.
     "cephfs_subvolume_row_by_namespace": (
         f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
         "/following::table[1]/tbody/tr"
@@ -2928,8 +2995,6 @@ topology = {
         "/ancestor::*[contains(@class, 'topology__node ')]",
         By.XPATH,
     ),
-    # this is complex locator, it is used to find node with specific name and via its ancestor find the arrow to enter
-    # to click and show the node topology
     "enter_into_entity_arrow": (
         "//*[contains(text(), '{}')]"
         "/ancestor::*[contains(@class, 'topology__node ')]"
@@ -2945,15 +3010,12 @@ topology = {
         "and contains(@class,'odf-topology__group-state--error')]",
         By.XPATH,
     ),
-    # node_group_name may be 'zone-<num>' or 'rack-<num>', exclude other elements that are not node groups
     "node_group_name": (
         "//*[@data-kind='node' and @data-type='group' "
         "and not(@transform) "
         "and *[contains(@class, 'odf-topology__group--zone')]]",
         By.XPATH,
     ),
-    # topology node parent, that aggregates n of nodes or n of deployments
-    # may be ocs-storagecluster or name of the node
     "topology_node_parent": (
         "//*[contains(@class,'topology__group__label') "
         "and *[contains(@class, 'topology__node__label__badge')] "
@@ -3640,9 +3702,6 @@ s3_vector_tab = {
         'input[id="search-bar"]',
         By.CSS_SELECTOR,
     ),
-    # Vector index creation - on bucket detail page.
-    # Button text confirmed as "Create vector index" from s3VectorBucketOverview.js bundle.
-    # No data-test attribute on this button; text match is the only available selector.
     "create_vector_index_button": (
         "//button[normalize-space()='Create vector index']",
         By.XPATH,
@@ -3697,10 +3756,6 @@ s3_vector_tab = {
         "//dt[normalize-space()='Distance metric']/following-sibling::dd[1]",
         By.XPATH,
     ),
-    # The index detail page has no "Vector bucket" description field; the bucket
-    # name appears only in the breadcrumb. breadcrumb-link-1 is a stable
-    # data-test-id attribute set by the ODF console BreadCrumbs component for the
-    # second breadcrumb item (Buckets / <bucket-name> / Vector index).
     "index_detail_vector_bucket": (
         "//a[@data-test-id='breadcrumb-link-1']",
         By.XPATH,
@@ -3709,8 +3764,6 @@ s3_vector_tab = {
         "//button[@id='{}-link']",
         By.XPATH,
     ),
-    # Shared kebab toggle for any named table row (index rows and bucket rows
-    # share the same DOM pattern; callers differ only by which page they are on).
     "row_kebab_by_name": (
         "//tr[.//a[normalize-space()='{}']]//button[@aria-label='Kebab toggle']",
         By.XPATH,

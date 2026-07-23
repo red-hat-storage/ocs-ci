@@ -250,14 +250,18 @@ class AcmPageNavigator(BaseUI):
             log.info("Select Fleet Management view")
             self.do_click(self.acm_page_nav["fleet-management-view"])
 
-        # There is a modal dialog box which appears as soon as we login
-        # we need to click on close on that dialog box
+        # There is a modal dialog box which appears as soon as we login;
+        # we need to click Close on it if present.  This modal is optional —
+        # it does not always appear — so use_fallback=False to prevent the AI
+        # locator fallback from running (and wasting 3+ minutes) when the
+        # modal is simply not there.
         if self.check_element_presence(
             (
                 self.acm_page_nav["modal_dialog_close_button"][1],
                 self.acm_page_nav["modal_dialog_close_button"][0],
             ),
             timeout=15,
+            use_fallback=False,
         ):
             self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=15)
         log.info("Successfully navigated to ACM console")

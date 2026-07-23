@@ -16,6 +16,8 @@ from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
 from ocs_ci.helpers.dr_helpers import (
+    create_cdi_cert_configmap,
+    create_cdi_pull_secret,
     generate_kubeobject_capture_interval,
     get_cluster_set_name,
 )
@@ -2025,6 +2027,11 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
     def manage_dr_vm_secrets(self, shared_drpc_protection=False):
         """
         Create secrets to access the VMs via SSH. If a secret already exists, delete and recreate it.
+        When AUTH contains ``ibm_hci.quay_pull_secret``, also creates a
+        ``kubernetes.io/dockerconfigjson`` Secret named ``quayadmin`` in the
+        workload namespace so CDI can pull VM disk images from the internal
+        Quay registry referenced by ``secretRef: quayadmin`` in the workload
+        YAML files.
 
         Args:
             shared_drpc_protection (bool): False by default, True when Shared Protection type is used to DR Protect
@@ -2074,6 +2081,14 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                             namespace=self.workload_namespace,
                         )
                     )
+
+            # In disconnected environments the workload YAML files reference
+            # an internal Quay registry via ``secretRef: quayadmin`` and
+            # ``certConfigMap: user-ca-bundle``.  Both resources must exist in
+            # the workload namespace before ``oc create -k`` runs.
+            if config.DEPLOYMENT.get("disconnected"):
+                create_cdi_pull_secret(namespace=self.workload_namespace)
+                create_cdi_cert_configmap(namespace=self.workload_namespace)
 
     def create_placement(self):
         """

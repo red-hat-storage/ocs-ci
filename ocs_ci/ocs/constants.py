@@ -4121,3 +4121,5 @@ CEPH_OSD_PORT_MAX = 7300  # Ceph OSD port range end
 
 # IBM HCI
 IBM_HCI_RACK_DIR = os.path.join(DATA_DIR, "rack_details")
+
+MANIFEST_WORKS = "manifestworks.work.open-cluster-management.io"

@@ -14,6 +14,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.framework import config
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
@@ -164,6 +165,7 @@ class MCEInstaller(object):
     def create_mce_subscription(self):
         """
         Creates subscription for mce operator
+        Supports both released MCE (from redhat-operators) and unreleased MCE (from custom catalog)
 
         """
         logger.info("Check if mce subscription already exist")
@@ -181,9 +183,34 @@ class MCEInstaller(object):
                 mce_subscription_yaml_data["spec"][
                     "channel"
                 ] = f"stable-{config.ENV_DATA.get('mce_version')}"
-            mce_subscription_yaml_data["spec"][
-                "source"
-            ] = constants.MCE_DEV_CATALOG_SOURCE_NAME
+
+            # Determine catalog source based on whether using released or unreleased MCE
+            use_released_mce = not config.ENV_DATA.get("mce_unreleased_image")
+
+            if use_released_mce:
+                # For released MCE, get catalog name from PackageManifest
+                # This handles both connected and disconnected environments
+                logger.info(
+                    "Using released MCE - getting catalog source from PackageManifest"
+                )
+                try:
+                    mce_catalog_name = PackageManifest(
+                        resource_name=constants.MCE_OPERATOR,
+                    ).get()["metadata"]["labels"]["catalog"]
+                    logger.info(f"Found MCE catalog source: {mce_catalog_name}")
+                    mce_subscription_yaml_data["spec"]["source"] = mce_catalog_name
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to get catalog from PackageManifest: {e}. "
+                        f"Using default catalog source: redhat-operators"
+                    )
+                    mce_subscription_yaml_data["spec"]["source"] = "redhat-operators"
+            else:
+                # For unreleased MCE, use custom catalog source
+                logger.info("Using unreleased MCE - using custom catalog source")
+                mce_subscription_yaml_data["spec"][
+                    "source"
+                ] = constants.MCE_DEV_CATALOG_SOURCE_NAME
 
             mce_subscription_manifest = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="mce_subscription_manifest", delete=False
@@ -191,7 +218,10 @@ class MCEInstaller(object):
             templating.dump_data_to_temp_yaml(
                 mce_subscription_yaml_data, mce_subscription_manifest.name
             )
-            logger.info("Creating subscription for the mce operator")
+            logger.info(
+                f"Creating subscription for MCE operator from catalog: "
+                f"{mce_subscription_yaml_data['spec']['source']}"
+            )
             exec_cmd(f"oc apply -f {mce_subscription_manifest.name}")
             OCP(
                 kind=constants.SUBSCRIPTION_COREOS,
@@ -338,13 +368,23 @@ class MCEInstaller(object):
     def deploy_mce(self):
         """
         Installs mce enabling software emulation.
+        Supports both released and unreleased MCE deployments.
 
         """
 
         if not self.mce_installed():
             logger.info("Installing mce")
-            # we create catsrc with nightly builds only if config.DEPLOYMENT does not have mce_latest_stable
-            create_mce_catsrc()
+            # Check if using released or unreleased MCE
+            use_released_mce = not config.ENV_DATA.get("mce_unreleased_image")
+
+            if use_released_mce:
+                logger.info("Deploying released MCE from default catalog")
+                # For released MCE, no custom catalog source needed
+            else:
+                logger.info("Deploying unreleased MCE from custom catalog")
+                # Create custom catalog source for unreleased builds
+                create_mce_catsrc()
+
             self.create_mce_namespace()
             self.create_multiclusterengine_operatorgroup()
             self.create_mce_subscription()

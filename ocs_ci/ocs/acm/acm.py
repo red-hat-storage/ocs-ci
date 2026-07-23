@@ -219,7 +219,47 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["cluster-sets"])
         self.page_has_loaded(retries=15, sleep_time=5)
         log.info("Click on Create cluster set")
+        # In PF6 ACM (OCP 4.22+) the button uses aria-disabled (not the HTML
+        # disabled attribute) when the page is still loading or the user lacks
+        # permissions. This is commonly observed when ACM is under high load
+        # and the cluster sets data has not yet been fetched — the button
+        # starts aria-disabled and becomes enabled once the API response
+        # arrives. Selenium's element_to_be_clickable does NOT detect
+        # aria-disabled, so clicking it silently does nothing and the modal
+        # never opens. Wait up to 4 min for the button to become enabled;
+        # raise a clear error only if it never becomes enabled (likely a real
+        # permissions issue rather than a transient loading delay).
+        log.info("Waiting for 'Create cluster set' button to become enabled")
+        create_btn_wait = 240
+        create_btn_interval = 5
+        elapsed = 0
+        while elapsed < create_btn_wait:
+            create_btn_elements = self.get_elements(self.page_nav["create-cluster-set"])
+            if create_btn_elements:
+                aria_disabled = create_btn_elements[0].get_attribute("aria-disabled")
+                if not aria_disabled or aria_disabled.lower() != "true":
+                    log.info("'Create cluster set' button is enabled")
+                    break
+                log.warning(
+                    f"'Create cluster set' button still aria-disabled, "
+                    f"retrying in {create_btn_interval}s "
+                    f"({elapsed}/{create_btn_wait}s elapsed)"
+                )
+            time.sleep(create_btn_interval)
+            elapsed += create_btn_interval
+        else:
+            raise PermissionError(
+                "The 'Create cluster set' button remained aria-disabled=true "
+                f"after {create_btn_wait}s. The logged-in user likely lacks "
+                "permission to create cluster sets. Ensure the user has the "
+                "'open-cluster-management:cluster-manager-admin' ClusterRole."
+            )
         self.do_click(self.page_nav["create-cluster-set"])
+        # Allow the "Create cluster set" modal to fully render before interacting
+        # with the name input — without this the modal may still be animating when
+        # do_send_keys runs, causing page_has_loaded() to be triggered and the
+        # modal to be dismissed before the element is found.
+        time.sleep(3)
         global cluster_set_name
         cluster_set_name = config.ENV_DATA.get(
             "cluster_set"
@@ -228,26 +268,120 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_send_keys(self.page_nav["cluster-set-name"], text=cluster_set_name)
         log.info("Click on Create")
         self.do_click(self.page_nav["click-create"], enable_screenshot=True)
-        time.sleep(1)
+        # In PF6 the submit button transitions through pf-m-in-progress (spinner,
+        # disabled) while the cluster set API call is in flight. The modal stays
+        # open and only shows "Manage resource assignments" once the creation
+        # completes. Wait up to 300 s for the in-progress state to clear before
+        # clicking the next button, instead of a fixed sleep that races the API.
+        # On a loaded cluster the creation API can take well over 60 s.
+        log.info(
+            "Waiting for cluster set creation to complete "
+            "(submit button to leave pf-m-in-progress state, timeout=300s)"
+        )
+        try:
+            WebDriverWait(self.driver, 300).until_not(
+                ec.presence_of_element_located(
+                    (
+                        By.XPATH,
+                        "//button[contains(@class,'pf-m-in-progress')]"
+                        "[.//*[normalize-space()='Creating'] or "
+                        "normalize-space()='Creating']",
+                    )
+                )
+            )
+            log.info("Cluster set creation completed")
+        except Exception:
+            log.warning(
+                "Timed out waiting for in-progress state to clear; "
+                "proceeding to click 'Manage resource assignments'"
+            )
         log.info("Click on Manage resource assignments")
         self.do_click(
             self.page_nav["click-manage-resource-assignments"], enable_screenshot=True
         )
-        log.info(f"Search and select cluster '{cluster_name_a}'")
-        self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_a)
-        self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
-        log.info(f"Clear search by clicking on cross mark for cluster {cluster_name_a}")
-        self.do_click(self.page_nav["clear-search"])
-        log.info(f"Search and select cluster '{cluster_name_b}'")
-        self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_b)
-        self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
-        log.info(f"Clear search by clicking on cross mark for cluster {cluster_name_b}")
-        self.do_click(self.page_nav["clear-search"])
+        # The manage-resources page renders skeleton loaders while it fetches the
+        # cluster list from the ACM API.  On a loaded cluster this can take several
+        # minutes.  Wait up to 240 s for:
+        #   1. All pf-v6-c-skeleton elements to disappear (data loaded), AND
+        #   2. The search input to become visible (table rendered).
+        # Without this wait the search input does not yet exist in the DOM and
+        # do_send_keys fails immediately.
+        log.info(
+            "Waiting for manage-resources page to finish loading "
+            "(skeleton loaders to clear, timeout=240s)"
+        )
+        try:
+            WebDriverWait(self.driver, 240).until_not(
+                ec.presence_of_element_located((By.CSS_SELECTOR, ".pf-v6-c-skeleton"))
+            )
+            log.info("Skeleton loaders cleared, waiting for search input to appear")
+            WebDriverWait(self.driver, 60).until(
+                ec.visibility_of_element_located(
+                    (By.XPATH, self.page_nav["search-cluster"][0])
+                )
+            )
+            log.info("manage-resources page fully loaded")
+        except Exception:
+            log.warning(
+                "Timed out waiting for manage-resources page to load; "
+                "proceeding anyway"
+            )
+        for cluster_name in (cluster_name_a, cluster_name_b):
+            log.info(f"Search and select cluster '{cluster_name}'")
+            self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name)
+            # The search is a substring match — typing "f39l052" also shows
+            # "f39l052-hcp-2", "f39l052-c1-h1", etc.  Wait for the exact-name
+            # row checkbox to appear (confirms the table has re-rendered after
+            # the keystroke), then click only that row's checkbox.
+            exact_checkbox_xpath = (
+                "//tr[.//td[@data-label='Name' and "
+                f"normalize-space()='{cluster_name}']]//input[@type='checkbox'] | "
+                "//tr[.//td[@data-label='Name']"
+                f"//*[normalize-space()='{cluster_name}']]//input[@type='checkbox']"
+            )
+            log.info(f"Waiting for exact-match row for '{cluster_name}' to appear")
+            try:
+                checkbox_el = WebDriverWait(self.driver, 60).until(
+                    ec.visibility_of_element_located((By.XPATH, exact_checkbox_xpath))
+                )
+                log.info(
+                    f"Found exact-match row for '{cluster_name}', clicking checkbox"
+                )
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});", checkbox_el
+                )
+                checkbox_el.click()
+            except Exception:
+                log.warning(
+                    f"Exact-match row for '{cluster_name}' not found within 60s; "
+                    "falling back to first visible checkbox"
+                )
+                self.do_click(
+                    self.page_nav["select-first-checkbox"], enable_screenshot=True
+                )
+            log.info(f"Clear search after selecting cluster '{cluster_name}'")
+            self.do_click(self.page_nav["clear-search"])
         log.info("Click on 'Review'")
         self.do_click(self.page_nav["review-btn"], enable_screenshot=True)
         log.info("Click on 'Save' to confirm the changes")
         self.do_click(self.page_nav["confirm-btn"], enable_screenshot=True)
-        time.sleep(3)
+        # After clicking Save the browser navigates from /manage-resources to
+        # the cluster-set detail page (/overview).  Wait up to 240 s for that
+        # navigation to complete before looking for the Submariner add-ons tab.
+        log.info(
+            "Waiting for navigation away from manage-resources page "
+            "(to cluster-set detail, timeout=240s)"
+        )
+        try:
+            WebDriverWait(self.driver, 240).until(
+                lambda d: "manage-resources" not in d.current_url
+            )
+            log.info(f"Navigated to: {self.driver.current_url}")
+        except Exception:
+            log.warning(
+                "Timed out waiting for manage-resources navigation; "
+                "proceeding anyway"
+            )
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"])
         log.info("Click on 'Install Submariner add-ons' button")
@@ -285,6 +419,10 @@ class AcmAddClusters(AcmPageNavigator):
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
+        is_disconnected = False
+        if config.DEPLOYMENT.get("disconnected"):
+            is_disconnected = True
+            log.info("Submariner is in disconnected mode")
         azure_ipi_clusters_indices = [
             cluster_index
             for cluster_index in [primary_index, secondary_index]
@@ -320,6 +458,9 @@ class AcmAddClusters(AcmPageNavigator):
                     f"Click on 'Enable NAT-T' to uncheck it for cluster [{cluster_nr}]"
                 )
                 self.do_click(self.page_nav["nat-t-checkbox"])
+            if is_disconnected:
+                log.info(f"Click on 'Diconnected Clsuter for cluster [{cluster_nr}]")
+                self.do_click(self.page_nav["disconnected-checkbox"])
             if increase_gateway:
                 log.info(
                     f"Increase the gateway count by {increase_gateway_number} clicking"
@@ -711,10 +852,13 @@ def login_to_acm():
     locator = ["click-local-cluster", "click-admin-dropdown"]
     expected_text = ["local-cluster", "Administrator"]
     for expected_text, locator in zip(expected_text, locator):
+        # use_fallback=False: a timeout here is the expected "not found"
+        # outcome for the alternative branch — suppress AI fallback noise.
         dropdown_found = page_nav.wait_until_expected_text_is_found(
             locator=page_nav.acm_page_nav[locator],
             expected_text=expected_text,
             timeout=15,
+            use_fallback=False,
         )
         if dropdown_found:
             log.info(

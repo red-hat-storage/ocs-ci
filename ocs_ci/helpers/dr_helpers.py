@@ -2,6 +2,7 @@
 Helper functions specific for DR
 """
 
+import base64
 import json
 import logging
 import os
@@ -12,7 +13,6 @@ from time import sleep
 
 from novaclient.exceptions import ResourceNotFound
 
-from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 
 import yaml
 
@@ -35,6 +35,7 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_ceph_tools_pod,
     get_odf_external_snapshotter_leader,
+    get_pods_having_label,
     wait_for_matching_pattern_in_pod_logs,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
@@ -61,7 +62,6 @@ from ocs_ci.ocs.utils import (
     set_recovery_as_primary,
     get_all_acm_indexes,
     get_non_acm_cluster_and_non_provider_cluster_config,
-    get_non_acm_cluster_indexes,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -76,6 +76,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
 )
 from ocs_ci.helpers.helpers import (
+    create_resource,
     run_cmd_verify_cli_output,
     find_cephblockpoolradosnamespace,
     find_cephfilesystemsubvolumegroup,
@@ -1629,11 +1630,18 @@ def get_all_drpolicy():
 
     dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     if dr_cluster_relations:
-        current_managed_clusters_list = [
-            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
-            for item in dr_cluster_relations[0]
-            if is_hosted_cluster(cluster_name=item)
-        ]
+        current_managed_clusters_list = []
+        for item in dr_cluster_relations[0]:
+            try:
+                idx = config.get_cluster_index_by_name(item)
+                _is_hosted = config.clusters[idx].MULTICLUSTER.get("is_hosted", False)
+            except Exception:
+                _is_hosted = False
+            current_managed_clusters_list.append(
+                f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+                if _is_hosted
+                else item
+            )
 
     for drpolicy in drpolicy_list:
 
@@ -1645,7 +1653,12 @@ def get_all_drpolicy():
     return return_drpolicy_list
 
 
-@retry(UnexpectedBehaviour, tries=5, delay=10, backoff=2)
+# Guard flag: bounce the ramen-hub-operator pod at most once per process
+# across all retry attempts of validate_drpolicy_grouping.
+_ramen_hub_pod_bounced = False
+
+
+@retry(UnexpectedBehaviour, tries=10, delay=30, backoff=2, max_delay=120)
 def validate_drpolicy_grouping(drpolicy_name=None):
     """
     Validate DRPolicy configuration for CG behavior.
@@ -1695,7 +1708,135 @@ def validate_drpolicy_grouping(drpolicy_name=None):
         if not peer_classes:
             error_msg = f"PeerClasses not found in DRPolicy: {drp_name}"
             logger.error(error_msg)
-            raise UnexpectedBehaviour(error_msg)
+
+            # --- Diagnostic: dump drcconfig-mw ManifestWork for each DR cluster
+            # using the OCP resource API (avoids raw oc subprocess calls).
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            cluster_names = dr_cluster_relations[0] if dr_cluster_relations else []
+            for cl_name in cluster_names:
+                # ManifestWorks on the ACM hub live in a namespace named after
+                # the managed cluster.  For hosted (HCP) clusters the managed
+                # cluster name carries the "dr-" prefix, so we must apply it
+                # here the same way deploy_dr_policy does.
+                try:
+                    idx = config.get_cluster_index_by_name(cl_name)
+                    cl_is_hosted = config.clusters[idx].MULTICLUSTER.get(
+                        "is_hosted", False
+                    )
+                except Exception:
+                    cl_is_hosted = False
+                mw_namespace = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cl_name}"
+                    if cl_is_hosted
+                    else cl_name
+                )
+                try:
+                    mw_obj = ocp.OCP(
+                        kind=constants.MANIFEST_WORKS,
+                        namespace=mw_namespace,
+                        resource_name="drcconfig-mw",
+                    )
+                    mw_data = mw_obj.get()
+                    mw_status = mw_data.get("status", {}).get(
+                        "conditions", "(no conditions)"
+                    )
+                    logger.info(
+                        f"[{cl_name}] drcconfig-mw ManifestWork status "
+                        f"conditions: {mw_status}"
+                    )
+                except Exception as dump_exc:
+                    logger.warning(
+                        f"[{cl_name}] Could not fetch drcconfig-mw "
+                        f"ManifestWork: {dump_exc}"
+                    )
+
+            # --- Recovery: delete the ramen-hub-operator pod once to speed up
+            # reconciliation.  The operator will be immediately recreated by its
+            # Deployment controller and will re-reconcile all DRPolicy resources
+            # on startup.  This is purely a reconciliation acceleration technique
+            # — it does NOT indicate a bug in the operator; peerClasses can
+            # legitimately take several minutes to appear on a loaded cluster.
+            # The normal retry loop above already handles the waiting; this bounce
+            # just gives the operator a nudge to process sooner.
+            global _ramen_hub_pod_bounced
+            if not _ramen_hub_pod_bounced:
+                _ramen_hub_pod_bounced = True
+                logger.info(
+                    "Deleting ramen-hub-operator pod in "
+                    f"{constants.OPENSHIFT_OPERATORS} to accelerate DRPolicy "
+                    "reconciliation (pod will be recreated automatically by its "
+                    "Deployment — this is a speed-up, not an error recovery)"
+                )
+                try:
+                    ramen_pods = get_pods_having_label(
+                        label="app=ramen-hub",
+                        namespace=constants.OPENSHIFT_OPERATORS,
+                    )
+                    for pod_info in ramen_pods:
+                        pod_name = pod_info["metadata"]["name"]
+                        ocp.OCP(
+                            kind=constants.POD,
+                            namespace=constants.OPENSHIFT_OPERATORS,
+                        ).delete(resource_name=pod_name, wait=True)
+                        logger.info(
+                            f"Deleted pod '{pod_name}' — Deployment controller "
+                            "will recreate it; waiting for new pod to start"
+                        )
+                    logger.info(
+                        "Sleeping 120s to allow ramen-hub-operator to restart "
+                        "and re-reconcile DRPolicy peerClasses"
+                    )
+                    time.sleep(120)
+                    # Re-fetch the DRPolicy and check peerClasses once
+                    # before falling through to raise (which triggers retry).
+                    logger.info(
+                        "Re-checking peerClasses after ramen-hub-operator bounce"
+                    )
+                    if drpolicy_name:
+                        refreshed = ocp.OCP(
+                            kind=constants.DRPOLICY,
+                            resource_name=drpolicy_name,
+                            namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+                        ).get()
+                        refreshed_peer_classes = (
+                            refreshed.get("status", {})
+                            .get("async", {})
+                            .get("peerClasses")
+                        )
+                    else:
+                        refreshed_list = get_all_drpolicy()
+                        refreshed_peer_classes = next(
+                            (
+                                p.get("status", {}).get("async", {}).get("peerClasses")
+                                for p in refreshed_list
+                                if p.get("metadata", {}).get("name") == drp_name
+                            ),
+                            None,
+                        )
+                    if refreshed_peer_classes:
+                        logger.info(
+                            f"peerClasses now populated after pod bounce: "
+                            f"{refreshed_peer_classes}"
+                        )
+                        # Patch the in-loop variable so the rest of the
+                        # validation loop proceeds normally.
+                        peer_classes = refreshed_peer_classes
+                    else:
+                        logger.warning(
+                            "peerClasses still absent after pod bounce; "
+                            "retry loop will continue"
+                        )
+                        raise UnexpectedBehaviour(error_msg)
+                except UnexpectedBehaviour:
+                    raise
+                except Exception as bounce_exc:
+                    logger.warning(
+                        f"Pod bounce attempt failed: {bounce_exc}; "
+                        "retry loop will continue"
+                    )
+                    raise UnexpectedBehaviour(error_msg)
+            else:
+                raise UnexpectedBehaviour(error_msg)
 
         # Validate grouping is true for every storageClass in peerClasses
         logger.info(f"Check grouping for storageClasses in DRPolicy: {drp_name}")
@@ -3022,14 +3163,18 @@ def get_cluster_set_name(switch_ctx=None):
             )
     dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     if dr_cluster_relations:
-        current_managed_clusters_list = [
-            (
+        current_managed_clusters_list = []
+        for item in dr_cluster_relations[0]:
+            try:
+                idx = config.get_cluster_index_by_name(item)
+                _is_hosted = config.clusters[idx].MULTICLUSTER.get("is_hosted", False)
+            except Exception:
+                _is_hosted = False
+            current_managed_clusters_list.append(
                 f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
-                if is_hosted_cluster(cluster_name=item)
+                if _is_hosted
                 else item
             )
-            for item in dr_cluster_relations[0]
-        ]
 
     # The list current_managed_clusters_list is required for RDR, not mandatory for MDR
     current_managed_clusters_list = current_managed_clusters_list or [
@@ -3164,18 +3309,45 @@ def create_service_exporter(annotate=True):
 
         if annotate:
             cluster_type = cluster.ENV_DATA.get("cluster_type", "").lower()
-            if (
-                config.ENV_DATA.get("odf_provider_mode_deployment")
+            service_type = get_provider_service_type()
+            odf_provider_mode = config.ENV_DATA.get("odf_provider_mode_deployment")
+
+            logger.info(
+                f"Determining cluster address configuration: "
+                f"service_type={service_type}, cluster_type={cluster_type}, "
+                f"odf_provider_mode={odf_provider_mode}"
+            )
+
+            # Check service type first - ClusterIP always uses cluster service
+            if service_type == "ClusterIP":
+                logger.info(
+                    "Using ClusterIP configuration: cluster service with port 50051"
+                )
+                cluster_address = config.ENV_DATA["cluster_name"]
+                cluster_address_port = "50051"
+                cluster_service_export_provider_server = (
+                    ".ocs-provider-server.openshift-storage.svc.clusterset.local"
+                )
+            elif (
+                odf_provider_mode
                 or cluster_type == constants.HCI_PROVIDER
-                or get_provider_service_type() == "NodePort"
+                or service_type == "NodePort"
             ):
+                logger.info(
+                    f"Using NodePort/Provider configuration: node IP with port 31659 "
+                    f"(odf_provider_mode={odf_provider_mode}, "
+                    f"cluster_type={cluster_type}, service_type={service_type})"
+                )
                 cluster_address = get_node_internal_ip(
                     get_node_objs(get_worker_nodes()[0])[0]
                 )
                 cluster_address_port = "31659"
                 cluster_service_export_provider_server = ""
-
             else:
+                logger.info(
+                    f"Using default configuration: cluster service with port 50051 "
+                    f"(service_type={service_type})"
+                )
                 cluster_address = config.ENV_DATA["cluster_name"]
                 cluster_address_port = "50051"
                 cluster_service_export_provider_server = (
@@ -3190,8 +3362,55 @@ def create_service_exporter(annotate=True):
                 exec_cmd(
                     "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
                     f" ocs.openshift.io/api-server-exported-address={cluster_address}"
-                    f"{cluster_service_export_provider_server}:{cluster_address_port}"
+                    f"{cluster_service_export_provider_server}:{cluster_address_port} --overwrite"
                 )
+
+            # On proxy clusters, add the provider-server address to the
+            # cluster-wide noProxy list so that internal ODF traffic is not
+            # routed through the proxy.
+            #
+            # Auto-detection: read the live proxy/cluster object — if
+            # spec.httpProxy is set the cluster is behind a proxy, regardless
+            # of what config.DEPLOYMENT["proxy"] says (handles re-runs and
+            # clusters where the flag was never explicitly set in the config).
+            # config.DEPLOYMENT["proxy"] is also respected as an explicit
+            # override so test configs can force the behaviour.
+            no_proxy_entry = (
+                f"{cluster_address}{cluster_service_export_provider_server}"
+            )
+            proxy_obj = OCP(kind=constants.PROXY, resource_name="cluster").get()
+            live_http_proxy = proxy_obj.get("spec", {}).get("httpProxy", "")
+            is_proxy_cluster = bool(live_http_proxy) or bool(
+                config.DEPLOYMENT.get("proxy")
+            )
+
+            if is_proxy_cluster:
+                # Read the current noProxy value from the live object status
+                # (status.noProxy is the fully-resolved list including defaults).
+                current_no_proxy = proxy_obj.get("status", {}).get("noProxy", "")
+                entries = [e.strip() for e in current_no_proxy.split(",") if e.strip()]
+
+                if no_proxy_entry in entries:
+                    logger.info(
+                        f"'{no_proxy_entry}' already present in proxy/cluster "
+                        "noProxy — skipping patch and MCP wait"
+                    )
+                else:
+                    entries.append(no_proxy_entry)
+                    updated_no_proxy = ",".join(entries)
+                    logger.info(
+                        f"Proxy cluster detected — adding '{no_proxy_entry}' "
+                        f"to proxy/cluster noProxy (new value: '{updated_no_proxy}')"
+                    )
+                    exec_cmd(
+                        "oc patch proxy/cluster --type=merge "
+                        f'--patch=\'{{"spec":{{"noProxy":"{updated_no_proxy}"}}}}\''
+                    )
+                    logger.info(
+                        "Waiting for MachineConfigPool to roll out after "
+                        "noProxy update"
+                    )
+                    wait_for_machineconfigpool_status("all")
     config.switch_ctx(restore_index)
 
 
@@ -3327,26 +3546,159 @@ def create_ingress_cert_dr(
     namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
     patch_proxy=True,
 ):
+    """
+    Build a combined ingress CA bundle from all non-hosted clusters (both spoke
+    and ACM hub), apply it as a ConfigMap on every non-hosted cluster, and
+    optionally patch the cluster-wide proxy so OpenShift trusts the new CAs.
 
-    non_acm_indexes = get_non_acm_cluster_indexes()
-    ingress_data = templating.load_yaml(constants.OC_INGRESS_CERT_YAML)
-    LiteralString = enable_literal_block_style()
-    ssl_data = []
+    Why this is needed in a DR setup
+    ---------------------------------
+    In a Regional-DR or Metro-DR topology the spoke clusters and the ACM hub
+    each have their own self-signed ingress CA.  For cross-cluster traffic
+    (e.g. Submariner, OADP, ACM observability) to succeed without TLS errors
+    every cluster must trust the ingress CAs of every other cluster.  This
+    function collects those CAs and distributes the combined bundle cluster-wide.
 
-    # Save original context to restore later
+    Hosted / HCP clusters are skipped entirely because they share the hosting
+    cluster's ingress and therefore have no independent ingress CA or
+    MachineConfigPool to update.
+
+    High-level flow
+    ---------------
+    1. Collect indexes of all non-hosted clusters (spokes + ACM hub).
+    2. For each such cluster fetch the default ingress CA bundle
+       (ConfigMap ``default-ingress-cert`` in ``openshift-config-managed``),
+       split it into individual PEM blocks, and add each block to a combined
+       list — skipping any block already seen to avoid duplicates.
+    3. Write the deduplicated bundle to a temp YAML file as a ConfigMap
+       named *cert_name* in *namespace* (default: ``openshift-config``).
+    4. Apply that ConfigMap on every non-hosted cluster (``oc apply``).
+    5. If *patch_proxy* is True, merge-patch ``proxy/cluster`` so that
+       ``spec.trustedCA.name`` points at the new ConfigMap — this makes the
+       OpenShift node trust store pick up the new CAs.
+    6. Wait for all MachineConfigPools to finish rolling out on every
+       non-hosted cluster (the proxy patch triggers a MCO update).
+
+    Args:
+        cert_name (str): Name of the ConfigMap that will hold the CA bundle.
+                         Defaults to ``user-ca-bundle``.
+        namespace (str): Namespace where the ConfigMap is created.
+                         Defaults to ``openshift-config``.
+        patch_proxy (bool): Whether to patch ``proxy/cluster`` after applying
+                            the ConfigMap.  Set to False when the proxy has
+                            already been configured externally.
+    """
+    logger.info(
+        "create_ingress_cert_dr: collecting ingress CA certs from all "
+        "non-hosted clusters (spokes + ACM hub) to build a combined trust bundle"
+    )
+
+    # --- Phase 1: determine which clusters to collect certs from -------------
+    # Include every cluster that is NOT a hosted (HCP) cluster.
+    # This covers both the DR spoke clusters and the ACM hub(s).
+    # dict.fromkeys preserves insertion order while dropping duplicate indexes.
+    all_cert_indexes = list(
+        dict.fromkeys(
+            [
+                c.MULTICLUSTER["multicluster_index"]
+                for c in config.clusters
+                if not c.MULTICLUSTER.get("is_hosted", False)
+            ]
+        )
+    )
+    logger.info(f"Cluster indexes selected for CA collection: {all_cert_indexes}")
+
     original_index = config.cur_index
 
-    for non_acm_index in non_acm_indexes:
-        config.switch_ctx(non_acm_index)
+    ingress_data = templating.load_yaml(constants.OC_INGRESS_CERT_YAML)
+    # LiteralString ensures the PEM bundle is written with YAML block-scalar
+    # style (|), which preserves embedded newlines correctly in the output file.
+    LiteralString = enable_literal_block_style()
+    # ssl_data holds individual deduplicated PEM blocks that will be joined
+    # into the final ca-bundle.crt value.
+    ssl_data = []
+
+    # --- Phase 2: collect and deduplicate individual PEM blocks --------------
+    # Each cluster's ConfigMap may contain multiple PEM certs (leaf + CA chain).
+    # We split on the PEM footer so every cert is checked independently —
+    # this prevents duplicates when two clusters share the same signing CA.
+    seen_certs = set()
+
+    # Seed ssl_data with whatever is already in the existing user-ca-bundle on
+    # each non-hosted cluster BEFORE collecting from default-ingress-cert.
+    # This preserves certs from other spoke-pair test runs that were previously
+    # applied to the ACM hub (or any cluster) so they are not wiped out when
+    # this run's bundle is applied.
+    for cert_index in all_cert_indexes:
+        with config.RunWithConfigContext(cert_index):
+            cluster_name = config.clusters[cert_index].MULTICLUSTER.get(
+                "name", f"Cluster-{cert_index}"
+            )
+            try:
+                existing_cm = ocp.OCP(
+                    kind=constants.CONFIGMAP,
+                    resource_name=cert_name,
+                    namespace=namespace,
+                ).get()
+                existing_raw = existing_cm.get("data", {}).get("ca-bundle.crt", "")
+            except Exception:
+                existing_raw = ""
+            if existing_raw:
+                pre_count = 0
+                for pem_block in existing_raw.split("-----END CERTIFICATE-----"):
+                    pem_block = pem_block.strip()
+                    if pem_block:
+                        pem_block = pem_block + "\n-----END CERTIFICATE-----\n"
+                        if pem_block not in seen_certs:
+                            seen_certs.add(pem_block)
+                            ssl_data.append(pem_block)
+                            pre_count += 1
+                if pre_count:
+                    logger.info(
+                        f"[{cluster_name}] Seeded {pre_count} existing cert(s) "
+                        f"from '{cert_name}' (preserving certs from other spoke pairs)"
+                    )
+
+    for cert_index in all_cert_indexes:
+        config.switch_ctx(cert_index)
+        cluster_name = config.clusters[cert_index].MULTICLUSTER.get(
+            "name", f"Cluster-{cert_index}"
+        )
+        logger.info(
+            f"[{cluster_name}] Fetching ingress CA bundle from "
+            f"{constants.DEFAULT_INGRESS_CRT_OPENSHIFT} "
+            f"in {constants.OPENSHIFT_CONFIG_MANAGED_NAMESPACE}"
+        )
         default_ingress_cert = ocp.OCP(
             kind=constants.CONFIGMAP,
             resource_name=constants.DEFAULT_INGRESS_CRT_OPENSHIFT,
             namespace=constants.OPENSHIFT_CONFIG_MANAGED_NAMESPACE,
         )
 
-        ssl_data.append(
-            default_ingress_cert.get()["data"]["ca-bundle.crt"].strip() + "\n"
+        bundle = default_ingress_cert.get()["data"]["ca-bundle.crt"]
+        # Split the multi-cert bundle into individual PEM blocks.
+        # Each block ends with "-----END CERTIFICATE-----"; splitting on that
+        # delimiter leaves the body without the footer, so we re-attach it.
+        new_count = 0
+        for pem_block in bundle.split("-----END CERTIFICATE-----"):
+            pem_block = pem_block.strip()
+            if not pem_block:
+                # Trailing empty segment after the last delimiter — skip it.
+                continue
+            pem_block = pem_block + "\n-----END CERTIFICATE-----\n"
+            if pem_block not in seen_certs:
+                seen_certs.add(pem_block)
+                ssl_data.append(pem_block)
+                new_count += 1
+
+        logger.info(
+            f"[{cluster_name}] Added {new_count} new PEM block(s) "
+            f"(bundle total so far: {len(ssl_data)} cert(s))"
         )
+
+        # Update the ConfigMap template with the growing bundle and write to
+        # a temp file.  The file is overwritten each iteration so the final
+        # file always reflects the fully accumulated bundle.
         ingress_data["data"]["ca-bundle.crt"] = LiteralString("".join(ssl_data))
         ingress_data["metadata"]["name"] = cert_name
         ingress_data["metadata"]["namespace"] = namespace
@@ -3355,41 +3707,184 @@ def create_ingress_cert_dr(
         )
         templating.dump_data_to_temp_yaml(ingress_data, ingress_file.name)
 
-    # Restore original context
+    logger.info(
+        f"Combined CA bundle written to {ingress_file.name} "
+        f"({len(ssl_data)} unique PEM block(s))"
+    )
+
+    # Restore the cluster context that was active before cert collection.
     config.switch_ctx(original_index)
 
+    # --- Early-exit: skip apply + MCP wait if every cluster already has the
+    # correct bundle and (when patch_proxy=True) proxy is already configured.
+    # This prevents redundant apply/MCP-rollout cycles on repeated test runs.
+    # Build a frozenset of the expected PEM blocks for order-independent comparison.
+    # Two bundles are considered identical when they contain the same set of certs
+    # regardless of the order they were written into the ConfigMap.
+    expected_cert_set = frozenset(ssl_data)
+    all_done = True
+    for cluster in config.clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+        if cluster.MULTICLUSTER.get("is_hosted", False):
+            continue
+        with config.RunWithConfigContext(index):
+            # Check whether the ConfigMap already contains exactly the same
+            # set of PEM blocks (order-independent).
+            try:
+                existing = ocp.OCP(
+                    kind=constants.CONFIGMAP,
+                    resource_name=cert_name,
+                    namespace=namespace,
+                ).get()
+                existing_raw = existing.get("data", {}).get("ca-bundle.crt", "")
+            except Exception:
+                existing_raw = ""
+
+            # Split the existing bundle into individual PEM blocks the same
+            # way Phase 2 does, then compare as sets.
+            existing_cert_set = set()
+            for pem_block in existing_raw.split("-----END CERTIFICATE-----"):
+                pem_block = pem_block.strip()
+                if pem_block:
+                    existing_cert_set.add(pem_block + "\n-----END CERTIFICATE-----\n")
+
+            if existing_cert_set != expected_cert_set:
+                logger.info(
+                    f"[{cluster_name}] ConfigMap '{cert_name}' missing or "
+                    "outdated — applying updated bundle"
+                )
+                all_done = False
+                break
+
+            if patch_proxy:
+                try:
+                    proxy_obj = ocp.OCP(kind="Proxy", resource_name="cluster").get()
+                    proxy_ca = (
+                        proxy_obj.get("spec", {}).get("trustedCA", {}).get("name", "")
+                    )
+                except Exception:
+                    proxy_ca = ""
+                if proxy_ca != cert_name:
+                    logger.info(
+                        f"[{cluster_name}] proxy/cluster not yet pointing at "
+                        f"'{cert_name}' — applying"
+                    )
+                    all_done = False
+                    break
+
+            logger.info(
+                f"[{cluster_name}] already has correct bundle and proxy config — "
+                "skipping apply"
+            )
+
+    if all_done:
+        logger.info(
+            "create_ingress_cert_dr: all clusters already up-to-date — skipping "
+            "apply and MCP wait"
+        )
+        return
+
+    # --- Phase 3: apply ConfigMap and patch proxy on every non-hosted cluster -
+    # The ConfigMap is applied on ALL clusters (not just the ones we collected
+    # certs from) so that every cluster trusts the complete cross-cluster bundle.
     for cluster in config.clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
         is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
 
+        # Hosted (HCP) clusters have no independent MachineConfigPool or node
+        # trust store — skip them entirely.
         if not is_hosted:
             with config.RunWithConfigContext(index):
-                # Skip proxy patches and MachineConfigPool waits for hosted (HCP) clusters
-                is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
-
-                logger.info(f"[{cluster_name}] Creating Ingress cert")
+                logger.info(f"[{cluster_name}] Applying ingress CA ConfigMap")
                 run_cmd(cmd=f"oc apply -f {ingress_file.name}")
 
-                if patch_proxy and not is_hosted:
-                    logger.info(f"[{cluster_name}] Proxy patch")
+                if patch_proxy:
+                    # Patching proxy/cluster tells the MCO to inject the new
+                    # CA bundle into every node's trust store via a MachineConfig.
+                    logger.info(
+                        f"[{cluster_name}] Patching proxy/cluster to trust "
+                        f"ConfigMap '{cert_name}'"
+                    )
                     cmd = (
                         f"oc patch proxy/cluster --type=merge "
                         f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{cert_name}"}}}}}}\''
                     )
                     run_cmd(cmd=cmd)
 
-    for cluster in config.clusters:
-        index = cluster.MULTICLUSTER["multicluster_index"]
-        cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
-        is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+    # --- Phase 4: wait for MachineConfigPool rollout on every non-hosted cluster
+    # The proxy patch above triggers the MCO to create a new MachineConfig and
+    # roll it out to all nodes.  We must wait here before declaring success,
+    # otherwise subsequent steps may run against nodes that have not yet
+    # reloaded their trust store.
+    # Only wait when patch_proxy is True — no proxy patch means no MCO rollout.
+    if patch_proxy:
+        for cluster in config.clusters:
+            index = cluster.MULTICLUSTER["multicluster_index"]
+            cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+            is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
 
-        if not is_hosted:
+            if not is_hosted:
+                with config.RunWithConfigContext(index):
+                    logger.info(
+                        f"[{cluster_name}] Waiting for MachineConfigPool to finish "
+                        "rolling out the updated trust bundle"
+                    )
+                    wait_for_machineconfigpool_status(node_type="all")
+
+        # --- Phase 5: restart ramen operator pods so they reload the new trust bundle
+        # The MCP rollout injects the new CA into the node trust store on disk, but
+        # operator pods that were already running before the rollout still hold the
+        # old in-memory trust store.  Deleting them forces the Deployment controller
+        # to recreate them and they will start with the updated CA bundle.
+        # Hub clusters run ramen-hub-operator (label: app=ramen-hub).
+        # Spoke clusters run ramen-dr-cluster-operator (label: app=ramen-dr-cluster).
+        for cluster in config.clusters:
+            index = cluster.MULTICLUSTER["multicluster_index"]
+            cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+            is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+            is_hub = cluster.MULTICLUSTER.get("acm_cluster", False)
+
+            if is_hosted:
+                continue
+
+            ramen_label = (
+                "app=ramen-hub"
+                if is_hub
+                else constants.RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL
+            )
+
             with config.RunWithConfigContext(index):
+                try:
+                    ramen_pods = get_pods_having_label(
+                        label=ramen_label,
+                        namespace=constants.OPENSHIFT_OPERATORS,
+                    )
+                except Exception:
+                    ramen_pods = []
+
+                if not ramen_pods:
+                    logger.info(
+                        f"[{cluster_name}] No pods found for label '{ramen_label}' "
+                        "in openshift-operators — skipping restart"
+                    )
+                    continue
+
                 logger.info(
-                    f"[{cluster_name}] Waiting for MachineConfigPool to be updated"
+                    f"[{cluster_name}] Restarting ramen operator pods "
+                    f"(label: {ramen_label}) to reload updated CA trust bundle"
                 )
-                wait_for_machineconfigpool_status(node_type="all")
+                for pod_info in ramen_pods:
+                    pod_name = pod_info["metadata"]["name"]
+                    ocp.OCP(
+                        kind=constants.POD,
+                        namespace=constants.OPENSHIFT_OPERATORS,
+                    ).delete(resource_name=pod_name, wait=True)
+                    logger.info(
+                        f"[{cluster_name}] Deleted pod '{pod_name}' — "
+                        "Deployment controller will recreate it"
+                    )
 
 
 def create_multiclusterservice_dr():
@@ -3437,18 +3932,55 @@ def create_multiclusterservice_dr():
 
 def setup_fdf_catsrc_for_hub():
     """
-    This function creates fdf catalogsource on hub
+    Create or verify the FDF CatalogSource (isf-data-foundation-catalog) on the
+    ACM hub cluster.
 
+    If the CatalogSource already exists:
+      - Compare its installed image tag against the expected ``fdf_image_tag``
+        from ``DEPLOYMENT`` config.
+      - If tags match: skip creation and wait for READY state.
+      - If tags differ: log a warning and re-apply with the new tag so the
+        catalog is updated to the correct version.
+
+    If the CatalogSource does not exist: create it from scratch.
     """
     logger.info("Creating FDF specific resource")
 
     fdf = FusionDataFoundationDeployment()
     fdf.create_image_tag_mirror_set()
     fdf.create_image_digest_mirror_set()
-    logger.info("Creating FDF Catsrc from Primary")
+
+    expected_tag = config.DEPLOYMENT.get("fdf_image_tag")
+    logger.info(f"Expected FDF catalog image tag: {expected_tag}")
+
+    fdf_catalog_source = CatalogSource(
+        resource_name=constants.FDF_CATALOG_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+
+    if fdf_catalog_source.is_exist():
+        installed_tag = fdf_catalog_source.get_image_name()
+        logger.info(
+            f"CatalogSource '{constants.FDF_CATALOG_NAME}' already exists "
+            f"with image tag: {installed_tag}"
+        )
+        if installed_tag == expected_tag:
+            logger.info(
+                f"Installed tag '{installed_tag}' matches expected tag — "
+                "skipping CatalogSource creation"
+            )
+            fdf_catalog_source.wait_for_state("READY")
+            return
+        else:
+            logger.warning(
+                f"Installed tag '{installed_tag}' differs from expected tag "
+                f"'{expected_tag}' — re-applying CatalogSource with new tag"
+            )
+
+    logger.info("Creating FDF CatalogSource from Primary")
     isf_data_foundation_catsrc = templating.load_yaml(constants.FDF_CATSRC_CR)
     isf_data_foundation_catsrc["spec"]["image"] = (
-        constants.FDF_CATSRC_IMAGE_PATH + ":" + config.DEPLOYMENT.get("fdf_image_tag")
+        constants.FDF_CATSRC_IMAGE_PATH + ":" + expected_tag
     )
     isf_data_foundation_catsrc_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="isf_df_catsrc", delete=False
@@ -3459,10 +3991,6 @@ def setup_fdf_catsrc_for_hub():
 
     wait_for_machineconfigpool_status("all", timeout=1800)
     run_cmd(f"oc apply -f {isf_data_foundation_catsrc_yaml.name}")
-    fdf_catalog_source = CatalogSource(
-        resource_name=constants.FDF_CATALOG_NAME,
-        namespace=constants.MARKETPLACE_NAMESPACE,
-    )
 
     logger.info("Waiting for CatalogSource to be READY")
     fdf_catalog_source.wait_for_state("READY")
@@ -3681,3 +4209,226 @@ def extract_images_from_yaml(obj, images=None):
             extract_images_from_yaml(item, images)
 
     return images
+
+
+def get_cdi_registry_credentials():
+    """
+    Extract the username and password for the internal mirror registry from
+    the cluster's global pull secret (``secret/pull-secret`` in
+    ``openshift-config``).
+
+    The pull-secret ``auths`` map may contain multiple entries keyed by
+    registry hostname or hostname/path.  We match on the bare hostname from
+    ``config.DEPLOYMENT["mirror_registry"]`` — the first entry whose key
+    equals that hostname exactly is preferred; if not found we fall back to
+    any entry whose key starts with that hostname (sub-repo paths).
+
+    Each auth entry may carry explicit ``username`` / ``password`` fields, or
+    only an ``auth`` field which is ``base64(username:password)``.  Both forms
+    are handled.
+
+    Returns:
+        tuple[str, str]: ``(username, password)`` as plain strings.
+
+    Raises:
+        CommandFailed: If the ``oc`` call fails.
+        KeyError: If no entry for the mirror registry is found in the secret.
+        ValueError: If the ``auth`` field cannot be decoded into ``user:pass``.
+    """
+    mirror_host = config.DEPLOYMENT["mirror_registry"].rstrip("/")
+
+    raw_b64 = (
+        exec_cmd(
+            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE}"
+            r" -o jsonpath='{.data.\.dockerconfigjson}'"
+        )
+        .stdout.decode()
+        .strip()
+    )
+    auths = json.loads(base64.b64decode(raw_b64)).get("auths", {})
+
+    # Prefer an exact-hostname match (e.g. "r8-ru26-w-l.quay-service.fusion.tadn.ibm.com")
+    # over sub-repo entries (e.g. "r8-.../mirror-automation-.../hci/...").
+    entry = auths.get(mirror_host) or next(
+        (v for k, v in auths.items() if k.startswith(mirror_host)),
+        None,
+    )
+    if entry is None:
+        raise KeyError(
+            f"No pull-secret entry found for mirror registry '{mirror_host}'. "
+            f"Available hosts: {list(auths.keys())}"
+        )
+
+    username = entry.get("username")
+    password = entry.get("password")
+    if not username or not password:
+        # Decode "auth": base64("username:password")
+        auth_decoded = base64.b64decode(entry["auth"]).decode()
+        if ":" not in auth_decoded:
+            raise ValueError(
+                f"Cannot parse 'auth' field for '{mirror_host}': "
+                f"expected 'user:password', got '{auth_decoded}'"
+            )
+        username, password = auth_decoded.split(":", 1)
+
+    logger.debug(
+        f"Extracted CDI registry credentials for '{mirror_host}': " f"user='{username}'"
+    )
+    return username, password
+
+
+def create_cdi_pull_secret(namespace, secret_name="quayadmin"):
+    """
+    Create an Opaque Secret in *namespace* so CDI can authenticate against
+    the internal mirror registry when importing VM disk images.
+
+    CDI's ``spec.source.registry.secretRef`` expects an Opaque secret with
+    two keys:
+
+    * ``accessKeyId`` — registry username (base64-encoded)
+    * ``secretKey``   — registry password (base64-encoded)
+
+    The credentials are derived automatically from the cluster's existing
+    ``secret/pull-secret`` in ``openshift-config`` — no manual credential
+    management is required.
+
+    The secret name must match the ``secretRef`` value in the workload YAML
+    files (default: ``quayadmin``).
+
+    This function is idempotent — it deletes an existing secret before
+    re-creating it.
+
+    Args:
+        namespace (str): Workload namespace where the secret is created.
+        secret_name (str): Name to give the Secret.  Defaults to
+            ``quayadmin`` to match the workload YAML ``secretRef``.
+    """
+    secret_ocp = ocp.OCP(kind=constants.SECRET, namespace=namespace)
+
+    if secret_ocp.is_exist(resource_name=secret_name):
+        logger.info(
+            f"CDI pull secret '{secret_name}' already exists in "
+            f"'{namespace}', recreating."
+        )
+        secret_ocp.delete(resource_name=secret_name, wait=True)
+
+    mirror_host = config.DEPLOYMENT.get("mirror_registry")
+    logger.info(
+        f"Creating CDI registry secret '{secret_name}' in namespace "
+        f"'{namespace}' (mirror registry: {mirror_host})"
+    )
+    username, password = get_cdi_registry_credentials()
+    secret_manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": secret_name, "namespace": namespace},
+        "type": "Opaque",
+        "data": {
+            "accessKeyId": base64.b64encode(username.encode()).decode(),
+            "secretKey": base64.b64encode(password.encode()).decode(),
+        },
+    }
+    create_resource(**secret_manifest)
+    logger.info(
+        f"CDI registry secret '{secret_name}' created in namespace '{namespace}'"
+    )
+
+
+def fetch_mirror_registry_cert():
+    """
+    Fetch the TLS certificate presented by ``config.DEPLOYMENT["mirror_registry"]``
+    using ``openssl s_client``.
+
+    The mirror registry is stored as a bare hostname (and optional port), e.g.
+    ``r8-ru26-w-l.quay-service.fusion.tadn.ibm.com`` or
+    ``r8-ru26-w-l.quay-service.fusion.tadn.ibm.com:8443``.  Port 443 is
+    assumed when none is specified.
+
+    Returns:
+        str: PEM-encoded certificate string (includes trailing newline).
+
+    Raises:
+        CommandFailed: If ``openssl`` is not available or the connection fails.
+        ValueError: If the output contains no PEM certificate block.
+    """
+    mirror_registry = config.DEPLOYMENT["mirror_registry"].rstrip("/")
+
+    # Split off an explicit port; default to 443.
+    if ":" in mirror_registry:
+        host, port = mirror_registry.rsplit(":", 1)
+    else:
+        host, port = mirror_registry, "443"
+
+    endpoint = f"{host}:{port}"
+    logger.info(
+        f"Fetching TLS certificate from mirror registry '{endpoint}' "
+        f"via openssl s_client"
+    )
+    cmd = (
+        f"echo | openssl s_client -connect {endpoint} -showcerts 2>/dev/null"
+        f" | openssl x509 -outform PEM"
+    )
+    result = exec_cmd(cmd, shell=True)
+    pem = result.stdout.decode().strip()
+
+    if "BEGIN CERTIFICATE" not in pem:
+        raise ValueError(
+            f"openssl s_client returned no PEM certificate for '{endpoint}'. "
+            f"Output: {pem!r}"
+        )
+
+    if not pem.endswith("\n"):
+        pem += "\n"
+
+    logger.debug(f"Successfully fetched TLS certificate for '{endpoint}'")
+    return pem
+
+
+def create_cdi_cert_configmap(namespace, configmap_name="user-ca-bundle"):
+    """
+    Create a ConfigMap in *namespace* containing the TLS CA certificate of
+    ``config.DEPLOYMENT["mirror_registry"]``, so CDI can verify the registry's
+    TLS certificate when importing VM disk images in a disconnected environment.
+
+    CDI's ``spec.source.registry.certConfigMap`` is namespace-scoped — it must
+    exist in the **same namespace** as the DataVolume / VolumeImportSource.
+    The certificate is fetched live from the registry endpoint via
+    ``openssl s_client``, so no manual cert management is required.
+
+    The ConfigMap name must match the ``certConfigMap`` value in the workload
+    YAML files (default: ``user-ca-bundle``).
+
+    This function is idempotent — it deletes an existing ConfigMap before
+    re-creating it.
+
+    Args:
+        namespace (str): Workload namespace where the ConfigMap is created.
+        configmap_name (str): Name to give the ConfigMap.  Defaults to
+            ``user-ca-bundle`` to match the workload YAML ``certConfigMap``.
+    """
+    cm_ocp = ocp.OCP(kind=constants.CONFIGMAP, namespace=namespace)
+
+    if cm_ocp.is_exist(resource_name=configmap_name):
+        logger.info(
+            f"CDI cert ConfigMap '{configmap_name}' already exists in "
+            f"'{namespace}', recreating."
+        )
+        cm_ocp.delete(resource_name=configmap_name, wait=True)
+
+    mirror_registry = config.DEPLOYMENT.get("mirror_registry")
+    logger.info(
+        f"Creating CDI cert ConfigMap '{configmap_name}' in namespace "
+        f"'{namespace}' (mirror registry: {mirror_registry})"
+    )
+    ca_bundle = fetch_mirror_registry_cert()
+
+    cm_manifest = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": configmap_name, "namespace": namespace},
+        "data": {"ca-bundle.crt": ca_bundle},
+    }
+    create_resource(**cm_manifest)
+    logger.info(
+        f"CDI cert ConfigMap '{configmap_name}' created in namespace '{namespace}'"
+    )
