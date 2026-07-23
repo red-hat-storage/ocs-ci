@@ -23,7 +23,7 @@ from ocs_ci.ocs import flowtest
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -40,11 +40,11 @@ class TestCouchBaseNodeReboot(E2ETest):
         """
         Creates couchbase workload
         """
+        logger.info("Creating CouchBase workload with 3 replicas (background mode)")
         self.cb = couchbase_factory_fixture(
             replicas=3, run_in_bg=True, skip_analyze=True
         )
 
-        # Initialize Sanity instance
         self.sanity_helpers = Sanity()
 
     @pytest.mark.parametrize(
@@ -61,10 +61,11 @@ class TestCouchBaseNodeReboot(E2ETest):
         """
         Test couchbase workload with node reboot
         """
-        # Check worker node utilization (adm_top)
+        logger.test_step("Check node resource utilization")
         get_node_resource_utilization_from_adm_top(node_type="worker", print_table=True)
         get_node_resource_utilization_from_adm_top(node_type="master", print_table=True)
 
+        logger.test_step(f"Identify {pod_name_of_node} node for reboot")
         if pod_name_of_node == "couchbase":
             node_list = self.cb.get_couchbase_nodes()
         elif pod_name_of_node == "osd":
@@ -72,20 +73,20 @@ class TestCouchBaseNodeReboot(E2ETest):
         elif pod_name_of_node == "master":
             master_node = get_nodes(pod_name_of_node, num_of_nodes=1)
 
-        # Restart relevant node
+        logger.test_step(f"Restart {pod_name_of_node} node")
         if pod_name_of_node == "master":
             nodes.restart_nodes(master_node, wait=False)
             waiting_time = 40
-            log.info(f"Waiting {waiting_time} seconds...")
+            logger.info(f"Waiting {waiting_time}s for master node restart to initiate")
             time.sleep(waiting_time)
         else:
             restart_node = get_node_objs(
                 node_list[random.randint(0, len(node_list) - 1)]
             )
+            logger.info(f"Restarting node: {restart_node}")
             nodes.restart_nodes(restart_node)
 
-        # Validate all nodes and services are in READY state and up
-
+        logger.test_step("Validate cluster connectivity and node status")
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=28,
@@ -96,6 +97,8 @@ class TestCouchBaseNodeReboot(E2ETest):
             tries=28,
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
+
+        logger.test_step("Wait for background workload and verify cluster health")
         bg_handler = flowtest.BackgroundOps()
         bg_ops = [self.cb.result]
         retry((CommandFailed), tries=28, delay=15)(

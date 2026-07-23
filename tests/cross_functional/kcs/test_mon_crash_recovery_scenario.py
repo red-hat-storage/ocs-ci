@@ -31,7 +31,7 @@ from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.helpers.helpers import wait_for_resource_state
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -43,8 +43,9 @@ class TestMonCrashRecoveryScenario:
     def teardown_fixture(self, request):
         def scale_up_deployments():
             """Teardown function to scale deployments back to 1 replica."""
+            logger.test_step("Restore operator deployments to 1 replica")
             for dep in [OCS_OPERATOR_NAME, ROOK_CEPH_OPERATOR]:
-                log.info(f"Teardown: Scaling up {dep} to replica=1")
+                logger.info(f"Teardown: Scaling up {dep} to replica=1")
                 modify_deployment_replica_count(dep, 1)
 
         request.addfinalizer(scale_up_deployments)
@@ -67,80 +68,92 @@ class TestMonCrashRecoveryScenario:
 
         """
 
-        # Step 1: Calculate initial mon count
+        logger.test_step("Calculate initial mon count and select target mon")
         initial_mon_count = len(get_mon_deployments())
-        log.info(f"Initial mon count in the cluster: {initial_mon_count}")
+        logger.info(f"Initial mon count in the cluster: {initial_mon_count}")
 
         mon_obj = choice(get_mon_deployments())
         mon_name = mon_obj.name
         mon_pvc = mon_obj.data["metadata"]["labels"]["pvc_name"]
         mon_pvc_obj = get_pvc_objs([mon_pvc])[0]
+        logger.info(f"Selected mon for corruption: {mon_name}, PVC: {mon_pvc}")
 
-        # Step 1: Courrupting the mon database from the mon deployment.
+        logger.test_step(f"Corrupt mon database on {mon_name}")
         monpod = mon_obj.pods[0]
         monpod.exec_cmd_on_pod(
             f"rm -rf /var/lib/ceph/mon/ceph-{mon_name.split('-')[-1].strip()}",
             ignore_error=True,
         )
         wait_for_resource_state(resource=monpod, state=STATUS_CLBO)
+        logger.info(f"Mon pod {monpod.name} entered CrashLoopBackOff state")
 
-        # Step 2:  Start IO Workload in the background.
+        logger.test_step("Start IO workload in the background")
         pod_obj = pod_factory(interface=CEPHBLOCKPOOL)
         run_io_in_bg(pod_obj)
 
-        # Step 3: Scale down the deployments of ocs-operator,rook-ceph-operator and rook-ceph-mon-x.
-        deployment_list = [OCS_OPERATOR_NAME, ROOK_CEPH_OPERATOR, mon_name]
-        log.info(
-            f"Scaling down deployments: {','.join(deployment_list)} to 0 replicas..."
+        logger.test_step(
+            "Scale down operators and corrupted mon deployment to 0 replicas"
         )
+        deployment_list = [OCS_OPERATOR_NAME, ROOK_CEPH_OPERATOR, mon_name]
+        logger.info(f"Scaling down deployments: {', '.join(deployment_list)}")
         for deployment in deployment_list:
-            assert modify_deployment_replica_count(
-                deployment, 0
-            ), f"Fail to scale {deployment} to replica count: 0"
+            scaled = modify_deployment_replica_count(deployment, 0)
+            logger.assertion(f"Scale down {deployment}: expected=True, actual={scaled}")
+            assert scaled, f"Fail to scale {deployment} to replica count: 0"
 
-        # Step 4: Deleting the mon deployment
-        log.info(f"Deleting mon deployment {mon_name}")
+        logger.test_step(f"Delete mon deployment {mon_name}")
         mon_obj.delete()
+        logger.assertion(
+            f"Mon deployment deletion: name={mon_name}, deleted={mon_obj.is_deleted}"
+        )
         assert mon_obj.is_deleted, f"Mon Deployment {mon_name} is not deleted."
 
-        # Step 5: Delete PVC associated with the MON.
-        log.info(f"deleting pvc {mon_pvc_obj.name} associated with mon {mon_name}")
-        mon_pvc_obj.delete()
-        assert mon_pvc_obj.ocp.wait_for_delete(mon_pvc_obj.name)
-
-        # Step 6: Scale up the deployment of  ocs-operator and rook-ceph-operator to replicas = 1
-        log.info("Scaling up deployments to 1 replica...")
-        for dep in [OCS_OPERATOR_NAME, ROOK_CEPH_OPERATOR]:
-            assert modify_deployment_replica_count(
-                dep, 1
-            ), f"Failed to scale deployment {dep} to replicas : 1"
-
-        # Step 7: Verify 'ceph mon dump' output has the recovered mon information.
-        log.info(
-            f"Verifying 'ceph mon dump' command output has information about recovered mon: {mon_name} "
+        logger.test_step(
+            f"Delete PVC {mon_pvc_obj.name} associated with mon {mon_name}"
         )
-        mon_dump = ceph_mon_dump()
-        assert [
-            mon for mon in mon_dump["mons"] if mon["name"] == mon_name.split("-")[-1]
-        ], f"'ceph mon dump' command output dont have the information about recovered mon: {mon_name}"
+        mon_pvc_obj.delete()
+        pvc_deleted = mon_pvc_obj.ocp.wait_for_delete(mon_pvc_obj.name)
+        logger.assertion(
+            f"Mon PVC deletion: name={mon_pvc_obj.name}, deleted={pvc_deleted}"
+        )
+        assert pvc_deleted
 
-        # Step 8: Check If any crash has generated.
-        log.info("Checking if the new crash has generated by the ceph.")
+        logger.test_step("Scale up operator deployments to 1 replica")
+        for dep in [OCS_OPERATOR_NAME, ROOK_CEPH_OPERATOR]:
+            scaled = modify_deployment_replica_count(dep, 1)
+            logger.assertion(f"Scale up {dep}: expected=True, actual={scaled}")
+            assert scaled, f"Failed to scale deployment {dep} to replicas: 1"
+
+        logger.test_step("Verify recovered mon appears in 'ceph mon dump'")
+        mon_dump = ceph_mon_dump()
+        mon_short_name = mon_name.split("-")[-1]
+        recovered_mon = [
+            mon for mon in mon_dump["mons"] if mon["name"] == mon_short_name
+        ]
+        logger.assertion(
+            f"Mon in ceph mon dump: name={mon_short_name}, found={bool(recovered_mon)}"
+        )
+        assert recovered_mon, (
+            f"'ceph mon dump' output does not have information about "
+            f"recovered mon: {mon_name}"
+        )
+
+        logger.test_step("Check for new ceph crashes")
         toolbox = get_ceph_tools_pod()
         crash = toolbox.exec_ceph_cmd("ceph crash ls-new")
+        logger.assertion(f"New ceph crashes: expected=none, found={len(crash)}")
         assert not crash, f"Ceph cluster has generated crash {' '.join(crash[0])}"
 
-        # Step 9: Verify all mon pods are up and running (same count as initial)
+        logger.test_step("Verify all mon pods are up and running")
         current_mon_count = len(get_mon_deployments())
-        log.info(f"Current mon deployments count: {current_mon_count}")
+        logger.info(f"Current mon deployments count: {current_mon_count}")
 
         if current_mon_count != initial_mon_count:
-            log.warning(
-                f"Mon count mismatch: Initial={initial_mon_count}, Current={current_mon_count}. "
-                f"Waiting for all mons to come up..."
+            logger.warning(
+                f"Mon count mismatch: initial={initial_mon_count}, "
+                f"current={current_mon_count}. Waiting for all mons to come up..."
             )
 
-        # Wait for all mon pods to be running with 10-minute timeout
         pod_objs = ocp.OCP(kind=POD, namespace=config.ENV_DATA["cluster_namespace"])
         ret = pod_objs.wait_for_resource(
             condition=STATUS_RUNNING,
@@ -149,13 +162,15 @@ class TestMonCrashRecoveryScenario:
             dont_allow_other_resources=True,
             timeout=600,
         )
+        logger.assertion(
+            f"Mon pods running: expected={initial_mon_count}, all_running={ret}"
+        )
         assert (
             ret
         ), f"Not all {initial_mon_count} mon pods are in running state after 10 minutes"
-        log.info(f"All {initial_mon_count} mon pods are up and running successfully")
+        logger.info(f"All {initial_mon_count} mon pods are up and running")
 
-        # Step 10: Check for crashes for 10 minutes and archive them
-        log.info("Checking for crashes for 10 minutes and archiving if found...")
+        logger.test_step("Monitor and archive ceph crashes for 10 minutes")
         timeout = 600
         start_time = time.time()
         crash_found = False
@@ -164,16 +179,17 @@ class TestMonCrashRecoveryScenario:
             crash = toolbox.exec_ceph_cmd("ceph crash ls-new")
             if crash:
                 crash_found = True
-                log.info(f"Found crash(es): {crash}. Archiving...")
+                logger.info(f"Found crash(es): {crash}. Archiving...")
                 toolbox.exec_ceph_cmd("ceph crash archive-all")
                 sleep(20)
             else:
-                log.info(
-                    "No new crashes found. Waiting 60 seconds before next check..."
+                logger.debug(
+                    f"No new crashes found. Elapsed: "
+                    f"{int(time.time() - start_time)}s/{timeout}s"
                 )
                 sleep(60)
 
         if crash_found:
-            log.info("Completed crash archiving process")
+            logger.info("Completed crash archiving process")
         else:
-            log.info("No crashes found during 10-minute monitoring period")
+            logger.info("No crashes found during 10-minute monitoring period")

@@ -12,7 +12,7 @@ from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.ocs import flowtest
 from ocs_ci.helpers.sanity_helpers import Sanity
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -29,6 +29,7 @@ class TestCouchBasePodRespin(E2ETest):
         """
         Creates couchbase workload
         """
+        logger.info("Creating CouchBase workload with 3 replicas (background mode)")
         self.cb = couchbase_factory_fixture(
             replicas=3, run_in_bg=True, skip_analyze=True
         )
@@ -44,7 +45,7 @@ class TestCouchBasePodRespin(E2ETest):
         ],
     )
     def test_run_couchbase_respin_pod(self, cb_setup, pod_name):
-        log.info(f"Respin Ceph pod {pod_name}")
+        logger.test_step(f"Respin {pod_name} pod")
 
         if pod_name == "couchbase":
             self.cb.respin_couchbase_app_pod()
@@ -53,6 +54,7 @@ class TestCouchBasePodRespin(E2ETest):
             disruption.set_resource(resource=f"{pod_name}")
             disruption.delete_resource()
 
+        logger.test_step("Wait for background workload and verify cluster health")
         bg_handler = flowtest.BackgroundOps()
         bg_ops = [self.cb.result]
         bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)

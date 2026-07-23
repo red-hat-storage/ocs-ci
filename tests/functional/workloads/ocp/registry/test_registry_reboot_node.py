@@ -20,7 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -61,20 +61,20 @@ class TestRegistryRebootNode(E2ETest):
         Test registry workload when backed by OCS and reboot node
         """
 
-        # Get the node list
+        logger.test_step(f"Get {node_type} node for reboot")
         node = get_nodes(node_type, num_of_nodes=1)
+        logger.info(f"Selected node: {node[0].name}")
 
-        # Pull and push images to registries
-        log.info("Pull and push images to registries")
+        logger.test_step("Pull and push images to registries")
         image_pull_and_push(project_name=self.project_name)
 
-        # Validate image exists in registries path
+        logger.test_step("Validate image exists in registry before reboot")
         validate_image_exists()
 
-        # Reboot one node
+        logger.test_step(f"Reboot {node_type} node {node[0].name}")
         nodes.restart_nodes(node, wait=False)
 
-        # Validate all nodes and services are in READY state and up
+        logger.test_step("Wait for cluster connectivity and node readiness")
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=28,
@@ -83,19 +83,17 @@ class TestRegistryRebootNode(E2ETest):
         )(wait_for_cluster_connectivity)(tries=400)
 
         node_ready_timeout = 1800 if node_type == MASTER_MACHINE else 900
+        logger.info(f"Waiting for nodes to be ready (timeout: {node_ready_timeout}s)")
         wait_for_nodes_status(timeout=node_ready_timeout)
 
-        # Validate cluster health ok and all pods are running
+        logger.test_step("Validate cluster health and storage pods")
         self.sanity_helpers.health_check(tries=40)
-
-        # Validate storage pods are running
         wait_for_storage_pods()
 
-        # Validate image registry pods
+        logger.test_step("Validate registry pods and image persistence after reboot")
         validate_registry_pod_status()
-
-        # Validate image exists in registries path
         validate_image_exists()
+        logger.info("Registry image persisted after node reboot")
 
     @pytest.mark.parametrize(
         argnames=["node_type"],
@@ -109,28 +107,29 @@ class TestRegistryRebootNode(E2ETest):
         Test registry workload when backed by OCS and reboot node one by one
         """
 
-        # Get the node list
+        logger.test_step(f"Get all {node_type} nodes for rolling reboot")
         node_list = get_nodes(node_type)
+        logger.info(f"Found {len(node_list)} {node_type} nodes")
 
-        # Pull and push images to registries
-        log.info("Pull and push images to registries")
+        logger.test_step("Pull and push images to registries")
         image_pull_and_push(project_name=self.project_name)
 
-        # Validate image exists in registries path
+        logger.test_step("Validate image exists in registry before rolling reboot")
         validate_image_exists()
 
-        for node in node_list:
-
-            # Reboot node
-            log.info(node.name)
+        logger.test_step(f"Rolling reboot of {len(node_list)} {node_type} nodes")
+        for i, node in enumerate(node_list, 1):
+            logger.info(f"Rebooting node {i}/{len(node_list)}: {node.name}")
             nodes.restart_nodes([node], wait=False)
 
-            # Wait some time after rebooting node
             waiting_time = 40
-            log.info(f"Waiting {waiting_time} seconds...")
+            logger.debug(f"Waiting {waiting_time}s after reboot of {node.name}")
             time.sleep(waiting_time)
 
-            # Validate all nodes and services are in READY state and up
+            logger.info(
+                f"Waiting for cluster connectivity and node readiness "
+                f"after rebooting {node.name}"
+            )
             retry(
                 (
                     CommandFailed,
@@ -151,15 +150,15 @@ class TestRegistryRebootNode(E2ETest):
                 tries=28,
                 delay=15,
             )(wait_for_nodes_status)(timeout=900)
+            logger.info(f"Node {node.name} recovered successfully")
 
-        # Validate cluster health ok and all pods are running
+        logger.test_step("Validate cluster health and storage pods")
         self.sanity_helpers.health_check(tries=40)
-
-        # Validate storage pods are running
         wait_for_storage_pods()
 
-        # Validate image registry pods
+        logger.test_step(
+            "Validate registry pods and image persistence after rolling reboot"
+        )
         validate_registry_pod_status()
-
-        # Validate image exists in registries path
         validate_image_exists()
+        logger.info("Registry image persisted after rolling node reboot")

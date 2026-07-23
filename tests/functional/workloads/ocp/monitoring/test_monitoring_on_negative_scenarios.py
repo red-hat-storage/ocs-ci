@@ -39,7 +39,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @retry(AssertionError, tries=60, delay=3, backoff=1)
@@ -52,7 +52,9 @@ def wait_to_update_mgrpod_info_prometheus_pod(threading_lock):
 
     """
 
-    log.info("Verifying ceph health status metrics is updated after rebooting the node")
+    logger.info(
+        "Verifying ceph health status metrics is updated after rebooting the node"
+    )
     ocp_obj = ocp.OCP(
         kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
     )
@@ -65,7 +67,7 @@ def wait_to_update_mgrpod_info_prometheus_pod(threading_lock):
     assert check_ceph_health_status_metrics_on_prometheus(
         mgr_pod=mgr_pod, threading_lock=threading_lock
     ), "Ceph health status metrics are not updated after the rebooting node where the mgr running"
-    log.info("Ceph health status metrics is updated")
+    logger.info("Ceph health status metrics is updated")
 
 
 @retry(AssertionError, tries=29, delay=5, backoff=2)
@@ -158,14 +160,14 @@ class TestMonitoringBackedByOCS(E2ETest):
                 for n in get_node_objs()
                 if n.ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
             ]
-            log.warning(
+            logger.warning(
                 f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
             )
             if not_ready_nodes:
                 nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
                 wait_for_nodes_status()
 
-            log.info("All nodes are in Ready status")
+            logger.info("All nodes are in Ready status")
 
             assert prometheus_health_check(), "Prometheus health is degraded"
 
@@ -207,20 +209,21 @@ class TestMonitoringBackedByOCS(E2ETest):
         should not have any functional impact
 
         """
-
-        # Get the prometheus pod
+        logger.test_step("Get Prometheus pods")
         prometheus_pod_obj = pod.get_all_pods(
             namespace=defaults.OCS_MONITORING_NAMESPACE, selector=["prometheus"]
         )
+        logger.info(f"Found {len(prometheus_pod_obj)} Prometheus pod(s)")
 
+        logger.test_step("Restart Prometheus pods and verify PVC persistence")
         for pod_object in prometheus_pod_obj:
-            # Get the pvc which mounted on prometheus pod
             pod_info = pod_object.get()
             pvc_name = pod_info["spec"]["volumes"][0]["persistentVolumeClaim"][
                 "claimName"
             ]
+            logger.info(f"Prometheus pod {pod_object.name} using PVC: {pvc_name}")
 
-            # Restart the prometheus pod
+            logger.info(f"Restarting Prometheus pod: {pod_object.name}")
             pod_object.delete(force=True)
             pod_obj = ocp.OCP(
                 kind=constants.POD, namespace=defaults.OCS_MONITORING_NAMESPACE
@@ -228,18 +231,28 @@ class TestMonitoringBackedByOCS(E2ETest):
             assert pod_obj.wait_for_resource(
                 condition="Running", selector="app=prometheus", timeout=60
             )
+            logger.info("Prometheus pod restarted and running")
 
-            # Check the same pvc is mounted on new pod
             pod_info = pod_object.get()
+            new_pvc_name = pod_info["spec"]["volumes"][0]["persistentVolumeClaim"][
+                "claimName"
+            ]
+            logger.assertion(
+                f"PVC persistence check: pod={pod_object.name}, "
+                f"old_pvc={pvc_name}, new_pvc={new_pvc_name}, match={new_pvc_name in pvc_name}"
+            )
             assert (
-                pod_info["spec"]["volumes"][0]["persistentVolumeClaim"]["claimName"]
-                in pvc_name
+                new_pvc_name in pvc_name
             ), f"Old pvc not found after restarting the prometheus pod {pod_object.name}"
+            logger.info(f"Verified PVC {pvc_name} persisted after restart")
 
+        logger.test_step("Verify PVC metrics are collected on Prometheus")
         for pod_obj in pods:
+            logger.assertion(f"PVC metrics check: pvc={pod_obj.pvc.name}")
             assert check_pvcdata_collected_on_prometheus(
                 pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
+        logger.info("All PVC metrics validated successfully")
 
     @pytest.mark.polarion_id("OCS-579")
     def test_monitoring_after_draining_node_where_prometheus_hosted(
@@ -290,7 +303,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             assert (
                 new_node not in prometheus_node
             ), "Promethues pod not re-spinned on new node"
-            log.info(f"Prometheus pod re-spinned on new node {new_node}")
+            logger.info(f"Prometheus pod re-spinned on new node {new_node}")
 
             # Validate same pvc is mounted on prometheus pod
             assert (
@@ -306,7 +319,7 @@ class TestMonitoringBackedByOCS(E2ETest):
 
             # Wait some time after node scheduling back
             waiting_time = 30
-            log.info(f"Waiting {waiting_time} seconds...")
+            logger.info(f"Waiting {waiting_time} seconds...")
             time.sleep(waiting_time)
 
             # Validate node is in Ready State
@@ -331,22 +344,28 @@ class TestMonitoringBackedByOCS(E2ETest):
         its interaction with prometheus pod
 
         """
-
-        # Re-spin the ceph pods(i.e mgr, mon, osd, mds) one by one
+        logger.test_step("Respin Ceph pods (mgr, mon, osd)")
         resource_to_delete = ["mgr", "mon", "osd"]
         disruption = Disruptions()
         for res_to_del in resource_to_delete:
+            logger.info(f"Respinning Ceph {res_to_del} pod")
             disruption.set_resource(resource=res_to_del)
             disruption.delete_resource()
+            logger.info(f"Ceph {res_to_del} pod respun successfully")
 
-        # Check for the created pvc metrics on prometheus pod
+        logger.test_step("Verify PVC metrics are collected after Ceph pod respins")
         for pod_obj in pods:
+            logger.assertion(
+                f"PVC metrics check after Ceph respin: pvc={pod_obj.pvc.name}"
+            )
             assert check_pvcdata_collected_on_prometheus(
                 pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
+        logger.info("All PVC metrics validated successfully")
 
-        # Validate osd is up and ceph health is ok
+        logger.test_step("Verify cluster and Ceph health")
         self.sanity_helpers.health_check(tries=40)
+        logger.info("Cluster and Ceph health checks passed")
 
     @pytest.mark.polarion_id("OCS-605")
     def test_monitoring_when_osd_down(self, pods, threading_lock):
@@ -423,7 +442,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             assert check_pvcdata_collected_on_prometheus(
                 pod_obj.pvc.name, threading_lock
             ), f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
-            log.info(
+            logger.info(
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is collected"
             )
 
@@ -444,7 +463,7 @@ class TestMonitoringBackedByOCS(E2ETest):
 
             # Wait some time after rebooting master
             waiting_time = 40
-            log.info(f"Waiting {waiting_time} seconds...")
+            logger.info(f"Waiting {waiting_time} seconds...")
             time.sleep(waiting_time)
 
             wait_for_nodes_status_and_prometheus_health_check(pods, threading_lock)
@@ -469,11 +488,11 @@ class TestMonitoringBackedByOCS(E2ETest):
         toolbox = pod.get_ceph_tools_pod()
         active_mgr_pod_output = toolbox.exec_cmd_on_pod("ceph mgr stat")
         active_mgr_pod_suffix = active_mgr_pod_output.get("active_name")
-        log.info(f"The active MGR pod is {active_mgr_pod_suffix}")
+        logger.info(f"The active MGR pod is {active_mgr_pod_suffix}")
         for obj in mgr_pod_obj:
             if active_mgr_pod_suffix in obj.name:
                 active_mgr_pod_obj = obj
-        log.info(f"The active MGR pod name is  {active_mgr_pod_obj.name}")
+        logger.info(f"The active MGR pod name is  {active_mgr_pod_obj.name}")
 
         # Get the node where the mgr pod is hosted
         mgr_node_obj = pod.get_pod_node(active_mgr_pod_obj)
@@ -542,7 +561,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             nodes.stop_nodes([prometheus_node_obj])
 
             waiting_time = 20
-            log.info(f"Waiting for {waiting_time} seconds")
+            logger.info(f"Waiting for {waiting_time} seconds")
             time.sleep(waiting_time)
 
             nodes.start_nodes(nodes=[prometheus_node_obj])
@@ -624,7 +643,7 @@ class TestMonitoringBackedByOCS(E2ETest):
                 out_yaml_format=False,
             )
             assert "/dev/rbd" in mount_point, f"pvc is not mounted on pod {pod.name}"
-        log.info("Verified all pvc are mounted on monitoring pods")
+        logger.info("Verified all pvc are mounted on monitoring pods")
 
         # Validate the prometheus health is ok
         assert prometheus_health_check(), "Prometheus cluster health is not OK"
@@ -650,19 +669,19 @@ class TestMonitoringBackedByOCS(E2ETest):
             pattern=mgr, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
-        log.info(f"Downscaling deployment {mgr} to 0")
+        logger.info(f"Downscaling deployment {mgr} to 0")
         oc_deployment.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
 
-        log.info(f"Wait for a mgr pod {pod_mgr_name[0]} to be deleted")
+        logger.info(f"Wait for a mgr pod {pod_mgr_name[0]} to be deleted")
         oc_pod = ocp.OCP(
             kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         )
         oc_pod.wait_for_delete(resource_name=pod_mgr_name[0])
 
-        log.info(f"Upscaling deployment {mgr} back to 1")
+        logger.info(f"Upscaling deployment {mgr} back to 1")
         oc_deployment.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
 
-        log.info("Waiting for mgr pod to be reach Running state")
+        logger.info("Waiting for mgr pod to be reach Running state")
         oc_pod.wait_for_resource(
             condition=constants.STATUS_RUNNING, selector=constants.MGR_APP_LABEL
         )

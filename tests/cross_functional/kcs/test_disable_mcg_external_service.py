@@ -21,49 +21,51 @@ class TestDisableMCGExternalService:
     @pytest.fixture()
     def patch_storagecluster_object(self, request):
 
-        # get noobaa object
+        logger.test_step("Get NooBaa and StorageCluster objects")
         noobaa_ocp_obj = OCP(
             kind="noobaa",
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="noobaa",
         )
 
-        # get storagecluster object
         storagecluster_obj = OCP(
             kind="storagecluster",
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=constants.DEFAULT_STORAGE_CLUSTER,
         )
 
-        # patch storagecluster object
+        logger.test_step("Patch StorageCluster to disable LoadBalancer service")
         storagecluster_obj.patch(
             resource_name=constants.DEFAULT_STORAGE_CLUSTER,
             params='{"spec":{ "multiCloudGateway": {"disableLoadBalancerService": true }}}',
             format_type="merge",
         )
 
-        # scale up noobaa endpoints
+        logger.test_step("Scale up NooBaa endpoints (min=2, max=4)")
         noobaa_ocp_obj.patch(
             resource_name="noobaa",
             params='{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 2,"maxCount": 4}}}}',
             format_type="merge",
         )
         wait_for_noobaa_db_ready()
+        logger.info("NooBaa DB is ready after endpoint scale-up")
 
         def finalizer():
-
+            logger.test_step("Restore StorageCluster LoadBalancer service")
             storagecluster_obj.patch(
                 resource_name=constants.DEFAULT_STORAGE_CLUSTER,
                 params='{"spec":{ "multiCloudGateway": {"disableLoadBalancerService": false }}}',
                 format_type="merge",
             )
 
+            logger.test_step("Restore NooBaa endpoints to defaults (min=1, max=2)")
             noobaa_ocp_obj.patch(
                 resource_name="noobaa",
                 params='{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 1,"maxCount": 2}}}}',
                 format_type="merge",
             )
             wait_for_noobaa_db_ready()
+            logger.info("NooBaa DB is ready after restoring defaults")
 
         request.addfinalizer(finalizer)
         return noobaa_ocp_obj
@@ -76,13 +78,18 @@ class TestDisableMCGExternalService:
         Test KCS https://access.redhat.com/articles/6970745
         Make sure disableLoadBalancerService is not reconciled and verify it works as expected
         """
-        # verify disableLoadBalancerService is reconciled
+        logger.test_step("Verify disableLoadBalancerService is reconciled")
+        disable_lb = str(
+            patch_storagecluster_object.get()["spec"]["disableLoadBalancerService"]
+        )
+        logger.assertion(
+            f"disableLoadBalancerService: expected='True', actual='{disable_lb}'"
+        )
         assert (
-            str(patch_storagecluster_object.get()["spec"]["disableLoadBalancerService"])
-            == "True"
+            disable_lb == "True"
         ), "disableLoadBalancerService is reconciled back to false"
 
-        # verify that services are now Cluster IP
+        logger.test_step("Verify services are switched to ClusterIP")
         service_obj = OCP(
             kind="service", namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -98,7 +105,10 @@ class TestDisableMCGExternalService:
             return True
 
         sample = TimeoutSampler(timeout=60, sleep=10, func=check_svc_type)
-        assert sample.wait_for_func_status(
-            result=True
-        ), f"Services {services} isn't switched to ClusterIP service"
+        svc_switched = sample.wait_for_func_status(result=True)
+        logger.assertion(
+            f"Services type check: services={services}, "
+            f"expected_type='ClusterIP', all_switched={svc_switched}"
+        )
+        assert svc_switched, f"Services {services} isn't switched to ClusterIP service"
         logger.info(f"Services {services} switched to ClusterIP")

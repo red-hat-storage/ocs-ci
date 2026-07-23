@@ -23,7 +23,11 @@ class TestRegistryImage(E2ETest):
         """
         Run a pod with image backed by local registry
         """
+        logger.test_step(f"Create PVC with size {self.pvc_size}Gi")
         pvc_obj = pvc_factory(size=self.pvc_size)
+        logger.info(f"Created PVC: {pvc_obj.name} in namespace {pvc_obj.namespace}")
+
+        logger.test_step("Create custom fio image from Docker in local registry")
         image_obj = helpers.create_build_from_docker_image(
             namespace=pvc_obj.namespace,
             source_image_label="fio",
@@ -37,12 +41,21 @@ class TestRegistryImage(E2ETest):
             .get("items")[0]
             .get("dockerImageReference")
         )
+        logger.info(f"Built image with ID: {image_id}")
+
+        logger.test_step("Create pod using local registry image")
         pod_dict = templating.load_yaml(constants.CSI_CEPHFS_POD_YAML)
         pod_dict["spec"]["containers"][0]["image"] = image_obj.resource_name
         pod_dict["spec"]["volumes"][0]["persistentVolumeClaim"][
             "claimName"
         ] = pvc_obj.name
         pod_obj = pod_factory(pvc=pvc_obj, custom_data=pod_dict)
+        logger.info(f"Created pod: {pod_obj.name}")
+
+        logger.test_step("Verify pod is using the correct registry image")
         pod_image = pod_obj.get().get("status").get("containerStatuses")[0].get("image")
-        assert image_id == pod_image, f"pod uses different image {pod_image}"
-        logger.info(f"pod uses {image_id}")
+        logger.assertion(
+            f"Image verification: expected='{image_id}', actual='{pod_image}', "
+            f"match={image_id == pod_image}"
+        )
+        assert image_id == pod_image, f"Pod uses different image: {pod_image}"

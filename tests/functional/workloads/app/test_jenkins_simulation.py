@@ -49,6 +49,8 @@ class TestJenkinsSimulation(ManageTest):
         Added test coverage for BZ #2096395
         """
         if interface_iterate == constants.CEPHFILESYSTEM:
+            logger.test_step("Collect CephFS CSI plugin pod logs for validation")
+
             csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
                 namespace=config.ENV_DATA["cluster_namespace"],
                 selector=["openshift-storage.cephfs.csi.ceph.com-nodeplugin"],
@@ -60,17 +62,18 @@ class TestJenkinsSimulation(ManageTest):
             inode_info = '"unit":2'
             kubelet_volume_stats = "kubelet_volume_stats_inodes"
 
-            # Get the node running this pod
             node_name = res_pod.get_pod_node(pod_obj=pod).name
+            logger.info(f"Pod is running on node: {node_name}")
 
-            # Get the csi_cephfsplugin pod running on this node
             cephfsplugin_pod = node.get_node_pods(
                 node_name=node_name, pods_to_search=csi_cephfsplugin_pod_objs
             )[0]
+            logger.info(f"Found CephFS plugin pod: {cephfsplugin_pod.name}")
 
             pod_log = res_pod.get_pod_logs(
                 pod_name=cephfsplugin_pod.name, container="csi-cephfsplugin"
             )
+
             for f_call in func_calls:
                 if f_call in pod_log:
                     relevant_pod_logs = pod_log
@@ -79,25 +82,44 @@ class TestJenkinsSimulation(ManageTest):
                     )
                     break
 
+            logger.test_step("Validate CSI function calls are present in logs")
+            logger.assertion(
+                f"CSI function calls check: expected={func_calls}, "
+                f"found={relevant_pod_logs is not None}, pod={cephfsplugin_pod.name}"
+            )
             assert (
                 relevant_pod_logs
             ), f"None of {func_calls} were not found on {cephfsplugin_pod.name} pod logs"
-            assert not (
-                error_msg in relevant_pod_logs
-            ), f"Logs should not contain the error message '{error_msg}'"
-            logger.info(f"Logs did not contain the error message '{error_msg}'")
+            logger.info("Validated CSI function calls present in logs")
 
-            # Test coverage for BZ 2132270
-            assert not (
-                inode_info in relevant_pod_logs
-            ), f"Logs should not contain the message '{inode_info}'"
-            logger.info(f"Logs did not contain the error message '{inode_info}'")
-
-            assert not (
-                kubelet_volume_stats in relevant_pod_logs
-            ), f"Logs should not contain the message '{kubelet_volume_stats}'"
-            logger.info(
-                f"Logs did not contain the error message '{kubelet_volume_stats}'"
+            logger.test_step("Validate logs do not contain error messages")
+            logger.assertion(
+                f"Error message check: error_msg='{error_msg}', "
+                f"present={error_msg in relevant_pod_logs}"
             )
+            assert (
+                error_msg not in relevant_pod_logs
+            ), f"Logs should not contain the error message '{error_msg}'"
+            logger.info(f"Validated error message '{error_msg}' not present in logs")
 
+            logger.assertion(
+                f"Inode info check (BZ 2132270): message='{inode_info}', "
+                f"present={inode_info in relevant_pod_logs}"
+            )
+            assert (
+                inode_info not in relevant_pod_logs
+            ), f"Logs should not contain the message '{inode_info}'"
+            logger.info("Validated inode info message not present (BZ 2132270)")
+
+            logger.assertion(
+                f"Kubelet volume stats check: message='{kubelet_volume_stats}', "
+                f"present={kubelet_volume_stats in relevant_pod_logs}"
+            )
+            assert (
+                kubelet_volume_stats not in relevant_pod_logs
+            ), f"Logs should not contain the message '{kubelet_volume_stats}'"
+            logger.info("Validated kubelet volume stats message not present")
+
+        logger.test_step("Execute git clone operation on pod")
         pod.run_git_clone()
+        logger.info("Git clone operation completed successfully")
