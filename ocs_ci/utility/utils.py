@@ -2931,6 +2931,9 @@ def email_reports(session):
         log.info(f"Results have been emailed to {recipients}")
     except Exception:
         log.exception("Sending email with results failed!")
+        log.error(f"smtp_server: {config.REPORTING['email']['smtp_server']}")
+        log.error(f"sender: {sender}")
+        log.error(f"recipients: {recipients}")
 
 
 def save_reports():
