@@ -21,7 +21,13 @@ spec:
       - name: rook-ceph-tools
         image: rook/ceph:v1.4.9
         command: ["/tini"]
-        args: ["-g", "--", "/usr/local/bin/toolbox.sh"]
+        args:
+          - -g
+          - --
+          - |
+            mkdir -p /var/lib/rook-ceph-mon
+            echo "${ROOK_CEPH_SECRET}" > /var/lib/rook-ceph-mon/secret.keyring
+            /usr/local/bin/toolbox.sh
         imagePullPolicy: IfNotPresent
         env:
           - name: ROOK_CEPH_USERNAME
