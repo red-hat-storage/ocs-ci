@@ -66,6 +66,7 @@ class TestNSFSSystem(MCGTest):
         s3_ops_obj_data = "object data-" + str(uuid.uuid4().hex)
         nsfs_obj_pattern = "nsfs-obj"
 
+        logger.test_step("Create NSFS buckets with different configurations")
         nsfs_objs = [
             NSFS(
                 method="OC",
@@ -80,11 +81,14 @@ class TestNSFSSystem(MCGTest):
         for nsfs_obj in nsfs_objs:
             nsfs_bucket_factory(nsfs_obj)
             logger.info(f"Successfully created NSFS bucket: {nsfs_obj.bucket_name}")
+        logger.info("All NSFS buckets created successfully")
 
-        # Waiting for the changes to propagate
+        logger.info("Waiting 60 seconds for changes to propagate")
         sleep(60)
 
-        # Put, Get, Copy, Head, list and Delete S3 operations
+        logger.test_step(
+            "Perform S3 operations on NSFS buckets (Put, Get, Copy, Head, List, Delete)"
+        )
         for nsfs_obj in nsfs_objs:
             logger.info(f"Put and Get object operation on {nsfs_obj.bucket_name}")
             assert s3_put_object(
@@ -142,7 +146,11 @@ class TestNSFSSystem(MCGTest):
                 assert (
                     key == del_res["Deleted"][i]["Key"]
                 ), "Object key not found/not-deleted"
+        logger.info(
+            "S3 operations (Put, Get, Copy, Head, List, Delete) verified successfully on all buckets"
+        )
 
+        logger.test_step("Perform random object round trip verification")
         for nsfs_obj in nsfs_objs:
             random_object_round_trip_verification(
                 io_pod=awscli_pod_session,
@@ -155,6 +163,9 @@ class TestNSFSSystem(MCGTest):
                 result_pod=nsfs_obj.interface_pod,
                 result_pod_path=nsfs_obj.mounted_bucket_path,
             )
+        logger.info("Random object round trip verification completed successfully")
+
+        logger.test_step("Respin NooBaa core pod and MDS pod")
         pods_to_respin = [
             pod.Pod(
                 **pod.get_pods_having_label(
@@ -167,7 +178,10 @@ class TestNSFSSystem(MCGTest):
         for pod_del in pods_to_respin:
             logger.info(f"Deleting pod {pod_del.name}")
             pod_del.delete()
+        logger.info("Pods deleted, waiting 30 seconds for respawn")
         sleep(30)
+
+        logger.test_step("Validate pods are running after respin")
         pods_to_validate = [
             pod.Pod(
                 **pod.get_pods_having_label(
@@ -181,10 +195,12 @@ class TestNSFSSystem(MCGTest):
             wait_for_resource_state(
                 resource=pod_val, state=constants.STATUS_RUNNING, timeout=300
             )
+        logger.info("All pods are running after respin")
+
+        logger.test_step("Validate data integrity after pod respin")
         for nsfs_obj in nsfs_objs:
             logger.info(
-                f"Downloading the objects and validating the integrity on {nsfs_obj.bucket_name} "
-                f"post pod re-spins"
+                f"Downloading objects and validating integrity on {nsfs_obj.bucket_name} after pod respin"
             )
             sync_object_directory(
                 podobj=awscli_pod_session,
@@ -200,8 +216,14 @@ class TestNSFSSystem(MCGTest):
                 amount=5,
                 pattern=nsfs_obj_pattern,
             )
-        logger.info("Partially bringing the ceph cluster down")
+        logger.info("Data integrity validated successfully after pod respin")
+
+        logger.test_step("Scale down Ceph cluster and validate NSFS data access")
+        logger.info("Scaling down Ceph cluster (mon, osd, mds) to 0 replicas")
         scale_ceph(replica=0)
+        logger.info("Ceph cluster scaled down")
+
+        logger.info("Validating NSFS data access with Ceph cluster down")
         for nsfs_obj in nsfs_objs:
             sync_object_directory(
                 podobj=awscli_pod_session,
@@ -216,19 +238,25 @@ class TestNSFSSystem(MCGTest):
                 amount=5,
                 pattern=nsfs_obj_pattern,
             )
-        logger.info(
-            "Scaling the ceph cluster back to normal and validating all storage pods"
-        )
+        logger.info("Data access validated successfully with Ceph cluster down")
+
+        logger.test_step("Scale up Ceph cluster and validate storage pods")
+        logger.info("Scaling Ceph cluster back to normal (1 replica)")
         scale_ceph(replica=1)
+        logger.info("Waiting 60 seconds for cluster stabilization")
         sleep(60)
         wait_for_storage_pods()
+        logger.info("All storage pods are running after Ceph scale up")
 
-        logger.info("Performing noobaa db backup/recovery")
+        logger.test_step("Perform NooBaa DB backup and recovery")
+        logger.info("Starting NooBaa DB backup and recovery")
         noobaa_db_backup_and_recovery_locally()
+        logger.info("NooBaa DB backup and recovery completed successfully")
+
+        logger.test_step("Validate data integrity after NooBaa DB recovery")
         for nsfs_obj in nsfs_objs:
             logger.info(
-                f"Downloading the objects and validating the integrity on {nsfs_obj.bucket_name} "
-                f"post noobaa-db recovery"
+                f"Downloading objects and validating integrity on {nsfs_obj.bucket_name} after NooBaa DB recovery"
             )
             sync_object_directory(
                 podobj=awscli_pod_session,
@@ -243,6 +271,7 @@ class TestNSFSSystem(MCGTest):
                 amount=5,
                 pattern=nsfs_obj_pattern,
             )
+        logger.info("Data integrity validated successfully after NooBaa DB recovery")
 
 
 def scale_ceph(replica=1):

@@ -151,26 +151,30 @@ class TestBucketNotificationSystemTest:
             "s3:ObjectTagging:*",
         ]
 
+        logger.test_step("Setup MCG background features for entry criteria")
         feature_setup_map = setup_mcg_bg_features(
             num_of_buckets=5,
             object_amount=5,
             is_disruptive=True,
             skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
+        logger.info("MCG background features setup completed")
 
-        # 1. Enable bucket notification on Noobaa CR
+        logger.test_step("Enable bucket notifications on NooBaa CR")
         notify_manager.enable_bucket_notifs_on_cr(use_provided_pvc=True)
+        logger.info("Bucket notifications enabled on NooBaa CR")
 
-        # 2. Create kafka topic and add it to the Noobaa CR
+        logger.test_step("Create Kafka topic and add to NooBaa CR")
         topic = notify_manager.create_kafka_topic()
         secret, conn_config_path = notify_manager.create_kafka_conn_secret(topic)
         notify_manager.add_notif_conn_to_noobaa_cr(secret)
+        logger.info(f"Kafka topic '{topic}' created and added to NooBaa CR")
 
-        # 3. Create the five buckets that is needed for the testing
+        logger.test_step(f"Create {NUM_OF_BUCKETS} buckets with notification enabled")
         buckets_created = []
         for _ in range(NUM_OF_BUCKETS):
             bucket = bucket_factory()[0]
-            logger.info(f"Enabling bucket notification for the bucket {bucket.name}")
+            logger.info(f"Enabling bucket notification for bucket {bucket.name}")
             notify_manager.put_bucket_notification(
                 awscli_pod,
                 mcg_obj,
@@ -179,9 +183,9 @@ class TestBucketNotificationSystemTest:
                 conn_config_path=conn_config_path,
             )
             buckets_created.append(bucket.name)
+        logger.info(f"Created {NUM_OF_BUCKETS} buckets with notifications enabled")
 
-        # 4. Write some object to all the buckets and verify the events
-        # has occurred for all the buckets
+        logger.test_step("Upload objects and verify ObjectCreated events")
         obj_written = []
         for bucket in buckets_created:
             obj_written = write_random_test_objects_to_bucket(
@@ -197,11 +201,13 @@ class TestBucketNotificationSystemTest:
             bucket_names=buckets_created[:],
             event_name="ObjectCreated:Put",
         )
+        logger.info("ObjectCreated:Put events verified for all buckets")
 
         with ThreadPoolExecutor(max_workers=5) as executor:
 
-            # 5. Tag object from the bucket and stop/start noobaa pod nodes
-            # Verify ObjectTagging:Put events has occurred for all the buckets
+            logger.test_step(
+                "Tag objects and restart NooBaa pod node, verify ObjectTagging events"
+            )
             noobaa_pods = [
                 get_noobaa_core_pod(),
                 get_noobaa_db_pod(),
@@ -244,11 +250,15 @@ class TestBucketNotificationSystemTest:
                 sleep=30,
             )
 
-            logger.info("Starting Noobaa pod nodes")
+            logger.info("Starting NooBaa pod nodes")
             nodes.start_nodes(nodes=node_to_shutdown)
+            logger.info(
+                "ObjectTagging:Put events verified after NooBaa pod node restart"
+            )
 
-            # 6. Remove object from the bucket and restart kafka pods
-            # Verify ObjectRemoved event has occurred
+            logger.test_step(
+                "Delete objects and restart Kafka pods, verify ObjectRemoved events"
+            )
             kafka_pods = [
                 Pod(**pod_info)
                 for pod_info in get_pods_having_label(
@@ -274,9 +284,7 @@ class TestBucketNotificationSystemTest:
             for future in as_completed(future_objs):
                 future.result()
 
-            logger.info(
-                "Verifying if ObjectRemoved:Delete events has occurred for all buckets"
-            )
+            logger.info("Verifying ObjectRemoved:Delete events for all buckets")
             self.verify_events(
                 notify_manager,
                 topic,
@@ -285,11 +293,12 @@ class TestBucketNotificationSystemTest:
                 timeout=600,
                 sleep=30,
             )
+            logger.info("ObjectRemoved:Delete events verified after Kafka pod restart")
 
-        # 7. Enable object expiration for 1 day and expire the objects manually
-        # Perform noobaa db backup and recovery. Make sure notifications are updated
-        # for LifecycleExpiration:Delete event
-
+        logger.test_step(
+            "Set object expiration, perform NooBaa DB backup/recovery, "
+            "verify LifecycleExpiration events"
+        )
         for bucket in buckets_created:
             logger.info(f"Setting object expiration on bucket {bucket}")
             lifecycle_policy = LifecyclePolicy(
@@ -301,15 +310,13 @@ class TestBucketNotificationSystemTest:
             expire_objects_in_bucket(bucket)
 
         reduce_expiration_interval(interval=5)
-        logger.info("Reduced the object expiration interval to 5 minutes")
+        logger.info("Object expiration interval reduced to 5 minutes")
 
-        # Backup noobaa db and recovery
+        logger.info("Starting NooBaa DB backup and recovery")
         noobaa_db_backup_and_recovery_locally()
-        logger.info("Noobaa db backup and recovery is completed")
+        logger.info("NooBaa DB backup and recovery completed successfully")
 
-        logger.info(
-            "Verifying if LifecycleExpiration:Delete events has occurred for all the buckets"
-        )
+        logger.info("Verifying LifecycleExpiration:Delete events for all buckets")
         self.verify_events(
             notify_manager,
             topic,
@@ -318,7 +325,9 @@ class TestBucketNotificationSystemTest:
             timeout=600,
             sleep=30,
         )
+        logger.info("LifecycleExpiration:Delete events verified successfully")
 
+        logger.test_step("Validate MCG background features")
         validate_mcg_bg_features(
             feature_setup_map,
             run_in_bg=False,

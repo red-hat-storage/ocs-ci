@@ -28,7 +28,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -95,9 +95,9 @@ class TestRestoreCephMonQuorum(E2ETest):
             if operator_obj.get("spec").get("replicas") != 1:
                 modify_deployment_replica_count(
                     deployment_name=constants.ROOK_CEPH_OPERATOR, replica_count=1
-                ), "Failed to scale up rook-ceph-operator to 1"
+                )
 
-            log.info("Validate all mons are up and running")
+            logger.info("Validate all mons are up and running")
             try:
                 pod_obj.wait_for_resource(
                     condition=constants.STATUS_RUNNING,
@@ -107,7 +107,7 @@ class TestRestoreCephMonQuorum(E2ETest):
                     sleep=5,
                 )
             except (TimeoutExpiredError, ResourceWrongStatusException) as ex:
-                log.warning(ex)
+                logger.warning(ex)
                 op_obj.delete(resource_name=constants.ROOK_CEPH_OPERATOR)
                 for pod in get_mon_pods():
                     pod.delete()
@@ -118,7 +118,7 @@ class TestRestoreCephMonQuorum(E2ETest):
                     timeout=360,
                     sleep=5,
                 )
-            log.info("All mons are up and running")
+            logger.info("All mons are up and running")
 
         request.addfinalizer(finalizer)
 
@@ -137,34 +137,41 @@ class TestRestoreCephMonQuorum(E2ETest):
 
         """
 
-        # Take mons out of the quorum and confirm it
+        logger.test_step("Induce mon quorum loss")
         (
             self.mon_pod_obj_list,
             mon_pod_running,
             ceph_mon_daemon_id,
         ) = induce_mon_quorum_loss()
+        logger.info("Mons taken out of quorum")
 
-        # Recover mon quorum
+        logger.test_step("Recover mon quorum")
         recover_mon_quorum(self.mon_pod_obj_list, mon_pod_running, ceph_mon_daemon_id)
+        logger.info("Mon quorum recovered")
 
-        # Validate storage pods are running
+        logger.test_step("Validate all storage pods are running")
         wait_for_storage_pods()
+        logger.info("All storage pods are running")
 
-        # Remove crash list from ceph health
-        log.info("Silence the ceph warnings by “archiving” the crash")
+        logger.test_step("Remove crash warnings from ceph health")
+        logger.info("Silencing ceph warnings by archiving the crash")
         tool_pod = get_ceph_tools_pod()
         tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
-        log.info("Removed ceph crash warnings. Check for ceph and cluster health")
+        logger.info("Ceph crash warnings removed")
 
-        # Validate cluster health
+        logger.test_step("Validate cluster health after mon recovery")
         self.sanity_helpers.health_check(tries=40)
+        logger.info("Cluster health check passed")
 
         # ToDo: Common system test case validation: Check for data integrity and corruption after mon recovery
 
-        # Creating Resources
-        log.info("Creating Resources using sanity helpers")
+        logger.test_step("Create test resources")
+        logger.info("Creating resources using sanity helpers")
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
-        # Deleting Resources
+        logger.info("Test resources created successfully")
+
+        logger.test_step("Delete test resources")
         self.sanity_helpers.delete_resources()
+        logger.info("Test resources deleted successfully")
