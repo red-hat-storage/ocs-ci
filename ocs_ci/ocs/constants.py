@@ -4095,6 +4095,7 @@ NFS_CSI_PLUGIN_LABEL = "app=csi-nfsplugin"
 NFS_CSI_CTRLPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-ctrlplugin"
 NFS_CSI_NODEPLUGIN_LABEL_419 = "app=openshift-storage.nfs.csi.ceph.com-nodeplugin"
 NFS_DEFAULT_SERVICE_NAME = "ocs-storagecluster-cephnfs-service"
+NFS_SNAPSHOT_CLASS_NAME = "ocs-storagecluster-nfsplugin-snapclass"
 DAEMONSET_CSI_CEPHFS = "openshift-storage.cephfs.csi.ceph.com-nodeplugin"
 DAEMONSET_CSI_RBD = "openshift-storage.rbd.csi.ceph.com-nodeplugin"
 DAEMONSET_CSI_RBD_CSI_ADDONS = (
