@@ -7,6 +7,7 @@ import json
 import logging
 import yaml
 import pytest
+import time
 from ocs_ci.ocs import constants, resources, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
@@ -140,8 +141,43 @@ def nfs_disable(
     # Wait untill nfs-ganesha pod deleted
     pod_obj.wait_for_delete(resource_name=nfs_ganesha_pod_name)
 
-    # Delete the nfs StorageClass
-    sc_obj.delete(resource_name=constants.NFS_STORAGECLASS_NAME)
+    # Wait for the StorageCluster to reach Ready phase before touching the SC.
+    # The nfs-controller reconciler hits a retriggered reconcile loop during NFS
+    # disable (confirmed: "failed to remove ganesha from grace db" causes 3x
+    # retriggers). Each loop recreates the SC as part of the NFS cleanup sequence,
+    # so manually deleting the SC before reconciliation finishes races with the
+    # operator and the SC reappears on every poll.
+    # Waiting for Ready ensures all retrigger loops have completed and the operator
+    # has either removed the SC itself or will no longer recreate it.
+    log.info(
+        "Waiting for StorageCluster to reach Ready phase after disabling NFS "
+        "(ensures reconciler retrigger loops are complete)..."
+    )
+    storage_cluster = StorageCluster(
+        resource_name=config.ENV_DATA["storage_cluster_name"],
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    storage_cluster.wait_for_phase(phase="Ready", timeout=600)
+    log.info("StorageCluster is Ready — safe to delete NFS StorageClass")
+
+    # Only delete the SC if the operator has not already removed it during
+    # reconciliation — after a clean reconcile it may already be gone.
+    if sc_obj.is_exist(resource_name=constants.NFS_STORAGECLASS_NAME):
+        log.info(f"Deleting NFS StorageClass {constants.NFS_STORAGECLASS_NAME}")
+        sc_obj.delete(resource_name=constants.NFS_STORAGECLASS_NAME)
+        log.info(
+            f"Waiting for NFS StorageClass {constants.NFS_STORAGECLASS_NAME} to be deleted..."
+        )
+        sc_obj.wait_for_delete(
+            resource_name=constants.NFS_STORAGECLASS_NAME, timeout=120
+        )
+        log.info(
+            f"NFS StorageClass {constants.NFS_STORAGECLASS_NAME} deleted successfully"
+        )
+    else:
+        log.info(
+            f"NFS StorageClass {constants.NFS_STORAGECLASS_NAME} already removed by operator"
+        )
 
 
 def create_nfs_load_balancer_service(
@@ -217,7 +253,12 @@ def create_nfs_load_balancer_service(
             configure_nfs_lb_security_group,
         )
 
+        log.info("Configuring IBM Cloud security group for NFS LoadBalancer...")
         configure_nfs_lb_security_group()
+        log.info(
+            "Security group configured. Waiting 60 seconds for rules to propagate..."
+        )
+        time.sleep(60)
 
     return hostname_add
 
@@ -850,3 +891,94 @@ def fetch_nfs_server_details_on_client_cluster(default_server=False):
                 server,
             )
             return server
+
+
+def get_file_checksum_from_nfs(con, file_path):
+    """
+    Get MD5 checksum for a file on NFS mount (out-of-cluster).
+
+    Args:
+        con: Connection object to NFS client VM
+        file_path (str): Full path to the file on NFS mount
+
+    Returns:
+        str: MD5 checksum of the file
+
+    Raises:
+        CommandFailed: If the md5sum command fails
+    """
+    checksum_cmd = f"md5sum {file_path}"
+    retcode, stdout, stderr = con.exec_cmd(checksum_cmd)
+    if retcode != 0:
+        raise CommandFailed(
+            f"Failed to calculate checksum for {file_path}: {stderr or stdout}"
+        )
+    return stdout.split()[0]
+
+
+def get_file_line_count_from_nfs(con, file_path):
+    """
+    Get line count for a file on NFS mount (out-of-cluster).
+
+    Args:
+        con: Connection object to NFS client VM
+        file_path (str): Full path to the file on NFS mount
+
+    Returns:
+        int: Line count of the file
+
+    Raises:
+        CommandFailed: If the wc -l command fails
+    """
+    line_cmd = f"wc -l {file_path}"
+    retcode, stdout, stderr = con.exec_cmd(line_cmd)
+    if retcode != 0:
+        raise CommandFailed(
+            f"Failed to get line count for {file_path}: {stderr or stdout}"
+        )
+    return int(stdout.split()[0])
+
+
+def frame_deployment_config(deployment_name, pvc_name, node_name=None):
+    """
+    Frame a deployment configuration for an app pod that mounts a given PVC.
+
+    The returned dict can be passed directly to ``helpers.create_resource``.
+    Pass ``node_name`` to pin the pod to a specific worker node — use this to
+    guarantee the pod never lands on a node that will be rebooted during the
+    test (e.g. the node hosting the NFS server pod).
+
+    Args:
+        deployment_name (str): Name for the Deployment and its pod label.
+        pvc_name (str): Name of the PVC to mount at ``/mnt``.
+        node_name (str): Optional worker node hostname. When provided,
+            ``spec.template.spec.nodeName`` is set so Kubernetes schedules the
+            pod directly onto that node.
+
+    Returns:
+        dict: Deployment manifest ready for creation.
+    """
+    from ocs_ci.utility import templating
+
+    # Load base deployment template
+    deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
+
+    # Set deployment name
+    deployment_data["metadata"]["name"] = deployment_name
+
+    # Set label values (used in multiple places for pod selection)
+    deployment_data["metadata"]["labels"]["app"] = deployment_name
+    deployment_data["spec"]["selector"]["matchLabels"]["name"] = deployment_name
+    deployment_data["spec"]["template"]["metadata"]["labels"]["name"] = deployment_name
+
+    # Set PVC claimName
+    deployment_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+        "claimName"
+    ] = pvc_name
+
+    # Pin the pod to a specific node so it never lands on the node being rebooted
+    if node_name:
+        deployment_data["spec"]["template"]["spec"]["nodeName"] = node_name
+        log.info(f"Deployment '{deployment_name}': nodeName set to '{node_name}'")
+
+    return deployment_data
