@@ -2250,6 +2250,9 @@ class TimeoutSampler(object):
         func_kwargs: Keyword arguments for the function
     """
 
+    # How often (seconds, at most) to log the INFO-level progress heartbeat
+    progress_log_interval = 60
+
     def __init__(self, timeout, sleep, func, *func_args, **func_kwargs):
         self.timeout = timeout
         self.sleep = sleep
@@ -2284,6 +2287,8 @@ class TimeoutSampler(object):
         # distinguishable from "func never succeeded"
         self._has_result = False
         self.last_exception = None
+        # Timestamp of the last INFO-level progress log (for rate limiting)
+        self.last_progress_log_time = None
         # The exception to raise
         self.timeout_exc_cls = TimeoutExpiredError
         # Arguments that will be passed to the exception
@@ -2364,6 +2369,27 @@ class TimeoutSampler(object):
         all_args_string = ", ".join(args + kwargs)
         return f"{self._get_func_name()}({all_args_string})"
 
+    def _log_progress(self):
+        """
+        Log an INFO-level progress message at most once per
+        `progress_log_interval` seconds, so that long-running samplers show
+        a heartbeat without logging every iteration.
+        """
+        now = time.time()
+        if self.last_progress_log_time is None:
+            self.last_progress_log_time = self.start_time
+        if (now - self.last_progress_log_time) < self.progress_log_interval:
+            return
+        log.info(
+            "Still waiting for results of %s: elapsed %ss of %ss timeout, "
+            "sleeping %ss between samples",
+            self._get_func_name(),
+            int(now - self.start_time),
+            self.timeout,
+            self.sleep,
+        )
+        self.last_progress_log_time = now
+
     def __iter__(self):
         if self.start_time is None:
             self.start_time = time.time()
@@ -2402,7 +2428,8 @@ class TimeoutSampler(object):
                 )
             if self.timeout <= (time.time() - self.start_time):
                 self._raise_timeout()
-            log.info("Going to sleep for %d seconds before next iteration", self.sleep)
+            self._log_progress()
+            log.debug("Going to sleep for %s seconds before next iteration", self.sleep)
             time.sleep(self.sleep)
 
     def wait_for_func_value(self, value):

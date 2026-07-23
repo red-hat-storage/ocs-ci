@@ -54,6 +54,8 @@ def test_ts_simple_logging(caplog, capsys):
     sleep_msg = f"Going to sleep for {sleep_time} seconds before next iteration"
     for rec in caplog.records:
         assert rec.getMessage() == sleep_msg
+        # iteration-level details belong to DEBUG (see docs/logging_guide.md)
+        assert rec.levelno == logging.DEBUG
     assert len(caplog.records) == timeout
 
 
@@ -352,3 +354,60 @@ def test_ts_wait_for_value_negative_never_succeeded(caplog):
     assert "last sampled value: <no successful sample>" in log_msg
     # the terminal ERROR log still surfaces the last failure reason
     assert "last attempt raised ValueError: always fails" in log_msg
+
+
+def test_ts_progress_heartbeat(caplog):
+    """
+    Long-running samplers log a rate-limited INFO-level progress heartbeat
+    (at most once per progress_log_interval seconds), regardless of how many
+    sampling iterations happen within that window.
+    """
+    func = lambda: 1  # noqa: E731
+    # sleep (0.25s) is much shorter than the heartbeat interval (1s), so many
+    # iterations happen per interval -- this exercises the rate-limit ceiling
+    # (a per-iteration log would produce ~8 heartbeats, not <= 2).
+    ts = TimeoutSampler(2, 0.25, func)
+    ts.progress_log_interval = 1
+    caplog.set_level(logging.INFO)
+    iterations = 0
+    with pytest.raises(TimeoutExpiredError):
+        for _ in ts:
+            iterations += 1
+    heartbeats = [
+        r for r in caplog.records if "Still waiting for results of" in r.getMessage()
+    ]
+    # far more iterations than heartbeats proves the heartbeat is rate-limited
+    # rather than logged on every iteration
+    assert iterations >= 4
+    assert 1 <= len(heartbeats) <= 2
+    for rec in heartbeats:
+        assert rec.levelno == logging.INFO
+        assert "Still waiting for results of <lambda>" in rec.getMessage()
+        assert "of 2s timeout" in rec.getMessage()
+
+
+def test_ts_no_progress_heartbeat_for_short_wait(caplog):
+    """
+    Samplers which time out sooner than progress_log_interval do not log any
+    progress messages (so short waits stay quiet on the INFO level).
+    """
+    caplog.set_level(logging.DEBUG)
+    with pytest.raises(TimeoutExpiredError):
+        for _ in TimeoutSampler(2, 1, lambda: 1):
+            pass
+    assert not [r for r in caplog.records if "Still waiting" in r.getMessage()]
+
+
+def test_ts_float_sleep_logged_correctly(caplog):
+    """
+    Float sleep intervals are rendered correctly in the sleep log message
+    (%d used to truncate 0.5 to 0).
+    """
+    caplog.set_level(logging.DEBUG)
+    with pytest.raises(TimeoutExpiredError):
+        for _ in TimeoutSampler(1, 0.5, lambda: 1):
+            pass
+    sleep_records = [r for r in caplog.records if "Going to sleep" in r.getMessage()]
+    assert sleep_records
+    for rec in sleep_records:
+        assert "0.5 seconds" in rec.getMessage()
