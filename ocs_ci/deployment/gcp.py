@@ -179,28 +179,49 @@ class GCPIPI(GCPBase):
 
         """
         if config.DEPLOYMENT.get("sts_enabled"):
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT_KEY_FILEPATH
-            sa_dict = load_service_account_key_dict()
-            gcp_project = config.ENV_DATA.get("gcp_project_id") or sa_dict["project_id"]
-            cluster_path = config.ENV_DATA["cluster_path"]
-            credentials_requests_dir = os.path.join(cluster_path, "creds_reqs")
-            if not os.path.isdir(credentials_requests_dir):
-                logger.info("Credentials requests directory not found, re-extracting")
+            try:
+                # 1. Set GCP authentication
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = (
+                    SERVICE_ACCOUNT_KEY_FILEPATH
+                )
+                sa_dict = load_service_account_key_dict()
+                gcp_project = (
+                    config.ENV_DATA.get("gcp_project_id") or sa_dict["project_id"]
+                )
+
+                # 2. Ensure ccoctl binary is available (may be missing if
+                # teardown runs on a different agent than the one that deployed)
+                cluster_path = config.ENV_DATA["cluster_path"]
                 pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-                install_config = os.path.join(cluster_path, "install-config.yaml")
                 release_image = get_ocp_release_image_from_installer()
                 cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
                 cco.extract_ccoctl_binary(cco_image, pull_secret_path)
-                cco.extract_credentials_requests(
-                    release_image,
-                    install_config,
-                    pull_secret_path,
+
+                # 3. Re-extract CredentialsRequest manifests if missing
+                credentials_requests_dir = os.path.join(cluster_path, "creds_reqs")
+                if not os.path.isdir(credentials_requests_dir):
+                    logger.info(
+                        "Credentials requests directory not found, re-extracting"
+                    )
+                    install_config = os.path.join(cluster_path, "install-config.yaml")
+                    cco.extract_credentials_requests(
+                        release_image,
+                        install_config,
+                        pull_secret_path,
+                        credentials_requests_dir,
+                    )
+
+                # 4. Run ccoctl gcp delete to remove WIF resources
+                infra_id = get_infra_id_from_openshift_install_state(cluster_path)
+                cco.delete_gcp_sts_resources(
+                    infra_id,
+                    gcp_project,
                     credentials_requests_dir,
                 )
-            infra_id = get_infra_id_from_openshift_install_state(cluster_path)
-            cco.delete_gcp_sts_resources(
-                infra_id,
-                gcp_project,
-                credentials_requests_dir,
-            )
-        super(GCPIPI, self).destroy_cluster(log_level)
+            except Exception:
+                logger.warning(
+                    "Failed to delete GCP STS resources. "
+                    "Proceeding with cluster destroy.",
+                    exc_info=True,
+                )
+        super().destroy_cluster(log_level)
