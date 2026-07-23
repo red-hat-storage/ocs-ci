@@ -23,73 +23,88 @@ from ocs_ci.deployment.helpers.tnf_helpers import (
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedDeploymentConfiguration
+from ocs_ci.ocs.resources.pod import get_pods_having_label
 
 logger = logging.getLogger(__name__)
 
 
-class TNFOCPDeployment(BMBaseOCPDeployment):
+class TNFBASE(Deployment):
     """
-    Two-Node Failover OCP Deployment class
-
-    This class handles OCP deployment for two-node clusters.
+    Base class for Two-Node Failover deployments
     """
 
     def __init__(self):
         super().__init__()
         self.tnf_config = config.ENV_DATA.get("tnf", {})
-        logger.info("Initializing TNF OCP Deployment")
-
-    def deploy_prereq(self):
-        """
-        Pre-requisites for TNF deployment
-        """
-        super().deploy_prereq()
-        logger.info("Verifying TNF deployment prerequisites...")
-
-        # Verify two-node cluster topology
-        if not verify_tnf_cluster_topology():
-            raise UnexpectedDeploymentConfiguration(
-                "Cluster does not have DualReplica topology. "
-                "TNF deployment requires a two-node cluster."
-            )
-
-        # Get node information
-        self.node_info = get_tnf_node_info()
-        if len(self.node_info) != 2:
-            raise UnexpectedDeploymentConfiguration(
-                f"Expected 2 nodes for TNF cluster, found {len(self.node_info)}"
-            )
-
-        logger.info("TNF prerequisites verified successfully")
-
-    def deploy(self, log_level=""):
-        """
-        Deploy OCP for TNF cluster
-
-        Args:
-            log_level (str): log level for installer
-        """
-        logger.info("Deploying OCP on TNF cluster...")
-        super().deploy(log_level=log_level)
-        logger.info("OCP deployment completed")
+        logger.info("Initializing TNF Base Deployment")
 
 
-class TNFDeployment(Deployment):
+class TNF(TNFBASE):
     """
-    Two-Node Failover OpenShift Data Foundation Deployment class
+    Two-Node Failover deployment class
 
-    This class handles the complete deployment of ODF on two-node clusters
-    including DRBD configuration for the floating monitor.
+    Handles complete OCP + ODF deployment on two-node clusters
+    following Red Hat ODF 4.22 documentation.
     """
 
     def __init__(self):
+        logger.info("TNF Deployment")
         super().__init__()
-        self.tnf_config = config.ENV_DATA.get("tnf", {})
-        logger.info("Initializing TNF ODF Deployment")
+
+    class OCPDeployment(BMBaseOCPDeployment):
+        """
+        TNF-specific OCP deployment class
+
+        Handles OCP deployment for two-node clusters with DualReplica topology
+        """
+
+        def __init__(self):
+            super().__init__()
+            self.tnf_config = config.ENV_DATA.get("tnf", {})
+
+        def deploy_prereq(self):
+            """
+            Pre-requisites for TNF OCP deployment
+
+            Verifies two-node cluster requirements
+            """
+            super(TNF.OCPDeployment, self).deploy_prereq()
+            logger.info("Verifying TNF cluster prerequisites...")
+
+            # Get and verify node information
+            self.node_info = get_tnf_node_info()
+            if len(self.node_info) != 2:
+                raise UnexpectedDeploymentConfiguration(
+                    f"TNF requires exactly 2 nodes, found {len(self.node_info)}"
+                )
+
+            logger.info(
+                f"Node 0: {self.node_info[0]['name']} - {self.node_info[0]['ip']}"
+            )
+            logger.info(
+                f"Node 1: {self.node_info[1]['name']} - {self.node_info[1]['ip']}"
+            )
+
+        def deploy(self, log_level=""):
+            """
+            Deploy OCP for TNF cluster
+
+            Args:
+                log_level (str): log level for installer
+            """
+            logger.info("Deploying OCP on TNF cluster...")
+            super().deploy(log_level=log_level)
+
+            # Verify DualReplica topology after deployment
+            if not verify_tnf_cluster_topology():
+                raise UnexpectedDeploymentConfiguration(
+                    "Cluster does not have DualReplica topology"
+                )
+            logger.info("OCP TNF cluster deployed and verified successfully")
 
     def deploy_prereq(self):
         """
-        Pre-requisites for TNF ODF deployment
+        Pre-deployment checks for TNF ODF deployment
         """
         super().deploy_prereq()
         logger.info("Verifying TNF ODF deployment prerequisites...")
@@ -107,9 +122,6 @@ class TNFDeployment(Deployment):
                 f"TNF deployment requires exactly 2 nodes, found {len(self.node_info)}"
             )
 
-        logger.info(f"Node 0: {self.node_info[0]['name']} - {self.node_info[0]['ip']}")
-        logger.info(f"Node 1: {self.node_info[1]['name']} - {self.node_info[1]['ip']}")
-
         # Verify DRBD port connectivity
         for i, node in enumerate(self.node_info):
             peer_node = self.node_info[1 - i]
@@ -119,9 +131,9 @@ class TNFDeployment(Deployment):
 
         logger.info("TNF ODF prerequisites verified")
 
-    def prepare_storage(self):
+    def deploy_ocs_prereq(self):
         """
-        Prepare storage for TNF ODF deployment
+        Deploy prerequisites for ODF on TNF cluster
 
         This includes:
         1. Creating local storage class
@@ -135,35 +147,25 @@ class TNFDeployment(Deployment):
 
         # Get device mappings from config
         device_mappings = self.tnf_config.get("osd_device_mappings", [])
-        if not device_mappings:
-            logger.warning(
-                "No OSD device mappings found in config. "
-                "You must manually create persistent volumes."
-            )
-        else:
+        if device_mappings:
             # Create persistent volumes for OSD disks
             create_persistent_volumes(device_mappings)
+        else:
+            logger.warning(
+                "No OSD device mappings found in config. "
+                "PVs must be created manually before StorageCluster creation."
+            )
 
-        logger.info("Storage preparation completed")
-
-    def configure_drbd_for_floating_monitor(self):
-        """
-        Configure DRBD for the floating monitor
-
-        This sets up DRBD replication between the two nodes for the
-        floating monitor disk.
-        """
+        # Configure DRBD for floating monitor
         logger.info("Configuring DRBD for floating monitor...")
 
-        # Get monitor disk configuration
         monitor_disk_node_0 = self.tnf_config.get("monitor_disk_node_0")
         monitor_disk_node_1 = self.tnf_config.get("monitor_disk_node_1")
 
         if not monitor_disk_node_0 or not monitor_disk_node_1:
             raise UnexpectedDeploymentConfiguration(
                 "Monitor disk paths must be specified in config for both nodes. "
-                "Set 'tnf.monitor_disk_node_0' and 'tnf.monitor_disk_node_1' "
-                "in your deployment configuration."
+                "Set 'tnf.monitor_disk_node_0' and 'tnf.monitor_disk_node_1'"
             )
 
         # Get optional custom DRBD image
@@ -188,51 +190,28 @@ class TNFDeployment(Deployment):
         for node in self.node_info:
             verify_drbd_status(node["name"])
 
-        logger.info("DRBD configuration completed successfully")
+        logger.info("TNF storage prerequisites completed successfully")
 
-    def deploy_odf(self):
+    def deploy_ocs(self):
         """
-        Deploy OpenShift Data Foundation on TNF cluster
+        Deploy ODF on TNF cluster
 
-        This follows the standard ODF deployment process but with
-        TNF-specific configurations.
+        Follows the standard deployment workflow with TNF-specific prerequisites
         """
         logger.info("Deploying ODF on TNF cluster...")
 
-        # Prepare storage (LSO, PVs)
-        self.prepare_storage()
+        # Deploy TNF-specific prerequisites (storage, DRBD)
+        self.deploy_ocs_prereq()
 
-        # Configure DRBD for floating monitor
-        self.configure_drbd_for_floating_monitor()
+        # Deploy ODF using parent class method
+        # This installs operator and creates StorageCluster
+        super().deploy_ocs()
 
-        # Deploy ODF using standard deployment process
-        # The StorageCluster creation will be handled by the standard
-        # ODF deployment workflow
-        logger.info(
-            "Storage preparation complete. "
-            "Proceed with StorageCluster creation via UI or CLI."
-        )
-
-    def deploy(self, log_cli_level="DEBUG"):
-        """
-        Main deployment method for TNF ODF
-
-        Args:
-            log_cli_level (str): Log level for deployment
-        """
-        logger.info("Starting TNF ODF deployment...")
-
-        # Run prerequisites
-        self.deploy_prereq()
-
-        # Deploy ODF
-        self.deploy_odf()
-
-        logger.info("TNF ODF deployment completed successfully")
+        logger.info("ODF deployment on TNF cluster completed")
 
     def verify_deployment(self):
         """
-        Verify TNF ODF deployment is successful
+        Verify TNF ODF deployment
 
         Returns:
             bool: True if deployment is verified successfully
@@ -252,8 +231,6 @@ class TNFDeployment(Deployment):
                     return False
 
             # Verify floating monitor pod
-            from ocs_ci.ocs.resources.pod import get_pods_having_label
-
             mon_pods = get_pods_having_label(
                 label="app=rook-ceph-mon",
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
@@ -264,8 +241,6 @@ class TNFDeployment(Deployment):
                 return False
 
             logger.info(f"Found {len(mon_pods)} monitor pod(s)")
-
-            # Additional verification can be added here
             logger.info("TNF ODF deployment verified successfully")
             return True
 
