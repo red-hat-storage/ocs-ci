@@ -832,7 +832,6 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
                     "image"
                 ] = get_rook_version()
                 toolbox["metadata"]["name"] += "-external"
-                keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
                 if ocs_version >= version.VERSION_4_10:
                     toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
                         "/bin/bash"
@@ -844,11 +843,6 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
                         1
                     ] = "-c"
                     toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
-                env = toolbox["spec"]["template"]["spec"]["containers"][0]["env"]
-                # replace secret
-                env = [item for item in env if not (item["name"] == "ROOK_CEPH_SECRET")]
-                env.append({"name": "ROOK_CEPH_SECRET", "value": keyring_dict["key"]})
-                toolbox["spec"]["template"]["spec"]["containers"][0]["env"] = env
                 # add ceph volumeMounts
                 ceph_volume_mount_path = {
                     "mountPath": "/etc/ceph",
