@@ -1324,6 +1324,8 @@ def storageclass_factory_fixture(
             secret = secret or secret_factory(interface=interface)
             ec_data_pool_name = None
             if interface == constants.CEPHBLOCKPOOL:
+                from ocs_ci.ocs.cluster import get_ec_metadata_pool_name
+
                 if ocsci_config.ENV_DATA.get("new_rbd_pool") or new_rbd_pool:
                     pool_obj = ceph_pool_factory(
                         interface=interface,
@@ -1334,8 +1336,6 @@ def storageclass_factory_fixture(
                         erasure_coded=erasure_coded,
                     )
                     if erasure_coded:
-                        from ocs_ci.ocs.cluster import get_ec_metadata_pool_name
-
                         interface_name = get_ec_metadata_pool_name()
                         ec_data_pool_name = pool_obj.name
                     else:
@@ -1361,7 +1361,11 @@ def storageclass_factory_fixture(
                     if pool_name is None:
                         interface_name = helpers.default_ceph_block_pool()
                     else:
-                        interface_name = pool_name
+                        if erasure_coded:
+                            interface_name = get_ec_metadata_pool_name()
+                            ec_data_pool_name = pool_name
+                        else:
+                            interface_name = pool_name
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 

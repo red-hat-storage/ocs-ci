@@ -33,12 +33,13 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
     """
 
     @pytest.mark.parametrize(
-        argnames=["custom_sc", "replica", "compression"],
+        argnames=["custom_sc", "replica", "compression", "erasure_coding"],
         argvalues=[
             pytest.param(
                 False,
                 3,
                 None,
+                False,
                 marks=pytest.mark.polarion_id("OCS-6266"),
                 id="default_pool_replica3_without_compression",
             ),
@@ -46,6 +47,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 True,
                 2,
                 None,
+                False,
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
                 id="custom_pool_replica2_without_compression",
             ),
@@ -54,6 +56,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 True,
                 3,
                 "aggressive",
+                False,
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
                 id="custom_pool_replica3_with_compression",
             ),
@@ -62,8 +65,17 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 True,
                 2,
                 "aggressive",
+                False,
                 # marks=pytest.mark.polarion_id("OCS-XXXX"),
                 id="custom_pool_replica2_with_compression",
+            ),
+            pytest.param(
+                True,
+                0,
+                None,
+                True,
+                # marks=pytest.mark.polarion_id("OCS-XXXX"),
+                id="custom_pool_erasure_coding_without_compression",
             ),
             # TODO: ADD Polarion ID for Custom SC test
         ],
@@ -73,6 +85,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         custom_sc,
         replica,
         compression,
+        erasure_coding,
         cnv_custom_storage_class,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
@@ -116,7 +129,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 f"replica={replica}, compression={compression}"
             )
             custom_dr_policy_name = cnv_custom_storage_class(
-                replica=replica, compression=compression
+                replica=replica, compression=compression, erasure_coded=erasure_coding
             )
             logger.test_step("Validate groupreplicationID for default and custom SCs")
             validate_drpolicy_replication_ids(
