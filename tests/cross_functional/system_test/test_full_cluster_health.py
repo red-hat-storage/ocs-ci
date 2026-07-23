@@ -5,8 +5,6 @@ Test to verify cluster health/stability when it's full (85%)
 import logging
 import pytest
 import time
-import jira
-
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs import constants, ocp
@@ -19,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     polarion_id,
     magenta_squad,
+    jira,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
