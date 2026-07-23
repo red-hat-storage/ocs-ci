@@ -972,7 +972,12 @@ class TestECNodeOperations(ManageTest):
                 fio_filename="drain_write_test",
             )
             get_fio_rw_iops(pod_obj)
-        except (CommandFailed, TimeoutExpiredError, TimeoutError) as e:
+        except (
+            CommandFailed,
+            TimeoutExpiredError,
+            TimeoutError,
+            TimeoutExpired,
+        ) as e:
             log.warning(f"Write IO failed: {e}")
             self._log_ceph_status_on_io_failure()
             raise
@@ -992,7 +997,7 @@ class TestECNodeOperations(ManageTest):
             )
             get_fio_rw_iops(pod_obj)
             return True
-        except (CommandFailed, TimeoutExpiredError, TimeoutError):
+        except (CommandFailed, TimeoutExpiredError, TimeoutError, TimeoutExpired):
             self._log_ceph_status_on_io_failure()
             return False
 
@@ -1332,13 +1337,23 @@ class TestECNodeOperations(ManageTest):
                     time.sleep(60)
                     try:
                         retry(
-                            (CommandFailed, TimeoutExpiredError, TimeoutError),
+                            (
+                                CommandFailed,
+                                TimeoutExpiredError,
+                                TimeoutError,
+                                TimeoutExpired,
+                            ),
                             tries=5,
                             delay=30,
                             backoff=1,
                         )(self._run_write_io)(pod_obj)
                         log.info("Write succeeded in tier 2")
-                    except (CommandFailed, TimeoutExpiredError, TimeoutError):
+                    except (
+                        CommandFailed,
+                        TimeoutExpiredError,
+                        TimeoutError,
+                        TimeoutExpired,
+                    ):
                         log.warning(
                             f"!!! ALL 5 WRITE ATTEMPTS FAILED in tier 2 "
                             f"with {live_hosts} hosts "
@@ -1361,7 +1376,13 @@ class TestECNodeOperations(ManageTest):
                     try:
                         verify_data_integrity(pod_obj, "fio-rand-write", original_md5)
                         log.info("Read succeeded in tier 3 (expected: >= k hosts)")
-                    except (CommandFailed, AssertionError):
+                    except (
+                        CommandFailed,
+                        AssertionError,
+                        TimeoutExpired,
+                        TimeoutExpiredError,
+                        TimeoutError,
+                    ):
                         log.info("Read failed in tier 3 (can happen)")
 
                 log.test_step(f"Shutdown {i}/{max_shutdowns} complete for {node_name}")
