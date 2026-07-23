@@ -469,6 +469,56 @@ def get_provider_address():
     return storage_provider_endpoint
 
 
+def get_df_version(cluster_name):
+    """
+    Get the DF/ODF version for a hosted cluster.
+    Prefers df_version over hosted_odf_version if both are set.
+
+    Args:
+        cluster_name (str): Name of the cluster
+
+    Returns:
+        str or None: The version string, or None if not set
+
+    """
+    cluster_conf = config.ENV_DATA.get("clusters", {}).get(cluster_name, {})
+    return cluster_conf.get("df_version") or cluster_conf.get("hosted_odf_version")
+
+
+def get_df_registry(cluster_name):
+    """
+    Get the DF/ODF registry for a hosted cluster.
+    Prefers df_registry over hosted_odf_registry if both are set.
+
+    Args:
+        cluster_name (str): Name of the cluster
+
+    Returns:
+        str: The registry string
+
+    """
+    cluster_conf = config.ENV_DATA.get("clusters", {}).get(cluster_name, {})
+    return cluster_conf.get("df_registry") or cluster_conf.get(
+        "hosted_odf_registry", defaults.DF_REGISTRY_DEFAULT
+    )
+
+
+def get_cluster_path(cluster_name):
+    """
+    Get the cluster path for a hosted cluster.
+    Prefers cluster_path over hosted_cluster_path if both are set.
+
+    Args:
+        cluster_name (str): Name of the cluster
+
+    Returns:
+        str or None: The cluster path, or None if not set
+
+    """
+    cluster_conf = config.ENV_DATA.get("clusters", {}).get(cluster_name, {})
+    return cluster_conf.get("cluster_path") or cluster_conf.get("hosted_cluster_path")
+
+
 def config_has_hosted_odf_image(cluster_name):
     """
     Check if the config has hosted ODF image set for the cluster
@@ -480,13 +530,7 @@ def config_has_hosted_odf_image(cluster_name):
         bool: True if the config has hosted ODF image, False otherwise
 
     """
-    version_exists = (
-        config.ENV_DATA.get("clusters")
-        .get(cluster_name)
-        .get("hosted_odf_version", False)
-    )
-
-    return version_exists
+    return bool(get_df_version(cluster_name))
 
 
 def is_fdf_on_provider():
@@ -1531,9 +1575,7 @@ class HostedClients(HyperShiftBase):
         ]
 
         for name in cluster_names:
-            path = cluster_names_paths_dict.get(name) or config.ENV_DATA.setdefault(
-                "clusters", {}
-            ).setdefault(name, {}).get("hosted_cluster_path")
+            path = cluster_names_paths_dict.get(name) or get_cluster_path(name)
             self.kubeconfig_paths.append(
                 self.download_hosted_cluster_kubeconfig(name, path, from_hcp=from_hcp)
             )
@@ -1575,9 +1617,7 @@ class HostedClients(HyperShiftBase):
 
         password_paths = []
         for name in cluster_names:
-            path = cluster_names_paths_dict.get(name) or config.ENV_DATA.setdefault(
-                "clusters", {}
-            ).setdefault(name, {}).get("hosted_cluster_path")
+            path = cluster_names_paths_dict.get(name) or get_cluster_path(name)
             password_paths.append(
                 self.download_hosted_cluster_kubeadmin_password(name, path)
             )
@@ -1723,12 +1763,9 @@ class SpokeOCP(ABC):
         self.name = name
         self.timeout_check_resources_exist_sec = 6
 
-        # when hosted_cluster_path will be dropped from config(s), we will use only cluster_path
-        cluster_path_key = "cluster_path" if self.is_external else "hosted_cluster_path"
-
         cluster_info = config.ENV_DATA.get("clusters", {}).get(self.name)
         if cluster_info:
-            cluster_path = cluster_info.get(cluster_path_key)
+            cluster_path = get_cluster_path(self.name)
             if cluster_path:
                 self.cluster_kubeconfig = os.path.expanduser(
                     os.path.join(cluster_path, "auth", "kubeconfig")
@@ -2832,9 +2869,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
     def _create_aws_hcp_files_dir(self):
         """
-        Create a directory for AWS HCP files inside the hosted_cluster_path.
+        Create a directory for AWS HCP files inside the cluster_path.
 
-        Creates a folder called 'aws_hcp_files' inside the cluster's hosted_cluster_path
+        Creates a folder called 'aws_hcp_files' inside the cluster's cluster_path
         directory. This folder is used to store AWS-specific files like infra output,
         STS credentials, etc.
 
@@ -2842,22 +2879,21 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             str: Path to the created aws_hcp_files directory
 
         Raises:
-            ValueError: If hosted_cluster_path is not configured for the cluster
+            ValueError: If cluster_path is not configured for the cluster
 
         """
-        cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
-        hosted_cluster_path = cluster_config.get("hosted_cluster_path")
+        cluster_path = get_cluster_path(self.name)
 
-        if not hosted_cluster_path:
+        if not cluster_path:
             raise ValueError(
-                f"hosted_cluster_path not configured for cluster '{self.name}'. "
-                "Set ENV_DATA.clusters.<cluster_name>.hosted_cluster_path in config."
+                f"cluster_path not configured for cluster '{self.name}'. "
+                "Set ENV_DATA.clusters.<cluster_name>.cluster_path in config."
             )
 
-        hosted_cluster_path = os.path.expanduser(hosted_cluster_path)
+        cluster_path = os.path.expanduser(cluster_path)
 
         # Create the aws_hcp_files directory
-        aws_hcp_files_dir = os.path.join(hosted_cluster_path, "aws_hcp_files")
+        aws_hcp_files_dir = os.path.join(cluster_path, "aws_hcp_files")
 
         if not os.path.exists(aws_hcp_files_dir):
             logger.info(f"Creating AWS HCP files directory: {aws_hcp_files_dir}")
@@ -6896,14 +6932,8 @@ class SpokeODF(SpokeOCP, ABC):
         Initialize SpokeODF class with necessary parameters
         """
         super().__init__(name)
-        self.odf_version = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-        )
-        self.odf_registry = (
-            config.ENV_DATA.get("clusters")
-            .get(self.name)
-            .get("hosted_odf_registry", defaults.HOSTED_ODF_REGISTRY_DEFAULT)
-        )
+        self.odf_version = get_df_version(self.name)
+        self.odf_registry = get_df_registry(self.name)
         self.catsrc_image = f"{self.odf_registry}:{self.odf_version}"
 
         # Get cluster namespace - parse from yaml_text_config if present
@@ -7286,25 +7316,20 @@ class SpokeODF(SpokeOCP, ABC):
 
         catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
 
-        if not config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"):
+        if not get_df_version(self.name):
             if not reapply:
                 raise ValueError(
-                    "OCS version is not set in the config file, should be set in format similar to '4.14.5-8'"
-                    "in the 'hosted_odf_version' key in the 'ENV_DATA.clusters.<name>' section of the config file. "
+                    "OCS version is not set in the config file, should be set in format similar to '4.14.5-8' "
+                    "in the 'df_version' (or 'hosted_odf_version') key in the 'ENV_DATA.clusters.<name>' "
+                    "section of the config file. "
                 )
 
         if odf_version_tag:
             # If odf_version_tag is provided, use it instead of the one from config
             self.odf_version = odf_version_tag
         else:
-            self.odf_version = (
-                config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-            )
-        self.odf_registry = (
-            config.ENV_DATA.get("clusters")
-            .get(self.name)
-            .get("hosted_odf_registry", defaults.HOSTED_ODF_REGISTRY_DEFAULT)
-        )
+            self.odf_version = get_df_version(self.name)
+        self.odf_registry = get_df_registry(self.name)
 
         logger.info(
             f"ODF version: {self.odf_version} will be installed on client. Setting up CatalogSource"
@@ -7376,16 +7401,14 @@ class SpokeODF(SpokeOCP, ABC):
         subscription_data["metadata"]["namespace"] = self.namespace_client
 
         # since we are allowed to install N+1 on hosted clusters we can not rely on PackageManifest default channel
-        hosted_odf_version = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-        )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
+        df_version = get_df_version(self.name)
+        if any(tag in df_version for tag in ["latest", "stable"]):
+            df_version = df_version.split("-")[-1]
 
-        version_semantic = version.get_semantic_version(hosted_odf_version)
+        version_semantic = version.get_semantic_version(df_version)
 
-        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
-        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
+        df_version = f"{version_semantic.major}.{version_semantic.minor}"
+        subscription_data["spec"]["channel"] = f"stable-{str(df_version)}"
 
         subscription_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription", delete=False
@@ -7772,15 +7795,13 @@ class HostedFDF(HypershiftHostedOCP, SpokeODF):
         subscription_data["metadata"]["namespace"] = self.namespace_client
         subscription_data["spec"]["source"] = self.FDF_CATALOGSOURCE_NAME
 
-        hosted_odf_version = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-        )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
+        df_version = get_df_version(self.name)
+        if any(tag in df_version for tag in ["latest", "stable"]):
+            df_version = df_version.split("-")[-1]
 
-        version_semantic = version.get_semantic_version(hosted_odf_version)
-        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
-        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
+        version_semantic = version.get_semantic_version(df_version)
+        df_version = f"{version_semantic.major}.{version_semantic.minor}"
+        subscription_data["spec"]["channel"] = f"stable-{str(df_version)}"
 
         subscription_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="fdf_subscription", delete=False
@@ -7847,12 +7868,12 @@ def hypershift_cluster_factory(
             # this configuration is necessary to deploy hosted cluster, but not for running tests with multicluster job
             cluster_path = create_cluster_dir(cluster_name)
             hosted_cluster_conf_on_provider["ENV_DATA"]["clusters"][cluster_name] = {
-                "hosted_cluster_path": cluster_path,
+                "cluster_path": cluster_path,
                 "ocp_version": ocp_version,
                 "cpu_cores_per_hosted_cluster": 8,
                 "memory_per_hosted_cluster": "12Gi",
-                "hosted_odf_registry": "quay.io/rhceph-dev/ocs-registry",
-                "hosted_odf_version": odf_version,
+                "df_registry": "quay.io/rhceph-dev/ocs-registry",
+                "df_version": odf_version,
                 "setup_storage_client": setup_storage_client,
                 "nodepool_replicas": nodepool_replicas,
             }

@@ -14,8 +14,8 @@ ENV_DATA:
 
       # OCP and ODF versions
       ocp_version: "4.18"  # Can be X.Y or X.Y.Z format
-      hosted_odf_version: "4.18.5-8"  # ODF catalog source image tag
-      hosted_odf_registry: "quay.io/rhceph-dev/ocs-registry"
+      df_version: "4.18.5-8"  # DF/ODF catalog source image tag
+      df_registry: "quay.io/rhceph-dev/ocs-registry"  # DF/ODF registry
       setup_storage_client: true  # Set to true to connect to ODF provider
 
       # Control plane and infrastructure configuration
@@ -37,8 +37,8 @@ ENV_DATA:
       hosted_cluster_platform: "aws"
       cluster_path: "~/aws-hcp-clusters/aws-hcp-client-2"
       ocp_version: "4.18"
-      hosted_odf_version: "4.18.5-8"
-      hosted_odf_registry: "quay.io/rhceph-dev/ocs-registry"
+      df_version: "4.18.5-8"  # DF/ODF catalog source image tag
+      df_registry: "quay.io/rhceph-dev/ocs-registry"  # DF/ODF registry
       setup_storage_client: true
       nodepool_replicas: 2
       region: "us-west-2"  # Different region
