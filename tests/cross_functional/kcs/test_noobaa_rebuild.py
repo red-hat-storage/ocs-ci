@@ -16,6 +16,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
 from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
@@ -134,12 +135,14 @@ class TestNoobaaRebuild(E2ETest):
             timeout=900,
         )
         # verify noobaa statefulset is present
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        expected_ready = "2/2" if ocs_version >= version.VERSION_4_23 else "1/1"
         sample = TimeoutSampler(
             timeout=500,
             sleep=30,
             func=run_cmd_verify_cli_output,
             cmd="oc get sts noobaa-core -n openshift-storage",
-            expected_output_lst={"noobaa-core", "1/1"},
+            expected_output_lst={"noobaa-core", expected_ready},
         )
         if not sample.wait_for_func_status(result=True):
             raise Exception("Statefulset noobaa-core is not recreated")
