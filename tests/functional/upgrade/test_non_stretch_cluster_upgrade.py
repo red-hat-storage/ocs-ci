@@ -91,10 +91,20 @@ def _pods_for_pvcs(pod_obj_list, wait=True):
     Return running pods in the same namespace that share PVCs with the given
     workload pod list.  Pods without a PVC are skipped.
     """
+    from ocs_ci.ocs.exceptions import UnavailableResourceException
+
     target_pvcs = {p.pvc.name for p in pod_obj_list}
     namespace = pod_obj_list[0].namespace
     all_pods = get_all_pods(namespace=namespace, wait=wait)
-    return [p for p in all_pods if get_pvc_name(p) in target_pvcs]
+    matched = []
+    for p in all_pods:
+        try:
+            pvc_name = get_pvc_name(p)
+        except UnavailableResourceException:
+            continue
+        if pvc_name and pvc_name in target_pvcs:
+            matched.append(p)
+    return matched
 
 
 def _verify_cluster_health(storage_pod_timeout=600, ceph_tries=20, ceph_delay=30):
@@ -156,7 +166,7 @@ def _wait_for_migration_off_node(pod_obj_list, outage_node_name, label="workload
     """
 
     def _all_rescheduled():
-        pods = _pods_for_pvcs(pod_obj_list)
+        pods = _pods_for_pvcs(pod_obj_list, wait=False)
         if len(pods) != len(pod_obj_list):
             logger.info(
                 f"Migration wait ({label}): expected {len(pod_obj_list)} pods, "
@@ -261,6 +271,7 @@ def test_pre_upgrade_non_stretch_workloads(nodes, deployment_pod_factory):
 @skipif_hci_provider_or_client
 @pytest.mark.polarion_id("OCS-7379")
 def test_post_upgrade_non_stretch_node_shutdown(
+    request,
     node_restart_teardown,
     nodes,
     deployment_pod_factory,
@@ -300,6 +311,8 @@ def test_post_upgrade_non_stretch_node_shutdown(
             except Exception as exc:
                 logger.warning(f"untaint_nodes raised during cleanup: {exc}")
             _tainted_node.clear()
+
+    request.addfinalizer(_cleanup_taints)
 
     logger.info(
         "POST-UPGRADE Step 4: Verifying cluster health after OCP/ODF 4.22 upgrade"

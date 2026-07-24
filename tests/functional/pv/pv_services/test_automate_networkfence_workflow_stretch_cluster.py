@@ -404,16 +404,18 @@ class TestStretchClusterZoneBNodeShutdown(ManageTest):
                     namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                 )
             ]
-            if rbd_pod_names:
-                wait_for_pods_to_be_in_statuses(
-                    expected_statuses=constants.STATUS_PENDING,
-                    pod_names=rbd_pod_names,
-                    timeout=300,
-                    namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                )
-                logger.info(
-                    "Zone-aware RBD pods are Pending (FailedScheduling) as expected"
-                )
+            assert (
+                rbd_pod_names
+            ), "No RBD logwriter pods found; workload deployment failed"
+            wait_for_pods_to_be_in_statuses(
+                expected_statuses=constants.STATUS_PENDING,
+                pod_names=rbd_pod_names,
+                timeout=300,
+                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+            )
+            logger.info(
+                "Zone-aware RBD pods are Pending (FailedScheduling) as expected"
+            )
         else:
             logger.info("Healthy Zone-B nodes exist – verifying pods relocated there")
             sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
@@ -511,17 +513,17 @@ class TestStretchClusterZoneBNodeShutdown(ManageTest):
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE,
             )
         ]
-        if rbd_pod_names:
-            wait_for_pods_to_be_in_statuses(
-                expected_statuses=constants.STATUS_PENDING,
-                pod_names=rbd_pod_names,
-                timeout=300,
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-            )
-            logger.info(
-                "Zone-aware RBD pods are Pending (FailedScheduling) – "
-                "no Zone-B nodes available"
-            )
+        assert rbd_pod_names, "No RBD logwriter pods found; workload deployment failed"
+        wait_for_pods_to_be_in_statuses(
+            expected_statuses=constants.STATUS_PENDING,
+            pod_names=rbd_pod_names,
+            timeout=300,
+            namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+        )
+        logger.info(
+            "Zone-aware RBD pods are Pending (FailedScheduling) – "
+            "no Zone-B nodes available"
+        )
 
         _check_ceph_accessible(sc_obj, "during full Zone-B outage")
 

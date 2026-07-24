@@ -206,6 +206,7 @@ def test_pre_upgrade_stretch_cluster_workloads(
 @magenta_squad
 @pytest.mark.polarion_id("OCS-7377")
 def test_post_upgrade_stretch_cluster_zone_b_shutdown(
+    request,
     node_restart_teardown,
     reset_conn_score,
     nodes,
@@ -249,6 +250,8 @@ def test_post_upgrade_stretch_cluster_zone_b_shutdown(
             except Exception as exc:
                 logger.warning(f"untaint_nodes raised during cleanup: {exc}")
             tainted_nodes.clear()
+
+    request.addfinalizer(_remove_taints)
 
     logger.info(
         "POST-UPGRADE Step 3: Verifying cluster health after OCP/ODF 4.22 upgrade"
