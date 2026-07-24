@@ -227,7 +227,6 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         wait_for_pods_to_be_running(
             pod_names=pod_names, namespace=config.ENV_DATA["cluster_namespace"]
         )
-
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
@@ -258,7 +257,6 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             namespace=config.ENV_DATA["cluster_namespace"], timeout=800
         )
         logger.info("Nodes rebooted successfully!!")
-
         assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )

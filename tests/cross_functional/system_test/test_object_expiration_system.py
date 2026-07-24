@@ -12,6 +12,8 @@ from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, Expirat
 from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import ceph_health_check, CephCluster
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     magenta_squad,
@@ -401,7 +403,21 @@ class TestObjectExpirationSystemTest:
         wait_for_noobaa_pods_running(timeout=1200)
         logger.info("NooBaa DB pod node started, all NooBaa pods running")
 
-        logger.test_step("Verify object expiration after node disruptions")
+        logger.info("Waiting for NooBaa to stabilize after disruptions...")
+        ceph_cluster = CephCluster()
+        ceph_cluster.wait_for_noobaa_health_ok()
+        logger.info("NooBaa health check passed after disruptions")
+
+        # Perform ceph health check after disruptions
+        try:
+            ceph_health_check(
+                namespace=config.ENV_DATA["cluster_namespace"], tries=45, delay=60
+            )
+            logger.info("Ceph health check passed after disruptions")
+        except Exception as ex:
+            logger.warning(f"Ceph health check failed: {ex}")
+
+        # check if the objects are expired
         sample_if_objects_expired()
         logger.info("Object expiration verified after node disruptions")
 
