@@ -4053,10 +4053,16 @@ def create_gitops_private_repo_secret():
     gitops_private_repo_secret_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="gitops_private", delete=False
     )
-    templating.dump_data_to_temp_yaml(
-        gitops_private_repo_secret, gitops_private_repo_secret_yaml.name
-    )
-    run_cmd(f"oc create -f {gitops_private_repo_secret_yaml.name}")  # IgnoreDeprecation
+    try:
+        gitops_private_repo_secret_yaml.close()
+        templating.dump_data_to_temp_yaml(
+            gitops_private_repo_secret, gitops_private_repo_secret_yaml.name
+        )
+        run_cmd(  # IgnoreDeprecation
+            f"oc create -f {gitops_private_repo_secret_yaml.name}"
+        )
+    finally:
+        os.unlink(gitops_private_repo_secret_yaml.name)
 
 
 def generate_rdr_mirror_images():
