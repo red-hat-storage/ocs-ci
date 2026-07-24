@@ -3,6 +3,7 @@ import platform
 import os
 import tempfile
 from ocs_ci.deployment.ocp import download_pull_secret
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 import pytest
 
@@ -19,6 +20,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.helpers.dr_helpers import (
     apply_itms_to_managed_clusters,
+    create_gitops_private_repo_secret,
     generate_rdr_mirror_images,
 )
 from ocs_ci.ocs.exceptions import (
@@ -123,6 +125,24 @@ def rdr_health_check():
 def get_virtctl():
     with config.RunWithProviderConfigContextIfAvailable():
         get_virtctl_tool()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def check_gitops_secret_offline_mode():
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+    if config.ENV_DATA.get("dr_workload_repo_login"):
+        for cluster_index in range(config.nclusters):
+            config.switch_ctx(cluster_index)
+            try:
+                OCP(
+                    kind=constants.SECRET,
+                    namespace=constants.GITOPS_NAMESPACE,
+                    resource_name=constants.GITOPS_PRIVATE_REPO_SECRET,
+                ).get()
+            except (CommandFailed, FileNotFoundError):
+                log.info("Secret not found creating New one")
+                create_gitops_private_repo_secret()
 
 
 @pytest.fixture()
@@ -529,7 +549,7 @@ def scale_deployments(request):
     return _scale
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session", autouse=False)
 def mirror_rdr_images(request):
     """
     Mirror RDR images to disconnected registry and apply ITMS to managed clusters.
