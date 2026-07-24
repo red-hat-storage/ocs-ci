@@ -24,6 +24,7 @@ from ocs_ci.utility.utils import (
     create_directory_path,
     exec_cmd,
     get_latest_ds_olm_tag,
+    get_ocp_release_mirror_path,
     get_ocp_version,
     login_to_mirror_registry,
     prepare_customized_pull_secret,
@@ -611,10 +612,15 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
             - imageContentSources (for install-config.yaml)
             - ImageDigestMirrorSet (for running cluster)
     """
-    dest_image_repo = (
-        f"{config.DEPLOYMENT['mirror_registry']}/"
-        f"{constants.OCP_RELEASE_IMAGE_MIRROR_PATH}"
-    )
+    if ocp_version.startswith("sha256"):
+        mirror_path = (
+            constants.OCP_RELEASE_IMAGE_MIRROR_PATH_V5
+            if "release-5" in ocp_image_path
+            else constants.OCP_RELEASE_IMAGE_MIRROR_PATH
+        )
+    else:
+        mirror_path = get_ocp_release_mirror_path(ocp_version)
+    dest_image_repo = f"{config.DEPLOYMENT['mirror_registry']}/{mirror_path}"
     if ocp_version.startswith("sha256"):
         ocp_image = f"{ocp_image_path}@{ocp_version}"
         dest_ocp_image = f"{dest_image_repo}@{ocp_version}"
@@ -667,7 +673,7 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
     config.DEPLOYMENT["haproxy_router_image"] = haproxy_router_line.split()[1]
 
     return (
-        f"{config.DEPLOYMENT['mirror_registry']}/{constants.OCP_RELEASE_IMAGE_MIRROR_PATH}",
+        f"{config.DEPLOYMENT['mirror_registry']}/{mirror_path}",
         ocp_version,
         ics,
         idms,
