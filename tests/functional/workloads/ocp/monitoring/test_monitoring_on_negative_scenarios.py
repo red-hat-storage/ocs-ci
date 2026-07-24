@@ -479,7 +479,6 @@ class TestMonitoringBackedByOCS(E2ETest):
         active_mgr_pod_obj = pod.get_active_mgr_pod()
         logger.info(f"The active MGR pod name is {active_mgr_pod_obj.name}")
 
-
         # Get the node where the mgr pod is hosted
         mgr_node_obj = pod.get_pod_node(active_mgr_pod_obj)
 
