@@ -189,6 +189,7 @@ version.
 * `host_network` - Enable host network in the storage cluster CR and to be able to connect to the storage cluster from the host network or other scenarios where host network is required.
 * `partitioned_disk_on_workers` - Create a partition for OSD on the OS disk on worker nodes.
 * `vsphere_vm_start_timeout` - Number of seconds to wait for vsphere vms to start up (default: 900)
+* `submariner_cli_deployment` - Enforce Submariner CLI deployment.
 
 #### REPORTING
 
