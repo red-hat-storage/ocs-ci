@@ -4032,6 +4032,33 @@ def validate_protection_label(kind, namespace, protection_name=None):
     )
 
 
+def create_gitops_private_repo_secret():
+    """
+    Create Gitops Secret that are required to pull workloads from Private Git repo
+    """
+
+    gitops_private_repo_secret = templating.load_yaml(
+        constants.GITOPS_PRIVATE_REPO_SECRET_YAML
+    )
+    gitops_private_repo_secret["metadata"][
+        "name"
+    ] = constants.GITOPS_PRIVATE_REPO_SECRET
+
+    gitops_private_repo_secret["stringData"]["url"] = config.ENV_DATA.get(
+        "dr_workload_repo_url"
+    )
+    gitops_private_repo_secret["stringData"]["password"] = config.clusters[
+        get_active_acm_index()
+    ].AUTH["ibm_hci"]["github_token"]
+    gitops_private_repo_secret_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="gitops_private", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        gitops_private_repo_secret, gitops_private_repo_secret_yaml.name
+    )
+    run_cmd(f"oc create -f {gitops_private_repo_secret_yaml.name}")  # IgnoreDeprecation
+
+
 def generate_rdr_mirror_images():
     """
     Extract and return list of container images from RDR workload repository.
@@ -4247,8 +4274,7 @@ def get_cdi_registry_credentials():
     )
     auths = json.loads(base64.b64decode(raw_b64)).get("auths", {})
 
-    # Prefer an exact-hostname match (e.g. "r8-ru26-w-l.quay-service.fusion.tadn.ibm.com")
-    # over sub-repo entries (e.g. "r8-.../mirror-automation-.../hci/...").
+    # Prefer an exact-hostname match over sub-repo entries.
     entry = auths.get(mirror_host) or next(
         (v for k, v in auths.items() if k.startswith(mirror_host)),
         None,
@@ -4272,7 +4298,7 @@ def get_cdi_registry_credentials():
         username, password = auth_decoded.split(":", 1)
 
     logger.debug(
-        f"Extracted CDI registry credentials for '{mirror_host}': " f"user='{username}'"
+        f"Extracted CDI registry credentials for '{mirror_host}': user='{username}'"
     )
     return username, password
 
@@ -4291,9 +4317,6 @@ def create_cdi_pull_secret(namespace, secret_name="quayadmin"):
     The credentials are derived automatically from the cluster's existing
     ``secret/pull-secret`` in ``openshift-config`` — no manual credential
     management is required.
-
-    The secret name must match the ``secretRef`` value in the workload YAML
-    files (default: ``quayadmin``).
 
     This function is idempotent — it deletes an existing secret before
     re-creating it.
@@ -4339,10 +4362,7 @@ def fetch_mirror_registry_cert():
     Fetch the TLS certificate presented by ``config.DEPLOYMENT["mirror_registry"]``
     using ``openssl s_client``.
 
-    The mirror registry is stored as a bare hostname (and optional port), e.g.
-    ``r8-ru26-w-l.quay-service.fusion.tadn.ibm.com`` or
-    ``r8-ru26-w-l.quay-service.fusion.tadn.ibm.com:8443``.  Port 443 is
-    assumed when none is specified.
+    Port 443 is assumed when none is specified in the registry address.
 
     Returns:
         str: PEM-encoded certificate string (includes trailing newline).
@@ -4391,12 +4411,7 @@ def create_cdi_cert_configmap(namespace, configmap_name="user-ca-bundle"):
     TLS certificate when importing VM disk images in a disconnected environment.
 
     CDI's ``spec.source.registry.certConfigMap`` is namespace-scoped — it must
-    exist in the **same namespace** as the DataVolume / VolumeImportSource.
-    The certificate is fetched live from the registry endpoint via
-    ``openssl s_client``, so no manual cert management is required.
-
-    The ConfigMap name must match the ``certConfigMap`` value in the workload
-    YAML files (default: ``user-ca-bundle``).
+    exist in the same namespace as the DataVolume / VolumeImportSource.
 
     This function is idempotent — it deletes an existing ConfigMap before
     re-creating it.
