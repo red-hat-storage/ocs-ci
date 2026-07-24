@@ -385,6 +385,45 @@ class CNVInstaller(object):
         # validate that HyperConverged systemHealthStatus is healthy
         return self.check_hyperconverged_healthy(raise_exception=raise_exception)
 
+    def wait_for_hyperconverged_healthy(self, timeout=300, sleep=30):
+        """
+        Wait until HyperConverged systemHealthStatus becomes 'healthy'.
+
+        This is needed before annotating HyperConverged (e.g. enabling software
+        emulation) because the SSP operator admission webhook
+        (ssp-operator-service) is only available once the cluster reaches a
+        healthy state.  Attempting to annotate while health is still 'error'
+        causes the webhook to deny the request with
+        "no endpoints available for service ssp-operator-service".
+
+        Args:
+            timeout (int): Maximum seconds to wait (default 300).
+            sleep (int): Seconds between polling attempts (default 30).
+
+        Raises:
+            TimeoutExpiredError: If health does not become 'healthy' within timeout.
+        """
+        logger.info(
+            f"Waiting up to {timeout}s for HyperConverged systemHealthStatus to become 'healthy'"
+        )
+        ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
+        try:
+            for sample in TimeoutSampler(
+                timeout=timeout,
+                sleep=sleep,
+                func=lambda: ocp.get(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
+                .get("status", {})
+                .get("systemHealthStatus"),
+            ):
+                logger.info(f"HyperConverged systemHealthStatus: {sample}")
+                if sample == "healthy":
+                    logger.info("HyperConverged cluster is healthy")
+                    return
+        except exceptions.TimeoutExpiredError as exc:
+            raise exceptions.TimeoutExpiredError(
+                f"HyperConverged did not reach 'healthy' status within {timeout}s"
+            ) from exc
+
     def check_hyperconverged_healthy(self, raise_exception=True):
         """
         Validate that HyperConverged systemHealthStatus is healthy.
@@ -689,6 +728,12 @@ class CNVInstaller(object):
         self.deploy_hyper_converged()
         # Post CNV installation checks
         self.post_install_verification()
+        # Wait for HyperConverged to become healthy before annotating.
+        # The SSP operator admission webhook (ssp-operator-service) is only
+        # available once systemHealthStatus == "healthy"; attempting to annotate
+        # earlier results in "no endpoints available for service
+        # ssp-operator-service" errors from the webhook.
+        self.wait_for_hyperconverged_healthy()
         # Enable software emulation
         self.enable_software_emulation()
         # Download and extract the virtctl binary to bin_dir
