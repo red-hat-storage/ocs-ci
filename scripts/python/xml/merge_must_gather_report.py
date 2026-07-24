@@ -15,6 +15,7 @@ Usage:
 import argparse
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -37,6 +38,14 @@ def url_to_local_path(url):
     if url.startswith(MAGNA_BASE_URL):
         return url.replace(MAGNA_BASE_URL, MAGNA_MOUNT, 1)
     return url
+
+
+def sanitize_for_xml(text):
+    """Strip ANSI escape codes and XML-invalid control characters."""
+    text = re.sub(r"\x1b\[[0-9;]*m", "", text)
+    # Remove all control chars except tab, newline, carriage return
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+    return text
 
 
 def merge_must_gather_into_junit(junit_xml_path):
@@ -90,7 +99,7 @@ def merge_must_gather_into_junit(junit_xml_path):
 
             try:
                 with open(text_path, "r") as f:
-                    text_content = f.read()
+                    text_content = sanitize_for_xml(f.read())
             except Exception as e:
                 logger.error(f"Failed to read text file {text_path}: {e}")
                 continue
