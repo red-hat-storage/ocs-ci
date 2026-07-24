@@ -132,17 +132,21 @@ def check_gitops_secret_offline_mode():
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
     if config.ENV_DATA.get("dr_workload_repo_login"):
-        for cluster_index in range(config.nclusters):
-            config.switch_ctx(cluster_index)
-            try:
-                OCP(
-                    kind=constants.SECRET,
-                    namespace=constants.GITOPS_NAMESPACE,
-                    resource_name=constants.GITOPS_PRIVATE_REPO_SECRET,
-                ).get()
-            except (CommandFailed, FileNotFoundError):
-                log.info("Secret not found creating New one")
-                create_gitops_private_repo_secret()
+        original_index = config.cur_index
+        try:
+            for cluster_index in range(config.nclusters):
+                config.switch_ctx(cluster_index)
+                try:
+                    OCP(
+                        kind=constants.SECRET,
+                        namespace=constants.GITOPS_NAMESPACE,
+                        resource_name=constants.GITOPS_PRIVATE_REPO_SECRET,
+                    ).get()
+                except (CommandFailed, FileNotFoundError):
+                    log.info("Secret not found creating New one")
+                    create_gitops_private_repo_secret()
+        finally:
+            config.switch_ctx(original_index)
 
 
 @pytest.fixture()
