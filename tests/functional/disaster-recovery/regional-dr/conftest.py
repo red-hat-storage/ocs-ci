@@ -26,12 +26,13 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CephHealthNotRecoveredException,
     CephHealthRecoveredException,
+    TimeoutExpiredError,
     UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.dr_helpers import (
     check_rbd_mirror_running,
-    check_mirroring_status_ok,
+    wait_for_mirroring_status_ok,
 )
 
 log = logging.getLogger(__name__)
@@ -111,9 +112,11 @@ def rdr_health_check():
             except UnexpectedDeploymentConfiguration as e:
                 log.error(f"rbd-mirror daemon check failed on {cluster_name}: {e}")
                 pytest.skip(f"rbd-mirror daemon check failed on {cluster_name}")
-            if not check_mirroring_status_ok():
-                log.error(f"Mirroring health is not OK on {cluster_name}")
-                pytest.skip(f"Mirroring health is not OK on {cluster_name}")
+        try:
+            wait_for_mirroring_status_ok(timeout=120)
+        except TimeoutExpiredError:
+            log.error("Mirroring health is not OK on managed clusters")
+            pytest.skip("Mirroring health is not OK on managed clusters")
     finally:
         config.switch_ctx(restore_index)
 
