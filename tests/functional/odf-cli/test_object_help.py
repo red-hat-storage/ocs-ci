@@ -28,8 +28,8 @@ class TestObjectHelp:
     @pytest.mark.parametrize(
         "subcommand",
         [
-            pytest.param("object enable", marks=polarion_id("OCS-XXXX")),
-            pytest.param("object disable", marks=polarion_id("OCS-YYYY")),
+            pytest.param("object enable", marks=polarion_id("OCS-8078")),
+            pytest.param("object disable", marks=polarion_id("OCS-8079")),
         ],
     )
     @tier1
