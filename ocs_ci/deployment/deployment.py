@@ -181,7 +181,6 @@ from ocs_ci.utility.ssl_certs import (
     configure_custom_api_cert,
     get_root_ca_cert,
 )
-from ocs_ci.ocs.resources.rgw import create_ec_cephobjectstore
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -2411,14 +2410,6 @@ class Deployment(object):
 
         # Enable console plugin
         enable_console_plugin()
-
-        if (
-            config.DEPLOYMENT.get("ec_default_pools")
-            and not config.DEPLOYMENT.get("external_mode")
-            and not config.ENV_DATA.get("mcg_only_deployment")
-            and version.get_semantic_ocs_version_from_config() < version.VERSION_4_22
-        ):
-            create_ec_cephobjectstore()
 
         # validate PDB creation of MON, MDS, OSD pods
         if not config.DEPLOYMENT["external_mode"]:
