@@ -383,9 +383,11 @@ class TestBlockExternalAccess(MCGTest):
     ):
         """
         This method validates that
-         - if disableRoutes flag in noobaa yaml is set to False then all routes are recreated after deletion
-         - if disableRoutes flag in noobaa yaml is set to True then noobaa-mgmt, s3 and sts routes are not
+         - if disableRoutes flag is set to False then all routes are recreated after deletion
+         - if disableRoutes flag is set to True then noobaa-mgmt, s3 and sts routes are not
         recreated after deletion
+        Sets disableRoutes via StorageCluster CR to avoid ocs-operator reconciliation overwriting
+        direct NooBaa CR changes.
         """
 
         # The test is meaningful only when there is no 'disableRoutes' flag in storagecluster configuration
@@ -395,6 +397,12 @@ class TestBlockExternalAccess(MCGTest):
             resource_name=constants.NOOBAA_RESOURCE_NAME,
             namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.NOOBAA_RESOURCE_NAME,
+        )
+
+        storagecluster_obj = ocp.OCP(
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.STORAGECLUSTER,
         )
 
         # validate that initial value of disableRoutes is false or missing (and is false by default)
@@ -408,8 +416,8 @@ class TestBlockExternalAccess(MCGTest):
 
         self.check_disable_routes(False)
 
-        self.set_disable_routes_value(noobaa_obj, False, True)
+        self.set_disable_routes_value(storagecluster_obj, True, True)
         self.check_disable_routes(True)
 
-        self.set_disable_routes_value(noobaa_obj, False, False)
+        self.set_disable_routes_value(storagecluster_obj, True, False)
         self.check_disable_routes(False)
