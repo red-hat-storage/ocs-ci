@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
 )
 
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
 
 from ocs_ci.ocs.bucket_utils import (
@@ -31,17 +31,25 @@ def wait_for_num_objects(mcg_obj, bucket_name, expected_count, timeout=360):
 
     """
     logger.info(f"Waiting for object count to reach {expected_count}")
-    for num_objects in TimeoutSampler(
-        timeout=timeout,
-        sleep=30,
-        func=get_bucket_status_value,
-        mcg_obj=mcg_obj,
-        bucket_name=bucket_name,
-        key="Num Objects",
-    ):
-        if int(num_objects) == expected_count:
-            logger.info(f"Object count reached {num_objects}")
-            break
+    last_seen = None
+    try:
+        for num_objects in TimeoutSampler(
+            timeout=timeout,
+            sleep=30,
+            func=get_bucket_status_value,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket_name,
+            key="Num Objects",
+        ):
+            last_seen = num_objects
+            if int(num_objects) == expected_count:
+                logger.info(f"Object count reached {num_objects}")
+                break
+    except TimeoutExpiredError:
+        assert False, (
+            f"Object count did not reach {expected_count} within {timeout}s, "
+            f"last observed: {last_seen}"
+        )
 
 
 class QuotaStatus:
@@ -121,20 +129,28 @@ class TestNoobaaMetrics:
         )
 
         logger.info("Waiting for space available to decrease after writing 1 object")
-        for space_avail_after_write in TimeoutSampler(
-            timeout=360,
-            sleep=30,
-            func=get_bucket_status_value,
-            mcg_obj=mcg_obj,
-            bucket_name=bucket_name,
-            key="Data Space Avail",
-        ):
-            space_avail_after_write = float(space_avail_after_write.split(" ")[0])
-            if space_avail_after_write < space_avail_after_update:
-                logger.info(
-                    f"Space available decreased: {space_avail_after_update} -> {space_avail_after_write}"
-                )
-                break
+        last_seen = None
+        try:
+            for space_avail_after_write in TimeoutSampler(
+                timeout=360,
+                sleep=30,
+                func=get_bucket_status_value,
+                mcg_obj=mcg_obj,
+                bucket_name=bucket_name,
+                key="Data Space Avail",
+            ):
+                space_avail_after_write = float(space_avail_after_write.split(" ")[0])
+                last_seen = space_avail_after_write
+                if space_avail_after_write < space_avail_after_update:
+                    logger.info(
+                        f"Space available decreased: {space_avail_after_update} -> {space_avail_after_write}"
+                    )
+                    break
+        except TimeoutExpiredError:
+            assert False, (
+                f"Space available did not decrease below {space_avail_after_update} "
+                f"within 360s, last observed: {last_seen}"
+            )
 
         # 3. Update bucket with --max-objects quota and verify that it worked as expected
         max_objects = 10
@@ -238,14 +254,22 @@ class TestNoobaaMetrics:
         logger.info(
             "Waiting for quota status to return to OPTIMAL after increasing max-objects"
         )
-        for quota_status in TimeoutSampler(
-            timeout=360,
-            sleep=30,
-            func=get_bucket_status_value,
-            mcg_obj=mcg_obj,
-            bucket_name=bucket_name,
-            key="QuotaStatus",
-        ):
-            if quota_status == QuotaStatus.OPTIMAL:
-                logger.info("Quota status returned to OPTIMAL")
-                break
+        last_seen = None
+        try:
+            for quota_status in TimeoutSampler(
+                timeout=360,
+                sleep=30,
+                func=get_bucket_status_value,
+                mcg_obj=mcg_obj,
+                bucket_name=bucket_name,
+                key="QuotaStatus",
+            ):
+                last_seen = quota_status
+                if quota_status == QuotaStatus.OPTIMAL:
+                    logger.info("Quota status returned to OPTIMAL")
+                    break
+        except TimeoutExpiredError:
+            assert False, (
+                f"Quota status did not reach {QuotaStatus.OPTIMAL} "
+                f"within 360s, last observed: {last_seen}"
+            )
