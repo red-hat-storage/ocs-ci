@@ -147,17 +147,33 @@ class TestBlockExternalAccess(MCGTest):
                 kind=constants.NOOBAA_RESOURCE_NAME,
             )
 
-            noobaa_patch_params = [
-                {
-                    "op": "replace",
-                    "path": "/spec/disableRoutes",
-                    "value": self.noobaa_disableRoutes_orig_val,
-                }
-            ]
-            noobaa_obj.patch(
-                params=dumps(noobaa_patch_params),
-                format_type="json",
-            )
+            if self.noobaa_disableRoutes_orig_val is not None:
+                noobaa_patch_params = [
+                    {
+                        "op": "add",
+                        "path": "/spec/disableRoutes",
+                        "value": self.noobaa_disableRoutes_orig_val,
+                    }
+                ]
+            else:
+                current_disable_routes = (
+                    noobaa_obj.get().get("spec", {}).get("disableRoutes", None)
+                )
+                noobaa_patch_params = (
+                    [
+                        {
+                            "op": "remove",
+                            "path": "/spec/disableRoutes",
+                        }
+                    ]
+                    if current_disable_routes is not None
+                    else None
+                )
+            if noobaa_patch_params:
+                noobaa_obj.patch(
+                    params=dumps(noobaa_patch_params),
+                    format_type="json",
+                )
 
         request.addfinalizer(finalizer)
 
