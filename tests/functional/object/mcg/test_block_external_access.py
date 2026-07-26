@@ -112,7 +112,7 @@ class TestBlockExternalAccess(MCGTest):
             if self.sc_disableRoutes_orig_val is not None:
                 sc_patch_params = [
                     {
-                        "op": "replace",
+                        "op": "add",
                         "path": "/spec/multiCloudGateway/disableRoutes",
                         "value": self.sc_disableRoutes_orig_val,
                     }
@@ -363,6 +363,20 @@ class TestBlockExternalAccess(MCGTest):
             )
             sc_dict = storagecluster_obj.get()
             logger.info(f"Storagecluster configuration after patch is {sc_dict}")
+
+            noobaa_obj = ocp.OCP(
+                resource_name=constants.NOOBAA_RESOURCE_NAME,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind=constants.NOOBAA_RESOURCE_NAME,
+            )
+            logger.info("Waiting for disableRoutes removal to propagate to noobaa CR")
+            for noobaa_data in TimeoutSampler(
+                timeout=120, sleep=5, func=noobaa_obj.get
+            ):
+                noobaa_disable_routes = noobaa_data.get("spec", {}).get("disableRoutes")
+                if noobaa_disable_routes is None:
+                    logger.info("disableRoutes successfully removed from noobaa CR")
+                    break
 
     def test_block_access_from_noobaa(
         self,
