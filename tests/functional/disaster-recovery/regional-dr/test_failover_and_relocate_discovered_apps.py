@@ -17,6 +17,13 @@ from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.version import get_semantic_ocs_version_from_config
+from semantic_version import Version
+from ocs_ci.helpers.dr_helpers_ui import (
+    verify_pending_cleanup_alert_firing,
+    verify_pending_cleanup_alert_resolved,
+)
+from ocs_ci.ocs.acm.acm import AcmAddClusters
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +73,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         discovered_apps_dr_workload,
         nodes_multicluster,
         node_restart_teardown,
+        setup_acm_ui,
     ):
         """
         Tests to verify application failover and relocate with discovered applications
@@ -177,6 +185,25 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             logger.info("Checking for Ceph Health OK")
             ceph_health_check()
 
+        # Verify ApplicationCleanupPending alert firing before cleanup (OCS 4.22+)
+        if get_semantic_ocs_version_from_config() >= Version("4.22", partial=True):
+            wait_time_for_alert = (
+                constants.ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD + 180
+            )
+            logger.info(
+                f"Waiting for {wait_time_for_alert} seconds for ApplicationCleanupPending alert to fire"
+            )
+            sleep(wait_time_for_alert)
+            acm_obj = AcmAddClusters()
+
+            # Verify alert firing for each workload
+            for rdr_workload in rdr_workloads:
+                verify_pending_cleanup_alert_firing(
+                    acm_obj,
+                    "Failover",
+                    drpc_name=rdr_workload.discovered_apps_placement_name,
+                )
+
         for rdr_workload in rdr_workloads:
             logger.info("Doing Cleanup Operations")
             dr_helpers.do_discovered_apps_cleanup(
@@ -186,6 +213,16 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 workload_dir=rdr_workload.workload_dir,
                 vrg_name=rdr_workload.discovered_apps_placement_name,
             )
+
+        # Verify ApplicationCleanupPending alert resolved after cleanup (OCS 4.22+)
+        if get_semantic_ocs_version_from_config() >= Version("4.22", partial=True):
+            # Verify alert resolved for each workload
+            for rdr_workload in rdr_workloads:
+                verify_pending_cleanup_alert_resolved(
+                    acm_obj,
+                    "Failover",
+                    drpc_name=rdr_workload.discovered_apps_placement_name,
+                )
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
@@ -257,7 +294,50 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 discovered_apps=True,
                 old_primary=secondary_cluster_name,
                 workload_instance=rdr_workload,
+                vm_auto_cleanup=(
+                    get_semantic_ocs_version_from_config()
+                    >= Version("4.22", partial=True)
+                ),
             )
+
+        # Verify ApplicationCleanupPending alert firing after relocate (OCS 4.22+)
+        if get_semantic_ocs_version_from_config() >= Version("4.22", partial=True):
+            wait_time_for_alert = (
+                constants.ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD + 180
+            )
+            logger.info(
+                f"Waiting for {wait_time_for_alert} seconds for ApplicationCleanupPending alert to fire after Relocate"
+            )
+            sleep(wait_time_for_alert)
+            # Create fresh ACM UI session as previous session may have expired
+            acm_obj = AcmAddClusters()
+
+            # Verify alert firing for each workload
+            for rdr_workload in rdr_workloads:
+                verify_pending_cleanup_alert_firing(
+                    acm_obj,
+                    "Relocate",
+                    drpc_name=rdr_workload.discovered_apps_placement_name,
+                )
+
+            # Manual cleanup after relocate
+            for rdr_workload in rdr_workloads:
+                logger.info("Doing Cleanup Operations after Relocate")
+                dr_helpers.do_discovered_apps_cleanup(
+                    drpc_name=rdr_workload.discovered_apps_placement_name,
+                    old_primary=secondary_cluster_name,
+                    workload_namespace=rdr_workload.workload_namespace,
+                    workload_dir=rdr_workload.workload_dir,
+                    vrg_name=rdr_workload.discovered_apps_placement_name,
+                )
+
+            # Verify alert resolved for each workload
+            for rdr_workload in rdr_workloads:
+                verify_pending_cleanup_alert_resolved(
+                    acm_obj,
+                    "Relocate",
+                    drpc_name=rdr_workload.discovered_apps_placement_name,
+                )
 
         # Verify resources creation on primary cluster (preferredCluster)
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
