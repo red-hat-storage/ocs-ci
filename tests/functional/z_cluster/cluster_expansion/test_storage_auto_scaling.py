@@ -176,16 +176,19 @@ class TestStorageAutoscalerBase(ManageTest):
 
     def fill_up_cluster(self, target_percentage, is_completed=True):
         """
-        Fill up the cluster to a target percentage of total storage capacity using FIO-based load.
+        Fill up the cluster to a target percentage of total storage
+        capacity using dd-based FillPoolJob objects.
 
-        This method invokes the benchmark operator to prefill the cluster up to a specified
-        usage level. If `fast_fill_up` is enabled, more aggressive FIO settings are applied
-        to increase fill speed, and the `target_percentage` is reduced slightly to compensate
-        for potential overshoot.
+        Storage is split between zero-fill (75%) and random-fill
+        (25%) modes. On vSphere, a larger block size with
+        oflag=direct is used to maintain throughput and avoid
+        page-cache writeback stalls.
 
         Args:
-            target_percentage (int): Desired percentage of used cluster storage to reach.
-            is_completed (bool): Whether to wait until the benchmark workload completes.
+            target_percentage (int): Desired percentage of used
+                cluster storage to reach.
+            is_completed (bool): Whether to wait until the fill
+                jobs complete.
 
         """
         storage_to_fill = get_file_size(
