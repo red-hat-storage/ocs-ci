@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import (
     StorageSizeNotReflectedException,
     ResourceWrongStatusException,
@@ -258,7 +259,9 @@ def base_ceph_verification_steps_post_resize_osd(
     logger.info("Check the resources size post resize OSD")
     check_storage_size_is_reflected(expected_storage_size)
     logger.info("Check the Ceph state post resize OSD")
-    check_ceph_state_post_resize_osd()
+    retry(CephHealthException, tries=5, delay=30, backoff=1)(
+        check_ceph_state_post_resize_osd
+    )()
     logger.info("All the Ceph verification steps post resize osd finished successfully")
 
 

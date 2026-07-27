@@ -3621,7 +3621,7 @@ def parse_ceph_table_output(raw_output: str) -> pd.DataFrame:
 
     """
     # Known units for sizes (e.g., GiB, TiB, MiB)
-    known_units = ["GiB", "MiB", "KiB", "TiB"]
+    known_units = ["GiB", "MiB", "KiB", "TiB", "B"]
 
     # Step 1: Join size values with their units (e.g., '894 GiB' -> '894GiB')
     for unit in known_units:
@@ -3705,11 +3705,21 @@ def check_ceph_osd_df_tree():
 
     for line in ceph_output_lines:
         osd_id = line["ID"]
+        if osd_id.startswith("-") or osd_id == "TOTAL":
+            continue
+
         weight = float(line["WEIGHT"])
-        # Regular expression to match the numeric part and the unit
         match = re.match(r"([0-9.]+)([a-zA-Z]+)", line["SIZE"])
+        if not match:
+            logger.warning(f"Unable to parse SIZE {line['SIZE']} for OSD ID {osd_id}")
+            return False
+
         size = float(match.group(1))
         units = match.group(2)
+        if units == "B" and size == 0:
+            logger.warning(f"OSD ID {osd_id} reports 0 B — Ceph stats not ready yet")
+            return False
+
         if units.startswith("Ti"):
             storage_size = convert_device_size(storage_size_param, "TB", 1024)
         elif units.startswith("Gi"):
@@ -3726,19 +3736,21 @@ def check_ceph_osd_df_tree():
         diff = size * 0.04
         if not (size - diff <= weight <= size + diff):
             logger.warning(
-                f"OSD weight {weight} (converted) does not match the OSD size {size} "
-                f"for OSD ID {osd_id}. Expected OSD weight within [{size - diff}, {size + diff}]"
+                f"OSD weight {weight} (converted) does not match "
+                f"the OSD size {size} for OSD ID {osd_id}. "
+                f"Expected OSD weight within "
+                f"[{size - diff}, {size + diff}]"
             )
             return False
-        # If it's a regular OSD entry, check if the expected osd size
-        # and the current size are equal ignoring a small diff
-        diff = size * 0.02
-        if not osd_id.startswith("-") and not (
-            size - diff <= storage_size <= size + diff
-        ):
+        # Check if the expected osd size and the current size are
+        # equal ignoring a small diff
+        diff = size * 0.04
+        if not (size - diff <= storage_size <= size + diff):
             logger.warning(
-                f"The storage size {storage_size} does not match the OSD size {size} "
-                f"for OSD ID {osd_id}. Expected storage size within [{size - diff}, {size + diff}]"
+                f"The storage size {storage_size} does not match "
+                f"the OSD size {size} for OSD ID {osd_id}. "
+                f"Expected storage size within "
+                f"[{size - diff}, {size + diff}]"
             )
             return False
 

@@ -2536,6 +2536,7 @@ VOLUMESNAPSHOT = "volumesnapshot"
 LOGICALVOLUME = "logicalvolume"
 
 PERF_IMAGE = "quay.io/ocsci/perf:latest"
+NGINX_FIO_IMAGE = "quay.io/ocsci/nginx:fio"
 
 ROOK_CEPH_CONFIG_VALUES = """
 [global]
