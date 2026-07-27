@@ -705,22 +705,17 @@ def cnv_hyperconverged_installed_on_dr_clusters(request):
                 kind=constants.HYPERCONVERGED,
                 namespace=constants.CNV_NAMESPACE,
             )
-            try:
-                hco_obj.get(
-                    resource_name=constants.KUBEVIRT_HYPERCONVERGED, silent=True
-                )
-                log.info(
-                    f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' found "
-                    f"on cluster '{cluster_name}'"
-                )
-            except CommandFailed as e:
-                if "NotFound" not in str(e):
-                    raise
+            if not hco_obj.is_exist(resource_name=constants.KUBEVIRT_HYPERCONVERGED):
                 log.info(
                     f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' not found "
                     f"on cluster '{cluster_name}'"
                 )
                 missing.append(cluster_name)
+            else:
+                log.info(
+                    f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' found "
+                    f"on cluster '{cluster_name}'"
+                )
     finally:
         config.switch_ctx(restore_index)
 
