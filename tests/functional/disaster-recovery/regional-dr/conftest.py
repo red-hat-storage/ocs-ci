@@ -771,7 +771,6 @@ def verify_arbiter_deployment_with_zone_failure():
             "Set 'arbiter_deployment: true' in deployment config."
         )
 
-    # Check node counts on each managed cluster
     with config.RunWithPrimaryConfigContext():
 
         master_nodes = get_master_nodes()

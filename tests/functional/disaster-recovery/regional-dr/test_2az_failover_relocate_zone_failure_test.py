@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class Test2AZFailoverAndRelocateZoneFailure:
     """
     Test Failover and Relocate with zone failure on 2az cluster
-    Tests deploy 2 GitOps apps, 2 Discovered apps, and 2 CNV apps
+    Tests deploy 1 GitOps apps, 1 Discovered apps, and 1 CNV apps
 
     """
 
