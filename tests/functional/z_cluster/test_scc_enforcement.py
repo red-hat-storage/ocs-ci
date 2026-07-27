@@ -90,7 +90,8 @@ class TestSCCEnforcement(ManageTest):
         )
 
     # --- Category tests ---
-    # TODO: Confirm SCC values against final design doc before merge.
+    # NooBaa SCC values confirmed by noobaa-operator team (PRs 2000, 2004, 2035).
+    # TODO: Confirm Rook-Ceph, CSI, and operator SCC values against design doc.
 
     @tier1
     @polarion_id("OCS-8070")
@@ -157,11 +158,15 @@ class TestSCCEnforcement(ManageTest):
     @polarion_id("OCS-8071")
     def test_noobaa_scc(self):
         """
-        Verify all NooBaa pods are pinned to their respective custom SCCs.
+        Verify all NooBaa pods are pinned to their expected SCCs.
 
-        Each NooBaa component uses a different custom SCC: noobaa-core,
-        noobaa-db, and noobaa-endpoint have dedicated SCCs, while
-        noobaa-operator uses restricted-v2.
+        noobaa-core and noobaa-endpoint use dedicated custom SCCs.
+        noobaa-operator, noobaa-db (CNPG), cnpg-controller-manager,
+        and prometheus-adapter use restricted-v2.
+
+        Note: noobaa-agent pods are conditional (require a pv-pool
+        BackingStore) and ephemeral — covered by the audit test when
+        present, not tested here.
 
         """
         components = [
@@ -169,7 +174,7 @@ class TestSCCEnforcement(ManageTest):
             (
                 constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
                 "noobaa-db",
-                constants.SCC_NOOBAA_DB,
+                constants.SCC_RESTRICTED_V2,
             ),
             (
                 constants.NOOBAA_ENDPOINT_POD_LABEL,
@@ -179,6 +184,16 @@ class TestSCCEnforcement(ManageTest):
             (
                 constants.NOOBAA_OPERATOR_POD_LABEL,
                 "noobaa-operator",
+                constants.SCC_RESTRICTED_V2,
+            ),
+            (
+                constants.NOOBAA_CNPG_POD_LABEL,
+                "cnpg-controller-manager",
+                constants.SCC_RESTRICTED_V2,
+            ),
+            (
+                constants.NOOBAA_PROMETHEUS_ADAPTER_LABEL,
+                "prometheus-adapter",
                 constants.SCC_RESTRICTED_V2,
             ),
         ]
