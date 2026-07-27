@@ -27,7 +27,14 @@ from ocs_ci.framework.testlib import (
     tier4c,
     tier4a,
 )
-from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK, OSD, ROOK_OPERATOR, MON_DAEMON
+from ocs_ci.ocs.constants import (
+    NGINX_FIO_IMAGE,
+    VOLUME_MODE_BLOCK,
+    OSD,
+    ROOK_OPERATOR,
+    MON_DAEMON,
+)
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.osd_resize import (
     ceph_verification_steps_post_resize_osd,
     check_ceph_health_after_resize_osd,
@@ -169,6 +176,7 @@ class TestResizeOSD(ManageTest):
         Prepare the data before resizing the osd
 
         """
+        helpers.pull_images(NGINX_FIO_IMAGE)
         pvc_size = random.randint(3, 7)
         self.pvcs1, self.pods_for_integrity_check = self.create_pvcs_and_pods(
             pvc_size=pvc_size, num_of_rbd_pvc=6, num_of_cephfs_pvc=6
