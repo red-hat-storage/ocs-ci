@@ -1741,6 +1741,15 @@ acm_configuration_4_18 = {
         By.XPATH,
     ),
     "disconnected-checkbox": ("//input[@id='isAirGappedDeployment']", By.XPATH),
+    "pending-cleanup-alert": (
+        f"//span[@class='mco-status-card__alert-item-header']"
+        f"[normalize-space()='{constants.ALERT_APPLICATION_CLEANUP_PENDING}']",
+        By.XPATH,
+    ),
+    "pending-cleanup-alert-drpc-message": (
+        "//span[contains(text(), \"DRPC '{}' in namespace '{}' requires manual cleanup\")]",
+        By.XPATH,
+    ),
 }
 
 acm_configuration_4_19 = {
