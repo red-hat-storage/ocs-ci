@@ -310,7 +310,7 @@ class AMQ(object):
             self.kafka_bridge = OCS(**kafka_bridge)
             self.kafka_bridge.create(out_yaml_format=False, log_yaml=False)
         except (CommandFailed, CalledProcessError) as cf:
-            log.error("Failed during setup of AMQ KafkaConnect")
+            log.error("Failed during setup of AMQ KafkaBridge")
             raise cf
         # Making sure the kafka_bridge is running
         if self.is_amq_pod_running(pod_pattern="my-bridge-bridge", expected_pods=1):

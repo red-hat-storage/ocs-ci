@@ -126,12 +126,7 @@ class OCS(object):
         log.info(f"Adding {self.kind} with name {self.name}")
         if self.kind in ("Pod", "Deployment", "DeploymentConfig", "StatefulSet"):
             utils.update_container_with_mirrored_image(self.data)
-        if log_yaml:
-            templating.dump_data_to_temp_yaml(self.data, self.temp_yaml)
-        else:
-            # Write temp YAML without logging its content
-            with open(self.temp_yaml, "w") as f:
-                f.write(yaml.dump(self.data))
+        templating.dump_data_to_temp_yaml(self.data, self.temp_yaml, log=log_yaml)
         status = self.ocp.create(
             yaml_file=self.temp_yaml, out_yaml_format=out_yaml_format
         )
