@@ -166,7 +166,7 @@ def fusion_access_status_check() -> None:
         namespace=defaults.FUSION_ACCESS_NAMESPACE,
     )
     cr_data = cr.get(resource_name="fusionaccess-object")
-    phase = cr_data["status"]["phase"]
-    logger.debug(f"FusionAccess status.phase = '{phase}'")
-    assert phase == "Ready", f"FusionAccess is not Ready (current phase: '{phase}')"
+    status = cr_data["status"]["status"]
+    logger.debug(f"FusionAccess status.phase = '{status}'")
+    assert status == "Ready", f"FusionAccess is not Ready (current phase: '{status}')"
     logger.info("FusionAccess is in Ready state")
