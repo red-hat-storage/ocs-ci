@@ -181,7 +181,6 @@ from ocs_ci.utility.ssl_certs import (
     configure_custom_api_cert,
     get_root_ca_cert,
 )
-from ocs_ci.ocs.resources.rgw import create_ec_cephobjectstore
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -2274,14 +2273,7 @@ class Deployment(object):
             config.ENV_DATA.get("odf_provider_mode_deployment", False)
             and not config.ENV_DATA["skip_ocs_deployment"]
         ):
-            path = "/spec/routeAdmission"
-            value = '{wildcardPolicy: "WildcardsAllowed"}'
-            params = f"""[{{"op": "add", "path": "{path}", "value": {value}}}]"""
-            patch_cmd = (
-                f"patch {constants.INGRESSCONTROLLER} -n {constants.OPENSHIFT_INGRESS_OPERATOR_NAMESPACE} "
-                + f"default --type json -p '{params}'"
-            )
-            OCP().exec_oc_cmd(command=patch_cmd)
+            enable_wildcard_routes()
 
             # Mark master nodes schedulable if mark_masters_schedulable: True
             if config.ENV_DATA.get("mark_masters_schedulable", True):
@@ -2425,13 +2417,6 @@ class Deployment(object):
 
         # Enable console plugin
         enable_console_plugin()
-
-        if (
-            config.DEPLOYMENT.get("ec_default_pools")
-            and not config.DEPLOYMENT.get("external_mode")
-            and not config.ENV_DATA.get("mcg_only_deployment")
-        ):
-            create_ec_cephobjectstore()
 
         # validate PDB creation of MON, MDS, OSD pods
         if not config.DEPLOYMENT["external_mode"]:
@@ -3229,6 +3214,27 @@ class Deployment(object):
         except CommandFailed:
             mch_running = False
         return mch_running
+
+
+def enable_wildcard_routes():
+    """
+    Enable wildcard routes on the default IngressController.
+
+    KubeVirt-based hosted clusters create passthrough routes with
+    ``wildcardPolicy: Subdomain`` so that all ``*.apps.<client>.*``
+    traffic is forwarded to the hosted cluster's own router.
+    Without this patch the route is rejected with
+    ``wildcard routes are not allowed``.
+    """
+    logger.info("Enabling wildcard routes on default IngressController")
+    path = "/spec/routeAdmission"
+    value = '{wildcardPolicy: "WildcardsAllowed"}'
+    params = f"""[{{"op": "add", "path": "{path}", "value": {value}}}]"""
+    patch_cmd = (
+        f"patch {constants.INGRESSCONTROLLER} -n {constants.OPENSHIFT_INGRESS_OPERATOR_NAMESPACE} "
+        + f"default --type json -p '{params}'"
+    )
+    ocp.OCP().exec_oc_cmd(command=patch_cmd)
 
 
 def validate_acm_hub_install():
