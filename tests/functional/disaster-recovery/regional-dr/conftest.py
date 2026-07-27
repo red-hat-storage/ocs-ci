@@ -685,11 +685,19 @@ def cnv_hyperconverged_installed_on_dr_clusters(request):
         )
         return
 
+    dr_cluster_names = dr_cluster_relations[0]
+    dr_cluster_configs = [
+        cluster
+        for cluster in config.clusters
+        if cluster.ENV_DATA.get("cluster_name") in dr_cluster_names
+    ]
+
+    missing = []
     restore_index = config.cur_index
     try:
-        for cluster_name in dr_cluster_relations[0]:
-            cluster_index = config.get_cluster_index_by_name(cluster_name)
-            config.switch_ctx(cluster_index)
+        for cluster_config in dr_cluster_configs:
+            cluster_name = cluster_config.ENV_DATA.get("cluster_name")
+            config.switch_ctx(cluster_config.MULTICLUSTER["multicluster_index"])
             hco_obj = OCP(
                 kind=constants.HYPERCONVERGED,
                 namespace=constants.CNV_NAMESPACE,
@@ -697,16 +705,20 @@ def cnv_hyperconverged_installed_on_dr_clusters(request):
             if not hco_obj.is_exist(resource_name=constants.KUBEVIRT_HYPERCONVERGED):
                 log.info(
                     f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' not found "
-                    f"on cluster '{cluster_name}' — skipping test"
+                    f"on cluster '{cluster_name}'"
                 )
-                pytest.skip(
-                    f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' "
-                    f"(hyperconvergeds.hco.kubevirt.io) is not present on managed "
-                    f"cluster '{cluster_name}'"
+                missing.append(cluster_name)
+            else:
+                log.info(
+                    f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' found "
+                    f"on cluster '{cluster_name}'"
                 )
-            log.info(
-                f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' found "
-                f"on cluster '{cluster_name}'"
-            )
     finally:
         config.switch_ctx(restore_index)
+
+    if missing:
+        pytest.skip(
+            f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' "
+            f"(hyperconvergeds.hco.kubevirt.io) is not present on managed "
+            f"cluster(s): {', '.join(missing)}"
+        )
