@@ -307,12 +307,32 @@ def measure_corrupt_pg(request, measurement_dir, threading_lock):
         dict: Contains information about `start` and `stop` time for
             corrupting Ceph Placement Group
     """
-    osd_deployment = deployment.get_osd_deployments()[0]
-    original_deployment_revision = osd_deployment.revision
     ct_pod = pod.get_ceph_tools_pod()
     pool_name = helpers.create_unique_resource_name("corrupted", "pool")
     ct_pod.exec_ceph_cmd(f"ceph osd pool create {pool_name} 1 1")
     ct_pod.exec_ceph_cmd(f"ceph osd pool application enable {pool_name} rbd")
+
+    pool_object = "test_object"
+    ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
+
+    # Find the primary OSD for this PG and use its deployment for corruption.
+    # On clusters with many OSDs the PG may not reside on osd.0, so we must
+    # pick the OSD that actually holds the data.
+    pg_info = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")
+    target_osd_id = pg_info["up"][0]
+    logger.info(
+        f"PG {pg_info['pgid']} primary is osd.{target_osd_id}, "
+        f"selecting its deployment for corruption"
+    )
+    osd_deployments = deployment.get_osd_deployments()
+    osd_deployment = None
+    for d in osd_deployments:
+        osd_pod_data = d.pods[0].get()
+        if osd_pod_data["metadata"]["labels"]["ceph-osd-id"] == str(target_osd_id):
+            osd_deployment = d
+            break
+    assert osd_deployment, f"Could not find OSD deployment for osd.{target_osd_id}"
+    original_deployment_revision = osd_deployment.revision
 
     def teardown():
         """
@@ -348,9 +368,6 @@ def measure_corrupt_pg(request, measurement_dir, threading_lock):
     request.addfinalizer(teardown)
     logger.info("Setting osd noout flag")
     ct_pod.exec_ceph_cmd("ceph osd set noout")
-    logger.info(f"Put object into {pool_name}")
-    pool_object = "test_object"
-    ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
     logger.info(f"Corrupting pool {pool_name} on {osd_deployment.name}")
     rados_utils.corrupt_pg(osd_deployment, pool_name, pool_object)
 

@@ -538,12 +538,29 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
         f'"{pgid}", "{pool_object}", "set-bytes", "/etc/shadow", "--no-mon-config"], '
         f'"command": [ "ceph-objectstore-tool" ], "image": "{ceph_image}", "imagePullPolicy": '
         '"IfNotPresent", "name": "corrupt-pg", "securityContext": {"privileged": true, '
-        f'"runAsUser": 0}}, "volumeMounts": [{{"mountPath": "/var/lib/ceph/osd/ceph-0", '
-        f'"name": "{bridge_name}", "subPath": "ceph-0"}}]}}}}]'
+        f'"runAsUser": 0}}, "volumeMounts": [{{"mountPath": "/var/lib/ceph/osd/ceph-{osd_id}", '
+        f'"name": "{bridge_name}", "subPath": "ceph-{osd_id}"}}]}}}}]'
     )
     osd_deployment.ocp.patch(
         resource_name=osd_deployment.name, params=patch_change, format_type="json"
     )
+
+    # Wait for the OSD pod to restart with corrupted data before issuing
+    # deep-scrub. If deep-scrub runs while the corrupted OSD is down, it only
+    # checks healthy replicas and finds no inconsistency.
+    logger.info(
+        f"Waiting for OSD pod {osd_deployment.name} to restart after corruption"
+    )
+    ocp_pod = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    ocp_pod.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=f"ceph-osd-id={osd_id}",
+        resource_count=1,
+        timeout=300,
+    )
+    logger.info(f"OSD pod osd.{osd_id} is running, issuing deep-scrub on {pgid}")
     ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
 
 
