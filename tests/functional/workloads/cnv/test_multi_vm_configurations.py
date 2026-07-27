@@ -103,7 +103,7 @@ class TestCNVVM(E2ETest):
 
         cmd = f"md5sum {file_name}"
         result = exec_cmd(cmd)
-        md5sum_on_local = result.stdout.strip().split()[0]
+        md5sum_on_local = result.stdout.decode().strip().split()[0]
         if not md5sum_on_local:
             raise ValueError(
                 "MD5 checksum could not be calculated. Ensure the file exists and is accessible."
