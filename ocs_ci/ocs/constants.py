@@ -799,7 +799,7 @@ NOOBAA_METRICS_AUTH_SECRET = "noobaa-metrics-auth-secret"
 # NooBaa DB CNPG
 NB_DB_PRIMARY_POD_LABEL = "cnpg.io/instanceRole=primary"
 CNPG_POD_ROLE_INSTANCE_LABEL = "cnpg.io/podRole=instance"
-CNPG_CLUSTER_KIND = "cluster"
+CNPG_CLUSTER_KIND = "cluster.postgresql.cnpg.noobaa.io"
 NB_DB_CNPG_CLUSTER_NAME = "noobaa-db-pg-cluster"
 NB_DB_CNPG_HEALTHY_STATUS = "Cluster in healthy state"
 NB_DB_CNPG_APP_SECRET = "noobaa-db-pg-cluster-app"
