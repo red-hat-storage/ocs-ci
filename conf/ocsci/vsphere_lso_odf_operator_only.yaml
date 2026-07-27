@@ -1,0 +1,4 @@
+---
+# Install ODF operator only (no StorageCluster) on vSphere with LSO
+DEPLOYMENT:
+  skip_storagecluster_install: true
