@@ -1,5 +1,8 @@
+import json
 import logging
 import types
+
+import botocore.exceptions as boto3exception
 import pytest
 
 from ocs_ci.framework.testlib import MCGTest, tier1, tier3
@@ -17,6 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     list_objects_from_bucket,
+    put_bucket_policy,
     random_object_round_trip_verification,
     s3_copy_object,
     s3_head_object,
@@ -25,7 +29,7 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
-
+from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 
 from ocs_ci.ocs.resources.mcg_params import NSFS
 from ocs_ci.utility.retry import retry
@@ -283,50 +287,106 @@ class TestNSFSObjectIntegrity(MCGTest):
     def test_nsfs_list_buckets(
         self,
         nsfs_bucket_factory,
+        bucket_factory,
     ):
         """
-        Test NSFS bucket listing:
+        Test NSFS bucket listing with ownership-scoped ListBuckets:
 
-        1. Create two NSFS accounts - one with NSFS_ONLY=True and one with NSFS_ONLY=False
-        2. Create two NSFS buckets - one from each account
-        3. Verify that the NSFS_ONLY=True account can only see the NSFS buckets
-        4. Verify that the NSFS_ONLY=False account can also see first.bucket
+        1. Create two NSFS accounts with one bucket each
+        2. Create a second bucket from each account
+        3. Verify that each account can only list its own buckets
         """
-        # 1. Create two NSFS accounts - one with NSFS_ONLY=True and one with NSFS_ONLY=False
-        # 2. Create two NSFS buckets - one from each account
-        nsfs_obj_1 = NSFS(
-            method="CLI",
-            pvc_size=20,
-            nsfs_only=True,
-        )
-        nsfs_obj_2 = NSFS(
-            method="CLI",
-            pvc_size=20,
-            nsfs_only=False,
-        )
-        nsfs_bucket_factory(nsfs_obj_1)
-        nsfs_bucket_factory(nsfs_obj_2)
+        # 1. Create two NSFS accounts with one bucket each
+        nsfs_objects = [NSFS(method="CLI", pvc_size=20) for _ in range(2)]
+        for nsfs_obj in nsfs_objects:
+            nsfs_bucket_factory(nsfs_obj)
 
-        nsfs_buckets = {nsfs_obj_1.bucket_name, nsfs_obj_2.bucket_name}
-        non_nsfs_bucket = "first.bucket"
-
-        # 3. Verify that the NSFS_ONLY=True account can only see the NSFS buckets
-        nsfs_only_acc_list = set(
-            s3_list_buckets(
-                s3_obj=nsfs_obj_1,
+        # 2. Create a second bucket from each account
+        expected_buckets = []
+        for nsfs_obj in nsfs_objects:
+            expected_buckets.append(
+                {
+                    nsfs_obj.bucket_name,
+                    retry(CommandFailed, tries=4, delay=10)(bucket_factory)(
+                        s3resource=nsfs_obj.s3_resource
+                    )[0].name,
+                }
             )
-        )
-        assert (
-            nsfs_buckets.issubset(nsfs_only_acc_list)
-            and non_nsfs_bucket not in nsfs_only_acc_list
-        ), "NSFS_ONLY=True account can see non-NSFS buckets"
 
-        # 4. Verify that the NSFS_ONLY=False account can also see first.bucket
-        nsfs_only_acc_list = set(
-            s3_list_buckets(
-                s3_obj=nsfs_obj_2,
+        # 3. Verify that each account can only list its own buckets
+        for i, nsfs_obj in enumerate(nsfs_objects):
+            listed = set(s3_list_buckets(s3_obj=nsfs_obj))
+            assert expected_buckets[i] == listed, (
+                f"Account {i + 1} bucket list mismatch. "
+                f"Expected: {expected_buckets[i]}, Listed: {listed}"
             )
+
+    @pytest.mark.polarion_id("OCS-8080")
+    @tier2
+    def test_nsfs_only_account_access(
+        self,
+        mcg_obj,
+        nsfs_bucket_factory,
+        bucket_factory,
+    ):
+        """
+        Test that nsfs_only=True restricts access to non-NSFS buckets
+        while still allowing cross-account access to NSFS buckets:
+
+        1. Create two NSFS accounts - one with nsfs_only=True, one without
+        2. Create a non-NSFS bucket (admin-owned) with a public access policy
+        3. Verify the regular account CAN access the non-NSFS bucket
+        4. Verify the nsfs_only account CANNOT access the non-NSFS bucket
+        5. Apply public policies on both NSFS buckets
+        6. Verify both accounts can access each other's NSFS buckets
+        """
+        # 1. Create two NSFS accounts - one with nsfs_only=True, one without
+        nsfs_only_obj = NSFS(method="CLI", pvc_size=20, nsfs_only=True)
+        regular_obj = NSFS(method="CLI", pvc_size=20)
+        nsfs_bucket_factory(nsfs_only_obj)
+        nsfs_bucket_factory(regular_obj)
+
+        # 2. Create a non-NSFS bucket (admin-owned) with a public access policy
+        admin_bucket = bucket_factory()[0].name
+        public_policy = gen_bucket_policy(
+            user_list="*",
+            actions_list=["*"],
+            resources_list=[admin_bucket, f"{admin_bucket}/*"],
         )
-        assert nsfs_buckets.union({non_nsfs_bucket}).issubset(
-            nsfs_only_acc_list
-        ), "NSFS_ONLY=False account can't see some of expected buckets"
+        put_bucket_policy(mcg_obj, admin_bucket, json.dumps(public_policy))
+
+        # 3. Verify the regular account CAN access the non-NSFS bucket
+        retry(boto3exception.ClientError, tries=4, delay=10)(
+            regular_obj.s3_client.list_objects_v2
+        )(Bucket=admin_bucket)
+
+        # 4. Verify the nsfs_only account CANNOT access the non-NSFS bucket
+        try:
+            nsfs_only_obj.s3_client.list_objects_v2(Bucket=admin_bucket)
+            assert (
+                False
+            ), "nsfs_only account should not be able to access non-NSFS bucket"
+        except boto3exception.ClientError as e:
+            assert (
+                e.response["Error"]["Code"] == "AccessDenied"
+            ), f"Expected AccessDenied, got {e.response['Error']['Code']}"
+
+        # 5. Apply public policies on both NSFS buckets
+        for nsfs_obj in (nsfs_only_obj, regular_obj):
+            nsfs_policy = gen_bucket_policy(
+                user_list="*",
+                actions_list=["*"],
+                resources_list=[
+                    nsfs_obj.bucket_name,
+                    f"{nsfs_obj.bucket_name}/*",
+                ],
+            )
+            put_bucket_policy(nsfs_obj, nsfs_obj.bucket_name, json.dumps(nsfs_policy))
+
+        # 6. Verify both accounts can access each other's NSFS buckets
+        retry(boto3exception.ClientError, tries=4, delay=10)(
+            nsfs_only_obj.s3_client.list_objects_v2
+        )(Bucket=regular_obj.bucket_name)
+        retry(boto3exception.ClientError, tries=4, delay=10)(
+            regular_obj.s3_client.list_objects_v2
+        )(Bucket=nsfs_only_obj.bucket_name)
