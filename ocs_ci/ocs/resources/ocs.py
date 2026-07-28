@@ -19,7 +19,6 @@ from ocs_ci.ocs.exceptions import CSVNotFound
 from ocs_ci.utility import templating, utils
 from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_9
 
-
 log = logging.getLogger(__name__)
 
 
@@ -113,12 +112,24 @@ class OCS(object):
     def set_deleted(self):
         self._is_deleted = True
 
-    def create(self, do_reload=True):
+    def create(self, do_reload=True, out_yaml_format=True, log_yaml=True):
+        """
+        Creates the resource on the cluster.
+
+        Args:
+            do_reload (bool): Reload the object with live data after creation
+            out_yaml_format (bool): If False, skip '-o yaml' on the oc create
+                command so the response is not logged at DEBUG level
+            log_yaml (bool): If False, skip logging the resource YAML at
+                INFO level before creation.
+        """
         log.info(f"Adding {self.kind} with name {self.name}")
         if self.kind in ("Pod", "Deployment", "DeploymentConfig", "StatefulSet"):
             utils.update_container_with_mirrored_image(self.data)
-        templating.dump_data_to_temp_yaml(self.data, self.temp_yaml)
-        status = self.ocp.create(yaml_file=self.temp_yaml)
+        templating.dump_data_to_temp_yaml(self.data, self.temp_yaml, log=log_yaml)
+        status = self.ocp.create(
+            yaml_file=self.temp_yaml, out_yaml_format=out_yaml_format
+        )
         if do_reload:
             self.reload()
         return status
