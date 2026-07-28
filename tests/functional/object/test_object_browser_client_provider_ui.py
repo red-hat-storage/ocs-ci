@@ -8,6 +8,8 @@ ensuring proper isolation and folder navigation in the UI.
 import logging
 import os
 import pytest
+import requests
+import shutil
 import tempfile
 import time
 
@@ -524,8 +526,8 @@ class TestObjectBrowserClientProviderUI(ManageTest):
         2. Download an object and check integrity
         3. Download the folder
         4. Check downloaded folder
-        5. Delete an object from folder via UI
-        6. Delete the folder via UI
+        5. Delete an object from folder via S3
+        6. Delete the folder contents via S3
 
         Expected result:
         - Upload, download integrity and deletion operations succeed
@@ -678,43 +680,41 @@ class TestObjectBrowserClientProviderUI(ManageTest):
                 # Step 4: Download entire folder
                 logger.test_step("Step 4: Downloading entire folder")
                 download_folder = tempfile.mkdtemp(prefix="downloaded-folder-")
+                try:
+                    # List all objects in the folder and download them
+                    response = s3_client.list_objects_v2(
+                        Bucket=bucket_name, Prefix=f"{folder_name}/"
+                    )
+                    if "Contents" in response:
+                        for obj in response["Contents"]:
+                            key = obj["Key"]
+                            file_path = os.path.join(
+                                download_folder, os.path.basename(key)
+                            )
+                            s3_client.download_file(bucket_name, key, file_path)
+                            logger.info("Downloaded: %s", key)
 
-                # List all objects in the folder and download them
-                response = s3_client.list_objects_v2(
-                    Bucket=bucket_name, Prefix=f"{folder_name}/"
-                )
-                if "Contents" in response:
-                    for obj in response["Contents"]:
-                        key = obj["Key"]
-                        file_path = os.path.join(download_folder, os.path.basename(key))
-                        s3_client.download_file(bucket_name, key, file_path)
-                        logger.info("Downloaded: %s", key)
+                    # Verify downloaded folder contents
+                    downloaded_file1 = os.path.join(download_folder, "file1.txt")
+                    downloaded_file2 = os.path.join(download_folder, "file2.txt")
+                    assert os.path.exists(
+                        downloaded_file1
+                    ), "file1.txt not in downloaded folder"
+                    assert os.path.exists(
+                        downloaded_file2
+                    ), "file2.txt not in downloaded folder"
 
-                # Verify downloaded folder contents
-                downloaded_file1 = os.path.join(download_folder, "file1.txt")
-                downloaded_file2 = os.path.join(download_folder, "file2.txt")
-                assert os.path.exists(
-                    downloaded_file1
-                ), "file1.txt not in downloaded folder"
-                assert os.path.exists(
-                    downloaded_file2
-                ), "file2.txt not in downloaded folder"
+                    with open(downloaded_file1, "rb") as f:
+                        assert f.read() == test_data1, "file1.txt content mismatch"
+                    with open(downloaded_file2, "rb") as f:
+                        assert f.read() == test_data2, "file2.txt content mismatch"
+                    logger.info("✓ Folder downloaded and verified successfully")
+                finally:
+                    shutil.rmtree(download_folder)
 
-                with open(downloaded_file1, "rb") as f:
-                    assert f.read() == test_data1, "file1.txt content mismatch"
-                with open(downloaded_file2, "rb") as f:
-                    assert f.read() == test_data2, "file2.txt content mismatch"
-                logger.info("✓ Folder downloaded and verified successfully")
+                # Step 5: Delete object from folder via S3
+                logger.test_step("Step 5: Deleting object from folder via S3")
 
-                # Cleanup downloaded folder
-                import shutil
-
-                shutil.rmtree(download_folder)
-
-                # Step 5: Delete object from folder via UI
-                logger.test_step("Step 5: Deleting object from folder via UI")
-
-                # Delete file1.txt via S3 (UI delete requires complex interactions)
                 s3_client.delete_object(
                     Bucket=bucket_name, Key=f"{folder_name}/file1.txt"
                 )
@@ -734,8 +734,8 @@ class TestObjectBrowserClientProviderUI(ManageTest):
                 ), "file2.txt should still exist"
                 logger.info("✓ Object deleted successfully")
 
-                # Step 6: Delete folder
-                logger.test_step("Step 6: Deleting folder")
+                # Step 6: Delete folder contents via S3
+                logger.test_step("Step 6: Deleting folder contents via S3")
 
                 # Delete remaining objects in folder
                 for key in remaining_objects:
@@ -752,9 +752,6 @@ class TestObjectBrowserClientProviderUI(ManageTest):
                 logger.info("✓ Folder deleted successfully")
 
         finally:
-            # Cleanup temp folder
-            import shutil
-
             if os.path.exists(temp_folder):
                 shutil.rmtree(temp_folder)
                 logger.info("Cleaned up temporary folder")
@@ -856,9 +853,7 @@ class TestObjectBrowserClientProviderUI(ManageTest):
 
             # Step 3: Validate URL is accessible
             logger.test_step("Step 3: Validating presigned URL is accessible")
-            import requests
-
-            response = requests.get(presigned_url, verify=False)
+            response = requests.get(presigned_url, verify=False, timeout=60)
             assert (
                 response.status_code == 200
             ), f"Presigned URL returned status {response.status_code}"
