@@ -438,7 +438,9 @@ class VSPHERE(object):
             self.start_vms(vms=[vm])
         # Importing here to avoid circular dependencies
         from ocs_ci.ocs.node import get_compute_node_names, wait_for_nodes_status
+        from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 
+        wait_for_cluster_connectivity(tries=120, delay=5)
         compute_nodes = get_compute_node_names()
         try:
             wait_for_nodes_status(compute_nodes, NODE_READY)
