@@ -8,7 +8,11 @@ from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
 from ocs_ci.ocs.resources import csv
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, ConfigurationError
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    ConfigurationError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import (
@@ -19,6 +23,7 @@ from ocs_ci.ocs.node import (
     label_nodes,
 )
 from ocs_ci.utility.operators import LocalStorageOperator
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
@@ -204,7 +209,12 @@ class DeploymentUI(PageNavigator):
         if ocs_version >= version.VERSION_4_20:
             logger.info("Navigate to Storage Cluster page")
 
-            self.nav_storage_cluster_default_page()
+            self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+            self.do_click(
+                locator=self.page_nav["storage_cluster"],
+                timeout=90,
+            )
+            self.page_has_loaded(retries=15)
             logger.info("Click Configure ODF")
             self.do_click(locator=self.dep_loc["configure_odf"], enable_screenshot=True)
             self.do_click(
@@ -485,12 +495,65 @@ class DeploymentUI(PageNavigator):
         if self.ocp_version_semantic >= version.VERSION_4_7:
             logger.info("Next on step 'Select capacity and nodes'")
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+            if ocs_version >= version.VERSION_4_22:
+                self.verify_forceful_deployment_option_disabled()
             self.configure_in_transit_encryption()
             self.configure_encryption()
 
         self.configure_data_protection()
 
         self.create_storage_cluster()
+
+    def verify_forceful_deployment_option_disabled(self):
+        """
+        Verify the 'Enable forceful deployment' checkbox is absent.
+
+        Attempts to navigate to the 'Advanced settings' wizard step
+        (if it exists) and then asserts the forceful deployment
+        checkbox is not present. In the non-LSO flow neither the
+        step nor the checkbox should appear.
+
+        Any exception other than finding the checkbox is logged and
+        suppressed so that deployment is not interrupted.
+
+        Raises:
+            UnexpectedBehaviour: If the checkbox element is found.
+
+        """
+        logger.info(
+            "Verify 'Enable forceful deployment' checkbox "
+            "is not present in non-LSO deployment flow"
+        )
+        if "enable_forceful_deployment" not in self.dep_loc:
+            logger.info(
+                "Locator 'enable_forceful_deployment' not "
+                "defined, skipping verification"
+            )
+            return
+        try:
+            self.take_screenshot()
+            if self.check_element_text("Advanced settings"):
+                logger.info("'Advanced settings' step found, clicking it")
+                self.do_click(
+                    locator=self.dep_loc["advanced_settings_step"],
+                    enable_screenshot=True,
+                )
+            elements = self.get_elements(
+                locator=self.dep_loc["enable_forceful_deployment"]
+            )
+            if elements:
+                raise UnexpectedBehaviour(
+                    "'Enable forceful deployment' checkbox should "
+                    "not appear in non-LSO deployment flow"
+                )
+            logger.info(
+                "'Enable forceful deployment' checkbox is not present, as expected"
+            )
+        except (WebDriverException, OSError):
+            logger.warning(
+                "Could not verify forceful deployment option, continuing deployment",
+                exc_info=True,
+            )
 
     def configure_performance(self):
         """

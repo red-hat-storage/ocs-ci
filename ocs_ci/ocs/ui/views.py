@@ -383,6 +383,10 @@ deployment_4_21 = {
 }
 
 deployment_4_22 = {
+    "advanced_settings_step": (
+        "//*[contains(text(), 'Advanced settings')]",
+        By.XPATH,
+    ),
     "enable_forceful_deployment": (
         "input#enable-forceful-deployment",
         By.CSS_SELECTOR,
