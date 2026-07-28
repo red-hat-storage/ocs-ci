@@ -901,9 +901,9 @@ def verify_pending_cleanup_alert_firing(
         avoid_stale=True,
         enable_screenshot=True,
         timeout=60,
-        copy_dom=True,
     )
     acm_obj.take_screenshot()
+    acm_obj.copy_dom()
 
     # Expand Critical alerts section (best-effort)
     try:
@@ -997,9 +997,9 @@ def verify_pending_cleanup_alert_resolved(
         avoid_stale=True,
         enable_screenshot=True,
         timeout=60,
-        copy_dom=True,
     )
     acm_obj.take_screenshot()
+    acm_obj.copy_dom()
 
     # Try to expand Critical alerts section if it exists
     try:
