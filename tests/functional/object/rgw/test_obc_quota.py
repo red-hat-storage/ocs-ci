@@ -8,6 +8,7 @@ from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.bucket_utils import (
     copy_random_individual_objects,
+    rm_object_recursive,
     write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -402,6 +403,176 @@ class TestOBCQuota:
                 raise
         else:
             logger.info("Writes succeeded after patching both quotas!!")
+
+    @tier1
+    @pytest.mark.polarion_id("OCS-8084")
+    def test_rgw_obc_multi_bucket_quota(
+        self,
+        awscli_pod_session,
+        rgw_bucket_factory,
+        test_directory_setup,
+        mcg_obj_session,
+    ):
+        """
+        Test RGW OBC quota with multiple buckets having different quota configs
+            * Create 4 RGW buckets: no quota, maxSize only, maxObjects only, both
+            * Write objects to exceed quotas on the 3 quota-limited buckets
+            * Verify no-quota bucket remains writable
+            * Remove objects from quota-limited buckets
+            * Verify all 4 buckets are writable again
+        """
+        interface = "RGW-OC"
+        test_dir = test_directory_setup.result_dir
+        err_msg = "(QuotaExceeded)"
+
+        # Create 4 buckets with different quota configurations
+        bucket_no_quota = rgw_bucket_factory(1, interface)[0].name
+        bucket_max_size = rgw_bucket_factory(1, interface, quota={"maxSize": "5M"})[
+            0
+        ].name
+        bucket_max_objects = rgw_bucket_factory(
+            1, interface, quota={"maxObjects": "5"}
+        )[0].name
+        bucket_both = rgw_bucket_factory(
+            1, interface, quota={"maxObjects": "5", "maxSize": "5M"}
+        )[0].name
+
+        obc_no_quota = OBC(bucket_no_quota)
+        obc_max_size = OBC(bucket_max_size)
+        obc_max_objects = OBC(bucket_max_objects)
+        obc_both = OBC(bucket_both)
+
+        logger.info(
+            f"Created 4 buckets: no_quota={bucket_no_quota}, "
+            f"max_size={bucket_max_size}, max_objects={bucket_max_objects}, "
+            f"both={bucket_both}"
+        )
+
+        # Exceed maxSize quota (upload 10 x 1MB objects, expect failure around 6th)
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="size-obj-",
+                file_dir=test_dir,
+                target=f"s3://{bucket_max_size}",
+                amount=10,
+                s3_obj=obc_max_size,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                logger.info(
+                    f"maxSize quota blocked writes on {bucket_max_size} as expected!!"
+                )
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
+        else:
+            assert False, f"maxSize quota not enforced on {bucket_max_size}!!"
+
+        # Exceed maxObjects quota (upload 6 objects, expect failure at 6th)
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="obj-count-",
+                file_dir=test_dir,
+                target=f"s3://{bucket_max_objects}",
+                amount=6,
+                s3_obj=obc_max_objects,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                logger.info(
+                    f"maxObjects quota blocked writes on {bucket_max_objects} as expected!!"
+                )
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
+        else:
+            assert False, f"maxObjects quota not enforced on {bucket_max_objects}!!"
+
+        # Exceed combined quota (upload 6 objects, expect failure)
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="both-obj-",
+                file_dir=test_dir,
+                target=f"s3://{bucket_both}",
+                amount=6,
+                s3_obj=obc_both,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                logger.info(
+                    f"Combined quota blocked writes on {bucket_both} as expected!!"
+                )
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
+        else:
+            assert False, f"Combined quota not enforced on {bucket_both}!!"
+
+        # Verify no-quota bucket is still writable
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="no-quota-obj-",
+                file_dir=test_dir,
+                target=f"s3://{bucket_no_quota}",
+                amount=3,
+                s3_obj=obc_no_quota,
+                ignore_error=False,
+            )
+        except CommandFailed:
+            assert (
+                False
+            ), f"No-quota bucket {bucket_no_quota} should be writable but failed!!"
+        else:
+            logger.info(f"No-quota bucket {bucket_no_quota} is writable as expected!!")
+
+        # Remove all objects from quota-limited buckets
+        rm_object_recursive(awscli_pod_session, bucket_max_size, obc_max_size)
+        logger.info(f"Removed all objects from {bucket_max_size}")
+        rm_object_recursive(awscli_pod_session, bucket_max_objects, obc_max_objects)
+        logger.info(f"Removed all objects from {bucket_max_objects}")
+        rm_object_recursive(awscli_pod_session, bucket_both, obc_both)
+        logger.info(f"Removed all objects from {bucket_both}")
+
+        # Wait for RGW to recalculate quotas after object removal
+        time.sleep(20)
+
+        # Verify all 4 buckets are writable again
+        for name, obc_obj, label in [
+            (bucket_no_quota, obc_no_quota, "no-quota"),
+            (bucket_max_size, obc_max_size, "max-size"),
+            (bucket_max_objects, obc_max_objects, "max-objects"),
+            (bucket_both, obc_both, "both"),
+        ]:
+            awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
+            try:
+                copy_random_individual_objects(
+                    awscli_pod_session,
+                    pattern=f"post-rm-{label}-",
+                    file_dir=test_dir,
+                    target=f"s3://{name}",
+                    amount=1,
+                    s3_obj=obc_obj,
+                    ignore_error=False,
+                )
+            except CommandFailed:
+                assert False, (
+                    f"Bucket {name} ({label}) should be writable after "
+                    "removing objects but writes failed!!"
+                )
+            else:
+                logger.info(
+                    f"Bucket {name} ({label}) is writable after removing objects!!"
+                )
 
     @polarion_id("OCS-6178")
     @pytest.mark.parametrize(
