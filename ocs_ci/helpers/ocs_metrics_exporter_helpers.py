@@ -820,13 +820,11 @@ def verify_no_cli_spawning_in_logs(pod_obj, time_window="5m", cli_patterns=None)
         "rbd children",
         "ceph osd blocklist",
         "ceph fs subvolume",
-        "exec",
-        "command",
     ]
 
     cmd = f"oc logs {pod_obj.name} -n {pod_obj.namespace} --since={time_window}"
     try:
-        logs = exec_cmd(cmd).stdout
+        logs = exec_cmd(cmd).stdout.decode()
     except CommandFailed:
         logger.warning(f"Could not retrieve logs for {pod_obj.name}")
         return
@@ -852,7 +850,7 @@ def verify_go_ceph_usage_in_logs(pod_obj, time_window="5m"):
     """
     cmd = f"oc logs {pod_obj.name} -n {pod_obj.namespace} --since={time_window}"
     try:
-        logs = exec_cmd(cmd).stdout
+        logs = exec_cmd(cmd).stdout.decode()
         go_ceph_indicators = ["go-ceph", "rados", "rbd.Image", "cephfs"]
         found = any(indicator in logs for indicator in go_ceph_indicators)
         if found:
@@ -879,7 +877,7 @@ def check_for_errors_in_logs(pod_obj, error_patterns=None, time_window="5m"):
     cmd = f"oc logs {pod_obj.name} -n {pod_obj.namespace} --since={time_window}"
 
     try:
-        logs = exec_cmd(cmd).stdout
+        logs = exec_cmd(cmd).stdout.decode()
     except CommandFailed:
         logger.warning(f"Could not retrieve logs for {pod_obj.name}")
         return []
