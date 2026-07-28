@@ -1070,6 +1070,22 @@ class Deployment(object):
         )
         if ibmcloud_ipi:
             ibmcloud.label_nodes_region()
+        vsphere_upi = (
+            config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "upi"
+        )
+        # Workaround for OCPBUGS-100052: vSphere UPI nodes are missing the
+        # platform-type label after OCP 4.22+. Revert once the bug is fixed.
+        if (
+            vsphere_upi
+            and version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22
+        ):
+            logger.info("Labeling all nodes with platform-type=vsphere for vSphere UPI")
+            ocp = OCP()
+            ocp.exec_oc_cmd(
+                "label node --all node.openshift.io/platform-type=vsphere"
+                " --overwrite"
+            )
         # configure Ingress Node Firewall and restrict SSH access to nodes
         if config.ENV_DATA.get("restrict_ssh_access_to_nodes", False):
             try:
