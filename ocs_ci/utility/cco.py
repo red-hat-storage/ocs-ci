@@ -75,7 +75,7 @@ def extract_credentials_requests(
     release_image, install_config, pull_secret, credentials_requests_dir
 ):
     """
-    Extract the CredentialsRequests (AWS and Azure STS variant).
+    Extract the CredentialsRequests (AWS, Azure, and GCP STS variant).
 
     Args:
         release_image (str): Release image from the openshift installer
@@ -235,6 +235,48 @@ def process_credentials_requests_azure(
         f"--credentials-requests-dir={credentials_requests_dir} "
         f"--dnszone-resource-group-name={dns_zone_group_name} --tenant-id={tenant_id} "
         f"--storage-account-name={storage_account_name}"
+    )
+    exec_cmd(cmd)
+
+
+def process_credentials_requests_gcp(
+    name, gcp_region, gcp_project, credentials_requests_dir, output_dir
+):
+    """
+    Process all CredentialsRequest objects for GCP.
+
+    Args:
+        name (str): Name used to tag any created cloud resources
+        gcp_region (str): GCP region to create cloud resources
+        gcp_project (str): GCP project ID
+        credentials_requests_dir (str): Path to the CredentialsRequest directory
+        output_dir (str): Path to the output directory
+
+    """
+    logger.info("Processing all CredentialsRequest objects for GCP")
+    cmd = (
+        f"ccoctl gcp create-all --name={name} --region={gcp_region} "
+        f"--project={gcp_project} "
+        f"--credentials-requests-dir={credentials_requests_dir} "
+        f"--output-dir={output_dir}"
+    )
+    exec_cmd(cmd)
+
+
+def delete_gcp_sts_resources(name, gcp_project, credentials_requests_dir):
+    """
+    Delete the GCP resources that ccoctl created.
+
+    Args:
+        name (str): Name used to tag any created cloud resources
+        gcp_project (str): GCP project ID
+        credentials_requests_dir (str): Path to the credentials requests directory
+
+    """
+    logger.info("Deleting GCP STS resources")
+    cmd = (
+        f"ccoctl gcp delete --name={name} --project={gcp_project} "
+        f"--credentials-requests-dir={credentials_requests_dir}"
     )
     exec_cmd(cmd)
 
