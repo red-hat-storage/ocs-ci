@@ -1870,17 +1870,13 @@ acm_configuration_4_22 = {
     "local-cluster_dropdown_item": (
         "//li[@data-test-id='perspective-switcher-menu-option']"
         "//button[@role='option' and .//h2[normalize-space()='Core platform']] | "
-        "//span[contains(@class, 'c-menu__item-text') and text()='local-cluster']/.. | "
         "//h2[normalize-space()='Administrator']",
         By.XPATH,
     ),
     "local-cluster_dropdown": (
         "//button[@data-test-id='perspective-switcher-toggle']"
         "//*[normalize-space()='Core platform'] | "
-        "//h2[text()='local-cluster'] | "
-        "//span[contains(@class, 'c-menu-toggle__text') and text()='local-cluster']/.. | "
-        "//h2[normalize-space()='Fleet Management'] | "
-        "//h2[normalize-space()='Administrator']",
+        "//h2[text()='local-cluster']",
         By.XPATH,
     ),
     "click-fleet-management": (
