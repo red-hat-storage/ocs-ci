@@ -3852,6 +3852,7 @@ def assert_store_phase_and_mode(
                     f"Current mode of {store_kind} {store_name}: {current_mode}"
                 )
                 return current_mode == expected_mode
+        logger.debug(f"{rpc_name} not found in {rpc_collection}")
         return False
 
     try:

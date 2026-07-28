@@ -156,6 +156,7 @@ STATUS_STOPPING = "stopping"
 STATUS_REPLACING = "Replacing"
 STATUS_SUCCEED = "Succeeded"
 STATUS_ACTIVE = "Active"
+STATUS_REJECTED = "Rejected"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"

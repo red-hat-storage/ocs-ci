@@ -124,7 +124,7 @@ class TestStoreStatusTransitions(MCGTest):
             disruption_timeout = 300 if store_type == "namespacestore" else 180
             assert_func(
                 store.name,
-                "Rejected",
+                constants.STATUS_REJECTED,
                 BS_AUTH_FAILED,
                 mcg_obj,
                 timeout=disruption_timeout,
@@ -217,7 +217,7 @@ class TestStoreStatusTransitions(MCGTest):
             disruption_timeout = 300 if store_type == "namespacestore" else 180
             assert_func(
                 store.name,
-                "Rejected",
+                constants.STATUS_REJECTED,
                 BS_STORAGE_NOT_EXIST,
                 mcg_obj,
                 timeout=disruption_timeout,
