@@ -128,7 +128,7 @@ class TestOBCQuota:
                 *[1, "RGW-OC", {"maxSize": "5M", "maxObjects": "100"}],
                 marks=[
                     tier1,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-8081"),
                 ],
             ),
         ],
@@ -173,6 +173,7 @@ class TestOBCQuota:
                 logger.info(f"Size quota {quota} worked as expected!!")
             else:
                 logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
+                raise
         else:
             assert (
                 False
@@ -208,6 +209,7 @@ class TestOBCQuota:
                 assert False, f"New maxSize quota {new_max_size} didn't get applied!!"
             else:
                 logger.error("Copy objects to bucket failed unexpectedly!!")
+                raise
         else:
             logger.info(f"New maxSize quota {new_max_size} got applied!!")
 
