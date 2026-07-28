@@ -1867,12 +1867,17 @@ acm_configuration_4_22 = {
         "//button[@data-test-id='perspective-switcher-toggle']",
         By.XPATH,
     ),
+    # In OCP 4.22 the perspective-switcher menu renders options as <li data-test-id="perspective-switcher-menu-option">
+    # inside the toggle button DOM. The local OCP cluster perspective is labelled "Core platform".
     "local-cluster_dropdown_item": (
-        "//button[@data-test-id='perspective-switcher-toggle']//*[normalize-space()='local-cluster']",
+        "//li[@data-test-id='perspective-switcher-menu-option']"
+        "//button[@role='option' and .//h2[normalize-space()='Core platform']]",
         By.XPATH,
     ),
+    # When already on the local OCP console the toggle button shows "Core platform" as the active perspective.
     "local-cluster_dropdown": (
-        "//h2[normalize-space()='Administrator']",
+        "//button[@data-test-id='perspective-switcher-toggle']"
+        "//*[normalize-space()='Core platform']",
         By.XPATH,
     ),
     "click-local-cluster": (
