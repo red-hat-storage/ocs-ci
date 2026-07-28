@@ -63,6 +63,7 @@ class TestOBCQuota:
             * check if the quota works
             * change the quota
             * check if the new quota works
+            * decrease maxObjects below current usage, verify writes are blocked
         """
         bucket_name = rgw_bucket_factory(amount, interface, quota=quota)[0].name
         obc_obj = OBC(bucket_name)
@@ -120,6 +121,43 @@ class TestOBCQuota:
                 logger.error("Copy objects to bucket failed unexpectedly!!")
         else:
             logger.info(f"New quota {new_quota_str} got applied!!")
+
+        # Decrease maxObjects below current usage and verify writes are blocked
+        decreased_quota = 2
+        decreased_quota_str = (
+            f'{{"spec": {{"additionalConfig":{{"maxObjects": "{decreased_quota}"}}}}}}'
+        )
+        cmd = f"patch obc {bucket_name} -p '{decreased_quota_str}' -n openshift-storage --type=merge"
+        OCP().exec_oc_cmd(cmd)
+        logger.info(
+            f"Decreased maxObjects to {decreased_quota} (below current usage) on obc {bucket_name}"
+        )
+        time.sleep(20)
+
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="decreased-object-",
+                file_dir=test_dir,
+                target=full_bucket_path,
+                amount=1,
+                s3_obj=obc_obj,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                logger.info(
+                    f"Decreased maxObjects quota to {decreased_quota} blocked writes as expected!!"
+                )
+            else:
+                logger.error("Copy objects to bucket failed unexpectedly!!")
+                raise
+        else:
+            assert False, (
+                f"Decreased maxObjects to {decreased_quota} below current usage "
+                "but writes still succeeded!!"
+            )
 
     @pytest.mark.parametrize(
         argnames="amount,interface,quota",
