@@ -32,7 +32,11 @@ from ocs_ci.ocs.resources.objectbucket import (
     get_s3_credentials_from_obc,
     wait_for_obc_phase,
 )
-from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
+from ocs_ci.ocs.ui.base_ui import (
+    accept_s3_endpoint_certificate,
+    login_ui,
+    close_browser,
+)
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.ocs.ui.page_objects.s3_login_form import S3LoginForm
@@ -361,6 +365,9 @@ class TestObjectBrowserClientProviderUI(ManageTest):
             login_ui()
             time.sleep(3)
 
+            # Accept S3 endpoint certificate in the browser
+            accept_s3_endpoint_certificate(s3_creds1["endpoint"])
+
             # Navigate to Object Storage page
             logger.info("Navigating to Object Storage page")
             bucket_ui = BucketsTab()
@@ -438,6 +445,9 @@ class TestObjectBrowserClientProviderUI(ManageTest):
             time.sleep(2)
             login_ui()
             time.sleep(3)
+
+            # Accept S3 endpoint certificate in the browser
+            accept_s3_endpoint_certificate(s3_creds2["endpoint"])
 
             # Navigate to Object Storage page
             logger.info("Navigating to Object Storage page")
@@ -604,6 +614,9 @@ class TestObjectBrowserClientProviderUI(ManageTest):
                 logger.test_step("Step 2: Uploading folder via UI")
                 login_ui()
                 time.sleep(3)
+
+                # Accept S3 endpoint certificate in the browser
+                accept_s3_endpoint_certificate(s3_creds["endpoint"])
 
                 bucket_ui = BucketsTab()
                 bucket_ui.nav_object_storage_page()
