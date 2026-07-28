@@ -52,6 +52,44 @@ def wait_for_num_objects(mcg_obj, bucket_name, expected_count, timeout=360):
         )
 
 
+def wait_for_quota_status(
+    mcg_obj, bucket_name, expected_statuses, timeout=360, sleep=30
+):
+    """
+    Poll bucket status until QuotaStatus matches one of expected_statuses.
+
+    Args:
+        mcg_obj (obj): An object representing the current state of the MCG in the cluster
+        bucket_name (str): Name of the bucket to check
+        expected_statuses (str or tuple): Expected QuotaStatus value(s)
+        timeout (int): Maximum time to wait in seconds
+        sleep (int): Seconds between polls
+
+    """
+    if isinstance(expected_statuses, str):
+        expected_statuses = (expected_statuses,)
+    logger.info(f"Waiting for quota status to reach {expected_statuses}")
+    last_seen = None
+    try:
+        for quota_status in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_bucket_status_value,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket_name,
+            key="QuotaStatus",
+        ):
+            last_seen = quota_status
+            if quota_status in expected_statuses:
+                logger.info(f"Quota status reached {quota_status}")
+                return quota_status
+    except TimeoutExpiredError:
+        assert False, (
+            f"Quota status did not reach {expected_statuses} "
+            f"within {timeout}s, last observed: {last_seen}"
+        )
+
+
 class QuotaStatus:
     NOT_SET = "QUOTA_NOT_SET"
     OPTIMAL = "OPTIMAL"
@@ -251,28 +289,7 @@ class TestNoobaaMetrics:
             mcg_obj=mcg_obj,
         )
 
-        logger.info(
-            "Waiting for quota status to return to OPTIMAL after increasing max-objects"
-        )
-        last_seen = None
-        try:
-            for quota_status in TimeoutSampler(
-                timeout=360,
-                sleep=30,
-                func=get_bucket_status_value,
-                mcg_obj=mcg_obj,
-                bucket_name=bucket_name,
-                key="QuotaStatus",
-            ):
-                last_seen = quota_status
-                if quota_status == QuotaStatus.OPTIMAL:
-                    logger.info("Quota status returned to OPTIMAL")
-                    break
-        except TimeoutExpiredError:
-            assert False, (
-                f"Quota status did not reach {QuotaStatus.OPTIMAL} "
-                f"within 360s, last observed: {last_seen}"
-            )
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.OPTIMAL)
 
     @config.run_with_provider_context_if_available
     def test_mcg_obc_max_size_quota_lifecycle(
@@ -334,26 +351,7 @@ class TestNoobaaMetrics:
             mcg_obj=mcg_obj,
         )
 
-        logger.info("Waiting for quota status to reach APPROACHING_QUOTA")
-        last_seen = None
-        try:
-            for quota_status in TimeoutSampler(
-                timeout=360,
-                sleep=30,
-                func=get_bucket_status_value,
-                mcg_obj=mcg_obj,
-                bucket_name=bucket_name,
-                key="QuotaStatus",
-            ):
-                last_seen = quota_status
-                if quota_status == QuotaStatus.APPROACHING:
-                    logger.info("Quota status is APPROACHING_QUOTA as expected")
-                    break
-        except TimeoutExpiredError:
-            assert False, (
-                f"Quota status did not reach {QuotaStatus.APPROACHING} "
-                f"within 360s, last observed: {last_seen}"
-            )
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.APPROACHING)
 
         # 4. Write beyond 100% (3 more x 200MB, total ~2.4GB exceeding 2Gi)
         logger.info(
@@ -369,26 +367,7 @@ class TestNoobaaMetrics:
             mcg_obj=mcg_obj,
         )
 
-        logger.info("Waiting for quota status to reach EXCEEDING_QUOTA")
-        last_seen = None
-        try:
-            for quota_status in TimeoutSampler(
-                timeout=360,
-                sleep=30,
-                func=get_bucket_status_value,
-                mcg_obj=mcg_obj,
-                bucket_name=bucket_name,
-                key="QuotaStatus",
-            ):
-                last_seen = quota_status
-                if quota_status == QuotaStatus.EXCEEDING:
-                    logger.info("Quota status is EXCEEDING_QUOTA as expected")
-                    break
-        except TimeoutExpiredError:
-            assert False, (
-                f"Quota status did not reach {QuotaStatus.EXCEEDING} "
-                f"within 360s, last observed: {last_seen}"
-            )
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.EXCEEDING)
 
         # 5. Verify that writes are blocked when quota is exceeded
         logger.info("Attempting to write one more object, expecting failure")
@@ -419,34 +398,11 @@ class TestNoobaaMetrics:
             use_yes=True,
         )
 
-        logger.info(
-            "Waiting for quota status to confirm EXCEEDING_QUOTA after decrease"
-        )
-        last_seen = None
-        try:
-            for quota_status in TimeoutSampler(
-                timeout=360,
-                sleep=30,
-                func=get_bucket_status_value,
-                mcg_obj=mcg_obj,
-                bucket_name=bucket_name,
-                key="QuotaStatus",
-            ):
-                last_seen = quota_status
-                if quota_status == QuotaStatus.EXCEEDING:
-                    logger.info(
-                        "Quota status remains EXCEEDING_QUOTA after decreasing "
-                        "below usage"
-                    )
-                    break
-        except TimeoutExpiredError:
-            assert False, (
-                f"Quota status did not reach {QuotaStatus.EXCEEDING} "
-                f"within 360s, last observed: {last_seen}"
-            )
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.EXCEEDING)
 
         # 7. Increase max-size to just above current usage, verify APPROACHING_QUOTA
-        approaching_size_gi = 3
+        #    Current usage is ~2.4GB (12 x 200MB), set quota to 2.5Gi (~94% used)
+        approaching_size_gi = 2.5
         logger.info(
             f"Increasing max-size quota to {approaching_size_gi}Gi "
             "(just above current usage)"
@@ -457,31 +413,7 @@ class TestNoobaaMetrics:
             use_yes=True,
         )
 
-        logger.info(
-            "Waiting for quota status to reach APPROACHING_QUOTA after increase"
-        )
-        last_seen = None
-        try:
-            for quota_status in TimeoutSampler(
-                timeout=360,
-                sleep=30,
-                func=get_bucket_status_value,
-                mcg_obj=mcg_obj,
-                bucket_name=bucket_name,
-                key="QuotaStatus",
-            ):
-                last_seen = quota_status
-                if quota_status == QuotaStatus.APPROACHING:
-                    logger.info(
-                        "Quota status is APPROACHING_QUOTA after setting quota "
-                        "just above usage"
-                    )
-                    break
-        except TimeoutExpiredError:
-            assert False, (
-                f"Quota status did not reach {QuotaStatus.APPROACHING} "
-                f"within 360s, last observed: {last_seen}"
-            )
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.APPROACHING)
 
         # 8. Remove max-size quota (set to 0 = unlimited), verify writes succeed
         logger.info("Removing max-size quota (setting to 0)")
@@ -491,26 +423,9 @@ class TestNoobaaMetrics:
             use_yes=True,
         )
 
-        logger.info("Waiting for quota status to update after removing max-size")
-        last_seen = None
-        try:
-            for quota_status in TimeoutSampler(
-                timeout=360,
-                sleep=30,
-                func=get_bucket_status_value,
-                mcg_obj=mcg_obj,
-                bucket_name=bucket_name,
-                key="QuotaStatus",
-            ):
-                last_seen = quota_status
-                logger.info(f"Quota status after removing max-size: {quota_status}")
-                if quota_status in (QuotaStatus.NOT_SET, QuotaStatus.OPTIMAL):
-                    break
-        except TimeoutExpiredError:
-            assert False, (
-                f"Quota status did not reach {QuotaStatus.NOT_SET} or "
-                f"{QuotaStatus.OPTIMAL} within 360s, last observed: {last_seen}"
-            )
+        wait_for_quota_status(
+            mcg_obj, bucket_name, (QuotaStatus.NOT_SET, QuotaStatus.OPTIMAL)
+        )
 
         logger.info("Writing object after quota removal, expecting success")
         write_random_test_objects_to_bucket(
