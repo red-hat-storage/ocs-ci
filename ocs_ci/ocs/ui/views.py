@@ -1880,6 +1880,19 @@ acm_configuration_4_22 = {
         "//*[normalize-space()='Core platform']",
         By.XPATH,
     ),
+    # OCP 4.22: detects that the current perspective is "Core platform" (local OCP cluster).
+    # Used by login_to_acm() to identify that a perspective switch to Fleet management is needed.
+    "click-fleet-management": (
+        "//button[@data-test-id='perspective-switcher-toggle']"
+        "//*[normalize-space()='Core platform']",
+        By.XPATH,
+    ),
+    # OCP 4.22: the "Fleet management" (ACM) perspective menu item inside the open switcher dropdown.
+    "fleet-management-item": (
+        "//li[@data-test-id='perspective-switcher-menu-option']"
+        "//button[@role='option' and .//h2[normalize-space()='Fleet management']]",
+        By.XPATH,
+    ),
     "click-local-cluster": (
         '//td[@data-label="Name"]//span[text()="local-cluster"]',
         By.XPATH,

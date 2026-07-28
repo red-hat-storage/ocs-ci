@@ -849,8 +849,8 @@ def login_to_acm():
     driver = login_ui(url)
     page_nav = AcmPageNavigator()
     page_nav.page_has_loaded(retries=10, sleep_time=5)
-    locator = ["click-local-cluster", "click-admin-dropdown"]
-    expected_text = ["local-cluster", "Administrator"]
+    locator = ["click-local-cluster", "click-admin-dropdown", "click-fleet-management"]
+    expected_text = ["local-cluster", "Administrator", "Core platform"]
     for expected_text, locator in zip(expected_text, locator):
         # use_fallback=False: a timeout here is the expected "not found"
         # outcome for the alternative branch — suppress AI fallback noise.
@@ -870,7 +870,8 @@ def login_to_acm():
             log.warning(f"'{expected_text}' dropdown not found")
     else:
         log.warning(
-            "Neither 'local-cluster' nor 'Administrator' dropdown found, view is expected to be on the ACM console"
+            "Neither 'local-cluster', 'Administrator', nor 'Core platform' dropdown found, "
+            "view is expected to be on the ACM console. "
             "Check if login to OCP console is successful or not"
         )
 
