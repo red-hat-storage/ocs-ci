@@ -820,6 +820,12 @@ ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+OCS_METRICS_EXPORTER_HTTPS_PORT = 8443
+OCS_METRICS_EXPORTER_METRICS_PATH = "/metrics"
+OCS_METRICS_EXPORTER_READYZ_PATH = "/readyz"
+OCS_METRICS_EXPORTER_CEPH_AUTH_SECRET = (
+    "ocs-metrics-exporter-ceph-auth"  # pragma: allowlist secret
+)
 MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
@@ -1660,6 +1666,7 @@ ALERT_CEPHFS_ORPHANED_SNAPSHOT = "CephFSOrphanedSnapshot"
 CEPHFS_SNAPSHOT_STATE_ORPHANED = "orphaned"
 CEPHFS_SNAPSHOT_STATE_BOUND = "bound"
 ALERT_MDSXATTR = "CephXattrSetLatency"
+ALERT_HIGHRBDCLONESNAPSHOTCOUNT = "HighRBDCloneSnapshotCount"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
