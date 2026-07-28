@@ -507,9 +507,9 @@ class TestNoobaaMetrics:
                 if quota_status in (QuotaStatus.NOT_SET, QuotaStatus.OPTIMAL):
                     break
         except TimeoutExpiredError:
-            logger.warning(
-                f"Quota status did not reach NOT_SET/OPTIMAL within 360s, "
-                f"last observed: {last_seen}"
+            assert False, (
+                f"Quota status did not reach {QuotaStatus.NOT_SET} or "
+                f"{QuotaStatus.OPTIMAL} within 360s, last observed: {last_seen}"
             )
 
         logger.info("Writing object after quota removal, expecting success")
