@@ -213,6 +213,158 @@ class TestOBCQuota:
         else:
             logger.info(f"New maxSize quota {new_max_size} got applied!!")
 
+    @pytest.mark.parametrize(
+        argnames="amount,interface,quota",
+        argvalues=[
+            pytest.param(
+                *[1, "RGW-OC", {"maxObjects": "5", "maxSize": "5M"}],
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-XXXX"),
+                ],
+            ),
+        ],
+    )
+    def test_rgw_obc_combined_quota(
+        self,
+        awscli_pod_session,
+        rgw_bucket_factory,
+        test_directory_setup,
+        mcg_obj_session,
+        amount,
+        interface,
+        quota,
+    ):
+        """
+        Test RGW OBC combined maxObjects and maxSize quota enforcement
+            * Create OBC with both maxObjects and maxSize set
+            * Write objects until both quotas are hit
+            * Patch only maxSize higher, verify writes still blocked by maxObjects
+            * Patch only maxObjects higher, verify writes still blocked by maxSize
+            * Patch both quotas higher, verify writes succeed
+        """
+        bucket_name = rgw_bucket_factory(amount, interface, quota=quota)[0].name
+        obc_obj = OBC(bucket_name)
+        full_bucket_path = f"s3://{bucket_name}"
+        test_dir = test_directory_setup.result_dir
+        err_msg = "(QuotaExceeded)"
+
+        # Write objects to hit both limits (5 x 1MB = 5MB and 5 objects)
+        max_objects = int(quota["maxObjects"])
+        upload_amount = max_objects + 1
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="object-",
+                file_dir=test_dir,
+                target=full_bucket_path,
+                amount=upload_amount,
+                s3_obj=obc_obj,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                logger.info("Both quotas hit as expected!!")
+            else:
+                logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
+                raise
+        else:
+            assert False, "Combined quota didn't work!! All objects were written!!"
+
+        # Patch only maxSize higher — writes should still be blocked by maxObjects
+        patch_str = '{"spec": {"additionalConfig":{"maxSize": "20M"}}}'
+        cmd = f"patch obc {bucket_name} -p '{patch_str}' -n openshift-storage --type=merge"
+        OCP().exec_oc_cmd(cmd)
+        logger.info(f"Patched only maxSize to 20M on obc {bucket_name}")
+        time.sleep(20)
+
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="size-patched-",
+                file_dir=test_dir,
+                target=full_bucket_path,
+                amount=1,
+                s3_obj=obc_obj,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                logger.info("Write still blocked by maxObjects as expected!!")
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
+        else:
+            assert False, (
+                "Write succeeded after patching only maxSize — "
+                "maxObjects should still block!!"
+            )
+
+        # Patch only maxObjects higher (reset maxSize back to original) —
+        # writes should still be blocked by maxSize
+        patch_str = (
+            '{"spec": {"additionalConfig":{"maxObjects": "20", "maxSize": "5M"}}}'
+        )
+        cmd = f"patch obc {bucket_name} -p '{patch_str}' -n openshift-storage --type=merge"
+        OCP().exec_oc_cmd(cmd)
+        logger.info(
+            f"Patched maxObjects to 20 and maxSize back to 5M on obc {bucket_name}"
+        )
+        time.sleep(20)
+
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="obj-patched-",
+                file_dir=test_dir,
+                target=full_bucket_path,
+                amount=1,
+                s3_obj=obc_obj,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                logger.info("Write still blocked by maxSize as expected!!")
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
+        else:
+            assert False, (
+                "Write succeeded after patching only maxObjects — "
+                "maxSize should still block!!"
+            )
+
+        # Patch both quotas higher — writes should succeed
+        patch_str = (
+            '{"spec": {"additionalConfig":{"maxObjects": "20", "maxSize": "20M"}}}'
+        )
+        cmd = f"patch obc {bucket_name} -p '{patch_str}' -n openshift-storage --type=merge"
+        OCP().exec_oc_cmd(cmd)
+        logger.info(f"Patched both quotas higher on obc {bucket_name}")
+        time.sleep(20)
+
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="both-patched-",
+                file_dir=test_dir,
+                target=full_bucket_path,
+                amount=3,
+                s3_obj=obc_obj,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                assert False, "Both quotas were increased but writes still blocked!!"
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
+        else:
+            logger.info("Writes succeeded after patching both quotas!!")
+
     @polarion_id("OCS-6178")
     @pytest.mark.parametrize(
         argnames="amount,interface,quota",
