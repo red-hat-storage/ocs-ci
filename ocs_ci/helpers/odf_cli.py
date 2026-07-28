@@ -186,24 +186,35 @@ class ODFCLIRetriever:
 
 class ODFCliRunner:
     def __init__(self) -> None:
-        self.binary_name = "odf"
+        self.binary_name = os.path.join(config.RUN["bin_dir"], "odf")
 
-    def run_command(self, command_args: Union[str, list]) -> str:
+    def run_command(self, command_args: Union[str, list], timeout=600) -> str:
         # by default Operator namespace is set to 'openshift-storage' in ODF CLI,
         # when -n <storage_ns> is not passed the command will fail if the namespace is not 'openshift-storage'
-        if isinstance(command_args, str):
-            full_command = str(
-                self.binary_name
-                + f' -n {config.ENV_DATA["cluster_namespace"]} '
-                + command_args
-            )
-        elif isinstance(command_args, list):
-            full_command = " ".join(
-                [self.binary_name, "-n", config.ENV_DATA["cluster_namespace"]]
-                + command_args
-            )
+        args_str = (
+            command_args if isinstance(command_args, str) else " ".join(command_args)
+        )
+        skip_namespace = args_str.lstrip().startswith("dr ")
 
-        output = exec_cmd(full_command)
+        if isinstance(command_args, str):
+            if skip_namespace:
+                full_command = f"{self.binary_name} {command_args}"
+            else:
+                full_command = str(
+                    self.binary_name
+                    + f' -n {config.ENV_DATA["cluster_namespace"]} '
+                    + command_args
+                )
+        elif isinstance(command_args, list):
+            if skip_namespace:
+                full_command = " ".join([self.binary_name] + command_args)
+            else:
+                full_command = " ".join(
+                    [self.binary_name, "-n", config.ENV_DATA["cluster_namespace"]]
+                    + command_args
+                )
+
+        output = exec_cmd(full_command, timeout=timeout)
         return output
 
     def run_help(self):

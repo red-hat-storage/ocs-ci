@@ -39,6 +39,7 @@ from ocs_ci.helpers.dr_helpers import (
     update_odf_cli_dr_config_kubeconfigs,
     validate_cluster_odf_cli,
 )
+from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +62,14 @@ def pytest_collection_modifyitems(items):
 
 
 @pytest.fixture(autouse=True, scope="session")
-def update_odf_cli_dr_kubeconfigs():
+def setup_odf_cli_binary():
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+    odf_cli_setup_helper()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def update_odf_cli_dr_kubeconfigs(setup_odf_cli_binary):
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
     update_odf_cli_dr_config_kubeconfigs()
@@ -89,7 +97,6 @@ def rdr_health_check():
     Checks Ceph health, rbd-mirror daemon status, and mirroring health.
 
     """
-    validate_cluster_odf_cli()
 
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
@@ -97,6 +104,8 @@ def rdr_health_check():
     if config.RUN["cli_params"].get("dev_mode"):
         log.info("Skipping RDR health checks for development mode")
         return
+
+    validate_cluster_odf_cli()
 
     restore_index = config.cur_index
     try:

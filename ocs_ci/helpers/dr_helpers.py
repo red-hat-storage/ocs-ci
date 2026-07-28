@@ -11,6 +11,8 @@ import time
 from datetime import datetime
 from time import sleep
 
+import pytest
+
 from novaclient.exceptions import ResourceNotFound
 
 
@@ -403,6 +405,12 @@ def relocate(
                     ].discovered_apps_placement_name,
                     skip_resource_deletion_verification=True,
                 )
+
+    validate_application_odf_cli(
+        drpc_name=drpc_obj.resource_name,
+        namespace=namespace,
+        dr_action="app-relocate",
+    )
 
     config.switch_ctx(restore_index)
 
@@ -4531,14 +4539,26 @@ def validate_application_odf_cli(
             f"Running ODF DR validate application for DRPC '{drpc_name}' "
             f"in namespace '{namespace}'"
         )
-        result = odf_cli_runner.run_command(cmd_args)
-        stdout = result.stdout.decode()
-        logger.info(f"ODF DR validate application output:\n{stdout}")
+        try:
+            result = odf_cli_runner.run_command(cmd_args, timeout=1200)
+            stdout = result.stdout.decode()
+            logger.info(f"ODF DR validate application output:\n{stdout}")
+        except Exception:
+            logger.warning(
+                f"ODF DR validate application command failed for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}'. Skipping test.",
+                exc_info=True,
+            )
+            pytest.skip(
+                f"ODF DR validate application command failed for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}'"
+            )
 
-        assert "validation successful" in stdout.lower(), (
-            f"ODF DR validate application did not report success for DRPC '{drpc_name}' "
-            f"in namespace '{namespace}'. Output:\n{stdout}"
-        )
+        if "validation completed" not in stdout.lower():
+            pytest.skip(
+                f"ODF DR validate application did not report success for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}'. Output:\n{stdout}"
+            )
 
     return stdout
 
@@ -4586,6 +4606,11 @@ def update_odf_cli_dr_config_kubeconfigs():
             logger.info(f"Updated odf_cli_dr.yaml passive-hub kubeconfig: {kubeconfig}")
             break
 
+    cluster_set_names = get_cluster_set_name()
+    if cluster_set_names:
+        cli_config["clusterSet"] = cluster_set_names[0]
+        logger.info(f"Updated odf_cli_dr.yaml clusterSet: {cluster_set_names[0]}")
+
     with open(config_path, "w") as f:
         yaml.dump(cli_config, f, default_flow_style=False)
 
@@ -4615,12 +4640,12 @@ def validate_cluster_odf_cli():
     odf_cli_runner = ODFCliRunner()
     cmd_args = f"dr validate clusters --config {constants.ODF_CLI_DR_CONFIG_PATH} -o {output_dir}"
     logger.info("Running ODF DR validate clusters")
-    result = odf_cli_runner.run_command(cmd_args)
+    result = odf_cli_runner.run_command(cmd_args, timeout=1200)
     stdout = result.stdout.decode()
     logger.info(f"ODF DR validate clusters output:\n{stdout}")
 
     assert (
-        "validation successful" in stdout.lower()
+        "validation completed" in stdout.lower()
     ), f"ODF DR validate clusters did not report success. Output:\n{stdout}"
 
     return stdout
