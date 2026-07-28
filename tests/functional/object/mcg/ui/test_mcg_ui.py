@@ -836,6 +836,8 @@ class TestBucketCreate:
         # Verify second branch
         logger.test_step("Verify f2.txt content via preview (d1/d1.2/d2.2/)")
         bucket_ui.navigate_to_bucket(s3_bucket_name)
+        bucket_ui.do_click(bucket_ui.bucket_tab["refresh_objects_button"])
+        bucket_ui.wait_for_object_listed("d1")
         bucket_ui.navigate_into_folder("d1")
         bucket_ui.navigate_into_folder("d1.2")
         bucket_ui.navigate_into_folder("d2.2")
