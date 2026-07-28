@@ -1190,6 +1190,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
 
         """
         nonlocal client
+        nonlocal current_version
         # First, stop heartbeat and wait for it to be missed
         client.stop_heartbeat()
         # Wait for heartbeat critical alert to fire (300s + margin)
@@ -1197,8 +1198,13 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
         logger.info(f"Waiting {heartbeat_wait_time} seconds for heartbeat to be missed")
         time.sleep(heartbeat_wait_time)
 
+        # Calculate incompatible version (1 minor version lower)
+        from ocs_ci.utility.version import get_previous_version
+        incompatible_version = get_previous_version(current_version, count=1)
+        logger.info(f"Setting incompatible version: {incompatible_version} (current: {current_version})")
+
         # Now change the version to trigger incompatible version alert
-        client.set_ocs_version("4.13.0")
+        client.set_ocs_version(incompatible_version)
         # Wait additional time to ensure all alerts are captured
         additional_wait_time = 60 * 3  # 3 minutes
         logger.info(
