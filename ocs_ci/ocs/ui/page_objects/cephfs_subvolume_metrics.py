@@ -61,6 +61,9 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
             "cephfs_subvolume_related_pods_links"
         ]
         self.view_all_link_loc = self.validation_loc["cephfs_subvolume_view_all_link"]
+        self.row_name_button_by_namespace_loc = self.validation_loc[
+            "cephfs_subvolume_row_name_button_by_namespace"
+        ]
         self.row_by_namespace_loc = self.validation_loc[
             "cephfs_subvolume_row_by_namespace"
         ]
@@ -282,6 +285,17 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         logger.info("Clicking first-row name button to open Related pods popover")
         self.do_click(self.first_row_name_button_loc)
 
+    def click_cephfs_subvolume_row_name_by_namespace(self, namespace):
+        """
+        Click the 'Show related pods' button on the row matching ``namespace``.
+
+        Args:
+            namespace (str): Kubernetes namespace whose row to click.
+        """
+        logger.info("Clicking name button for namespace '%s'", namespace)
+        loc = format_locator(self.row_name_button_by_namespace_loc, namespace)
+        self.do_click(loc)
+
     def verify_cephfs_subvolume_related_pods_visible(self, timeout=10):
         """
         Verify the 'Related pods' header is present in the name popover.
@@ -450,6 +464,42 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         except TimeoutExpiredError:
             pass
         return False
+
+    def verify_metric_value_for_namespace(self, namespace, metric):
+        """
+        Switch to ``metric``, wait for a valid value for ``namespace``,
+        and verify it carries the expected unit suffix.
+
+        Args:
+            namespace (str): Kubernetes namespace to check.
+            metric (str): Metric label to switch to, e.g.
+                ``constants.CEPHFS_SUBVOLUME_DEFAULT_METRIC``.
+
+        Returns:
+            str: The metric value string (e.g. '13 IOPS').
+
+        Raises:
+            AssertionError: If the value is invalid or has the wrong
+                unit suffix.
+        """
+        expected_unit = constants.CEPHFS_SUBVOLUME_METRIC_EXPECTED_UNITS[metric]
+        self.switch_cephfs_subvolume_metric(metric)
+        assert self.wait_for_valid_metric_value_for_namespace(namespace, metric), (
+            f"Metric '{metric}' did not show a valid value "
+            f"for namespace '{namespace}'"
+        )
+        value = self.get_cephfs_subvolume_value_for_namespace(namespace)
+        logger.info(
+            "Metric '%s', namespace '%s': %s",
+            metric,
+            namespace,
+            value,
+        )
+        assert expected_unit in value, (
+            f"Value '{value}' does not contain expected unit "
+            f"'{expected_unit}' for metric '{metric}'"
+        )
+        return value
 
     def verify_cephfs_subvolume_view_all_link_visible(self, timeout=10):
         """

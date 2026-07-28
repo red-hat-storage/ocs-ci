@@ -2970,6 +2970,14 @@ validation_4_22 = {
         "//a[normalize-space(.)='View all']",
         By.XPATH,
     ),
+    # {0} = namespace
+    "cephfs_subvolume_row_name_button_by_namespace": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::table[1]/tbody/tr"
+        "[.//td[@data-label='Namespace']//a[normalize-space(text())='{0}']]"
+        "//button[@aria-label='Show related pods']",
+        By.XPATH,
+    ),
     "cephfs_subvolume_row_by_namespace": (
         f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
         "/following::table[1]/tbody/tr"
