@@ -181,7 +181,7 @@ def get_n_document_from_yaml(yaml_generator, index=0):
     raise IndexError(f"Passed yaml generator doesn't have index {index}")
 
 
-def dump_data_to_temp_yaml(data, temp_yaml):
+def dump_data_to_temp_yaml(data, temp_yaml, log=True):
     """
     Dump data to temporary yaml file
 
@@ -189,6 +189,7 @@ def dump_data_to_temp_yaml(data, temp_yaml):
         data (dict or list): dict or list (in case of multi_document) with
             data to dump to the yaml file.
         temp_yaml (str): file path of yaml file
+        log (bool): If True, log the censored YAML content at INFO level.
 
     Returns:
         str: dumped yaml data
@@ -198,11 +199,12 @@ def dump_data_to_temp_yaml(data, temp_yaml):
     yaml_data = dumper(data)
     with open(temp_yaml, "w") as yaml_file:
         yaml_file.write(yaml_data)
-    if isinstance(data, dict):
-        yaml_data_censored = dumper(censor_values(deepcopy(data)))
-    else:
-        yaml_data_censored = [dumper(censor_values(deepcopy(doc))) for doc in data]
-    logger.info(yaml_data_censored)
+    if log:
+        if isinstance(data, dict):
+            yaml_data_censored = dumper(censor_values(deepcopy(data)))
+        else:
+            yaml_data_censored = [dumper(censor_values(deepcopy(doc))) for doc in data]
+        logger.info(yaml_data_censored)
     return yaml_data
 
 

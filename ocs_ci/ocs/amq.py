@@ -149,7 +149,7 @@ class AMQ(object):
                 if adm_data["kind"] == constants.DEPLOYMENT:
                     utils.update_container_with_mirrored_image(adm_data)
                 adm_obj = OCS(**adm_data)
-                adm_obj.create()
+                adm_obj.create(out_yaml_format=False, log_yaml=False)
                 self.crd_objects.append(adm_obj)
             except (CommandFailed, CalledProcessError) as cfe:
                 if "Error is Error from server (AlreadyExists):" in str(cfe):
@@ -248,10 +248,12 @@ class AMQ(object):
                     dict["spec"]["replicas"] = replicas
                     dict["spec"]["storage"] = storage_dict
                     self.kafkanodepools.append(OCS(**dict))
-                    self.kafkanodepools[-1].create()
+                    self.kafkanodepools[-1].create(
+                        out_yaml_format=False, log_yaml=False
+                    )
                 else:
                     self.kafka_persistent = OCS(**dict)
-                    self.kafka_persistent.create()
+                    self.kafka_persistent.create(out_yaml_format=False, log_yaml=False)
 
         except (CommandFailed, CalledProcessError) as cf:
             log.error("Failed during setup of AMQ Kafka-persistent")
@@ -280,7 +282,7 @@ class AMQ(object):
                 os.path.join(self.dir, self.amq_kafka_connect_yaml)
             )
             self.kafka_connect = OCS(**kafka_connect)
-            self.kafka_connect.create()
+            self.kafka_connect.create(out_yaml_format=False, log_yaml=False)
         except (CommandFailed, CalledProcessError) as cf:
             log.error("Failed during setup of AMQ KafkaConnect")
             raise cf
@@ -306,9 +308,9 @@ class AMQ(object):
                 os.path.join(self.dir, self.amq_kafka_bridge_yaml)
             )
             self.kafka_bridge = OCS(**kafka_bridge)
-            self.kafka_bridge.create()
+            self.kafka_bridge.create(out_yaml_format=False, log_yaml=False)
         except (CommandFailed, CalledProcessError) as cf:
-            log.error("Failed during setup of AMQ KafkaConnect")
+            log.error("Failed during setup of AMQ KafkaBridge")
             raise cf
         # Making sure the kafka_bridge is running
         if self.is_amq_pod_running(pod_pattern="my-bridge-bridge", expected_pods=1):
