@@ -423,9 +423,7 @@ class TestNoobaaMetrics:
             use_yes=True,
         )
 
-        wait_for_quota_status(
-            mcg_obj, bucket_name, (QuotaStatus.NOT_SET, QuotaStatus.OPTIMAL)
-        )
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.NOT_SET)
 
         logger.info("Writing object after quota removal, expecting success")
         write_random_test_objects_to_bucket(
