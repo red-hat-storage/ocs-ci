@@ -121,6 +121,96 @@ class TestOBCQuota:
         else:
             logger.info(f"New quota {new_quota_str} got applied!!")
 
+    @pytest.mark.parametrize(
+        argnames="amount,interface,quota",
+        argvalues=[
+            pytest.param(
+                *[1, "RGW-OC", {"maxSize": "5M", "maxObjects": "100"}],
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-XXXX"),
+                ],
+            ),
+        ],
+    )
+    def test_rgw_obc_size_quota(
+        self,
+        awscli_pod_session,
+        rgw_bucket_factory,
+        test_directory_setup,
+        mcg_obj_session,
+        amount,
+        interface,
+        quota,
+    ):
+        """
+        Test RGW OBC maxSize quota enforcement
+            * Create OBC with a size quota (maxSize) set
+            * Write objects until the size quota is exceeded (QuotaExceeded)
+            * Increase the maxSize quota via oc patch
+            * Verify that additional writes succeed under the new limit
+        """
+        bucket_name = rgw_bucket_factory(amount, interface, quota=quota)[0].name
+        obc_obj = OBC(bucket_name)
+        full_bucket_path = f"s3://{bucket_name}"
+        test_dir = test_directory_setup.result_dir
+        err_msg = "(QuotaExceeded)"
+
+        # Upload 1MB objects one-by-one until maxSize (5MB) is exceeded
+        upload_amount = 10
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="object-",
+                file_dir=test_dir,
+                target=full_bucket_path,
+                amount=upload_amount,
+                s3_obj=obc_obj,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                logger.info(f"Size quota {quota} worked as expected!!")
+            else:
+                logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
+        else:
+            assert (
+                False
+            ), "Size quota didn't work!! All objects were written without exceeding maxSize!"
+
+        # Patch the OBC to increase maxSize
+        new_max_size = "20M"
+        new_quota_str = (
+            f'{{"spec": {{"additionalConfig":{{"maxSize": "{new_max_size}"}}}}}}'
+        )
+        cmd = f"patch obc {bucket_name} -p '{new_quota_str}' -n openshift-storage --type=merge"
+        OCP().exec_oc_cmd(cmd)
+        logger.info(f"Patched maxSize quota to {new_max_size} on obc {bucket_name}")
+
+        # Wait for the new quota to propagate to RGW
+        time.sleep(20)
+
+        # Verify writes succeed under the new limit
+        post_patch_amount = 5
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
+        try:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="new-object-",
+                file_dir=test_dir,
+                target=full_bucket_path,
+                amount=post_patch_amount,
+                s3_obj=obc_obj,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in e.args[0]:
+                assert False, f"New maxSize quota {new_max_size} didn't get applied!!"
+            else:
+                logger.error("Copy objects to bucket failed unexpectedly!!")
+        else:
+            logger.info(f"New maxSize quota {new_max_size} got applied!!")
+
     @polarion_id("OCS-6178")
     @pytest.mark.parametrize(
         argnames="amount,interface,quota",
