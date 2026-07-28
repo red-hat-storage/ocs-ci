@@ -109,17 +109,20 @@ class TestCnvNodeReplace(E2ETest):
         node_name = self.vm_obj_on_replacing_node.get_vmi_instance().node()
         logger.info(f"Target node for replacement: '{node_name}'")
 
+        stopped_rwo_vm = None
         for vm_rwo in all_vms:
             if (
                 vm_rwo != self.vm_obj_on_replacing_node
                 and vm_rwo.get_vmi_instance().node() == node_name
+                and vm_rwo.pvc_access_mode == "ReadWriteOnce"
+                and vm_rwo.ready()
             ):
-                if vm_rwo.pvc_access_mode == "ReadWriteOnce" and vm_rwo.ready():
-                    logger.info(
-                        f"Stopping RWO VM '{vm_rwo.name}' on target node to avoid drain stuck"
-                    )
-                    vm_rwo.stop()
-                    break
+                logger.info(
+                    f"Stopping RWO VM '{vm_rwo.name}' on target node to avoid drain stuck"
+                )
+                vm_rwo.stop()
+                stopped_rwo_vm = vm_rwo
+                break
 
         logger.info(
             f"Stopping VM '{self.vm_for_stop.name}' and pausing VM '{self.vm_for_snap.name}'"
@@ -143,7 +146,7 @@ class TestCnvNodeReplace(E2ETest):
 
         logger.assertion("StorageCluster node topology validity")
         assert (
-            verify_storagecluster_nodetopology
+            verify_storagecluster_nodetopology()
         ), "StorageCluster node topology contains non-OCS node entries"
 
         logger.test_step("Verify VM state after node replacement")
@@ -161,8 +164,8 @@ class TestCnvNodeReplace(E2ETest):
             f"Starting VM '{self.vm_for_stop.name}' and unpausing VM '{self.vm_for_snap.name}'"
         )
         self.vm_for_stop.start()
-        if not vm_rwo.ready():
-            vm_rwo.start()
+        if stopped_rwo_vm and not stopped_rwo_vm.ready():
+            stopped_rwo_vm.start()
         if self.vm_for_snap.printableStatus() == constants.VM_PAUSED:
             self.vm_for_snap.unpause()
 

@@ -50,8 +50,8 @@ class TestVmOperations(E2ETest):
         for vm_obj in all_vm_list:
             logger.info(f"Restarting VM '{vm_obj.name}'")
             vm_obj.restart()
-            if check_fio_status(vm_obj):
-                logger.info(
-                    f"FIO running successfully on VM '{vm_obj.name}' after restart"
-                )
+            assert check_fio_status(
+                vm_obj
+            ), f"FIO failed to run on VM '{vm_obj.name}' after restart"
+            logger.info(f"FIO running successfully on VM '{vm_obj.name}' after restart")
         logger.info("VM lifecycle operations completed for all VMs")

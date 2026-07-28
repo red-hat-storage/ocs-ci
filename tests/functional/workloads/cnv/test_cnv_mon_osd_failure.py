@@ -67,11 +67,17 @@ class TestMonAndOSDFailures:
 
         def teardown():
             logger.info("Restoring mons back to 1 replica each")
+            errors = []
             for mon in mons:
                 try:
                     modify_deployment_replica_count(mon, 1)
                 except Exception as e:
                     logger.exception(f"Failed to restore mon '{mon}': {e}")
+                    errors.append(str(e))
+            if errors:
+                raise RuntimeError(
+                    f"MON restoration failed for {len(errors)} deployment(s): {errors}"
+                )
 
         request.addfinalizer(teardown)
 
@@ -132,6 +138,7 @@ class TestMonAndOSDFailures:
                 modify_deployment_replica_count(osd_dep, 1)
             except Exception as e:
                 logger.exception(f"Failed to restore OSD deployment '{osd_dep}': {e}")
+                raise
 
         request.addfinalizer(teardown)
 

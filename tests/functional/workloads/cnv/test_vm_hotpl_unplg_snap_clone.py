@@ -172,12 +172,15 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 vm_obj.restart()
                 logger.info(f"VM '{vm_obj.name}' rebooted successfully")
 
+                volume_attached = verifyvolume(
+                    vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
+                )
                 logger.assertion(
                     f"Volume attached after reboot: vm='{vm_obj.name}', "
-                    f"volume='{pvc.name}'"
+                    f"volume='{pvc.name}', expected=True, actual={volume_attached}"
                 )
-                assert verifyvolume(
-                    vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
+                assert (
+                    volume_attached
                 ), f"Volume '{pvc.name}' not found on VM '{vm_obj.name}' after reboot"
 
                 new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])

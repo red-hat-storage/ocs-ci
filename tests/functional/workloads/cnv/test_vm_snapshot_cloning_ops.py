@@ -132,11 +132,11 @@ class TestVmSnapshotClone(E2ETest):
                 f"and cloned VM '{cloned_vm.name}'"
             )
 
-            # Expand PVC if `pvc_expand_after_restore` is True
+            # Expand PVC if `pvc_expand_after_clone` is True
             if pvc_expand_after_clone:
                 new_size = 50
                 try:
-                    expand_pvc_and_verify(vm_obj, new_size)
+                    expand_pvc_and_verify(cloned_vm, new_size)
                 except ValueError:
                     logger.exception(
                         f"PVC expansion failed for cloned VM '{cloned_vm.name}'"

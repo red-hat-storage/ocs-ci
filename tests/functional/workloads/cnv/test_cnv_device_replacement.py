@@ -35,6 +35,8 @@ class TestCnvDeviceReplace(E2ETest):
         Setting up VMs for tests
 
         """
+        self.vm_for_stop = None
+        self.vm_for_snap = None
 
         logger.test_step("Create project and deploy CNV workload VMs")
         proj_obj = project_factory()
@@ -57,12 +59,18 @@ class TestCnvDeviceReplace(E2ETest):
         logger.info("Performing teardown operations")
 
         # Start the stopped VM if it is in stopped state
-        if self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED:
+        if (
+            self.vm_for_stop
+            and self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
+        ):
             self.vm_for_stop.start()
             logger.info(f"VM '{self.vm_for_stop.name}' started")
 
         # Unpause the paused VM if it is in paused state
-        if self.vm_for_snap.printableStatus() == constants.VM_PAUSED:
+        if (
+            self.vm_for_snap
+            and self.vm_for_snap.printableStatus() == constants.VM_PAUSED
+        ):
             self.vm_for_snap.unpause()
             logger.info(f"VM '{self.vm_for_snap.name}' unpaused")
 
