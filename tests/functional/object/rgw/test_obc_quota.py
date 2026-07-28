@@ -220,7 +220,7 @@ class TestOBCQuota:
                 *[1, "RGW-OC", {"maxObjects": "5", "maxSize": "5M"}],
                 marks=[
                     tier1,
-                    pytest.mark.polarion_id("OCS-XXXX"),
+                    pytest.mark.polarion_id("OCS-8083"),
                 ],
             ),
         ],
