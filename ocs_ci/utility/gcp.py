@@ -10,17 +10,20 @@ the case so far.
 .. _`Google Cloud python libraries`: https://cloud.google.com/python/docs/reference
 """
 
-
+import base64
 import json
 import logging
 import os
+import re
 import time
 
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from libcloud.compute.types import Provider
 from libcloud.compute.providers import get_driver
-from googleapiclient.discovery import build
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -33,7 +36,6 @@ from ocs_ci.ocs.constants import (
     OPERATION_RESTART,
     OPERATION_TERMINATE,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,251 @@ def load_service_account_key_dict(filepath=SERVICE_ACCOUNT_KEY_FILEPATH):
         filepath,
     )
     return sa_dict
+
+
+def build_noobaa_sa_name(infra_id):
+    """
+    Build a GCP service account ID for NooBaa, truncating infra_id if
+    the result would exceed GCP's 30-character limit.
+
+    Args:
+        infra_id (str): Cluster infrastructure ID
+
+    Returns:
+        str: SA ID of the form ``{infra_id}-noobaa``, at most 30 chars
+
+    """
+    suffix = "-noobaa"
+    max_prefix_len = 30 - len(suffix)
+    return f"{infra_id[:max_prefix_len]}{suffix}"
+
+
+def get_wif_params_from_cluster():
+    """
+    Extract GCP Workload Identity Federation parameters from the cluster.
+
+    Returns:
+        dict: Keys ``project_number``, ``pool_id``, ``provider_id``
+
+    Raises:
+        ValueError: If the audience URL does not match the expected
+            WIF format
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    logger.info("Extracting WIF parameters from cluster CCO secret")
+
+    # The CCO creates per-component secrets with GCP WIF credentials.
+    # The audience field in each one contains the full WIF pool path:
+    #   //iam.googleapis.com/projects/<number>/locations/global/
+    #   workloadIdentityPools/<pool>/providers/<provider>
+    # We extract from gcp-ccm-cloud-credentials but any CCO secret works.
+    secret_ocp_obj = OCP(
+        kind=constants.SECRET,
+        namespace="openshift-cloud-controller-manager",
+        resource_name="gcp-ccm-cloud-credentials",
+    )
+    secret_data = secret_ocp_obj.get()["data"]
+
+    # The secret has a single data key containing the base64-encoded
+    # JSON credential file (typically "service_account.json")
+    encoded_creds = list(secret_data.values())[0]
+    creds = json.loads(base64.b64decode(encoded_creds).decode())
+    audience = creds["audience"]
+
+    # Parse project number, pool ID, and provider ID from the audience URL
+    match = re.search(
+        r"projects/(\d+)/locations/global/"
+        r"workloadIdentityPools/([^/]+)/providers/([^/]+)",
+        audience,
+    )
+    if not match:
+        raise ValueError(f"Failed to parse WIF audience URL: {audience}")
+    params = {
+        "project_number": match.group(1),
+        "pool_id": match.group(2),
+        "provider_id": match.group(3),
+    }
+    logger.info(f"Extracted WIF params: {params}")
+    return params
+
+
+def create_noobaa_gcp_service_account(gcp_project_id, project_number, pool_id, sa_name):
+    """
+    Create a GCP service account for NooBaa with WIF principal bindings.
+
+    On GCP WIF clusters, NooBaa pods need a dedicated GCP service
+    account to authenticate to GCS without static credentials.
+
+    Args:
+        gcp_project_id (str): GCP project ID (string, not number)
+        project_number (str): GCP project number (numeric), used to
+            construct the WIF principal URIs
+        pool_id (str): Workload Identity Pool ID created by ccoctl
+        sa_name (str): Service account ID (max 30 chars, typically
+            ``{infra_id}-noobaa``)
+
+    Returns:
+        str: The created service account's email address
+
+    """
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT_KEY_FILEPATH
+    iam = build("iam", "v1", cache_discovery=False)
+    crm = build("cloudresourcemanager", "v1", cache_discovery=False)
+    project_resource = f"projects/{gcp_project_id}"
+
+    # 1. Create the GCP service account (idempotent - reuse if it exists)
+    sa_email = f"{sa_name}@{gcp_project_id}.iam.gserviceaccount.com"
+    sa_resource = f"{project_resource}/serviceAccounts/{sa_email}"
+    try:
+        iam.projects().serviceAccounts().get(name=sa_resource).execute()
+        logger.info(f"Service account already exists: {sa_email}")
+    except HttpError as e:
+        if e.resp.status != 404:
+            raise
+        logger.info(
+            f"Creating GCP service account {sa_name} in project {gcp_project_id}"
+        )
+        iam.projects().serviceAccounts().create(
+            name=project_resource,
+            body={
+                "accountId": sa_name,
+                "serviceAccount": {
+                    "displayName": "NooBaa WIF Service Account",
+                },
+            },
+        ).execute()
+        logger.info(f"Service account created: {sa_email}")
+
+    # 2. Grant roles/storage.admin on the project so NooBaa can create,
+    # read, write, list, and delete GCS buckets and objects.
+    # Newly created SAs may not be visible to IAM for up to 60s (GCP
+    # eventual consistency), so retry on 400 "does not exist".
+    logger.info(f"Granting roles/storage.admin to {sa_email}")
+
+    member = f"serviceAccount:{sa_email}"
+    role = "roles/storage.admin"
+
+    def _set_storage_admin_policy():
+        policy = crm.projects().getIamPolicy(resource=gcp_project_id, body={}).execute()
+
+        binding_found = False
+        for binding in policy.get("bindings", []):
+            if binding["role"] == role:
+                if member not in binding["members"]:
+                    binding["members"].append(member)
+                binding_found = True
+                break
+        if not binding_found:
+            policy.setdefault("bindings", []).append(
+                {"role": role, "members": [member]}
+            )
+
+        try:
+            crm.projects().setIamPolicy(
+                resource=gcp_project_id, body={"policy": policy}
+            ).execute()
+            return True
+        except HttpError as e:
+            if e.resp.status == 400 and "does not exist" in str(e):
+                logger.warning("SA not yet visible to IAM, will retry")
+                return False
+            raise
+
+    for granted in TimeoutSampler(timeout=60, sleep=10, func=_set_storage_admin_policy):
+        if granted:
+            break
+
+    # 3. Add WIF principal bindings on the SA itself.
+    # Each NooBaa k8s SA gets roles/iam.workloadIdentityUser so it can
+    # impersonate this GCP SA via WIF.
+    namespace = config.ENV_DATA.get(
+        "cluster_namespace", constants.OPENSHIFT_STORAGE_NAMESPACE
+    )
+    service_accounts = ["noobaa", "noobaa-core", "noobaa-endpoint"]
+    sa_policy = (
+        iam.projects().serviceAccounts().getIamPolicy(resource=sa_resource).execute()
+    )
+    wif_role = "roles/iam.workloadIdentityUser"
+
+    # Find or create a binding for the WIF role on the SA policy
+    wif_binding = None
+    for binding in sa_policy.get("bindings", []):
+        if binding["role"] == wif_role:
+            wif_binding = binding
+            break
+    if not wif_binding:
+        wif_binding = {"role": wif_role, "members": []}
+        sa_policy.setdefault("bindings", []).append(wif_binding)
+
+    # Add the fully qualified WIF principal for each NooBaa k8s SA to the binding
+    for k8s_sa in service_accounts:
+        principal = (
+            f"principal://iam.googleapis.com/projects/{project_number}"
+            f"/locations/global/workloadIdentityPools/{pool_id}"
+            f"/subject/system:serviceaccount:{namespace}:{k8s_sa}"
+        )
+        if principal not in wif_binding["members"]:
+            wif_binding["members"].append(principal)
+            logger.info(f"Adding WIF binding for {k8s_sa}: {principal}")
+
+    iam.projects().serviceAccounts().setIamPolicy(
+        resource=sa_resource, body={"policy": sa_policy}
+    ).execute()
+
+    logger.info(f"NooBaa GCP service account {sa_email} configured for WIF")
+    return sa_email
+
+
+def delete_noobaa_gcp_service_account(gcp_project_id, sa_email):
+    """
+    Delete the NooBaa GCP service account created for WIF deployments.
+
+    Safe to call during cluster destroy even if the SA was never
+    fully created - each step is independently wrapped so partial
+    failures don't block teardown.
+
+    Args:
+        gcp_project_id (str): GCP project ID (string identifier)
+        sa_email (str): Full email of the service account to delete
+
+    """
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT_KEY_FILEPATH
+    crm = build("cloudresourcemanager", "v1", cache_discovery=False)
+    iam = build("iam", "v1", cache_discovery=False)
+    member = f"serviceAccount:{sa_email}"
+
+    # 1. Remove the project-level roles/storage.admin binding first,
+    # before deleting the SA, to avoid orphaned IAM references.
+    try:
+        logger.info(f"Removing roles/storage.admin binding for {sa_email}")
+        policy = crm.projects().getIamPolicy(resource=gcp_project_id, body={}).execute()
+        for binding in policy.get("bindings", []):
+            if (
+                binding["role"] == "roles/storage.admin"
+                and member in binding["members"]
+            ):
+                binding["members"].remove(member)
+                if not binding["members"]:
+                    policy["bindings"].remove(binding)
+                break
+        crm.projects().setIamPolicy(
+            resource=gcp_project_id, body={"policy": policy}
+        ).execute()
+    except Exception as e:
+        logger.warning(f"Failed to remove IAM binding for {sa_email}: {e}")
+
+    # 2. Delete the service account itself.
+    # WIF bindings on the SA are automatically cleaned up by GCP
+    # when the SA is deleted.
+    try:
+        logger.info(f"Deleting service account {sa_email}")
+        sa_resource = f"projects/{gcp_project_id}/serviceAccounts/{sa_email}"
+        iam.projects().serviceAccounts().delete(name=sa_resource).execute()
+        logger.info(f"Service account {sa_email} deleted")
+    except Exception as e:
+        logger.warning(f"Failed to delete service account {sa_email}: {e}")
 
 
 class GoogleCloudUtil:

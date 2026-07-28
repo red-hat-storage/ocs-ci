@@ -17,6 +17,8 @@ from ocs_ci.utility import cco
 from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 from ocs_ci.utility.gcp import (
     GoogleCloudUtil,
+    build_noobaa_sa_name,
+    delete_noobaa_gcp_service_account,
     load_service_account_key_dict,
     SERVICE_ACCOUNT_KEY_FILEPATH,
 )
@@ -210,16 +212,23 @@ class GCPIPI(GCPBase):
             try:
                 # 1. Set GCP authentication
                 gcp_project = self._get_gcp_project()
+                cluster_path = config.ENV_DATA["cluster_path"]
+                infra_id = get_infra_id_from_openshift_install_state(cluster_path)
 
                 # 2. Ensure ccoctl binary and CredentialsRequest manifests
                 # are available (may be missing if teardown runs on a
-                # different agent than the one that deployed)
-                cluster_path = config.ENV_DATA["cluster_path"]
+                # different agent than the one that deployed).
+                # Done before SA deletion so a prep failure doesn't leave
+                # the SA deleted but WIF resources orphaned.
                 credentials_requests_dir = os.path.join(cluster_path, "creds_reqs")
                 self._ensure_ccoctl_and_credentials_requests(credentials_requests_dir)
 
-                # 3. Run ccoctl gcp delete to remove WIF resources
-                infra_id = get_infra_id_from_openshift_install_state(cluster_path)
+                # 3. Delete NooBaa GCP service account
+                sa_name = build_noobaa_sa_name(infra_id)
+                sa_email = f"{sa_name}@{gcp_project}.iam.gserviceaccount.com"
+                delete_noobaa_gcp_service_account(gcp_project, sa_email)
+
+                # 4. Run ccoctl gcp delete to remove WIF resources
                 cco.delete_gcp_sts_resources(
                     infra_id,
                     gcp_project,
