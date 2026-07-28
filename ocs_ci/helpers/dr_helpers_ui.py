@@ -901,6 +901,7 @@ def verify_pending_cleanup_alert_firing(
         avoid_stale=True,
         enable_screenshot=True,
         timeout=60,
+        copy_dom=True,
     )
     acm_obj.take_screenshot()
 
@@ -996,6 +997,7 @@ def verify_pending_cleanup_alert_resolved(
         avoid_stale=True,
         enable_screenshot=True,
         timeout=60,
+        copy_dom=True,
     )
     acm_obj.take_screenshot()
 
