@@ -303,7 +303,7 @@ class TestNoobaaMetrics:
         3. Write ~88% of quota (9 x 200MB), verify APPROACHING_QUOTA status
         4. Write beyond 100% (3 more x 200MB), verify EXCEEDING_QUOTA status
         5. Attempt one more write, verify it is blocked (CommandFailed)
-        6. Decrease max-size below current usage, verify EXCEEDING_QUOTA persists
+        6. Attempt to decrease max-size below current usage, verify it's rejected
         7. Increase max-size just above current usage, verify APPROACHING_QUOTA
         8. Remove max-size quota (set to 0), verify writes succeed again
 
@@ -386,19 +386,22 @@ class TestNoobaaMetrics:
             logger.info("Expected CommandFailed exception was caught")
             logger.info(f"Message: {e}")
 
-        # 6. Decrease max-size below current usage, verify EXCEEDING persists
+        # 6. Attempt to decrease max-size below current usage, verify it's rejected
         decreased_size_gi = 1
         logger.info(
-            f"Decreasing max-size quota to {decreased_size_gi}Gi "
-            "(below current usage)"
+            f"Attempting to decrease max-size quota to {decreased_size_gi}Gi "
+            "(below current usage, expecting rejection)"
         )
-        mcg_obj.exec_mcg_cmd(
-            cmd=f"bucket update --max-size={decreased_size_gi}Gi {bucket_name}",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            use_yes=True,
-        )
-
-        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.EXCEEDING)
+        try:
+            mcg_obj.exec_mcg_cmd(
+                cmd=f"bucket update --max-size={decreased_size_gi}Gi {bucket_name}",
+                namespace=config.ENV_DATA["cluster_namespace"],
+                use_yes=True,
+            )
+            assert False, "Decreasing max-size below current usage should have failed"
+        except CommandFailed as e:
+            logger.info("Expected rejection when decreasing quota below current usage")
+            logger.info(f"Message: {e}")
 
         # 7. Increase max-size to just above current usage, verify APPROACHING_QUOTA
         #    Current usage is ~2.4GB (12 x 200MB), set quota to 2.5Gi (~94% used)
