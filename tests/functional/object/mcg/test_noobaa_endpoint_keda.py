@@ -6,12 +6,13 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     mcg,
+    tier2,
     red_squad,
     skipif_disconnected_cluster,
     skipif_external_mode,
     skipif_managed_service,
 )
-from ocs_ci.framework.testlib import MCGTest, tier2
+from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
