@@ -907,6 +907,7 @@ def verify_pending_cleanup_alert_firing(
         enable_screenshot=True,
         timeout=60,
     )
+    acm_obj.page_has_loaded()
     acm_obj.take_screenshot()
     acm_obj.copy_dom()
 
