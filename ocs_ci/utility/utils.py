@@ -1330,9 +1330,29 @@ def get_registry_svc(version):
 
     """
     major = version.split(".")[0]
-    if int(major) >= 5:
-        return "registry.ci.openshift.org/ocp/release-5"
+    if int(major) == 5:
+        return constants.REGISTRY_SVC_V5
     return constants.REGISTRY_SVC
+
+
+def get_ocp_release_mirror_path(version):
+    """
+    Get the OCP release image mirror path for the given OCP version.
+
+    OCP 5.x release images are published under ocp/release-5
+    instead of ocp/release.
+
+    Args:
+        version (str): OCP version string (e.g. "5.0.0-0.nightly-2026-06-18-000016")
+
+    Returns:
+        str: Mirror path (e.g. "ocp/release-5")
+
+    """
+    major = version.split(".")[0]
+    if int(major) == 5:
+        return constants.OCP_RELEASE_IMAGE_MIRROR_PATH_V5
+    return constants.OCP_RELEASE_IMAGE_MIRROR_PATH
 
 
 @retry(CommandFailed, tries=2, delay=5, backoff=2)
