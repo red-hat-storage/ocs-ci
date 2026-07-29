@@ -10,6 +10,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.deployment import acm
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
@@ -682,3 +683,69 @@ def mirror_rdr_images(request):
         error_msg = f"ITMS file not found at expected location: {itms_file_path}"
         log.error(error_msg)
         raise ResourceNotFoundError(error_msg)
+
+
+CNV_TEST_FILES = (
+    "test_cnv_app_failover_and_relocate.py",
+    "test_cnv_failover_and_relocate_discovered_apps.py",
+    "test_acm_kubevirt_dr_integration.py",
+    "test_vm_auto_cleanup.py",
+)
+
+
+@pytest.fixture(autouse=True)
+def cnv_hyperconverged_installed_on_dr_clusters(request):
+    """
+    Skip any CNV DR test if the HyperConverged CR (hyperconvergeds.hco.kubevirt.io)
+    is not present on every managed cluster that is part of dr_cluster_relations.
+
+    Runs automatically only for tests in CNV_TEST_FILES; all other tests are
+    skipped over without any cluster interaction.
+    """
+    if not any(request.node.fspath.basename == f for f in CNV_TEST_FILES):
+        return
+
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if not dr_cluster_relations:
+        log.warning(
+            "dr_cluster_relations is not configured; skipping HyperConverged check"
+        )
+        return
+
+    dr_cluster_names = dr_cluster_relations[0]
+    dr_cluster_configs = [
+        cluster
+        for cluster in config.clusters
+        if cluster.ENV_DATA.get("cluster_name") in dr_cluster_names
+    ]
+
+    missing = []
+    restore_index = config.cur_index
+    try:
+        for cluster_config in dr_cluster_configs:
+            cluster_name = cluster_config.ENV_DATA.get("cluster_name")
+            config.switch_ctx(cluster_config.MULTICLUSTER["multicluster_index"])
+            hco_obj = OCP(
+                kind=constants.HYPERCONVERGED,
+                namespace=constants.CNV_NAMESPACE,
+            )
+            if not hco_obj.is_exist(resource_name=constants.KUBEVIRT_HYPERCONVERGED):
+                log.info(
+                    f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' not found "
+                    f"on cluster '{cluster_name}'"
+                )
+                missing.append(cluster_name)
+            else:
+                log.info(
+                    f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' found "
+                    f"on cluster '{cluster_name}'"
+                )
+    finally:
+        config.switch_ctx(restore_index)
+
+    if missing:
+        pytest.skip(
+            f"HyperConverged resource '{constants.KUBEVIRT_HYPERCONVERGED}' "
+            f"(hyperconvergeds.hco.kubevirt.io) is not present on managed "
+            f"cluster(s): {', '.join(missing)}"
+        )
