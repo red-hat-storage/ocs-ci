@@ -150,31 +150,20 @@ def get_wif_params_from_cluster():
     return params
 
 
-def create_noobaa_gcp_service_account(gcp_project_id, project_number, pool_id, sa_name):
+def _get_or_create_gcp_sa(iam, gcp_project_id, sa_name):
     """
-    Create a GCP service account for NooBaa with WIF principal bindings.
+    Get an existing GCP service account or create a new one.
 
-    On GCP WIF clusters, NooBaa pods need a dedicated GCP service
-    account to authenticate to GCS without static credentials.
+    Uses a get-then-create pattern so the call is idempotent: if the
+    SA already exists (e.g. from a previous partial run), it is reused.
 
     Args:
-        gcp_project_id (str): GCP project ID (string, not number)
-        project_number (str): GCP project number (numeric), used to
-            construct the WIF principal URIs
-        pool_id (str): Workload Identity Pool ID created by ccoctl
-        sa_name (str): Service account ID (max 30 chars, typically
-            ``{infra_id}-noobaa``)
-
-    Returns:
-        str: The created service account's email address
+        iam: Google IAM v1 service client
+        gcp_project_id (str): GCP project ID
+        sa_name (str): Service account ID (max 30 chars)
 
     """
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT_KEY_FILEPATH
-    iam = build("iam", "v1", cache_discovery=False)
-    crm = build("cloudresourcemanager", "v1", cache_discovery=False)
     project_resource = f"projects/{gcp_project_id}"
-
-    # 1. Create the GCP service account (idempotent - reuse if it exists)
     sa_email = f"{sa_name}@{gcp_project_id}.iam.gserviceaccount.com"
     sa_resource = f"{project_resource}/serviceAccounts/{sa_email}"
     try:
@@ -197,18 +186,28 @@ def create_noobaa_gcp_service_account(gcp_project_id, project_number, pool_id, s
         ).execute()
         logger.info(f"Service account created: {sa_email}")
 
-    # 2. Grant roles/storage.admin on the project so NooBaa can create,
-    # read, write, list, and delete GCS buckets and objects.
-    # Newly created SAs may not be visible to IAM for up to 60s (GCP
-    # eventual consistency), so retry on 400 "does not exist".
-    logger.info(f"Granting roles/storage.admin to {sa_email}")
 
+def _grant_storage_admin_role_to_sa(crm, gcp_project_id, sa_email):
+    """
+    Grant roles/storage.admin on the GCP project for the given SA.
+
+    This role lets NooBaa create, read, write, list, and delete GCS
+    buckets and objects. Newly created SAs may not be visible to IAM
+    for up to 60s (GCP eventual consistency), so the setIamPolicy
+    call is retried via TimeoutSampler on 400 "does not exist".
+
+    Args:
+        crm: Google Cloud Resource Manager v1 service client
+        gcp_project_id (str): GCP project ID
+        sa_email (str): Service account email to grant the role to
+
+    """
+    logger.info(f"Granting roles/storage.admin to {sa_email}")
     member = f"serviceAccount:{sa_email}"
     role = "roles/storage.admin"
 
-    def _set_storage_admin_policy():
+    def _set_policy():
         policy = crm.projects().getIamPolicy(resource=gcp_project_id, body={}).execute()
-
         binding_found = False
         for binding in policy.get("bindings", []):
             if binding["role"] == role:
@@ -220,7 +219,6 @@ def create_noobaa_gcp_service_account(gcp_project_id, project_number, pool_id, s
             policy.setdefault("bindings", []).append(
                 {"role": role, "members": [member]}
             )
-
         try:
             crm.projects().setIamPolicy(
                 resource=gcp_project_id, body={"policy": policy}
@@ -232,23 +230,41 @@ def create_noobaa_gcp_service_account(gcp_project_id, project_number, pool_id, s
                 return False
             raise
 
-    for granted in TimeoutSampler(timeout=60, sleep=10, func=_set_storage_admin_policy):
+    for granted in TimeoutSampler(timeout=60, sleep=10, func=_set_policy):
         if granted:
             break
+    logger.info(f"roles/storage.admin granted to {sa_email}")
 
-    # 3. Add WIF principal bindings on the SA itself.
-    # Each NooBaa k8s SA gets roles/iam.workloadIdentityUser so it can
-    # impersonate this GCP SA via WIF.
+
+def _add_noobaa_wif_bindings_to_sa(
+    iam, gcp_project_id, sa_email, project_number, pool_id
+):
+    """
+    Add WIF principal bindings so NooBaa k8s SAs can impersonate this GCP SA.
+
+    Grants roles/iam.workloadIdentityUser on the SA to the three
+    NooBaa Kubernetes service accounts (noobaa, noobaa-core,
+    noobaa-endpoint), allowing them to obtain GCP tokens via
+    Workload Identity Federation.
+
+    Args:
+        iam: Google IAM v1 service client
+        gcp_project_id (str): GCP project ID
+        sa_email (str): Service account email to bind to
+        project_number (str): GCP project number (numeric)
+        pool_id (str): Workload Identity Pool ID
+
+    """
+    sa_resource = f"projects/{gcp_project_id}/serviceAccounts/{sa_email}"
     namespace = config.ENV_DATA.get(
         "cluster_namespace", constants.OPENSHIFT_STORAGE_NAMESPACE
     )
-    service_accounts = ["noobaa", "noobaa-core", "noobaa-endpoint"]
+    k8s_service_accounts = ["noobaa", "noobaa-core", "noobaa-endpoint"]
     sa_policy = (
         iam.projects().serviceAccounts().getIamPolicy(resource=sa_resource).execute()
     )
     wif_role = "roles/iam.workloadIdentityUser"
 
-    # Find or create a binding for the WIF role on the SA policy
     wif_binding = None
     for binding in sa_policy.get("bindings", []):
         if binding["role"] == wif_role:
@@ -258,8 +274,7 @@ def create_noobaa_gcp_service_account(gcp_project_id, project_number, pool_id, s
         wif_binding = {"role": wif_role, "members": []}
         sa_policy.setdefault("bindings", []).append(wif_binding)
 
-    # Add the fully qualified WIF principal for each NooBaa k8s SA to the binding
-    for k8s_sa in service_accounts:
+    for k8s_sa in k8s_service_accounts:
         principal = (
             f"principal://iam.googleapis.com/projects/{project_number}"
             f"/locations/global/workloadIdentityPools/{pool_id}"
@@ -272,6 +287,37 @@ def create_noobaa_gcp_service_account(gcp_project_id, project_number, pool_id, s
     iam.projects().serviceAccounts().setIamPolicy(
         resource=sa_resource, body={"policy": sa_policy}
     ).execute()
+
+
+def create_noobaa_gcp_service_account(gcp_project_id, project_number, pool_id, sa_name):
+    """
+    Create a GCP service account for NooBaa with WIF principal bindings.
+
+    On GCP WIF clusters, NooBaa pods need a dedicated GCP service
+    account to authenticate to GCS without static credentials.
+
+    Args:
+        gcp_project_id (str): GCP project ID (string, not number)
+        project_number (str): GCP project number (numeric), used to
+            construct the WIF principal URIs
+        pool_id (str): Workload Identity Pool ID created by ccoctl
+        sa_name (str): Service account ID (max 30 chars, typically
+            ``{infra_id}-noobaa``)
+
+    Returns:
+        str: The created service account's email address
+
+    """
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT_KEY_FILEPATH
+    iam = build("iam", "v1", cache_discovery=False)
+    crm = build("cloudresourcemanager", "v1", cache_discovery=False)
+    sa_email = f"{sa_name}@{gcp_project_id}.iam.gserviceaccount.com"
+
+    _get_or_create_gcp_sa(iam, gcp_project_id, sa_name)
+    _grant_storage_admin_role_to_sa(crm, gcp_project_id, sa_email)
+    _add_noobaa_wif_bindings_to_sa(
+        iam, gcp_project_id, sa_email, project_number, pool_id
+    )
 
     logger.info(f"NooBaa GCP service account {sa_email} configured for WIF")
     return sa_email
