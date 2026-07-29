@@ -104,7 +104,6 @@ class TestOBCQuota:
 
         # check if the new quota applied works
         amount = new_quota - int(quota["maxObjects"])
-        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -135,7 +134,6 @@ class TestOBCQuota:
         )
         time.sleep(20)
 
-        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -232,7 +230,6 @@ class TestOBCQuota:
 
         # Verify writes succeed under the new limit
         post_patch_amount = 5
-        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -317,7 +314,6 @@ class TestOBCQuota:
         logger.info(f"Patched only maxSize to 20M on obc {bucket_name}")
         time.sleep(20)
 
-        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -352,7 +348,6 @@ class TestOBCQuota:
         )
         time.sleep(20)
 
-        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -384,7 +379,6 @@ class TestOBCQuota:
         logger.info(f"Patched both quotas higher on obc {bucket_name}")
         time.sleep(20)
 
-        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -471,7 +465,6 @@ class TestOBCQuota:
             assert False, f"maxSize quota not enforced on {bucket_max_size}!!"
 
         # Exceed maxObjects quota (upload 6 objects, expect failure at 6th)
-        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -494,7 +487,6 @@ class TestOBCQuota:
             assert False, f"maxObjects quota not enforced on {bucket_max_objects}!!"
 
         # Exceed combined quota (upload 6 objects, expect failure)
-        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -517,7 +509,6 @@ class TestOBCQuota:
             assert False, f"Combined quota not enforced on {bucket_both}!!"
 
         # Verify no-quota bucket is still writable
-        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -553,7 +544,6 @@ class TestOBCQuota:
             (bucket_max_objects, obc_max_objects, "max-objects"),
             (bucket_both, obc_both, "both"),
         ]:
-            awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
             try:
                 copy_random_individual_objects(
                     awscli_pod_session,
