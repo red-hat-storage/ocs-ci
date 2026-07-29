@@ -820,6 +820,7 @@ ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+OCS_METRICS_EXPORTER_HTTPS_PORT = 8443
 MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
