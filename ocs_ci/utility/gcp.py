@@ -124,9 +124,14 @@ def get_wif_params_from_cluster():
 
     # The secret has a single data key containing the base64-encoded
     # JSON credential file (typically "service_account.json")
-    encoded_creds = list(secret_data.values())[0]
-    creds = json.loads(base64.b64decode(encoded_creds).decode())
-    audience = creds["audience"]
+    try:
+        encoded_creds = next(iter(secret_data.values()))
+        creds = json.loads(base64.b64decode(encoded_creds).decode())
+        audience = creds["audience"]
+    except (StopIteration, KeyError, json.JSONDecodeError) as e:
+        raise ValueError(
+            f"CCO secret gcp-ccm-cloud-credentials is missing or malformed: {e}"
+        ) from e
 
     # Parse project number, pool ID, and provider ID from the audience URL
     match = re.search(

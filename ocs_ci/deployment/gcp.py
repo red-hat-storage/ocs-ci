@@ -226,7 +226,14 @@ class GCPIPI(GCPBase):
                 # 3. Delete NooBaa GCP service account
                 sa_name = build_noobaa_sa_name(infra_id)
                 sa_email = f"{sa_name}@{gcp_project}.iam.gserviceaccount.com"
-                delete_noobaa_gcp_service_account(gcp_project, sa_email)
+                try:
+                    delete_noobaa_gcp_service_account(gcp_project, sa_email)
+                except Exception:
+                    logger.warning(
+                        "Failed to delete NooBaa GCP service account. "
+                        "Proceeding with WIF resource cleanup.",
+                        exc_info=True,
+                    )
 
                 # 4. Run ccoctl gcp delete to remove WIF resources
                 cco.delete_gcp_sts_resources(

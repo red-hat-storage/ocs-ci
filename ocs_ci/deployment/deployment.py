@@ -238,7 +238,7 @@ class Deployment(object):
         self.sts_role_arn = None
         self.azure_noobaa_mi_client_id = None
         self.gcp_noobaa_sa_email = None
-        self._gcp_wif_params = None
+        self.gcp_wif_params = None
         storage_class.set_custom_storage_class_path()
         logger.info(
             f"Deployment platform {self.platform} initiated with storage class: {self.storage_class}"
@@ -1333,7 +1333,7 @@ class Deployment(object):
             else:
                 subscription_yaml_data["spec"]["config"]["env"].extend(azure_sub_data)
         elif gcp_sts_deployment:
-            if not self._gcp_wif_params or not self.gcp_noobaa_sa_email:
+            if not self.gcp_wif_params or not self.gcp_noobaa_sa_email:
                 raise ValueError(
                     "GCP WIF parameters or NooBaa SA email not initialized. "
                     "Ensure deploy_ocs_via_operator() ran the GCP STS block "
@@ -1344,12 +1344,12 @@ class Deployment(object):
             gcp_sub_data = [
                 {
                     "name": "PROJECT_NUMBER",
-                    "value": self._gcp_wif_params["project_number"],
+                    "value": self.gcp_wif_params["project_number"],
                 },
-                {"name": "POOL_ID", "value": self._gcp_wif_params["pool_id"]},
+                {"name": "POOL_ID", "value": self.gcp_wif_params["pool_id"]},
                 {
                     "name": "PROVIDER_ID",
-                    "value": self._gcp_wif_params["provider_id"],
+                    "value": self.gcp_wif_params["provider_id"],
                 },
                 {
                     "name": "SERVICE_ACCOUNT_EMAIL",
@@ -1502,14 +1502,14 @@ class Deployment(object):
             gcp_project_id = (
                 config.ENV_DATA.get("gcp_project_id") or sa_dict["project_id"]
             )
-            self._gcp_wif_params = get_wif_params_from_cluster()
+            self.gcp_wif_params = get_wif_params_from_cluster()
             cluster_path = config.ENV_DATA["cluster_path"]
             infra_id = get_infra_id(cluster_path)
             sa_name = build_noobaa_sa_name(infra_id)
             self.gcp_noobaa_sa_email = create_noobaa_gcp_service_account(
                 gcp_project_id=gcp_project_id,
-                project_number=self._gcp_wif_params["project_number"],
-                pool_id=self._gcp_wif_params["pool_id"],
+                project_number=self.gcp_wif_params["project_number"],
+                pool_id=self.gcp_wif_params["pool_id"],
                 sa_name=sa_name,
             )
         stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
