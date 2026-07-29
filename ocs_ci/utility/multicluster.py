@@ -53,6 +53,7 @@ class MultiClusterUpgradeParametrize(object):
         "acm_upgrade",
         "pre_ocs_upgrade",
         "ocs_upgrade",
+        "provider_operator_upgrade",
         "post_ocs_upgrade",
         "post_upgrade",
     ]
