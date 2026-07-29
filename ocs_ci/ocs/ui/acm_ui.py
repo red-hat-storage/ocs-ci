@@ -198,10 +198,18 @@ class AcmPageNavigator(BaseUI):
         )
         if find_element:
             log.info("Data Services page found")
-            element = self.driver.find_element(
-                By.XPATH, "//button[normalize-space()='Data Services']"
-            )
-            if element.get_attribute("aria-expanded") == "false":
+            try:
+                element = self.driver.find_element(
+                    By.XPATH, "//button[normalize-space()='Data Services']"
+                )
+                expanded = element.get_attribute("aria-expanded")
+            except StaleElementReferenceException:
+                # Page re-rendered between find and get_attribute; re-fetch.
+                element = self.driver.find_element(
+                    By.XPATH, "//button[normalize-space()='Data Services']"
+                )
+                expanded = element.get_attribute("aria-expanded")
+            if expanded == "false":
                 self.do_click(
                     locator=self.acm_page_nav["data-services"],
                     avoid_stale=True,
