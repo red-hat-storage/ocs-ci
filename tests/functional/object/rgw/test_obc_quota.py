@@ -258,7 +258,7 @@ class TestOBCQuota:
             pytest.param(
                 *[1, "RGW-OC", {"maxObjects": "5", "maxSize": "5M"}],
                 marks=[
-                    tier1,
+                    tier2,
                     pytest.mark.polarion_id("OCS-8083"),
                 ],
             ),
@@ -404,7 +404,7 @@ class TestOBCQuota:
         else:
             logger.info("Writes succeeded after patching both quotas!!")
 
-    @tier1
+    @tier2
     @pytest.mark.polarion_id("OCS-8084")
     def test_rgw_obc_multi_bucket_quota(
         self,
