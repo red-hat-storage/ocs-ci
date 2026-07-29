@@ -1965,6 +1965,22 @@ class Deployment(object):
                     "CatalogSource %s already exists and is READY, skipping creation",
                     constants.OPERATOR_CATALOG_SOURCE_NAME,
                 )
+                odf_pm = OCP(
+                    kind="packagemanifest",
+                    resource_name=constants.ODF_SUBSCRIPTION,
+                    namespace=constants.MARKETPLACE_NAMESPACE,
+                )
+                if not odf_pm.check_resource_existence(
+                    should_exist=True,
+                    timeout=30,
+                    resource_name=constants.ODF_SUBSCRIPTION,
+                ):
+                    logger.info(
+                        "ODF operator package %s not found in catalog, "
+                        "creating dev catalog source",
+                        constants.ODF_SUBSCRIPTION,
+                    )
+                    create_catalog_source()
             else:
                 create_catalog_source()
 
@@ -5061,9 +5077,12 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             thanos_bucket_name = f"thanos-bkt-int-{fauxfactory.gen_alpha(6).lower()}"
 
             # Use helper function to create OBC and get credentials
-            bucket_name, endpoint, access_key, secret_key = (
-                self.create_odf_bucket_and_get_credentials(thanos_bucket_name)
-            )
+            (
+                bucket_name,
+                endpoint,
+                access_key,
+                secret_key,
+            ) = self.create_odf_bucket_and_get_credentials(thanos_bucket_name)
 
             logger.info(
                 f"Retrieved ODF bucket credentials for Thanos: {bucket_name} @ {endpoint}"

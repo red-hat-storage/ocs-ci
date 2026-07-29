@@ -126,14 +126,17 @@ class DeploymentUI(PageNavigator):
                 self.do_click(
                     self.dep_loc["click_odf_operator"], enable_screenshot=True
                 )
-            except TimeoutException:
+            except (TimeoutException, WebDriverException) as ex:
                 logger.warning(
-                    "ODF operator not found in catalog. "
-                    "Applying dev catalog source and retrying."
+                    "ODF operator not found in catalog (%s). "
+                    "Applying dev catalog source and retrying.",
+                    type(ex).__name__,
                 )
                 from ocs_ci.deployment.deployment import create_catalog_source
 
                 create_catalog_source()
+                if isinstance(ex, WebDriverException):
+                    raise
                 self.navigate_operatorhub_page()
                 if self.driver.find_elements(
                     *self.dep_loc["filter_operator_namespace"][::-1]
