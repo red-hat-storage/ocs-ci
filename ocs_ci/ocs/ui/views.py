@@ -1863,6 +1863,13 @@ acm_configuration_4_21 = {
 }
 
 acm_configuration_4_22 = {
+    # ODF 4.22 uses PF6 — the MCO status-card alert panel no longer renders on the
+    # DR Overview page.  Use a broader element search so the locator works whether
+    # the text is inside a <span>, <p>, <div> or any other container.
+    "pending-cleanup-alert-drpc-message": (
+        "//*[contains(text(), \"DRPC '{}' in namespace '{}' requires manual cleanup\")]",
+        By.XPATH,
+    ),
     "all-clusters_dropdown": (
         "//button[@data-test-id='perspective-switcher-toggle']",
         By.XPATH,
