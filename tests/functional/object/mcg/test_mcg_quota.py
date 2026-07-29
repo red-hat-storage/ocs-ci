@@ -52,6 +52,44 @@ def wait_for_num_objects(mcg_obj, bucket_name, expected_count, timeout=360):
         )
 
 
+def wait_for_quota_status(
+    mcg_obj, bucket_name, expected_statuses, timeout=360, sleep=30
+):
+    """
+    Poll bucket status until QuotaStatus matches one of expected_statuses.
+
+    Args:
+        mcg_obj (obj): An object representing the current state of the MCG in the cluster
+        bucket_name (str): Name of the bucket to check
+        expected_statuses (str or tuple): Expected QuotaStatus value(s)
+        timeout (int): Maximum time to wait in seconds
+        sleep (int): Seconds between polls
+
+    """
+    if isinstance(expected_statuses, str):
+        expected_statuses = (expected_statuses,)
+    logger.info(f"Waiting for quota status to reach {expected_statuses}")
+    last_seen = None
+    try:
+        for quota_status in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_bucket_status_value,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket_name,
+            key="QuotaStatus",
+        ):
+            last_seen = quota_status
+            if quota_status in expected_statuses:
+                logger.info(f"Quota status reached {quota_status}")
+                return quota_status
+    except TimeoutExpiredError:
+        assert False, (
+            f"Quota status did not reach {expected_statuses} "
+            f"within {timeout}s, last observed: {last_seen}"
+        )
+
+
 class QuotaStatus:
     NOT_SET = "QUOTA_NOT_SET"
     OPTIMAL = "OPTIMAL"
@@ -63,9 +101,9 @@ class QuotaStatus:
 @mcg
 @red_squad
 @polarion_id("OCS-7465")
-class TestNoobaaMetrics:
+class TestOBCQuota:
     """
-    Test different Noobaa metrics
+    Test OBC Quota feature using MCG CLI
     """
 
     @config.run_with_provider_context_if_available
@@ -251,25 +289,153 @@ class TestNoobaaMetrics:
             mcg_obj=mcg_obj,
         )
 
-        logger.info(
-            "Waiting for quota status to return to OPTIMAL after increasing max-objects"
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.OPTIMAL)
+
+    @config.run_with_provider_context_if_available
+    def test_mcg_obc_max_size_quota_lifecycle(
+        self, mcg_obj, awscli_pod_session, bucket_factory, test_directory_setup
+    ):
+        """
+        Test max-size quota lifecycle including decrease, increase and removal
+
+        1. Create bucket and verify initial quota status is QUOTA_NOT_SET
+        2. Set max-size quota to 2Gi and verify status transitions to OPTIMAL
+        3. Write ~88% of quota (9 x 200MB), verify APPROACHING_QUOTA status
+        4. Write beyond 100% (3 more x 200MB), verify EXCEEDING_QUOTA status
+        5. Attempt one more write, verify it is blocked (CommandFailed)
+        6. Attempt to decrease max-size below current usage, verify it's rejected
+        7. Increase max-size just above current usage, verify APPROACHING_QUOTA
+        8. Remove max-size quota (set to 0), verify writes succeed again
+
+        Args:
+            mcg_obj (obj): An object representing the current state of the MCG in the cluster
+            awscli_pod_session (pod): A pod running the AWSCLI tools
+            bucket_factory: Calling this fixture creates a new bucket(s)
+            test_directory_setup: Setup for test directories on the awscli pod
+        """
+        max_size_gi = 2
+        obj_size_mb = "200M"
+        approaching_count = 9
+        exceeding_count = 3
+
+        # 1. Create bucket and verify initial quota status
+        bucket_name = bucket_factory(amount=1, interface="CLI")[0].name
+        quota_status = get_bucket_status_value(mcg_obj, bucket_name, "QuotaStatus")
+        assert (
+            quota_status == QuotaStatus.NOT_SET
+        ), f"Initial quota status is {quota_status}, expected {QuotaStatus.NOT_SET}"
+
+        # 2. Set max-size quota and verify OPTIMAL status
+        mcg_obj.exec_mcg_cmd(
+            cmd=f"bucket update --max-size={max_size_gi}Gi {bucket_name}",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            use_yes=True,
         )
-        last_seen = None
+        quota_status = get_bucket_status_value(mcg_obj, bucket_name, "QuotaStatus")
+        assert (
+            quota_status == QuotaStatus.OPTIMAL
+        ), f"Quota status after setting max-size is {quota_status}, expected {QuotaStatus.OPTIMAL}"
+        logger.info(f"Max-size quota set to {max_size_gi}Gi, status is OPTIMAL")
+
+        # 3. Write ~88% of quota (9 x 200MB = 1.8GB, ~88% of 2Gi)
+        logger.info(
+            f"Writing {approaching_count} objects of {obj_size_mb} to approach quota"
+        )
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            bucket_name,
+            file_dir=test_directory_setup.origin_dir,
+            amount=approaching_count,
+            pattern="SizeKey1-",
+            bs=obj_size_mb,
+            mcg_obj=mcg_obj,
+        )
+
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.APPROACHING)
+
+        # 4. Write beyond 100% (3 more x 200MB, total ~2.4GB exceeding 2Gi)
+        logger.info(
+            f"Writing {exceeding_count} more objects of {obj_size_mb} to exceed quota"
+        )
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            bucket_name,
+            file_dir=test_directory_setup.origin_dir,
+            amount=exceeding_count,
+            pattern="SizeKey2-",
+            bs=obj_size_mb,
+            mcg_obj=mcg_obj,
+        )
+
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.EXCEEDING)
+
+        # 5. Verify that writes are blocked when quota is exceeded
+        logger.info("Attempting to write one more object, expecting failure")
         try:
-            for quota_status in TimeoutSampler(
-                timeout=360,
-                sleep=30,
-                func=get_bucket_status_value,
+            write_random_test_objects_to_bucket(
+                awscli_pod_session,
+                bucket_name,
+                file_dir=test_directory_setup.origin_dir,
+                amount=1,
+                pattern="SizeKey3-",
+                bs=obj_size_mb,
                 mcg_obj=mcg_obj,
-                bucket_name=bucket_name,
-                key="QuotaStatus",
-            ):
-                last_seen = quota_status
-                if quota_status == QuotaStatus.OPTIMAL:
-                    logger.info("Quota status returned to OPTIMAL")
-                    break
-        except TimeoutExpiredError:
-            assert False, (
-                f"Quota status did not reach {QuotaStatus.OPTIMAL} "
-                f"within 360s, last observed: {last_seen}"
             )
+            assert False, "Writing succeeded after max-size quota was exceeded"
+        except CommandFailed as e:
+            logger.info("Expected CommandFailed exception was caught")
+            logger.info(f"Message: {e}")
+
+        # 6. Attempt to decrease max-size below current usage, verify it's rejected
+        decreased_size_gi = 1
+        logger.info(
+            f"Attempting to decrease max-size quota to {decreased_size_gi}Gi "
+            "(below current usage, expecting rejection)"
+        )
+        try:
+            mcg_obj.exec_mcg_cmd(
+                cmd=f"bucket update --max-size={decreased_size_gi}Gi {bucket_name}",
+                namespace=config.ENV_DATA["cluster_namespace"],
+                use_yes=True,
+            )
+            assert False, "Decreasing max-size below current usage should have failed"
+        except CommandFailed as e:
+            logger.info("Expected rejection when decreasing quota below current usage")
+            logger.info(f"Message: {e}")
+
+        # 7. Increase max-size to just above current usage, verify APPROACHING_QUOTA
+        #    Current usage is ~2.4GB (12 x 200MB), set quota to 2.5Gi (~94% used)
+        approaching_size_gi = 2.5
+        logger.info(
+            f"Increasing max-size quota to {approaching_size_gi}Gi "
+            "(just above current usage)"
+        )
+        mcg_obj.exec_mcg_cmd(
+            cmd=f"bucket update --max-size={approaching_size_gi}Gi {bucket_name}",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            use_yes=True,
+        )
+
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.APPROACHING)
+
+        # 8. Remove max-size quota (set to 0 = unlimited), verify writes succeed
+        logger.info("Removing max-size quota (setting to 0)")
+        mcg_obj.exec_mcg_cmd(
+            cmd=f"bucket update --max-size=0 {bucket_name}",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            use_yes=True,
+        )
+
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.NOT_SET)
+
+        logger.info("Writing object after quota removal, expecting success")
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            bucket_name,
+            file_dir=test_directory_setup.origin_dir,
+            amount=1,
+            pattern="SizeKey4-",
+            bs=obj_size_mb,
+            mcg_obj=mcg_obj,
+        )
+        logger.info("Write succeeded after quota removal as expected")
