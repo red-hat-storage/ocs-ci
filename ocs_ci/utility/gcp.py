@@ -358,6 +358,7 @@ def delete_noobaa_gcp_service_account(gcp_project_id, sa_email):
         crm.projects().setIamPolicy(
             resource=gcp_project_id, body={"policy": policy}
         ).execute()
+        logger.info(f"roles/storage.admin binding removed for {sa_email}")
     except Exception as e:
         logger.warning(f"Failed to remove IAM binding for {sa_email}: {e}")
 
