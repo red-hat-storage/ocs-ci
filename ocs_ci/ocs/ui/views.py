@@ -3807,6 +3807,12 @@ virtualmachine = {
         "//li[contains(.,'{namespace}')]",
         By.XPATH,
     ),
+    # "Virtual machines" horizontal tab on the VirtualMachines page (right panel)
+    "virtual_machines_list_tab": (
+        "//button[normalize-space(.)='Virtual machines'] | "
+        "//a[normalize-space(.)='Virtual machines']",
+        By.XPATH,
+    ),
     # Welcome / overlay modal close button
     "modal_close_button": (
         "//button[@aria-label='Close'][ancestor::*[@role='dialog' or contains(@class,'modal')]]",
@@ -3926,6 +3932,11 @@ virtualmachine = {
         "//li//button[normalize-space(.)='Stop']",
         By.XPATH,
     ),
+    # Start option inside Actions > Control submenu
+    "actions_start_option": (
+        "//li//button[normalize-space(.)='Start']",
+        By.XPATH,
+    ),
     # Delete option inside Actions menu
     "actions_delete_option": (
         "//li//button[normalize-space(.)='Delete']",
@@ -3939,6 +3950,31 @@ virtualmachine = {
     # Delete modal — 'With grace period' checkbox
     "delete_grace_period_checkbox": (
         "//label[contains(normalize-space(.),'With grace period')]/..//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    # Clone option inside Actions menu
+    "actions_clone_option": (
+        "//li//button[normalize-space(.)='Clone']",
+        By.XPATH,
+    ),
+    # Clone VirtualMachine popup — 'Start VirtualMachine once created' checkbox
+    "clone_start_vm_checkbox": (
+        "//input[@id='start-clone']",
+        By.XPATH,
+    ),
+    # Clone VirtualMachine popup — Clone submit button
+    "clone_submit_button": (
+        "//button[@data-test='save-button']",
+        By.XPATH,
+    ),
+    # Clone popup — Name field (pre-filled with cloned VM name)
+    "clone_vm_name_input": (
+        "//input[@id='clone-name']",
+        By.XPATH,
+    ),
+    # VM name link in the VirtualMachines table — format with vm_name at runtime.
+    "vm_left_tree_link_tmpl": (
+        "//a[@data-test='{vm_name}']",
         By.XPATH,
     ),
 }
