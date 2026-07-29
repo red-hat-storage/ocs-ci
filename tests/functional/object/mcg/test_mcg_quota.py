@@ -469,14 +469,6 @@ class TestMCGQuotaAlerts:
         bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj)
         logger.info(f"Created bucket {bucket_name}")
 
-        max_objects = 10
-        mcg_obj.exec_mcg_cmd(
-            cmd=f"bucket update --max-objects={max_objects} {bucket_name}",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            use_yes=True,
-        )
-        logger.info(f"Set max-objects={max_objects} on bucket {bucket_name}")
-
         local_dir = f"/tmp/{bucket_name}"
 
         def finalizer():
@@ -490,6 +482,14 @@ class TestMCGQuotaAlerts:
             bucket.delete()
 
         request.addfinalizer(finalizer)
+
+        max_objects = 10
+        mcg_obj.exec_mcg_cmd(
+            cmd=f"bucket update --max-objects={max_objects} {bucket_name}",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            use_yes=True,
+        )
+        logger.info(f"Set max-objects={max_objects} on bucket {bucket_name}")
 
         write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
@@ -532,7 +532,6 @@ class TestMCGQuotaAlerts:
             bucket.delete()
 
         request.addfinalizer(finalizer)
-
         write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
             bucket_to_write=bucket_name,
