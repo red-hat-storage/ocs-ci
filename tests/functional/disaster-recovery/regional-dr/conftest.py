@@ -3,7 +3,6 @@ import platform
 import os
 import tempfile
 from ocs_ci.deployment.ocp import download_pull_secret
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 import pytest
 
