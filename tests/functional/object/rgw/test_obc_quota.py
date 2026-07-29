@@ -36,13 +36,13 @@ class TestOBCQuota:
     Test OBC Quota feature
     """
 
+    @tier1
     @pytest.mark.parametrize(
         argnames="amount,interface,quota",
         argvalues=[
             pytest.param(
                 *[1, "RGW-OC", {"maxObjects": "1", "maxSize": "50M"}],
                 marks=[
-                    tier1,
                     pytest.mark.polarion_id("OCS-3904"),
                 ],
             ),
@@ -160,13 +160,13 @@ class TestOBCQuota:
                 "but writes still succeeded!!"
             )
 
+    @tier1
     @pytest.mark.parametrize(
         argnames="amount,interface,quota",
         argvalues=[
             pytest.param(
                 *[1, "RGW-OC", {"maxSize": "5M", "maxObjects": "100"}],
                 marks=[
-                    tier1,
                     pytest.mark.polarion_id("OCS-8081"),
                 ],
             ),
@@ -252,13 +252,13 @@ class TestOBCQuota:
         else:
             logger.info(f"New maxSize quota {new_max_size} got applied!!")
 
+    @tier2
     @pytest.mark.parametrize(
         argnames="amount,interface,quota",
         argvalues=[
             pytest.param(
                 *[1, "RGW-OC", {"maxObjects": "5", "maxSize": "5M"}],
                 marks=[
-                    tier2,
                     pytest.mark.polarion_id("OCS-8083"),
                 ],
             ),
@@ -574,15 +574,13 @@ class TestOBCQuota:
                     f"Bucket {name} ({label}) is writable after removing objects!!"
                 )
 
+    @tier2
     @polarion_id("OCS-6178")
     @pytest.mark.parametrize(
         argnames="amount,interface,quota",
         argvalues=[
             pytest.param(
                 *[1, "RGW-OC", {"maxObjects": "10"}],
-                marks=[
-                    tier2,
-                ],
             ),
         ],
     )
@@ -645,13 +643,13 @@ class TestOBCQuota:
             ), f"Alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT} doesn't seem have expected format"
         logger.info(f"Verified the alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT}")
 
+    @tier2
     @pytest.mark.parametrize(
         argnames="amount,interface,quota",
         argvalues=[
             pytest.param(
                 *[1, "RGW-OC", {"maxSize": "10M"}],
                 marks=[
-                    tier2,
                     pytest.mark.polarion_id("OCS-8082"),
                 ],
             ),
