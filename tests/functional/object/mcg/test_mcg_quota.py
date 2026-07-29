@@ -101,9 +101,9 @@ class QuotaStatus:
 @mcg
 @red_squad
 @polarion_id("OCS-7465")
-class TestNoobaaMetrics:
+class TestOBCQuota:
     """
-    Test different Noobaa metrics
+    Test OBC Quota feature using MCG CLI
     """
 
     @config.run_with_provider_context_if_available
