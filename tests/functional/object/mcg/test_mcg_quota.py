@@ -549,12 +549,12 @@ class TestMCGQuotaAlerts:
         self, quota_approaching_bucket_objects, threading_lock
     ):
         """
-        Verify that NooBaaBucketReachingQuotaState Prometheus alert
+        Verify that NooBaaBucketReachingQuantityQuotaState Prometheus alert
         fires when object count approaches the max-objects quota.
 
         Steps:
             1. Fixture creates bucket with max-objects=10, uploads 9 objects
-            2. Wait for NooBaaBucketReachingQuotaState alert to fire
+            2. Wait for NooBaaBucketReachingQuantityQuotaState alert to fire
             3. Verify alert has the correct bucket_name label
         """
         bucket_name = quota_approaching_bucket_objects
