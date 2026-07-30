@@ -35,7 +35,6 @@ from ocs_ci.helpers import helpers
 from ocs_ci.helpers.dr_helpers import (
     check_rbd_mirror_running,
     wait_for_mirroring_status_ok,
-    check_mirroring_status_ok,
     update_odf_cli_dr_config_kubeconfigs,
     validate_cluster_odf_cli,
 )
