@@ -198,6 +198,9 @@ version.
 * `ec_data_chunks` - The k value for erasure coding — number of data chunks. Data is split into this many pieces. Requires `ec_default_pools: true` (Default: 2)
 * `ec_coding_chunks` - The m value for erasure coding — number of parity (coding) chunks. Determines how many simultaneous host failures the pool can tolerate. Requires `ec_default_pools: true` (Default: 1)
 * `ec_failure_domain` - CRUSH failure domain for EC pools. Each chunk is placed on a different unit of this domain. Use `host` for vSphere/bare metal. Requires k+m failure domain units. (Default: "host")
+* `fusion_access_deployment` - Enable IBM Fusion Access for SAN operator deployment after OCP is deployed. When `true`, the `openshift-fusion-access-operator` is installed from the `certified-operators` CatalogSource. (Default: false). Use with `conf/ocsci/fusion_access_deployment.yaml`.
+* `fusion_access_channel` - Subscription channel for the Fusion Access operator. (Default: `"stable-v1"`)
+* `fusion_access_skip_cr` - When `true`, skip creation of the `FusionAccess` CR after the operator CSV reaches `Succeeded`. Useful when the CR is managed externally or created manually. (Default: false)
 
 #### REPORTING
 
