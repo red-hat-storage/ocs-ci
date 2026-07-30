@@ -4077,3 +4077,5 @@ FUSION_ACCESS_OPERATOR_NAME = "openshift-fusion-access-operator"
 FUSION_ACCESS_CR_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "fusion-access-san.yaml"
 )
+
+CONFIRM_DELETION_ANNOTATION = "uninstall.ocs.openshift.io/confirm-deletion"
