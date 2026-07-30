@@ -664,7 +664,7 @@ class TestOBCQuota:
             * Create OBC with a size quota (maxSize=10M) set
             * Write data to ~90% of maxSize capacity
             * Wait for ObcQuotaBytesAlert (80% warning) to fire and verify
-            * Write more data to exceed 100% of maxSize
+            * Reduce maxSize below current usage to push ratio above 100%
             * Wait for ObcQuotaBytesExhausedAlert (100% critical) to fire
             * Verify alert description matches expected format
         """
@@ -711,19 +711,22 @@ class TestOBCQuota:
             ), f"Alert {constants.ALERT_OBC_QUOTA_BYTES_ALERT} doesn't seem have expected format"
         logger.info(f"Verified the alert {constants.ALERT_OBC_QUOTA_BYTES_ALERT}")
 
-        # Phase 2: Fill to 100% and verify exhaustion alert
-        remaining_to_fill = max_size_mb - fill_amount + 2
-        try:
-            write_random_test_objects_to_bucket(
-                awscli_pod_session,
-                bucket_name,
-                test_directory_setup.origin_dir,
-                amount=remaining_to_fill,
-                mcg_obj=OBC(bucket_name),
-            )
-        except CommandFailed as e:
-            logger.info(f"Writes rejected after exceeding maxSize as expected: {e}")
-        logger.info(f"Filled bucket {bucket_name} to 100%+ of maxSize capacity")
+        # Phase 2: Reduce quota below current usage to trigger exhaustion alert.
+        # RGW enforces maxSize strictly, so writes can't push past 100%.
+        # Instead, patch maxSize down so current usage exceeds the new limit.
+        reduced_max_size = fill_amount // 2
+        patch_str = (
+            f'{{"spec": {{"additionalConfig":{{"maxSize": "{reduced_max_size}M"}}}}}}'
+        )
+        cmd = (
+            f"patch obc {bucket_name} -p '{patch_str}' "
+            f"-n openshift-storage --type=merge"
+        )
+        OCP().exec_oc_cmd(cmd)
+        logger.info(
+            f"Reduced maxSize from {max_size_mb}M to {reduced_max_size}M "
+            f"on bucket {bucket_name} to trigger exhaustion"
+        )
 
         exhausted_alerts = [
             alert
