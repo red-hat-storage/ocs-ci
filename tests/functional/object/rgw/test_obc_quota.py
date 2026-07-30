@@ -625,10 +625,12 @@ class TestOBCQuota:
         quota,
     ):
         """
-        Test that ObcQuotaBytesAlert fires when OBC reaches ~80% of maxSize
-            * Create OBC with a size quota (maxSize) set
+        Test OBC size quota Prometheus alerts at 80% and 100% thresholds
+            * Create OBC with a size quota (maxSize=10M) set
             * Write data to ~90% of maxSize capacity
-            * Wait for ObcQuotaBytesAlert Prometheus alert to fire
+            * Wait for ObcQuotaBytesAlert (80% warning) to fire and verify
+            * Write more data to exceed 100% of maxSize
+            * Wait for ObcQuotaBytesExhausedAlert (100% critical) to fire
             * Verify alert description matches expected format
         """
 
@@ -673,3 +675,45 @@ class TestOBCQuota:
                 "description"
             ), f"Alert {constants.ALERT_OBC_QUOTA_BYTES_ALERT} doesn't seem have expected format"
         logger.info(f"Verified the alert {constants.ALERT_OBC_QUOTA_BYTES_ALERT}")
+
+        # Phase 2: Fill to 100% and verify exhaustion alert
+        remaining_to_fill = max_size_mb - fill_amount + 2
+        try:
+            write_random_test_objects_to_bucket(
+                awscli_pod_session,
+                bucket_name,
+                test_directory_setup.origin_dir,
+                amount=remaining_to_fill,
+                mcg_obj=OBC(bucket_name),
+            )
+        except CommandFailed as e:
+            logger.info(f"Writes rejected after exceeding maxSize as expected: {e}")
+        logger.info(f"Filled bucket {bucket_name} to 100%+ of maxSize capacity")
+
+        exhausted_alerts = [
+            alert
+            for alert in prometheus.wait_for_alert(
+                name=constants.ALERT_OBC_QUOTA_BYTES_EXHAUSED_ALERT,
+                state="firing",
+                timeout=600,
+            )
+            if alert.get("labels").get("objectbucketclaim") == bucket_name
+        ]
+
+        assert len(exhausted_alerts) > 0, (
+            f"Alert {constants.ALERT_OBC_QUOTA_BYTES_EXHAUSED_ALERT} didn't fire "
+            f"despite the bucket exceeding 100% of maxSize"
+        )
+
+        exhausted_desc = (
+            f"ObjectBucketClaim {bucket_name} has crossed the limit "
+            f"set by the quota(bytes) and will be read-only now"
+        )
+        for alert in exhausted_alerts:
+            assert exhausted_desc in alert.get("annotations").get("description"), (
+                f"Alert {constants.ALERT_OBC_QUOTA_BYTES_EXHAUSED_ALERT} "
+                f"doesn't have expected format"
+            )
+        logger.info(
+            f"Verified the alert {constants.ALERT_OBC_QUOTA_BYTES_EXHAUSED_ALERT}"
+        )
