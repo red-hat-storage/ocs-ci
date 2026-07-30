@@ -124,6 +124,8 @@ class TestDryRunFailover:
 
         for info in failover_infos:
             if info["is_discovered"]:
+                # do_discovered_apps_cleanup internally calls wait_for_all_resources_deletion
+                # on old_primary (cluster_a) then waits for Completed — no separate deletion wait needed
                 logger.info("Doing Cleanup Operations")
                 dr_helpers.do_discovered_apps_cleanup(
                     drpc_name=info["placement_name"],
@@ -132,21 +134,27 @@ class TestDryRunFailover:
                     workload_dir=info["workload"].workload_dir,
                     vrg_name=info["placement_name"],
                 )
-            config.switch_to_cluster_by_name(cluster_b)
-            dr_helpers.wait_for_all_resources_creation(
-                info["workload_pvc_count"],
-                info["workload_pod_count"],
-                info["workload_namespace"],
-                discovered_apps=info["is_discovered"],
-                vrg_name=info["placement_name"] if info["is_discovered"] else "",
-                performed_dr_action=True,
-            )
-            config.switch_to_cluster_by_name(cluster_a)
-            dr_helpers.wait_for_all_resources_deletion(
-                info["workload_namespace"],
-                discovered_apps=info["is_discovered"],
-                vrg_name=info["placement_name"] if info["is_discovered"] else "",
-            )
+                config.switch_to_cluster_by_name(cluster_b)
+                dr_helpers.wait_for_all_resources_creation(
+                    info["workload_pvc_count"],
+                    info["workload_pod_count"],
+                    info["workload_namespace"],
+                    timeout=1200,
+                    discovered_apps=True,
+                    vrg_name=info["placement_name"],
+                    performed_dr_action=True,
+                )
+            else:
+                # AppSet: creation on cluster_b first, then deletion on cluster_a
+                config.switch_to_cluster_by_name(cluster_b)
+                dr_helpers.wait_for_all_resources_creation(
+                    info["workload_pvc_count"],
+                    info["workload_pod_count"],
+                    info["workload_namespace"],
+                    performed_dr_action=True,
+                )
+                config.switch_to_cluster_by_name(cluster_a)
+                dr_helpers.wait_for_all_resources_deletion(info["workload_namespace"])
             info["current_cluster"] = cluster_b
 
         # Relocate workloads at indices 2, 5 to cluster_b
@@ -172,21 +180,30 @@ class TestDryRunFailover:
             f.result()
 
         for info in relocate_infos:
-            config.switch_to_cluster_by_name(cluster_b)
-            dr_helpers.wait_for_all_resources_creation(
-                info["workload_pvc_count"],
-                info["workload_pod_count"],
-                info["workload_namespace"],
-                discovered_apps=info["is_discovered"],
-                vrg_name=info["placement_name"] if info["is_discovered"] else "",
-                performed_dr_action=True,
-            )
-            config.switch_to_cluster_by_name(cluster_a)
-            dr_helpers.wait_for_all_resources_deletion(
-                info["workload_namespace"],
-                discovered_apps=info["is_discovered"],
-                vrg_name=info["placement_name"] if info["is_discovered"] else "",
-            )
+            if info["is_discovered"]:
+                # relocate() already called do_discovered_apps_cleanup internally —
+                # no separate deletion wait needed
+                config.switch_to_cluster_by_name(cluster_b)
+                dr_helpers.wait_for_all_resources_creation(
+                    info["workload_pvc_count"],
+                    info["workload_pod_count"],
+                    info["workload_namespace"],
+                    timeout=1200,
+                    discovered_apps=True,
+                    vrg_name=info["placement_name"],
+                    performed_dr_action=True,
+                )
+            else:
+                # AppSet: deletion on cluster_a first, then creation on cluster_b
+                config.switch_to_cluster_by_name(cluster_a)
+                dr_helpers.wait_for_all_resources_deletion(info["workload_namespace"])
+                config.switch_to_cluster_by_name(cluster_b)
+                dr_helpers.wait_for_all_resources_creation(
+                    info["workload_pvc_count"],
+                    info["workload_pod_count"],
+                    info["workload_namespace"],
+                    performed_dr_action=True,
+                )
             info["current_cluster"] = cluster_b
 
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
@@ -409,6 +426,7 @@ class TestDryRunFailover:
                 info["workload_pvc_count"],
                 info["workload_pod_count"],
                 workload_namespace,
+                timeout=1200 if info["is_discovered"] else 900,
                 discovered_apps=info["is_discovered"],
                 vrg_name=placement_name if info["is_discovered"] else "",
                 skip_vrg_check=True,
@@ -505,6 +523,7 @@ class TestDryRunFailover:
                 info["workload_pvc_count"],
                 info["workload_pod_count"],
                 workload_namespace,
+                timeout=1200 if info["is_discovered"] else 900,
                 discovered_apps=info["is_discovered"],
                 vrg_name=placement_name if info["is_discovered"] else "",
                 performed_dr_action=True,
