@@ -4124,8 +4124,6 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version
     latest_tag = latest_tag or config.DEPLOYMENT.get("default_latest_tag", "latest")
     if stable_upgrade_version:
         latest_tag = config.UPGRADE.get("default_latest_stable_upgrade_tag", latest_tag)
-    tags = get_ocs_olm_operator_tags()
-    latest_image = None
     ocs_version = config.ENV_DATA["ocs_version"]
     upgrade_ocs_version = config.UPGRADE.get("upgrade_ocs_version")
     use_rc_build = config.UPGRADE.get("use_rc_build")
@@ -4135,12 +4133,24 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version
         latest_tag = previous_rc_build
     if upgrade_version_change:
         upgrade = False
+    tags = get_ocs_olm_operator_tags(filter_tag_name=f"like:{ocs_version}")
+    latest_image = None
     for tag in tags:
         if tag["name"] == latest_tag:
             latest_image = tag["manifest_digest"]
             break
     if not latest_image:
-        raise TagNotFoundException("Couldn't find latest tag!")
+        log.warning(
+            f"Tag '{latest_tag}' not found in version-filtered results, "
+            "fetching all tags"
+        )
+        tags = get_ocs_olm_operator_tags()
+        for tag in tags:
+            if tag["name"] == latest_tag:
+                latest_image = tag["manifest_digest"]
+                break
+        if not latest_image:
+            raise TagNotFoundException("Couldn't find latest tag!")
     latest_tag_found = False
     for tag in tags:
         if not upgrade:
@@ -4295,7 +4305,7 @@ def load_auth_config():
         return {}
 
 
-def get_ocs_olm_operator_tags(limit=100):
+def get_ocs_olm_operator_tags(limit=100, filter_tag_name=""):
     """
     Query the OCS OLM Operator repo and retrieve a list of tags. Since we are limited
     to 100 tags per page, we end up making several API calls and combining the results
@@ -4303,6 +4313,7 @@ def get_ocs_olm_operator_tags(limit=100):
 
     Args:
         limit: the number of tags to limit the request to
+        filter_tag_name (str): Optional tag name filter (e.g. "like:4.22")
 
     Raises:
         KeyError: if the auth config isn't setup properly
@@ -4333,7 +4344,9 @@ def get_ocs_olm_operator_tags(limit=100):
     all_tags = []
     page = 1
     while True:
-        tags = query_quay_for_operator_tags(image, headers, limit, page)
+        tags = query_quay_for_operator_tags(
+            image, headers, limit, page, filter_tag_name=filter_tag_name
+        )
         if len(tags) == 0:
             log.info("No more tags to retrieve")
             break
@@ -4345,7 +4358,7 @@ def get_ocs_olm_operator_tags(limit=100):
 
 @retry(requests.RequestException, 20, 30, 1)
 def query_quay_for_operator_tags(
-    image: str, headers: dict, limit: int, page: int
+    image: str, headers: dict, limit: int, page: int, filter_tag_name: str = ""
 ) -> list:
     """
     Query quay tags for the specified image.
@@ -4355,6 +4368,7 @@ def query_quay_for_operator_tags(
         headers (dict): Request headers
         limit (int): Maximum number of tags to query
         page (int): Which page of results to return
+        filter_tag_name (str): Optional tag name filter (e.g. "like:4.22")
 
     Raises:
         requests.RequestException: If we do not receive an ok response from quay after several retries.
@@ -4364,12 +4378,15 @@ def query_quay_for_operator_tags(
 
     """
     log.info(f"Retrieving OCS OLM Operator tags (limit {limit}, page {page})")
+    url = constants.OPERATOR_CS_QUAY_API_QUERY.format(
+        tag_limit=limit,
+        image=image,
+        page=page,
+    )
+    if filter_tag_name:
+        url += f"&filter_tag_name={filter_tag_name}"
     resp = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(
-            tag_limit=limit,
-            image=image,
-            page=page,
-        ),
+        url,
         headers=headers,
         timeout=120,
     )
