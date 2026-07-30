@@ -1213,3 +1213,102 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
     teardown()
 
     return measured_op
+
+
+@pytest.fixture()
+def measure_create_high_rbd_clone_snapshot_count(
+    request,
+    measurement_dir,
+    threading_lock,
+    pvc_factory,
+    pvc_clone_factory,
+):
+    """
+    Create more than 200 CSI clones from an RBD PVC to trigger
+    HighRBDCloneSnapshotCount alert. The alert fires when
+    ocs_rbd_children_count exceeds the clone soft limit of 200.
+
+    Returns:
+        dict: Contains ``start``, ``stop`` time, ``prometheus_alerts``,
+            and ``metadata`` with ``client_name`` and ``is_provider_mode``.
+    """
+    is_provider_mode = config.multicluster
+    client_name = None
+
+    if is_provider_mode:
+        logger.info("Provider mode detected, getting consumer info")
+        with config.RunWithFirstConsumerConfigContextIfAvailable():
+            cluster_id = exec_cmd(
+                "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+            ).stdout.decode("utf-8")
+            client_name = f"storageconsumer-{cluster_id}"
+        logger.info(f"Consumer client name: {client_name}")
+    else:
+        logger.info("Internal mode detected")
+
+    clone_pvcs = []
+    clone_count = 201
+
+    def create_high_clone_count(count=clone_count):
+        nonlocal clone_pvcs
+
+        with config.RunWithFirstConsumerConfigContextIfAvailable():
+            pvc_obj = pvc_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                size=1,
+            )
+            logger.info(f"Created source RBD PVC {pvc_obj.name}")
+
+            logger.info(
+                f"Creating {count} CSI clones to exceed " "clone soft limit of 200"
+            )
+            for i in range(count):
+                clone_pvc = pvc_clone_factory(
+                    pvc_obj=pvc_obj,
+                    status=None,
+                )
+                clone_pvcs.append(clone_pvc)
+                if (i + 1) % 50 == 0:
+                    logger.info(f"Created {i + 1}/{count} CSI clones")
+
+            logger.info(f"All {count} CSI clones created, " "waiting for Bound status")
+            for clone_pvc in clone_pvcs:
+                helpers.wait_for_resource_state(
+                    clone_pvc, constants.STATUS_BOUND, timeout=600
+                )
+            logger.info("All CSI clones are Bound")
+
+        run_time = 60 * 15
+        logger.info(
+            f"Waiting {run_time}s for HighRBDCloneSnapshotCount " "alert evaluation"
+        )
+        time.sleep(run_time)
+
+    def teardown():
+        logger.info("Deleting CSI clones to clear alert")
+        with config.RunWithFirstConsumerConfigContextIfAvailable():
+            for clone_pvc in clone_pvcs:
+                if not clone_pvc.is_deleted:
+                    clone_pvc.delete()
+            for clone_pvc in clone_pvcs:
+                clone_pvc.ocp.wait_for_delete(clone_pvc.name, timeout=600)
+        logger.info("All CSI clones deleted")
+
+    request.addfinalizer(teardown)
+
+    test_file = os.path.join(
+        measurement_dir, "measure_high_rbd_clone_snapshot_count.json"
+    )
+    measured_op = measure_operation(
+        create_high_clone_count,
+        test_file,
+        threading_lock=threading_lock,
+        metadata={
+            "client_name": client_name,
+            "is_provider_mode": is_provider_mode,
+        },
+    )
+
+    teardown()
+
+    return measured_op
