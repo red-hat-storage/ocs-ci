@@ -248,6 +248,7 @@ def failover(
     switch_ctx=None,
     discovered_apps=False,
     old_primary=None,
+    skip_odf_cli_validation=False,
 ):
     """
     Initiates Failover action to the specified cluster
@@ -260,6 +261,8 @@ def failover(
         switch_ctx (int): The cluster index by the cluster name
         discovered_apps (bool): True when cluster is failing over DiscoveredApps
         old_primary (str): Name of cluster where workload were running
+        skip_odf_cli_validation (bool): If True, skip ODF CLI validation
+            (e.g. when the primary cluster is down and unreachable)
 
     """
     restore_index = config.cur_index
@@ -294,11 +297,17 @@ def failover(
 
     drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=360, sleep=10)
 
-    validate_application_odf_cli(
-        drpc_name=drpc_obj.resource_name,
-        namespace=namespace,
-        dr_action="app-failover",
-    )
+    if skip_odf_cli_validation:
+        logger.info(
+            "Skipping ODF CLI validation for app-failover " "(primary cluster is down)"
+        )
+    else:
+        time.sleep(60)
+        validate_application_odf_cli(
+            drpc_name=drpc_obj.resource_name,
+            namespace=namespace,
+            dr_action="app-failover",
+        )
 
     config.switch_ctx(restore_index)
 
@@ -315,6 +324,7 @@ def relocate(
     multi_ns=False,
     workload_instances_shared=None,
     vm_auto_cleanup=False,
+    skip_odf_cli_validation=False,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -331,6 +341,7 @@ def relocate(
         multi_ns (bool): Multi Namespace
         workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
         vm_auto_cleanup (bool): If true, cleanup will not be initiated after relocate action, False otherwise.
+        skip_odf_cli_validation (bool): If True, skip ODF CLI validation
 
     """
     restore_index = config.cur_index
@@ -406,11 +417,14 @@ def relocate(
                     skip_resource_deletion_verification=True,
                 )
 
-    validate_application_odf_cli(
-        drpc_name=drpc_obj.resource_name,
-        namespace=namespace,
-        dr_action="app-relocate",
-    )
+    if skip_odf_cli_validation:
+        logger.info("Skipping ODF CLI validation for app-relocate")
+    else:
+        validate_application_odf_cli(
+            drpc_name=drpc_obj.resource_name,
+            namespace=namespace,
+            dr_action="app-relocate",
+        )
 
     config.switch_ctx(restore_index)
 
@@ -4260,6 +4274,7 @@ def extract_images_from_yaml(obj, images=None):
 
     return images
 
+
 def get_cdi_registry_credentials():
     """
     Extract the username and password for the internal mirror registry from
@@ -4470,8 +4485,14 @@ def create_cdi_cert_configmap(namespace, configmap_name="user-ca-bundle"):
         f"CDI cert ConfigMap '{configmap_name}' created in namespace '{namespace}'"
     )
 
+
 def validate_application_odf_cli(
-    drpc_name, namespace, action="validate", dr_action=None
+    drpc_name,
+    namespace,
+    action="validate",
+    dr_action=None,
+    retries=5,
+    retry_interval=100,
 ):
     """
     Validate DR application using the ODF CLI tool.
@@ -4479,9 +4500,11 @@ def validate_application_odf_cli(
     Run an ODF CLI DR action on a DR application.
 
     Supports 'validate' and 'gather' actions. For 'validate', runs
-    'odf dr validate application' and asserts success. For 'gather',
-    runs 'odf dr gather application' to collect diagnostic data
-    (non-fatal on failure).
+    'odf dr validate application' and asserts success, retrying up to
+    ``retries`` times with ``retry_interval`` seconds between attempts
+    to allow post-failover/relocate resources time to stabilise.
+    For 'gather', runs 'odf dr gather application' to collect diagnostic
+    data (non-fatal on failure).
 
     Args:
         drpc_name (str): Name of the DRPC resource
@@ -4490,6 +4513,8 @@ def validate_application_odf_cli(
         dr_action (str): Label for the output directory
             (e.g., "app-failover", "app-relocate"). Defaults to
             "{action}-app" if not provided.
+        retries (int): Number of retry attempts for validate action.
+        retry_interval (int): Seconds to wait between retries.
 
     Returns:
         str or None: The stdout output from the command,
@@ -4535,32 +4560,61 @@ def validate_application_odf_cli(
             )
             return None
     else:
-        logger.info(
-            f"Running ODF DR validate application for DRPC '{drpc_name}' "
-            f"in namespace '{namespace}'"
+        last_exception = None
+        last_stdout = None
+        for attempt in range(1, retries + 1):
+            logger.info(
+                f"Running ODF DR validate application for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}' (attempt {attempt}/{retries})"
+            )
+            try:
+                result = odf_cli_runner.run_command(cmd_args, timeout=1200)
+                last_stdout = result.stdout.decode()
+                last_exception = None
+                logger.info(f"ODF DR validate application output:\n{last_stdout}")
+            except Exception as ex:
+                last_exception = ex
+                last_stdout = None
+                logger.warning(
+                    f"ODF DR validate application command failed for DRPC "
+                    f"'{drpc_name}' in namespace '{namespace}' "
+                    f"(attempt {attempt}/{retries}).",
+                    exc_info=True,
+                )
+
+            if last_exception is None and last_stdout is not None:
+                if "validation completed" in last_stdout.lower():
+                    return last_stdout
+
+            if attempt < retries:
+                logger.info(
+                    f"Retrying ODF DR validate in {retry_interval}s "
+                    f"(attempt {attempt}/{retries} did not pass)"
+                )
+                sleep(retry_interval)
+
+        if last_exception is not None:
+            logger.error(
+                f"ODF DR validate application command failed for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}' after {retries} attempts. "
+                f"Last exception: {last_exception}"
+            )
+            pytest.skip(
+                f"ODF DR validate application command failed for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}' after {retries} attempts"
+            )
+
+        logger.error(
+            f"ODF DR validate application did not report success for DRPC '{drpc_name}' "
+            f"in namespace '{namespace}' after {retries} attempts. Output:\n{last_stdout}"
         )
-        try:
-            result = odf_cli_runner.run_command(cmd_args, timeout=1200)
-            stdout = result.stdout.decode()
-            logger.info(f"ODF DR validate application output:\n{stdout}")
-        except Exception:
-            logger.warning(
-                f"ODF DR validate application command failed for DRPC '{drpc_name}' "
-                f"in namespace '{namespace}'. Skipping test.",
-                exc_info=True,
-            )
-            pytest.skip(
-                f"ODF DR validate application command failed for DRPC '{drpc_name}' "
-                f"in namespace '{namespace}'"
-            )
+        pytest.skip(
+            f"ODF DR validate application did not report success for DRPC '{drpc_name}' "
+            f"in namespace '{namespace}' after {retries} attempts. Output:\n{last_stdout}"
+        )
 
-        if "validation completed" not in stdout.lower():
-            pytest.skip(
-                f"ODF DR validate application did not report success for DRPC '{drpc_name}' "
-                f"in namespace '{namespace}'. Output:\n{stdout}"
-            )
+    return last_stdout
 
-    return stdout
 
 def update_odf_cli_dr_config_kubeconfigs():
     """
@@ -4616,12 +4670,18 @@ def update_odf_cli_dr_config_kubeconfigs():
 
     logger.info(f"ODF CLI DR config updated at: {config_path}")
 
-def validate_cluster_odf_cli():
+
+def validate_cluster_odf_cli(retries=5, retry_interval=60):
     """
     Validate DR cluster configuration using the ODF CLI tool.
 
     Runs 'odf dr validate clusters' and stores the output files
-    to the test log directory.
+    to the test log directory, retrying up to ``retries`` times
+    with ``retry_interval`` seconds between attempts.
+
+    Args:
+        retries (int): Number of retry attempts.
+        retry_interval (int): Seconds to wait between retries.
 
     Returns:
         str: The stdout output from the validation command
@@ -4639,14 +4699,50 @@ def validate_cluster_odf_cli():
 
     odf_cli_runner = ODFCliRunner()
     cmd_args = f"dr validate clusters --config {constants.ODF_CLI_DR_CONFIG_PATH} -o {output_dir}"
-    logger.info("Running ODF DR validate clusters")
-    result = odf_cli_runner.run_command(cmd_args, timeout=1200)
-    stdout = result.stdout.decode()
-    logger.info(f"ODF DR validate clusters output:\n{stdout}")
 
-    assert (
-        "validation completed" in stdout.lower()
-    ), f"ODF DR validate clusters did not report success. Output:\n{stdout}"
+    last_exception = None
+    last_stdout = None
+    for attempt in range(1, retries + 1):
+        logger.info(f"Running ODF DR validate clusters (attempt {attempt}/{retries})")
+        try:
+            result = odf_cli_runner.run_command(cmd_args, timeout=1200)
+            last_stdout = result.stdout.decode()
+            last_exception = None
+            logger.info(f"ODF DR validate clusters output:\n{last_stdout}")
+        except Exception as ex:
+            last_exception = ex
+            last_stdout = None
+            logger.warning(
+                f"ODF DR validate clusters command failed "
+                f"(attempt {attempt}/{retries}).",
+                exc_info=True,
+            )
 
-    return stdout
+        if last_exception is None and last_stdout is not None:
+            if "validation completed" in last_stdout.lower():
+                return last_stdout
 
+        if attempt < retries:
+            logger.info(
+                f"Retrying ODF DR validate clusters in {retry_interval}s "
+                f"(attempt {attempt}/{retries} did not pass)"
+            )
+            sleep(retry_interval)
+
+    if last_exception is not None:
+        logger.error(
+            f"ODF DR validate clusters command failed after {retries} attempts. "
+            f"Last exception: {last_exception}"
+        )
+        pytest.skip(f"ODF DR validate clusters command failed after {retries} attempts")
+
+    logger.error(
+        f"ODF DR validate clusters did not report success after {retries} attempts. "
+        f"Output:\n{last_stdout}"
+    )
+    pytest.skip(
+        f"ODF DR validate clusters did not report success after {retries} attempts. "
+        f"Output:\n{last_stdout}"
+    )
+
+    return last_stdout

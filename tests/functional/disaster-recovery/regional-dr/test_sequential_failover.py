@@ -131,6 +131,7 @@ class TestSequentialFailover:
                             if wl.workload_type == constants.APPLICATION_SET
                             else None
                         ),
+                        skip_odf_cli_validation=primary_cluster_down,
                     )
                 )
                 time.sleep(5)

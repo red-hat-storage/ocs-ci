@@ -139,6 +139,7 @@ class TestCnvApplicationRDR:
                     if cnv_wl.workload_type != constants.SUBSCRIPTION
                     else None
                 ),
+                skip_odf_cli_validation=primary_cluster_down,
             )
 
         # Verify VM and its resources on secondary managed cluster
