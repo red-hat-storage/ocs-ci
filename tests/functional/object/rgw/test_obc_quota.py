@@ -587,9 +587,11 @@ class TestOBCQuota:
         quota,
     ):
         """
-        This test will verify the prometheus alerts
-        when the OBC quota is reached
-
+        Test OBC object count quota Prometheus alert at 80% threshold
+            * Create OBC with an object count quota (maxObjects=10) set
+            * Write objects to ~90% of maxObjects capacity
+            * Wait for ObcQuotaObjectsAlert (80% warning) to fire and verify
+            * Verify alert description matches expected format
         """
 
         # create the bucket
