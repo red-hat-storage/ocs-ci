@@ -86,7 +86,6 @@ class VirtualMachineUI(PageNavigator):
         appear and dismiss it.
         """
         logger.info("Navigating to Virtualization > VirtualMachines")
-        self.page_has_loaded()
         self.choose_expanded_mode(mode=True, locator=self.vm_loc["virtualization_menu"])
         self.do_click(self.vm_loc["virtualmachines_tab"])
         logger.info(
