@@ -523,6 +523,36 @@ class RDRProviderClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
             ]
         return super().get_pytest_params_tuple(role)
 
+    def generate_pytest_parameters(self, metafunc, roles):
+        """
+        Override to accept plain ``rdr-all-*`` markers in addition to
+        ``rdr-provider-all-*``.
+
+        Existing upgrade tests are decorated with
+        ``@multicluster_roles(["rdr-all-odf"])`` etc., which lack the
+        ``-provider`` infix that ``self.dr_type`` carries.  The base-class
+        implementation only matches roles that start with ``self.dr_type``
+        ("rdr-provider"), so those tests receive no parametrization and fall
+        back to the default ``NotSetType`` fixture value, causing a TypeError
+        in ``pytest_collection_modifyitems`` when the order arithmetic runs.
+
+        This override handles both prefixes:
+          - ``rdr-provider-*`` → delegated to ``get_pytest_params_tuple``
+          - ``rdr-all-*``      → mapped directly to the equivalent helper
+        """
+        pytest_params = []
+        for role in roles:
+            if role.startswith(self.dr_type):
+                pytest_params.extend(self.get_pytest_params_tuple(role))
+            elif role.startswith("rdr-all"):
+                if "all-odf" in role:
+                    pytest_params.extend(self.get_all_odf_roles_to_param_tuple())
+                elif "all-acm" in role:
+                    pytest_params.extend(self.get_all_acm_roles_to_param_tuple())
+                elif "all-ocp" in role:
+                    pytest_params.extend(self.get_all_roles_to_param_tuples())
+        return pytest_params
+
     def reeval_upgrade_order(self, phase_order, zrank, role_rank):
         """
         Compute a unique, globally-ordered test-order number that honours the
