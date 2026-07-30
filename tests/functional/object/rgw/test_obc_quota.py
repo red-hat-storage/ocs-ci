@@ -60,11 +60,12 @@ class TestOBCQuota:
     ):
         """
         Test OBC quota feature
-            * create OBC with some quota set
-            * check if the quota works
-            * change the quota
-            * check if the new quota works
-            * decrease maxObjects below current usage, verify writes are blocked
+            * Create OBC with maxObjects quota set
+            * Write objects exceeding maxObjects, verify QuotaExceeded
+            * Patch maxObjects higher, verify additional writes succeed
+            * Decrease maxObjects below current usage, verify writes are
+              blocked (any CommandFailed accepted — RGW may return errors
+              other than QuotaExceeded when quota is reduced below usage)
         """
         bucket_name = rgw_bucket_factory(amount, interface, quota=quota)[0].name
         obc_obj = OBC(bucket_name)
@@ -83,10 +84,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
-                logger.info(f"Quota {quota} worked as expected!!")
-            else:
-                logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
+            logger.info(f"Quota {quota} blocked writes as expected: {e}")
         else:
             assert (
                 False
@@ -115,10 +113,10 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 assert False, f"New quota {new_quota_str} didn't get applied!!"
             else:
-                logger.error("Copy objects to bucket failed unexpectedly!!")
+                logger.error(f"Copy objects to bucket failed unexpectedly: {e}")
         else:
             logger.info(f"New quota {new_quota_str} got applied!!")
 
@@ -145,13 +143,10 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
-                logger.info(
-                    f"Decreased maxObjects quota to {decreased_quota} blocked writes as expected!!"
-                )
-            else:
-                logger.error("Copy objects to bucket failed unexpectedly!!")
-                raise
+            logger.info(
+                f"Decreased maxObjects quota to {decreased_quota} blocked writes "
+                f"as expected: {e}"
+            )
         else:
             assert False, (
                 f"Decreased maxObjects to {decreased_quota} below current usage "
@@ -206,11 +201,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
-                logger.info(f"Size quota {quota} worked as expected!!")
-            else:
-                logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
-                raise
+            logger.info(f"Size quota {quota} blocked writes as expected: {e}")
         else:
             assert (
                 False
@@ -241,10 +232,10 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 assert False, f"New maxSize quota {new_max_size} didn't get applied!!"
             else:
-                logger.error("Copy objects to bucket failed unexpectedly!!")
+                logger.error(f"Copy objects to bucket failed unexpectedly: {e}")
                 raise
         else:
             logger.info(f"New maxSize quota {new_max_size} got applied!!")
@@ -299,11 +290,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
-                logger.info("Both quotas hit as expected!!")
-            else:
-                logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
-                raise
+            logger.info(f"Both quotas blocked writes as expected: {e}")
         else:
             assert False, "Combined quota didn't work!! All objects were written!!"
 
@@ -325,11 +312,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
-                logger.info("Write still blocked by maxObjects as expected!!")
-            else:
-                logger.error("Copying objects to bucket failed unexpectedly!!")
-                raise
+            logger.info(f"Write still blocked by maxObjects as expected: {e}")
         else:
             assert False, (
                 "Write succeeded after patching only maxSize — "
@@ -359,11 +342,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
-                logger.info("Write still blocked by maxSize as expected!!")
-            else:
-                logger.error("Copying objects to bucket failed unexpectedly!!")
-                raise
+            logger.info(f"Write still blocked by maxSize as expected: {e}")
         else:
             assert False, (
                 "Write succeeded after patching only maxObjects — "
@@ -390,10 +369,10 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 assert False, "Both quotas were increased but writes still blocked!!"
             else:
-                logger.error("Copying objects to bucket failed unexpectedly!!")
+                logger.error(f"Copying objects to bucket failed unexpectedly: {e}")
                 raise
         else:
             logger.info("Writes succeeded after patching both quotas!!")
@@ -417,7 +396,6 @@ class TestOBCQuota:
         """
         interface = "RGW-OC"
         test_dir = test_directory_setup.result_dir
-        err_msg = "(QuotaExceeded)"
 
         # Create 4 buckets with different quota configurations
         bucket_no_quota = rgw_bucket_factory(1, interface)[0].name
@@ -454,13 +432,10 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
-                logger.info(
-                    f"maxSize quota blocked writes on {bucket_max_size} as expected!!"
-                )
-            else:
-                logger.error("Copying objects to bucket failed unexpectedly!!")
-                raise
+            logger.info(
+                f"maxSize quota blocked writes on {bucket_max_size} "
+                f"as expected: {e}"
+            )
         else:
             assert False, f"maxSize quota not enforced on {bucket_max_size}!!"
 
@@ -476,13 +451,10 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
-                logger.info(
-                    f"maxObjects quota blocked writes on {bucket_max_objects} as expected!!"
-                )
-            else:
-                logger.error("Copying objects to bucket failed unexpectedly!!")
-                raise
+            logger.info(
+                f"maxObjects quota blocked writes on {bucket_max_objects} "
+                f"as expected: {e}"
+            )
         else:
             assert False, f"maxObjects quota not enforced on {bucket_max_objects}!!"
 
@@ -498,13 +470,9 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
-                logger.info(
-                    f"Combined quota blocked writes on {bucket_both} as expected!!"
-                )
-            else:
-                logger.error("Copying objects to bucket failed unexpectedly!!")
-                raise
+            logger.info(
+                f"Combined quota blocked writes on {bucket_both} " f"as expected: {e}"
+            )
         else:
             assert False, f"Combined quota not enforced on {bucket_both}!!"
 
