@@ -8,6 +8,7 @@ import tempfile
 
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import exec_cmd, run_cmd
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -541,25 +542,43 @@ def corrupt_pg(osd_deployment, pool_name, pool_object):
         f'"runAsUser": 0}}, "volumeMounts": [{{"mountPath": "/var/lib/ceph/osd/ceph-{osd_id}", '
         f'"name": "{bridge_name}", "subPath": "ceph-{osd_id}"}}]}}}}]'
     )
-    osd_deployment.ocp.patch(
+    # Record the current pod UID so we can detect when the old pod is replaced
+    old_pod_uid = osd_pod.get()["metadata"]["uid"]
+
+    patched = osd_deployment.ocp.patch(
         resource_name=osd_deployment.name, params=patch_change, format_type="json"
     )
+    assert patched, f"Failed to patch deployment {osd_deployment.name}"
 
-    # Wait for the OSD pod to restart with corrupted data before issuing
-    # deep-scrub. If deep-scrub runs while the corrupted OSD is down, it only
-    # checks healthy replicas and finds no inconsistency.
+    # Wait for the old pod to terminate and a new one to reach Running.
+    # If deep-scrub runs while the corrupted OSD is down, it only checks
+    # healthy replicas and finds no inconsistency.
     logger.info(
-        f"Waiting for OSD pod {osd_deployment.name} to restart after corruption"
+        f"Waiting for OSD pod {osd_deployment.name} to be replaced "
+        f"(old pod UID: {old_pod_uid})"
     )
     ocp_pod = ocp.OCP(
         kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
     )
-    ocp_pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=f"ceph-osd-id={osd_id}",
-        resource_count=1,
+    for sample in TimeoutSampler(
         timeout=300,
-    )
+        sleep=10,
+        func=ocp_pod.get,
+        selector=f"ceph-osd-id={osd_id}",
+    ):
+        pods = sample.get("items", [])
+        running = [
+            p
+            for p in pods
+            if p["metadata"]["uid"] != old_pod_uid
+            and p["status"].get("phase") == "Running"
+            and all(
+                cs.get("ready", False)
+                for cs in p["status"].get("containerStatuses", [])
+            )
+        ]
+        if running:
+            break
     logger.info(f"OSD pod osd.{osd_id} is running, issuing deep-scrub on {pgid}")
     ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pgid}")
 
