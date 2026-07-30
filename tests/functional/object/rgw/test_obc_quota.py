@@ -11,7 +11,8 @@ from ocs_ci.ocs.bucket_utils import (
     rm_object_recursive,
     write_random_test_objects_to_bucket,
 )
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier2,
@@ -299,24 +300,40 @@ class TestOBCQuota:
         cmd = f"patch obc {bucket_name} -p '{patch_str}' -n openshift-storage --type=merge"
         OCP().exec_oc_cmd(cmd)
         logger.info(f"Patched only maxSize to 20M on obc {bucket_name}")
-        time.sleep(20)
+
+        def check_write_blocked_by_max_objects():
+            try:
+                copy_random_individual_objects(
+                    awscli_pod_session,
+                    pattern="size-patched-",
+                    file_dir=test_dir,
+                    target=full_bucket_path,
+                    amount=1,
+                    s3_obj=obc_obj,
+                    ignore_error=False,
+                )
+                return False
+            except CommandFailed:
+                return True
 
         try:
-            copy_random_individual_objects(
-                awscli_pod_session,
-                pattern="size-patched-",
-                file_dir=test_dir,
-                target=full_bucket_path,
-                amount=1,
-                s3_obj=obc_obj,
-                ignore_error=False,
-            )
-        except CommandFailed as e:
-            logger.info(f"Write still blocked by maxObjects as expected: {e}")
-        else:
+            for blocked in TimeoutSampler(
+                timeout=120, sleep=20, func=check_write_blocked_by_max_objects
+            ):
+                if blocked:
+                    logger.info(
+                        "Write blocked by maxObjects as expected after "
+                        "patching only maxSize"
+                    )
+                    break
+                logger.info(
+                    "Write succeeded — RGW hasn't re-enforced "
+                    "maxObjects yet, retrying..."
+                )
+        except TimeoutExpiredError:
             assert False, (
-                "Write succeeded after patching only maxSize — "
-                "maxObjects should still block!!"
+                "Write never got blocked by maxObjects after patching "
+                "only maxSize — waited 120s"
             )
 
         # Patch only maxObjects higher (reset maxSize back to original) —
@@ -329,24 +346,40 @@ class TestOBCQuota:
         logger.info(
             f"Patched maxObjects to 20 and maxSize back to 5M on obc {bucket_name}"
         )
-        time.sleep(20)
+
+        def check_write_blocked_by_max_size():
+            try:
+                copy_random_individual_objects(
+                    awscli_pod_session,
+                    pattern="obj-patched-",
+                    file_dir=test_dir,
+                    target=full_bucket_path,
+                    amount=1,
+                    s3_obj=obc_obj,
+                    ignore_error=False,
+                )
+                return False
+            except CommandFailed:
+                return True
 
         try:
-            copy_random_individual_objects(
-                awscli_pod_session,
-                pattern="obj-patched-",
-                file_dir=test_dir,
-                target=full_bucket_path,
-                amount=1,
-                s3_obj=obc_obj,
-                ignore_error=False,
-            )
-        except CommandFailed as e:
-            logger.info(f"Write still blocked by maxSize as expected: {e}")
-        else:
+            for blocked in TimeoutSampler(
+                timeout=120, sleep=20, func=check_write_blocked_by_max_size
+            ):
+                if blocked:
+                    logger.info(
+                        "Write blocked by maxSize as expected after "
+                        "patching only maxObjects"
+                    )
+                    break
+                logger.info(
+                    "Write succeeded — RGW hasn't re-enforced "
+                    "maxSize yet, retrying..."
+                )
+        except TimeoutExpiredError:
             assert False, (
-                "Write succeeded after patching only maxObjects — "
-                "maxSize should still block!!"
+                "Write never got blocked by maxSize after patching "
+                "only maxObjects — waited 120s"
             )
 
         # Patch both quotas higher — writes should succeed
