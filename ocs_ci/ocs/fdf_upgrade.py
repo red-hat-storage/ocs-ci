@@ -31,7 +31,6 @@ from ocs_ci.ocs.resources.csv import (
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import get_packagemanifest_by_catalog_source
 from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.ocs.upgrade import BaseUpgrade
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
@@ -513,13 +512,14 @@ class FDFUpgrade(BaseUpgrade):
         catalog and re-pointing all subscriptions.
 
         The migration flow:
-        1. Pre-migration pod health check
-        2. Record pre-migration CSV name
-        3. Create FDF CatalogSource and set Manual approval
-        4. Patch ODF subscriptions to point at FDF catalog
-        5. Approve the pending InstallPlan
-        6. Wait for all CSVs to reach Succeeded
-        7. Post-migration CSV and OCS install verification
+        1. Version validation - ensures target version is >= current version
+        2. Pre-migration pod health check
+        3. Record pre-migration CSV name
+        4. Create FDF CatalogSource and set Manual approval
+        5. Patch ODF subscriptions to point at FDF catalog
+        6. Approve the pending InstallPlan
+        7. Wait for all CSVs to reach Succeeded
+        8. Post-migration CSV and FDF install verification
 
         Raises:
             AssertionError: When fdf_registry_image is not configured, or
@@ -533,6 +533,9 @@ class FDFUpgrade(BaseUpgrade):
             "FDF migration. Provide the full pull-spec of the ISF Data "
             "Foundation catalog image."
         )
+
+        logger.test_step("Validating migration versions")
+        self.validate_upgrade_versions()
 
         logger.test_step("Pre-migration pod health check")
         _check_pod_health(namespace=self.namespace)
@@ -561,23 +564,16 @@ class FDFUpgrade(BaseUpgrade):
         elapsed = time.time() - start_time
         logger.info(f"FDF migration took {elapsed:.1f} seconds")
 
-        logger.test_step("Post-migration: verifying all CSVs are Succeeded")
-        csvs_ok = check_all_csvs_are_succeeded(namespace=self.namespace)
-        logger.assertion(f"Post-migration CSVs check: all_succeeded={csvs_ok}")
-        assert csvs_ok, (
-            "Post-migration verification failed: not all CSVs are in "
-            "Succeeded state."
+        ocp_sub = OCP(
+            kind="subscription.operators.coreos.com",
+            resource_name=defaults.ODF_OPERATOR_NAME,
+            namespace=self.namespace,
         )
+        self.channel = ocp_sub.data["spec"]["channel"]
+        logger.info(f"Post-migration subscription channel: {self.channel}")
 
-        if not config.ENV_DATA.get("mcg_only_deployment"):
-            logger.test_step("Post-migration: running OCS install verification")
-            ocs_install_verification(
-                timeout=600,
-                skip_osd_distribution_check=True,
-                ocs_registry_image=fdf_registry_image,
-                post_upgrade_verification=True,
-                version_before_upgrade=self.version_before_upgrade,
-            )
+        logger.test_step("Post-migration: verifying required CSVs")
+        self.verify_required_csvs()
 
         logger.info("ODF to FDF migration completed and verified successfully.")
 

@@ -6,4 +6,4 @@ DEPLOYMENT:
 
 UPGRADE:
   # Set to the full pull-spec of the ISF Data Foundation catalog image.
-  fdf_registry_image: ""
+  fdf_registry_image: "cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.21.9-4"
