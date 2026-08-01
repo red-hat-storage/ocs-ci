@@ -523,6 +523,14 @@ class RDRProviderClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
             ]
         return super().get_pytest_params_tuple(role)
 
+    def _get_provider_acm_param_tuples(self):
+        """Return param tuples for provider and ACM roles only, excluding hosted clients."""
+        return [
+            t
+            for role, t in self.roles_to_param_tuples.items()
+            if not role.startswith("HostedClient")
+        ]
+
     def generate_pytest_parameters(self, metafunc, roles):
         """
         Override to accept plain ``rdr-all-*`` markers in addition to
@@ -539,6 +547,10 @@ class RDRProviderClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
         This override handles both prefixes:
           - ``rdr-provider-*`` → delegated to ``get_pytest_params_tuple``
           - ``rdr-all-*``      → mapped directly to the equivalent helper
+
+        For ``rdr-all-ocp``: hosted client clusters are excluded because their
+        OCP upgrade is handled by ``test_upgrade_kubevirt_clusters`` (marked
+        ``rdr-provider-all-clients``), not by ``test_upgrade_ocp``.
         """
         pytest_params = []
         for role in roles:
@@ -550,7 +562,8 @@ class RDRProviderClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
                 elif "all-acm" in role:
                     pytest_params.extend(self.get_all_acm_roles_to_param_tuple())
                 elif "all-ocp" in role:
-                    pytest_params.extend(self.get_all_roles_to_param_tuples())
+                    # Hosted clients use test_upgrade_kubevirt_clusters instead
+                    pytest_params.extend(self._get_provider_acm_param_tuples())
         return pytest_params
 
     def reeval_upgrade_order(self, phase_order, zrank, role_rank):
