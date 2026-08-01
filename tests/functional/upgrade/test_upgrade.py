@@ -210,6 +210,7 @@ def test_mce_upgrade(zone_rank, role_rank, config_index):
 
 @yellow_squad
 @kubevirt_cluster_upgrade
+@multicluster_roles(["rdr-provider-all-clients"])
 @runs_on_provider
 def test_upgrade_kubevirt_clusters(zone_rank, role_rank, config_index):
     """
