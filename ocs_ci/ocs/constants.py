@@ -89,6 +89,7 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
 TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, "authentication")
 KREW_INSTALL_DIR = os.path.join(TEMPLATE_DIR, "krew_plugin")
 TEMPLATE_CNV_VM_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "cnv-vm-workload")
+TEMPLATE_CBT_DIR = os.path.join(TEMPLATE_DIR, "cbt")
 DATA_DIR = os.getenv("OCSCI_DATA_DIR") or os.path.join(TOP_DIR, "data")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -4026,6 +4027,11 @@ CEPHFS_CSI_ADDONS_SOCKET_NAME = "csi-addons.sock"
 # Fill pool job and PVC Yaml files
 FILL_POOL_JOB_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_job.yaml")
 FILL_POOL_PVC_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_pvc.yaml")
+
+# CBT (Changed Block Tracking) metadata tool templates and constants
+CBT_LISTER_POD_YAML = os.path.join(TEMPLATE_CBT_DIR, "lister_pod.yaml")
+CBT_VERIFIER_POD_YAML = os.path.join(TEMPLATE_CBT_DIR, "verifier_pod.yaml")
+CBT_CONFIGMAP_NAME = "openshift-storage.rbd.csi.ceph.com"
 
 # KEDA and RGW HA
 KEDACORE_REPO_URL = "https://kedacore.github.io/charts"
