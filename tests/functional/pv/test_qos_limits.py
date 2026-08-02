@@ -81,10 +81,6 @@ class TestVolumeAttributesClassQoS(ManageTest):
             json.dump(gold_manifest, gf)
             tmp_gold = gf.name
 
-        log.info("Injecting class structures into cluster context...")
-        exec_cmd(f"oc apply -f {tmp_silver}")
-        exec_cmd(f"oc apply -f {tmp_gold}")
-
         def cleanup():
             log.info("Scrubbing VolumeAttributesClass operational configurations...")
             exec_cmd(
@@ -97,7 +93,12 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 if os.path.exists(tmp_file):
                     os.remove(tmp_file)
 
+        # Register finalizer immediately after definition to guarantee execution if apply fails
         request.addfinalizer(cleanup)
+
+        log.info("Injecting class structures into cluster context...")
+        exec_cmd(f"oc apply -f {tmp_silver}")
+        exec_cmd(f"oc apply -f {tmp_gold}")
 
     @pytest.fixture
     def test_resources_cleanup(self, request):
