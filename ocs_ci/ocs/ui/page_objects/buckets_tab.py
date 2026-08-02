@@ -785,8 +785,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         Open the Preview of an object in the object browser and return its
         text content.
 
-        Assumes the object contains UTF-8 text. The blob is fetched via
-        Response.text(), so binary objects will produce garbled output.
+        Assumes the object contains UTF-8 text.
 
         Args:
             object_key (str): The S3 object key visible in the object browser.
@@ -795,53 +794,15 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         Returns:
             str: The text content of the previewed object.
 
-        Raises:
-            RuntimeError: If the blob fetch did not return a string (e.g.
-                the async script timed out and returned None, or the JS
-                fetch failed and returned a non-string error).
-
         """
-        parent_handle = self.driver.current_window_handle
-        original_handles = set(self.driver.window_handles)
-
         kebab_locator = format_locator(self.bucket_tab["object_row_kebab"], object_key)
         self.do_click(kebab_locator, enable_screenshot=True)
-        self.do_click(self.bucket_tab["object_action_preview"], enable_screenshot=True)
 
-        WebDriverWait(self.driver, timeout).until(
-            lambda d: len(d.window_handles) > len(original_handles)
-        )
-
-        new_handles = set(self.driver.window_handles) - original_handles
-        preview_handle = new_handles.pop()
-        try:
-            self.driver.switch_to.window(preview_handle)
-            blob_url = self.driver.current_url
-            logger.info(f"Preview tab opened with URL: {blob_url}")
-
-            self.driver.switch_to.window(parent_handle)
-            content = self.driver.execute_async_script(
-                "var cb = arguments[arguments.length - 1];"
-                "fetch(arguments[0]).then(r => r.text()).then(cb)"
-                ".catch(e => cb('ERROR:' + e));",
-                blob_url,
-            )
-        finally:
-            if preview_handle in self.driver.window_handles:
-                self.driver.switch_to.window(preview_handle)
-                self.driver.close()
-            self.driver.switch_to.window(parent_handle)
-
-        if not isinstance(content, str):
-            raise RuntimeError(
-                f"Blob fetch for '{object_key}' returned {type(content).__name__} "
-                f"instead of str (value: {content!r}). The async script may have "
-                f"timed out or the blob URL '{blob_url}' was not accessible from "
-                f"the app window."
-            )
-
-        if content.startswith("ERROR:"):
-            raise RuntimeError(f"Blob fetch for '{object_key}' failed: {content}")
+        locator = self.bucket_tab["object_action_preview"]
+        with self.run_in_new_tab(locator, timeout=timeout):
+            # Read the content directly from the DOM - browsers consistently
+            # render text/plain blobs inside a <pre> tag.
+            content = self.driver.find_element(By.TAG_NAME, "pre").text
 
         logger.info(f"Preview content length for '{object_key}': {len(content)}")
         return content
