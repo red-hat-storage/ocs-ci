@@ -689,7 +689,7 @@ class BaseUI:
 
         Usage::
 
-            with self.new_tab(some_locator):
+            with self.run_in_new_tab(some_locator):
                 content = self.driver.find_element(By.TAG_NAME, "pre").text
 
         Args:
@@ -713,10 +713,10 @@ class BaseUI:
             WebDriverWait(driver, timeout).until(
                 lambda d: len(d.window_handles) > len(original_handles)
             )
-        except TimeoutException:
+        except TimeoutException as err:
             raise TimeoutException(
                 f"No new tab opened within {timeout}s after clicking {locator}"
-            )
+            ) from err
 
         new_handle = (set(driver.window_handles) - original_handles).pop()
         driver.switch_to.window(new_handle)
