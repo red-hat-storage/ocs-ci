@@ -3690,6 +3690,24 @@ bucket_tab = {
         "//span[text()='Secret name']/ancestor::div[contains(@class, 'form__group')]//span[@class='odf-resource-item']",
         By.XPATH,
     ),
+    # Object row actions (object browser)
+    "object_row_kebab": (
+        "//tr[.//td[@data-label='Name' and contains(normalize-space(),'{}')]]"
+        "//button[@aria-label='Kebab toggle']",
+        By.XPATH,
+    ),
+    "object_action_preview": (
+        "//button[normalize-space()='Preview']",
+        By.XPATH,
+    ),
+    "folder_link_by_name": (
+        "//td[@data-label='Name']//a[contains(., '{}')]",
+        By.XPATH,
+    ),
+    "refresh_objects_button": (
+        "//button[.//span[text()='Refresh']]",
+        By.XPATH,
+    ),
 }
 s3_vector_tab = {
     # S3 Vector sub-tab within Buckets page

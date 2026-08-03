@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 import datetime
 import logging
@@ -682,6 +683,53 @@ class BaseUI:
 
         """
         self.driver.refresh()
+
+    @contextmanager
+    def run_in_new_tab(self, locator, timeout=15):
+        """
+        Click a locator that opens a new browser tab, switch to it, and
+        guarantee cleanup on exit.
+
+        Usage::
+
+            with self.run_in_new_tab(some_locator):
+                content = self.driver.find_element(By.TAG_NAME, "pre").text
+
+        Args:
+            locator: Selenium locator tuple that triggers a new tab on click.
+            timeout (int): Seconds to wait for the new tab to appear.
+
+        Yields:
+            The WebDriver instance, now focused on the new tab.
+
+        Raises:
+            TimeoutException: If no new tab opens within ``timeout`` seconds.
+
+        """
+        driver = SeleniumDriver()
+        parent_handle = driver.current_window_handle
+        original_handles = set(driver.window_handles)
+
+        self.do_click(locator, enable_screenshot=True)
+
+        try:
+            WebDriverWait(driver, timeout).until(
+                lambda d: len(d.window_handles) > len(original_handles)
+            )
+        except TimeoutException as err:
+            raise TimeoutException(
+                f"No new tab opened within {timeout}s after clicking {locator}"
+            ) from err
+
+        new_handle = (set(driver.window_handles) - original_handles).pop()
+        driver.switch_to.window(new_handle)
+        try:
+            yield driver
+        finally:
+            if new_handle in driver.window_handles:
+                driver.switch_to.window(new_handle)
+                driver.close()
+            driver.switch_to.window(parent_handle)
 
     def navigate_backward(self):
         """
