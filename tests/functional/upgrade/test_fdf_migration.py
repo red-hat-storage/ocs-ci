@@ -27,8 +27,12 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.framework.pytest_customization.marks import purple_squad
 from ocs_ci.ocs.cluster import ceph_health_check
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.fdf_upgrade import FDFUpgrade
-from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
+from ocs_ci.ocs.resources.csv import (
+    check_all_csvs_are_succeeded,
+    get_csvs_start_with_prefix,
+)
 from ocs_ci.deployment.fusion_data_foundation import storagecluster_health_check
 
 logger = logging.getLogger(__name__)
@@ -66,12 +70,14 @@ class TestFDFMigration(ManageTest):
     def test_fdf_migration(self):
         """
         Full ODF -> FDF migration:
-          1. Pre-flight pod health check.
-          2. Create ISF FDF CatalogSource.
-          3. Patch ODF subscriptions to the new catalog.
-          4. Approve the pending InstallPlan (Manual strategy).
-          5. Wait for all CSVs to reach Succeeded.
-          6. Post-migration OCS install verification.
+          1. Version validation.
+          2. ITMS/IDMS for registry mirroring (if needed).
+          3. Pre-migration pod health check.
+          4. Create ISF FDF CatalogSource.
+          5. Patch ODF subscriptions to the new catalog.
+          6. Approve the pending InstallPlan (Manual strategy).
+          7. Wait for all CSVs to reach Succeeded.
+          8. Post-migration CSV verification.
         """
         fdf_image = config.UPGRADE.get("fdf_registry_image")
         assert fdf_image, (
@@ -79,10 +85,16 @@ class TestFDFMigration(ManageTest):
             "Pass via --ocsci-conf conf/upgrade/fdf_migration.yaml."
         )
         namespace = config.ENV_DATA["cluster_namespace"]
-        odf_version = config.ENV_DATA.get("ocs_version")
+
+        csv_list = get_csvs_start_with_prefix(
+            defaults.ODF_OPERATOR_NAME, namespace=namespace
+        )
+        odf_csv = csv_list[0]
+        odf_version = odf_csv["spec"]["version"]
 
         logger.test_step("Starting ODF -> FDF migration")
         logger.info(f"Catalog image: {fdf_image}")
+        logger.info(f"ODF version from cluster CSV: {odf_version}")
 
         fdf_migration_obj = FDFUpgrade(
             namespace=namespace,
