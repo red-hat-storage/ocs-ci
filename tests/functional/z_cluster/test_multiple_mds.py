@@ -14,7 +14,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_client,
 )
 from ocs_ci.framework import config
-from ocs_ci.helpers import helpers
 from ocs_ci.ocs.cluster import (
     adjust_active_mds_count_storagecluster,
     get_active_mds_count_cephfilesystem,
@@ -24,7 +23,7 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import node, constants
-from ocs_ci.ocs.resources.pod import get_mds_pods
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
     delete_and_create_osd_node,
@@ -74,11 +73,18 @@ class TestMultipleMds:
             ), "Failed to set active mds count to 1"
 
             log.info("Validate mds pods are up and running")
-            mds_pods = get_mds_pods()
-            for mds_pod in mds_pods:
-                helpers.wait_for_resource_state(
-                    resource=mds_pod, state=constants.STATUS_RUNNING
-                )
+            # Wait by selector rather than by pod name to avoid stale references
+            # after a ReplicaSet rollover triggered by the scale adjustment.
+            ocp_pod = OCP(
+                kind=constants.POD,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            ocp_pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector="app=rook-ceph-mds",
+                resource_count=2,
+                timeout=300,
+            )
 
             log.info("Checking for Ceph Health OK")
             ceph_health_check()
@@ -147,9 +153,12 @@ class TestMultipleMds:
         active_mds_node_name = selected_pod_obj.data["spec"].get("nodeName")
 
         log.info("Drain active mds pod running node")
-        node.drain_nodes([active_mds_node_name])
-        # Make the node schedulable again
-        node.schedule_nodes([active_mds_node_name])
+        try:
+            node.drain_nodes([active_mds_node_name])
+        finally:
+            # Always uncordon, even if drain fails or times out, to prevent
+            # the node remaining unschedulable and affecting subsequent tests.
+            node.schedule_nodes([active_mds_node_name])
 
         log.info("Performing cluster and Ceph health checks")
         self.sanity_helpers.health_check(tries=120)
