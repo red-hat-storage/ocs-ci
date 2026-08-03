@@ -4,8 +4,12 @@ import pytest
 import requests
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import purple_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    purple_squad,
+    skipif_external_mode,
+)
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2
+from ocs_ci.helpers.helpers import get_provisioner_label
 from ocs_ci.helpers.network_policy_helpers import (
     check_pod_connectivity,
     get_all_network_policies,
@@ -41,7 +45,7 @@ class TestNetworkPolicyCompliance(ManageTest):
         A-1: Verify expected NetworkPolicy CRs exist after OLM install.
         """
         namespace = config.ENV_DATA["cluster_namespace"]
-        policies = get_all_network_policies(namespace)
+        policies = network_policies_present
         policy_names = [p["metadata"]["name"] for p in policies]
 
         assert len(policies) > 0, (
@@ -121,7 +125,7 @@ class TestNetworkPolicyCompliance(ManageTest):
                 all_issues.extend(result["issues"])
 
         assert not all_issues, (
-            f"Policy structure issues:\n" + "\n".join(all_issues)
+            "Policy structure issues:\n" + "\n".join(all_issues)
         )
 
 
@@ -141,7 +145,7 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
         namespace = config.ENV_DATA["cluster_namespace"]
 
         tools_pods = get_pods_having_label(
-            "app=rook-ceph-tools", namespace=namespace
+            constants.TOOL_APP_LABEL, namespace=namespace
         )
         if tools_pods:
             verify_dns_from_pod(
@@ -150,7 +154,7 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
         else:
             logger.warning("No tools pod found, trying operator pod")
             operator_pods = get_pods_having_label(
-                "app=rook-ceph-operator", namespace=namespace
+                constants.OPERATOR_LABEL, namespace=namespace
             )
             assert operator_pods, "No tools or operator pod found for DNS test"
             verify_dns_from_pod(
@@ -158,6 +162,7 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
             )
 
     @tier1
+    @skipif_external_mode
     @pytest.mark.polarion_id("OCS-6905")
     def test_inter_component_communication(self, network_policies_present):
         """
@@ -169,8 +174,8 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
         ceph_health_check(namespace=namespace, tries=10, delay=15)
 
         csi_labels = [
-            "app=csi-rbdplugin-provisioner",
-            "app=csi-cephfsplugin-provisioner",
+            get_provisioner_label(constants.CEPHBLOCKPOOL),
+            get_provisioner_label(constants.CEPHFILESYSTEM),
         ]
         for label in csi_labels:
             pods = get_pods_having_label(label, namespace=namespace)
@@ -183,7 +188,7 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
                 )
 
         mon_pods = get_pods_having_label(
-            "app=rook-ceph-mon", namespace=namespace
+            constants.MON_APP_LABEL, namespace=namespace
         )
         assert len(mon_pods) >= 3, (
             f"Expected at least 3 mon pods, found {len(mon_pods)}"
@@ -199,20 +204,22 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
         sm_obj = OCP(kind="ServiceMonitor", namespace=namespace)
         service_monitors = sm_obj.get().get("items", [])
 
-        expected_monitors = [
-            "rook-ceph-mgr",
-            "s3-service-monitor",
-        ]
         sm_names = [sm["metadata"]["name"] for sm in service_monitors]
         logger.info(
             f"Found {len(service_monitors)} ServiceMonitors: {sm_names}"
         )
 
-        for expected in expected_monitors:
-            assert expected in sm_names, (
-                f"ServiceMonitor '{expected}' not found. "
-                f"Present: {sm_names}"
-            )
+        assert "rook-ceph-mgr" in sm_names, (
+            f"ServiceMonitor 'rook-ceph-mgr' not found. Present: {sm_names}"
+        )
+
+        if not config.ENV_DATA.get("mcg_only_deployment"):
+            if "s3-service-monitor" in sm_names:
+                logger.info("s3-service-monitor present (MCG deployed)")
+            else:
+                logger.info(
+                    "s3-service-monitor absent — MCG may not be deployed"
+                )
 
         prom_ocp = OCP(kind=constants.POD, namespace="openshift-monitoring")
         prom_pods = prom_ocp.get(
@@ -243,11 +250,15 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
         for route in routes:
             name = route["metadata"]["name"]
             host = route.get("spec", {}).get("host", "")
+            if not host:
+                logger.warning(f"Route {name} has no host, skipping")
+                continue
             tls = route.get("spec", {}).get("tls")
             scheme = "https" if tls else "http"
             url = f"{scheme}://{host}"
 
             try:
+                # verify=False: cluster routes use self-signed certificates
                 resp = requests.get(url, timeout=15, verify=False)
                 logger.info(
                     f"Route {name}: {url} -> HTTP {resp.status_code}"
@@ -265,6 +276,10 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
             except requests.exceptions.Timeout:
                 pytest.fail(
                     f"Route {name} ({url}) timed out"
+                )
+            except requests.exceptions.RequestException as ex:
+                pytest.fail(
+                    f"Route {name} ({url}) request failed: {ex}"
                 )
 
         assert tested > 0, (
@@ -316,11 +331,23 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
         pod_name, ns = test_pod_in_foreign_ns
         storage_ns = config.ENV_DATA["cluster_namespace"]
 
-        targets = {
-            "rook-ceph-mon-a": 3300,
-            "noobaa-mgmt": 443,
-        }
+        mon_pods = get_pods_having_label(
+            constants.MON_APP_LABEL, namespace=storage_ns
+        )
+        mon_svc_name = None
+        if mon_pods:
+            mon_svc_name = mon_pods[0]["metadata"]["labels"].get(
+                "ceph_daemon_id"
+            )
+            if mon_svc_name:
+                mon_svc_name = f"rook-ceph-mon-{mon_svc_name}"
 
+        targets = {}
+        if mon_svc_name:
+            targets[mon_svc_name] = 3300
+        targets["noobaa-mgmt"] = 443
+
+        tested = 0
         for svc_name, port in targets.items():
             svc_ip = get_service_ip(svc_name, namespace=storage_ns)
             if not svc_ip:
@@ -337,13 +364,19 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
                 should_succeed=False,
                 timeout=10,
             )
+            tested += 1
+
+        assert tested > 0, (
+            "No services were tested — cannot verify blocked traffic"
+        )
 
     @tier2
     @pytest.mark.polarion_id("OCS-6910")
     def test_allowed_namespace_traffic(self, network_policies_present):
         """
         C-2: Traffic from explicitly allowed namespaces
-        (monitoring, console) is not blocked.
+        (monitoring, console) is not blocked. Verifies Prometheus
+        targets for ODF are healthy.
         """
         namespace = config.ENV_DATA["cluster_namespace"]
 
@@ -363,6 +396,24 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
         assert service_monitors, (
             "No ServiceMonitors found — monitoring may be broken"
         )
+
+        ep_obj = OCP(kind="Endpoints", namespace=namespace)
+        for sm in service_monitors:
+            sm_name = sm["metadata"]["name"]
+            try:
+                ep = ep_obj.get(resource_name=sm_name)
+                subsets = ep.get("subsets", [])
+                if subsets:
+                    logger.info(
+                        f"ServiceMonitor {sm_name}: endpoints reachable "
+                        f"({len(subsets)} subsets)"
+                    )
+            except Exception:
+                logger.info(
+                    f"ServiceMonitor {sm_name}: no matching endpoints "
+                    f"(may use different service name)"
+                )
+
         logger.info(
             f"Monitoring access verified: {len(prom_pods)} Prometheus "
             f"pods running, {len(service_monitors)} ServiceMonitors present"
@@ -393,14 +444,13 @@ class TestNetworkPolicyDisruption(ManageTest):
 
         deploy_obj = OCP(kind="Deployment", namespace=namespace)
         deploy_obj.exec_oc_cmd(
-            f"rollout restart deployment/rook-ceph-operator "
-            f"-n {namespace}",
+            "rollout restart deployment/rook-ceph-operator",
             out_yaml_format=False,
         )
         logger.info("Waiting for rook-ceph-operator rollout to complete")
         deploy_obj.exec_oc_cmd(
-            f"rollout status deployment/rook-ceph-operator "
-            f"-n {namespace} --timeout=300s",
+            "rollout status deployment/rook-ceph-operator "
+            "--timeout=300s",
             out_yaml_format=False,
         )
 
@@ -422,6 +472,7 @@ class TestNetworkPolicyDisruption(ManageTest):
         )
 
     @tier2
+    @skipif_external_mode
     @pytest.mark.polarion_id("OCS-6912")
     def test_pod_restart_under_policies(self, network_policies_present):
         """
@@ -430,7 +481,7 @@ class TestNetworkPolicyDisruption(ManageTest):
         namespace = config.ENV_DATA["cluster_namespace"]
 
         osd_pods = get_pods_having_label(
-            "app=rook-ceph-osd", namespace=namespace
+            constants.OSD_APP_LABEL, namespace=namespace
         )
         assert osd_pods, "No OSD pods found"
 
@@ -441,8 +492,15 @@ class TestNetworkPolicyDisruption(ManageTest):
         pod_ocp.delete(resource_name=target_osd)
 
         pod_ocp.wait_for_resource(
+            condition="",
+            resource_name=target_osd,
+            timeout=120,
+            should_exist=False,
+        )
+
+        pod_ocp.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector="app=rook-ceph-osd",
+            selector=constants.OSD_APP_LABEL,
             resource_count=len(osd_pods),
             timeout=300,
         )

@@ -1,4 +1,5 @@
 import logging
+import shlex
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -56,6 +57,20 @@ def verify_network_policies_exist(expected_policies, namespace=None):
     )
 
 
+def _matches_api_group(api_groups):
+    return "networking.k8s.io" in api_groups or "*" in api_groups
+
+
+def _matches_resource(resources):
+    return "networkpolicies" in resources or "*" in resources
+
+
+def _expand_verbs(verbs):
+    if "*" in verbs:
+        return {"create", "delete", "get", "list", "patch", "update", "watch"}
+    return set(verbs)
+
+
 def get_csv_network_policy_rbac(csv_name, namespace=None):
     """
     Extract NetworkPolicy RBAC rules from a CSV.
@@ -67,13 +82,21 @@ def get_csv_network_policy_rbac(csv_name, namespace=None):
     Returns:
         list: List of matching RBAC rule dicts that reference
               networking.k8s.io networkpolicies.
+
+    Raises:
+        AssertionError: If the CSV cannot be retrieved.
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_obj = OCP(
         kind="ClusterServiceVersion",
         namespace=namespace,
     )
-    csv_data = ocp_obj.get(resource_name=csv_name)
+    try:
+        csv_data = ocp_obj.get(resource_name=csv_name)
+    except CommandFailed as ex:
+        raise AssertionError(
+            f"Failed to retrieve CSV {csv_name}: {ex}"
+        ) from ex
     spec = csv_data.get("spec", {})
     install_spec = spec.get("install", {}).get("spec", {})
 
@@ -84,8 +107,8 @@ def get_csv_network_policy_rbac(csv_name, namespace=None):
                 api_groups = rule.get("apiGroups", [])
                 resources = rule.get("resources", [])
                 if (
-                    "networking.k8s.io" in api_groups
-                    and "networkpolicies" in resources
+                    _matches_api_group(api_groups)
+                    and _matches_resource(resources)
                 ):
                     matching_rules.append(
                         {
@@ -93,7 +116,9 @@ def get_csv_network_policy_rbac(csv_name, namespace=None):
                             "service_account": perm.get(
                                 "serviceAccountName", ""
                             ),
-                            "verbs": set(rule.get("verbs", [])),
+                            "verbs": _expand_verbs(
+                                rule.get("verbs", [])
+                            ),
                         }
                     )
     return matching_rules
@@ -183,7 +208,7 @@ def verify_sa_can_manage_network_policies(sa_name, namespace=None):
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_obj = OCP(kind=constants.NETWORK_POLICY, namespace=namespace)
-    required_verbs = ["create", "delete", "update"]
+    required_verbs = list(constants.NETWORK_POLICY_REQUIRED_VERBS)
     failed_verbs = []
     for verb in required_verbs:
         cmd = (
@@ -197,6 +222,23 @@ def verify_sa_can_manage_network_policies(sa_name, namespace=None):
                 failed_verbs.append(verb)
         except CommandFailed:
             failed_verbs.append(verb)
+
+    update_ok = False
+    for verb in constants.NETWORK_POLICY_REQUIRED_UPDATE_VERBS:
+        cmd = (
+            f"auth can-i {verb} networkpolicies.networking.k8s.io "
+            f"--as=system:serviceaccount:{namespace}:{sa_name} "
+            f"-n {namespace}"
+        )
+        try:
+            result = ocp_obj.exec_oc_cmd(cmd, out_yaml_format=False)
+            if "yes" in str(result).lower():
+                update_ok = True
+                break
+        except CommandFailed:
+            continue
+    if not update_ok:
+        failed_verbs.append("update/patch")
 
     assert not failed_verbs, (
         f"SA {sa_name} cannot {failed_verbs} NetworkPolicies "
@@ -231,9 +273,11 @@ def check_pod_connectivity(
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pod_obj = get_pod_obj(source_pod_name, namespace=namespace)
+    safe_ip = shlex.quote(str(target_ip))
+    safe_port = shlex.quote(str(port))
     cmd = (
         f"bash -c 'timeout {timeout} "
-        f"bash -c \"echo > /dev/tcp/{target_ip}/{port}\" "
+        f"bash -c \"echo > /dev/tcp/{safe_ip}/{safe_port}\" "
         f"&& echo CONNECTED || echo FAILED'"
     )
     try:
@@ -241,7 +285,7 @@ def check_pod_connectivity(
             cmd, out_yaml_format=False, timeout=timeout + 10
         )
         connected = "CONNECTED" in str(result)
-    except (CommandFailed, Exception):
+    except CommandFailed:
         connected = False
 
     if should_succeed:
@@ -277,10 +321,11 @@ def verify_dns_from_pod(pod_name, namespace=None, hostname=None):
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     hostname = hostname or "kubernetes.default.svc.cluster.local"
+    safe_hostname = shlex.quote(hostname)
     pod_obj = get_pod_obj(pod_name, namespace=namespace)
     cmd = (
         f"python3 -c \"import socket; "
-        f"print(socket.gethostbyname('{hostname}'))\""
+        f"print(socket.gethostbyname({safe_hostname}))\""
     )
     try:
         result = pod_obj.exec_cmd_on_pod(
@@ -293,11 +338,11 @@ def verify_dns_from_pod(pod_name, namespace=None, hostname=None):
         logger.info(
             f"DNS from pod {pod_name}: {hostname} -> {result.strip()}"
         )
-    except (CommandFailed, Exception) as ex:
+    except CommandFailed as ex:
         raise AssertionError(
             f"DNS resolution failed for {hostname} from pod "
             f"{pod_name}: {ex}"
-        )
+        ) from ex
 
 
 def get_service_ip(service_name, namespace=None):

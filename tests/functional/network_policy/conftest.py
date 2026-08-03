@@ -1,12 +1,16 @@
 import logging
+import os
+import tempfile
 
 import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.helpers.network_policy_helpers import get_all_network_policies
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.templating import dump_data_to_temp_yaml
 
 
 logger = logging.getLogger(__name__)
@@ -40,15 +44,16 @@ def foreign_namespace(request):
     Returns:
         OCP: Project object for the foreign namespace.
     """
-    proj_obj = helpers.create_project(project_name="netpol-test")
+    ns_name = create_unique_resource_name("netpol-test", "namespace")
+    proj_obj = helpers.create_project(project_name=ns_name)
 
     def finalizer():
         try:
             proj_obj.delete_project(proj_obj.namespace)
             proj_obj.wait_for_delete(proj_obj.namespace, timeout=120)
-        except Exception:
+        except Exception as ex:
             logger.warning(
-                f"Failed to clean up namespace {proj_obj.namespace}"
+                f"Failed to clean up namespace {proj_obj.namespace}: {ex}"
             )
 
     request.addfinalizer(finalizer)
@@ -80,7 +85,7 @@ def test_pod_in_foreign_ns(request, foreign_namespace):
             "containers": [
                 {
                     "name": "test",
-                    "image": "registry.access.redhat.com/ubi9/ubi-minimal:latest",
+                    "image": "registry.access.redhat.com/ubi9/ubi:9.4",
                     "command": ["sleep", "3600"],
                     "securityContext": {
                         "allowPrivilegeEscalation": False,
@@ -93,21 +98,7 @@ def test_pod_in_foreign_ns(request, foreign_namespace):
         },
     }
 
-    import tempfile
-    from ocs_ci.utility.templating import dump_data_to_temp_yaml
-
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="netpol_test_pod_", suffix=".yaml", delete=False
-    )
-    dump_data_to_temp_yaml(pod_data, tmp.name)
-
     ocp_obj = OCP(kind=constants.POD, namespace=ns)
-    ocp_obj.exec_oc_cmd(f"apply -f {tmp.name}")
-    ocp_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        resource_name=pod_name,
-        timeout=120,
-    )
 
     def finalizer():
         try:
@@ -116,4 +107,21 @@ def test_pod_in_foreign_ns(request, foreign_namespace):
             logger.warning(f"Failed to delete test pod {pod_name}")
 
     request.addfinalizer(finalizer)
+
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="netpol_test_pod_", suffix=".yaml", delete=False
+    )
+    try:
+        dump_data_to_temp_yaml(pod_data, tmp.name)
+        tmp.close()
+        ocp_obj.exec_oc_cmd(f"apply -f {tmp.name}")
+    finally:
+        os.unlink(tmp.name)
+
+    ocp_obj.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        resource_name=pod_name,
+        timeout=120,
+    )
+
     return pod_name, ns
