@@ -513,13 +513,14 @@ class FDFUpgrade(BaseUpgrade):
 
         The migration flow:
         1. Version validation - ensures target version is >= current version
-        2. Pre-migration pod health check
-        3. Record pre-migration CSV name
-        4. Create FDF CatalogSource and set Manual approval
-        5. Patch ODF subscriptions to point at FDF catalog
-        6. Approve the pending InstallPlan
-        7. Wait for all CSVs to reach Succeeded
-        8. Post-migration CSV and FDF install verification
+        2. Apply ITMS/IDMS for registry mirroring (if not in current source)
+        3. Pre-migration pod health check
+        4. Record pre-migration CSV name
+        5. Create FDF CatalogSource and set Manual approval
+        6. Patch ODF subscriptions to point at FDF catalog
+        7. Approve the pending InstallPlan
+        8. Wait for all CSVs to reach Succeeded
+        9. Post-migration CSV and FDF install verification
 
         Raises:
             AssertionError: When fdf_registry_image is not configured, or
@@ -536,6 +537,19 @@ class FDFUpgrade(BaseUpgrade):
 
         logger.test_step("Validating migration versions")
         self.validate_upgrade_versions()
+
+        if not self.upgrade_in_current_source:
+            logger.test_step("Applying ITMS/IDMS for FDF registry mirroring")
+            image_name, tag = fdf_registry_image.rsplit(":", 1)
+            registry = image_name.rsplit("/", 1)[0]
+            config.DEPLOYMENT["fdf_upgrade_registry"] = registry
+            config.DEPLOYMENT["fdf_upgrade_image_tag"] = tag
+            logger.info(
+                f"Parsed registry='{registry}', tag='{tag}' " f"from fdf_registry_image"
+            )
+            self.fdf_deployment.create_image_tag_mirror_set()
+            self.fdf_deployment.create_image_digest_mirror_set(upgrade=True)
+            wait_for_machineconfigpool_status(node_type="all")
 
         logger.test_step("Pre-migration pod health check")
         _check_pod_health(namespace=self.namespace)
@@ -572,8 +586,13 @@ class FDFUpgrade(BaseUpgrade):
         self.channel = ocp_sub.data["spec"]["channel"]
         logger.info(f"Post-migration subscription channel: {self.channel}")
 
-        logger.test_step("Post-migration: verifying required CSVs")
-        self.verify_required_csvs()
+        logger.test_step("Post-migration: verifying all CSVs are Succeeded")
+        csvs_ok = check_all_csvs_are_succeeded(namespace=self.namespace)
+        logger.assertion(f"Post-migration CSVs check: all_succeeded={csvs_ok}")
+        assert csvs_ok, (
+            "Post-migration verification failed: not all CSVs are in "
+            "Succeeded state."
+        )
 
         logger.info("ODF to FDF migration completed and verified successfully.")
 
