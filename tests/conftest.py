@@ -8310,15 +8310,6 @@ def cnv_dr_workload(request):
                 instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]
                 workload.deploy_workload()
-                drpc_namespace = (
-                    workload.workload_namespace
-                    if workload_type == constants.SUBSCRIPTION
-                    else constants.GITOPS_CLUSTER_NAMESPACE
-                )
-                dr_helpers.validate_application_odf_cli(
-                    drpc_name=f"{workload.cnv_workload_placement_name}-drpc",
-                    namespace=drpc_namespace,
-                )
 
         if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)

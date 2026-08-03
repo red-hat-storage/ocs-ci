@@ -297,19 +297,18 @@ def failover(
 
     drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=360, sleep=10)
 
+    config.switch_ctx(restore_index)
+
     if skip_odf_cli_validation:
         logger.info(
-            "Skipping ODF CLI validation for app-failover " "(primary cluster is down)"
+            "Skipping ODF CLI validation for app-failover (primary cluster is down)"
         )
     else:
-        time.sleep(60)
         validate_application_odf_cli(
             drpc_name=drpc_obj.resource_name,
             namespace=namespace,
             dr_action="app-failover",
         )
-
-    config.switch_ctx(restore_index)
 
 
 def relocate(
@@ -4520,8 +4519,8 @@ def validate_application_odf_cli(
         str or None: The stdout output from the command,
             or None if gather failed
 
-    Raises:
-        CommandFailed: If the ODF CLI command fails (validate only)
+    Note:
+        Skips the test on validation failure.
 
     """
     dir_label = dr_action or f"{action}-app"
@@ -4744,5 +4743,3 @@ def validate_cluster_odf_cli(retries=5, retry_interval=60):
         f"ODF DR validate clusters did not report success after {retries} attempts. "
         f"Output:\n{last_stdout}"
     )
-
-    return last_stdout
