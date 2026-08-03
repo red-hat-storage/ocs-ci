@@ -1547,6 +1547,11 @@ class Deployment(object):
                 resource_name=constants.DEFAULT_STORAGECLASS_LSO
             )
             if not lso_deployed:
+                if config.ENV_DATA.get("skip_disks_cleanup", False):
+                    logger.info("Skipping disks cleanup")
+                else:
+                    logger.info("Performing disk cleanup before LSO setup")
+                    cleanup_nodes_for_lso_install()
                 log_step("Deploy and setup Local Storage Operator")
                 setup_local_storage(
                     storageclass=constants.DEFAULT_STORAGECLASS_LSO,

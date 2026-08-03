@@ -65,6 +65,10 @@ def setup_local_storage(storageclass, add_new_disks=True):
     if add_new_disks:
         add_disks_lso()
 
+    # Default to worker_names; overridden in the modern path when masters
+    # are included via mark_masters_schedulable or odf_provider_mode
+    storage_node_names = list(worker_names)
+
     if (ocp_version >= version.VERSION_4_6) and (ocs_version >= version.VERSION_4_6):
         # Pull local volume discovery yaml data
         logger.info("Pulling LocalVolumeDiscovery CR data from yaml")
@@ -79,7 +83,14 @@ def setup_local_storage(storageclass, add_new_disks=True):
             "mark_masters_schedulable", True if provider_mode else False
         )
         if mark_schedulable:
-            storage_node_names.extend(get_master_nodes())
+            master_nodes = get_master_nodes()
+            new_masters = [n for n in master_nodes if n not in storage_node_names]
+            if new_masters:
+                logger.info(
+                    f"Adding {len(new_masters)} master node(s) to LSO "
+                    f"storage nodes: {new_masters}"
+                )
+                storage_node_names.extend(new_masters)
 
         # Update local volume discovery data with Worker node Names
         logger.info(
@@ -157,7 +168,7 @@ def setup_local_storage(storageclass, add_new_disks=True):
         storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
         if config.DEPLOYMENT.get("deploy_multiple_device_classes"):
             storage_class_device_count *= 2
-    expected_pvs = len(worker_names) * storage_class_device_count
+    expected_pvs = len(storage_node_names) * storage_class_device_count
     if platform in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
         verify_pvs_created(expected_pvs, storageclass, False)
         if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
