@@ -2939,8 +2939,10 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                         f"Infrastructure exists but output file not found: {self.output_infra_file}. "
                         "Reconstructing output file from existing AWS resources."
                     )
-                    self._reconstruct_infra_output(existing_vpcs)
-                    return self.output_infra_file
+                    if self._reconstruct_infra_output(existing_vpcs):
+                        return self.output_infra_file
+                    # False means orphaned infra was destroyed — fall through
+                    # to create fresh infrastructure
         except ClientError as e:
             logger.error(
                 f"AWS API error while checking for existing infrastructure: {e}"
@@ -3013,7 +3015,87 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         except (json.JSONDecodeError, IOError) as e:
             logger.warning(f"Could not read/parse infra output file: {e}")
 
+        self._tag_infra_vpc_with_management_cluster()
+
         return self.output_infra_file
+
+    # Tag key used to identify which management cluster created the HCP infra
+    MGMT_CLUSTER_TAG_KEY = constants.MGMT_CLUSTER_TAG_KEY
+
+    def _tag_infra_vpc_with_management_cluster(self):
+        """
+        Tag the infrastructure VPC with the management cluster name.
+
+        Adds an ``ocs-ci/management-cluster`` tag to all VPCs belonging to this
+        infra_id so that orphaned infrastructure can be safely identified and
+        cleaned up without risking destruction of VPCs owned by a different
+        management cluster.
+        """
+        mgmt_cluster_name = config.ENV_DATA.get("cluster_name", "")
+        if not mgmt_cluster_name:
+            logger.warning(
+                "Management cluster name not available in ENV_DATA.cluster_name. "
+                "Skipping VPC tagging."
+            )
+            return
+
+        existing_vpcs = self.get_vpc_from_existing_infra()
+        if not existing_vpcs:
+            logger.warning(f"No VPCs found for infra_id '{self.infra_id}' to tag")
+            return
+
+        vpc_ids = [vpc["VpcId"] for vpc in existing_vpcs]
+        logger.info(
+            f"Tagging VPC(s) {vpc_ids} with "
+            f"{self.MGMT_CLUSTER_TAG_KEY}={mgmt_cluster_name}"
+        )
+        self.ec2_client.create_tags(
+            Resources=vpc_ids,
+            Tags=[{"Key": self.MGMT_CLUSTER_TAG_KEY, "Value": mgmt_cluster_name}],
+        )
+
+    def _get_mgmt_cluster_tag_from_vpc(self, vpc_info):
+        """
+        Read the management cluster tag from a VPC.
+
+        Args:
+            vpc_info (dict): VPC description dict from describe_vpcs.
+
+        Returns:
+            str or None: The management cluster name from the tag, or None if
+                the tag is not present.
+        """
+        for tag in vpc_info.get("Tags", []):
+            if tag["Key"] == self.MGMT_CLUSTER_TAG_KEY:
+                return tag["Value"]
+        return None
+
+    def _delete_vpc_peering_connections(self, vpc_id):
+        """
+        Delete all VPC peering connections associated with a VPC.
+
+        VPC peering connections are created by the ODF VPC peering setup and
+        are not managed by ``hypershift destroy infra aws``. They must be
+        removed before the VPC can be deleted.
+
+        Args:
+            vpc_id (str): The VPC ID whose peering connections should be deleted.
+        """
+        ec2 = self.ec2_client
+        for direction in ("requester-vpc-info.vpc-id", "accepter-vpc-info.vpc-id"):
+            peerings = ec2.describe_vpc_peering_connections(
+                Filters=[
+                    {"Name": direction, "Values": [vpc_id]},
+                    {"Name": "status-code", "Values": ["active", "pending-acceptance"]},
+                ]
+            ).get("VpcPeeringConnections", [])
+            for pcx in peerings:
+                pcx_id = pcx["VpcPeeringConnectionId"]
+                logger.info(
+                    f"Deleting VPC peering connection '{pcx_id}' "
+                    f"associated with VPC '{vpc_id}'"
+                )
+                ec2.delete_vpc_peering_connection(VpcPeeringConnectionId=pcx_id)
 
     def _reconstruct_infra_output(self, existing_vpcs):
         """
@@ -3023,15 +3105,24 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         base domain, and reads the VPC CIDR from the existing VPC. Writes the
         reconstructed data to self.output_infra_file and populates instance attributes.
 
-        If Route53 zones are missing the infrastructure is considered incomplete
-        (partial creation from a prior failed run) and a RuntimeError is raised
-        with instructions to clean up before retrying.
+        If Route53 zones are missing the infrastructure is considered incomplete.
+        The method checks the ``ocs-ci/management-cluster`` tag on the VPC to
+        determine ownership:
+
+        - Tag matches this management cluster: orphaned leftover, destroy and
+          return False so the caller creates fresh infrastructure.
+        - Tag is missing or belongs to another cluster: raise RuntimeError to
+          prevent destroying infrastructure that may belong to another provider.
 
         Args:
             existing_vpcs (list): List of VPC dicts returned by describe_vpcs.
 
+        Returns:
+            bool: True if reconstruction succeeded, False if orphaned infra was
+                destroyed and fresh creation is needed.
+
         Raises:
-            RuntimeError: If Route53 zones are missing (partial infra state).
+            RuntimeError: If partial infra cannot be safely cleaned up.
         """
         zone_name = f"{self.name}.{self.base_domain}."
         logger.info(f"Querying Route53 for hosted zones with name '{zone_name}'")
@@ -3066,13 +3157,43 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             vpc_id = (
                 existing_vpcs[0].get("VpcId", "unknown") if existing_vpcs else "unknown"
             )
-            raise RuntimeError(
-                f"Partial infrastructure detected for cluster '{self.name}': "
-                f"VPC '{vpc_id}' (tag: kubernetes.io/cluster/{self.infra_id}=owned) exists "
-                f"but Route53 hosted zones for '{zone_name}' are missing. "
-                f"This is a leftover from a previous failed run. "
-                f"Delete the VPC and its associated resources, then retry."
+            mgmt_tag = self._get_mgmt_cluster_tag_from_vpc(existing_vpcs[0])
+            our_mgmt = config.ENV_DATA.get("cluster_name", "")
+
+            if not mgmt_tag:
+                raise RuntimeError(
+                    f"Partial infrastructure detected for cluster '{self.name}': "
+                    f"VPC '{vpc_id}' exists but Route53 zones are missing and the "
+                    f"VPC has no '{self.MGMT_CLUSTER_TAG_KEY}' tag. Cannot determine "
+                    f"ownership — manual cleanup required."
+                )
+
+            if mgmt_tag != our_mgmt:
+                raise RuntimeError(
+                    f"Partial infrastructure detected for cluster '{self.name}': "
+                    f"VPC '{vpc_id}' exists but Route53 zones are missing. "
+                    f"VPC belongs to management cluster '{mgmt_tag}', but we are "
+                    f"'{our_mgmt}'. Cannot safely destroy — manual cleanup required."
+                )
+
+            logger.warning(
+                f"Orphaned infrastructure detected for cluster '{self.name}': "
+                f"VPC '{vpc_id}' (management-cluster={mgmt_tag}) exists but "
+                f"Route53 zones for '{zone_name}' are missing. "
+                f"Destroying leftover infrastructure before creating fresh."
             )
+            self._delete_vpc_peering_connections(vpc_id)
+            self._destroy_infra_via_hypershift(timeout=600)
+            remaining = self.get_vpc_from_existing_infra()
+            if remaining:
+                raise RuntimeError(
+                    f"Failed to clean up orphaned VPC '{vpc_id}' for cluster "
+                    f"'{self.name}'. Manual cleanup required."
+                )
+            logger.info(
+                f"Orphaned infrastructure for '{self.name}' destroyed successfully"
+            )
+            return False
 
         vpc_cidr = existing_vpcs[0].get("CidrBlock") if existing_vpcs else None
 
@@ -3098,6 +3219,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         )
 
         self.read_infra_output()
+        return True
 
     def get_vpc_from_existing_infra(self, infra_id=None):
         """

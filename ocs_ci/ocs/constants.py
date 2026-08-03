@@ -2863,6 +2863,7 @@ HCP_DEPLOYER_IAM_ROLE = "aws-agent-deployer-role"
 HCP_DEPLOYER_IAM_POLICY = "aws-hcp-deployer-policy"
 HCP_OIDC_S3_SECRET = "hypershift-operator-oidc-provider-s3-credentials"
 
+MGMT_CLUSTER_TAG_KEY = "ocs-ci/management-cluster"
 
 # aws volume constants
 AWS_VOL_PVC_NAME_TAG = "kubernetes.io/created-for/pvc/name"
