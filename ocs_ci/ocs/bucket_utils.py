@@ -845,6 +845,41 @@ def oc_create_azure_sts_backingstore(cld_mgr, backingstore_name, uls_name, regio
     create_resource(**bs_data)
 
 
+def oc_create_gcp_sts_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore of type google-cloud-storage-sts via oc apply,
+    referencing the existing WIF secret from the default GCP STS backingstore
+
+    Args:
+        cld_mgr (CloudManager): holds GCP STS credentials for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+    default_bs = OCP(
+        kind="backingstore",
+        namespace=namespace,
+        resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+    ).get()
+    secret_name = default_bs["spec"]["googleCloudStorage"]["secret"]["name"]
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = namespace
+    bs_data["spec"] = {
+        "type": constants.BACKINGSTORE_TYPE_GOOGLE,
+        "googleCloudStorage": {
+            "targetBucket": uls_name,
+            "secret": {
+                "name": secret_name,
+                "namespace": namespace,
+            },
+        },
+    }
+    create_resource(**bs_data)
+
+
 def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with GCP underlying storage using oc create command

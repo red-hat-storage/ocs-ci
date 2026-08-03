@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     sts_deployment_required,
     aws_platform_required,
     azure_platform_required,
+    gcp_platform_required,
     red_squad,
     mcg,
     polarion_id,
@@ -53,6 +54,15 @@ class TestSTSBucket:
             pytest.param(
                 *[
                     {
+                        "interface": "OC",
+                        "backingstore_dict": {"gcp-sts": [(1, None)]},
+                    },
+                ],
+                marks=[tier1, gcp_platform_required, polarion_id("OCS-8120")],
+            ),
+            pytest.param(
+                *[
+                    {
                         "interface": "CLI",
                         "namespace_policy_dict": {
                             "type": "Single",
@@ -70,6 +80,7 @@ class TestSTSBucket:
         ids=[
             "AWS-STS-BS-CLI",
             "AZURE-STS-BS-CLI",
+            "GCP-STS-BS-OC",
             "AZURE-STS-NSS-CLI",
             "STS-DEFAULT",
         ],
@@ -84,14 +95,20 @@ class TestSTSBucket:
     ):
         """
         Test full object round trip verification
-        on an STS-backed bucket (AWS STS or Azure STS)
+        on an STS-backed bucket (AWS STS, Azure STS, or GCP STS)
 
+        1. Create a backingstore, bucketclass, and OBC
+        2. Upload 5 randomly generated objects to the bucket
+        3. Download all objects from the bucket to a separate directory
+        4. Compare the downloaded objects against the originals
+        5. Delete all objects from the bucket
+        6. Verify the bucket is empty
         """
 
-        # create the bucket
+        # 1. Create a backingstore, bucketclass, and OBC
         bucketname = bucket_factory(bucketclass=bucketclass)[0].name
 
-        # upload randomly generated objects to the bucket
+        # 2. Upload 5 randomly generated objects to the bucket
         obj_list = write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
             bucket_to_write=bucketname,
@@ -102,7 +119,7 @@ class TestSTSBucket:
         )
         logger.info(f"Uploaded {obj_list} to bucket {bucketname}")
 
-        # download the objects from bucket
+        # 3. Download all objects from the bucket
         sync_object_directory(
             podobj=awscli_pod_session,
             src=f"s3://{bucketname}",
@@ -113,6 +130,7 @@ class TestSTSBucket:
             f"Objects are downloaded to the dir {test_directory_setup.result_dir}"
         )
 
+        # 4. Compare downloaded objects against originals
         compare_directory(
             awscli_pod=awscli_pod_session,
             original_dir=test_directory_setup.origin_dir,
@@ -121,13 +139,14 @@ class TestSTSBucket:
             pattern="Random-Obj",
         )
 
-        # delete objects from the bucket
+        # 5. Delete all objects from the bucket
         s3_delete_objects(
             mcg_obj_session,
             bucketname=bucketname,
             object_keys=[{"Key": f"{obj}"} for obj in obj_list],
         )
 
+        # 6. Verify the bucket is empty
         assert check_if_objects_expired(
             mcg_obj=mcg_obj_session,
             bucket_name=bucketname,
