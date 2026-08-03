@@ -172,7 +172,7 @@ def test_dr_cluster_upgrade(zone_rank, role_rank, config_index):
 
 @yellow_squad
 @provider_operator_upgrade
-@multicluster_roles(["rdr-all-odf"])
+@multicluster_roles(["rdr-provider-all-providers"])
 @runs_on_provider
 def test_provider_cluster_upgrade(zone_rank, role_rank, config_index):
     """
