@@ -14,6 +14,7 @@ from ocs_ci.helpers.scc_helpers import (
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     polarion_id,
+    post_upgrade,
     skipif_external_mode,
     skipif_ocs_version,
     tier1,
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 @brown_squad
+@post_upgrade
 @skipif_ocs_version("<4.23")
 @skipif_external_mode
 class TestSCCEnforcement(ManageTest):
