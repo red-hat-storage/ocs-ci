@@ -98,7 +98,6 @@ class VirtualMachineUI(PageNavigator):
     def dismiss_welcome_modal(self):
         """
         Close the 'Welcome to OpenShift Virtualization' modal if present.
-        Uses driver.find_elements to avoid AI fallback when no modal is shown.
         """
         locator = self.vm_loc["modal_close_button"]
         try:
@@ -114,19 +113,16 @@ class VirtualMachineUI(PageNavigator):
     def dismiss_welcome_modal_if_present(self, wait_for_modal=False, timeout=15):
         """
         Dismiss any overlay modal currently blocking the page.
-        Uses driver.find_elements to avoid AI fallback when no modal is shown.
 
         Args:
             wait_for_modal (bool): If True, poll until the modal appears or timeout
                                    expires before attempting to close it.
             timeout (int): Seconds to wait for the modal when wait_for_modal=True.
         """
-        import time as _time
-
         locator = self.vm_loc["modal_close_button"]
         if wait_for_modal:
-            end = _time.time() + timeout
-            while _time.time() < end:
+            end = time.time() + timeout
+            while time.time() < end:
                 try:
                     els = self.driver.find_elements(locator[1], locator[0])
                     if els and els[0].is_displayed():
@@ -135,7 +131,7 @@ class VirtualMachineUI(PageNavigator):
                         return
                 except (NoSuchElementException, WebDriverException):
                     pass
-                _time.sleep(1)
+                time.sleep(1)
             logger.info("No modal appeared within timeout")
             return
         try:
@@ -384,28 +380,33 @@ class VirtualMachineUI(PageNavigator):
     def ensure_cloned_vm_running(self):
         """
         After clone submission the UI lands on the cloned VM detail page.
-        Check whether the VM reaches Running within 60 s.
+        Check whether the VM reaches Running within 4 minutes (240 s).
         If it is Stopped instead, start it via Actions > Control > Start
         and wait for Running.
         """
-        import time as _time
+        logger.info("Checking cloned VM status (up to 4 min for Running)...")
+        end = time.time() + 240
+        while time.time() < end:
+            try:
+                running_els = self.driver.find_elements(
+                    self.vm_loc["vm_status_running"][1],
+                    self.vm_loc["vm_status_running"][0],
+                )
+                running = bool(running_els) and running_els[0].is_displayed()
+                stopped_els = self.driver.find_elements(
+                    self.vm_loc["vm_status_stopped"][1],
+                    self.vm_loc["vm_status_stopped"][0],
+                )
+                stopped = bool(stopped_els) and stopped_els[0].is_displayed()
+            except (NoSuchElementException, WebDriverException):
+                time.sleep(3)
+                continue
 
-        logger.info("Checking cloned VM status (up to 60 s for Running)...")
-        end = _time.time() + 60
-        while _time.time() < end:
-            running_els = self.driver.find_elements(
-                self.vm_loc["vm_status_running"][1],
-                self.vm_loc["vm_status_running"][0],
-            )
-            if running_els and running_els[0].is_displayed():
+            if running:
                 logger.info("Cloned VM is already Running")
                 return
 
-            stopped_els = self.driver.find_elements(
-                self.vm_loc["vm_status_stopped"][1],
-                self.vm_loc["vm_status_stopped"][0],
-            )
-            if stopped_els and stopped_els[0].is_displayed():
+            if stopped:
                 logger.info(
                     "Cloned VM is Stopped — starting via Actions > Control > Start"
                 )
@@ -415,10 +416,10 @@ class VirtualMachineUI(PageNavigator):
                 self.wait_for_vm_running()
                 return
 
-            _time.sleep(3)
+            time.sleep(3)
 
         # Fell through the loop without finding either status — try full wait
-        logger.info("Status not yet visible after 60 s — waiting for Running...")
+        logger.info("Status not yet visible after 4 min — waiting for Running...")
         self.wait_for_vm_running()
 
     def click_actions_menu(self):
@@ -479,15 +480,13 @@ class VirtualMachineUI(PageNavigator):
         self.do_click(delete_btn, enable_screenshot=True)
         logger.info("Clicked Delete in confirmation modal")
 
-    def click_virtual_machines_tab_and_open_vm(self, vm_name, namespace):
+    def click_virtual_machines_tab_and_open_vm(self, vm_name):
         """
         Click the "Virtual machines" tab on the VirtualMachines page to show
         the list, then click the VM name link to open its detail page.
 
         Args:
             vm_name (str): Name of the VirtualMachine to click.
-            namespace (str): Namespace that owns the VM (unused but kept for
-                call-site compatibility).
         """
         logger.info("Clicking 'Virtual machines' tab to show the VM list")
         tab_locator = self.vm_loc["virtual_machines_list_tab"]
@@ -541,12 +540,30 @@ class VirtualMachineUI(PageNavigator):
 
     def click_clone_submit_button(self):
         """
-        Click the Clone button at the bottom of the Clone VirtualMachine popup.
+        Click the Clone button at the bottom of the Clone VirtualMachine popup
+        and wait for the dialog to close before returning.
+
         """
         clone_btn = self.vm_loc["clone_submit_button"]
         wait_for_element_to_be_clickable(locator=clone_btn, timeout=20)
         self.do_click(clone_btn, enable_screenshot=True)
-        logger.info("Clicked Clone submit button")
+        logger.info("Clicked Clone submit button — waiting for dialog to close...")
+
+        # Wait up to 3 minutes for the clone dialog to disappear.
+        dialog_loc = self.vm_loc["dialog_overlay"]
+        end = time.time() + 180
+        while time.time() < end:
+            try:
+                els = self.driver.find_elements(dialog_loc[1], dialog_loc[0])
+                if not els or not any(e.is_displayed() for e in els):
+                    logger.info("Clone dialog closed — navigation to clone VM started")
+                    return
+            except (NoSuchElementException, WebDriverException):
+                logger.info("Clone dialog closed — navigation to clone VM started")
+                return
+            time.sleep(2)
+
+        logger.warning("Clone dialog did not close within 3 min — proceeding anyway")
 
     def click_actions_control_then_start(self):
         """

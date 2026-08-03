@@ -3809,8 +3809,7 @@ virtualmachine = {
     ),
     # "Virtual machines" horizontal tab on the VirtualMachines page (right panel)
     "virtual_machines_list_tab": (
-        "//button[normalize-space(.)='Virtual machines'] | "
-        "//a[normalize-space(.)='Virtual machines']",
+        "//button[normalize-space(.)='Virtual machines']",
         By.XPATH,
     ),
     # Welcome / overlay modal close button
@@ -3962,9 +3961,9 @@ virtualmachine = {
         "//input[@id='start-clone']",
         By.XPATH,
     ),
-    # Clone VirtualMachine popup — Clone submit button
+    # Clone VirtualMachine popup — Clone submit button (scoped to the dialog)
     "clone_submit_button": (
-        "//button[@data-test='save-button']",
+        "//*[@role='dialog']//button[@data-test='save-button']",
         By.XPATH,
     ),
     # Clone popup — Name field (pre-filled with cloned VM name)
@@ -3975,6 +3974,11 @@ virtualmachine = {
     # VM name link in the VirtualMachines table — format with vm_name at runtime.
     "vm_left_tree_link_tmpl": (
         "//a[@data-test='{vm_name}']",
+        By.XPATH,
+    ),
+    # Any open modal/dialog overlay
+    "dialog_overlay": (
+        "//*[@role='dialog']",
         By.XPATH,
     ),
 }

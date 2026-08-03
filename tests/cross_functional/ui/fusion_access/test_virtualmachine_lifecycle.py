@@ -28,6 +28,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.page_objects.virtualmachine_ui import VirtualMachineUI
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,6 @@ class TestVirtualMachineLifecycle(ManageTest):
         Args:
             setup_ui_class_factory: Factory fixture to setup UI session
         """
-        # Initialise cleanup handles; tests populate these after VM creation.
         self._test_vm_name = None
         self._test_namespace = None
 
@@ -60,45 +60,49 @@ class TestVirtualMachineLifecycle(ManageTest):
         self.vm_ui = VirtualMachineUI()
 
     @pytest.fixture(autouse=True)
-    def teardown_vm(self):
+    def teardown_vm(self, request):
         """
-        Teardown fixture — runs after every test method regardless of outcome.
-
         Lists all VirtualMachines in the test namespace, deletes
         all of them, then deletes the namespace itself.
         """
-        yield  # test runs here
 
-        namespace = self._test_namespace
-        if not namespace:
-            logger.info("teardown_vm: no namespace recorded — nothing to clean up")
-            return
+        def cleanup():
+            namespace = self._test_namespace
+            if not namespace:
+                logger.info("teardown_vm: no namespace recorded — nothing to clean up")
+                return
 
-        vm_ocp = OCP(kind=constants.VIRTUAL_MACHINE, namespace=namespace)
-        ns_ocp = OCP(kind="Namespace")
+            vm_ocp = OCP(kind=constants.VIRTUAL_MACHINE, namespace=namespace)
+            ns_ocp = OCP(kind="Namespace")
 
-        # List all VMs in the namespace
-        try:
-            vm_list = vm_ocp.exec_oc_cmd(
-                f"get vm -n {namespace} --no-headers", out_yaml_format=False
-            )
-            logger.info(vm_list or "(no VMs found)")
-        except Exception as e:
-            logger.warning(f"Could not list VMs in '{namespace}': {e}")
+            # List all VMs in the namespace for diagnostics
+            try:
+                vm_list = vm_ocp.exec_oc_cmd(
+                    f"get vm -n {namespace} --no-headers", out_yaml_format=False
+                )
+                logger.info(vm_list or "(no VMs found)")
+            except Exception as e:
+                logger.warning(f"Could not list VMs in '{namespace}': {e}")
 
-        # Delete all VMs in the namespace
-        try:
-            vm_ocp.exec_oc_cmd(f"delete vm --all -n {namespace}", out_yaml_format=False)
-            logger.info(f"All VMs deleted from namespace '{namespace}'")
-        except Exception as e:
-            logger.warning(f"Could not delete VMs in '{namespace}': {e}")
+            # Delete all VMs in the namespace
+            try:
+                vm_ocp.exec_oc_cmd(
+                    f"delete vm --all -n {namespace}", out_yaml_format=False
+                )
+                logger.info(f"All VMs deleted from namespace '{namespace}'")
+            except Exception as e:
+                logger.warning(f"Could not delete VMs in '{namespace}': {e}")
 
-        # Delete the namespace
-        try:
-            ns_ocp.exec_oc_cmd(f"delete namespace {namespace}", out_yaml_format=False)
-            logger.info(f"Namespace '{namespace}' deleted")
-        except Exception as e:
-            logger.warning(f"Could not delete namespace '{namespace}': {e}")
+            # Delete the namespace
+            try:
+                ns_ocp.exec_oc_cmd(
+                    f"delete namespace {namespace}", out_yaml_format=False
+                )
+                logger.info(f"Namespace '{namespace}' deleted")
+            except Exception as e:
+                logger.warning(f"Could not delete namespace '{namespace}': {e}")
+
+        request.addfinalizer(cleanup)
 
     def _login_to_vm_console(self, vm_name, namespace, vm_username, vm_password):
         """
@@ -146,25 +150,38 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         return child
 
-    def _calculate_vm_file_md5sum(self, child, test_file, test_data):
+    def _calculate_vm_file_md5sum(self, child, test_file, test_data=None):
         """
-        Write *test_data* to *test_file* inside the VM, run ``md5sum``,
-        and return the hex digest.
-
         Args:
             child (pexpect.spawn): An open, logged-in pexpect console session.
-            test_file (str): Absolute path of the file to create inside the VM.
-            test_data (str): String content to write into the file.
+            test_file (str): Absolute path of the file to checksum inside the VM.
+            test_data (str | None): String content to write into the file before
+                checksumming.  Pass ``None`` (default) to checksum without writing.
 
         Returns:
-            str: The md5 hex digest of the written file.
+            str: The md5 hex digest of the file.
         """
         shell_prompt = r"\]\$\s"
+        filename = test_file.split("/")[-1]
 
-        # Write the test data
-        child.sendline(f"echo '{test_data}' > {test_file}")
-        child.expect(shell_prompt, timeout=30)
-        logger.info(f"Test data written to '{test_file}' inside the VM")
+        if test_data is not None:
+            child.sendline(f"echo '{test_data}' > {test_file}")
+            child.expect(shell_prompt, timeout=30)
+            logger.info(f"Test data written to '{test_file}' inside the VM")
+        else:
+            # Check the file is present on the cloned disk by listing the
+            # parent directory and confirming the filename appears in the output.
+            parent_dir = "/".join(test_file.split("/")[:-1]) or "/"
+            logger.info(f"Checking for '{filename}' in '{parent_dir}' via ls...")
+            child.sendline(f"ls {parent_dir}")
+            child.expect(shell_prompt, timeout=30)
+            ls_output = child.before
+            logger.info(f"ls output: {ls_output.strip()}")
+            assert filename in ls_output, (
+                f"Expected file '{test_file}' not found on cloned VM — "
+                f"'ls {parent_dir}' output:\n{ls_output.strip()}"
+            )
+            logger.info(f"Confirmed '{filename}' is present on cloned disk")
 
         # Run md5sum
         child.sendline(f"md5sum {test_file}")
@@ -182,50 +199,57 @@ class TestVirtualMachineLifecycle(ManageTest):
                     md5sum_output = candidate
                     break
 
-        logger.info(f"Parsed md5sum checksum: {md5sum_output}")
+        if md5sum_output is None:
+            logger.warning(f"Could not parse md5sum from output:\n{child.before}")
+        else:
+            logger.info(f"Parsed md5sum checksum: {md5sum_output}")
         return md5sum_output
 
     def _wait_for_vmi_agent_connected(self, vm_name, namespace, timeout=600):
         """
-        Poll the VMI conditions until ``AgentConnected`` is ``True``.
+        Wait until the VMI exists in the cluster and its ``AgentConnected``
+        condition is ``True``.
 
         Args:
-            vm_name (str): Name of the VirtualMachineInstance (same as the VM name).
+            vm_name (str): Name of the VirtualMachineInstance (same as the VM).
             namespace (str): Namespace the VMI lives in.
-            timeout (int): Maximum seconds to wait (default 600 = 10 minutes).
+            timeout (int): Maximum seconds to wait across both phases
+                (default 600 = 10 minutes).
 
         Raises:
-            AssertionError: If the VMI does not appear or AgentConnected does not
-            become True within *timeout*.
+            ocs_ci.ocs.exceptions.TimeoutExpiredError: If the VMI does not
+                appear or AgentConnected does not become True within *timeout*.
         """
         vmi_ocp = OCP(kind=constants.VIRTUAL_MACHINE_INSTANCE, namespace=namespace)
-        deadline = time.time() + timeout
 
         logger.info(
             f"Waiting for VMI '{vm_name}' to appear in cluster "
             f"(namespace '{namespace}', timeout {timeout}s)..."
         )
-        while True:
-            vmi_data = vmi_ocp.get(resource_name=vm_name, dont_raise=True, silent=True)
+        for vmi_data in TimeoutSampler(
+            timeout=timeout,
+            sleep=10,
+            func=vmi_ocp.get,
+            resource_name=vm_name,
+            dont_raise=True,
+            silent=True,
+        ):
             if vmi_data:
                 logger.info(f"VMI '{vm_name}' found in cluster")
                 break
-            remaining = deadline - time.time()
-            assert (
-                remaining > 0
-            ), f"VMI '{vm_name}' did not appear in cluster within {timeout}s"
-            logger.info(
-                f"VMI '{vm_name}' not yet found — "
-                f"retrying in 10 s ({int(remaining)}s remaining)..."
-            )
-            time.sleep(10)
 
         logger.info(
             f"Waiting for AgentConnected on VMI '{vm_name}' "
             f"(namespace '{namespace}')..."
         )
-        while True:
-            vmi_data = vmi_ocp.get(resource_name=vm_name, dont_raise=True, silent=True)
+        for vmi_data in TimeoutSampler(
+            timeout=timeout,
+            sleep=30,
+            func=vmi_ocp.get,
+            resource_name=vm_name,
+            dont_raise=True,
+            silent=True,
+        ):
             if vmi_data:
                 conditions = vmi_data.get("status", {}).get("conditions") or []
                 for cond in conditions:
@@ -238,16 +262,6 @@ class TestVirtualMachineLifecycle(ManageTest):
                             "guest OS is fully booted and ready"
                         )
                         return
-            remaining = deadline - time.time()
-            assert remaining > 0, (
-                f"AgentConnected did not become True for VMI '{vm_name}' "
-                f"within {timeout}s"
-            )
-            logger.info(
-                f"AgentConnected not yet True on '{vm_name}' — "
-                f"retrying in 30 s ({int(remaining)}s remaining)..."
-            )
-            time.sleep(30)
 
     def _create_vm_and_wait_for_running(self):
         """
@@ -412,6 +426,11 @@ class TestVirtualMachineLifecycle(ManageTest):
             if cloud_init_data:
                 user_data_str = cloud_init_data.get("userData", "")
                 user_data = yaml.safe_load(user_data_str)
+                if not isinstance(user_data, dict):
+                    logger.warning(
+                        "cloud-init userData is not a mapping — skipping volume"
+                    )
+                    continue
                 vm_username = user_data.get("user")
                 vm_password = user_data.get("password")
                 break
@@ -492,10 +511,9 @@ class TestVirtualMachineLifecycle(ManageTest):
         5. Open Actions dropdown, click Clone; the Clone VirtualMachine popup
            opens with the clone name pre-filled. Read the clone name, tick
            'Start VirtualMachine once created', then click Clone.
-        6. Wait for the page to finish loading after clone — the UI navigates
-           automatically to the cloned VM detail page. Verify status is Running.
-        7. Log in to the cloned VM console via virtctl and compute the md5sum
-           of the same test file.
+        6. Wait for the page to finish loading after clone — Verify status is Running.
+        7. Log in to the cloned VM console, confirm the file exists, compute
+           its md5sum without writing anything.
         8. Assert the md5sum of the cloned file matches the original checksum.
         """
         logger.info("=" * 80)
@@ -535,7 +553,7 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         logger.info(f"\nStep 4b: Click VM '{vm_name}'")
         logger.info("-" * 80)
-        self.vm_ui.click_virtual_machines_tab_and_open_vm(vm_name, namespace)
+        self.vm_ui.click_virtual_machines_tab_and_open_vm(vm_name)
         self.base_ui.take_screenshot("clone_test_original_vm_detail")
 
         logger.info(
@@ -561,19 +579,22 @@ class TestVirtualMachineLifecycle(ManageTest):
         logger.info(f"Clone submitted — clone VM name: '{clone_vm_name}'")
 
         logger.info(
-            "\nStep 6: Wait for page to load after clone, verify cloned VM is Running"
+            "\nStep 6: Wait for clone detail page to load, verify cloned VM is Running"
         )
         logger.info("-" * 80)
         self.base_ui.page_has_loaded()
+        logger.info("Waiting 30 s for cloned VM detail page to fully render...")
+        time.sleep(30)
+        self.base_ui.page_has_loaded()
         self.base_ui.take_screenshot("clone_test_clone_vm_detail")
 
-        # If Running within 60 s — proceed. If Stopped — start via Actions > Control > Start.
+        # If Running within 4 min — proceed. If Stopped — start via Actions > Control > Start.
         self.vm_ui.ensure_cloned_vm_running()
         self.base_ui.take_screenshot("clone_test_clone_vm_running")
         logger.info(f"Cloned VM '{clone_vm_name}' is now Running — PASS")
 
         logger.info(
-            "\nStep 7: Login to cloned VM console and compute md5sum of test file"
+            "\nStep 7: Login to cloned VM console, verify file exists, compute md5sum"
         )
         logger.info("-" * 80)
         # Wait for the cloned VM's guest OS to fully boot
@@ -586,9 +607,10 @@ class TestVirtualMachineLifecycle(ManageTest):
             vm_password,
         )
 
-        clone_md5sum = self._calculate_vm_file_md5sum(
-            child, test_file, "OCS CI test data for checksum verification"
-        )
+        # Pass no test_data — the file was written to the parent VM's disk and
+        # should be present on the clone unchanged.  The helper first asserts
+        # the file exists, then reads its md5sum without overwriting it.
+        clone_md5sum = self._calculate_vm_file_md5sum(child, test_file)
 
         child.send("\x1d")
         child.close()
