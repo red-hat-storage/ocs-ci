@@ -1,6 +1,7 @@
 import logging
 import sys
 import time
+import uuid
 
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework.pytest_customization.marks import (
@@ -35,8 +36,14 @@ from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import (
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.scale_noobaa_lib import fetch_noobaa_storage_class_name
-from ocs_ci.ocs.bucket_utils import wait_for_bucket_count_stability
-
+from ocs_ci.ocs.bucket_utils import (
+    s3_put_object,
+    wait_for_bucket_count_stability,
+)
+from ocs_ci.ocs.resources.objectbucket import (
+    get_s3_credentials_from_obc,
+    wait_for_obc_phase,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -671,3 +678,174 @@ class TestBucketCreate:
         ), "Returned to first page but buckets don't match"
 
         logger.info("Pagination test completed successfully")
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-6651")
+    def test_namespace_bucket_object_preview(
+        self,
+        setup_ui_class_factory,
+        mcg_obj,
+        bucket_factory,
+    ):
+        """
+        Verify object listing and preview in a namespace bucket.
+
+        Steps:
+        1. Create an AWS namespacestore, bucketclass, and namespace bucket
+        2. Upload a text object to the bucket via the S3 API
+        3. Navigate to the bucket in the ODF console object browser
+        4. Verify the object key is listed in the object browser
+        5. Open Preview for the object and verify the content matches
+
+        """
+        # 1. Create an AWS namespacestore, bucketclass, and namespace bucket
+        logger.test_step("Create AWS namespace bucket via bucket_factory")
+        bucketclass_dict = {
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Single",
+                "namespacestore_dict": {"aws": [(1, "eu-central-1")]},
+            },
+        }
+        ns_bucket = bucket_factory(
+            amount=1,
+            interface=bucketclass_dict["interface"],
+            bucketclass=bucketclass_dict,
+        )[0]
+        bucket_name = ns_bucket.name
+        logger.info(f"Namespace bucket created: {bucket_name}")
+
+        # 2. Upload a text object to the bucket via the S3 API
+        logger.test_step("Upload text object via S3 API")
+        object_key = f"preview-test-{uuid.uuid4().hex[:8]}.txt"
+        expected_content = "Hello from namespace bucket preview test"
+        s3_put_object(mcg_obj, bucket_name, object_key, expected_content)
+        logger.info(f"Uploaded object '{object_key}' to bucket '{bucket_name}'")
+
+        # 3. Navigate to the bucket in the ODF console object browser
+        logger.test_step("Navigate to bucket in ODF console object browser")
+        setup_ui_class_factory()
+        bucket_ui = BucketsTab()
+        bucket_ui.navigate_to_bucket(bucket_name)
+
+        # 4. Verify the object key is listed in the object browser
+        logger.test_step("Verify object key is listed in the object browser")
+        bucket_ui.do_click(bucket_ui.bucket_tab["refresh_objects_button"])
+        bucket_ui.wait_for_object_listed(object_key)
+        logger.info(f"Object '{object_key}' is visible in the object browser")
+
+        # 5. Open Preview for the object and verify the content matches
+        logger.test_step("Preview object and verify content matches uploaded data")
+        preview_content = bucket_ui.preview_object_content(object_key)
+        assert preview_content == expected_content, (
+            f"Preview content mismatch.\n"
+            f"Expected: {expected_content!r}\n"
+            f"Got:      {preview_content!r}"
+        )
+        logger.info("Preview content matches the original uploaded data")
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-6652")
+    def test_obc_bucket_directory_hierarchy_and_preview(
+        self,
+        request,
+        setup_ui_class_factory,
+        mcg_obj,
+    ):
+        """
+        Verify directory hierarchy and file preview in an OBC bucket.
+
+        Steps:
+        1. Create an OBC bucket via the UI
+        2. Upload objects with nested folder keys via S3 API
+        3. Verify the hierarchy is presented in the bucket's object browser
+        4. Verify the leaf files' content via the UI preview option
+
+        """
+        # 1. Create an OBC bucket via the UI
+        logger.test_step("Create OBC bucket via the UI")
+        setup_ui_class_factory()
+        bucket_ui = BucketsTab()
+        bucket_ui.nav_object_storage_page()
+        _, bucket_name = bucket_ui.create_bucket_ui(method="obc", return_name=True)
+        logger.info(f"Created OBC bucket via UI: {bucket_name}")
+
+        wait_for_obc_phase(
+            bucket_name,
+            config.ENV_DATA["cluster_namespace"],
+            constants.STATUS_BOUND,
+            timeout=60,
+        )
+
+        obc_creds = get_s3_credentials_from_obc(
+            bucket_name, config.ENV_DATA["cluster_namespace"]
+        )
+        s3_bucket_name = obc_creds["bucket_name"]
+        logger.info(f"OBC '{bucket_name}' maps to S3 bucket '{s3_bucket_name}'")
+
+        obc_ocp = OCP(
+            kind=constants.OBC,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+
+        def cleanup_obc():
+            try:
+                obc_ocp.delete(resource_name=bucket_name)
+                logger.info(f"Cleaned up OBC: {bucket_name}")
+            except Exception:
+                logger.warning(f"Failed to clean up OBC: {bucket_name}", exc_info=True)
+
+        request.addfinalizer(cleanup_obc)
+
+        # 2. Upload objects with folder-like keys to create a hierarchy
+        logger.test_step("Upload objects with nested folder keys via S3 API")
+        f1_content = "Content of leaf file f1"
+        f2_content = "Content of leaf file f2"
+        object_keys = {
+            "d1/d1.1/d2.1/f1.txt": f1_content,
+            "d1/d1.2/d2.2/f2.txt": f2_content,
+        }
+        for key, content in object_keys.items():
+            s3_put_object(mcg_obj, s3_bucket_name, key, data=content)
+            logger.info(f"Uploaded {key} to {s3_bucket_name}")
+
+        # 3. Verify the hierarchy in the object browser
+        logger.test_step("Verify directory hierarchy in the object browser")
+        bucket_ui.navigate_to_bucket(s3_bucket_name)
+        bucket_ui.do_click(bucket_ui.bucket_tab["refresh_objects_button"])
+        bucket_ui.wait_for_object_listed("d1")
+
+        bucket_ui.navigate_into_folder("d1")
+        for subfolder in ("d1.1", "d1.2"):
+            assert bucket_ui.is_object_listed(
+                subfolder
+            ), f"{subfolder}/ not found in d1/"
+
+        # 4. Verify leaf files via preview - first branch
+        logger.test_step("Verify f1.txt content via preview (d1/d1.1/d2.1/)")
+        bucket_ui.navigate_into_folder("d1.1")
+        bucket_ui.navigate_into_folder("d2.1")
+        assert bucket_ui.is_object_listed("f1.txt"), "f1.txt not found in d2.1/"
+
+        preview = bucket_ui.preview_object_content("f1.txt")
+        assert (
+            preview == f1_content
+        ), f"f1.txt preview mismatch.\nExpected: {f1_content!r}\nGot: {preview!r}"
+        logger.info("f1.txt preview content verified")
+
+        # Verify second branch
+        logger.test_step("Verify f2.txt content via preview (d1/d1.2/d2.2/)")
+        bucket_ui.navigate_to_bucket(s3_bucket_name)
+        bucket_ui.do_click(bucket_ui.bucket_tab["refresh_objects_button"])
+        bucket_ui.wait_for_object_listed("d1")
+        bucket_ui.navigate_into_folder("d1")
+        bucket_ui.navigate_into_folder("d1.2")
+        bucket_ui.navigate_into_folder("d2.2")
+
+        assert bucket_ui.is_object_listed("f2.txt"), "f2.txt not found in d2.2/"
+
+        preview = bucket_ui.preview_object_content("f2.txt")
+        assert (
+            preview == f2_content
+        ), f"f2.txt preview mismatch.\nExpected: {f2_content!r}\nGot: {preview!r}"
+        logger.info("f2.txt preview content verified")
