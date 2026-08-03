@@ -23,6 +23,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_acm_mce_build_tag,
 )
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.utility.utils import get_running_ocp_version
@@ -148,6 +149,13 @@ class MCEInstaller(object):
             operatorgroup_yaml.create()
             logger.info("mce OperatorGroup created successfully")
 
+    @retry(
+        CommandFailed,
+        tries=5,
+        delay=10,
+        backoff=1,
+        text_in_exception="no endpoints available for service",
+    )
     def create_multiclusterengine_resource(self):
         """
         Creates multiclusterengine resource
