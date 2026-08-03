@@ -583,8 +583,12 @@ def namespace_store_factory(
                     continue
                 if nss.pvc_obj and not nss.pvc_obj.is_deleted:
                     try:
+                        pv_obj = nss.pvc_obj.backed_pv_obj
                         nss.pvc_obj.delete()
                         nss.pvc_obj.ocp.wait_for_delete(nss.pvc_obj.name, timeout=180)
+                        pv_obj.ocp.wait_for_delete(
+                            resource_name=pv_obj.name, timeout=180
+                        )
                     except Exception as e:
                         cleanup_errors.append(
                             f"Failed to delete PVC {nss.pvc_obj.name} of "
