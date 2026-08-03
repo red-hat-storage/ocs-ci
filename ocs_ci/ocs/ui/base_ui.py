@@ -1566,18 +1566,15 @@ def accept_s3_endpoint_certificate(endpoint):
     )
     logger.info("Accepting certificate for S3 endpoint: %s", endpoint_url)
     driver.get(endpoint_url)
-    time.sleep(2)
     try:
         body = driver.find_element(By.TAG_NAME, "body")
         body.send_keys("thisisunsafe")
-        time.sleep(2)
     except WebDriverException as e:
         logger.warning(
             "Could not bypass certificate interstitial — endpoint may already be trusted: %s",
             e,
         )
     driver.get(current_url)
-    time.sleep(2)
     logger.info("Returned to console after certificate acceptance")
 
 

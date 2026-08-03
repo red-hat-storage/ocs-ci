@@ -2901,6 +2901,10 @@ bucket_tab = {
         "//*[contains(text(), '{}')]",
         By.XPATH,
     ),
+    "item_link": (
+        "//a[contains(text(), '{}')]",
+        By.XPATH,
+    ),
     "txt_files": (
         "//*[contains(text(), '.txt')]",
         By.XPATH,
