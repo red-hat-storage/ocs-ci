@@ -74,9 +74,11 @@ def setup_local_storage(storageclass, add_new_disks=True):
 
         storage_node_names = get_compute_node_names(no_replace=True)
 
-        if config.ENV_DATA.get(
-            "odf_provider_mode_deployment", False
-        ) and config.ENV_DATA.get("mark_masters_schedulable", True):
+        provider_mode = config.ENV_DATA.get("odf_provider_mode_deployment", False)
+        mark_schedulable = config.ENV_DATA.get(
+            "mark_masters_schedulable", True if provider_mode else False
+        )
+        if mark_schedulable:
             storage_node_names.extend(get_master_nodes())
 
         # Update local volume discovery data with Worker node Names
