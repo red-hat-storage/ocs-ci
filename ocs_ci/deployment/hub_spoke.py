@@ -3719,7 +3719,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         Args:
             bucket_name (str, optional): Name of the S3 bucket to create.
-                If not provided, defaults to "{cluster_name}-oidc-bucket".
+                If not provided, defaults to "{cluster_name}-oidc-{region}".
                 To reuse an existing shared bucket across clusters, pass the bucket name.
 
         Returns:
@@ -3734,7 +3734,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 bucket_name = configured_bucket_name
                 logger.info(f"Using configured OIDC bucket name: {bucket_name}")
             else:
-                bucket_name = f"{self.name}-oidc-bucket"
+                bucket_name = f"{self.name}-oidc-{self.aws_region}"
                 logger.info(f"Using default OIDC bucket naming: {bucket_name}")
 
         # Get namespace for the secret from config or use default
@@ -3821,7 +3821,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         try:
             existing_buckets = self.list_buckets()
             if any(bucket["Name"] == bucket_name for bucket in existing_buckets):
-                logger.info(f"Bucket '{bucket_name}' already exists, skipping creation")
+                logger.info(f"Bucket '{bucket_name}' already exists, reusing it")
                 bucket_location = f"http://{bucket_name}.s3.amazonaws.com/"
                 bucket_arn = f"arn:aws:s3:::{bucket_name}"
             else:
