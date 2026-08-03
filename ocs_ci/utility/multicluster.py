@@ -446,8 +446,8 @@ class RDRProviderClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
         hosted client.
 
         Clients inherit their provider's zone so that all clients of the same
-        provider form a single zone bucket.  This ensures the ordering is:
-            Provider1 clients (zone A) ... Provider2 clients (zone B) ...
+        provider form a single zone bucket. This ensures the ordering is:
+        Provider1 clients (zone A) ... Provider2 clients (zone B) ...
         """
         # Populate static roles (ACM + providers) first
         super().generate_zone_role_map()
@@ -576,22 +576,22 @@ class RDRProviderClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
         the scale grows by at least 1 per phase, no two phases can ever produce
         overlapping order numbers regardless of how many clusters exist.
 
-        Concrete example (zone_base_rank=100, 2 zones a=100/b=200):
+        Concrete example (zone_base_rank=100, 2 zones a=100/b=200)::
 
-        Phase                      scale  cluster          base  final order
-        ─────────────────────────────────────────────────────────────────────
-        OCP upgrade (30)             1    ACM  (z=100,r=1)  131  1_310
-                                          PriODF(z=100,r=2) 132  1_320
-                                          SecODF(z=200,r=2) 232  2_320
-        MCE upgrade (46)             2    PriODF(z=100,r=2) 148  14_800
-                                          SecODF(z=200,r=2) 248  24_800
-        OCP-kubevirt (48)            3    Client1(z=100,r=3,i=3) 151 151_000
-                                          Client2(z=200,r=3,i=4) 252 252_000
-        OCS upgrade (60)             4    PriODF(z=100,r=2) 162  1_620_000
-        MCO upgrade (42)             5    ACM  (z=100,r=1)  143  14_300_000
-        DR Hub upgrade (44)          6    ACM  (z=100,r=1)  145  145_000_000
-        ACM upgrade (46)             7    ACM  (z=100,r=1)  147  1_470_000_000
-        ─────────────────────────────────────────────────────────────────────
+            Phase             scale  cluster                   base  final order
+            ──────────────────────────────────────────────────────────────────────
+            OCP upgrade (30)    1    ACM (z=100,r=1)            131  1_310
+            OCP upgrade (30)    1    PriODF (z=100,r=2)         132  1_320
+            OCP upgrade (30)    1    SecODF (z=200,r=2)         232  2_320
+            MCE upgrade (46)    2    PriODF (z=100,r=2)         148  14_800
+            MCE upgrade (46)    2    SecODF (z=200,r=2)         248  24_800
+            OCP-kubevirt (48)   3    Client1 (z=100,r=3,i=3)   151  151_000
+            OCP-kubevirt (48)   3    Client2 (z=200,r=3,i=4)   252  252_000
+            OCS upgrade (60)    4    PriODF (z=100,r=2)         162  1_620_000
+            MCO upgrade (42)    5    ACM (z=100,r=1)            143  14_300_000
+            DR Hub upgrade (44) 6    ACM (z=100,r=1)            145  145_000_000
+            ACM upgrade (46)    7    ACM (z=100,r=1)            147  1_470_000_000
+            ──────────────────────────────────────────────────────────────────────
         """
         neworder = phase_order + zrank + role_rank
         scaling = self.UPGRADE_TEST_ORDER.get(phase_order, 10)
