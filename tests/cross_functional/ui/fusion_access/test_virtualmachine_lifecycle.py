@@ -181,7 +181,7 @@ class TestVirtualMachineLifecycle(ManageTest):
                 f"Expected file '{test_file}' not found on cloned VM — "
                 f"'ls {parent_dir}' output:\n{ls_output.strip()}"
             )
-            logger.info(f"Confirmed '{filename}' is present on cloned disk")
+            logger.info(f"Confirmed '{filename}' is present on the cloned disk")
 
         # Run md5sum
         child.sendline(f"md5sum {test_file}")
