@@ -97,7 +97,6 @@ class TestVMAutoCleanUp:
         Test has been parametrized to run with standalone and shared protection type.
 
         """
-
         md5sum_original = []
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
@@ -257,6 +256,7 @@ class TestVMAutoCleanUp:
             discovered_apps=True,
             workload_placement_name=resource_name,
             old_primary=primary_cluster_name,
+            skip_odf_cli_validation=True,
         )
 
         # Verify resources creation on secondary cluster (failoverCluster)
@@ -381,6 +381,7 @@ class TestVMAutoCleanUp:
             workload_instance=cnv_workloads[0],
             workload_instances_shared=cnv_workloads,
             vm_auto_cleanup=True,
+            skip_odf_cli_validation=True,
         )
 
         # Verify resources creation on primary managed cluster
