@@ -73,12 +73,16 @@ def check_subctl_cli():
 
 
 @pytest.fixture(autouse=True, scope="function")
-def rdr_health_check():
+def rdr_health_check(request):
     """
     Verify cluster health on both managed clusters before each RDR test.
     Checks Ceph health, rbd-mirror daemon status, and mirroring health.
 
     """
+    if request.node.get_closest_marker("skip_rdr_health_check"):
+        log.info("Skipping RDR health check (skip_rdr_health_check marker)")
+        return
+
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
 
