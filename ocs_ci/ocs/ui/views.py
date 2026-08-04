@@ -1135,6 +1135,70 @@ SCALE_DASHBOARD_LOCATORS = {
     ),
 }
 
+# Fusion Access for SAN — Storage Cluster creation locators
+FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS = {
+    # Left nav: Storage > Fusion Access for SAN
+    "fusion_access_for_san_nav": (
+        "//a[normalize-space()='Fusion Access for SAN']",
+        By.XPATH,
+    ),
+    # "Create storage cluster" button on the empty-state page (no cluster yet)
+    "create_storage_cluster_btn": (
+        "//button[normalize-space()='Create storage cluster']"
+        " | //button[contains(@data-test,'create-storage-cluster')]",
+        By.XPATH,
+    ),
+    # Per-row node checkboxes — id="node-<uuid>", class="pf-v6-c-check__input".
+    # There is no "Select all" header checkbox on this page; each row must be
+    # clicked individually.
+    "node_row_checkboxes": (
+        "//tbody//tr//input[@type='checkbox' and contains(@id,'node-')]"
+        " | //tbody//tr//input[@type='checkbox' and contains(@class,'pf-v6-c-check__input')]"
+        " | //tbody//tr//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    # Summary text below the table, e.g. "3 nodes were selected, sharing 9 disks between them"
+    "nodes_selected_summary": (
+        "//p[contains(text(), 'nodes were selected')]"
+        " | //span[contains(text(), 'nodes were selected')]"
+        " | //*[contains(text(), 'nodes were selected')]",
+        By.XPATH,
+    ),
+    # Final "Create storage cluster" submit button at the bottom of the node list
+    "submit_create_storage_cluster_btn": (
+        "//button[normalize-space()='Create storage cluster'"
+        " and not(@data-test='create-storage-cluster')]"
+        " | //button[@data-test='submit-create-storage-cluster']"
+        " | (//button[normalize-space()='Create storage cluster'])[last()]",
+        By.XPATH,
+    ),
+    # "Create file system claim" button — appears (enabled) on the Fusion Access
+    # for SAN landing page once the storage cluster is ready
+    "create_file_system_claim_btn": (
+        "//button[normalize-space()='Create file system claim']"
+        " | //button[contains(normalize-space(),'Create file system claim')]",
+        By.XPATH,
+    ),
+    # File system claim name input field — the <div> wrapping the <input>
+    # inside form id="file-system-claim-create-form"
+    "file_system_claim_name_input": (
+        "//*[@id='file-system-claim-create-form']//input[@type='text']"
+        " | //*[@id='file-system-claim-create-form']/div[1]//input",
+        By.XPATH,
+    ),
+    # First LUN row checkbox in the "Select LUNs" table
+    # label click is required because the checkbox input is hidden behind a <label>
+    "first_lun_row_label": (
+        "//*[@id='luns-selection-table']/tbody/tr[1]/td[1]/label",
+        By.XPATH,
+    ),
+    # Submit button at the bottom of the "Create file system claim" form
+    "submit_file_system_claim_btn": (
+        "//button[normalize-space()='Create file system claim'" " and not(@disabled)]",
+        By.XPATH,
+    ),
+}
+
 acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
