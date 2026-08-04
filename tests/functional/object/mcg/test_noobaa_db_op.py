@@ -9,7 +9,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     mcg,
 )
-from ocs_ci.ocs import platform_nodes
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, platform_nodes
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.bucket_utils import (
     write_random_objects_in_pod,
@@ -17,8 +18,12 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
     list_objects_from_bucket,
 )
-from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running, get_pod_node
-from ocs_ci.utility.utils import get_primary_nb_db_pod
+from ocs_ci.ocs.resources.pod import (
+    wait_for_pods_to_be_running,
+    get_pod_node,
+    get_pods_having_label,
+)
+from ocs_ci.utility.utils import get_primary_nb_db_pod, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +105,34 @@ class TestNoobaaDbOps:
                 raise_pod_not_found_error=True,
             )
             assert res, f"{noobaa_db_pod} pod is not in a Running state"
+
+            # Wait for ALL CNPG pods to be 1/1 Ready before next iteration.
+            # Running phase alone is not enough — standby needs WAL sync before it
+            # can safely serve as failover target. Firing the next delete while
+            # pg_rewind is in progress corrupts the data directory.
+            for cnpg_pods in TimeoutSampler(
+                timeout=120,
+                sleep=10,
+                func=get_pods_having_label,
+                label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            ):
+                live_pods = [
+                    pod
+                    for pod in cnpg_pods
+                    if not pod["metadata"].get("deletionTimestamp")
+                ]
+                if len(live_pods) >= 2 and all(
+                    pod["status"].get("phase") == "Running"
+                    and pod["status"].get("containerStatuses")
+                    and all(
+                        cs.get("ready", False)
+                        for cs in pod["status"]["containerStatuses"]
+                    )
+                    for pod in live_pods
+                ):
+                    logger.info("All CNPG pods are 1/1 Ready — safe to proceed")
+                    break
 
             logger.info("Downloading objects from the bucket")
             sync_object_directory(
