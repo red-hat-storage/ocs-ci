@@ -8,18 +8,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     skipif_aws_creds_are_missing,
     skipif_disconnected_cluster,
+    tier4,
 )
-from ocs_ci.framework.testlib import MCGTest, tier4
+from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import (
-    assert_backingstore_phase_and_mode,
-    assert_namespacestore_phase_and_mode,
-)
-from ocs_ci.ocs.constants import (
-    BS_AUTH_FAILED,
-    BS_OPTIMAL,
-    BS_STORAGE_NOT_EXIST,
-)
+from ocs_ci.ocs.bucket_utils import assert_store_phase_and_mode
 
 logger = logging.getLogger(__name__)
 
@@ -79,10 +72,10 @@ class TestStoreStatusTransitions(MCGTest):
             5. Remove the Deny bucket policy to restore access
             6. Verify the store recovers to Ready/OPTIMAL
         """
-        assert_func = (
-            assert_backingstore_phase_and_mode
+        store_kind = (
+            constants.BACKINGSTORE
             if store_type == "backingstore"
-            else assert_namespacestore_phase_and_mode
+            else constants.NAMESPACESTORE
         )
 
         # 1. Create an AWS-backed store via bucket_factory
@@ -113,7 +106,13 @@ class TestStoreStatusTransitions(MCGTest):
         )
 
         # 2. Verify the store is in Ready phase and OPTIMAL mode
-        assert_func(store.name, constants.STATUS_READY, BS_OPTIMAL, mcg_obj)
+        assert_store_phase_and_mode(
+            store.name,
+            store_kind,
+            constants.STATUS_READY,
+            constants.BS_OPTIMAL,
+            mcg_obj,
+        )
 
         # 3. Apply a Deny bucket policy to block access
         logger.info(f"Blocking access to underlying bucket {store.uls_name}")
@@ -122,10 +121,11 @@ class TestStoreStatusTransitions(MCGTest):
             # 4. Verify the store transitions to Rejected/AUTH_FAILED
             # namespace_monitor polls every 3 min (NAMESPACE_MONITOR_DELAY)
             disruption_timeout = 300 if store_type == "namespacestore" else 180
-            assert_func(
+            assert_store_phase_and_mode(
                 store.name,
+                store_kind,
                 constants.STATUS_REJECTED,
-                BS_AUTH_FAILED,
+                constants.BS_AUTH_FAILED,
                 mcg_obj,
                 timeout=disruption_timeout,
             )
@@ -137,10 +137,11 @@ class TestStoreStatusTransitions(MCGTest):
         # 6. Verify the store recovers to Ready/OPTIMAL
         # namespace_monitor polls less frequently than nodes_monitor
         recovery_timeout = 300 if store_type == "namespacestore" else 180
-        assert_func(
+        assert_store_phase_and_mode(
             store.name,
+            store_kind,
             constants.STATUS_READY,
-            BS_OPTIMAL,
+            constants.BS_OPTIMAL,
             mcg_obj,
             timeout=recovery_timeout,
         )
@@ -171,10 +172,10 @@ class TestStoreStatusTransitions(MCGTest):
             5. Recreate the underlying MCG bucket
             6. Verify the store recovers to Ready/OPTIMAL
         """
-        assert_func = (
-            assert_backingstore_phase_and_mode
+        store_kind = (
+            constants.BACKINGSTORE
             if store_type == "backingstore"
-            else assert_namespacestore_phase_and_mode
+            else constants.NAMESPACESTORE
         )
 
         # 1. Create a store backed by a self-ref MCG bucket
@@ -205,7 +206,13 @@ class TestStoreStatusTransitions(MCGTest):
         )
 
         # 2. Verify the store is in Ready phase and OPTIMAL mode
-        assert_func(store.name, constants.STATUS_READY, BS_OPTIMAL, mcg_obj)
+        assert_store_phase_and_mode(
+            store.name,
+            store_kind,
+            constants.STATUS_READY,
+            constants.BS_OPTIMAL,
+            mcg_obj,
+        )
 
         # 3. Delete the underlying MCG bucket
         logger.info(f"Deleting underlying MCG bucket: {uls_name}")
@@ -215,10 +222,11 @@ class TestStoreStatusTransitions(MCGTest):
             # 4. Verify the store transitions to Rejected/STORAGE_NOT_EXIST
             # namespace_monitor polls every 3 min (NAMESPACE_MONITOR_DELAY)
             disruption_timeout = 300 if store_type == "namespacestore" else 180
-            assert_func(
+            assert_store_phase_and_mode(
                 store.name,
+                store_kind,
                 constants.STATUS_REJECTED,
-                BS_STORAGE_NOT_EXIST,
+                constants.BS_STORAGE_NOT_EXIST,
                 mcg_obj,
                 timeout=disruption_timeout,
             )
@@ -230,10 +238,11 @@ class TestStoreStatusTransitions(MCGTest):
         # 6. Verify the store recovers to Ready/OPTIMAL
         # namespace_monitor polls less frequently than nodes_monitor
         recovery_timeout = 300 if store_type == "namespacestore" else 180
-        assert_func(
+        assert_store_phase_and_mode(
             store.name,
+            store_kind,
             constants.STATUS_READY,
-            BS_OPTIMAL,
+            constants.BS_OPTIMAL,
             mcg_obj,
             timeout=recovery_timeout,
         )

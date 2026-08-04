@@ -3836,12 +3836,10 @@ def assert_store_phase_and_mode(
         timeout=timeout,
     ), f"{store_kind} {store_name} did not reach PHASE {expected_phase}"
 
-    if store_kind == constants.BACKINGSTORE:
-        rpc_name = store_name
-        rpc_collection = "pools"
-    else:
-        rpc_name = store_name
-        rpc_collection = "namespace_resources"
+    rpc_name = store_name
+    rpc_collection = (
+        "pools" if store_kind == constants.BACKINGSTORE else "namespace_resources"
+    )
 
     def _check_mode():
         sysinfo = mcg_obj.read_system()
@@ -3866,44 +3864,3 @@ def assert_store_phase_and_mode(
             f"{expected_mode} within {timeout}s"
         )
         raise
-
-
-def assert_backingstore_phase_and_mode(
-    bs_name, expected_phase, expected_mode, mcg_obj, timeout=180
-):
-    """
-    Assert the K8s PHASE and NooBaa pool mode of a backingstore.
-
-    Convenience wrapper around assert_store_phase_and_mode.
-    See its docstring for details.
-
-    """
-    assert_store_phase_and_mode(
-        bs_name,
-        constants.BACKINGSTORE,
-        expected_phase,
-        expected_mode,
-        mcg_obj,
-        timeout,
-    )
-
-
-def assert_namespacestore_phase_and_mode(
-    nss_name, expected_phase, expected_mode, mcg_obj, timeout=180
-):
-    """
-    Assert the K8s PHASE and NooBaa namespace resource mode
-    of a namespacestore.
-
-    Convenience wrapper around assert_store_phase_and_mode.
-    See its docstring for details.
-
-    """
-    assert_store_phase_and_mode(
-        nss_name,
-        constants.NAMESPACESTORE,
-        expected_phase,
-        expected_mode,
-        mcg_obj,
-        timeout,
-    )
