@@ -407,7 +407,6 @@ class Test2AZFailoverAndRelocateZoneFailure:
                     "workload_placement_name": wl_meta["resource_name"],
                     "discovered_apps": wl_meta["is_discovered_app"],
                     "old_primary": wl_meta["old_primary"],
-                    "timeout": 1800,
                 }
                 if not wl_meta["is_discovered_app"]:
                     failover_params["workload_type"] = (
