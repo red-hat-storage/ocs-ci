@@ -73,6 +73,7 @@ class ODFCLIRetriever:
             image = self._get_odf_cli_image()
             self._extract_cli_binary(image)
             self._set_executable_permissions()
+            self._create_fdf_alias()
             self.add_cli_to_path()
 
             # Tag the CLI binary with its version for post-upgrade verification
@@ -166,6 +167,24 @@ class ODFCLIRetriever:
         os.chmod(self.local_cli_path, current_permissions | S_IEXEC)
         log.info(f"Set executable permissions for {self.local_cli_path}")
 
+    def _create_fdf_alias(self):
+        """
+        Create an 'fdf' symlink pointing to the 'odf' binary for FDF clusters.
+
+        On non-FDF clusters this is a no-op.
+
+        """
+        if not config.DEPLOYMENT.get("fdf_cluster"):
+            return
+
+        fdf_path = os.path.join(os.path.dirname(self.local_cli_path), "fdf")
+        if os.path.exists(fdf_path):
+            log.info(f"FDF alias already exists at {fdf_path}")
+            return
+
+        os.symlink("odf", fdf_path)
+        log.info(f"Created FDF alias: {fdf_path} -> odf")
+
     def _verify_cli_binary(self):
         if not self.check_odf_cli_binary():
             raise AssertionError(
@@ -185,8 +204,8 @@ class ODFCLIRetriever:
 
 
 class ODFCliRunner:
-    def __init__(self) -> None:
-        self.binary_name = "odf"
+    def __init__(self, binary_name: str = "odf") -> None:
+        self.binary_name = binary_name
 
     def run_command(self, command_args: Union[str, list]) -> str:
         # by default Operator namespace is set to 'openshift-storage' in ODF CLI,
@@ -422,8 +441,9 @@ class ODFCLICephfsSnapRunner(ODFCliRunner):
         rados_namespace=None,
         svg=None,
         filesystem=None,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         from ocs_ci.ocs.constants import STORAGE_CLIENT_NAME
 
         self.storage_client = storage_client or config.ENV_DATA.get(
@@ -540,6 +560,9 @@ def odf_cli_setup_helper(odf_cli_class=ODFCliRunner, **kwargs):
         odf_cli_retriever.retrieve_odf_cli_binary()
         if not odf_cli_retriever.check_odf_cli_binary():
             raise RuntimeError("Failed to download ODF CLI binary")
+
+    if config.DEPLOYMENT.get("fdf_cluster") and "binary_name" not in kwargs:
+        kwargs["binary_name"] = "fdf"
 
     # Check and initialize ODFCliRunner
     odf_cli_runner = odf_cli_class(**kwargs)
