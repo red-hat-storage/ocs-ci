@@ -162,6 +162,27 @@ class FDFUpgrade(BaseUpgrade):
                 "using current configuration"
             )
 
+    def get_parsed_versions(self):
+        """
+        Get parsed version objects for current and upgrade versions.
+
+        Overrides the base implementation to normalize FDF version strings
+        (e.g., "4.20.999-1.stable") to X.Y format before parsing, since
+        FDF versions are not PEP 440 compliant.
+
+        Returns:
+            tuple: (parsed_current_version, parsed_upgrade_version)
+
+        """
+        current_parts = self.version_before_upgrade.split(".")
+        current_xy = f"{current_parts[0]}.{current_parts[1]}"
+
+        upgrade_version = self.get_upgrade_version()
+        upgrade_parts = upgrade_version.split(".")
+        upgrade_xy = f"{upgrade_parts[0]}.{upgrade_parts[1]}"
+
+        return parse_version(current_xy), parse_version(upgrade_xy)
+
     def get_csv_name_pre_upgrade(self, resource_name=OCS_OPERATOR_NAME):
         """
         Get pre-upgrade CSV name for FDF.
