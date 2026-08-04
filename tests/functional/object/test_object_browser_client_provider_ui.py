@@ -588,7 +588,10 @@ class TestObjectBrowserClientProviderUI(ManageTest):
                 },
                 ExpiresIn=3600,
             )
-            logger.info("Generated presigned URL: %s", presigned_url)
+            logger.info(
+                "Generated presigned URL for key '%s' (expires in 3600s)",
+                test_object_key,
+            )
 
             logger.test_step("Step 3: Validating presigned URL is accessible")
             response = requests.get(presigned_url, verify=False, timeout=60)
