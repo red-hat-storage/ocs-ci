@@ -71,8 +71,9 @@ class TestRbdImageMetadata:
         )
         log.info(f"Snapshot of PVC {pvc_obj.name} created!")
         snapshot_content = get_snapshot_content_obj(snap_obj=snap_obj)
-        snap_content_name = snapshot_content.get().get("metadata").get("name")
-        snap_handle = snapshot_content.get().get("status").get("snapshotHandle")
+        snapshot_content_data = snapshot_content.get()
+        snap_content_name = snapshot_content_data.get("metadata").get("name")
+        snap_handle = snapshot_content_data.get("status").get("snapshotHandle")
         snap_image_name = f'csi-snap-{snap_handle.split("-", 5)[5]}'
 
         # Validate metadata for the snapshot image
