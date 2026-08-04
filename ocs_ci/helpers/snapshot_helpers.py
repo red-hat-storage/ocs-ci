@@ -78,7 +78,7 @@ def restore_snapshot_to_block_pvc(
         PVC: The created PVC object, in Bound state
     """
     if pvc_name is None:
-        pvc_name = helpers.create_unique_resource_name("cbt-restored", constants.PVC)
+        pvc_name = helpers.create_unique_resource_name("cbt-restored", "pvc")
 
     if original_volume_mode and original_volume_mode != constants.VOLUME_MODE_BLOCK:
         annotate_snapshot_for_block_restore(snap_obj)
