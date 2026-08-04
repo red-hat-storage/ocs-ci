@@ -193,6 +193,36 @@ class TestObjectBrowserClientProviderUI(ManageTest):
                 "s3_creds": s3_creds,
             }
 
+    def _open_object_browser(self, obc):
+        """
+        Login to the cluster UI, accept the S3 certificate, navigate to
+        Object Storage, sign in with S3 credentials and return BucketsTab.
+
+        Must be called inside a RunWithConfigContext block so that
+        login_ui() picks up the correct console_url.
+
+        Args:
+            obc (dict): Return value of _create_obc_on_client.
+
+        Returns:
+            BucketsTab: Page object ready for bucket-level operations.
+
+        """
+        login_ui()
+        accept_s3_endpoint_certificate(obc["s3_creds"]["endpoint"])
+
+        bucket_ui = BucketsTab()
+        bucket_ui.nav_object_storage_page()
+
+        s3_login = S3LoginForm()
+        s3_login.sign_in_with_secret(
+            namespace=obc["namespace"],
+            secret_name=obc["obc_name"],
+        )
+        assert s3_login.is_signed_in(), "S3 login failed for OBC %s" % obc["obc_name"]
+        logger.info("Successfully signed in to object browser")
+        return bucket_ui
+
     @polarion_id("OCS-7990")
     def test_object_browser_list_objects_with_folders(self, project_factory):
         """
@@ -272,37 +302,9 @@ class TestObjectBrowserClientProviderUI(ManageTest):
                 logger.info("Uploaded object: %s", obj_key)
 
         # Step 2-5: Login to object browser on client 1 and verify objects
-        # RunWithConfigContext sets config.ENV_DATA (including console_url),
-        # so login_ui() connects to the correct client cluster UI.
         logger.test_step("Step 2-5: Testing object browser on client 1")
         with config.RunWithConfigContext(client1_index):
-            logger.info(
-                "Logging into client1 console at: %s",
-                config.ENV_DATA.get("console_url"),
-            )
-            login_ui()
-
-            accept_s3_endpoint_certificate(c1["s3_creds"]["endpoint"])
-
-            logger.info("Navigating to Object Storage page")
-            bucket_ui = BucketsTab()
-            bucket_ui.nav_object_storage_page()
-
-            logger.info(
-                "Signing in with S3 secret: %s/%s",
-                c1["namespace"],
-                c1["obc_name"],
-            )
-            s3_login = S3LoginForm()
-            s3_login.sign_in_with_secret(
-                namespace=c1["namespace"],
-                secret_name=c1["obc_name"],
-            )
-
-            assert s3_login.is_signed_in(), "S3 login failed on client1"
-            logger.info("Successfully signed in to object browser on client1")
-
-            logger.info("Navigating to bucket: %s", c1["bucket_name"])
+            bucket_ui = self._open_object_browser(c1)
             bucket_ui.navigate_to_bucket_by_name(c1["bucket_name"])
 
             logger.info("Verifying objects/folders are visible in bucket")
@@ -339,32 +341,8 @@ class TestObjectBrowserClientProviderUI(ManageTest):
             "Step 6-7: Testing object browser on client 2 and verifying isolation"
         )
         with config.RunWithConfigContext(client2_index):
-            logger.info(
-                "Logging into client2 console at: %s",
-                config.ENV_DATA.get("console_url"),
-            )
             close_browser()
-            login_ui()
-
-            accept_s3_endpoint_certificate(c2["s3_creds"]["endpoint"])
-
-            logger.info("Navigating to Object Storage page")
-            bucket_ui2 = BucketsTab()
-            bucket_ui2.nav_object_storage_page()
-
-            logger.info(
-                "Signing in with S3 secret: %s/%s",
-                c2["namespace"],
-                c2["obc_name"],
-            )
-            s3_login2 = S3LoginForm()
-            s3_login2.sign_in_with_secret(
-                namespace=c2["namespace"],
-                secret_name=c2["obc_name"],
-            )
-
-            assert s3_login2.is_signed_in(), "S3 login failed on client2"
-            logger.info("Successfully signed in to object browser on client2")
+            bucket_ui2 = self._open_object_browser(c2)
 
             buckets_list = bucket_ui2.get_buckets_list()
             logger.info("Buckets visible on client2: %s", buckets_list)
@@ -450,20 +428,7 @@ class TestObjectBrowserClientProviderUI(ManageTest):
             with config.RunWithConfigContext(client_index):
                 # Step 2: Upload folder via UI
                 logger.test_step("Step 2: Uploading folder via UI")
-                login_ui()
-
-                accept_s3_endpoint_certificate(obc["s3_creds"]["endpoint"])
-
-                bucket_ui = BucketsTab()
-                bucket_ui.nav_object_storage_page()
-
-                s3_login = S3LoginForm()
-                s3_login.sign_in_with_secret(
-                    namespace=obc["namespace"], secret_name=obc["obc_name"]
-                )
-                assert s3_login.is_signed_in(), "S3 login failed"
-                logger.info("Successfully signed in to object browser")
-
+                bucket_ui = self._open_object_browser(obc)
                 bucket_ui.navigate_to_bucket_by_name(obc["bucket_name"])
 
                 logger.info("Uploading folder: %s", temp_folder)
@@ -480,23 +445,24 @@ class TestObjectBrowserClientProviderUI(ManageTest):
 
                 # Step 3: Download object and verify integrity via S3
                 logger.test_step("Step 3: Downloading object and verifying integrity")
-                download_path = os.path.join(
-                    tempfile.gettempdir(), "downloaded_file1.txt"
-                )
-                obc["s3_client"].download_file(
-                    obc["bucket_name"],
-                    "%s/file1.txt" % folder_name,
-                    download_path,
-                )
-                logger.info("Downloaded file to: %s", download_path)
+                download_path = os.path.join(temp_folder, "downloaded_file1.txt")
+                try:
+                    obc["s3_client"].download_file(
+                        obc["bucket_name"],
+                        "%s/file1.txt" % folder_name,
+                        download_path,
+                    )
+                    logger.info("Downloaded file to: %s", download_path)
 
-                with open(download_path, "rb") as f:
-                    downloaded_data = f.read()
-                assert (
-                    downloaded_data == test_data1
-                ), "Downloaded file content does not match original"
-                logger.info("File integrity verified")
-                os.unlink(download_path)
+                    with open(download_path, "rb") as f:
+                        downloaded_data = f.read()
+                    assert (
+                        downloaded_data == test_data1
+                    ), "Downloaded file content does not match original"
+                    logger.info("File integrity verified")
+                finally:
+                    if os.path.exists(download_path):
+                        os.unlink(download_path)
 
                 # Step 4: Download entire folder via S3
                 logger.test_step("Step 4: Downloading entire folder")
@@ -578,17 +544,21 @@ class TestObjectBrowserClientProviderUI(ManageTest):
         logger.info("Test completed successfully")
 
     @polarion_id("OCS-7995")
-    def test_object_browser_share_object(self, project_factory):
+    def test_s3_presigned_url_access(self, project_factory):
         """
-        Test sharing an object via presigned URL in object browser.
+        Test S3 presigned URL generation and access for bucket objects.
+
+        Validates that a presigned URL generated via the S3 API for an
+        object in a client OBC bucket is accessible and returns the
+        correct content.
 
         Test steps:
-        1. Create OBC with object on client
-        2. Get object presigned URL
-        3. Validate that the URL is accessible
+        1. Create OBC with a test object on client
+        2. Generate a presigned URL for the object via S3 API
+        3. Validate that the URL returns correct content via HTTP GET
 
         Expected result:
-        - Object URL is accessible and returns correct content
+        - Presigned URL returns HTTP 200 with matching object content
         """
         client_indices = config.get_consumer_indexes_list()
         if len(client_indices) < 1:

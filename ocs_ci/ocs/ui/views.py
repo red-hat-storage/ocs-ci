@@ -2902,7 +2902,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "item_link": (
-        "//a[contains(text(), '{}')]",
+        "//tr//a[contains(text(), '{}')]",
         By.XPATH,
     ),
     "txt_files": (
