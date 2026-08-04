@@ -491,12 +491,7 @@ class TestNetworkPolicyDisruption(ManageTest):
         pod_ocp = OCP(kind=constants.POD, namespace=namespace)
         pod_ocp.delete(resource_name=target_osd)
 
-        pod_ocp.wait_for_resource(
-            condition="",
-            resource_name=target_osd,
-            timeout=120,
-            should_exist=False,
-        )
+        pod_ocp.wait_for_delete(resource_name=target_osd, timeout=120)
 
         pod_ocp.wait_for_resource(
             condition=constants.STATUS_RUNNING,

@@ -273,12 +273,11 @@ def check_pod_connectivity(
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pod_obj = get_pod_obj(source_pod_name, namespace=namespace)
-    safe_ip = shlex.quote(str(target_ip))
-    safe_port = shlex.quote(str(port))
     cmd = (
         f"bash -c 'timeout {timeout} "
-        f"bash -c \"echo > /dev/tcp/{safe_ip}/{safe_port}\" "
-        f"&& echo CONNECTED || echo FAILED'"
+        f"bash -c \"echo > /dev/tcp/$1/$2\" "
+        f"&& echo CONNECTED || echo FAILED' "
+        f"_ {shlex.quote(str(target_ip))} {shlex.quote(str(port))}"
     )
     try:
         result = pod_obj.exec_cmd_on_pod(
@@ -321,11 +320,10 @@ def verify_dns_from_pod(pod_name, namespace=None, hostname=None):
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     hostname = hostname or "kubernetes.default.svc.cluster.local"
-    safe_hostname = shlex.quote(hostname)
     pod_obj = get_pod_obj(pod_name, namespace=namespace)
     cmd = (
         f"python3 -c \"import socket; "
-        f"print(socket.gethostbyname({safe_hostname}))\""
+        f"print(socket.gethostbyname('{hostname}'))\""
     )
     try:
         result = pod_obj.exec_cmd_on_pod(
