@@ -5,7 +5,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_pod_obj, get_pods_having_label
+from ocs_ci.ocs.resources.pod import get_pod_obj
 
 
 logger = logging.getLogger(__name__)
@@ -48,9 +48,7 @@ def verify_network_policies_exist(expected_policies, namespace=None):
     for policy_name in expected_policies:
         if not ocp_obj.is_exist(resource_name=policy_name):
             missing.append(policy_name)
-    assert not missing, (
-        f"Missing NetworkPolicies in {namespace}: {missing}"
-    )
+    assert not missing, f"Missing NetworkPolicies in {namespace}: {missing}"
     logger.info(
         f"All {len(expected_policies)} expected NetworkPolicies "
         f"verified in {namespace}"
@@ -94,9 +92,7 @@ def get_csv_network_policy_rbac(csv_name, namespace=None):
     try:
         csv_data = ocp_obj.get(resource_name=csv_name)
     except CommandFailed as ex:
-        raise AssertionError(
-            f"Failed to retrieve CSV {csv_name}: {ex}"
-        ) from ex
+        raise AssertionError(f"Failed to retrieve CSV {csv_name}: {ex}") from ex
     spec = csv_data.get("spec", {})
     install_spec = spec.get("install", {}).get("spec", {})
 
@@ -106,19 +102,12 @@ def get_csv_network_policy_rbac(csv_name, namespace=None):
             for rule in perm.get("rules", []):
                 api_groups = rule.get("apiGroups", [])
                 resources = rule.get("resources", [])
-                if (
-                    _matches_api_group(api_groups)
-                    and _matches_resource(resources)
-                ):
+                if _matches_api_group(api_groups) and _matches_resource(resources):
                     matching_rules.append(
                         {
                             "perm_type": perm_block,
-                            "service_account": perm.get(
-                                "serviceAccountName", ""
-                            ),
-                            "verbs": _expand_verbs(
-                                rule.get("verbs", [])
-                            ),
+                            "service_account": perm.get("serviceAccountName", ""),
+                            "verbs": _expand_verbs(rule.get("verbs", [])),
                         }
                     )
     return matching_rules
@@ -144,8 +133,7 @@ def verify_csv_network_policy_rbac(csv_prefix, namespace=None):
     rules = get_csv_network_policy_rbac(csv_name, namespace)
 
     assert rules, (
-        f"CSV {csv_name} has no RBAC rules for "
-        f"networking.k8s.io/networkpolicies"
+        f"CSV {csv_name} has no RBAC rules for " f"networking.k8s.io/networkpolicies"
     )
 
     all_verbs = set()
@@ -159,13 +147,9 @@ def verify_csv_network_policy_rbac(csv_prefix, namespace=None):
     )
 
     has_update = all_verbs & constants.NETWORK_POLICY_REQUIRED_UPDATE_VERBS
-    assert has_update, (
-        f"CSV {csv_name} missing update/patch verb. Has: {all_verbs}"
-    )
+    assert has_update, f"CSV {csv_name} missing update/patch verb. Has: {all_verbs}"
 
-    logger.info(
-        f"CSV {csv_name} has valid NetworkPolicy RBAC: {all_verbs}"
-    )
+    logger.info(f"CSV {csv_name} has valid NetworkPolicy RBAC: {all_verbs}")
 
 
 def get_csv_name_by_prefix(csv_prefix, namespace=None):
@@ -189,9 +173,7 @@ def get_csv_name_by_prefix(csv_prefix, namespace=None):
         name = csv["metadata"]["name"]
         if name.startswith(csv_prefix):
             return name
-    raise AssertionError(
-        f"No CSV found with prefix '{csv_prefix}' in {namespace}"
-    )
+    raise AssertionError(f"No CSV found with prefix '{csv_prefix}' in {namespace}")
 
 
 def verify_sa_can_manage_network_policies(sa_name, namespace=None):
@@ -241,8 +223,7 @@ def verify_sa_can_manage_network_policies(sa_name, namespace=None):
         failed_verbs.append("update/patch")
 
     assert not failed_verbs, (
-        f"SA {sa_name} cannot {failed_verbs} NetworkPolicies "
-        f"in {namespace}"
+        f"SA {sa_name} cannot {failed_verbs} NetworkPolicies " f"in {namespace}"
     )
     logger.info(
         f"SA {sa_name} has create/delete/update permissions for "
@@ -251,8 +232,12 @@ def verify_sa_can_manage_network_policies(sa_name, namespace=None):
 
 
 def check_pod_connectivity(
-    source_pod_name, target_ip, port, namespace=None,
-    should_succeed=True, timeout=10,
+    source_pod_name,
+    target_ip,
+    port,
+    namespace=None,
+    should_succeed=True,
+    timeout=10,
 ):
     """
     Check TCP connectivity from a pod to a target IP:port.
@@ -275,7 +260,7 @@ def check_pod_connectivity(
     pod_obj = get_pod_obj(source_pod_name, namespace=namespace)
     cmd = (
         f"bash -c 'timeout {timeout} "
-        f"bash -c \"echo > /dev/tcp/$1/$2\" "
+        f'bash -c "echo > /dev/tcp/$1/$2" '
         f"&& echo CONNECTED || echo FAILED' "
         f"_ {shlex.quote(str(target_ip))} {shlex.quote(str(port))}"
     )
@@ -300,9 +285,7 @@ def check_pod_connectivity(
             f"Pod {source_pod_name} connected to {target_ip}:{port} "
             f"but should have been blocked"
         )
-        logger.info(
-            f"Pod {source_pod_name} -> {target_ip}:{port}: blocked (expected)"
-        )
+        logger.info(f"Pod {source_pod_name} -> {target_ip}:{port}: blocked (expected)")
 
 
 def verify_dns_from_pod(pod_name, namespace=None, hostname=None):
@@ -321,25 +304,17 @@ def verify_dns_from_pod(pod_name, namespace=None, hostname=None):
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     hostname = hostname or "kubernetes.default.svc.cluster.local"
     pod_obj = get_pod_obj(pod_name, namespace=namespace)
-    cmd = (
-        f"python3 -c \"import socket; "
-        f"print(socket.gethostbyname('{hostname}'))\""
-    )
+    cmd = f'python3 -c "import socket; ' f"print(socket.gethostbyname('{hostname}'))\""
     try:
-        result = pod_obj.exec_cmd_on_pod(
-            cmd, out_yaml_format=False, timeout=30
-        )
+        result = pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=30)
         assert result and result.strip(), (
             f"DNS resolution returned empty result for {hostname} "
             f"from pod {pod_name}"
         )
-        logger.info(
-            f"DNS from pod {pod_name}: {hostname} -> {result.strip()}"
-        )
+        logger.info(f"DNS from pod {pod_name}: {hostname} -> {result.strip()}")
     except CommandFailed as ex:
         raise AssertionError(
-            f"DNS resolution failed for {hostname} from pod "
-            f"{pod_name}: {ex}"
+            f"DNS resolution failed for {hostname} from pod " f"{pod_name}: {ex}"
         ) from ex
 
 
@@ -416,14 +391,10 @@ def verify_policy_structure(policy_data):
 
     if "Ingress" in policy_types and not spec.get("ingress"):
         logger.info(
-            f"{name}: Ingress type with no ingress rules "
-            f"(deny-all ingress)"
+            f"{name}: Ingress type with no ingress rules " f"(deny-all ingress)"
         )
 
     if "Egress" in policy_types and not spec.get("egress"):
-        logger.info(
-            f"{name}: Egress type with no egress rules "
-            f"(deny-all egress)"
-        )
+        logger.info(f"{name}: Egress type with no egress rules " f"(deny-all egress)")
 
     return {"valid": len(issues) == 0, "issues": issues}

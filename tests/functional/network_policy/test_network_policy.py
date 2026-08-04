@@ -13,12 +13,9 @@ from ocs_ci.helpers.helpers import get_provisioner_label
 from ocs_ci.helpers.network_policy_helpers import (
     check_pod_connectivity,
     get_all_network_policies,
-    get_csv_name_by_prefix,
-    get_route_url,
     get_service_ip,
     verify_csv_network_policy_rbac,
     verify_dns_from_pod,
-    verify_network_policies_exist,
     verify_policy_structure,
     verify_sa_can_manage_network_policies,
 )
@@ -48,12 +45,8 @@ class TestNetworkPolicyCompliance(ManageTest):
         policies = network_policies_present
         policy_names = [p["metadata"]["name"] for p in policies]
 
-        assert len(policies) > 0, (
-            f"No NetworkPolicies found in {namespace}"
-        )
-        logger.info(
-            f"Found {len(policies)} NetworkPolicies: {policy_names}"
-        )
+        assert len(policies) > 0, f"No NetworkPolicies found in {namespace}"
+        logger.info(f"Found {len(policies)} NetworkPolicies: {policy_names}")
 
         for policy in policies:
             labels = policy.get("metadata", {}).get("labels", {})
@@ -63,9 +56,7 @@ class TestNetworkPolicyCompliance(ManageTest):
                 logger.info(f"  {name}: OLM-managed")
             elif owners:
                 owner_kinds = [o.get("kind", "?") for o in owners]
-                logger.info(
-                    f"  {name}: dynamic, owned by {owner_kinds}"
-                )
+                logger.info(f"  {name}: dynamic, owned by {owner_kinds}")
             else:
                 logger.info(f"  {name}: standalone")
 
@@ -85,9 +76,8 @@ class TestNetworkPolicyCompliance(ManageTest):
             except AssertionError as ex:
                 failures.append(str(ex))
 
-        assert not failures, (
-            f"CSV RBAC failures ({len(failures)}):\n"
-            + "\n".join(failures)
+        assert not failures, f"CSV RBAC failures ({len(failures)}):\n" + "\n".join(
+            failures
         )
 
     @tier1
@@ -99,17 +89,14 @@ class TestNetworkPolicyCompliance(ManageTest):
         """
         namespace = config.ENV_DATA["cluster_namespace"]
         failures = []
-        for csv_prefix, sa_name in (
-            constants.ODF_OPERATOR_SA_FOR_NETWORK_POLICY.items()
-        ):
+        for csv_prefix, sa_name in constants.ODF_OPERATOR_SA_FOR_NETWORK_POLICY.items():
             try:
                 verify_sa_can_manage_network_policies(sa_name, namespace)
             except AssertionError as ex:
                 failures.append(f"{csv_prefix} (SA: {sa_name}): {ex}")
 
-        assert not failures, (
-            f"SA permission failures ({len(failures)}):\n"
-            + "\n".join(failures)
+        assert not failures, f"SA permission failures ({len(failures)}):\n" + "\n".join(
+            failures
         )
 
     @tier1
@@ -124,9 +111,7 @@ class TestNetworkPolicyCompliance(ManageTest):
             if not result["valid"]:
                 all_issues.extend(result["issues"])
 
-        assert not all_issues, (
-            "Policy structure issues:\n" + "\n".join(all_issues)
-        )
+        assert not all_issues, "Policy structure issues:\n" + "\n".join(all_issues)
 
 
 @purple_squad
@@ -148,9 +133,7 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
             constants.TOOL_APP_LABEL, namespace=namespace
         )
         if tools_pods:
-            verify_dns_from_pod(
-                tools_pods[0]["metadata"]["name"], namespace=namespace
-            )
+            verify_dns_from_pod(tools_pods[0]["metadata"]["name"], namespace=namespace)
         else:
             logger.warning("No tools pod found, trying operator pod")
             operator_pods = get_pods_having_label(
@@ -183,16 +166,14 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
             for pod in pods:
                 phase = pod.get("status", {}).get("phase", "Unknown")
                 pod_name = pod["metadata"]["name"]
-                assert phase == constants.STATUS_RUNNING, (
-                    f"CSI pod {pod_name} is {phase}, expected Running"
-                )
+                assert (
+                    phase == constants.STATUS_RUNNING
+                ), f"CSI pod {pod_name} is {phase}, expected Running"
 
-        mon_pods = get_pods_having_label(
-            constants.MON_APP_LABEL, namespace=namespace
-        )
-        assert len(mon_pods) >= 3, (
-            f"Expected at least 3 mon pods, found {len(mon_pods)}"
-        )
+        mon_pods = get_pods_having_label(constants.MON_APP_LABEL, namespace=namespace)
+        assert (
+            len(mon_pods) >= 3
+        ), f"Expected at least 3 mon pods, found {len(mon_pods)}"
 
     @tier1
     @pytest.mark.polarion_id("OCS-6906")
@@ -205,26 +186,22 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
         service_monitors = sm_obj.get().get("items", [])
 
         sm_names = [sm["metadata"]["name"] for sm in service_monitors]
-        logger.info(
-            f"Found {len(service_monitors)} ServiceMonitors: {sm_names}"
-        )
+        logger.info(f"Found {len(service_monitors)} ServiceMonitors: {sm_names}")
 
-        assert "rook-ceph-mgr" in sm_names, (
-            f"ServiceMonitor 'rook-ceph-mgr' not found. Present: {sm_names}"
-        )
+        assert (
+            "rook-ceph-mgr" in sm_names
+        ), f"ServiceMonitor 'rook-ceph-mgr' not found. Present: {sm_names}"
 
         if not config.ENV_DATA.get("mcg_only_deployment"):
             if "s3-service-monitor" in sm_names:
                 logger.info("s3-service-monitor present (MCG deployed)")
             else:
-                logger.info(
-                    "s3-service-monitor absent — MCG may not be deployed"
-                )
+                logger.info("s3-service-monitor absent — MCG may not be deployed")
 
         prom_ocp = OCP(kind=constants.POD, namespace="openshift-monitoring")
-        prom_pods = prom_ocp.get(
-            selector="app.kubernetes.io/name=prometheus"
-        ).get("items", [])
+        prom_pods = prom_ocp.get(selector="app.kubernetes.io/name=prometheus").get(
+            "items", []
+        )
         assert prom_pods, "No Prometheus pods found in openshift-monitoring"
 
         for prom_pod in prom_pods:
@@ -260,31 +237,21 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
             try:
                 # verify=False: cluster routes use self-signed certificates
                 resp = requests.get(url, timeout=15, verify=False)
-                logger.info(
-                    f"Route {name}: {url} -> HTTP {resp.status_code}"
-                )
+                logger.info(f"Route {name}: {url} -> HTTP {resp.status_code}")
                 assert resp.status_code < 500, (
-                    f"Route {name} returned server error: "
-                    f"HTTP {resp.status_code}"
+                    f"Route {name} returned server error: " f"HTTP {resp.status_code}"
                 )
                 tested += 1
             except requests.exceptions.ConnectionError:
                 pytest.fail(
-                    f"Route {name} ({url}) is not reachable "
-                    f"(connection error)"
+                    f"Route {name} ({url}) is not reachable " f"(connection error)"
                 )
             except requests.exceptions.Timeout:
-                pytest.fail(
-                    f"Route {name} ({url}) timed out"
-                )
+                pytest.fail(f"Route {name} ({url}) timed out")
             except requests.exceptions.RequestException as ex:
-                pytest.fail(
-                    f"Route {name} ({url}) request failed: {ex}"
-                )
+                pytest.fail(f"Route {name} ({url}) request failed: {ex}")
 
-        assert tested > 0, (
-            f"No routes found to test in {namespace}"
-        )
+        assert tested > 0, f"No routes found to test in {namespace}"
 
     @tier1
     @pytest.mark.polarion_id("OCS-6908")
@@ -331,14 +298,10 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
         pod_name, ns = test_pod_in_foreign_ns
         storage_ns = config.ENV_DATA["cluster_namespace"]
 
-        mon_pods = get_pods_having_label(
-            constants.MON_APP_LABEL, namespace=storage_ns
-        )
+        mon_pods = get_pods_having_label(constants.MON_APP_LABEL, namespace=storage_ns)
         mon_svc_name = None
         if mon_pods:
-            mon_svc_name = mon_pods[0]["metadata"]["labels"].get(
-                "ceph_daemon_id"
-            )
+            mon_svc_name = mon_pods[0]["metadata"]["labels"].get("ceph_daemon_id")
             if mon_svc_name:
                 mon_svc_name = f"rook-ceph-mon-{mon_svc_name}"
 
@@ -351,9 +314,7 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
         for svc_name, port in targets.items():
             svc_ip = get_service_ip(svc_name, namespace=storage_ns)
             if not svc_ip:
-                logger.warning(
-                    f"Service {svc_name} not found, skipping"
-                )
+                logger.warning(f"Service {svc_name} not found, skipping")
                 continue
 
             check_pod_connectivity(
@@ -366,9 +327,7 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
             )
             tested += 1
 
-        assert tested > 0, (
-            "No services were tested — cannot verify blocked traffic"
-        )
+        assert tested > 0, "No services were tested — cannot verify blocked traffic"
 
     @tier2
     @pytest.mark.polarion_id("OCS-6910")
@@ -381,21 +340,19 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
         namespace = config.ENV_DATA["cluster_namespace"]
 
         prom_ocp = OCP(kind=constants.POD, namespace="openshift-monitoring")
-        prom_pods = prom_ocp.get(
-            selector="app.kubernetes.io/name=prometheus"
-        ).get("items", [])
+        prom_pods = prom_ocp.get(selector="app.kubernetes.io/name=prometheus").get(
+            "items", []
+        )
         assert prom_pods, "No Prometheus pods found"
         for prom_pod in prom_pods:
             phase = prom_pod.get("status", {}).get("phase", "Unknown")
-            assert phase == constants.STATUS_RUNNING, (
-                f"Prometheus pod not running: {phase}"
-            )
+            assert (
+                phase == constants.STATUS_RUNNING
+            ), f"Prometheus pod not running: {phase}"
 
         sm_obj = OCP(kind="ServiceMonitor", namespace=namespace)
         service_monitors = sm_obj.get().get("items", [])
-        assert service_monitors, (
-            "No ServiceMonitors found — monitoring may be broken"
-        )
+        assert service_monitors, "No ServiceMonitors found — monitoring may be broken"
 
         ep_obj = OCP(kind="Endpoints", namespace=namespace)
         for sm in service_monitors:
@@ -429,18 +386,14 @@ class TestNetworkPolicyDisruption(ManageTest):
 
     @tier2
     @pytest.mark.polarion_id("OCS-6911")
-    def test_policies_survive_operator_restart(
-        self, network_policies_present
-    ):
+    def test_policies_survive_operator_restart(self, network_policies_present):
         """
         D-1: Restarting rook-ceph-operator does not remove policies.
         """
         namespace = config.ENV_DATA["cluster_namespace"]
 
         policies_before = get_all_network_policies(namespace)
-        names_before = sorted(
-            [p["metadata"]["name"] for p in policies_before]
-        )
+        names_before = sorted([p["metadata"]["name"] for p in policies_before])
 
         deploy_obj = OCP(kind="Deployment", namespace=namespace)
         deploy_obj.exec_oc_cmd(
@@ -449,15 +402,12 @@ class TestNetworkPolicyDisruption(ManageTest):
         )
         logger.info("Waiting for rook-ceph-operator rollout to complete")
         deploy_obj.exec_oc_cmd(
-            "rollout status deployment/rook-ceph-operator "
-            "--timeout=300s",
+            "rollout status deployment/rook-ceph-operator " "--timeout=300s",
             out_yaml_format=False,
         )
 
         policies_after = get_all_network_policies(namespace)
-        names_after = sorted(
-            [p["metadata"]["name"] for p in policies_after]
-        )
+        names_after = sorted([p["metadata"]["name"] for p in policies_after])
 
         assert names_before == names_after, (
             f"NetworkPolicies changed after operator restart.\n"
@@ -466,10 +416,7 @@ class TestNetworkPolicyDisruption(ManageTest):
         )
 
         ceph_health_check(namespace=namespace, tries=20, delay=30)
-        logger.info(
-            "NetworkPolicies intact and Ceph healthy after "
-            "operator restart"
-        )
+        logger.info("NetworkPolicies intact and Ceph healthy after " "operator restart")
 
     @tier2
     @skipif_external_mode
@@ -480,9 +427,7 @@ class TestNetworkPolicyDisruption(ManageTest):
         """
         namespace = config.ENV_DATA["cluster_namespace"]
 
-        osd_pods = get_pods_having_label(
-            constants.OSD_APP_LABEL, namespace=namespace
-        )
+        osd_pods = get_pods_having_label(constants.OSD_APP_LABEL, namespace=namespace)
         assert osd_pods, "No OSD pods found"
 
         target_osd = osd_pods[0]["metadata"]["name"]
@@ -501,6 +446,4 @@ class TestNetworkPolicyDisruption(ManageTest):
         )
 
         ceph_health_check(namespace=namespace, tries=20, delay=30)
-        logger.info(
-            "OSD pod restarted and Ceph healthy under NetworkPolicies"
-        )
+        logger.info("OSD pod restarted and Ceph healthy under NetworkPolicies")

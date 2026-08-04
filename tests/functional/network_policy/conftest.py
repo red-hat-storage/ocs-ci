@@ -52,9 +52,7 @@ def foreign_namespace(request):
             proj_obj.delete_project(proj_obj.namespace)
             proj_obj.wait_for_delete(proj_obj.namespace, timeout=120)
         except Exception as ex:
-            logger.warning(
-                f"Failed to clean up namespace {proj_obj.namespace}: {ex}"
-            )
+            logger.warning(f"Failed to clean up namespace {proj_obj.namespace}: {ex}")
 
     request.addfinalizer(finalizer)
     return proj_obj
