@@ -937,6 +937,43 @@ class Deployment(object):
 
             FusionAccessOperator().deploy()
 
+    def do_deploy_fusion_access_storage_cluster(self):
+        """
+        Create the Fusion Access for SAN storage cluster and first file system
+        claim via the OpenShift Console UI.
+
+        Runs only when ``DEPLOYMENT.fusion_access`` is ``True`` in the active
+        config.  The UI automation is performed by
+        :class:`~ocs_ci.ocs.ui.page_objects.premigration_fusion_access_ui.PreMigrationFusionAccessUI`
+        which drives the full wizard:
+
+        1. Navigate to Storage → Fusion Access for SAN.
+        2. Click "Create storage cluster" and select all worker nodes.
+        3. Wait for the cluster to become ready.
+        4. Create a file system claim with the first available LUN.
+        """
+        if not config.DEPLOYMENT.get("fusion_access_deployment"):
+            return
+
+        logger.info(
+            "fusion_access_deployment=True — starting Fusion Access storage "
+            "cluster creation via UI"
+        )
+        from ocs_ci.ocs.ui.helpers_ui import login_ui, close_browser
+        from ocs_ci.ocs.ui.page_objects.premigration_fusion_access_ui import (
+            PreMigrationFusionAccessUI,
+        )
+
+        login_ui()
+        try:
+            PreMigrationFusionAccessUI().create_fusion_access_storage_cluster()
+        finally:
+            close_browser()
+
+        logger.info(
+            "Fusion Access storage cluster creation via UI completed successfully"
+        )
+
     def do_deploy_hosted_spoke_clusters(self):
         """
         Deploy Hosted cluster(s)
@@ -1074,6 +1111,7 @@ class Deployment(object):
         self.do_deploy_hyperconverged()
         self.do_deploy_metallb()
         self.do_deploy_fusion_access()
+        self.do_deploy_fusion_access_storage_cluster()
         self.do_deploy_hosted_spoke_clusters()
         self.do_deploy_external_spoke_clusters()
 
