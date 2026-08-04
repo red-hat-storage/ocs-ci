@@ -198,6 +198,7 @@ SCRUBBER_INTERVAL = CONFIG_JS_PREFIX + "SCRUBBER_RESTART_DELAY"
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
+CEPHCLIENT = "CephClient"
 CEPHBLOCKPOOL = "CephBlockPool"
 CEPHBLOCKPOOLRADOSNS = "cephblockpoolradosnamespaces"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
@@ -799,7 +800,8 @@ OSD_ENCRYPTED_LABEL = "encrypted"
 OSD_LOCKBOX_AUTH_PREFIX = "client.osd-lockbox."
 OSD_ACTIVATE_INIT_CONTAINER = "activate"
 OSD_LOCKBOX_INIT_SUCCESS_LOG = "got latest cephx lockbox key for OSD successfully"
-OSD_LOCKBOX_GET_OR_CREATE_LOG = "auth get-or-create"
+# Same get-or-create token as OSD cephx init; alias kept for lockbox call sites.
+OSD_LOCKBOX_GET_OR_CREATE_LOG = OSD_CEPHX_GET_OR_CREATE_LOG
 OSD_LOCKBOX_OPERATOR_LOG = "rotating osd-lockbox cephx key of encrypted OSD"
 ROOK_OSD_UUID_ENV = "ROOK_OSD_UUID"
 CEPHX_BOOTSTRAP_AUTH_PREFIX = "client.bootstrap-"
@@ -822,9 +824,8 @@ CEPHX_BOOTSTRAP_DELETION_WARNING_PATTERNS = (
     "bootstrap key deletion failed",
 )
 CEPHX_LOCKBOX_ROTATION_FAILURE_LOG_PATTERNS = (
-    "error",
-    "failed",
-    "unable to",
+    "failed to rotate cephx lockbox",
+    "failed auth rotate osd-lockbox",
     "could not",
     "connection refused",
     "no route to host",
@@ -860,12 +861,12 @@ CEPHX_ROTATION_QUORUM_ERROR_PATTERNS = (
     "mon quorum",
 )
 CEPHX_OSD_ROTATION_DEFERRED_PATTERNS = (
-    "pg",
     "not clean",
     "not healthy",
-    "defer",
     "skipping osd",
     "waiting for pgs",
+    "deferring osd rotation",
+    "osd rotation deferred",
 )
 CEPHX_OSD_AUTH_ROTATION_LOG_PATTERN = r'rotating ceph auth key.*"osd\.'
 CEPHX_RECONCILE_FAILURE_PATTERNS = (

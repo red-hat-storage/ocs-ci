@@ -32,8 +32,8 @@ log = logging.getLogger(__name__)
 CONSECUTIVE_ROTATION_COUNT = 3
 MIN_OSD_COUNT = 2
 IDEMPOTENCY_SETTLE_SECONDS = 120
-RBD_IO_FILE = "/mnt/rbd/testfile"
-CEPHFS_IO_FILE = "/mnt/cephfs/testfile"
+RBD_IO_FILE = "/mnt/testfile"
+CEPHFS_IO_FILE = "/mnt/testfile"
 DD_BS = "4k"
 DD_COUNT = 10000
 WORKLOAD_PVC_SIZE = 10
@@ -75,6 +75,7 @@ class TestCephXKeyRotation:
         )
 
         auth_entities = rotator.discover_rook_daemon_auth_entities()
+        assert auth_entities, "No rook daemon auth entities discovered"
         for daemon, entities in auth_entities.items():
             if daemon == "mon" and not entities:
                 log.info(
@@ -138,9 +139,10 @@ class TestCephXKeyRotation:
                         "MON auth is not verifiable on this cluster"
                     )
                     continue
-                assert (
-                    annotation is not None
-                ), f"Pod {pod_name} ({daemon}) missing cephx-key-identifier annotation"
+                assert annotation and annotation.strip() != "", (
+                    f"Pod {pod_name} ({daemon}) missing or empty "
+                    "cephx-key-identifier annotation"
+                )
             log.info(
                 f"Post-rotation {daemon} pods: "
                 f"{', '.join(f'{name} (cephx-key-identifier={ann})' for name, ann in pods.items())}"
@@ -243,6 +245,7 @@ class TestCephXKeyRotation:
                 )
                 prior_keys.add(key)
 
+            rotator.wait_for_cluster_fully_recovered(timeout=1500)
             ceph_health_check(namespace=namespace)
             rotator.wait_for_cluster_ready()
             log.info(
@@ -434,8 +437,8 @@ class TestCephXKeyRotationIdempotency:
             settle_timeout=IDEMPOTENCY_SETTLE_SECONDS,
         )
 
-        ceph_health_check(namespace=namespace)
         rotator.wait_for_pgs_active_clean()
+        ceph_health_check(namespace=namespace)
         log.info(
             "Daemon CephX key rotation idempotency after operator re-reconcile "
             f"verified (restarted operator pod {previous_operator_pod})"

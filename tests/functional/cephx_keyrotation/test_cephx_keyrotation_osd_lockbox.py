@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     tier1,
 )
+from ocs_ci.helpers.helpers import get_last_log_time_date
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -83,10 +84,11 @@ class TestCephXKeyRotationOSDLockbox:
 
         ceph_health_check(namespace=namespace)
 
+        operator_log_marker = get_last_log_time_date()
         target_generation = rotator.rotate_daemon_keys()
         log.info(f"Triggered daemon CephX rotation to generation {target_generation}")
 
-        rotator.wait_for_osd_rotation(target_generation)
+        rotator.wait_for_osd_rotation(target_generation, timeout=1500)
         rotator.wait_for_pod_restarts(pre_pod_states, constants.OSD_APP_LABEL)
 
         assert (
@@ -100,7 +102,9 @@ class TestCephXKeyRotationOSDLockbox:
 
         encrypted_osd_pods = rotator.get_encrypted_osd_pods()
         rotator.verify_osd_activate_lockbox_logs(encrypted_osd_pods)
-        rotator.verify_operator_lockbox_rotation_logs(len(encrypted_deployments))
+        rotator.verify_operator_lockbox_rotation_logs(
+            len(encrypted_deployments), since_time=operator_log_marker
+        )
         rotator.verify_encrypted_osd_pods_running(encrypted_osd_pods)
 
         # OSDs track rotation via Deployment cephx-status, not cephx-key-identifier.
@@ -113,5 +117,7 @@ class TestCephXKeyRotationOSDLockbox:
         ceph_health_check(namespace=namespace)
         rotator.wait_for_cluster_ready()
 
-        assert rotator.get_status_key_generation("osd") > pre_osd_generation
+        assert (
+            rotator.get_status_key_generation("osd") > pre_osd_generation
+        ), "OSD keyGeneration should increase after lockbox CephX key rotation"
         log.info("Encrypted OSD lockbox CephX key rotation completed successfully")

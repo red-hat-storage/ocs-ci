@@ -96,10 +96,6 @@ class ResiliencyWorkloadOps:
         """Start background cluster operations during workload execution."""
         workload_config = ResiliencyWorkloadConfig()
 
-        if not workload_config.is_background_cluster_operations_enabled():
-            log.info("Background cluster operations disabled in config")
-            return
-
         try:
             from ocs_ci.krkn_chaos.background_cluster_operations import (
                 BackgroundClusterOperations,

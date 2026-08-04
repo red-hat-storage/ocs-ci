@@ -114,14 +114,16 @@ class TestCephXAllowedCiphers:
     def _teardown(self, request):
         """Restore StorageCluster security after custom cipher test."""
         request.node._cephx_reconcile_strategy_restore = None
+        rotator = CephXKeyRotation()
+        # Capture full pre-test security (including sc_ciphers / other fields).
+        pre_security = rotator.get_storagecluster_managed_cephcluster().get("security")
 
         def fin():
-            rotator = CephXKeyRotation()
             log.info(
-                "Teardown: removing StorageCluster managedResources.cephCluster.security"
+                "Teardown: restoring StorageCluster managedResources.cephCluster.security"
             )
             try:
-                rotator.remove_storagecluster_cephcluster_security()
+                rotator.restore_storagecluster_cephcluster_security(pre_security)
                 restore_strategy = getattr(
                     request.node, "_cephx_reconcile_strategy_restore", None
                 )

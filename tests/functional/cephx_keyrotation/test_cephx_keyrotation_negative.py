@@ -28,7 +28,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     tier2,
 )
-from ocs_ci.helpers.cephx_keyrotation_helper import CephXKeyRotation
 from ocs_ci.helpers.helpers import get_last_log_time_date
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_mon_pods
@@ -55,65 +54,6 @@ CSI_POST_ROTATION_PVC_SIZE = 5
 @green_squad
 @ignore_leftovers
 class TestCephXKeyRotationNegative:
-    @pytest.fixture(autouse=True)
-    def _restore_cluster_state(self, request):
-        """Restore mon quorum, OSD mark-in, and deleted OSD auth after tests."""
-        self._scaled_mon_deployments = []
-        self._osd_marked_out = None
-        self._deleted_osd_auth_entity = None
-
-        def finalizer():
-            rotator = CephXKeyRotation()
-            namespace = config.ENV_DATA["cluster_namespace"]
-            restored = False
-            # Full recovery wait for mon/auth restore only. OSD mark-in already
-            # waits inside restore_osd_and_wait_for_recovery.
-            need_full_recovery = False
-            if self._scaled_mon_deployments:
-                log.info(
-                    "Teardown: restoring mon deployments "
-                    f"{self._scaled_mon_deployments}"
-                )
-                rotator.restore_mon_deployments(self._scaled_mon_deployments)
-                self._scaled_mon_deployments = []
-                restored = True
-                need_full_recovery = True
-            if self._osd_marked_out is not None:
-                log.info(
-                    f"Teardown: marking osd.{self._osd_marked_out} back in and "
-                    "waiting for full cluster recovery"
-                )
-                rotator.restore_osd_and_wait_for_recovery(
-                    self._osd_marked_out, timeout=1500
-                )
-                self._osd_marked_out = None
-                restored = True
-            if self._deleted_osd_auth_entity:
-                entity = self._deleted_osd_auth_entity
-                log.info(
-                    f"Teardown: ensuring deleted OSD auth entity {entity} is restored"
-                )
-                try:
-                    if rotator.ensure_osd_auth_entity_restored(entity):
-                        rotator.trigger_cephcluster_reconcile()
-                        need_full_recovery = True
-                    restored = True
-                except Exception as exc:
-                    log.warning(
-                        f"Teardown: failed to restore OSD auth entity {entity}: {exc}"
-                    )
-                self._deleted_osd_auth_entity = None
-            if need_full_recovery:
-                rotator.wait_for_cluster_fully_recovered(timeout=1500)
-            if restored:
-                ceph_health_check(namespace=namespace)
-            try:
-                rotator.ensure_daemon_key_generations_aligned()
-            except Exception as exc:
-                log.warning("Teardown: failed to align daemon keyGeneration: %s", exc)
-
-        request.addfinalizer(finalizer)
-
     @tier2
     def test_cephx_operator_crash_during_mon_rotation(self, cephx_keyrotation_setup):
         """
@@ -297,11 +237,19 @@ class TestCephXKeyRotationNegative:
         pre_cephx_status = rotator.capture_osd_deployment_cephx_status()
 
         # Trigger async so inject can race a still-pending OSD before Ready.
+        # Record a restore candidate before inject's failure-prone polling/delete.
+        self._deleted_osd_auth_entity = sorted(osd_entities)[-1]
         target_generation = rotator.rotate_daemon_keys(wait_for_rotation=False)
-        failed_entity, operator_log_marker = rotator.inject_osd_auth_rotation_failure(
-            pre_osd_keys, timeout=900
-        )
-        self._deleted_osd_auth_entity = failed_entity
+        try:
+            failed_entity, operator_log_marker = (
+                rotator.inject_osd_auth_rotation_failure(pre_osd_keys, timeout=900)
+            )
+            self._deleted_osd_auth_entity = failed_entity
+        except Exception:
+            injected = getattr(rotator, "last_deleted_osd_auth_entity", None)
+            if injected:
+                self._deleted_osd_auth_entity = injected
+            raise
 
         rotator.wait_for_cephcluster_reconcile_failure(
             timeout=600,
@@ -416,11 +364,17 @@ class TestCephXKeyRotationNegative:
             "StorageCluster daemon keyGeneration changed after rejected "
             f"decrease: before={pre_sc_generation}, after={post_sc_generation}"
         )
-        assert post_cc_phase == pre_cc_phase == constants.STATUS_READY, (
+        assert (
+            pre_cc_phase == constants.STATUS_READY
+        ), f"CephCluster precondition phase was not Ready: {pre_cc_phase}"
+        assert post_cc_phase == pre_cc_phase, (
             "CephCluster phase changed after rejected keyGeneration decrease: "
             f"before={pre_cc_phase}, after={post_cc_phase}"
         )
-        assert post_sc_phase == pre_sc_phase == constants.STATUS_READY, (
+        assert (
+            pre_sc_phase == constants.STATUS_READY
+        ), f"StorageCluster precondition phase was not Ready: {pre_sc_phase}"
+        assert post_sc_phase == pre_sc_phase, (
             "StorageCluster phase changed after rejected keyGeneration decrease: "
             f"before={pre_sc_phase}, after={post_sc_phase}"
         )
@@ -467,7 +421,9 @@ class TestCephXKeyRotationNegative:
 @ignore_leftovers
 class TestCephXKeyRotationNegativeOSD:
     @tier2
-    def test_cephx_brownfield_osd_empty_cephx_status(self, cephx_keyrotation_setup):
+    def test_cephx_brownfield_osd_empty_cephx_status(
+        self, cephx_keyrotation_setup, request
+    ):
         """
         TC-32: Brownfield OSD deployments start with empty cephx-status.
 
@@ -489,6 +445,23 @@ class TestCephXKeyRotationNegativeOSD:
             osd_entities, label="before brownfield"
         )
         pre_cephx_status = rotator.capture_osd_deployment_cephx_status()
+
+        def restore_cephx_status():
+            log.info(
+                "Teardown: restoring OSD deployment cephx-status annotations "
+                "to pre-test state"
+            )
+            try:
+                rotator.restore_osd_deployment_cephx_status_annotations(
+                    pre_cephx_status
+                )
+            except Exception as exc:
+                log.warning(
+                    "Teardown: failed to restore OSD cephx-status annotations: %s",
+                    exc,
+                )
+
+        request.addfinalizer(restore_cephx_status)
 
         rotator.clear_osd_deployment_cephx_status_annotations()
         rotator.assert_osd_deployments_have_empty_cephx_status()
@@ -594,26 +567,6 @@ class TestCephXKeyRotationNegativeOSD:
 @green_squad
 @ignore_leftovers
 class TestCephXKeyRotationNegativeEncryptedCSI:
-    @pytest.fixture(autouse=True)
-    def _restore_cluster_state(self, request):
-        """Restore mon quorum after disruptive encrypted OSD negative tests."""
-        self._scaled_mon_deployments = []
-
-        def finalizer():
-            rotator = CephXKeyRotation()
-            if self._scaled_mon_deployments:
-                log.info(
-                    "Teardown: restoring mon deployments "
-                    f"{self._scaled_mon_deployments}"
-                )
-                rotator.restore_mon_deployments(self._scaled_mon_deployments)
-            try:
-                rotator.ensure_daemon_key_generations_aligned()
-            except Exception as exc:
-                log.warning("Teardown: failed to align daemon keyGeneration: %s", exc)
-
-        request.addfinalizer(finalizer)
-
     @tier2
     @encryption_at_rest_required
     def test_cephx_lockbox_rotation_failure_preserves_key(

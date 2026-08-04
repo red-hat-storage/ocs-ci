@@ -182,21 +182,22 @@ class KrknWorkloadConfig:
         Returns:
             bool: True if CephX key rotation is enabled in config
         """
-        bg_ops_config = self.get_background_cluster_operations_config()
-        return bg_ops_config.get("enable_cephx_keyrotation", False)
+        from ocs_ci.helpers.cephx_bg_ops_config import is_cephx_keyrotation_enabled
+
+        return is_cephx_keyrotation_enabled(
+            self.get_background_cluster_operations_config()
+        )
 
     def get_cephx_keys(self) -> List[str]:
         """
         Get CephX key components to rotate in background operations.
 
         Returns:
-            list: Component names (daemon, csi, rbdMirrorPeer)
+            list: Component names (rook_daemon, csi, rbdMirrorPeer)
         """
-        bg_ops_config = self.get_background_cluster_operations_config()
-        cephx_keys = bg_ops_config.get("cephx_keys", ["rook_daemon"])
-        if isinstance(cephx_keys, dict):
-            return list(cephx_keys.get("components", ["rook_daemon"]))
-        return list(cephx_keys or ["rook_daemon"])
+        from ocs_ci.helpers.cephx_bg_ops_config import get_cephx_keys
+
+        return get_cephx_keys(self.get_background_cluster_operations_config())
 
     def get_cephx_keyrotation_interval(self) -> int:
         """
@@ -205,10 +206,10 @@ class KrknWorkloadConfig:
         Returns:
             int: Interval in seconds (default: 180)
         """
-        return int(
-            self.get_background_cluster_operations_config().get(
-                "cephx_keyrotation_interval", 180
-            )
+        from ocs_ci.helpers.cephx_bg_ops_config import get_cephx_keyrotation_interval
+
+        return get_cephx_keyrotation_interval(
+            self.get_background_cluster_operations_config()
         )
 
     def is_parallel_verification_enabled(self) -> bool:

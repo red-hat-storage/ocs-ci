@@ -156,11 +156,15 @@ ENV_DATA:
 
       # CephX key rotation during chaos (requires ODF 4.19+, non-external mode)
       enable_cephx_keyrotation: true
-      cephx_keyrotation_interval: 180  # seconds between CephX rotation iterations
+      # Minimum delay between rotation iterations; a single rotation may take longer.
+      cephx_keyrotation_interval: 180
       cephx_keys:
-        - rook_daemon  # mon, mgr, osd, mds
-        - csi
-        - rbdMirrorPeer
+        components:
+          - rook_daemon  # mon, mgr, osd, mds
+          - csi
+          - rbdMirrorPeer
+        rotation_timeout: 1200
+        keep_prior_key_count_max: 1
 
       # Enabled operation types (comment out to disable specific operations)
       enabled_operations:

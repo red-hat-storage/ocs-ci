@@ -8,6 +8,7 @@ Covers:
   D. Negative / edge cases (TC16–TC18; TC17 invalid keyGeneration types)
 """
 
+import json
 import logging
 import time
 
@@ -164,7 +165,16 @@ def _get_ocs_operator_env(namespace):
 
 
 def _wait_for_ocs_operator_running(namespace):
-    """Wait until at least one ocs-operator pod is Running."""
+    """Wait for ocs-operator deployment rollout, then a Running pod."""
+    deploy = OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=namespace,
+        resource_name=OCS_OPERATOR_DEPLOYMENT,
+    )
+    deploy.exec_oc_cmd(
+        f"rollout status deployment/{OCS_OPERATOR_DEPLOYMENT} --timeout=300s",
+        out_yaml_format=False,
+    )
     for pods in TimeoutSampler(
         300,
         5,
@@ -250,7 +260,7 @@ def _restore_ocs_operator_env_var(namespace, name, previous_value, existed):
 
 def _list_cephclients(namespace):
     """Return list of CephClient resource dicts."""
-    return OCP(kind="CephClient", namespace=namespace).get().get("items") or []
+    return OCP(kind=constants.CEPHCLIENT, namespace=namespace).get().get("items") or []
 
 
 def _cephfilesystem_exists(namespace):
@@ -694,6 +704,95 @@ class TestCephXCephClusterReconciliation:
         ), f"TC11: daemon.keyGeneration should be >= env default, got {daemon}"
         log.info("TC11: brownfield daemon key rotation config verified: %s", daemon)
 
+    @tier2
+    def test_storagecluster_keygeneration_zero_falls_back_to_env(
+        self, cephx_bootstrap_setup, request
+    ):
+        """
+        TC13: Unset/0 StorageCluster keyGeneration falls back to DESIRED_CEPHX_KEY_GEN.
+
+        Runs before TC12 so a persisted StorageCluster keyGeneration override does
+        not force a skip. If a prior suite left SC keyGeneration set, remove it for
+        this check and realign on teardown.
+        """
+        rotator = cephx_bootstrap_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+        env_list = _get_ocs_operator_env(namespace)
+        env_map = {item.get("name"): item.get("value") for item in env_list}
+        desired_env = env_map.get(constants.DESIRED_CEPHX_KEY_GEN_ENV)
+        assert (
+            desired_env is not None
+        ), f"TC13: {constants.DESIRED_CEPHX_KEY_GEN_ENV} must be set on ocs-operator"
+        assert int(desired_env) == constants.DEFAULT_DESIRED_CEPHX_KEY_GEN
+
+        sc_daemon = rotator.get_storagecluster_component_spec(rotator.COMPONENT_DAEMON)
+        if "keyGeneration" in sc_daemon:
+            path = (
+                "/spec/managedResources/cephCluster/security/cephx/daemon/keyGeneration"
+            )
+            log.info(
+                "TC13: removing StorageCluster daemon.keyGeneration=%s so "
+                "fallback-to-env can be exercised",
+                sc_daemon.get("keyGeneration"),
+            )
+            rotator._get_storagecluster_ocp().patch(
+                params=json.dumps([{"op": "remove", "path": path}]),
+                format_type="json",
+            )
+
+            def restore_sc_keygen():
+                try:
+                    rotator.ensure_daemon_key_generations_aligned()
+                except Exception as exc:
+                    log.warning(
+                        "TC13 teardown: failed to align daemon keyGeneration: %s",
+                        exc,
+                    )
+
+            request.addfinalizer(restore_sc_keygen)
+
+        desired = int(desired_env)
+
+        def _fallback_applied():
+            daemon = rotator.get_spec_cephx().get("daemon") or {}
+            return int(daemon.get("keyGeneration", 0) or 0) == desired
+
+        # Wait for reconcile after SC override removal before reading CC state.
+        for ready in TimeoutSampler(300, 10, _fallback_applied):
+            if ready:
+                break
+        else:
+            daemon = rotator.get_spec_cephx().get("daemon") or {}
+            cc_gen = int(daemon.get("keyGeneration", 0) or 0)
+            annotations = (
+                rotator._get_cluster_dict().get("metadata", {}).get("annotations") or {}
+            )
+            if constants.CEPHX_CREATED_WITH_FEATURES_ANNOTATION in annotations:
+                pytest.skip(
+                    "Greenfield clusters do not apply DESIRED_CEPHX_KEY_GEN to "
+                    "daemon by default (TC13 is brownfield-oriented)"
+                )
+            pytest.skip(
+                f"CephCluster daemon.keyGeneration={cc_gen} already advanced past "
+                f"env default {desired_env}; TC13 fallback check requires a "
+                "brownfield cluster that has not been rotated above the env default"
+            )
+
+        daemon = rotator.get_spec_cephx().get("daemon") or {}
+        annotations = (
+            rotator._get_cluster_dict().get("metadata", {}).get("annotations") or {}
+        )
+        if constants.CEPHX_CREATED_WITH_FEATURES_ANNOTATION in annotations:
+            pytest.skip(
+                "Greenfield clusters do not apply DESIRED_CEPHX_KEY_GEN to daemon "
+                "by default (TC13 is brownfield-oriented)"
+            )
+        cc_gen = int(daemon.get("keyGeneration", 0) or 0)
+        assert cc_gen == desired, (
+            f"TC13: expected CephCluster daemon.keyGeneration={desired_env}, "
+            f"got {daemon}"
+        )
+
     @tier1
     def test_storagecluster_keygeneration_overrides_env(
         self, cephx_keyrotation_setup, request
@@ -764,50 +863,6 @@ class TestCephXCephClusterReconciliation:
         )
         # Allow rotation to complete so cluster stays healthy for later tests
         rotator.wait_for_rook_daemon_rotation(target_generation, timeout=1200)
-
-    @tier2
-    def test_storagecluster_keygeneration_zero_falls_back_to_env(
-        self, cephx_bootstrap_setup
-    ):
-        """
-        TC13: Unset/0 StorageCluster keyGeneration falls back to DESIRED_CEPHX_KEY_GEN.
-
-        On clusters that already set an explicit StorageCluster keyGeneration
-        (common after rotation tests), verify the ocs-operator env default is
-        present and document the fallback contract.
-        """
-        rotator = cephx_bootstrap_setup
-        namespace = config.ENV_DATA["cluster_namespace"]
-        env_list = _get_ocs_operator_env(namespace)
-        env_map = {item.get("name"): item.get("value") for item in env_list}
-        desired_env = env_map.get(constants.DESIRED_CEPHX_KEY_GEN_ENV)
-        assert (
-            desired_env is not None
-        ), f"TC13: {constants.DESIRED_CEPHX_KEY_GEN_ENV} must be set on ocs-operator"
-        assert int(desired_env) == constants.DEFAULT_DESIRED_CEPHX_KEY_GEN
-
-        sc_daemon = rotator.get_storagecluster_component_spec(rotator.COMPONENT_DAEMON)
-        sc_gen = int(sc_daemon.get("keyGeneration", 0) or 0)
-        if sc_gen > 0:
-            pytest.skip(
-                f"StorageCluster already sets daemon.keyGeneration={sc_gen}; "
-                "TC13 fallback-to-env requires unset/0 StorageCluster keyGeneration"
-            )
-
-        daemon = rotator.get_spec_cephx().get("daemon") or {}
-        # Brownfield without SC override should get env default on CephCluster
-        annotations = (
-            rotator._get_cluster_dict().get("metadata", {}).get("annotations") or {}
-        )
-        if constants.CEPHX_CREATED_WITH_FEATURES_ANNOTATION in annotations:
-            pytest.skip(
-                "Greenfield clusters do not apply DESIRED_CEPHX_KEY_GEN to daemon "
-                "by default (TC13 is brownfield-oriented)"
-            )
-        assert int(daemon.get("keyGeneration", 0) or 0) == int(desired_env), (
-            f"TC13: expected CephCluster daemon.keyGeneration={desired_env}, "
-            f"got {daemon}"
-        )
 
 
 @skipif_external_mode
@@ -1024,12 +1079,22 @@ class TestCephXDesiredKeyGenNegative:
             rotator.get_spec_key_generation(rotator.COMPONENT_DAEMON)
             == pre_sc_generation
         ), "StorageCluster daemon keyGeneration changed after rejected type patch"
-        assert (
-            rotator.get_cephcluster_phase() == pre_cc_phase == constants.STATUS_READY
-        ), "CephCluster phase changed after rejected keyGeneration type patch"
-        assert (
-            rotator.get_storagecluster_phase() == pre_sc_phase == constants.STATUS_READY
-        ), "StorageCluster phase changed after rejected keyGeneration type patch"
+        assert pre_cc_phase == constants.STATUS_READY, (
+            "CephCluster must be Ready before invalid keyGeneration type patch; "
+            f"got {pre_cc_phase}"
+        )
+        assert pre_sc_phase == constants.STATUS_READY, (
+            "StorageCluster must be Ready before invalid keyGeneration type patch; "
+            f"got {pre_sc_phase}"
+        )
+        assert rotator.get_cephcluster_phase() == pre_cc_phase, (
+            "CephCluster phase changed unexpectedly after rejected keyGeneration "
+            f"type patch (was {pre_cc_phase})"
+        )
+        assert rotator.get_storagecluster_phase() == pre_sc_phase, (
+            "StorageCluster phase changed unexpectedly after rejected keyGeneration "
+            f"type patch (was {pre_sc_phase})"
+        )
         rotator.assert_cephx_status_generations_unchanged(
             pre_generations,
             context="after rejected non-integer daemon keyGeneration patch",

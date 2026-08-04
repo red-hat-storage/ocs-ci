@@ -371,7 +371,7 @@ class CephXKeyRotation:
                 raise UnexpectedBehaviour(
                     "Expected StorageCluster admission error containing "
                     f"'{constants.CEPHX_KEY_GENERATION_DECREASE_ERROR}', got: {err}"
-                )
+                ) from exc
             log.info(
                 "StorageCluster correctly rejected daemon keyGeneration decrease "
                 f"to {lower_generation}"
@@ -463,14 +463,14 @@ class CephXKeyRotation:
                 raise UnexpectedBehaviour(
                     "Expected StorageCluster validation error containing "
                     f"'{expected_error}', got: {err}"
-                )
+                ) from exc
             if not expect_remove_error:
                 type_token = f'"{expected_json_type}"'
                 if type_token not in err and expected_json_type not in err:
                     raise UnexpectedBehaviour(
                         "Expected type validation error to mention JSON type "
                         f"{type_token}, got: {err}"
-                    )
+                    ) from exc
             log.info(
                 "StorageCluster correctly rejected invalid daemon "
                 f"keyGeneration={value_repr}"
@@ -1032,6 +1032,45 @@ class CephXKeyRotation:
         )
         self._storagecluster_obj = None
 
+    def restore_storagecluster_cephcluster_security(self, security):
+        """
+        Restore ``managedResources.cephCluster.security`` on StorageCluster.
+
+        Args:
+            security (dict | None): Pre-test security block. When None, removes
+                the security path if present (pre-test absent state).
+        """
+        if security is None:
+            self.remove_storagecluster_cephcluster_security()
+            return
+
+        cc_spec = self.get_storagecluster_managed_cephcluster()
+        sc_obj = OCP(
+            kind=constants.STORAGECLUSTER,
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            namespace=self.namespace,
+        )
+        path = "/spec/managedResources/cephCluster/security"
+        if not cc_spec:
+            patch_ops = [
+                {
+                    "op": "add",
+                    "path": "/spec/managedResources/cephCluster",
+                    "value": {"security": security},
+                }
+            ]
+        elif "security" in cc_spec:
+            patch_ops = [{"op": "replace", "path": path, "value": security}]
+        else:
+            patch_ops = [{"op": "add", "path": path, "value": security}]
+
+        log.info(
+            "Restoring StorageCluster managedResources.cephCluster.security "
+            f"to pre-test state: {security}"
+        )
+        sc_obj.patch(params=json.dumps(patch_ops), format_type="json")
+        self._storagecluster_obj = None
+
     def get_metrics_exporter_pods(self):
         """Return Running ocs-metrics-exporter pod resource dicts."""
         return get_pods_having_label(
@@ -1245,6 +1284,9 @@ class CephXKeyRotation:
         if component == self.COMPONENT_DAEMON:
             for entity in self.DAEMON_STATUS_ENTITIES:
                 current = max(current, self.get_status_key_generation(entity))
+            # MDS (and other CR-backed daemon) generation lives on CephFilesystem,
+            # not CephCluster.status.cephx; fold it in to avoid no-op rotations.
+            current = max(current, self.get_filesystem_daemon_key_generation())
             current = max(current, self.get_desired_cephx_key_gen())
         elif component == self.COMPONENT_CSI:
             current = max(current, self.get_status_key_generation("csi"))
@@ -1827,9 +1869,9 @@ class CephXKeyRotation:
 
     @staticmethod
     def log_auth_key_comparison(old_keys, new_keys):
-        """Log per-entity CephX key comparison between two snapshots."""
+        """Log per-entity CephX key comparison without exposing key values."""
         log.info("CephX auth key comparison (before vs after rotation):")
-        for entity in sorted(old_keys):
+        for entity in sorted(set(old_keys) | set(new_keys)):
             old_key = old_keys.get(entity, "")
             new_key = new_keys.get(entity, "")
             if not old_key and not new_key:
@@ -1838,11 +1880,7 @@ class CephXKeyRotation:
                 status = "UNCHANGED"
             else:
                 status = "CHANGED"
-            log.info(
-                f"  {entity} [{status}]: "
-                f"before={old_key if old_key else '<empty>'} "
-                f"after={new_key if new_key else '<empty>'}"
-            )
+            log.info(f"  {entity}: {status}")
 
     def capture_auth_keys(self, entities, toolbox_pod=None, label=None):
         """
@@ -2013,8 +2051,15 @@ class CephXKeyRotation:
 
     def discover_cephclient_auth_entities(self, toolbox_pod=None):
         """Return auth entities associated with CephClient CRs when present."""
-        cc_obj = OCP(kind="CephClient", namespace=self.namespace)
-        resources = cc_obj.get()
+        cc_obj = OCP(kind=constants.CEPHCLIENT, namespace=self.namespace)
+        try:
+            resources = cc_obj.get()
+        except CommandFailed as exc:
+            log.info(
+                "CephClient kind unavailable; skipping CephClient auth discovery "
+                f"({exc})"
+            )
+            return []
         items = resources.get("items", [])
         if not items and resources.get("metadata"):
             items = [resources]
@@ -2625,11 +2670,58 @@ class CephXKeyRotation:
                 format_type="json",
             )
             cleared.append(deployment.name)
-        log.info(
-            "Cleared cephx-status annotation from OSD deployments: "
-            f"{', '.join(cleared) or 'none'}"
-        )
+        if cleared:
+            log.info(
+                "Cleared cephx-status annotation from OSD deployments: "
+                f"{', '.join(cleared)}"
+            )
         return cleared
+
+    def restore_osd_deployment_cephx_status_annotations(self, statuses):
+        """
+        Restore OSD deployment ``cephx-status`` annotations from a snapshot.
+
+        Args:
+            statuses (dict): deployment name to parsed CephxStatus JSON (may be
+                empty). Empty values remove the annotation.
+        """
+        annotation_key = constants.CEPHX_STATUS_ANNOTATION
+        restored = []
+        for deployment in get_osd_deployments(namespace=self.namespace):
+            if deployment.name not in statuses:
+                continue
+            status = statuses[deployment.name] or {}
+            deployment_data = deployment.get()
+            annotations = (
+                deployment_data.get("spec", {})
+                .get("template", {})
+                .get("metadata", {})
+                .get("annotations", {})
+                or {}
+            )
+            path = f"/spec/template/metadata/annotations/{annotation_key}"
+            if not status:
+                if annotation_key not in annotations:
+                    continue
+                patch_ops = [{"op": "remove", "path": path}]
+            elif annotation_key in annotations:
+                patch_ops = [
+                    {"op": "replace", "path": path, "value": json.dumps(status)}
+                ]
+            else:
+                patch_ops = [{"op": "add", "path": path, "value": json.dumps(status)}]
+            deployment.ocp.patch(
+                resource_name=deployment.name,
+                params=json.dumps(patch_ops),
+                format_type="json",
+            )
+            restored.append(deployment.name)
+        if restored:
+            log.info(
+                "Restored cephx-status annotation on OSD deployments: "
+                f"{', '.join(restored)}"
+            )
+        return restored
 
     def assert_osd_deployments_have_empty_cephx_status(self):
         """Assert all OSD deployments lack populated cephx-status annotations."""
@@ -2745,7 +2837,9 @@ class CephXKeyRotation:
         Start daemon rotation and break mon quorum while lockbox rotation runs.
 
         Returns:
-            list: Mon deployment names scaled down for later restoration.
+            tuple: ``(target_generation, scaled_mon_deployments)`` where
+            ``scaled_mon_deployments`` is the list of mon deployment names
+            scaled down for later restoration.
         """
         from ocs_ci.helpers.helpers import get_last_log_time_date
 
@@ -2814,6 +2908,8 @@ class CephXKeyRotation:
         Returns:
             list: Matching log lines (may be non-empty when old CSI keys are deleted).
         """
+        from ocs_ci.helpers.helpers import get_event_line_datetime
+
         matches = []
         for csi_pod in self.get_csi_node_plugin_pods():
             logs = get_pod_logs(
@@ -2821,9 +2917,12 @@ class CephXKeyRotation:
                 namespace=self.namespace,
             )
             if since_time:
-                logs = "\n".join(
-                    line for line in logs.splitlines() if line[:19] >= since_time[:19]
-                )
+                filtered = []
+                for line in logs.splitlines():
+                    log_time = get_event_line_datetime(line)
+                    if log_time and log_time > since_time:
+                        filtered.append(line)
+                logs = "\n".join(filtered)
             for line in logs.splitlines():
                 if constants.AUTH_BAD_KEY_LOG in line:
                     matches.append(f"{csi_pod.name}: {line.strip()}")
@@ -3772,7 +3871,8 @@ class CephXKeyRotation:
         Returns:
             str: Base64 CephX key for ``osd.<id>``.
         """
-        osd_pods = get_osd_pods_having_ids([osd_id])
+        # get_osd_pod_id returns string labels; keep public callers on int osd_id.
+        osd_pods = get_osd_pods_having_ids([str(osd_id)])
         if not osd_pods:
             raise UnexpectedBehaviour(f"No running OSD pod found for osd.{osd_id}")
         osd_pod = osd_pods[0]
@@ -3804,12 +3904,18 @@ class CephXKeyRotation:
         key = self.get_osd_keyring_key_from_pod(osd_id)
         toolbox = toolbox_pod or self.get_ceph_cli_pod()
         # Pipe a minimal keyring into ceph auth add (entity must exist for rotate).
-        cmd = (
-            f"printf '%s\\n' '[osd.{osd_id}]' '	key = {key}' | "
+        # oc rsh does not invoke a shell, so compound printf|ceph needs bash -c.
+        # Pass the CephX key via secrets so it is masked in logs.
+        keyring_script = (
+            f"printf '%s\\n' '[osd.{osd_id}]' ' key = {key}' | "
             f"ceph auth add osd.{osd_id} osd 'allow *' mon 'allow profile osd' "
             f"mgr 'allow profile osd' -i -"
         )
-        toolbox.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        toolbox.exec_cmd_on_pod(
+            command=f"bash -c {shlex.quote(keyring_script)}",
+            out_yaml_format=False,
+            secrets=[key],
+        )
         log.info(f"Restored Ceph auth entity {entity} from OSD pod keyring")
 
     def ensure_osd_auth_entity_restored(self, entity, toolbox_pod=None):
@@ -3949,6 +4055,8 @@ class CephXKeyRotation:
                 "All OSD auth keys rotated before failure could be injected"
             )
         failed_entity = sorted(pending_entities)[-1]
+        # Record before delete so callers can restore if a later step raises.
+        self.last_deleted_osd_auth_entity = failed_entity
         operator_log_marker = get_last_log_time_date()
         self.delete_auth_entity(failed_entity)
         return failed_entity, operator_log_marker
@@ -4153,20 +4261,23 @@ class CephXKeyRotation:
                     "ceph auth get-or-create for lockbox key"
                 )
 
-    def verify_operator_lockbox_rotation_logs(self, expected_count):
+    def verify_operator_lockbox_rotation_logs(self, expected_count, since_time=None):
         """
         Verify rook-ceph-operator logged lockbox key rotation for encrypted OSDs.
 
         Args:
             expected_count (int): Minimum number of lockbox rotation log lines.
+            since_time: Optional marker from ``get_last_log_time_date``; when set,
+                only logs newer than the marker are considered.
         """
         from ocs_ci.helpers.helpers import get_logs_rook_ceph_operator
 
-        operator_logs = get_logs_rook_ceph_operator()
+        if since_time:
+            log_lines = self.get_operator_logs_since(since_time)
+        else:
+            log_lines = get_logs_rook_ceph_operator().splitlines()
         matches = [
-            line
-            for line in operator_logs.splitlines()
-            if constants.OSD_LOCKBOX_OPERATOR_LOG in line
+            line for line in log_lines if constants.OSD_LOCKBOX_OPERATOR_LOG in line
         ]
         log.info(
             f"Found {len(matches)} operator log lines for encrypted OSD lockbox "
@@ -4295,12 +4406,12 @@ class CephXKeyRotation:
             current = self.capture_daemon_pod_state(label)
             if not current:
                 return False
+            # Require every currently Running pod to be new or annotation-changed;
+            # a single restarted peer must not short-circuit the wait.
             for pod_name, annotation in current.items():
-                if pod_name not in before_state:
-                    return True
-                if before_state.get(pod_name) != annotation:
-                    return True
-            return False
+                if pod_name in before_state and before_state[pod_name] == annotation:
+                    return False
+            return True
 
         for restarted in TimeoutSampler(timeout, sleep, _pods_restarted):
             if restarted:

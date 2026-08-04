@@ -24,7 +24,6 @@ from ocs_ci.ocs.node import (
     schedule_nodes,
     unschedule_nodes,
 )
-from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
@@ -95,9 +94,10 @@ class TestCephXKeyRotationNodeCordon:
 
         # --- Phase 1: Cordon one node and rotate ---
         cordon_target = osd_nodes[0]
+        # Assign before unschedule so teardown can uncordon if readiness wait fails.
+        self._cordoned_node = cordon_target
         log.info(f"Cordoning OSD node: {cordon_target}")
         unschedule_nodes([cordon_target])
-        self._cordoned_node = cordon_target
 
         pre_generations_1 = rotator.record_daemon_generations()
         pre_auth_keys_1 = rotator.capture_auth_keys(
@@ -159,7 +159,7 @@ class TestCephXKeyRotationNodeCordon:
         )
 
         rotator.wait_for_rook_daemon_rotation(target_gen_2, timeout=1500)
-        rotator.wait_for_all_daemon_pod_restarts(pre_pod_states_2)
+        post_pod_states_2 = rotator.wait_for_all_daemon_pod_restarts(pre_pod_states_2)
 
         rotator.assert_rook_daemon_generations(target_gen_2, mon_rotation_supported)
         rotator.assert_generations_increased(pre_generations_2, mon_rotation_supported)
@@ -183,10 +183,12 @@ class TestCephXKeyRotationNodeCordon:
         ceph_health_check(namespace=namespace)
         rotator.wait_for_cluster_ready()
 
-        osd_pods = get_osd_pods(namespace=namespace)
-        all_daemon_pods = []
-        all_daemon_pods.extend(osd_pods)
-        rotator.verify_pods_no_auth_bad_key(all_daemon_pods)
+        # AUTH_BAD_KEY check across MON/MGR/OSD/MDS using pod-name dicts from
+        # capture_all_daemon_pod_states / wait_for_all_daemon_pod_restarts.
+        all_daemon_pod_names = [
+            pod_name for pods in post_pod_states_2.values() for pod_name in pods
+        ]
+        rotator.verify_pods_no_auth_bad_key(all_daemon_pod_names)
 
         log.info(
             "CephX daemon key rotation with node cordon/uncordon completed "
