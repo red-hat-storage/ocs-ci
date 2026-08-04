@@ -10,6 +10,8 @@ The tools are built from source inside pods using the upstream
 repository at github.com/red-hat-storage/external-snapshot-metadata.
 """
 
+import base64
+import json
 import logging
 
 from ocs_ci.ocs import constants
@@ -360,7 +362,7 @@ class ListerTool:
         pod = helpers.create_resource(**pod_data)
         self._created_ns_resources.append(pod)
 
-        ocp_pod = OCP(kind="Pod", namespace=self.namespace)
+        ocp_pod = OCP(kind=constants.POD, namespace=self.namespace)
         ocp_pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_name=pod_name,
@@ -379,7 +381,7 @@ class ListerTool:
 
     def _check_build_complete(self):
         """Return True once the lister binary has been built."""
-        ocp_pod = OCP(kind="Pod", namespace=self.namespace)
+        ocp_pod = OCP(kind=constants.POD, namespace=self.namespace)
         try:
             logs = ocp_pod.exec_oc_cmd(
                 f"logs {self._lister_pod_name}",
@@ -470,7 +472,7 @@ class ListerTool:
 
     def _exec_in_lister_pod(self, cmd, timeout=300):
         """Exec a command inside the lister pod and return stdout."""
-        ocp_pod = OCP(kind="Pod", namespace=self.namespace)
+        ocp_pod = OCP(kind=constants.POD, namespace=self.namespace)
         return ocp_pod.exec_oc_cmd(
             f"exec {self._lister_pod_name} -- {cmd}",
             out_yaml_format=False,
@@ -665,7 +667,7 @@ class VerifierTool(ListerTool):
         Returns:
             tuple: (exit_code, logs)
         """
-        ocp_pod = OCP(kind="Pod", namespace=self.namespace)
+        ocp_pod = OCP(kind=constants.POD, namespace=self.namespace)
 
         pod_data = None
         for sample in TimeoutSampler(
@@ -695,6 +697,23 @@ class VerifierTool(ListerTool):
         )
         return exit_code, str(logs)
 
+    def _untrack_resource(self, name, kind):
+        """
+        Remove a resource from the tracked list so it is
+        not deleted again during cleanup.
+
+        Args:
+            name (str): Resource name
+            kind (str): Resource kind
+        """
+        self._created_ns_resources = [
+            r
+            for r in self._created_ns_resources
+            if not (
+                getattr(r, "name", None) == name and getattr(r, "kind", None) == kind
+            )
+        ]
+
     def delete_pod(self, pod_name):
         """
         Delete a specific pod and stop tracking it.
@@ -702,16 +721,9 @@ class VerifierTool(ListerTool):
         Args:
             pod_name (str): Pod name to delete
         """
-        ocp_pod = OCP(kind="Pod", namespace=self.namespace)
+        ocp_pod = OCP(kind=constants.POD, namespace=self.namespace)
         ocp_pod.delete(resource_name=pod_name, wait=True)
-        self._created_ns_resources = [
-            r
-            for r in self._created_ns_resources
-            if not (
-                getattr(r, "name", None) == pod_name
-                and getattr(r, "kind", None) == "Pod"
-            )
-        ]
+        self._untrack_resource(pod_name, constants.POD)
         logger.info("Deleted pod %s", pod_name)
 
     def cleanup(self):
@@ -719,3 +731,139 @@ class VerifierTool(ListerTool):
         _delete_tracked_resources(self._created_ns_resources)
         _delete_tracked_resources(self._created_cluster_resources)
         logger.info("CBT verifier tool cleanup complete")
+
+
+# ---- CBT sidecar image & SMS CR (DFBUGS-9181) ---------------------
+
+# Temp fix: ODF 4.23 ships a v1alpha1 sidecar but the
+# CRD only serves v1beta1. Remove once ODF ships a
+# v1beta1-compatible image in the Red Hat registry.
+CBT_SIDECAR_IMAGE = "ghcr.io/rakshith-r/csi-snapshot-metadata" ":v1.0.0-fix-audience"
+
+
+def _sms_cr_exists():
+    """
+    Check whether the SnapshotMetadataService CR exists.
+
+    Returns:
+        bool: True if the CR is present.
+    """
+    ocp_sms = OCP(kind=constants.SNAPSHOT_METADATA_SERVICE)
+    try:
+        ocp_sms.get(
+            resource_name=constants.CBT_CONFIGMAP_NAME,
+        )
+        return True
+    except CommandFailed:
+        return False
+
+
+def ensure_sms_cr():
+    """
+    Create the SnapshotMetadataService CR if it does not
+    exist (DFBUGS-9181).
+
+    Reads address, audience and caCert from the CBT
+    ConfigMap and creates the cluster-scoped CR.
+    """
+    if _sms_cr_exists():
+        logger.info("SnapshotMetadataService CR already exists")
+        return
+
+    logger.info("Creating SnapshotMetadataService CR (DFBUGS-9181)")
+    ocp_cm = OCP(
+        kind="ConfigMap",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    cm = ocp_cm.get(resource_name=constants.CBT_CONFIGMAP_NAME)
+    ca_b64 = base64.b64encode(cm["data"]["caCert"].encode()).decode()
+
+    sms_data = {
+        "apiVersion": f"{constants.SMS_API_GROUP}/{constants.SMS_API_VERSION}",
+        "kind": constants.SNAPSHOT_METADATA_SERVICE,
+        "metadata": {
+            "name": constants.CBT_CONFIGMAP_NAME,
+        },
+        "spec": {
+            "address": cm["data"]["address"],
+            "audience": cm["data"]["audience"],
+            "caCert": ca_b64,
+        },
+    }
+    helpers.create_resource(**sms_data)
+    logger.info("SnapshotMetadataService CR created")
+
+
+def ensure_sidecar_image():
+    """
+    Patch the csi-images ConfigMap so the RBD ctrlplugin
+    pods run the v1beta1-compatible snapshot-metadata
+    sidecar.
+
+    ODF 4.23 ships a sidecar that uses v1alpha1, but the
+    CRD only serves v1beta1. This replaces it with
+    CBT_SIDECAR_IMAGE via the csi-images ConfigMap and
+    triggers a rollout.
+
+    No-op if the image already matches.
+    """
+    from ocs_ci.framework import config
+
+    ocs_version = config.ENV_DATA["ocs_version"]
+    cm_name = f"{constants.CSI_IMAGES_CM_PREFIX}{ocs_version}"
+
+    ocp_cm = OCP(
+        kind="ConfigMap",
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    cm = ocp_cm.get(resource_name=cm_name)
+    key = constants.CSI_IMAGES_SNAPSHOT_METADATA_KEY
+    current = cm["data"].get(key, "")
+    desired = CBT_SIDECAR_IMAGE
+
+    if current == desired:
+        logger.info("Sidecar image already up to date")
+        return
+
+    logger.info(
+        "Patching %s: %s -> %s",
+        cm_name,
+        current,
+        desired,
+    )
+    patch = json.dumps({"data": {key: desired}})
+    ocp_cm.patch(
+        resource_name=cm_name,
+        params=patch,
+        format_type="merge",
+    )
+
+    # Restart the ceph-csi-operator so it reconciles the
+    # deployment with the new image from the ConfigMap.
+    ocp_pod = OCP(
+        kind=constants.POD,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    pod_data = ocp_pod.get(
+        selector=constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL,
+    )
+    for item in pod_data.get("items", []):
+        ocp_pod.delete(
+            resource_name=item["metadata"]["name"],
+        )
+    logger.info(
+        "Restarted ceph-csi-controller-manager",
+    )
+
+    # Wait for the ctrlplugin deployment rollout
+    ocp_deploy = OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    ocp_deploy.exec_oc_cmd(
+        "rollout status deployment/"
+        f"{constants.RBD_CTRLPLUGIN_DEPLOY}"
+        " --timeout=300s",
+        out_yaml_format=False,
+    )
+    logger.info("RBD ctrlplugin rollout complete")

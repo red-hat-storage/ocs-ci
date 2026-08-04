@@ -4032,6 +4032,12 @@ FILL_POOL_PVC_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_pvc.yaml")
 CBT_LISTER_POD_YAML = os.path.join(TEMPLATE_CBT_DIR, "lister_pod.yaml")
 CBT_VERIFIER_POD_YAML = os.path.join(TEMPLATE_CBT_DIR, "verifier_pod.yaml")
 CBT_CONFIGMAP_NAME = "openshift-storage.rbd.csi.ceph.com"
+SNAPSHOT_METADATA_SERVICE = "SnapshotMetadataService"
+SMS_API_GROUP = "cbt.storage.k8s.io"
+SMS_API_VERSION = "v1beta1"
+CSI_IMAGES_CM_PREFIX = "csi-images-v"
+CSI_IMAGES_SNAPSHOT_METADATA_KEY = "snapshot-metadata"
+RBD_CTRLPLUGIN_DEPLOY = "openshift-storage.rbd.csi.ceph.com-ctrlplugin"
 
 # KEDA and RGW HA
 KEDACORE_REPO_URL = "https://kedacore.github.io/charts"
