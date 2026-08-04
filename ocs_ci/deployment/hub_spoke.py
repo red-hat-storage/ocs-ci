@@ -1465,7 +1465,7 @@ class HostedClients(HyperShiftBase):
             bool: True if all hosted clusters passed verification, False otherwise
 
         """
-        cluster_names = list(config.ENV_DATA.get("clusters").keys())
+        cluster_names = list((config.ENV_DATA.get("clusters") or {}).keys())
         cluster_names = [
             name
             for name in cluster_names
@@ -1653,7 +1653,7 @@ class HostedClients(HyperShiftBase):
                 f'--patch \'{{"data":{{"ack-4.19-admissionregistration-v1beta1-api-removals-in-4.20":"true"}}}}\' '
             )
 
-        cluster_names = list(config.ENV_DATA.get("clusters").keys())
+        cluster_names = list((config.ENV_DATA.get("clusters") or {}).keys())
         cluster_names = [
             name
             for name in cluster_names
