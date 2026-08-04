@@ -64,7 +64,6 @@ class TestSiteFailureRecoveryAndFailover:
         Test to verify failover of all workloads after site-failure where the active hub along with
         the primary managed cluster is down
         """
-
         # Deploy Subscription and Appset based application of both RBD and CephFS SC
         rdr_workload = dr_workload(
             num_of_subscription=1,

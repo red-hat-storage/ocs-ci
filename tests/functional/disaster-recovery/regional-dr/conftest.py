@@ -35,7 +35,10 @@ from ocs_ci.helpers import helpers
 from ocs_ci.helpers.dr_helpers import (
     check_rbd_mirror_running,
     wait_for_mirroring_status_ok,
+    update_odf_cli_dr_config_kubeconfigs,
+    validate_cluster_odf_cli,
 )
+from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +58,20 @@ def pytest_collection_modifyitems(items):
                     f"Test {item} is removed from the collected items. Test runs only on RDR clusters"
                 )
                 items.remove(item)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def setup_odf_cli_binary():
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+    odf_cli_setup_helper()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def update_odf_cli_dr_kubeconfigs(setup_odf_cli_binary):
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+    update_odf_cli_dr_config_kubeconfigs()
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -79,12 +96,15 @@ def rdr_health_check():
     Checks Ceph health, rbd-mirror daemon status, and mirroring health.
 
     """
+
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
 
     if config.RUN["cli_params"].get("dev_mode"):
         log.info("Skipping RDR health checks for development mode")
         return
+
+    validate_cluster_odf_cli()
 
     restore_index = config.cur_index
     try:

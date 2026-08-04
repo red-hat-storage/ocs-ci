@@ -4927,6 +4927,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             validate_storage_cluster_peer_state()
             verify_volsync()
 
+        self.run_ramenctl_e2e()
+
         # TODO: Skip backup configuration if the managed clusters under test is client clusters
         #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
         #  This should be updated for the client clusters

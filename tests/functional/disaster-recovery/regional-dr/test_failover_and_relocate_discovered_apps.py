@@ -162,6 +162,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 discovered_apps=True,
                 workload_placement_name=rdr_workload.discovered_apps_placement_name,
                 old_primary=primary_cluster_name_before_failover,
+                skip_odf_cli_validation=primary_cluster_down,
             )
 
         if primary_cluster_down:

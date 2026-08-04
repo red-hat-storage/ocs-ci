@@ -195,6 +195,7 @@ class TestFailoverAndRelocate:
                         if wl.workload_type == constants.APPLICATION_SET
                         else None
                     ),
+                    skip_odf_cli_validation=primary_cluster_down,
                 )
 
         # Verify resources creation on secondary cluster (failoverCluster)
