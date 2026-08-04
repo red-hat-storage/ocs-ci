@@ -85,7 +85,6 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     wait_for_machineconfigpool_status,
     get_server_version,
-    get_client_type_by_name,
     get_registry_svc,
 )
 from ocs_ci.utility.aws import AWS, get_unused_vpc_cidr, get_cluster_region
@@ -701,10 +700,12 @@ def destroy_aws_hcp_clusters(cluster_names_list=None):
     """
     if not cluster_names_list:
         cluster_names_list = get_hosted_cluster_names()
+    clusters_config = config.ENV_DATA.get("clusters", {})
     aws_hcp_names = [
         name
         for name in cluster_names_list
-        if get_client_type_by_name(name) == constants.AWS_PLATFORM
+        if clusters_config.get(name, {}).get("hosted_cluster_platform")
+        == constants.AWS_PLATFORM
     ]
 
     if not aws_hcp_names:
@@ -3965,7 +3966,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         Args:
             bucket_name (str, optional): Name of the S3 bucket to create.
-                If not provided, defaults to "{cluster_name}-oidc-{region}".
+                If not provided, defaults to "{cluster_name}-oidc-bucket".
                 To reuse an existing shared bucket across clusters, pass the bucket name.
 
         Returns:
@@ -3980,7 +3981,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 bucket_name = configured_bucket_name
                 logger.info(f"Using configured OIDC bucket name: {bucket_name}")
             else:
-                bucket_name = f"{self.name}-oidc-{self.aws_region}"
+                bucket_name = f"{self.name}-oidc-bucket"
                 logger.info(f"Using default OIDC bucket naming: {bucket_name}")
 
         # Get namespace for the secret from config or use default
@@ -4067,7 +4068,21 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         try:
             existing_buckets = self.list_buckets()
             if any(bucket["Name"] == bucket_name for bucket in existing_buckets):
-                logger.info(f"Bucket '{bucket_name}' already exists, reusing it")
+                # Verify actual bucket region — it may differ from the
+                # requested region if a previous deployment in another
+                # region created it (S3 bucket names are globally unique).
+                location_resp = self.s3_client.get_bucket_location(Bucket=bucket_name)
+                actual_region = location_resp.get("LocationConstraint") or "us-east-1"
+                if actual_region != region:
+                    logger.warning(
+                        f"Bucket '{bucket_name}' exists in '{actual_region}', "
+                        f"not in requested '{region}'. Using actual region."
+                    )
+                    region = actual_region
+                logger.info(
+                    f"Bucket '{bucket_name}' already exists in region "
+                    f"'{region}', reusing it"
+                )
                 bucket_location = f"http://{bucket_name}.s3.amazonaws.com/"
                 bucket_arn = f"arn:aws:s3:::{bucket_name}"
             else:
@@ -6205,6 +6220,40 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         logger.info(f"Instance {instance_id} has security group {sg_id}")
         return sg_id
 
+    def _get_worker_node_sg(self, vpc_id):
+        """
+        Find the worker node security group in a VPC by name pattern.
+
+        OCP IPI clusters create security groups with a ``*-node`` suffix for
+        worker nodes and ``*-controlplane`` for masters. This method finds the
+        worker node SG so that Ceph port rules are applied to the correct group.
+
+        Args:
+            vpc_id (str): VPC ID to search in.
+
+        Returns:
+            str: Security group ID for worker nodes.
+
+        Raises:
+            ValueError: If no matching security group is found.
+        """
+        sgs = self.ec2_client.describe_security_groups(
+            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+        ).get("SecurityGroups", [])
+
+        for sg in sgs:
+            if sg["GroupName"].endswith("-node"):
+                logger.info(
+                    f"Found worker node SG '{sg['GroupId']}' "
+                    f"({sg['GroupName']}) in VPC '{vpc_id}'"
+                )
+                return sg["GroupId"]
+
+        raise ValueError(
+            f"No worker node security group (*-node) found in VPC '{vpc_id}'. "
+            f"Available SGs: {[s['GroupName'] for s in sgs]}"
+        )
+
     def create_vpc_peering_connection(self, client_vpc_id, mgmt_vpc_id):
         """
         Create a VPC peering connection between two VPCs.
@@ -6652,6 +6701,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         client_cluster_name,
         mgmt_cluster_name,
         mgmt_instance_id,
+        client_instance_id=None,
         nodeport=None,
     ):
         """
@@ -6667,6 +6717,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             client_cluster_name (str): Name of the client cluster
             mgmt_cluster_name (str): Name of the management cluster
             mgmt_instance_id (str): EC2 instance ID in management cluster (used for SG and routing)
+            client_instance_id (str): Optional EC2 instance ID in client cluster.
+                Used to find the correct (private) subnet route table for routing.
+                If not provided, falls back to the main VPC route table.
             nodeport (int): Optional NodePort to add to security group rules
 
         Returns:
@@ -6682,10 +6735,14 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             client_cluster_name=client_cluster_name,
             mgmt_cluster_name=mgmt_cluster_name,
             mgmt_instance_id=mgmt_instance_id,
+            client_instance_id=client_instance_id,
         )
 
-        # Get security group for management instance
-        mgmt_sg_id = self.get_security_group_id_by_instance_id(mgmt_instance_id)
+        # Get the worker node security group from the management VPC.
+        # Ceph port rules must be on the worker (*-node) SG, not the master
+        # (*-controlplane) SG, because NodePort services are reached via workers.
+        mgmt_vpc_id = peering_result["mgmt_vpc_id"]
+        mgmt_sg_id = self._get_worker_node_sg(mgmt_vpc_id)
 
         # Add Ceph ports to security group
         client_vpc_cidr = peering_result["client_vpc_cidr"]
@@ -6843,10 +6900,35 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         mgmt_instance_id = instances["Reservations"][0]["Instances"][0]["InstanceId"]
 
+        # Get a client worker node instance ID so the route is added to the
+        # correct (private) subnet route table, not the main/public one.
+        client_instance_id = None
+        if self.cluster_kubeconfig:
+            try:
+                ocp_nodes = OCP(kind="node", cluster_kubeconfig=self.cluster_kubeconfig)
+                nodes = ocp_nodes.get(selector="node-role.kubernetes.io/worker")
+                if nodes.get("items"):
+                    provider_id = (
+                        nodes["items"][0].get("spec", {}).get("providerID", "")
+                    )
+                    # providerID format: aws:///us-west-2a/i-0123456789abcdef0
+                    if "/" in provider_id:
+                        client_instance_id = provider_id.rsplit("/", 1)[-1]
+                        logger.info(
+                            f"Client worker instance ID for routing: "
+                            f"{client_instance_id}"
+                        )
+            except (CommandFailed, IndexError, KeyError) as e:
+                logger.warning(
+                    f"Could not get client instance ID, will use main route "
+                    f"table as fallback: {e}"
+                )
+
         network_result = self.setup_network_for_client_cluster(
             client_cluster_name=self.name,
             mgmt_cluster_name=mgmt_cluster_name,
             mgmt_instance_id=mgmt_instance_id,
+            client_instance_id=client_instance_id,
             nodeport=nodeport,
         )
 
