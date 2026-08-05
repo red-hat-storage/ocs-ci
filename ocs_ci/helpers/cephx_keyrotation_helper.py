@@ -2,10 +2,12 @@
 Helper for CephX authentication key rotation on Rook-managed Ceph clusters.
 
 All CephX key rotation (daemon, CSI, rbdMirrorPeer) is driven from StorageCluster
-``spec.managedResources.cephCluster.security.cephx`` (ODF passthrough to Rook):
-  - daemon → managedResources.cephCluster.security.cephx.daemon
-  - csi → managedResources.cephCluster.security.cephx.csi
-  - rbdMirrorPeer → managedResources.cephCluster.security.cephx.rbdMirrorPeer
+spec.managedResources.cephCluster.security.cephx (ODF passthrough to Rook):
+
+- daemon → managedResources.cephCluster.security.cephx.daemon
+- csi → managedResources.cephCluster.security.cephx.csi
+- rbdMirrorPeer → managedResources.cephCluster.security.cephx.rbdMirrorPeer
+
 Status verification remains on CephCluster / CephFilesystem.
 This is distinct from OSD LUKS / StorageCluster encryption key rotation
 (see ``keyrotation_helper.KeyRotation``).
@@ -51,10 +53,10 @@ class CephXKeyRotation:
     ``managedResources.cephCluster.security.cephx``.
 
     Supported rotation targets (all written on StorageCluster):
-      - ``daemon``: local Ceph daemons (OSD, MGR, MDS, etc.).
-        MON keys cannot be rotated on older Ceph (limitation).
-      - ``csi``: CSI driver client keys (affects new PVCs; prior keys may be kept).
-      - ``rbdMirrorPeer``: RBD mirror peer bootstrap token key.
+    ``daemon`` (local Ceph daemons such as OSD/MGR/MDS; MON keys cannot be
+    rotated on older Ceph), ``csi`` (CSI driver client keys; affects new PVCs
+    and prior keys may be kept), and ``rbdMirrorPeer`` (RBD mirror peer
+    bootstrap token key).
 
     Example::
 
@@ -393,12 +395,10 @@ class CephXKeyRotation:
         ``/spec/managedResources/cephCluster/security/cephx/daemon/keyGeneration``
         with a non-integer JSON value.
 
-        Expected rejection:
-          - non-null values → OpenAPI type error
-            ``must be of type integer: "<expected_json_type>"``
-          - ``null`` → custom validation error
-            ``keyGeneration cannot be removed once set``
-            (null is treated as removing the field once it has been set)
+        Expected rejection: non-null values fail with an OpenAPI type error
+        (``must be of type integer: "<expected_json_type>"``); ``null`` fails
+        with ``keyGeneration cannot be removed once set`` (null is treated as
+        removing the field once it has been set).
 
         Args:
             invalid_value: Value to patch (e.g. ``"abc"``, ``True``, ``None``).
@@ -1375,14 +1375,12 @@ class CephXKeyRotation:
         Return True when writing *key_generation* should start a CephX rotation.
 
         CephCluster Progressing is expected only when the written generation is
-        greater than all of:
-          - current StorageCluster spec keyGeneration
-          - current status keyGeneration
-          - ocs-operator DESIRED_CEPHX_KEY_GEN baseline
+        greater than the current StorageCluster spec keyGeneration, the current
+        status keyGeneration, and the ocs-operator DESIRED_CEPHX_KEY_GEN baseline.
 
-        Writing the desired baseline (commonly 2) onto StorageCluster is a
-        no-op for CephCluster reconcile — keys are already at that desired
-        level even when status.keyGeneration still reports 1.
+        Writing the desired baseline (commonly 2) onto StorageCluster is a no-op
+        for CephCluster reconcile — keys are already at that desired level even
+        when status.keyGeneration still reports 1.
         """
         self._validate_component(component)
         key_generation = int(key_generation)

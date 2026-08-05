@@ -8,7 +8,6 @@ Covers:
   D. Negative / edge cases (TC16–TC18; TC17 invalid keyGeneration types)
 """
 
-import json
 import logging
 import time
 
@@ -706,14 +705,14 @@ class TestCephXCephClusterReconciliation:
 
     @tier2
     def test_storagecluster_keygeneration_zero_falls_back_to_env(
-        self, cephx_bootstrap_setup, request
+        self, cephx_bootstrap_setup
     ):
         """
         TC13: Unset/0 StorageCluster keyGeneration falls back to DESIRED_CEPHX_KEY_GEN.
 
         Runs before TC12 so a persisted StorageCluster keyGeneration override does
-        not force a skip. If a prior suite left SC keyGeneration set, remove it for
-        this check and realign on teardown.
+        not force a skip. ``keyGeneration`` cannot be removed once set, so this
+        check only runs when the field is unset or already ``0``.
         """
         rotator = cephx_bootstrap_setup
         namespace = config.ENV_DATA["cluster_namespace"]
@@ -727,29 +726,17 @@ class TestCephXCephClusterReconciliation:
 
         sc_daemon = rotator.get_storagecluster_component_spec(rotator.COMPONENT_DAEMON)
         if "keyGeneration" in sc_daemon:
-            path = (
-                "/spec/managedResources/cephCluster/security/cephx/daemon/keyGeneration"
-            )
+            sc_gen = int(sc_daemon.get("keyGeneration") or 0)
+            if sc_gen != 0:
+                pytest.skip(
+                    f"TC13: StorageCluster daemon.keyGeneration={sc_gen} is set; "
+                    f"{constants.CEPHX_KEY_GENERATION_REMOVE_ERROR}, so "
+                    "fallback-to-env cannot be exercised on this cluster"
+                )
             log.info(
-                "TC13: removing StorageCluster daemon.keyGeneration=%s so "
-                "fallback-to-env can be exercised",
-                sc_daemon.get("keyGeneration"),
+                "TC13: StorageCluster daemon.keyGeneration already 0; "
+                "verifying fallback to DESIRED_CEPHX_KEY_GEN"
             )
-            rotator._get_storagecluster_ocp().patch(
-                params=json.dumps([{"op": "remove", "path": path}]),
-                format_type="json",
-            )
-
-            def restore_sc_keygen():
-                try:
-                    rotator.ensure_daemon_key_generations_aligned()
-                except Exception as exc:
-                    log.warning(
-                        "TC13 teardown: failed to align daemon keyGeneration: %s",
-                        exc,
-                    )
-
-            request.addfinalizer(restore_sc_keygen)
 
         desired = int(desired_env)
 
@@ -757,7 +744,7 @@ class TestCephXCephClusterReconciliation:
             daemon = rotator.get_spec_cephx().get("daemon") or {}
             return int(daemon.get("keyGeneration", 0) or 0) == desired
 
-        # Wait for reconcile after SC override removal before reading CC state.
+        # Wait for CephCluster to reflect env fallback before reading CC state.
         for ready in TimeoutSampler(300, 10, _fallback_applied):
             if ready:
                 break
