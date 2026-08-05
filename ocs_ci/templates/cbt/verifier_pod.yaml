@@ -20,6 +20,13 @@ spec:
         - /bin/sh
         - -c
         - "sleep infinity"
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+        limits:
+          cpu: "2"
+          memory: 2Gi
       volumeDevices:
         - name: source
           devicePath: /dev/source
