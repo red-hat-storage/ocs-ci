@@ -1867,16 +1867,22 @@ acm_configuration_4_21 = {
 }
 
 acm_configuration_4_22 = {
+    "single-perspective": (
+        "//*[@id='only-one-perspective']",
+        By.XPATH,
+    ),
     "all-clusters_dropdown": (
         "//button[@data-test-id='perspective-switcher-toggle']",
         By.XPATH,
     ),
     "local-cluster_dropdown_item": (
-        "//button[@data-test-id='perspective-switcher-toggle']//*[normalize-space()='local-cluster']",
+        "//*[@data-test-id='perspective-switcher-toggle']//*[normalize-space()='local-cluster'] | "
+        "//*[@data-test-id='perspective-switcher-toggle']//*[normalize-space()='Core platform']",
         By.XPATH,
     ),
     "local-cluster_dropdown": (
-        "//h2[normalize-space()='Administrator']",
+        "//h2[normalize-space()='Administrator'] | "
+        "//*[@data-test-id='perspective-switcher-toggle']//h2[normalize-space()='Core platform']",
         By.XPATH,
     ),
     "click-local-cluster": (
