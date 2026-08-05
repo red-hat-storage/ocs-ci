@@ -1,0 +1,256 @@
+"""
+Standalone Fusion Data Foundation (FDF) deployment — RHSTOR-8840.
+
+FDF standalone installs *identically* to ODF.  The only difference from the
+standard ODF deployment path is that the operator is distributed through an
+IBM-owned CatalogSource (``ibm-operators`` in ``openshift-marketplace``)
+rather than the default Red Hat operators catalog.
+
+Deployment flow
+---------------
+1. ``StandaloneFDFCatalogSource.create_catalog_source()`` creates the
+   ``ibm-operators`` CatalogSource and waits for it to become READY.
+2. The existing ODF ``deploy_ocs_via_operator`` path then proceeds as normal:
+   namespace, OperatorGroup, Subscription (pointing at the new catalog),
+   StorageSystem, StorageCluster — all unchanged.
+
+Usage (conf yaml)::
+
+    DEPLOYMENT:
+      fdf_standalone_deployment: true
+      fdf_standalone_catalog_image: "cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40"
+
+The ``fdf_standalone_catalog_image`` must be the full image reference
+(registry + path + tag) as shown in the RHSTOR-8840 example::
+
+    apiVersion: operators.coreos.com/v1alpha1
+    kind: CatalogSource
+    metadata:
+      name: ibm-operators
+      namespace: openshift-marketplace
+    spec:
+      image: cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40
+      ...
+"""
+
+import logging
+import tempfile
+
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.utility import templating
+from ocs_ci.utility.deployment import get_and_apply_idms_from_catalog
+from ocs_ci.utility.utils import exec_cmd
+
+logger = logging.getLogger(__name__)
+
+
+def _apply_fdf_mirror_sets(catalog_image):
+    """
+    Extract and apply the IDMS rules embedded in the FDF catalog image.
+
+    The standard ODF deployment path calls
+    ``get_and_apply_idms_from_catalog(image)`` inside
+    ``create_catalog_source()``.  This step extracts an ``idms.yaml``
+    baked into the catalog image via ``oc image extract``, then applies
+    it to the cluster and waits for all MachineConfigPools to finish
+    rolling out — so that CRI-O on every node knows to redirect
+    ``registry.redhat.io`` digest pulls to the IBM staging registry.
+
+    Without this step, the operator pods created from the CSV will fail
+    with ``ImagePullBackOff`` because the digest referenced by the CSV
+    does not yet exist on ``registry.redhat.io`` (it is a pre-release
+    build served from ``cp.stg.icr.io``).
+
+    The FDF-within-Fusion path uses a separate static IDMS file
+    (``image-digest-mirror-set.yaml``).  For the standalone path we
+    prefer to extract the IDMS directly from the catalog image — the
+    same authoritative source used by the ODF path — so that the mirrors
+    always match the exact build being installed.
+
+    Args:
+        catalog_image (str): Full catalog image reference, e.g.
+            ``cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40``
+    """
+    logger.info(
+        "Extracting and applying IDMS rules from FDF catalog image '%s'",
+        catalog_image,
+    )
+    idms_path = get_and_apply_idms_from_catalog(image=catalog_image)
+    if idms_path:
+        logger.info("IDMS applied from catalog image, path: %s", idms_path)
+    else:
+        logger.warning(
+            "No idms.yaml found inside catalog image '%s' — "
+            "falling back to static FDF image mirror sets",
+            catalog_image,
+        )
+        # Fallback: apply the static FDF mirror sets shipped with ocs-ci.
+        # These cover the same registry redirects but are not build-specific.
+        from ocs_ci.deployment.fusion_data_foundation import (
+            FusionDataFoundationDeployment,
+        )
+
+        fdf = FusionDataFoundationDeployment()
+        fdf.create_image_tag_mirror_set()
+        fdf.create_image_digest_mirror_set()
+        logger.info("Static FDF image mirror sets applied as fallback")
+
+
+class StandaloneFDFCatalogSource:
+    """
+    Manages the CatalogSource required for a standalone FDF deployment.
+
+    All other deployment steps (namespace, OperatorGroup, Subscription,
+    StorageCluster) are handled by the existing ODF code path in
+    :func:`ocs_ci.deployment.deployment.Deployment.deploy_ocs_via_operator`.
+
+    The CatalogSource created here has name
+    :data:`~ocs_ci.ocs.constants.FDF_STANDALONE_CATALOG_SOURCE_NAME`
+    (``ibm-operators``) in ``openshift-marketplace``, matching the
+    example YAML provided in the RHSTOR-8840 analysis document.
+    """
+
+    def __init__(self):
+        self.kubeconfig = config.RUN["kubeconfig"]
+        self.catalog_image = config.DEPLOYMENT.get("fdf_standalone_catalog_image", "")
+        self.catalog_source_name = constants.FDF_STANDALONE_CATALOG_SOURCE_NAME
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def create_catalog_source(self):
+        """
+        Create (or verify) the FDF standalone CatalogSource and wait for READY.
+
+        * If the CatalogSource already exists with the same image → wait READY.
+        * If it exists with a different image → re-apply with the new image.
+        * If it does not exist → create from template and wait READY.
+
+        The ``catalog_image`` is validated upstream by
+        :func:`_validate_catalog_image` before this method is called.
+        """
+        catsrc = CatalogSource(
+            resource_name=self.catalog_source_name,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+
+        if catsrc.is_exist():
+            current_image = self._get_current_image(catsrc)
+            if current_image == self.catalog_image:
+                logger.info(
+                    "FDF standalone CatalogSource '%s' already exists with "
+                    "matching image — waiting for READY",
+                    self.catalog_source_name,
+                )
+                catsrc.wait_for_state("READY", timeout=600)
+                return
+            logger.warning(
+                "FDF standalone CatalogSource '%s' exists but image differs "
+                "(current=%s, expected=%s) — re-applying",
+                self.catalog_source_name,
+                current_image,
+                self.catalog_image,
+            )
+
+        logger.info(
+            "Creating FDF standalone CatalogSource '%s' with image '%s'",
+            self.catalog_source_name,
+            self.catalog_image,
+        )
+        self._apply_catalog_source_yaml()
+        catsrc.wait_for_state("READY", timeout=600)
+        logger.info(
+            "FDF standalone CatalogSource '%s' is READY", self.catalog_source_name
+        )
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _apply_catalog_source_yaml(self):
+        """Render the template, inject the catalog image, and apply via oc."""
+        catsrc_data = templating.load_yaml(constants.FDF_STANDALONE_CATSRC_YAML)
+        catsrc_data["spec"]["image"] = self.catalog_image
+
+        with tempfile.NamedTemporaryFile(
+            mode="w+", prefix="fdf_standalone_catsrc_", suffix=".yaml", delete=False
+        ) as tmp:
+            templating.dump_data_to_temp_yaml(catsrc_data, tmp.name)
+            exec_cmd(
+                f"oc --kubeconfig {self.kubeconfig} apply -f {tmp.name}",
+                timeout=120,
+            )
+
+    @staticmethod
+    def _get_current_image(catsrc: CatalogSource) -> str:
+        """Return the full image URL (url:tag) set on an existing CatalogSource, or ''."""
+        try:
+            # get_image_url() returns the registry/path portion (no tag).
+            # get_image_name() returns only the tag.
+            # Reconstruct the full reference to compare against fdf_standalone_catalog_image.
+            url = catsrc.get_image_url() or ""
+            tag = catsrc.get_image_name() or ""
+            if url and tag:
+                return f"{url}:{tag}"
+            return url or tag
+        except Exception:
+            return ""
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers used by deployment.py
+# ---------------------------------------------------------------------------
+
+
+def _validate_catalog_image():
+    """
+    Return the configured catalog image, raising ``ValueError`` early if unset.
+
+    Centralises the check so neither ``_apply_fdf_mirror_sets`` nor
+    ``StandaloneFDFCatalogSource.create_catalog_source`` can be reached
+    with an empty image string.
+
+    Returns:
+        str: The non-empty ``fdf_standalone_catalog_image`` config value.
+
+    Raises:
+        ValueError: when ``fdf_standalone_catalog_image`` is not set in config.
+    """
+    catalog_image = config.DEPLOYMENT.get("fdf_standalone_catalog_image", "")
+    if not catalog_image:
+        raise ValueError(
+            "config.DEPLOYMENT['fdf_standalone_catalog_image'] must be set "
+            "for standalone FDF deployment.\n"
+            "Example: 'cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40'"
+        )
+    return catalog_image
+
+
+def create_fdf_standalone_catalog_source():
+    """
+    Entry-point called from :func:`deploy_ocs_via_operator` when
+    ``config.DEPLOYMENT['fdf_standalone_deployment']`` is *True*.
+
+    Mirrors the standard ODF ``create_catalog_source()`` flow:
+
+    1. Validate ``fdf_standalone_catalog_image`` is set — raises
+       ``ValueError`` immediately if missing, before any cluster calls.
+    2. Extract and apply the IDMS rules embedded in the FDF catalog image
+       so that CRI-O on every node redirects ``registry.redhat.io``
+       digest pulls to the IBM staging registry before the operator pods
+       start.  Waits for all MachineConfigPools to finish rolling out.
+    3. Create (or verify) the ``ibm-operators`` CatalogSource and wait
+       for READY so that the standard ODF Subscription can resolve
+       ``odf-operator`` from it.
+    """
+    catalog_image = _validate_catalog_image()
+    _apply_fdf_mirror_sets(catalog_image)
+    StandaloneFDFCatalogSource().create_catalog_source()
+
+
+def is_fdf_standalone_deployment() -> bool:
+    """Return *True* when the run is configured for standalone FDF."""
+    return bool(config.DEPLOYMENT.get("fdf_standalone_deployment", False))
