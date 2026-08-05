@@ -1150,6 +1150,14 @@ FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS = {
         " | //*[contains(text(), 'nodes were selected')]",
         By.XPATH,
     ),
+    # Summary text that confirms at least 1 disk is shared (non-zero disk count).
+    # The disk count is loaded asynchronously after node selection; we wait for
+    # this before proceeding to the submit button to avoid "0 disks" races.
+    "nodes_selected_with_disks": (
+        "//*[contains(text(), 'nodes were selected') "
+        "and not(contains(text(), 'sharing 0 disks'))]",
+        By.XPATH,
+    ),
     # Final "Create storage cluster" submit button at the bottom of the node list
     "submit_create_storage_cluster_btn": (
         "//button[normalize-space()='Create storage cluster'"
