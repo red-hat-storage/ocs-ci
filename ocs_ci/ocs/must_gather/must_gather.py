@@ -117,6 +117,7 @@ class MustGather(object):
                 f"pool name as fallback for must-gather file matching"
             )
 
+        self.files_path.clear()
         self.get_all_paths()
         basenames = {}
         for p in self.full_paths:
@@ -422,8 +423,8 @@ class MustGather(object):
         """
         if config.ENV_DATA["platform"] not in MANAGED_SERVICE_PLATFORMS:
             self.verify_noobaa_diagnostics()
-        self.validate_file_size()
         self.validate_expected_files()
+        self.validate_file_size()
         self.print_invalid_files()
         self.compare_running_pods()
         self.print_must_gather_debug()
