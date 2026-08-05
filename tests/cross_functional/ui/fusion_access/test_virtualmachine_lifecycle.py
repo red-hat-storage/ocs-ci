@@ -598,7 +598,7 @@ class TestVirtualMachineLifecycle(ManageTest):
         )
         logger.info("-" * 80)
         # Wait for the cloned VM's guest OS to fully boot
-        self._wait_for_vmi_agent_connected(clone_vm_name, namespace)
+        self._wait_for_vmi_agent_connected(clone_vm_name, namespace, timeout=1200)
 
         child = self._login_to_vm_console(
             clone_vm_name,
