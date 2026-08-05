@@ -1135,16 +1135,21 @@ class OCP(object):
                     )
                     if status == condition:
                         log.info(
-                            f"status of {resource_name} at {column}"
-                            " reached condition!"
+                            f"status of {resource_name} at column {column}"
+                            f" reached desired condition: {condition}"
                         )
                         return True
-                    log.info(
-                        (
+                    if status != actual_status:
+                        log.info(
+                            f"status of {resource_name} at column {column} "
+                            f"changed: {actual_status} -> {status} "
+                            f"(waiting for {condition})"
+                        )
+                    else:
+                        log.debug(
                             f"status of {resource_name} at column {column} was {status},"
                             f" but we were waiting for {condition}"
                         )
-                    )
                     actual_status = status
                     if error_condition is not None and status == error_condition:
                         raise ResourceWrongStatusException(
@@ -1157,14 +1162,14 @@ class OCP(object):
                 elif sample.get("kind") == "List":
                     in_condition = []
                     in_condition_len = 0
-                    actual_status = []
+                    current_status = []
                     sample = sample["items"]
                     sample_len = len(sample)
                     for item in sample:
                         try:
                             item_name = item.get("metadata").get("name")
                             status = self.get_resource(item_name, column)
-                            actual_status.append(status)
+                            current_status.append(status)
                             if status == condition:
                                 in_condition.append(item)
                                 in_condition_len = len(in_condition)
@@ -1208,13 +1213,19 @@ class OCP(object):
                         exp_num_str = f"all {resource_count}"
                     else:
                         exp_num_str = "all"
-                    log.info(
-                        (
-                            f"status of {resource_name} at column {column} - item(s) were {actual_status},"
-                            f" but we were waiting"
-                            f" for {exp_num_str} of them to be {condition}"
+                    if current_status != actual_status:
+                        log.info(
+                            f"status of {resource_name} at column {column} "
+                            f"changed: {in_condition_len}/{len(sample)} "
+                            f"reached {condition} (waiting for {exp_num_str})"
                         )
-                    )
+                    else:
+                        log.debug(
+                            f"status of {resource_name} at column {column} "
+                            f"- {in_condition_len}/{len(sample)} "
+                            f"reached {condition} (waiting for {exp_num_str})"
+                        )
+                    actual_status = current_status
         except TimeoutExpiredError as ex:
             log.error(f"timeout expired: {ex}")
             # run `oc describe` on the resources we were waiting for to provide
