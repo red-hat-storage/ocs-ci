@@ -2215,6 +2215,9 @@ PDB_COUNT_ARBITER_VSPHERE = 5
 MGR_COUNT = 1
 MGR_COUNT_415 = 2
 
+# Supported Ceph MON counts for deployment
+SUPPORTED_MON_COUNTS = (3, 5)
+
 # Root Disk size
 CURRENT_VM_ROOT_DISK_SIZE = "60"
 VM_ROOT_DISK_SIZE = "120"

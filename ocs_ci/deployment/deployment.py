@@ -90,6 +90,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
+from ocs_ci.deployment.racks import create_unique_rack_labels
 from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.deployment.netsplit import get_netsplit_mc
 from ocs_ci.ocs.monitoring import (
@@ -219,6 +220,34 @@ from ocs_ci.deployment.kmm import deploy_kmm_operator
 from ocs_ci.deployment.image_registry import configure_image_registry_with_pvc
 
 logger = logging.getLogger(__name__)
+
+
+def get_expected_mon_count():
+    """
+    Return the expected number of ready MON pods for deployment consumers.
+
+    Validates DEPLOYMENT.mon_count when present. Defaults to 3 only when the
+    setting is absent. Used by StorageCluster monCount setup and the
+    deploy_ocs MON readiness wait_for_resource() call.
+
+    Returns:
+        int: Validated MON count (3 or 5)
+
+    Raises:
+        UnexpectedDeploymentConfiguration: If mon_count is set to any value
+            other than 3 or 5
+
+    """
+    if "mon_count" not in config.DEPLOYMENT:
+        return 3
+
+    mon_count = config.DEPLOYMENT["mon_count"]
+    # Require a real int (reject bool/float) and only the supported counts.
+    if type(mon_count) is not int or mon_count not in constants.SUPPORTED_MON_COUNTS:
+        raise UnexpectedDeploymentConfiguration(
+            f"DEPLOYMENT.mon_count must be 3 or 5, got {mon_count!r}"
+        )
+    return mon_count
 
 
 class Deployment(object):
@@ -1006,6 +1035,8 @@ class Deployment(object):
         self.do_deploy_submariner()
         self.do_gitops_deploy()
         self.do_deploy_oadp()
+        if config.DEPLOYMENT.get("unique_rack_node_labels"):
+            create_unique_rack_labels()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_mce()
@@ -2343,10 +2374,11 @@ class Deployment(object):
                 mon_pod_timeout = 1800
             else:
                 mon_pod_timeout = 900
+            expected_mon_count = get_expected_mon_count()
             assert pod.wait_for_resource(
                 condition="Running",
                 selector="app=rook-ceph-mon",
-                resource_count=3,
+                resource_count=expected_mon_count,
                 timeout=mon_pod_timeout,
             )
             assert pod.wait_for_resource(
