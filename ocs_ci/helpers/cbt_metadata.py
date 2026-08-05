@@ -71,6 +71,7 @@ def create_cbt_rbac(namespace, sa_name):
     Create all RBAC roles and bindings needed by the CBT tools.
 
     Creates the following resources:
+
     - ClusterRole + ClusterRoleBinding for getting
       VolumeSnapshotContents
     - Role + RoleBinding for getting VolumeSnapshots
@@ -93,7 +94,9 @@ def create_cbt_rbac(namespace, sa_name):
     ns_resources = []
 
     # ClusterRole: get volumesnapshotcontents
-    cr_name = "cbt-snap-content-reader"
+    cr_name = helpers.create_unique_resource_name(
+        "cbt-snap-content-reader", "clusterrole"
+    )
     cluster_resources.append(
         create_rbac_resource(
             {
@@ -112,13 +115,16 @@ def create_cbt_rbac(namespace, sa_name):
     )
 
     # ClusterRoleBinding
+    crb_name = helpers.create_unique_resource_name(
+        "cbt-snap-content-reader", "clusterrolebinding"
+    )
     cluster_resources.append(
         create_rbac_resource(
             {
                 "apiVersion": "rbac.authorization.k8s.io/v1",
                 "kind": "ClusterRoleBinding",
                 "metadata": {
-                    "name": "cbt-snap-content-reader-binding",
+                    "name": crb_name,
                 },
                 "subjects": [subject],
                 "roleRef": {
@@ -281,17 +287,23 @@ class ListerTool:
 
         Creates the ServiceAccount, RBAC bindings, CA certificate
         ConfigMap, and builds the lister tool in a persistent pod.
+        Cleans up partial resources if any step fails.
         """
-        self._read_configmap()
-        sa = create_cbt_service_account(self.namespace, self.service_account)
-        self._created_ns_resources.append(sa)
+        try:
+            self._read_configmap()
+            sa = create_cbt_service_account(self.namespace, self.service_account)
+            self._created_ns_resources.append(sa)
 
-        cluster_res, ns_res = create_cbt_rbac(self.namespace, self.service_account)
-        self._created_cluster_resources.extend(cluster_res)
-        self._created_ns_resources.extend(ns_res)
+            cluster_res, ns_res = create_cbt_rbac(self.namespace, self.service_account)
+            self._created_cluster_resources.extend(cluster_res)
+            self._created_ns_resources.extend(ns_res)
 
-        self._create_ca_cert_configmap()
-        self._deploy_lister_pod()
+            self._create_ca_cert_configmap()
+            self._deploy_lister_pod()
+        except Exception:
+            logger.error("CBT setup failed, cleaning up")
+            self.cleanup()
+            raise
 
     # ---- ConfigMap ------------------------------------------------
 
@@ -302,9 +314,16 @@ class ListerTool:
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
         cm = ocp.get(resource_name=constants.CBT_CONFIGMAP_NAME)
-        self.address = cm["data"]["address"]
-        self.audience = cm["data"]["audience"]
-        self._ca_cert = cm["data"]["caCert"]
+        data = cm.get("data", {})
+        required = ("address", "audience", "caCert")
+        missing = [k for k in required if k not in data]
+        if missing:
+            raise KeyError(
+                f"ConfigMap {constants.CBT_CONFIGMAP_NAME} " f"missing keys: {missing}"
+            )
+        self.address = data["address"]
+        self.audience = data["audience"]
+        self._ca_cert = data["caCert"]
         logger.info(
             "CBT service address=%s audience=%s",
             self.address,
@@ -382,6 +401,18 @@ class ListerTool:
     def _check_build_complete(self):
         """Return True once the lister binary has been built."""
         ocp_pod = OCP(kind=constants.POD, namespace=self.namespace)
+        pod_data = ocp_pod.get(
+            resource_name=self._lister_pod_name,
+        )
+        phase = pod_data.get("status", {}).get("phase", "")
+        if phase in ("Failed",):
+            logs = ocp_pod.exec_oc_cmd(
+                f"logs {self._lister_pod_name}",
+                out_yaml_format=False,
+            )
+            raise RuntimeError(
+                f"Lister pod {self._lister_pod_name} " f"failed:\n{logs}"
+            )
         try:
             logs = ocp_pod.exec_oc_cmd(
                 f"logs {self._lister_pod_name}",
@@ -500,6 +531,7 @@ class ListerTool:
                 continue
             parts = line.split()
             if len(parts) < 5:
+                logger.warning("Skipping malformed line: %s", line)
                 continue
             try:
                 entries.append(
@@ -512,6 +544,7 @@ class ListerTool:
                     }
                 )
             except (ValueError, IndexError):
+                logger.warning("Failed to parse line: %s", line)
                 continue
         return entries
 
@@ -638,10 +671,10 @@ class VerifierTool(ListerTool):
         container = spec["containers"][0]
         container["image"] = self.golang_image
         container["command"] = ["/bin/sh", "-c", build_and_run]
-        volumes = spec["volumes"]
-        volumes[0]["persistentVolumeClaim"]["claimName"] = source_pvc_name
-        volumes[1]["persistentVolumeClaim"]["claimName"] = dest_pvc_name
-        volumes[2]["configMap"]["name"] = self.ca_cert_cm_name
+        vol_map = {v["name"]: v for v in spec["volumes"]}
+        vol_map["source"]["persistentVolumeClaim"]["claimName"] = source_pvc_name
+        vol_map["target"]["persistentVolumeClaim"]["claimName"] = dest_pvc_name
+        vol_map["ca-cert"]["configMap"]["name"] = self.ca_cert_cm_name
 
         pod = helpers.create_resource(**pod_data)
         self._created_ns_resources.append(pod)

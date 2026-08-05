@@ -48,6 +48,7 @@ class TestRbdCBTMetadata(ManageTest):
     @pytest.fixture(autouse=True)
     def setup(
         self,
+        request,
         project_factory,
         pvc_factory,
         pod_factory,
@@ -63,6 +64,13 @@ class TestRbdCBTMetadata(ManageTest):
         factories are cleaned up by their respective
         factory finalizers.
         """
+
+        def finalizer():
+            if hasattr(self, "cbt_runner"):
+                self.cbt_runner.cleanup()
+
+        request.addfinalizer(finalizer)
+
         ensure_sidecar_image()
         ensure_sms_cr()
 
@@ -75,15 +83,6 @@ class TestRbdCBTMetadata(ManageTest):
 
         self.cbt_runner = VerifierTool(self.namespace)
         self.cbt_runner.setup()
-
-    @pytest.fixture(autouse=True)
-    def teardown(self, request):
-        """Clean up CBT runner."""
-
-        def finalizer():
-            self.cbt_runner.cleanup()
-
-        request.addfinalizer(finalizer)
 
     # -- helpers used by multiple tests ----------------------------
 
@@ -413,6 +412,7 @@ class TestRbdCBTMetadata(ManageTest):
             "Lister delta returned %d changed block(s)",
             len(entries),
         )
+        assert len(entries) > 0, "Delta lister returned no changed blocks"
 
         log.test_step("Run the CBT verifier in delta mode and " "assert exit code 0")
         self._restore_and_verify(

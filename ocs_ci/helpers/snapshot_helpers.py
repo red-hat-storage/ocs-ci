@@ -83,6 +83,7 @@ def restore_snapshot_to_block_pvc(
     if original_volume_mode and original_volume_mode != constants.VOLUME_MODE_BLOCK:
         annotate_snapshot_for_block_restore(snap_obj)
 
+    # Avoid circular import: pvc -> helpers -> snapshot_helpers
     from ocs_ci.ocs.resources.pvc import create_restore_pvc
 
     restored_pvc = create_restore_pvc(
@@ -122,12 +123,16 @@ def write_data_to_pvc(pod_obj, volume_mode, size_mb, filename=None, offset_mb=0)
     if volume_mode == constants.VOLUME_MODE_FILESYSTEM:
         if filename is None:
             filename = "testdata.bin"
+        if offset_mb:
+            logger.warning("offset_mb is ignored in Filesystem mode")
         cmd = (
             f"dd if=/dev/urandom "
             f"of={constants.MOUNT_POINT}/{filename} "
             f"bs=1M count={size_mb} conv=fsync"
         )
     else:
+        if filename is not None:
+            logger.warning("filename is ignored in Block mode")
         cmd = (
             f"dd if=/dev/urandom "
             f"of={constants.RAW_BLOCK_DEVICE} "
