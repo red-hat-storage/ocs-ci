@@ -2602,7 +2602,7 @@ def verify_pods_upgraded(
         try:
             pods = get_all_pods(namespace, [selector_value], selector_label)
             pods_len = len(pods)
-            logger.info(f"Found {pods_len} pod(s) for selector: {selector}")
+            logger.debug(f"Found {pods_len} pod(s) for selector: {selector}")
             if pods_len != count:
                 logger.warning(
                     f"Number of found pods {pods_len} is not as expected: " f"{count}"

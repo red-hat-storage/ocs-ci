@@ -1849,7 +1849,7 @@ def verify_images_upgraded(old_images, object_data, ignore_psql_12_verification=
     """
     name = object_data.get("metadata").get("name")
     current_images = get_images(object_data)
-    log.info(
+    log.debug(
         f"Current object {name} images: {current_images}, old images: {old_images}"
     )
     # from 4.15, noobaa-operator pod has NOOBAA_PSQL_12_IMAGE along with NOOBAA_DB_IMAGE
@@ -1872,7 +1872,8 @@ def verify_images_upgraded(old_images, object_data, ignore_psql_12_verification=
         raise NonUpgradedImagesFoundError(
             f"Images: {not_upgraded_images} weren't upgraded in: {name}!"
         )
-    log.info(f"All the images: {current_images} were successfully upgraded in: {name}!")
+    log.info(f"All images were successfully upgraded in: {name}")
+    log.debug(f"Upgraded images for {name}: {current_images}")
 
 
 def confirm_cluster_operator_version(target_version, cluster_operator):
