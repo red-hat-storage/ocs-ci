@@ -143,6 +143,13 @@ DEPLOYMENT:
   ec_default_pools: False
   # FDF
   fdf_upgrade_registry: "cp.stg.icr.io/cp/df"
+  # Standalone FDF (RHSTOR-8840): set true to deploy FDF via its own IBM catalog
+  # source instead of the full Fusion Operator stack. All other deployment steps
+  # (namespace, OperatorGroup, Subscription, StorageCluster) reuse the ODF path.
+  fdf_standalone_deployment: false
+  # Full image reference (registry + path + tag) for the standalone FDF catalog.
+  # Example: cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40
+  fdf_standalone_catalog_image: ""
 
 # Section for reporting configuration
 REPORTING:
