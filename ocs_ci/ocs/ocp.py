@@ -1887,9 +1887,8 @@ def confirm_cluster_operator_version(target_version, cluster_operator):
         bool: True if success, False if failed
 
     """
-    log.info(f"target_version: {target_version}")
     cur_version = get_cluster_operator_version(cluster_operator)
-    log.info(f"current {cluster_operator} operator version is: {cur_version}")
+    log.debug(f"current {cluster_operator} operator version is: {cur_version}")
     if cur_version == target_version or target_version.startswith(cur_version):
         log.info(
             f"{cluster_operator} cluster operator upgrade to build"
@@ -1946,6 +1945,7 @@ def check_cluster_operator_versions(target_image, operator_upgrade_timeout):
         target_image (str): target image to be upgraded
         operator_upgrade_timeout (int): timeout for operator upgrade
     """
+    log.info(f"Checking all cluster operators have upgraded to {target_image}")
     cluster_operators = get_all_cluster_operators()
     if "aro" in cluster_operators:
         log.debug("aro cluster operator check will be ignored!")
@@ -1962,7 +1962,7 @@ def check_cluster_operator_versions(target_image, operator_upgrade_timeout):
                 log.info(f"{ocp_operator} upgrade is completed!")
                 break
             else:
-                log.info(f"{ocp_operator} upgrade is not completed yet!")
+                log.debug(f"{ocp_operator} upgrade is not completed yet!")
 
 
 def get_cluster_operator_version(cluster_operator_name):
@@ -2008,10 +2008,10 @@ def get_all_cluster_operators():
     for name in operators_full_names:
         log.debug(f"original operator name: {name}")
         new_name = name.lstrip("clusteroperator.config.openshift.io").lstrip("/")
-        log.info(f"fixed operator name: {new_name}")
+        log.debug(f"fixed operator name: {new_name}")
         operator_names.append(new_name)
 
-    log.info(f"ClusterOperators full list: {operator_names}")
+    log.debug(f"ClusterOperators full list: {operator_names}")
 
     return operator_names
 
