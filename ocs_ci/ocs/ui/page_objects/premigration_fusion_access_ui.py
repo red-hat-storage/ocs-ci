@@ -97,32 +97,41 @@ class PreMigrationFusionAccessUI(PageNavigator, BaseUI):
         # each row has its own <input id="node-<uuid>" class="pf-v6-c-check__input">.
         # PF v6 checkboxes are visually overlaid by a <label>, so a plain click on
         # the <input> is intercepted.  We use JS .click() to bypass that overlay.
+        #
+        # We retry up to 3 times to handle two flaky scenarios:
+        #   a) "Only N of M selected" — React state update for one checkbox
+        #      arrives slightly after we re-query is_selected().
+        #   b) Stale element refs after a React re-render — get_elements()
+        #      is called fresh on every attempt.
         logger.info("Step 3: Select all nodes — clicking each unchecked row checkbox")
-        node_checkboxes = self.get_elements(
-            FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS["node_row_checkboxes"]
-        )
-        assert node_checkboxes, (
-            "No node checkboxes found on the 'Create storage cluster' page. "
-            "At least one worker node must be present."
-        )
-        logger.info(f"Found {len(node_checkboxes)} node row(s) in the table")
-        for checkbox in node_checkboxes:
-            if not checkbox.is_selected():
+        locator = FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS["node_row_checkboxes"]
+        for attempt in range(1, 4):
+            node_checkboxes = self.get_elements(locator)
+            assert node_checkboxes, (
+                "No node checkboxes found on the 'Create storage cluster' page. "
+                "At least one worker node must be present."
+            )
+            unchecked = [cb for cb in node_checkboxes if not cb.is_selected()]
+            if not unchecked:
+                break
+            logger.info(
+                f"Attempt {attempt}: clicking {len(unchecked)} unchecked "
+                f"checkbox(es) out of {len(node_checkboxes)}"
+            )
+            for checkbox in unchecked:
                 self.driver.execute_script("arguments[0].click();", checkbox)
+            # Wait for React to propagate the checked state before re-querying
+            self.wait_for_element_attribute(
+                locator=locator,
+                attribute="checked",
+                attribute_value="true",
+                timeout=15,
+                sleep=1,
+            )
         self.take_screenshot("all_nodes_selected")
 
-        # Step 4 — Wait until every row checkbox reports checked=true, then verify.
-        # Uses wait_for_element_attribute (TimeoutSampler-backed) per framework
-        # convention instead of a bare sleep — fails fast if DOM never settles.
-        logger.info("Step 4: Waiting for all node checkboxes to reach checked state")
-        locator = FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS["node_row_checkboxes"]
-        self.wait_for_element_attribute(
-            locator=locator,
-            attribute="checked",
-            attribute_value="true",
-            timeout=30,
-            sleep=1,
-        )
+        # Step 4 — Verify all checkboxes are now selected after the retry loop.
+        logger.info("Step 4: Verify all node checkboxes are selected")
         node_checkboxes = self.get_elements(locator)
         checked = [cb for cb in node_checkboxes if cb.is_selected()]
         assert len(checked) == len(node_checkboxes), (
@@ -131,12 +140,26 @@ class PreMigrationFusionAccessUI(PageNavigator, BaseUI):
         )
         logger.info(f"Verified: all {len(checked)} node(s) selected")
 
-        # Log the summary text when visible ("3 nodes were selected, sharing 9 disks…")
+        # Log the summary text and wait for the disk count to be non-zero.
+        # The disk count is populated asynchronously after node selection;
+        # proceeding while it shows "0 disks" causes the submit to create
+        # a cluster with no storage attached.
         summary_elements = self.get_elements(
             FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS["nodes_selected_summary"]
         )
         if summary_elements:
             logger.info(f"Node selection summary: '{summary_elements[0].text}'")
+
+        logger.info("Waiting for non-zero disk count in node selection summary...")
+        self.wait_for_element_to_be_present(
+            locator=FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS["nodes_selected_with_disks"],
+            timeout=60,
+        )
+        summary_elements = self.get_elements(
+            FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS["nodes_selected_summary"]
+        )
+        if summary_elements:
+            logger.info(f"Final node selection summary: '{summary_elements[0].text}'")
 
         # Step 5 — Click the final "Create storage cluster" submit button
         logger.info("Step 5: Click the 'Create storage cluster' submit button")
