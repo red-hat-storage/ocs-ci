@@ -93,6 +93,18 @@ def create_cbt_rbac(namespace, sa_name):
     cluster_resources = []
     ns_resources = []
 
+    try:
+        return _create_cbt_rbac_resources(
+            namespace, subject, cluster_resources, ns_resources
+        )
+    except Exception:
+        _delete_tracked_resources(ns_resources)
+        _delete_tracked_resources(cluster_resources)
+        raise
+
+
+def _create_cbt_rbac_resources(namespace, subject, cluster_resources, ns_resources):
+    """Create RBAC resources, called by create_cbt_rbac."""
     # ClusterRole: get volumesnapshotcontents
     cr_name = helpers.create_unique_resource_name(
         "cbt-snap-content-reader", "clusterrole"
@@ -401,17 +413,17 @@ class ListerTool:
     def _check_build_complete(self):
         """Return True once the lister binary has been built."""
         ocp_pod = OCP(kind=constants.POD, namespace=self.namespace)
-        pod_data = ocp_pod.get(
-            resource_name=self._lister_pod_name,
+        phase = ocp_pod.get_resource_status(
+            self._lister_pod_name,
         )
-        phase = pod_data.get("status", {}).get("phase", "")
-        if phase in ("Failed",):
+        terminal = (constants.STATUS_FAILED, constants.STATUS_SUCCEED)
+        if phase in terminal:
             logs = ocp_pod.exec_oc_cmd(
                 f"logs {self._lister_pod_name}",
                 out_yaml_format=False,
             )
             raise RuntimeError(
-                f"Lister pod {self._lister_pod_name} " f"failed:\n{logs}"
+                f"Lister pod {self._lister_pod_name} " f"terminated ({phase}):\n{logs}"
             )
         try:
             logs = ocp_pod.exec_oc_cmd(
