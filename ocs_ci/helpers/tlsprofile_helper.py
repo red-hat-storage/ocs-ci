@@ -335,6 +335,16 @@ def _tls_scan_discover_endpoints(kubeconfig, namespaces, component="all"):
             if name_filter and name_filter not in pod_name:
                 continue
             fallback_ports = selector.get("fallback_ports", [])
+            if not fallback_ports and component == "all":
+                pod_labels = pod.get("metadata", {}).get("labels", {})
+                for comp_sel in TLS_SCAN_COMPONENT_SELECTORS.values():
+                    comp_label = comp_sel.get("label", "")
+                    comp_fb = comp_sel.get("fallback_ports", [])
+                    if comp_fb and "=" in comp_label:
+                        key, val = comp_label.split("=", 1)
+                        if pod_labels.get(key) == val:
+                            fallback_ports = comp_fb
+                            break
             for container in pod["spec"]["containers"]:
                 c_name = container["name"]
                 cmd_parts = container.get("command", []) + container.get("args", [])
