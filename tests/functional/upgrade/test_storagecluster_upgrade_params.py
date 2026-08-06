@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     brown_squad,
 )
+from ocs_ci.framework.pytest_customization.marks import zstream_4_20_14, zstream_4_20_14_upgrade
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,8 @@ logger = logging.getLogger(__name__)
 @brown_squad
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-6225")
+@zstream_4_20_14
+@zstream_4_20_14_upgrade
 class TestStorageclusterUpgradeParams(ManageTest):
     """
     Verify the upgrade storagecluster parameters move to cephcluster
