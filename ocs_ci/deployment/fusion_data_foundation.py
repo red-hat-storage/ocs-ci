@@ -10,6 +10,7 @@ import tempfile
 import yaml
 
 from ocs_ci.deployment.helpers import storage_class
+from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
 
@@ -41,6 +42,9 @@ class FusionDataFoundationDeployment:
         self.live_deployment = config.DEPLOYMENT.get("live_deployment", False)
         self.kubeconfig = config.RUN["kubeconfig"]
         self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
+        self.fdf_skip_storage_setup = config.DEPLOYMENT.get(
+            "fdf_skip_storage_setup", False
+        )
         storage_class.set_custom_storage_class_path()
 
     @property
@@ -73,7 +77,8 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
-        self.setup_storage()
+        if not self.fdf_skip_storage_setup:
+            self.setup_storage()
 
     def ensure_lso_installed(self):
         """
@@ -200,6 +205,7 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Verifying FDF installation")
         fusion_service_instance_health_check()
+        wait_for_storageclusters_crd()
         self.get_installed_version()
         logger.info("FDF successfully installed")
 
@@ -241,8 +247,12 @@ class FusionDataFoundationDeployment:
             odfcluster_status_check()
         else:
             logger.info("Storage configuration for Fusion 2.11 or greater")
+            if self.lso_enabled:
+                add_disks_lso()
             clustersetup = StorageClusterSetup()
             create_lvs_resource(self.storage_class, self.storage_class)
+            if config.ENV_DATA.get("mark_masters_schedulable", False):
+                node.mark_masters_schedulable()
             add_storage_label()
             clustersetup.setup_storage_cluster()
             # Mute MON_NETSPLIT for arbiter deployments to avoid:
@@ -369,11 +379,40 @@ def extract_image_digest_mirror_set(upgrade=False):
     return filename
 
 
+def is_not_arbiter_node(node_obj):
+    """
+    Determines if a node contains the arbiter zone label.
+    Used to filter arbiter node from node list.
+
+    Args:
+        node_obj (ocs_ci.ocs.ocp.OCP): OCP Node object
+
+    Returns:
+        bool: True if node doesn't contain the labelj, False if it does
+
+    """
+    arbiter_zone = config.DEPLOYMENT.get(
+        "arbiter_zone", constants.ARBITER_ZONE_LABEL[0]
+    )
+    zone_key = "topology.kubernetes.io/zone"
+    data = node_obj.data
+    metadata = data.get("metadata")
+    labels = metadata.get("labels")
+    return not labels.get(zone_key) == arbiter_zone
+
+
 def add_storage_label():
     """
-    Add storage label on worker nodes.
+    Add storage label on nodes.
     """
-    nodes = node.get_nodes(node_type="worker")
+    if config.ENV_DATA.get("mark_masters_schedulable", False):
+        all_nodes = node.get_all_nodes()
+        nodes = node.get_node_objs(all_nodes)
+        # Filter arbiter node if configured
+        if config.DEPLOYMENT.get("arbiter_deployment"):
+            nodes = list(filter(is_not_arbiter_node, nodes))
+    else:
+        nodes = node.get_nodes(node_type="worker")
     node.label_nodes(nodes)
 
 
@@ -412,6 +451,31 @@ def storagecluster_health_check():
     logger.info("StorageCluster is healthy and in Ready state.")
 
 
+def wait_for_storageclusters_crd():
+    """
+    Wait for the storageclusters CRD to exist.
+    """
+    logger.info("Waiting for the StorageClusters CRD to exist")
+
+    @retry((CommandFailed, AssertionError, KeyError), 30, 30, backoff=1)
+    def _wait_for_storageclusters_crd():
+        storageclusters_crd = CustomResourceDefinition(
+            resource_name="storageclusters.ocs.openshift.io",
+        )
+        status = storageclusters_crd.data.get("status", {})
+        conditions = status.get("conditions")
+        established_status_exists = False
+
+        for condition in conditions:
+            if condition.get("type") == "Established":
+                established_status_exists = True
+                assert condition.get("status") == "True"
+
+        assert established_status_exists
+
+    _wait_for_storageclusters_crd()
+
+
 class FusionServiceInstance(OCP):
     def __init__(self, resource_name="", *args, **kwargs):
         super(FusionServiceInstance, self).__init__(
@@ -423,4 +487,14 @@ class OdfCluster(OCP):
     def __init__(self, resource_name="", *args, **kwargs):
         super(OdfCluster, self).__init__(
             resource_name=resource_name, kind="OdfCluster", *args, **kwargs
+        )
+
+
+class CustomResourceDefinition(OCP):
+    def __init__(self, resource_name="", *args, **kwargs):
+        super(CustomResourceDefinition, self).__init__(
+            resource_name=resource_name,
+            kind="CustomResourceDefinition",
+            *args,
+            **kwargs,
         )
