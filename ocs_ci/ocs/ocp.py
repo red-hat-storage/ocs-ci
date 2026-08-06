@@ -1468,7 +1468,14 @@ class OCP(object):
                 current_phase = data["status"]["operationState"]["phase"]
             else:
                 current_phase = data["status"]["phase"]
-            log.info(f"Resource {self.resource_name} is in phase: {current_phase}!")
+            last_phase = getattr(self, "_last_logged_phase", None)
+            if current_phase != last_phase:
+                log.info(f"Resource {self.resource_name} is in phase: {current_phase}!")
+                self._last_logged_phase = current_phase
+            else:
+                log.debug(
+                    f"Resource {self.resource_name} is in phase: {current_phase}!"
+                )
             return current_phase == phase
         except KeyError:
             log.info(
