@@ -2,7 +2,7 @@ import logging
 import random
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 @skipif_hci_provider_and_client
 @skipif_ocs_version("<4.11")
 @pytest.mark.polarion_id("OCS-4471")
+@zstream_4_18_1
 class TestCephPgLogDupsTrimming(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
