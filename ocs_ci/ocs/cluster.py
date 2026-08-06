@@ -1479,6 +1479,51 @@ def get_osd_utilization():
     return osd_filled
 
 
+def get_osd_bdev_type(osd_id=0):
+    """
+    Get the bluestore device type for an OSD.
+
+    Args:
+        osd_id (int): OSD ID to query (default: 0).
+
+    Returns:
+        str: Device type reported by the OSD ("ssd" or "hdd").
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    metadata = ct_pod.exec_ceph_cmd(ceph_cmd=f"ceph osd metadata osd.{osd_id}")
+    bdev_type = metadata.get("bluestore_bdev_type", "hdd")
+    logger.info("OSD %s bluestore_bdev_type: %s", osd_id, bdev_type)
+    return bdev_type
+
+
+def get_mclock_max_capacity_iops_config_key(osd_id=0):
+    """
+    Return the mclock max capacity IOPS config key and its
+    default value based on the OSD disk type.
+
+    Args:
+        osd_id (int): OSD ID to query for disk type
+            (default: 0).
+
+    Returns:
+        tuple: (config_key, default_value) e.g.
+            ("osd_mclock_max_capacity_iops_hdd", 315.0) or
+            ("osd_mclock_max_capacity_iops_ssd", 21500.0).
+
+    """
+    bdev_type = get_osd_bdev_type(osd_id)
+    if bdev_type == "ssd":
+        return (
+            constants.MCLOCK_MAX_CAPACITY_IOPS_SSD,
+            constants.MCLOCK_MAX_CAPACITY_IOPS_SSD_DEFAULT,
+        )
+    return (
+        constants.MCLOCK_MAX_CAPACITY_IOPS_HDD,
+        constants.MCLOCK_MAX_CAPACITY_IOPS_HDD_DEFAULT,
+    )
+
+
 def get_ceph_df_detail(format="json-pretty", out_yaml_format=True):
     """
     Get ceph osd df detail

@@ -3970,6 +3970,12 @@ MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
 
+# mclock IOPS config keys
+MCLOCK_MAX_CAPACITY_IOPS_SSD = "osd_mclock_max_capacity_iops_ssd"
+MCLOCK_MAX_CAPACITY_IOPS_HDD = "osd_mclock_max_capacity_iops_hdd"
+MCLOCK_MAX_CAPACITY_IOPS_SSD_DEFAULT = 21500.0
+MCLOCK_MAX_CAPACITY_IOPS_HDD_DEFAULT = 315.0
+
 # chaos Tests constants
 KRKN_DIR = os.path.join(DATA_DIR, "krkn")
 KRKN_CHAOS_DIR = os.path.join(TOP_DIR, "ocs_ci", "krkn_chaos")
