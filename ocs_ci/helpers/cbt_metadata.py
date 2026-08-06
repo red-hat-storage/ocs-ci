@@ -103,7 +103,9 @@ def create_cbt_rbac(namespace, sa_name):
         raise
 
 
-def _create_cbt_rbac_resources(namespace, subject, cluster_resources, ns_resources):
+def _create_cbt_rbac_resources(
+    namespace, subject, cluster_resources, ns_resources
+) -> None:
     """Create RBAC resources, called by create_cbt_rbac."""
     # ClusterRole: get volumesnapshotcontents
     cr_name = helpers.create_unique_resource_name(
@@ -284,6 +286,7 @@ class ListerTool:
         self.tools_repo = (
             "https://github.com/red-hat-storage/" "external-snapshot-metadata.git"
         )
+        self.tools_ref = "main"
         self.golang_image = "golang:1.26"
         self.service_account = "cbt-client"
         self.ca_cert_cm_name = "cbt-ca-cert"
@@ -370,7 +373,8 @@ class ListerTool:
         build_cmd = (
             "set -e && "
             f"cd {self.build_dir} && "
-            f"git clone --depth=1 {self.tools_repo} && "
+            f"git clone --depth=1 --branch {self.tools_ref} "
+            f"{self.tools_repo} && "
             "cd external-snapshot-metadata/tools/"
             "snapshot-metadata-lister && "
             "go mod tidy && "
@@ -664,7 +668,8 @@ class VerifierTool(ListerTool):
         build_and_run = (
             "set -e && "
             f"cd {self.build_dir} && "
-            f"git clone --depth=1 {self.tools_repo} && "
+            f"git clone --depth=1 --branch {self.tools_ref} "
+            f"{self.tools_repo} && "
             "cd external-snapshot-metadata/tools/"
             "snapshot-metadata-verifier && "
             "go mod tidy && "
