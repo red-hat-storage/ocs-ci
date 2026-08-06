@@ -6,20 +6,29 @@ using the new multi-step creation wizard
 """
 
 import logging
-import pytest
+import os
+import time
 
-from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.ocs.ui.base_ui import BaseUI
-from ocs_ci.framework.testlib import (
-    ui,
-    ManageTest,
-)
+import pexpect
+import pytest
+import yaml
+
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    magenta_squad,
     ignore_leftovers,
+    magenta_squad,
 )
-from ocs_ci.helpers.helpers import create_unique_resource_name, create_project
+from ocs_ci.framework.testlib import (
+    ManageTest,
+    ui,
+)
+from ocs_ci.helpers.helpers import create_project, create_unique_resource_name
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ui.base_ui import BaseUI
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.page_objects.virtualmachine_ui import VirtualMachineUI
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -35,39 +44,250 @@ class TestVirtualMachineLifecycle(ManageTest):
     @pytest.fixture(autouse=True)
     def setup_ui(self, setup_ui_class_factory):
         """
-        Setup UI session for the test class.
+        Setup UI session for the test class.  Initialises instance attributes
+        used by the teardown fixture so they are always defined even if a test
+        fails before the VM is created.
 
         Args:
             setup_ui_class_factory: Factory fixture to setup UI session
         """
+        self._test_vm_name = None
+        self._test_namespace = None
+
         setup_ui_class_factory()
         self.page_nav = PageNavigator()
         self.base_ui = BaseUI()
         self.vm_ui = VirtualMachineUI()
 
-    @pytest.mark.polarion_id("OCS-8066")
-    def test_create_virtualmachine_from_instancetype(self):
+    @pytest.fixture(autouse=True)
+    def teardown_vm(self, request):
         """
-        Test to create a VirtualMachine via the new UI wizard.
+        Lists all VirtualMachines in the test namespace, deletes
+        all of them, then deletes the namespace itself.
+        """
 
-        Test Steps:
-        1. Create a test namespace and navigate to Workloads > Pods in left nav.
-           Open "All Projects" dropdown at the top and select the test namespace.
-        2. Navigate to Virtualization > VirtualMachines, dismiss welcome modal.
-        3. Click Create, enter a unique VM name, click Next (Deployment details).
-        4. Guest OS page: select "Other Linux" (3rd card), open Guest operating
-           system type dropdown and pick the latest centos.stream* version, click Next.
-        5. Boot source page: click on the latest centos-stream* volume, click Next.
-        6. Compute resources page: select small size, click Next.
-        7. Customization page: click Storage tab, click the kebab menu on the
-           rootdisk row, select Edit, change StorageClass to option ending with
-           -vm, click Save, click Next.
-        8. Review and create page: click Create VirtualMachine.
-        9. Wait for VM status: Provisioning → Running.
+        def cleanup():
+            namespace = self._test_namespace
+            if not namespace:
+                logger.info("teardown_vm: no namespace recorded — nothing to clean up")
+                return
+
+            vm_ocp = OCP(kind=constants.VIRTUAL_MACHINE, namespace=namespace)
+            ns_ocp = OCP(kind="Namespace")
+
+            # List all VMs in the namespace for diagnostics
+            try:
+                vm_list = vm_ocp.exec_oc_cmd(
+                    f"get vm -n {namespace} --no-headers", out_yaml_format=False
+                )
+                logger.info(vm_list or "(no VMs found)")
+            except Exception as e:
+                logger.warning(f"Could not list VMs in '{namespace}': {e}")
+
+            # Delete all VMs in the namespace
+            try:
+                vm_ocp.exec_oc_cmd(
+                    f"delete vm --all -n {namespace}", out_yaml_format=False
+                )
+                logger.info(f"All VMs deleted from namespace '{namespace}'")
+            except Exception as e:
+                logger.warning(f"Could not delete VMs in '{namespace}': {e}")
+
+            # Delete the namespace
+            try:
+                ns_ocp.exec_oc_cmd(
+                    f"delete namespace {namespace}", out_yaml_format=False
+                )
+                logger.info(f"Namespace '{namespace}' deleted")
+            except Exception as e:
+                logger.warning(f"Could not delete namespace '{namespace}': {e}")
+
+        request.addfinalizer(cleanup)
+
+    def _login_to_vm_console(self, vm_name, namespace, vm_username, vm_password):
         """
-        logger.info("=" * 80)
-        logger.info("Starting VirtualMachine Creation Test")
-        logger.info("=" * 80)
+        Spawn a virtctl console session and log in to the VM.
+
+        Args:
+            vm_name (str): Name of the VirtualMachine.
+            namespace (str): Namespace the VM lives in.
+            vm_username (str): OS username (e.g. ``centos``).
+            vm_password (str): OS password from cloud-init userData.
+
+        Returns:
+            pexpect.spawn: The open pexpect child process, already at a shell
+            prompt and ready to receive commands.
+        """
+        virtctl_console_cmd = f"virtctl console {vm_name} --namespace {namespace}"
+        logger.info(f"Launching: {virtctl_console_cmd}")
+
+        env = os.environ.copy()
+        kubeconfig = config.RUN.get("kubeconfig")
+        if kubeconfig:
+            env["KUBECONFIG"] = kubeconfig
+
+        child = pexpect.spawn(
+            virtctl_console_cmd,
+            env=env,
+            encoding="utf-8",
+            timeout=120,
+        )
+
+        # Wait for the "Press Ctrl" banner confirming the console is connected
+        child.expect(r"Press Ctrl", timeout=60)
+        child.sendline("")
+
+        child.expect(r"login:", timeout=60)
+        logger.info("Login prompt detected — sending username")
+        child.sendline(vm_username)
+
+        child.expect(r"[Pp]assword:", timeout=60)
+        logger.info("Password prompt detected — sending password")
+        child.sendline(vm_password)
+
+        child.expect(r"\]\$\s", timeout=60)
+        logger.info("Shell prompt detected — logged in successfully")
+
+        return child
+
+    def _calculate_vm_file_md5sum(self, child, test_file, test_data=None):
+        """
+        Args:
+            child (pexpect.spawn): An open, logged-in pexpect console session.
+            test_file (str): Absolute path of the file to checksum inside the VM.
+            test_data (str | None): String content to write into the file before
+                checksumming.  Pass ``None`` (default) to checksum without writing.
+
+        Returns:
+            str: The md5 hex digest of the file.
+        """
+        shell_prompt = r"\]\$\s"
+        filename = test_file.split("/")[-1]
+
+        if test_data is not None:
+            child.sendline(f"echo '{test_data}' > {test_file}")
+            child.expect(shell_prompt, timeout=30)
+            logger.info(f"Test data written to '{test_file}' inside the VM")
+        else:
+            # Check the file is present on the cloned disk by listing the
+            # parent directory and confirming the filename appears in the output.
+            parent_dir = "/".join(test_file.split("/")[:-1]) or "/"
+            logger.info(f"Checking for '{filename}' in '{parent_dir}' via ls...")
+            child.sendline(f"ls {parent_dir}")
+            child.expect(shell_prompt, timeout=30)
+            ls_output = child.before
+            logger.info(f"ls output: {ls_output.strip()}")
+            assert filename in ls_output, (
+                f"Expected file '{test_file}' not found on cloned VM — "
+                f"'ls {parent_dir}' output:\n{ls_output.strip()}"
+            )
+            logger.info(f"Confirmed '{filename}' is present on the cloned disk")
+
+        # Run md5sum
+        child.sendline(f"md5sum {test_file}")
+        child.expect(shell_prompt, timeout=30)
+
+        md5sum_output = None
+        for line in child.before.splitlines():
+            line = line.strip()
+            # A valid md5sum line: 32 hex chars followed by whitespace + filename
+            if line and not line.startswith("md5sum") and len(line.split()) >= 2:
+                candidate = line.split()[0]
+                if len(candidate) == 32 and all(
+                    c in "0123456789abcdefABCDEF" for c in candidate
+                ):
+                    md5sum_output = candidate
+                    break
+
+        if md5sum_output is None:
+            logger.warning(f"Could not parse md5sum from output:\n{child.before}")
+        else:
+            logger.info(f"Parsed md5sum checksum: {md5sum_output}")
+        return md5sum_output
+
+    def _wait_for_vmi_agent_connected(self, vm_name, namespace, timeout=600):
+        """
+        Wait until the VMI exists in the cluster and its ``AgentConnected``
+        condition is ``True``.
+
+        Args:
+            vm_name (str): Name of the VirtualMachineInstance (same as the VM).
+            namespace (str): Namespace the VMI lives in.
+            timeout (int): Maximum seconds to wait across both phases
+                (default 600 = 10 minutes).
+
+        Raises:
+            ocs_ci.ocs.exceptions.TimeoutExpiredError: If the VMI does not
+                appear or AgentConnected does not become True within *timeout*.
+        """
+        vmi_ocp = OCP(kind=constants.VIRTUAL_MACHINE_INSTANCE, namespace=namespace)
+
+        logger.info(
+            f"Waiting for VMI '{vm_name}' to appear in cluster "
+            f"(namespace '{namespace}', timeout {timeout}s)..."
+        )
+        for vmi_data in TimeoutSampler(
+            timeout=timeout,
+            sleep=10,
+            func=vmi_ocp.get,
+            resource_name=vm_name,
+            dont_raise=True,
+            silent=True,
+        ):
+            if vmi_data:
+                logger.info(f"VMI '{vm_name}' found in cluster")
+                break
+
+        logger.info(
+            f"Waiting for AgentConnected on VMI '{vm_name}' "
+            f"(namespace '{namespace}')..."
+        )
+        for vmi_data in TimeoutSampler(
+            timeout=timeout,
+            sleep=30,
+            func=vmi_ocp.get,
+            resource_name=vm_name,
+            dont_raise=True,
+            silent=True,
+        ):
+            if vmi_data:
+                conditions = vmi_data.get("status", {}).get("conditions") or []
+                for cond in conditions:
+                    if (
+                        cond.get("type") == "AgentConnected"
+                        and cond.get("status") == "True"
+                    ):
+                        logger.info(
+                            f"AgentConnected=True on VMI '{vm_name}' — "
+                            "guest OS is fully booted and ready"
+                        )
+                        return
+
+    def _create_vm_and_wait_for_running(self):
+        """
+        Create a new namespace, navigate through the VM creation wizard, and
+        wait until the new VirtualMachine reaches the Running state.
+
+        Steps performed:
+        1. Create a new project/namespace and select it from the All Projects
+           dropdown under Workloads > Pods.
+        2. Navigate to Virtualization > VirtualMachines.
+        3. Open the creation wizard, enter a unique VM name, click Next.
+        4. Guest OS: select Other Linux, pick the latest centos.stream* version,
+           click Next.
+        5. Boot source: select the latest centos-stream* volume, click Next.
+        6. Compute resources: select the small size, click Next.
+        7. Customization: open the Storage tab, edit the rootdisk row's
+           StorageClass to the option ending with -vm, save, click Next.
+        8. Review and create: click Create VirtualMachine.
+        9. Wait for the VM status to reach Running.
+
+        Returns:
+            tuple[str, str]: ``(vm_name, namespace)`` of the newly running VM.
+        """
+        # Reset so teardown always has the latest namespace for this test run.
+        self._test_vm_name = None
+        self._test_namespace = None
 
         logger.info("\nStep 1: Create new project")
         logger.info("-" * 80)
@@ -89,7 +309,6 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         logger.info("\nStep 3: Click Create, enter VM name, click Next")
         logger.info("-" * 80)
-        self.vm_ui.dismiss_welcome_modal_if_present(wait_for_modal=True, timeout=15)
         vm_name = create_unique_resource_name("test", "vm")
         logger.info(f"Generated VM name: {vm_name}")
         self.vm_ui.click_create_virtualmachine()
@@ -167,5 +386,244 @@ class TestVirtualMachineLifecycle(ManageTest):
         self.vm_ui.wait_for_vm_running()
         self.base_ui.take_screenshot("vm_running")
         logger.info(f"VirtualMachine '{vm_name}' is now Running")
+
+        # Store on the instance so teardown_vm can clean up even on test failure.
+        self._test_vm_name = vm_name
+        self._test_namespace = namespace
+
+        return vm_name, namespace
+
+    def _fetch_vm_credentials(self, vm_name, namespace):
+        """
+        Retrieve the cloud-init username and password from the VM's YAML spec.
+
+        Args:
+            vm_name (str): Name of the VirtualMachine resource.
+            namespace (str): Namespace the VM lives in.
+
+        Returns:
+            tuple[str, str]: ``(vm_username, vm_password)``
+        """
+        logger.info(
+            f"Fetching VM YAML for '{vm_name}' in namespace '{namespace}' "
+            "to extract credentials"
+        )
+        vm_ocp = OCP(kind=constants.VIRTUAL_MACHINE, namespace=namespace)
+        vm_yaml = vm_ocp.get(resource_name=vm_name)
+
+        vm_username = None
+        vm_password = None
+        volumes = (
+            vm_yaml.get("spec", {})
+            .get("template", {})
+            .get("spec", {})
+            .get("volumes", [])
+        )
+        for volume in volumes:
+            cloud_init_data = volume.get("cloudInitNoCloud") or volume.get(
+                "cloudInitConfigDrive"
+            )
+            if cloud_init_data:
+                user_data_str = cloud_init_data.get("userData", "")
+                user_data = yaml.safe_load(user_data_str)
+                if not isinstance(user_data, dict):
+                    logger.warning(
+                        "cloud-init userData is not a mapping — skipping volume"
+                    )
+                    continue
+                vm_username = user_data.get("user")
+                vm_password = user_data.get("password")
+                break
+
+        assert vm_username, f"Could not find 'user' in userData for VM '{vm_name}'"
+        assert vm_password, f"Could not find 'password' in userData for VM '{vm_name}'"
+        logger.info("Extracted credentials — username: <masked>, password: <masked>")
+        return vm_username, vm_password
+
+    @pytest.mark.polarion_id("OCS-8066")
+    def test_create_virtualmachine_from_instancetype(self):
+        """
+        Test to create a VirtualMachine via the new UI wizard.
+
+        Test Steps:
+        1. Create a test namespace and navigate to Workloads > Pods in left nav.
+           Open "All Projects" dropdown at the top and select the test namespace.
+        2. Navigate to Virtualization > VirtualMachines, dismiss welcome modal.
+        3. Click Create, enter a unique VM name, click Next (Deployment details).
+        4. Guest OS page: select "Other Linux" (3rd card), open Guest operating
+           system type dropdown and pick the latest centos.stream* version, click Next.
+        5. Boot source page: click on the latest centos-stream* volume, click Next.
+        6. Compute resources page: select small size, click Next.
+        7. Customization page: click Storage tab, click the kebab menu on the
+           rootdisk row, select Edit, change StorageClass to option ending with
+           -vm, click Save, click Next.
+        8. Review and create page: click Create VirtualMachine.
+        9. Wait for VM status: Provisioning → Running.
+        10. Fetch VM credentials (username/password) from the VM YAML,
+            login to the VM console via virtctl console using pexpect,
+            write a test file with known data, compute its md5sum, and assert
+            the checksum is non-empty.
+        """
+        logger.info("=" * 80)
+        logger.info("Starting VirtualMachine Creation Test")
+        logger.info("=" * 80)
+
+        vm_name, namespace = self._create_vm_and_wait_for_running()
         logger.info("VM Created: PASS")
         logger.info("VM Running: PASS")
+
+        logger.info("\nStep 10: Add data to the VM and compute md5sum via CLI")
+        logger.info("-" * 80)
+
+        vm_username, vm_password = self._fetch_vm_credentials(vm_name, namespace)
+
+        self._wait_for_vmi_agent_connected(vm_name, namespace)
+
+        test_file = "/home/centos/ocs_test_data.txt"
+        test_data = "OCS CI test data for checksum verification"
+
+        child = self._login_to_vm_console(vm_name, namespace, vm_username, vm_password)
+
+        md5sum = self._calculate_vm_file_md5sum(child, test_file, test_data)
+
+        # Exit the console with Ctrl+] — the correct escape for
+        # virtctl console, same as pressing Ctrl+] in a terminal.
+        child.send("\x1d")
+        child.close()
+
+        assert md5sum, "md5sum value is empty — data write or checksum failed"
+        logger.info(f"VM data md5sum checksum stored: {md5sum}")
+        logger.info("VM data write and md5sum checksum: PASS")
+
+    @pytest.mark.polarion_id("OCS-8067")
+    def test_clone_virtualmachine(self):
+        """
+        Test cloning a VirtualMachine via the UI and verifying data integrity.
+
+        Test Steps:
+        1. Create a new namespace, run through the full VM creation wizard,
+           and wait for the VM to reach the Running state.
+        2. Fetch VM credentials from the VM YAML.
+        3. Log in to the VM console via virtctl, write a test file with known
+           data, and compute its md5sum.
+        4. Navigate to Virtualization > VirtualMachines and open the VM detail
+           page.
+        5. Open Actions dropdown, click Clone; the Clone VirtualMachine popup
+           opens with the clone name pre-filled. Read the clone name, tick
+           'Start VirtualMachine once created', then click Clone.
+        6. Wait for the page to finish loading after clone — Verify status is Running.
+        7. Log in to the cloned VM console, confirm the file exists, compute
+           its md5sum without writing anything.
+        8. Assert the md5sum of the cloned file matches the original checksum.
+        """
+        logger.info("=" * 80)
+        logger.info("Starting VirtualMachine Clone Test")
+        logger.info("=" * 80)
+
+        logger.info("\nStep 1: Create VM and wait for Running state")
+        logger.info("-" * 80)
+        vm_name, namespace = self._create_vm_and_wait_for_running()
+        logger.info(f"VM '{vm_name}' in namespace '{namespace}' is Running — PASS")
+
+        logger.info("\nStep 2: Fetch VM credentials from VM YAML")
+        logger.info("-" * 80)
+        vm_username, vm_password = self._fetch_vm_credentials(vm_name, namespace)
+
+        logger.info("\nStep 3: Write test data to VM and compute md5sum")
+        logger.info("-" * 80)
+        test_file = "/home/centos/ocs_test_data.txt"
+        test_data = "OCS CI test data for checksum verification"
+
+        self._wait_for_vmi_agent_connected(vm_name, namespace)
+        child = self._login_to_vm_console(vm_name, namespace, vm_username, vm_password)
+        original_md5sum = self._calculate_vm_file_md5sum(child, test_file, test_data)
+        child.send("\x1d")
+        child.close()
+
+        assert original_md5sum, "md5sum value is empty — data write or checksum failed"
+        logger.info(f"Original VM md5sum: {original_md5sum}")
+        logger.info("VM data write and md5sum checksum: PASS")
+
+        logger.info("\nStep 4: Navigate to Virtualization > VirtualMachines")
+        logger.info("-" * 80)
+        self.vm_ui.navigate_to_virtualmachines_page()
+        self.base_ui.page_has_loaded()
+        self.vm_ui.dismiss_welcome_modal_if_present(wait_for_modal=True, timeout=15)
+        self.base_ui.take_screenshot("clone_test_vms_page")
+
+        logger.info(f"\nStep 4b: Click VM '{vm_name}'")
+        logger.info("-" * 80)
+        self.vm_ui.click_virtual_machines_tab_and_open_vm(vm_name)
+        self.base_ui.take_screenshot("clone_test_original_vm_detail")
+
+        logger.info(
+            "\nStep 5: Actions > Clone — read clone name, tick checkbox, submit"
+        )
+        logger.info("-" * 80)
+        self.vm_ui.click_actions_menu()
+        self.base_ui.take_screenshot("clone_test_actions_menu_open")
+
+        self.vm_ui.click_actions_clone()
+        self.base_ui.take_screenshot("clone_test_clone_popup_open")
+
+        # Read the pre-filled clone name before clicking anything
+        clone_vm_name = self.vm_ui.get_clone_vm_name()
+        logger.info(f"Clone VM name will be: '{clone_vm_name}'")
+
+        # Tick 'Start VirtualMachine once created' so the clone starts automatically
+        self.vm_ui.tick_start_vm_once_created()
+        self.base_ui.take_screenshot("clone_test_popup_ready")
+
+        self.vm_ui.click_clone_submit_button()
+        self.base_ui.take_screenshot("clone_test_clone_submitted")
+        logger.info(f"Clone submitted — clone VM name: '{clone_vm_name}'")
+
+        logger.info(
+            "\nStep 6: Wait for clone detail page to load, verify cloned VM is Running"
+        )
+        logger.info("-" * 80)
+        self.base_ui.page_has_loaded()
+        logger.info("Waiting 30 s for cloned VM detail page to fully render...")
+        time.sleep(30)
+        self.base_ui.page_has_loaded()
+        self.base_ui.take_screenshot("clone_test_clone_vm_detail")
+
+        # If Running within 4 min — proceed. If Stopped — start via Actions > Control > Start.
+        self.vm_ui.ensure_cloned_vm_running()
+        self.base_ui.take_screenshot("clone_test_clone_vm_running")
+        logger.info(f"Cloned VM '{clone_vm_name}' is now Running — PASS")
+
+        logger.info(
+            "\nStep 7: Login to cloned VM console, verify file exists, compute md5sum"
+        )
+        logger.info("-" * 80)
+        # Wait for the cloned VM's guest OS to fully boot
+        self._wait_for_vmi_agent_connected(clone_vm_name, namespace, timeout=1200)
+
+        child = self._login_to_vm_console(
+            clone_vm_name,
+            namespace,
+            vm_username,
+            vm_password,
+        )
+
+        # Pass no test_data — the file was written to the parent VM's disk and
+        # should be present on the clone unchanged.  The helper first asserts
+        # the file exists, then reads its md5sum without overwriting it.
+        clone_md5sum = self._calculate_vm_file_md5sum(child, test_file)
+
+        child.send("\x1d")
+        child.close()
+
+        logger.info(f"Original VM md5sum : {original_md5sum}")
+        logger.info(f"Cloned VM md5sum   : {clone_md5sum}")
+
+        logger.info("\nStep 8: Assert cloned VM md5sum matches original")
+        logger.info("-" * 80)
+        assert clone_md5sum, "md5sum of cloned VM file is empty"
+        assert clone_md5sum == original_md5sum, (
+            f"Data integrity check FAILED: "
+            f"original md5sum={original_md5sum}, "
+            f"clone md5sum={clone_md5sum}"
+        )
+        logger.info("md5sum matches original — data integrity verified: PASS")

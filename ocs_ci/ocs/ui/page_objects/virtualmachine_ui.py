@@ -81,21 +81,23 @@ class VirtualMachineUI(PageNavigator):
 
     def navigate_to_virtualmachines_page(self):
         """
-        Navigate to Virtualization > VirtualMachines page and dismiss the
-        welcome modal if it appears.
+        Navigate to Virtualization > VirtualMachines page, wait for the page
+        to fully load, then wait up to 60 seconds for the welcome modal to
+        appear and dismiss it.
         """
         logger.info("Navigating to Virtualization > VirtualMachines")
-        # Wait for the page to fully settle (e.g. after a namespace switch) before
-        self.page_has_loaded()
         self.choose_expanded_mode(mode=True, locator=self.vm_loc["virtualization_menu"])
         self.do_click(self.vm_loc["virtualmachines_tab"])
-        logger.info("Navigated to VirtualMachines page")
-        self.dismiss_welcome_modal()
+        logger.info(
+            "Navigated to VirtualMachines page — waiting for page to fully load"
+        )
+        self.page_has_loaded()
+        logger.info("Page loaded — waiting up to 60 s for welcome modal")
+        self.dismiss_welcome_modal_if_present(wait_for_modal=True, timeout=60)
 
     def dismiss_welcome_modal(self):
         """
         Close the 'Welcome to OpenShift Virtualization' modal if present.
-        Uses driver.find_elements to avoid AI fallback when no modal is shown.
         """
         locator = self.vm_loc["modal_close_button"]
         try:
@@ -111,19 +113,16 @@ class VirtualMachineUI(PageNavigator):
     def dismiss_welcome_modal_if_present(self, wait_for_modal=False, timeout=15):
         """
         Dismiss any overlay modal currently blocking the page.
-        Uses driver.find_elements to avoid AI fallback when no modal is shown.
 
         Args:
             wait_for_modal (bool): If True, poll until the modal appears or timeout
                                    expires before attempting to close it.
             timeout (int): Seconds to wait for the modal when wait_for_modal=True.
         """
-        import time as _time
-
         locator = self.vm_loc["modal_close_button"]
         if wait_for_modal:
-            end = _time.time() + timeout
-            while _time.time() < end:
+            end = time.time() + timeout
+            while time.time() < end:
                 try:
                     els = self.driver.find_elements(locator[1], locator[0])
                     if els and els[0].is_displayed():
@@ -132,7 +131,7 @@ class VirtualMachineUI(PageNavigator):
                         return
                 except (NoSuchElementException, WebDriverException):
                     pass
-                _time.sleep(1)
+                time.sleep(1)
             logger.info("No modal appeared within timeout")
             return
         try:
@@ -162,8 +161,12 @@ class VirtualMachineUI(PageNavigator):
     def click_create_virtualmachine(self):
         """
         Click on 'Create VirtualMachine' button (top-right).
-        Falls back to JS click if an overlay intercepts.
+
+        Dismisses any blocking welcome modal before attempting the click
         """
+
+        self.dismiss_welcome_modal_if_present(wait_for_modal=True, timeout=60)
+
         locator = self.vm_loc["create_vm_button"]
         wait_for_element_to_be_clickable(locator=locator, timeout=30)
         try:
@@ -374,6 +377,51 @@ class VirtualMachineUI(PageNavigator):
         logger.info("VM status is now: Stopped")
         return True
 
+    def ensure_cloned_vm_running(self):
+        """
+        After clone submission the UI lands on the cloned VM detail page.
+        Check whether the VM reaches Running within 4 minutes (240 s).
+        If it is Stopped instead, start it via Actions > Control > Start
+        and wait for Running.
+        """
+        logger.info("Checking cloned VM status (up to 4 min for Running)...")
+        end = time.time() + 240
+        while time.time() < end:
+            try:
+                running_els = self.driver.find_elements(
+                    self.vm_loc["vm_status_running"][1],
+                    self.vm_loc["vm_status_running"][0],
+                )
+                running = bool(running_els) and running_els[0].is_displayed()
+                stopped_els = self.driver.find_elements(
+                    self.vm_loc["vm_status_stopped"][1],
+                    self.vm_loc["vm_status_stopped"][0],
+                )
+                stopped = bool(stopped_els) and stopped_els[0].is_displayed()
+            except (NoSuchElementException, WebDriverException):
+                time.sleep(3)
+                continue
+
+            if running:
+                logger.info("Cloned VM is already Running")
+                return
+
+            if stopped:
+                logger.info(
+                    "Cloned VM is Stopped — starting via Actions > Control > Start"
+                )
+                self.click_actions_menu()
+                self.click_actions_control_then_start()
+                logger.info("Start issued — waiting for Running status...")
+                self.wait_for_vm_running()
+                return
+
+            time.sleep(3)
+
+        # Fell through the loop without finding either status — try full wait
+        logger.info("Status not yet visible after 4 min — waiting for Running...")
+        self.wait_for_vm_running()
+
     def click_actions_menu(self):
         """
         Click on Actions menu on the VM detail page.
@@ -431,6 +479,105 @@ class VirtualMachineUI(PageNavigator):
         wait_for_element_to_be_clickable(locator=delete_btn, timeout=20)
         self.do_click(delete_btn, enable_screenshot=True)
         logger.info("Clicked Delete in confirmation modal")
+
+    def click_virtual_machines_tab_and_open_vm(self, vm_name):
+        """
+        Click the "Virtual machines" tab on the VirtualMachines page to show
+        the list, then click the VM name link to open its detail page.
+
+        Args:
+            vm_name (str): Name of the VirtualMachine to click.
+        """
+        logger.info("Clicking 'Virtual machines' tab to show the VM list")
+        tab_locator = self.vm_loc["virtual_machines_list_tab"]
+        wait_for_element_to_be_clickable(locator=tab_locator, timeout=30)
+        self.do_click(tab_locator)
+        self.page_has_loaded()
+
+        vm_xpath = self.vm_loc["vm_left_tree_link_tmpl"][0].format(vm_name=vm_name)
+        vm_locator = (vm_xpath, self.vm_loc["vm_left_tree_link_tmpl"][1])
+        wait_for_element_to_be_clickable(locator=vm_locator, timeout=30)
+        self.do_click(vm_locator)
+        logger.info(f"Clicked VM '{vm_name}'")
+        self.page_has_loaded()
+        logger.info(f"VM detail page for '{vm_name}' loaded")
+
+    def click_actions_clone(self):
+        """
+        From an open Actions menu click Clone to open the Clone popup.
+        """
+        clone_option = self.vm_loc["actions_clone_option"]
+        wait_for_element_to_be_clickable(locator=clone_option, timeout=20)
+        self.do_click(clone_option)
+        logger.info("Clicked Clone from Actions menu")
+
+    def get_clone_vm_name(self):
+        """
+        Read the pre-filled VM name from the Clone VirtualMachine popup.
+
+        Returns:
+            str: The clone VM name shown in the Name field.
+        """
+        name_input = self.vm_loc["clone_vm_name_input"]
+        wait_for_element_to_be_visible(locator=name_input, timeout=20)
+        el = self.driver.find_element(name_input[1], name_input[0])
+        clone_name = el.get_attribute("value") or el.text.strip()
+        logger.info(f"Clone VM name from popup: '{clone_name}'")
+        return clone_name
+
+    def tick_start_vm_once_created(self):
+        """
+        Tick the 'Start VirtualMachine once created' checkbox in the Clone popup.
+        """
+        checkbox_locator = self.vm_loc["clone_start_vm_checkbox"]
+        wait_for_element_to_be_clickable(locator=checkbox_locator, timeout=20)
+        el = self.driver.find_element(checkbox_locator[1], checkbox_locator[0])
+        if not el.is_selected():
+            el.click()
+            logger.info("Checked 'Start VirtualMachine once created'")
+        else:
+            logger.info("'Start VirtualMachine once created' was already checked")
+
+    def click_clone_submit_button(self):
+        """
+        Click the Clone button at the bottom of the Clone VirtualMachine popup
+        and wait for the dialog to close before returning.
+
+        """
+        clone_btn = self.vm_loc["clone_submit_button"]
+        wait_for_element_to_be_clickable(locator=clone_btn, timeout=20)
+        self.do_click(clone_btn, enable_screenshot=True)
+        logger.info("Clicked Clone submit button — waiting for dialog to close...")
+
+        # Wait up to 3 minutes for the clone dialog to disappear.
+        dialog_loc = self.vm_loc["dialog_overlay"]
+        end = time.time() + 180
+        while time.time() < end:
+            try:
+                els = self.driver.find_elements(dialog_loc[1], dialog_loc[0])
+                if not els or not any(e.is_displayed() for e in els):
+                    logger.info("Clone dialog closed — navigation to clone VM started")
+                    return
+            except (NoSuchElementException, WebDriverException):
+                logger.info("Clone dialog closed — navigation to clone VM started")
+                return
+            time.sleep(2)
+
+        logger.warning("Clone dialog did not close within 3 min — proceeding anyway")
+
+    def click_actions_control_then_start(self):
+        """
+        From the Actions menu click Control (submenu) then Start.
+        """
+        logger.info("Clicking Actions > Control")
+        control_menu = self.vm_loc["actions_control_menu"]
+        wait_for_element_to_be_clickable(locator=control_menu, timeout=20)
+        self.do_click(control_menu)
+        logger.info("Clicking Start")
+        start_option = self.vm_loc["actions_start_option"]
+        wait_for_element_to_be_clickable(locator=start_option, timeout=20)
+        self.do_click(start_option, enable_screenshot=True)
+        logger.info("Clicked Start")
 
     def verify_namespace_gone_from_left_tree(self, namespace, timeout=30):
         """
