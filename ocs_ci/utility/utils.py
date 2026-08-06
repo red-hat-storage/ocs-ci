@@ -5873,7 +5873,7 @@ def skipif_upgraded_from(version_list):
                 break
         return skip_this
     except Exception as err:
-        log.error(str(err))
+        log.debug(f"Could not determine upgrade origin, skipping check: {err}")
         return False
 
 
