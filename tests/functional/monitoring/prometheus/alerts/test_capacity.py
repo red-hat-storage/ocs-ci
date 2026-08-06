@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     runs_on_provider,
     blue_squad,
+    zstream_4_20_14,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
@@ -24,6 +25,7 @@ log = logging.getLogger(__name__)
 )
 @skipif_managed_service
 @runs_on_provider
+@zstream_4_20_14
 def test_rbd_capacity_workload_alerts(
     workload_storageutilization_97p_rbd, threading_lock
 ):
@@ -91,6 +93,7 @@ def test_rbd_capacity_workload_alerts(
 )
 @skipif_managed_service
 @runs_on_provider
+@zstream_4_20_14
 def test_cephfs_capacity_workload_alerts(
     workload_storageutilization_97p_cephfs, threading_lock
 ):
