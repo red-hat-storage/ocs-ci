@@ -12620,7 +12620,7 @@ def aws_backingstore_with_toggleable_creds(
     time.sleep(60)
 
     # 4. Create backingstore (auto-creates a K8s secret via ownerReferences)
-    bs_name = create_unique_resource_name("repl-alert", "bs")
+    bs_name = create_unique_resource_name("toggle-creds", "bs")
     mcg_obj.exec_mcg_cmd(
         f"backingstore create aws-s3 {bs_name} "
         f"--access-key {access_key_id} "

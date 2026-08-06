@@ -3844,3 +3844,70 @@ def get_bucket_status_value(mcg_obj, bucket_name, key):
     op = bucket_status.split("\n")
     value = next(item.split(":")[1].strip() for item in op if key in item)
     return value
+
+
+def assert_store_phase_and_mode(
+    store_name, store_kind, expected_phase, expected_mode, mcg_obj, timeout=180
+):
+    """
+    Assert both the K8s CR PHASE and NooBaa mode of a store.
+
+    For backingstores, the mode is read from the "pools" section
+    of the NooBaa system info.
+    For namespacestores, the mode is read from the
+    "namespace_resources" section (resource name = store name).
+
+    Args:
+        store_name (str): Store resource name
+        store_kind (str): K8s kind - constants.BACKINGSTORE or
+            constants.NAMESPACESTORE
+        expected_phase (str): Expected K8s PHASE (e.g. "Ready", "Rejected")
+        expected_mode (str): Expected NooBaa mode (e.g. "OPTIMAL",
+            "AUTH_FAILED", "STORAGE_NOT_EXIST")
+        mcg_obj: MCG object for RPC calls
+        timeout (int): Timeout in seconds for each check
+
+    Raises:
+        TimeoutExpiredError: If the PHASE or mode does not reach
+            the expected value within the timeout
+
+    """
+    store_ocp = OCP(
+        kind=store_kind,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    assert store_ocp.wait_for_resource(
+        condition=expected_phase,
+        resource_name=store_name,
+        column="PHASE",
+        timeout=timeout,
+    ), f"{store_kind} {store_name} did not reach PHASE {expected_phase}"
+
+    rpc_name = store_name
+    rpc_collection = (
+        "pools" if store_kind == constants.BACKINGSTORE else "namespace_resources"
+    )
+
+    def _check_mode():
+        sysinfo = mcg_obj.read_system()
+        for item in sysinfo.get(rpc_collection, []):
+            if item.get("name") == rpc_name:
+                current_mode = item.get("mode")
+                logger.info(
+                    f"Current mode of {store_kind} {store_name}: {current_mode}"
+                )
+                return current_mode == expected_mode
+        logger.debug(f"{rpc_name} not found in {rpc_collection}")
+        return False
+
+    try:
+        for reached in TimeoutSampler(timeout, 10, _check_mode):
+            if reached:
+                logger.info(f"{store_kind} {store_name} reached mode {expected_mode}")
+                return
+    except TimeoutExpiredError:
+        logger.error(
+            f"{store_kind} {store_name} did not reach mode "
+            f"{expected_mode} within {timeout}s"
+        )
+        raise
