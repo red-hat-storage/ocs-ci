@@ -93,6 +93,7 @@ class TestFDFSANConnection(ManageTest):
         ocp_obj.exec_oc_cmd(
             f"apply -f - <<'EOF'\n{secret_yaml}\nEOF",
             shell=True,
+            out_yaml_format=False,
             secrets=[ent_key, auth_b64, secret_data_b64],
         )
         logger.info(f"Verifying secret '{secret_name}' exists in namespace '{ns}'...")
@@ -123,6 +124,7 @@ class TestFDFSANConnection(ManageTest):
             f'chroot /host iscsiadm --mode node --target "{iscsi_iqn}" '
             f'--portal "{iscsi_ip}" -l\' 2> /dev/null',
             shell=True,
+            out_yaml_format=False,
             secrets=[iscsi_ip, iscsi_iqn],
         )
         logger.info("LUN discovery completed on all worker nodes")
