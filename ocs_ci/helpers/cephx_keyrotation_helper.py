@@ -1897,15 +1897,24 @@ class CephXKeyRotation:
             self.log_auth_key_snapshot(label, keys)
         return keys
 
+    @retry(UnexpectedBehaviour, tries=5, delay=20)
     def is_mon_key_rotation_supported(self):
         """
         Return True when CephCluster reports MON ``status.cephx.mon.keyGeneration``.
+
+        Raises ``UnexpectedBehaviour`` while ``status.cephx.mon`` is absent so the
+        retry decorator can wait for CephCluster to report MON status. Returns
+        False only when ``mon`` is present but has no ``keyGeneration`` (Rook
+        reports ``mon: {}`` when MON rotation is unsupported).
 
         Note: Prefer verifying keys via the shared ``mon.`` entity
         (``ceph auth get-key mon.``). Use :meth:`is_mon_auth_verifiable` before
         asserting on MON auth keys.
         """
-        mon_status = self.get_status_cephx().get("mon") or {}
+        status_cephx = self.get_status_cephx()
+        if "mon" not in status_cephx:
+            raise UnexpectedBehaviour("CephCluster status.cephx.mon not yet reported")
+        mon_status = status_cephx.get("mon") or {}
         return bool(mon_status.get("keyGeneration"))
 
     def is_mon_auth_verifiable(self, toolbox_pod=None):

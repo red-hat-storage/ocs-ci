@@ -154,10 +154,23 @@ class TestCephXKeyRotation:
         ceph_health_check(namespace=namespace)
 
         if mon_rotation_supported:
-            assert rotator.get_status_key_generation("mon") > pre_mon_generation
-        assert rotator.get_status_key_generation("mgr") > pre_mgr_generation
-        assert rotator.get_status_key_generation("osd") > pre_osd_generation
-        assert rotator.get_filesystem_daemon_key_generation() > pre_mds_generation
+            assert rotator.get_status_key_generation("mon") > pre_mon_generation, (
+                f"mon key generation did not increase: before={pre_mon_generation}, "
+                f"after={rotator.get_status_key_generation('mon')}"
+            )
+        assert rotator.get_status_key_generation("mgr") > pre_mgr_generation, (
+            f"mgr key generation did not increase: before={pre_mgr_generation}, "
+            f"after={rotator.get_status_key_generation('mgr')}"
+        )
+        assert rotator.get_status_key_generation("osd") > pre_osd_generation, (
+            f"osd key generation did not increase: before={pre_osd_generation}, "
+            f"after={rotator.get_status_key_generation('osd')}"
+        )
+        assert rotator.get_filesystem_daemon_key_generation() > pre_mds_generation, (
+            f"filesystem daemon key generation did not increase: "
+            f"before={pre_mds_generation}, "
+            f"after={rotator.get_filesystem_daemon_key_generation()}"
+        )
 
         log.info("CephX key rotation for MON/MGR/OSD/MDS completed successfully")
 
