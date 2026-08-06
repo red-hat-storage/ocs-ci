@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_20_14, zstream_4_20_14_ocs_operator
 from ocs_ci.framework.testlib import (
     tier4a,
     ManageTest,
@@ -34,6 +34,8 @@ log = logging.getLogger(__name__)
 @tier4a
 @aws_based_platform_required
 @ipi_deployment_required
+@zstream_4_20_14
+@zstream_4_20_14_ocs_operator
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement - AWS-IPI-Reactive
