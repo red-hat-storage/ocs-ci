@@ -129,9 +129,9 @@ class TestCNVVM(E2ETest):
             ), f"MD5 checksum mismatch after copying file to VM '{vm_obj.name}'"
         logger.info("Data integrity verified for all VMs")
 
-        logger.test_step("Verify PV key rotation")
-        logger.info("Verifying key rotation for VMs with default compression")
+        logger.test_step(
+            "Verify PV key rotation for VMs with default and aggressive compression"
+        )
         self.verify_keyrotation(self.vm_objs_def, self.sc_obj_def_compr)
-        logger.info("Verifying key rotation for VMs with aggressive compression")
         self.verify_keyrotation(self.vm_objs_aggr, self.sc_obj_aggressive)
         logger.info("PV key rotation verified for all VMs")

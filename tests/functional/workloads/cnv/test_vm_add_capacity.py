@@ -52,7 +52,6 @@ class TestVmAddCapacity(E2ETest):
         self.file_paths = ["/source_file.txt", "/new_file.txt"]
 
         logger.test_step("Set up KMS, StorageClass, and project")
-        logger.info("Configuring csi-kms-connection-details configmap")
         kms = pv_encryption_kms_setup_factory(kv_version="v2")
         logger.info("KMS setup successful")
 

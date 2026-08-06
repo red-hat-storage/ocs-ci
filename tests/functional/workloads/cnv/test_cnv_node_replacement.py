@@ -134,7 +134,6 @@ class TestCnvNodeReplace(E2ETest):
         delete_and_create_osd_node(node_name)
 
         logger.test_step("Verify cluster health and Ceph rebalance")
-        logger.info("Running cluster health check")
         self.sanity_helpers = Sanity()
         self.sanity_helpers.health_check(tries=120)
 
