@@ -85,7 +85,9 @@ def set_region(region=None):
         region (str): region to set, if not defined it will try to get from metadata.json
 
     """
-    if not config.ENV_DATA.get("enable_region_dynamic_switching"):
+    if not config.ENV_DATA.get("enable_region_dynamic_switching") or (
+        config.ENV_DATA["platform"] != constants.IBMCLOUD_PLATFORM
+    ):
         return
     if not region:
         region = get_region(config.ENV_DATA["cluster_path"])
