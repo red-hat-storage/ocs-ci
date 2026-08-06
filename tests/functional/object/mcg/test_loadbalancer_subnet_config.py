@@ -12,6 +12,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     red_squad,
     tier2,
+    zstream_4_20_14,
+    zstream_4_20_14_naturalintelligence/fast_xml_parser,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -24,6 +26,8 @@ logger = logging.getLogger(__name__)
 @mcg
 @red_squad
 @aws_platform_required
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestLBSubnetConfig(MCGTest):
 
     @tier2

@@ -16,6 +16,7 @@ from ocs_ci.framework.testlib import (
     pre_upgrade,
     post_upgrade,
 )
+from ocs_ci.framework.pytest_customization.marks import zstream_4_20_14, zstream_4_20_14_naturalintelligence/fast_xml_parser
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,8 @@ def thresholds_teardown_fixture(request):
 @brown_squad
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-6224")
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestStorageClusterCephFullThresholdsParams(ManageTest):
     """
     Verify the ceph full thresholds storagecluster parameters move to cephcluster

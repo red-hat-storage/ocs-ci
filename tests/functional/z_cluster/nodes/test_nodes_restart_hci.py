@@ -3,7 +3,7 @@ import pytest
 import random
 
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_20_14, zstream_4_20_14_naturalintelligence/fast_xml_parser
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
@@ -48,6 +48,8 @@ logger = logging.getLogger(__name__)
 @brown_squad
 @ignore_leftovers
 @provider_client_platform_required
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestNodesRestartHCI(ManageTest):
     """
     Test nodes restart scenarios when using HCI platform
