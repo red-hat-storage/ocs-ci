@@ -23,6 +23,7 @@ from ocs_ci.ocs.fiojob import get_timeout
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_osd_pods
 from ocs_ci.utility import prometheus
+from ocs_ci.framework.pytest_customization.marks import zstream_4_20_14
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-903")
 @skipif_managed_service
 @runs_on_provider
+@zstream_4_20_14
 def test_corrupt_pg_alerts(measure_corrupt_pg, threading_lock):
     """
     Test that there are appropriate alerts when Placement group
@@ -134,6 +136,7 @@ def deprecated_test_ceph_health(
 
 
 @runs_on_provider
+@zstream_4_20_14
 class TestCephOSDSlowOps(object):
     @pytest.fixture(scope="function")
     def setup(self, request, pod_factory, multi_pvc_factory):
