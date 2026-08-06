@@ -2596,20 +2596,26 @@ def verify_pods_upgraded(
     logger.info(info_message)
     start_time = time.time()
     selector_label, selector_value = selector.split("=")
+    last_upgrade_error = None
+    verified_pods = set()
     while True:
         pod_count = 0
         pod_images = {}
         try:
             pods = get_all_pods(namespace, [selector_value], selector_label)
             pods_len = len(pods)
-            logger.info(f"Found {pods_len} pod(s) for selector: {selector}")
+            logger.debug(f"Found {pods_len} pod(s) for selector: {selector}")
             if pods_len != count:
                 logger.warning(
                     f"Number of found pods {pods_len} is not as expected: " f"{count}"
                 )
             for pod in pods:
                 pod_obj = pod.get()
-                verify_images_upgraded(old_images, pod_obj, ignore_psql_12_verification)
+                pod_name = pod_obj.get("metadata", {}).get("name", "")
+                if pod_name not in verified_pods:
+                    verify_images_upgraded(
+                        old_images, pod_obj, ignore_psql_12_verification
+                    )
                 current_pod_images = get_images(pod_obj)
                 current_pod_image_ids = get_images(pod_obj, image_key="imageID")
                 for container_name, container_image in current_pod_images.items():
@@ -2636,13 +2642,19 @@ def verify_pods_upgraded(
                                     "Or it's caused by other discrepancy which needs to be investigated!"
                                     f"ImageID is: {current_pod_image_id}"
                                 )
+                verified_pods.add(pod_name)
                 pod_count += 1
         except CommandFailed as ex:
             logger.warning(
                 f"Failed when getting pods with selector {selector}." f"Error: {ex}"
             )
         except (NonUpgradedImagesFoundError, NotAllPodsHaveSameImagesError) as ex:
-            logger.warning(ex)
+            ex_str = str(ex)
+            if ex_str != last_upgrade_error:
+                logger.warning(ex)
+                last_upgrade_error = ex_str
+            else:
+                logger.debug(ex)
         check_timeout_reached(start_time, timeout, info_message)
         if pods_len != count:
             logger.error(f"Found pods: {pods_len} but expected: {count}!")

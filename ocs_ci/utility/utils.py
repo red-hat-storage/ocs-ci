@@ -839,7 +839,7 @@ def exec_cmd(
             masked_cmd = mask_secrets(cmd, secrets)
         else:
             masked_cmd = shlex.join(mask_secrets(cmd, secrets))
-        log.info(f"Executing command: {masked_cmd}")
+        log.debug(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
         run_kw = {
@@ -5873,7 +5873,7 @@ def skipif_upgraded_from(version_list):
                 break
         return skip_this
     except Exception as err:
-        log.error(str(err))
+        log.debug(f"Could not determine upgrade origin, skipping check: {err}")
         return False
 
 
